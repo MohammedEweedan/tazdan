@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useEffect, useState } from "react";
+import { useRef, useEffect, useState, memo, useMemo } from "react";
 import NextLink from "next/link";
 import NextImage from "next/image";
 import {
@@ -167,7 +167,7 @@ function MiniChart({ up, height = 110 }: { up: boolean; height?: number }) {
 }
 
 /* ── Brand logo screen (first state of the sticky-scroll phone) ── */
-function ScreenLogo() {
+const ScreenLogo = memo(function ScreenLogo() {
   const { t } = useTranslate();
   return (
     <VStack
@@ -193,17 +193,20 @@ function ScreenLogo() {
         pointerEvents="none"
       />
       <Box position="relative" w="140px" h="140px" zIndex={2}>
-        <NextImage src="/icon.gif" alt="promrkts" fill style={{ objectFit: "contain" }} priority />
-      </Box>
-      {/* hint */}
-      <Box position="absolute" bottom="28px" left={0} right={0} textAlign="center" zIndex={2}>
-        <Text fontSize="10px" color="rgba(255,255,255,0.45)" fontWeight="700" letterSpacing="0.1em">
-          {t("screen_logo_swipe")}
-        </Text>
+        <NextImage 
+          src="/icon.gif" 
+          alt="promrkts" 
+          fill 
+          priority 
+          sizes="140px"
+          placeholder="blur"
+          blurDataURL="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+          style={{ objectFit: "contain" }} 
+        />
       </Box>
     </VStack>
   );
-}
+});
 
 function ScreenSpot() {
   const { t } = useTranslate();
@@ -739,7 +742,16 @@ function PhoneFrame({
           </motion.div>
         )}
       </Box>
-      <NextImage src="/iphone-frame.png" alt="" fill priority style={{ objectFit: "contain", pointerEvents: "none", zIndex: 10 }} />
+      <NextImage 
+        src="/iphone-frame.png" 
+        alt="" 
+        fill 
+        priority 
+        sizes="100vw"
+        placeholder="blur"
+        blurDataURL="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+        style={{ objectFit: "contain", pointerEvents: "none", zIndex: 10 }} 
+      />
     </Box>
   );
 }
@@ -748,7 +760,7 @@ function PhoneFrame({
    RIGHT-SIDE STAGE WIDGETS
    ═════════════════════════════════════════════════════ */
 
-function StageSpot() {
+const StageSpot = memo(function StageSpot() {
   const { t } = useTranslate();
   const live = useLivePrices();
   const btc = live.BTCUSDT ?? SEED_PRICES.BTCUSDT;
@@ -798,7 +810,7 @@ function StageSpot() {
       </HStack>
     </Box>
   );
-}
+});
 
 function StageMarkets() {
   const live = useLivePrices();
@@ -1110,7 +1122,16 @@ function StaticPhone({ children, scale = 1 }: { children: React.ReactNode; scale
       >
         {children}
       </Box>
-      <NextImage src="/iphone-frame.png" alt="" fill style={{ objectFit: "contain", pointerEvents: "none", zIndex: 10 }} />
+      <NextImage 
+        src="/iphone-frame.png" 
+        alt="" 
+        fill 
+        priority 
+        sizes="100vw"
+        placeholder="blur"
+        blurDataURL="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+        style={{ objectFit: "contain", pointerEvents: "none", zIndex: 10 }} 
+      />
     </Box>
   );
 }
