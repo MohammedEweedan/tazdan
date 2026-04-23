@@ -2122,13 +2122,6 @@ export default function LandingPage() {
     { eyebrow: t("feat_mint_eyebrow"), title: t("feat_mint_title"), desc: t("feat_mint_desc"), widget: <StageMint /> },
   ];
 
-  const stats = [
-    { icon: FiGlobe, value: "120+", label: t("stats_countries") },
-    { icon: FiActivity, value: "$2.8B", label: t("stats_daily_volume") },
-    { icon: FiUsers, value: "1.4M", label: t("stats_traders") },
-    { icon: FiBarChart2, value: "400+", label: t("stats_pairs") },
-  ];
-
   // ✅ SAFE: all hooks already ran
   if (isLoading) return null;
 
