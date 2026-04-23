@@ -1,0 +1,954 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  USER
+  AGENT
+  ADMIN
+}
+
+enum UserStatus {
+  PENDING
+  ACTIVE
+  SUSPENDED
+  BANNED
+}
+
+enum KYCStatus {
+  NOT_SUBMITTED
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum DepositStatus {
+  PENDING
+  CONFIRMED
+  REJECTED
+  CANCELLED
+}
+
+enum WithdrawalStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  REJECTED
+  CANCELLED
+}
+
+enum OrderStatus {
+  PENDING
+  FILLED
+  PARTIALLY_FILLED
+  CANCELLED
+  EXPIRED
+}
+
+enum OrderSide {
+  BUY
+  SELL
+}
+
+enum OrderType {
+  MARKET
+  LIMIT
+}
+
+enum TransactionType {
+  DEPOSIT
+  WITHDRAWAL
+  BUY
+  SELL
+  TRANSFER_IN
+  TRANSFER_OUT
+  AGENT_DEPOSIT
+  AGENT_WITHDRAWAL
+  FEE
+  COMMISSION
+  REFERRAL_BONUS
+  ADMIN_CREDIT
+  ADMIN_DEBIT
+}
+
+enum Currency {
+  USD
+  USDT
+  BTC
+  ETH
+  BNB
+  SOL
+  XRP
+  ADA
+  DOGE
+  MATIC
+  DOT
+  AVAX
+}
+
+enum PaymentMethod {
+  SADAD
+  MASREFY
+  MOAMALAT
+  TADAWUL
+  BANK_TRANSFER
+  CASH_DEPOSIT
+  AGENT
+}
+
+enum CardTier {
+  STARTER
+  MASTER
+  PRO
+}
+
+enum CardStatus {
+  PENDING
+  ACTIVE
+  FROZEN
+  CANCELLED
+}
+
+enum CardTxType {
+  PURCHASE
+  REFUND
+  FEE
+  CASHBACK
+  TOPUP
+  WITHDRAWAL
+}
+
+model User {
+  id              String      @id @default(uuid())
+  email           String      @unique
+  phone           String?     @unique
+  passwordHash    String
+  firstName       String
+  lastName        String
+  role            UserRole    @default(USER)
+  status          UserStatus  @default(PENDING)
+  kycStatus       KYCStatus   @default(NOT_SUBMITTED)
+  twoFactorSecret String?
+  twoFactorEnabled Boolean    @default(false)
+  emailVerified   Boolean     @default(false)
+  phoneVerified   Boolean     @default(false)
+  referralCode    String      @unique
+  referredBy      String?
+  lastLoginAt     DateTime?
+  lastLoginIp     String?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  wallets         Wallet[]
+  deposits        Deposit[]
+  withdrawals     Withdrawal[]
+  orders          Order[]
+  transactions    Transaction[]
+  kycDocuments    KYCDocument[]
+  notifications   Notification[]
+  sessions        Session[]
+  bankAccounts    BankAccount[]
+  linkedWallets   LinkedWallet[]
+  referrals       User[]        @relation("Referrals")
+  referrer        User?         @relation("Referrals", fields: [referredBy], references: [id])
+  agentTransactions AgentTransaction[]
+  whatsappMessages WhatsAppMessage[]
+  agentProfile    Agent?
+  sentTransfers     Transfer[] @relation("TransferSender")
+  receivedTransfers Transfer[] @relation("TransferReceiver")
+
+  // Public profile
+  username          String?     @unique
+  bio               String?
+  avatarUrl         String?
+  profilePublic     Boolean     @default(false)
+  acceptedCurrencies String[]   @default(["USDT", "USD", "BTC", "ETH"])
+
+  // P2P relations
+  p2pListings       P2PListing[]
+  p2pTradesAsBuyer  P2PTrade[]  @relation("P2PBuyer")
+  p2pTradesAsSeller P2PTrade[]  @relation("P2PSeller")
+  p2pDisputes       P2PDispute[]
+
+  // Messages
+  sentMessages      Message[]   @relation("MessageSender")
+  receivedMessages  Message[]   @relation("MessageReceiver")
+
+  // Memecoins & Smart Contracts
+  memeTokens        MemeToken[]
+  smartContracts    SmartContract[]
+
+  // AML
+  amlFlags          AMLFlag[]
+
+  // Referral rewards, API keys, login history
+  apiKeys           APIKey[]
+  loginHistory      LoginHistory[]
+
+  // Virtual Visa cards
+  cards             Card[]
+  cardTransactions  CardTransaction[]
+
+  @@index([email])
+  @@index([referralCode])
+  @@index([username])
+}
+
+model Session {
+  id          String   @id @default(uuid())
+  userId      String
+  token       String   @unique
+  ipAddress   String?
+  userAgent   String?
+  expiresAt   DateTime
+  createdAt   DateTime @default(now())
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([token])
+  @@index([userId])
+}
+
+model Wallet {
+  id          String   @id @default(uuid())
+  userId      String
+  currency    Currency
+  balance     Decimal  @default(0) @db.Decimal(20, 8)
+  frozen      Decimal  @default(0) @db.Decimal(20, 8)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, currency])
+  @@index([userId])
+}
+
+model Deposit {
+  id              String        @id @default(uuid())
+  userId          String
+  currency        Currency
+  amount          Decimal       @db.Decimal(20, 8)
+  paymentMethod   PaymentMethod
+  status          DepositStatus @default(PENDING)
+  reference       String        @unique
+  proofImageUrl   String?
+  bankName        String?
+  accountNumber   String?
+  senderName      String?
+  notes           String?
+  adminNotes      String?
+  confirmedAt     DateTime?
+  confirmedBy     String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([status])
+  @@index([reference])
+}
+
+model Withdrawal {
+  id              String           @id @default(uuid())
+  userId          String
+  currency        Currency
+  amount          Decimal          @db.Decimal(20, 8)
+  fee             Decimal          @default(0) @db.Decimal(20, 8)
+  netAmount       Decimal          @db.Decimal(20, 8)
+  paymentMethod   PaymentMethod?
+  walletAddress   String?
+  network         String?
+  bankName        String?
+  accountNumber   String?
+  accountName     String?
+  status          WithdrawalStatus @default(PENDING)
+  reference       String           @unique
+  adminNotes      String?
+  processedAt     DateTime?
+  processedBy     String?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  onChainTxs      OnChainTx[]
+
+  @@index([userId])
+  @@index([status])
+}
+
+model Order {
+  id              String      @id @default(uuid())
+  userId          String
+  side            OrderSide
+  type            OrderType   @default(MARKET)
+  baseCurrency    Currency    @default(USDT)
+  quoteCurrency   Currency
+  amount          Decimal     @db.Decimal(20, 8)
+  price           Decimal     @db.Decimal(20, 8)
+  filled          Decimal     @default(0) @db.Decimal(20, 8)
+  total           Decimal     @db.Decimal(20, 8)
+  fee             Decimal     @default(0) @db.Decimal(20, 8)
+  status          OrderStatus @default(PENDING)
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  user            User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model Transaction {
+  id              String          @id @default(uuid())
+  userId          String
+  type            TransactionType
+  currency        Currency
+  amount          Decimal         @db.Decimal(20, 8)
+  fee             Decimal         @default(0) @db.Decimal(20, 8)
+  balanceBefore   Decimal         @db.Decimal(20, 8)
+  balanceAfter    Decimal         @db.Decimal(20, 8)
+  reference       String?
+  description     String?
+  metadata        Json?
+  createdAt       DateTime        @default(now())
+
+  user            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([type])
+  @@index([createdAt])
+}
+
+model KYCDocument {
+  id              String    @id @default(uuid())
+  userId          String
+  documentType    String
+  documentUrl     String
+  status          KYCStatus @default(PENDING)
+  rejectionReason String?
+  reviewedBy      String?
+  reviewedAt      DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model BankAccount {
+  id              String   @id @default(uuid())
+  userId          String
+  bankName        String
+  accountNumber   String
+  accountName     String
+  branch          String?
+  isDefault       Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model ExchangeRate {
+  id              String   @id @default(uuid())
+  baseCurrency    Currency @default(USDT)
+  quoteCurrency   Currency
+  buyPrice        Decimal  @db.Decimal(20, 8)
+  sellPrice       Decimal  @db.Decimal(20, 8)
+  isActive        Boolean  @default(true)
+  setBy           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([baseCurrency, quoteCurrency])
+  @@index([baseCurrency, quoteCurrency])
+}
+
+model PlatformSettings {
+  id              String   @id @default(uuid())
+  key             String   @unique
+  value           String
+  description     String?
+  updatedBy       String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model Notification {
+  id              String   @id @default(uuid())
+  userId          String
+  title           String
+  message         String
+  type            String   @default("info")
+  isRead          Boolean  @default(false)
+  metadata        Json?
+  createdAt       DateTime @default(now())
+
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([isRead])
+}
+
+model AuditLog {
+  id              String   @id @default(uuid())
+  userId          String?
+  action          String
+  entity          String
+  entityId        String?
+  oldValues       Json?
+  newValues       Json?
+  ipAddress       String?
+  userAgent       String?
+  createdAt       DateTime @default(now())
+
+  @@index([userId])
+  @@index([action])
+  @@index([createdAt])
+}
+
+model LinkedWallet {
+  id          String   @id @default(uuid())
+  userId      String
+  address     String
+  network     String
+  label       String   @default("My Wallet")
+  isDefault   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+enum OnChainTxStatus {
+  QUEUED
+  SENT
+  CONFIRMED
+  FAILED
+}
+
+model OnChainTx {
+  id              String          @id @default(uuid())
+  withdrawalId    String
+  toAddress       String
+  network         String          @default("TRC20")
+  amount          Decimal         @db.Decimal(20, 8)
+  currency        Currency        @default(USDT)
+  status          OnChainTxStatus @default(QUEUED)
+  txHash          String?
+  sentAt          DateTime?
+  confirmedAt     DateTime?
+  error           String?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  withdrawal      Withdrawal      @relation(fields: [withdrawalId], references: [id], onDelete: Cascade)
+
+  @@index([withdrawalId])
+  @@index([status])
+  @@index([txHash])
+}
+
+model Agent {
+  id              String   @id @default(uuid())
+  userId          String   @unique
+  name            String
+  phone           String
+  email           String?
+  address         String
+  city            String
+  region          String
+  googleMapsLink  String?
+  commissionRate  Decimal  @db.Decimal(5, 4) @default(0.0100) // 1%
+  isActive        Boolean  @default(true)
+  maxDailyLimit   Decimal  @db.Decimal(20, 8) @default(10000) // USD
+  totalCommission Decimal  @db.Decimal(20, 8) @default(0)
+  dailyVolume     Decimal  @db.Decimal(20, 8) @default(0)
+  dailyVolumeDate DateTime @default(now())
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  agentTransactions AgentTransaction[]
+
+  @@index([isActive])
+  @@index([city])
+  @@index([region])
+  @@index([userId])
+}
+
+model AgentTransaction {
+  id          String   @id @default(uuid())
+  agentId     String
+  userId      String
+  type        String   // "DEPOSIT" or "WITHDRAWAL"
+  amount      Decimal  @db.Decimal(20, 8)
+  fee         Decimal  @db.Decimal(20, 8) @default(0)
+  commission  Decimal  @db.Decimal(20, 8) @default(0)
+  currency    Currency
+  status      String   @default("PENDING") // "PENDING", "CONFIRMED", "COMPLETED", "REJECTED", "CANCELLED"
+  reference   String   @unique
+  notes       String?
+  userNotes   String?
+  processedAt DateTime?
+  processedBy String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  agent       Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([agentId])
+  @@index([userId])
+  @@index([status])
+  @@index([reference])
+  @@index([createdAt])
+}
+
+model Transfer {
+  id            String   @id @default(uuid())
+  senderId      String
+  receiverId    String
+  currency      Currency @default(USDT)
+  amount        Decimal  @db.Decimal(20, 8)
+  fee           Decimal  @db.Decimal(20, 8) @default(0)
+  reference     String   @unique
+  note          String?
+  createdAt     DateTime @default(now())
+
+  sender        User     @relation("TransferSender", fields: [senderId], references: [id], onDelete: Cascade)
+  receiver      User     @relation("TransferReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
+
+  @@index([senderId])
+  @@index([receiverId])
+  @@index([reference])
+  @@index([createdAt])
+}
+
+// ── P2P Marketplace ─────────────────────────────────────────────────
+
+enum P2PListingStatus {
+  ACTIVE
+  PAUSED
+  COMPLETED
+  CANCELLED
+}
+
+enum P2PTradeStatus {
+  AWAITING_ESCROW       // Seller hasn't funded escrow yet
+  ESCROW_FUNDED         // Seller's crypto locked in escrow
+  PAYMENT_SENT          // Buyer claims they've sent fiat
+  PAYMENT_CONFIRMED     // Seller confirms receipt of fiat
+  COMPLETED             // Trade finished, crypto released
+  DISPUTED              // One party raised a dispute
+  CANCELLED             // Trade cancelled
+  EXPIRED               // Trade expired
+}
+
+enum P2PDisputeStatus {
+  OPEN
+  UNDER_REVIEW
+  RESOLVED_BUYER
+  RESOLVED_SELLER
+  CLOSED
+}
+
+model P2PListing {
+  id              String          @id @default(uuid())
+  userId          String
+  currency        Currency        @default(USDT)
+  fiatCurrency    Currency        @default(USD)
+  side            OrderSide       // BUY or SELL
+  price           Decimal         @db.Decimal(20, 8) // price per unit in fiat
+  amount          Decimal         @db.Decimal(20, 8) // total crypto amount
+  minLimit        Decimal         @db.Decimal(20, 8) // min trade amount
+  maxLimit        Decimal         @db.Decimal(20, 8) // max trade amount
+  filled          Decimal         @default(0) @db.Decimal(20, 8)
+  paymentMethods  String[]        @default(["BANK_TRANSFER"])
+  terms           String?         // seller's terms
+  autoReply       String?         // auto message to buyer
+  status          P2PListingStatus @default(ACTIVE)
+  expiresAt       DateTime?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  user            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  trades          P2PTrade[]
+
+  @@index([userId])
+  @@index([currency, fiatCurrency, side, status])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model P2PTrade {
+  id              String          @id @default(uuid())
+  listingId       String
+  buyerId         String
+  sellerId        String
+  currency        Currency
+  fiatCurrency    Currency
+  cryptoAmount    Decimal         @db.Decimal(20, 8)
+  fiatAmount      Decimal         @db.Decimal(20, 8)
+  price           Decimal         @db.Decimal(20, 8)
+  escrowAmount    Decimal         @db.Decimal(20, 8) // amount locked in escrow
+  status          P2PTradeStatus  @default(AWAITING_ESCROW)
+  reference       String          @unique
+  buyerNote       String?
+  sellerNote      String?
+  paymentMethod   String?
+  paymentProofUrl String?
+  completedAt     DateTime?
+  cancelledAt     DateTime?
+  expiresAt       DateTime?       // auto-cancel if not funded
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  listing         P2PListing      @relation(fields: [listingId], references: [id])
+  buyer           User            @relation("P2PBuyer", fields: [buyerId], references: [id])
+  seller          User            @relation("P2PSeller", fields: [sellerId], references: [id])
+  disputes        P2PDispute[]
+
+  @@index([listingId])
+  @@index([buyerId])
+  @@index([sellerId])
+  @@index([status])
+  @@index([reference])
+  @@index([createdAt])
+}
+
+model P2PDispute {
+  id              String            @id @default(uuid())
+  tradeId         String
+  raisedById      String
+  reason          String
+  evidence        String[]          @default([])
+  status          P2PDisputeStatus  @default(OPEN)
+  resolution      String?           // admin resolution notes
+  penaltyPercent  Decimal?          @db.Decimal(5, 2) // 5.00% to 100.00%
+  penaltyUserId   String?           // who gets penalised
+  penaltyAmount   Decimal?          @db.Decimal(20, 8)
+  resolvedBy      String?           // admin id
+  resolvedAt      DateTime?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  trade           P2PTrade          @relation(fields: [tradeId], references: [id])
+  raisedBy        User              @relation(fields: [raisedById], references: [id])
+
+  @@index([tradeId])
+  @@index([raisedById])
+  @@index([status])
+}
+
+// ── In-App Messaging ─────────────────────────────────────────────────
+
+model Message {
+  id          String   @id @default(uuid())
+  senderId    String
+  receiverId  String
+  content     String
+  type        String   @default("TEXT") // TEXT, PAYMENT_NOTE, SYSTEM
+  metadata    Json?    // payment reference, amount, etc.
+  isRead      Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  sender      User     @relation("MessageSender", fields: [senderId], references: [id], onDelete: Cascade)
+  receiver    User     @relation("MessageReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
+
+  @@index([senderId])
+  @@index([receiverId])
+  @@index([senderId, receiverId])
+  @@index([createdAt])
+}
+
+// ── Memecoin Minting ─────────────────────────────────────────────────
+
+enum TokenStatus {
+  PENDING_PAYMENT
+  DEPLOYING
+  DEPLOYED
+  FAILED
+  REVOKED
+}
+
+model MemeToken {
+  id              String      @id @default(uuid())
+  userId          String
+  name            String      // "DogeCash"
+  symbol          String      // "DOGEC"
+  description     String?
+  totalSupply     Decimal     @db.Decimal(38, 0) // e.g. 1000000000
+  decimals        Int         @default(18)
+  chain           String      @default("BNB") // BNB, ETH, SOL, AVAX
+  contractAddress String?     // deployed address
+  deployTxHash    String?     // deployment tx
+  logoUrl         String?
+  website         String?
+  twitter         String?
+  telegram        String?
+  platformFee     Decimal     @db.Decimal(20, 8) // USDT fee charged
+  status          TokenStatus @default(PENDING_PAYMENT)
+  deployedAt      DateTime?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  user            User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([chain, symbol])
+  @@index([userId])
+  @@index([status])
+  @@index([chain])
+}
+
+// ── Smart Contract Templates ─────────────────────────────────────────
+
+enum ContractStatus {
+  DRAFT
+  PENDING_PAYMENT
+  DEPLOYING
+  DEPLOYED
+  FAILED
+}
+
+enum ContractType {
+  ESCROW
+  VESTING
+  MULTISIG
+  TOKEN_LOCK
+  PAYMENT_SPLITTER
+  CUSTOM
+}
+
+model SmartContract {
+  id              String          @id @default(uuid())
+  userId          String
+  type            ContractType
+  name            String
+  description     String?
+  chain           String          @default("BNB")
+  contractAddress String?
+  deployTxHash    String?
+  parameters      Json            // type-specific config
+  platformFee     Decimal         @db.Decimal(20, 8)
+  status          ContractStatus  @default(DRAFT)
+  deployedAt      DateTime?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  user            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([status])
+  @@index([type])
+}
+
+// ── AML / Compliance ─────────────────────────────────────────────────
+
+enum AMLFlagStatus {
+  OPEN
+  REVIEWING
+  CLEARED
+  ESCALATED
+  FROZEN
+}
+
+enum AMLFlagType {
+  HIGH_VOLUME
+  RAPID_TRANSACTIONS
+  SUSPICIOUS_PATTERN
+  SANCTIONED_ADDRESS
+  LARGE_WITHDRAWAL
+  STRUCTURING
+  MANUAL
+}
+
+model AMLFlag {
+  id              String          @id @default(uuid())
+  userId          String
+  type            AMLFlagType
+  severity        String          @default("MEDIUM") // LOW, MEDIUM, HIGH, CRITICAL
+  description     String
+  transactionRef  String?         // related transaction
+  amount          Decimal?        @db.Decimal(20, 8)
+  currency        Currency?
+  status          AMLFlagStatus   @default(OPEN)
+  autoAction      String?         // HOLD, FREEZE, NONE
+  reviewedBy      String?
+  reviewedAt      DateTime?
+  resolution      String?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  user            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([status])
+  @@index([type])
+  @@index([severity])
+  @@index([createdAt])
+}
+
+// ── Referral Rewards ─────────────────────────────────────────────────
+
+model ReferralReward {
+  id          String   @id @default(uuid())
+  referrerId  String
+  referredId  String
+  tier        Int      @default(1) // 1=direct, 2=indirect
+  amount      Decimal  @db.Decimal(20, 8)
+  currency    Currency @default(USDT)
+  triggerType String   // REGISTRATION, FIRST_TRADE, DEPOSIT, MONTHLY_VOLUME
+  triggerRef  String?  // reference to the triggering event
+  paid        Boolean  @default(false)
+  paidAt      DateTime?
+  createdAt   DateTime @default(now())
+
+  @@index([referrerId])
+  @@index([referredId])
+  @@index([paid])
+  @@index([createdAt])
+}
+
+// ── API Keys ─────────────────────────────────────────────────────────
+
+model APIKey {
+  id          String    @id @default(uuid())
+  userId      String
+  name        String
+  keyHash     String    @unique
+  prefix      String    // first 8 chars for display "awk_xxxx..."
+  permissions String[]  @default(["read"])
+  isActive    Boolean   @default(true)
+  lastUsedAt  DateTime?
+  expiresAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([keyHash])
+}
+
+// ── Login History ────────────────────────────────────────────────────
+
+model LoginHistory {
+  id          String   @id @default(uuid())
+  userId      String
+  ipAddress   String?
+  userAgent   String?
+  device      String?  // parsed device name
+  location    String?  // geo-ip location
+  success     Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([createdAt])
+}
+
+model WhatsAppMessage {
+  id          String   @id @default(uuid())
+  userId      String?
+  phoneNumber String
+  message     String
+  direction   String   // "IN" or "OUT"
+  status      String   @default("SENT") // "SENT", "DELIVERED", "READ", "FAILED"
+  botResponse Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user        User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([phoneNumber])
+  @@index([userId])
+  @@index([direction])
+  @@index([createdAt])
+}
+
+// ── Virtual Visa cards ───────────────────────────────────────────────
+
+model Card {
+  id              String      @id @default(uuid())
+  userId          String
+  tier            CardTier    @default(STARTER)
+  status          CardStatus  @default(PENDING)
+
+  // Card details (last4 shown to user, full pan encrypted externally)
+  nickname        String?     // user-given label
+  last4           String      // "1144"
+  expiryMonth     Int         // 1-12
+  expiryYear      Int         // 4-digit
+  cardHolder      String      // "RAYAN ZAHI"
+  currency        Currency    @default(USDT)
+
+  // Balances / spend
+  spentTotal      Decimal     @default(0) @db.Decimal(20, 8)
+  spentMonth      Decimal     @default(0) @db.Decimal(20, 8)
+  dailyLimit      Decimal     @default(5000)  @db.Decimal(20, 8)
+  monthlyLimit    Decimal     @default(50000) @db.Decimal(20, 8)
+  cashbackRate    Decimal     @default(0.01) @db.Decimal(6, 4) // 1% default
+  cashbackBalance Decimal     @default(0) @db.Decimal(20, 8)
+
+  // Controls
+  frozen          Boolean     @default(false)
+  contactlessOn   Boolean     @default(true)
+  onlineOn        Boolean     @default(true)
+  atmOn           Boolean     @default(true)
+
+  issuedAt        DateTime?
+  activatedAt     DateTime?
+  cancelledAt     DateTime?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  user            User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions    CardTransaction[]
+
+  @@index([userId])
+  @@index([status])
+  @@index([last4])
+}
+
+model CardTransaction {
+  id              String      @id @default(uuid())
+  cardId          String
+  userId          String
+  type            CardTxType
+  merchant        String?
+  category        String?     // e.g. "groceries", "travel", "subscription"
+  country         String?     // ISO country code
+  amount          Decimal     @db.Decimal(20, 8)
+  currency        Currency    @default(USDT)
+  fxRate          Decimal?    @db.Decimal(20, 8) // rate used if merchant currency != card currency
+  cashback        Decimal     @default(0) @db.Decimal(20, 8)
+  declined        Boolean     @default(false)
+  declinedReason  String?
+  reference       String      @unique
+  metadata        Json?
+  createdAt       DateTime    @default(now())
+
+  card            Card        @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  user            User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([cardId])
+  @@index([userId])
+  @@index([type])
+  @@index([createdAt])
+}

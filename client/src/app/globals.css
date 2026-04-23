@@ -1,0 +1,87 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600;700;800;900&family=Cairo:wght@300;400;500;600;700;800&display=swap');
+
+html, body {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-family: 'DM Sans', system-ui, sans-serif;
+}
+
+h1, h2, h3, h4, .amwa-serif {
+  font-family: 'DM Serif Display', 'Cairo', serif;
+  letter-spacing: -0.02em;
+}
+.amwa-italic { font-style: italic; }
+
+[dir='rtl'] body { font-family: 'Cairo', 'DM Sans', system-ui, sans-serif !important; }
+[dir='rtl'] h1, [dir='rtl'] h2, [dir='rtl'] h3, [dir='rtl'] h4 {
+  font-family: 'Cairo', 'DM Serif Display', serif !important;
+}
+
+/* ── Bidi handling ────────────────────────────────────────
+   Page layout stays LTR globally. For Arabic, we flip
+   `direction` only on text-bearing elements (not flex
+   rows / nav / buttons) so punctuation sits on the right
+   edge and inherited `text-align: start` resolves correctly.
+   NOTE: no :where() here — we need real specificity so
+   Chakra's emotion rules don't override. */
+html[lang='ar'] h1,
+html[lang='ar'] h2,
+html[lang='ar'] h3,
+html[lang='ar'] h4,
+html[lang='ar'] h5,
+html[lang='ar'] h6,
+html[lang='ar'] p,
+html[lang='ar'] [class*="chakra-text"],
+html[lang='ar'] [class*="chakra-heading"] {
+  direction: rtl !important;
+  unicode-bidi: plaintext !important;
+}
+
+/* Arabic-language font swap (dir still stays LTR) */
+html[lang='ar'] body,
+html[lang='ar'] p,
+html[lang='ar'] [class*="chakra-text"] {
+  font-family: 'Cairo', 'DM Sans', system-ui, sans-serif;
+}
+html[lang='ar'] h1, html[lang='ar'] h2, html[lang='ar'] h3, html[lang='ar'] h4,
+html[lang='ar'] [class*="chakra-heading"] {
+  font-family: 'Cairo', 'DM Serif Display', serif;
+}
+
+/* ── Justification ────────────────────────────────────────
+   Justify paragraph-level copy only. We skip anything the
+   author aligned explicitly via the Chakra textAlign prop
+   (which Chakra serialises to an inline style attribute). */
+p:not([style*="text-align"]),
+[class*="chakra-text"]:not([style*="text-align"]) {
+  text-align: justify;
+  text-align-last: start;
+  hyphens: auto;
+  -webkit-hyphens: auto;
+}
+
+/* amwa.ly shared utilities */
+.amwa-glass {
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(0,87,184,0.14);
+  backdrop-filter: blur(18px);
+}
+.amwa-glass-light {
+  background: rgba(255,255,255,0.92);
+  border: 1px solid rgba(0,87,184,0.08);
+  backdrop-filter: blur(18px);
+}
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(128,128,128,0.3); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(128,128,128,0.5); }
+
+@media print { .no-print { display: none !important; } }
+
+/* Landing-page scroll snap (proximity so it doesn't fight sticky-scroll sections) */
+html.snap-landing { scroll-snap-type: y proximity; scroll-padding-top: 0; }
+.snap-section { scroll-snap-align: start; scroll-snap-stop: always; }
+.snap-section-normal { scroll-snap-align: start; }
+/* Disable snap inside the sticky-scroll phone theater */
+.snap-none { scroll-snap-align: none; }
