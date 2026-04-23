@@ -610,7 +610,7 @@ export default function DepositPage() {
                             </Flex>
                           );
                         })()}
-                        <Text fontSize="10px" color="#f59e0b" mt={2}>⚠️ Only send {selectedWallet} to this address. Wrong currency/network = lost funds.</Text>
+                        <Text fontSize="10px" color="#ffaa18" mt={2}>⚠️ Only send {selectedWallet} to this address. Wrong currency/network = lost funds.</Text>
                       </Box>
                     )}
 
