@@ -325,7 +325,7 @@ function ScreenMarkets() {
 function ScreenP2P() {
   const { t } = useTranslate();
   const offers = [
-    { name: "Rayan Zahi", flag: "", rate: "67,240.50", lim: "100 – 50,000", orders: 1144, cur: "BTC/USDT" },
+    { name: "Rayan Z.", flag: "", rate: "67,240.50", lim: "100 – 50,000", orders: 1144, cur: "BTC/USDT" },
     { name: "Rahma A.", flag: "", rate: "3.67", lim: "114.20 – 41,120", orders: 411, cur: "USDT/AED" },
     { name: "Noran G.", flag: "", rate: "3.75", lim: "41.12 – 11,420", orders: 1120, cur: "USDT/SAR" },
   ];
@@ -470,7 +470,7 @@ function ScreenSocialWallet() {
           </Flex>
           <VStack align="start" spacing={0}>
             <Text fontSize="13px" color="white" fontWeight="800">@rayofsunshine</Text>
-            <Text fontSize="9px" color="rgba(255,255,255,0.55)">Rayan Zahi · {t("screen_social_handle")}</Text>
+            <Text fontSize="9px" color="rgba(255,255,255,0.55)">Rayan Z. · {t("screen_social_handle")}</Text>
           </VStack>
         </HStack>
         <Text fontSize="9px" color="rgba(255,255,255,0.55)">{t("screen_social_desc")}</Text>
@@ -596,7 +596,7 @@ function ScreenCard() {
                 <Text fontSize="7.5px" color="rgba(255,255,255,0.7)" letterSpacing="0.1em">
                   {t("screen_card_holder")}
                 </Text>
-                <Text fontSize="10px" color="white" fontWeight="700">RAYAN ZAHI</Text>
+                <Text fontSize="10px" color="white" fontWeight="700">RAYAN Z.</Text>
               </VStack>
               <VStack align="start" spacing={0}>
                 <Text fontSize="7.5px" color="rgba(255,255,255,0.7)" letterSpacing="0.1em">
@@ -867,7 +867,7 @@ function StageMarkets() {
 function StageP2P() {
   const { t } = useTranslate();
   const offers = [
-    { n: "Rayan Zahi", flag: "RZ", rate: "67,240.50", lim: "100 – 50,000 USD", grad: "linear-gradient(135deg, #facc15, #b45309)" },
+    { n: "Rayan G.", flag: "RG", rate: "67,240.50", lim: "100 – 50,000 USD", grad: "linear-gradient(135deg, #facc15, #b45309)" },
     { n: "Ali A.", flag: "AA", rate: "3.67", lim: "114.20 – 41,120 AED", grad: "linear-gradient(135deg, #06b6d4, #0369a1)" },
     { n: "Moe A.", flag: "MA", rate: "3.75", lim: "41.12 – 11,420 SAR", grad: "linear-gradient(135deg, #ec4899, #be185d)" },
   ];
@@ -980,10 +980,10 @@ function StageMint() {
 function StageHandles() {
   const { t } = useTranslate();
   const rows = [
-    { h: "@rayofsunshine", loc: "�� Rayan Zahi", col: "#facc15" },
-    { h: "@noor.dxb", loc: "🇪 UAE", col: "#06b6d4" },
-    { h: "@layla_k", loc: "�🇦 KSA", col: "#ec4899" },
-    { h: "@ines_casa", loc: "�� Morocco", col: "#f59e0b" },
+    { h: "@rayofsunshine", loc: "Tripoli", col: "#facc15" },
+    { h: "@noor.dxb", loc: "UAE", col: "#06b6d4" },
+    { h: "@layla_k", loc: "KSA", col: "#ec4899" },
+    { h: "@ines_casa", loc: "Morocco", col: "#f59e0b" },
   ];
   return (
     <VStack w={{ base: "260px", md: "320px" }} spacing={2.5} align="stretch">
@@ -1154,7 +1154,7 @@ function PhoneSendScreen() {
         </Flex>
         <VStack align="start" spacing={0} flex={1}>
           <Text fontSize="10px" color="rgba(255,255,255,0.5)" fontWeight="700" letterSpacing="0.1em">{t("sec_social_to")}</Text>
-          <Text fontSize="13px" color="white" fontWeight="800">@rayofsunshine · Rayan Zahi</Text>
+          <Text fontSize="13px" color="white" fontWeight="800">@rayofsunshine · Rayan Z.</Text>
         </VStack>
         <Icon as={FiCheck} color="#22c55e" />
       </HStack>
