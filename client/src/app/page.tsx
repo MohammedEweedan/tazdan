@@ -182,68 +182,58 @@ const ScreenLogo = memo(function ScreenLogo() {
       position="relative"
       overflow="hidden"
     >
-      {/* Apple-Pay-style chameleon glow — rotating brand-color halos */}
-      <motion.div
+      {/* Static chameleon glow — same Apple-Pay-style brand halo, no infinite blur+rotation
+          (rotating a blur-filtered element forces the GPU to re-blur every frame, which
+          was a major scroll-jank source on mobile). Layers are now composited once. */}
+      <Box
+        position="absolute"
+        top="50%"
+        left="50%"
+        w="340px"
+        h="340px"
+        mt="-170px"
+        ml="-170px"
+        borderRadius="full"
+        pointerEvents="none"
+        opacity={0.55}
         style={{
-          position: "absolute",
-          top: "50%",
-          left: "50%",
-          width: 340,
-          height: 340,
-          marginTop: -170,
-          marginLeft: -170,
-          borderRadius: "50%",
           filter: "blur(60px)",
-          pointerEvents: "none",
           background:
             "conic-gradient(from 0deg, #0057b8 0%, #4a8fe0 25%, #7c3aed 50%, #06b6d4 75%, #0057b8 100%)",
-          opacity: 0.55,
-          willChange: "transform",
         }}
-        animate={{ rotate: 360 }}
-        transition={{ duration: 16, repeat: Infinity, ease: "linear" }}
       />
-      <motion.div
+      <Box
+        position="absolute"
+        top="50%"
+        left="50%"
+        w="220px"
+        h="220px"
+        mt="-110px"
+        ml="-110px"
+        borderRadius="full"
+        pointerEvents="none"
+        opacity={0.85}
         style={{
-          position: "absolute",
-          top: "50%",
-          left: "50%",
-          width: 220,
-          height: 220,
-          marginTop: -110,
-          marginLeft: -110,
-          borderRadius: "50%",
           filter: "blur(36px)",
-          pointerEvents: "none",
           background:
             "conic-gradient(from 180deg, #4a8fe0 0%, #1d4ed8 30%, #0057b8 60%, #6ea8ee 90%, #4a8fe0 100%)",
-          opacity: 0.85,
-          willChange: "transform",
-        }}
-        animate={{ rotate: -360, scale: [1, 1.08, 1] }}
-        transition={{
-          rotate: { duration: 11, repeat: Infinity, ease: "linear" },
-          scale:  { duration: 4.5, repeat: Infinity, ease: "easeInOut" },
         }}
       />
-      <motion.div
+      <Box
+        position="absolute"
+        top="50%"
+        left="50%"
+        w="140px"
+        h="140px"
+        mt="-70px"
+        ml="-70px"
+        borderRadius="full"
+        pointerEvents="none"
         style={{
-          position: "absolute",
-          top: "50%",
-          left: "50%",
-          width: 140,
-          height: 140,
-          marginTop: -70,
-          marginLeft: -70,
-          borderRadius: "50%",
           filter: "blur(20px)",
-          pointerEvents: "none",
           background:
             "radial-gradient(circle, rgba(255,255,255,0.5) 0%, rgba(74,143,224,0.6) 40%, rgba(0,87,184,0.2) 70%, transparent 100%)",
-          willChange: "opacity",
         }}
-        animate={{ opacity: [0.6, 1, 0.6] }}
-        transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
       />
       <Box position="relative" w="140px" h="140px" zIndex={2}>
         <NextImage 
@@ -999,6 +989,64 @@ const StageHandles = memo(function StageHandles() {
 
 
 /* ═════════════════════════════════════════════════════
+   LAZY BACKGROUND VIDEO
+   Pauses when offscreen so we don't burn GPU/battery
+   decoding video frames the user can't see.
+   ═════════════════════════════════════════════════════ */
+function LazyBackgroundVideo({
+  src,
+  opacity = 1,
+  objectFit = "cover",
+  filter,
+}: {
+  src: string;
+  opacity?: number;
+  objectFit?: "cover" | "contain";
+  filter?: string;
+}) {
+  const ref = useRef<HTMLVideoElement>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    if (typeof IntersectionObserver === "undefined") {
+      el.play().catch(() => {});
+      return;
+    }
+    const io = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) {
+            el.play().catch(() => {});
+          } else {
+            el.pause();
+          }
+        }
+      },
+      { threshold: 0.05 }
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+  return (
+    <video
+      ref={ref}
+      src={src}
+      loop
+      muted
+      playsInline
+      preload="metadata"
+      style={{
+        width: "100%",
+        height: "100%",
+        objectFit,
+        opacity,
+        filter: filter ?? (opacity < 1 ? "saturate(1.1) blur(0.5px)" : undefined),
+      }}
+    />
+  );
+}
+
+/* ═════════════════════════════════════════════════════
    STATIC PHONE (used in feature sections below)
    ═════════════════════════════════════════════════════ */
 
@@ -1644,14 +1692,7 @@ function SectionOnRamp() {
                     bg={dark ? "#0a0f1e" : "#f8f9fc"} 
                     overflow="hidden"
                   >
-                    <video
-                      src={c.video}
-                      autoPlay
-                      loop
-                      muted
-                      playsInline
-                      style={{ width: "100%", height: "100%", objectFit: "cover" }}
-                    />
+                    <LazyBackgroundVideo src={c.video} objectFit="cover" />
                   </Box>
                   
                   {/* Text content */}
@@ -1685,14 +1726,7 @@ function SectionOnRamp() {
                     borderTop="1px solid"
                     borderColor={cardBorder}
                   >
-                    <video
-                      src={c.video}
-                      autoPlay
-                      loop
-                      muted
-                      playsInline
-                      style={{ width: "100%", height: "100%", objectFit: "contain" }}
-                    />
+                    <LazyBackgroundVideo src={c.video} objectFit="contain" />
                   </Box>
                 </VStack>
               </motion.div>
@@ -2212,7 +2246,7 @@ export default function LandingPage() {
     <Box minH="100vh" bg={pageBg} overflowX="clip" color={textMain}>
       <PublicNav />
 
-      <motion.div
+      {/* <motion.div
         style={{
           opacity: pathsOpacity,
           position: "fixed",
@@ -2224,7 +2258,7 @@ export default function LandingPage() {
         }}
       >
         <BackgroundPaths />
-      </motion.div>
+      </motion.div> */}
 
       {/* ══ HERO + STICKY STAGES (one phone — unlocks & cycles) ══
            300vh = 3 × 100vh. First segment = intro, next 2 = stages (Spot, Markets).
@@ -2391,7 +2425,7 @@ export default function LandingPage() {
 
       {/* ══ CONNECTED — text only; arches now live behind the CTA + footer ══ */}
       <Box className="snap-section" id="connect" py={{ base: 16, md: 24 }} position="relative" minH="100vh" display="flex" alignItems="center">
-        {/* Background hero video — soft, behind everything */}
+        {/* Background hero video — only plays when section is on-screen (saves mobile GPU/battery) */}
           <Box
             position="absolute"
             inset={0}
@@ -2403,19 +2437,9 @@ export default function LandingPage() {
               WebkitMaskImage: "radial-gradient(ellipse at center, black 35%, transparent 80%)",
             }}
           >
-            <video
+            <LazyBackgroundVideo
               src="/videos/WebHeader.mp4"
-              autoPlay
-              loop
-              muted
-              playsInline
-              style={{
-                width: "100%",
-                height: "100%",
-                objectFit: "cover",
-                opacity: dark ? 0.75 : 0.75,
-                filter: "saturate(1.1) blur(0.5px)",
-              }}
+              opacity={0.75}
             />
             <Box
               position="absolute"
@@ -2463,20 +2487,24 @@ export default function LandingPage() {
             alignItems="center"
             justifyContent="center"
           >
-            {/* Top arc */}
-            <motion.div
-              animate={{
-                boxShadow: [
-                  "0 0 30px rgba(0,87,184,0.25), inset 0 0 20px rgba(0,87,184,0.15)",
-                  "0 0 90px rgba(0,87,184,0.85), inset 0 0 40px rgba(0,87,184,0.5)",
-                  "0 0 30px rgba(0,87,184,0.25), inset 0 0 20px rgba(0,87,184,0.15)",
-                ],
-                borderColor: [
-                  "rgba(0,87,184,0.25)",
-                  "rgba(74,143,224,0.95)",
-                  "rgba(0,87,184,0.25)",
-                ],
+            {/* Top arc — static dim base */}
+            <Box
+              position="absolute"
+              top="0"
+              left="50%"
+              w="1600px"
+              h="1600px"
+              borderRadius="full"
+              border="1.5px solid rgba(0,87,184,0.4)"
+              style={{
+                transform: "translate(-50%, 0)",
+                clipPath: "inset(0 0 50% 0)",
+                boxShadow: "0 0 40px rgba(0,87,184,0.35)",
               }}
+            />
+            {/* Top arc — bright pulse layer (animated opacity only — composited, no paint) */}
+            <motion.div
+              animate={{ opacity: [0.2, 0.95, 0.2] }}
               transition={{ duration: 2.6, repeat: Infinity, ease: "easeInOut" }}
               style={{
                 position: "absolute",
@@ -2485,25 +2513,31 @@ export default function LandingPage() {
                 width: "1600px",
                 height: "1600px",
                 transform: "translate(-50%, 0)",
-                border: "1.5px solid",
+                border: "1.5px solid rgba(74,143,224,0.95)",
                 borderRadius: "50%",
                 clipPath: "inset(0 0 50% 0)",
+                boxShadow: "0 0 90px rgba(0,87,184,0.85)",
+                willChange: "opacity",
               }}
             />
-            {/* Bottom arc */}
-            <motion.div
-              animate={{
-                boxShadow: [
-                  "0 0 30px rgba(0,87,184,0.25), inset 0 0 20px rgba(0,87,184,0.15)",
-                  "0 0 90px rgba(0,87,184,0.85), inset 0 0 40px rgba(0,87,184,0.5)",
-                  "0 0 30px rgba(0,87,184,0.25), inset 0 0 20px rgba(0,87,184,0.15)",
-                ],
-                borderColor: [
-                  "rgba(0,87,184,0.25)",
-                  "rgba(74,143,224,0.95)",
-                  "rgba(0,87,184,0.25)",
-                ],
+            {/* Bottom arc — static dim base */}
+            <Box
+              position="absolute"
+              bottom="0"
+              left="50%"
+              w="1600px"
+              h="1600px"
+              borderRadius="full"
+              border="1.5px solid rgba(0,87,184,0.4)"
+              style={{
+                transform: "translate(-50%, 0)",
+                clipPath: "inset(50% 0 0 0)",
+                boxShadow: "0 0 40px rgba(0,87,184,0.35)",
               }}
+            />
+            {/* Bottom arc — bright pulse layer */}
+            <motion.div
+              animate={{ opacity: [0.2, 0.95, 0.2] }}
               transition={{ duration: 2.6, repeat: Infinity, ease: "easeInOut", delay: 1.3 }}
               style={{
                 position: "absolute",
@@ -2512,9 +2546,11 @@ export default function LandingPage() {
                 width: "1600px",
                 height: "1600px",
                 transform: "translate(-50%, 0)",
-                border: "1.5px solid",
+                border: "1.5px solid rgba(74,143,224,0.95)",
                 borderRadius: "50%",
                 clipPath: "inset(50% 0 0 0)",
+                boxShadow: "0 0 90px rgba(0,87,184,0.85)",
+                willChange: "opacity",
               }}
             />
             {/* Traveling spark on top arc */}
