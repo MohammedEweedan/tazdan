@@ -676,6 +676,16 @@ function ScreenCard() {
   );
 }
 
+const PHONE_SCREENS = [
+  <ScreenSpot key="0" />,
+  <ScreenMarkets key="1" />,
+  <ScreenP2P key="2" />,
+  <ScreenSocialWallet key="3" />,
+  <ScreenCard key="4" />,
+  <ScreenMint key="5" />,
+];
+
+
 /* ═════════════════════════════════════════════════════
    PHONE FRAME (crossfade across 6 screens)
    ═════════════════════════════════════════════════════ */
@@ -697,14 +707,6 @@ function PhoneFrame({
     useTransform(progress, [0.470, 0.500, 0.637, 0.667], [0, 1, 1, 0]),
     useTransform(progress, [0.637, 0.667, 0.803, 0.833], [0, 1, 1, 0]),
     useTransform(progress, [0.803, 0.833, 0.970, 1.0], [0, 1, 1, 1]),
-  ];
-  const screens = [
-    <ScreenSpot key="0" />,
-    <ScreenMarkets key="1" />,
-    <ScreenP2P key="2" />,
-    <ScreenSocialWallet key="3" />,
-    <ScreenCard key="4" />,
-    <ScreenMint key="5" />,
   ];
   return (
     <Box
@@ -728,7 +730,7 @@ function PhoneFrame({
         overflow="hidden"
         bg="#000"
       >
-        {screens.map((s, i) => (
+        {PHONE_SCREENS.map((s, i) => (
           <motion.div key={i} style={{ position: "absolute", inset: 0, opacity: opacities[i] }}>
             {s}
           </motion.div>
@@ -812,7 +814,7 @@ const StageSpot = memo(function StageSpot() {
   );
 });
 
-function StageMarkets() {
+const StageMarkets = memo(function StageMarkets() {
   const live = useLivePrices();
   const meta = [
     { sym: "BTC", k: "BTCUSDT", n: "Bitcoin", c: "#f7931a" },
@@ -862,9 +864,9 @@ function StageMarkets() {
       ))}
     </VStack>
   );
-}
+})
 
-function StageP2P() {
+const StageP2P = memo(function StageP2P() {
   const { t } = useTranslate();
   const offers = [
     { n: "Rayan G.", flag: "RG", rate: "67,240.50", lim: "100 – 50,000 USD", grad: "linear-gradient(135deg, #facc15, #b45309)" },
@@ -902,9 +904,9 @@ function StageP2P() {
       ))}
     </VStack>
   );
-}
+})
 
-function StageMint() {
+const StageMint = memo(function StageMint() {
   const { t } = useTranslate();
   const chains = [
     { n: "BNB", c: "#f3ba2f", angle: 0 },
@@ -975,9 +977,9 @@ function StageMint() {
       })}
     </Box>
   );
-}
+});
 
-function StageHandles() {
+const StageHandles = memo(function StageHandles() {
   const { t } = useTranslate();
   const rows = [
     { h: "@rayofsunshine", loc: "Tripoli", col: "#facc15" },
@@ -1023,9 +1025,9 @@ function StageHandles() {
       ))}
     </VStack>
   );
-}
+})
 
-function StageCards() {
+const StageCards = memo(function StageCards() {
   const { t } = useTranslate();
   const tiers = [
     { n: "Starter", c: "#8ab4f8" },
@@ -1091,7 +1093,7 @@ function StageCards() {
       </HStack>
     </VStack>
   );
-}
+});
 
 /* ═════════════════════════════════════════════════════
    STATIC PHONE (used in feature sections below)
@@ -2219,14 +2221,18 @@ function StageOverlay({ stages, progress }: { stages: Stage[]; progress: MotionV
   const textMain = dark ? "white" : "#0a0f1e";
   const textSub = dark ? "rgba(255,255,255,0.6)" : "#64748b";
   const [activeIndex, setActiveIndex] = useState(0);
+  const activeIndexRef = useRef(0); // ← add ref to avoid stale closure
 
-  // Use useMotionValueEvent instead of creating multiple transforms
   useMotionValueEvent(progress, "change", (latest) => {
     const newIndex = Math.min(
       Math.floor(latest * stages.length),
       stages.length - 1
     );
-    setActiveIndex(newIndex);
+    // Only call setState when the index actually changes
+    if (newIndex !== activeIndexRef.current) {
+      activeIndexRef.current = newIndex;
+      setActiveIndex(newIndex);
+    }
   });
 
   return (
@@ -2316,6 +2322,16 @@ function StageOverlay({ stages, progress }: { stages: Stage[]; progress: MotionV
   );
 }
 
+// At module level (outside LandingPage):
+const STAGE_WIDGETS = [
+  <StageSpot key="spot" />,
+  <StageMarkets key="markets" />,
+  <StageP2P key="p2p" />,
+  <StageHandles key="handles" />,
+  <StageCards key="cards" />,
+  <StageMint key="mint" />,
+];
+
 /* ═════════════════════════════════════════════════════
    LANDING PAGE
    ═════════════════════════════════════════════════════ */
@@ -2386,12 +2402,12 @@ export default function LandingPage() {
     : "linear(to-b, #0057b8 0%, #bbbbbb 95%, rgba(10,15,30,0.35) 100%)";
 
   const stages: Stage[] = [
-    { eyebrow: t("feat_spot_eyebrow"), title: t("feat_spot_title"), desc: t("feat_spot_desc"), widget: <StageSpot /> },
-    { eyebrow: t("feat_markets_eyebrow"), title: t("feat_markets_title"), desc: t("feat_markets_desc"), widget: <StageMarkets /> },
-    { eyebrow: t("feat_p2p_eyebrow"), title: t("feat_p2p_title"), desc: t("feat_p2p_desc"), widget: <StageP2P /> },
-    { eyebrow: t("feat_wallet_eyebrow"), title: t("feat_wallet_title"), desc: t("feat_wallet_desc"), widget: <StageHandles /> },
-    { eyebrow: t("feat_card_eyebrow"), title: t("feat_card_title"), desc: t("feat_card_desc"), widget: <StageCards /> },
-    { eyebrow: t("feat_mint_eyebrow"), title: t("feat_mint_title"), desc: t("feat_mint_desc"), widget: <StageMint /> },
+    { eyebrow: t("feat_spot_eyebrow"),    title: t("feat_spot_title"),    desc: t("feat_spot_desc"),    widget: STAGE_WIDGETS[0] },
+    { eyebrow: t("feat_markets_eyebrow"), title: t("feat_markets_title"), desc: t("feat_markets_desc"), widget: STAGE_WIDGETS[1] },
+    { eyebrow: t("feat_p2p_eyebrow"),     title: t("feat_p2p_title"),     desc: t("feat_p2p_desc"),     widget: STAGE_WIDGETS[2] },
+    { eyebrow: t("feat_wallet_eyebrow"),  title: t("feat_wallet_title"),  desc: t("feat_wallet_desc"),  widget: STAGE_WIDGETS[3] },
+    { eyebrow: t("feat_card_eyebrow"),    title: t("feat_card_title"),    desc: t("feat_card_desc"),    widget: STAGE_WIDGETS[4] },
+    { eyebrow: t("feat_mint_eyebrow"),    title: t("feat_mint_title"),    desc: t("feat_mint_desc"),    widget: STAGE_WIDGETS[5] },
   ];
 
   // ✅ SAFE: all hooks already ran
