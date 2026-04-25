@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useEffect, useState, memo, useMemo } from "react";
+import dynamic from "next/dynamic";
 import NextLink from "next/link";
 import NextImage from "next/image";
 import {
@@ -86,46 +87,52 @@ const SEED_PRICES: TickerMap = {
   ADAUSDT: { price: 0.445, change: -1.20 },
 };
 
-function useLivePrices(symbols: string[] = TRACKED_SYMBOLS, intervalMs = 8000): TickerMap {
-  const [prices, setPrices] = useState<TickerMap>(SEED_PRICES);
-  useEffect(() => {
-    let alive = true;
-    const fetchPrices = async () => {
-      try {
-        const url = `https://api.binance.com/api/v3/ticker/24hr?symbols=${encodeURIComponent(
-          JSON.stringify(symbols)
-        )}`;
-        const res = await fetch(url, { cache: "no-store" });
-        if (!res.ok) return;
-        const data: Array<{ symbol: string; lastPrice: string; priceChangePercent: string }> =
-          await res.json();
-        if (!alive) return;
-        const next: TickerMap = {};
-        for (const d of data) {
-          next[d.symbol] = {
-            price: parseFloat(d.lastPrice),
-            change: parseFloat(d.priceChangePercent),
-          };
-        }
-        // Only update if values actually changed to prevent unnecessary re-renders
-        setPrices((prev) => {
-          const hasChanges = Object.keys(next).some(
-            (sym) => next[sym].price !== prev[sym]?.price || next[sym].change !== prev[sym]?.change
-          );
-          return hasChanges ? { ...prev, ...next } : prev;
-        });
-      } catch {
-        /* network/CORS error — keep last-good state */
+// ── Module-level singleton: one poll, zero duplicate fetches ──
+let _prices: TickerMap = SEED_PRICES;
+let _listeners = new Set<() => void>();
+let _started = false;
+
+function _startPricePolling() {
+  if (_started || typeof window === "undefined") return;
+  _started = true;
+  const fetchPrices = async () => {
+    try {
+      const url = `https://api.binance.com/api/v3/ticker/24hr?symbols=${encodeURIComponent(
+        JSON.stringify(TRACKED_SYMBOLS)
+      )}`;
+      const res = await fetch(url, { cache: "no-store" });
+      if (!res.ok) return;
+      const data: Array<{ symbol: string; lastPrice: string; priceChangePercent: string }> =
+        await res.json();
+      const next: TickerMap = {};
+      for (const d of data) {
+        next[d.symbol] = {
+          price: parseFloat(d.lastPrice),
+          change: parseFloat(d.priceChangePercent),
+        };
       }
-    };
-    fetchPrices();
-    const id = setInterval(fetchPrices, intervalMs);
-    return () => {
-      alive = false;
-      clearInterval(id);
-    };
-  }, [symbols.join(","), intervalMs]);
-  return prices;
+      const hasChanges = Object.keys(next).some(
+        (sym) => next[sym].price !== _prices[sym]?.price
+      );
+      if (hasChanges) {
+        _prices = { ..._prices, ...next };
+        _listeners.forEach((fn) => fn());
+      }
+    } catch {}
+  };
+  fetchPrices();
+  setInterval(fetchPrices, 12000); // slower poll — 12s is fine for a landing page
+}
+
+function useLivePrices(): TickerMap {
+  const [, rerender] = useState(0);
+  useEffect(() => {
+    _startPricePolling();
+    const trigger = () => rerender((n) => n + 1);
+    _listeners.add(trigger);
+    return () => { _listeners.delete(trigger); };
+  }, []);
+  return _prices;
 }
 
 function fmtPrice(n: number): string {
@@ -240,7 +247,7 @@ const ScreenLogo = memo(function ScreenLogo() {
   );
 });
 
-function ScreenSpot() {
+const ScreenSpot = memo(function ScreenSpot(){
   const { t } = useTranslate();
   const prices = useLivePrices();
   const btc = prices.BTCUSDT ?? SEED_PRICES.BTCUSDT;
@@ -296,9 +303,9 @@ function ScreenSpot() {
       </HStack>
     </VStack>
   );
-}
+});
 
-function ScreenMarkets() {
+const ScreenMarkets = memo(function ScreenMarkets() {
   const { t } = useTranslate();
   const live = useLivePrices();
   const meta = [
@@ -352,7 +359,7 @@ function ScreenMarkets() {
       </VStack>
     </VStack>
   );
-}
+});
 
 function ScreenP2P() {
   const { t } = useTranslate();
@@ -664,7 +671,6 @@ function PhoneFrame({
       style={{
         transform: `scale(${scale})`,
         transformOrigin: "center center",
-        filter: isMobilePhone ? "drop-shadow(0 20px 50px rgba(0,87,184,0.25))" : "drop-shadow(0 40px 100px rgba(0,87,184,0.4))",
       }}
     >
       <Box
@@ -676,6 +682,9 @@ function PhoneFrame({
         borderRadius="40px"
         overflow="hidden"
         bg="#000"
+        boxShadow={isMobilePhone 
+          ? "0 20px 50px rgba(0,87,184,0.25)" 
+          : "0 40px 100px rgba(0,87,184,0.4)"}
       >
         {PHONE_SCREENS.map((s, i) => (
           <motion.div key={i} style={{ position: "absolute", inset: 0, opacity: opacities[i] }}>
@@ -721,7 +730,7 @@ const StageSpot = memo(function StageSpot() {
       p={5}
       borderRadius="24px"
       border="1px solid rgba(0,87,184,0.3)"
-      backdropFilter="blur(16px)"
+      bg="rgba(10, 18, 40, 0.92)"
       boxShadow="0 20px 60px rgba(0,87,184,0.25)"
     >
       <HStack mb={3}>
@@ -787,9 +796,8 @@ const StageMarkets = memo(function StageMarkets() {
           key={r.sym}
           p={3}
           borderRadius="16px"
-          bg="rgba(255,255,255,0.04)"
           border="1px solid rgba(255,255,255,0.08)"
-          backdropFilter="blur(14px)"
+          bg="rgba(18, 24, 44, 0.95)"
           boxShadow="0 8px 24px rgba(0,0,0,0.25)"
           style={{ transform: `translateX(${i % 2 === 0 ? -8 : 8}px)` }}
         >
@@ -877,6 +885,7 @@ function LazyBackgroundVideo({
    ═════════════════════════════════════════════════════ */
 
 function StaticPhone({ children, scale = 1 }: { children: React.ReactNode; scale?: number }) {
+    const isMobilePhone = useBreakpointValue({ base: true, md: false }) ?? false;
   return (
     <Box
       position="relative"
@@ -884,7 +893,6 @@ function StaticPhone({ children, scale = 1 }: { children: React.ReactNode; scale
       h={`${PHONE_H}px`}
       mx="auto"
       style={{
-        filter: "drop-shadow(0 40px 100px rgba(0,87,184,0.4))",
         transform: `scale(${scale})`,
         transformOrigin: "center center",
       }}
@@ -898,6 +906,9 @@ function StaticPhone({ children, scale = 1 }: { children: React.ReactNode; scale
         borderRadius="40px"
         overflow="hidden"
         bg="#000"
+        boxShadow={isMobilePhone 
+          ? "0 20px 50px rgba(0,87,184,0.25)" 
+          : "0 40px 100px rgba(0,87,184,0.4)"}
       >
         {children}
       </Box>
@@ -983,7 +994,6 @@ function SectionSocialFinance() {
               whileInView={{ opacity: 1, y: 0, scale: 1 }}
               viewport={{ once: true, amount: 0.2 }}
               transition={{ duration: 0.75, ease: [0.22, 1, 0.36, 1] }}
-              style={{ willChange: "transform" }}
             >
               <StaticPhone scale={0.85}>
                 <PhoneSendScreen />
@@ -996,7 +1006,6 @@ function SectionSocialFinance() {
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true, amount: 0.2 }}
             transition={{ duration: 0.65, delay: 0.1, ease: [0.22, 1, 0.36, 1] }}
-            style={{ willChange: "transform" }}
           >
             <VStack
               align={{ base: "center", lg: "start" }}
@@ -1019,7 +1028,7 @@ function SectionSocialFinance() {
               <Text fontSize={{ base: "14.5px", md: "16.5px" }} color={textSub} maxW="460px">
                 {t("sec_social_desc")}
               </Text>
-              <Box w="100%" maxW="460px" bg={cardBg} border="1px solid" borderColor={cardBorder} borderRadius="24px" p={6} backdropFilter="blur(14px)" boxShadow={dark ? "0 20px 50px rgba(0,0,0,0.3)" : "0 20px 50px rgba(0,87,184,0.08)"}>
+              <Box w="100%" maxW="460px" bg={cardBg} border="1px solid" borderColor={cardBorder} borderRadius="24px" p={6} boxShadow={dark ? "0 20px 50px rgba(0,0,0,0.3)" : "0 20px 50px rgba(0,87,184,0.08)"}>
                 <HStack align="baseline" spacing={2} mb={4}>
                   <Text fontSize="13px" color={textSub} fontWeight="700" letterSpacing="0.12em">USDT</Text>
                   <Heading color={textMain} fontSize={{ base: "36px", md: "44px" }} fontWeight="800" letterSpacing="-0.03em" fontFamily="'DM Sans', sans-serif">50.00</Heading>
@@ -1084,7 +1093,6 @@ function AlternatingFeatureSection({
               whileInView={{ opacity: 1, y: 0, scale: 1 }}
               viewport={{ once: true, amount: 0.2 }}
               transition={{ duration: 0.75, ease: [0.22, 1, 0.36, 1] }}
-              style={{ willChange: "transform" }}
             >
               <StaticPhone scale={0.85}>{phoneScreen}</StaticPhone>
             </motion.div>
@@ -1095,7 +1103,7 @@ function AlternatingFeatureSection({
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true, amount: 0.2 }}
             transition={{ duration: 0.65, delay: 0.1, ease: [0.22, 1, 0.36, 1] }}
-            style={{ willChange: "transform", order: textOrder }}
+            style={{ order: textOrder }}
           >
             <VStack
               align={{ base: "center", lg: "start" }}
@@ -1163,7 +1171,6 @@ function AlternatingFeatureSection({
                         borderRadius="16px"
                         px={4}
                         spacing={3}
-                        backdropFilter="blur(12px)"
                         transition="all 0.2s ease"
                         _hover={{ transform: "translateY(-3px)", borderColor: BRAND_LIGHT }}
                       >
@@ -1262,7 +1269,6 @@ function SectionBento() {
                 bg={s.gradient || s.bg || cardBg}
                 border="1px solid"
                 borderColor={s.border || cardBorder}
-                backdropFilter="blur(14px)"
                 color={s.color || textMain}
                 position="relative"
                 overflow="hidden"
@@ -1501,6 +1507,10 @@ function SectionSocialProof() {
   const { colorMode } = useColorMode();
   const dark = colorMode === "dark";
   const textMain = dark ? "white" : "#0a0f1e";
+  const prefersReducedMotion = typeof window !== "undefined" 
+  && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const isMobileDevice = typeof window !== "undefined" && window.innerWidth < 768;
+
 
   // Avatars positioned around the centered "35,000+" headline.
   // Each entry holds top/left in % of the wrapping stage. Sizes use responsive Chakra props.
@@ -1559,7 +1569,7 @@ function SectionSocialProof() {
               }}
             >
               <motion.div
-                animate={{ y: [0, -10, 0] }}
+                animate={(!prefersReducedMotion && !isMobileDevice) ? { y: [0, -10, 0] } : {}}
                 transition={{
                   duration: 5 + (a.floatDelay % 2),
                   delay: a.floatDelay,
