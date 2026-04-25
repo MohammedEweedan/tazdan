@@ -64,9 +64,6 @@ export default function AboutPage() {
         <Box position="absolute" top="20%" left="50%" transform="translateX(-50%)" w={{ base: "600px", md: "900px" }} h="500px" bg={glow} filter="blur(120px)" borderRadius="full" pointerEvents="none" />
         <Container maxW="1100px" position="relative" zIndex={1}>
           <VStack spacing={6} textAlign="center">
-            <Text fontSize="11px" fontWeight="800" color="#4a8fe0" letterSpacing="0.22em">
-              ✦ {t("page_about_eyebrow")}
-            </Text>
             <Heading
               as="h1"
               fontFamily="'DM Sans', sans-serif"

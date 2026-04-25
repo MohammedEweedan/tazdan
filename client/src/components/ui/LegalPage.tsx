@@ -47,9 +47,6 @@ export default function LegalPage({ eyebrow, title, updated, intro, sections }: 
         <Box position="absolute" top="10%" left="50%" transform="translateX(-50%)" w="700px" h="400px" bg={glow} filter="blur(140px)" borderRadius="full" pointerEvents="none" />
         <Container maxW="820px" position="relative" zIndex={1}>
           <VStack spacing={5} align="start">
-            <Text fontSize="11px" fontWeight="800" color="#4a8fe0" letterSpacing="0.22em">
-              ✦ {eyebrow}
-            </Text>
             <Heading
               as="h1"
               fontFamily="'DM Sans', sans-serif"

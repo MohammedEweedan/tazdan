@@ -50,6 +50,8 @@ import {
   FiMapPin,
   FiAtSign,
 } from "react-icons/fi";
+import { FaApplePay, FaGooglePay, FaCcVisa, FaCcMastercard, FaPaypal } from "react-icons/fa";
+import { SiRevolut } from "react-icons/si";
 import { motion, useScroll, useTransform, MotionValue, AnimatePresence, useMotionValueEvent } from "framer-motion";
 import { IconLogo } from "@/components/ui/Logo";
 import PublicNav from "@/components/ui/PublicNav";
@@ -180,21 +182,72 @@ const ScreenLogo = memo(function ScreenLogo() {
       position="relative"
       overflow="hidden"
     >
-      {/* ambient glow behind logo */}
-      <Box
-        position="absolute"
-        top="50%"
-        left="50%"
-        transform="translate(-50%, -50%)"
-        w="110%"
-        h="60%"
-        bg="radial-gradient(ellipse, rgba(74,143,224,0.45) 0%, rgba(0,87,184,0.15) 40%, transparent 70%)"
-        filter="blur(40px)"
-        pointerEvents="none"
+      {/* Apple-Pay-style chameleon glow — rotating brand-color halos */}
+      <motion.div
+        style={{
+          position: "absolute",
+          top: "50%",
+          left: "50%",
+          width: 340,
+          height: 340,
+          marginTop: -170,
+          marginLeft: -170,
+          borderRadius: "50%",
+          filter: "blur(60px)",
+          pointerEvents: "none",
+          background:
+            "conic-gradient(from 0deg, #0057b8 0%, #4a8fe0 25%, #7c3aed 50%, #06b6d4 75%, #0057b8 100%)",
+          opacity: 0.55,
+          willChange: "transform",
+        }}
+        animate={{ rotate: 360 }}
+        transition={{ duration: 16, repeat: Infinity, ease: "linear" }}
+      />
+      <motion.div
+        style={{
+          position: "absolute",
+          top: "50%",
+          left: "50%",
+          width: 220,
+          height: 220,
+          marginTop: -110,
+          marginLeft: -110,
+          borderRadius: "50%",
+          filter: "blur(36px)",
+          pointerEvents: "none",
+          background:
+            "conic-gradient(from 180deg, #4a8fe0 0%, #1d4ed8 30%, #0057b8 60%, #6ea8ee 90%, #4a8fe0 100%)",
+          opacity: 0.85,
+          willChange: "transform",
+        }}
+        animate={{ rotate: -360, scale: [1, 1.08, 1] }}
+        transition={{
+          rotate: { duration: 11, repeat: Infinity, ease: "linear" },
+          scale:  { duration: 4.5, repeat: Infinity, ease: "easeInOut" },
+        }}
+      />
+      <motion.div
+        style={{
+          position: "absolute",
+          top: "50%",
+          left: "50%",
+          width: 140,
+          height: 140,
+          marginTop: -70,
+          marginLeft: -70,
+          borderRadius: "50%",
+          filter: "blur(20px)",
+          pointerEvents: "none",
+          background:
+            "radial-gradient(circle, rgba(255,255,255,0.5) 0%, rgba(74,143,224,0.6) 40%, rgba(0,87,184,0.2) 70%, transparent 100%)",
+          willChange: "opacity",
+        }}
+        animate={{ opacity: [0.6, 1, 0.6] }}
+        transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
       />
       <Box position="relative" w="140px" h="140px" zIndex={2}>
         <NextImage 
-          src="/icon.gif" 
+          src="/icon-black.png" 
           alt="promrkts" 
           fill 
           priority 
@@ -682,7 +735,6 @@ const PHONE_SCREENS = [
   <ScreenP2P key="2" />,
   <ScreenSocialWallet key="3" />,
   <ScreenCard key="4" />,
-  <ScreenMint key="5" />,
 ];
 
 
@@ -699,14 +751,13 @@ function PhoneFrame({
   scale?: number;
   logoOpacity?: MotionValue<number>;
 }) {
-  /* 6 equal slices of [0,1], ~0.167 each, with 0.03 crossfade */
+  /* 5 equal slices of [0,1], 0.2 each, with 0.03 crossfade */
   const opacities = [
-    useTransform(progress, [0.0, 0.03, 0.137, 0.167], [1, 1, 1, 0]),
-    useTransform(progress, [0.137, 0.167, 0.303, 0.333], [0, 1, 1, 0]),
-    useTransform(progress, [0.303, 0.333, 0.470, 0.500], [0, 1, 1, 0]),
-    useTransform(progress, [0.470, 0.500, 0.637, 0.667], [0, 1, 1, 0]),
-    useTransform(progress, [0.637, 0.667, 0.803, 0.833], [0, 1, 1, 0]),
-    useTransform(progress, [0.803, 0.833, 0.970, 1.0], [0, 1, 1, 1]),
+    useTransform(progress, [0.0,  0.03, 0.17, 0.20], [1, 1, 1, 0]),
+    useTransform(progress, [0.17, 0.20, 0.37, 0.40], [0, 1, 1, 0]),
+    useTransform(progress, [0.37, 0.40, 0.57, 0.60], [0, 1, 1, 0]),
+    useTransform(progress, [0.57, 0.60, 0.77, 0.80], [0, 1, 1, 0]),
+    useTransform(progress, [0.77, 0.80, 0.97, 1.00], [0, 1, 1, 1]),
   ];
   return (
     <Box
@@ -906,92 +957,19 @@ const StageP2P = memo(function StageP2P() {
   );
 })
 
-const StageMint = memo(function StageMint() {
-  const { t } = useTranslate();
-  const chains = [
-    { n: "BNB", c: "#f3ba2f", angle: 0 },
-    { n: "ETH", c: "#627eea", angle: 72 },
-    { n: "SOL", c: "#1b563d", angle: 144 },
-    { n: "AVAX", c: "#e84142", angle: 216 },
-    { n: "MATIC", c: "#0057b8", angle: 288 },
-  ];
-  const scale = useBreakpointValue({ base: 0.8, md: 1 }) ?? 1;
-  const WRAP = 360;
-  return (
-    <Box position="relative" w={`${WRAP}px`} h={`${WRAP}px`} style={{ transform: `scale(${scale})`, transformOrigin: "center center" }}>
-      <Box
-        position="absolute"
-        inset={0}
-        borderRadius="full"
-        bg="radial-gradient(circle, rgba(58, 103, 237, 0.3) 0%, rgba(12, 102, 206, 0.12) 45%, transparent 70%)"
-        pointerEvents="none"
-      />
-      <Box
-        position="absolute"
-        top="50%"
-        left="50%"
-        w="220px"
-        h="220px"
-        border="1.5px dashed rgba(58, 127, 237, 0.45)"
-        borderRadius="full"
-        style={{ transform: "translate(-50%, -50%)" }}
-      />
-      {/* Chain orbit */}
-      {chains.map((c, idx) => {
-        const rad = (c.angle * Math.PI) / 180;
-        const x = Math.cos(rad) * 140;
-        const y = Math.sin(rad) * 140;
-        return (
-          <motion.div
-            key={c.n}
-            initial={{ opacity: 0, scale: 0.3 }}
-            animate={{ opacity: 1, scale: 1, y: [y, y - 6, y] }}
-            transition={{
-              opacity: { duration: 0.8, delay: idx * 0.1 },
-              scale: { duration: 0.8, delay: idx * 0.1, type: "spring", stiffness: 40 },
-              y: { duration: 5, repeat: Infinity, ease: "easeInOut", delay: idx * 0.15 },
-            }}
-            style={{
-              position: "absolute",
-              top: "50%",
-              left: "50%",
-              x: x - 28,
-              marginTop: -28,
-            }}
-          >
-            <Flex
-              w="56px"
-              h="56px"
-              borderRadius="full"
-              bg={`${c.c}22`}
-              border={`2px solid ${c.c}77`}
-              align="center"
-              justify="center"
-              boxShadow={`0 8px 22px ${c.c}55`}
-              backdropFilter="blur(8px)"
-            >
-              <Text fontSize="11px" fontWeight="900" color={c.c} letterSpacing="-0.02em">{c.n}</Text>
-            </Flex>
-          </motion.div>
-        );
-      })}
-    </Box>
-  );
-});
-
 const StageHandles = memo(function StageHandles() {
   const { t } = useTranslate();
   const rows = [
     { h: "@rayofsunshine", loc: "Tripoli", col: "#facc15" },
-    { h: "@noor.dxb", loc: "UAE", col: "#06b6d4" },
-    { h: "@layla_k", loc: "KSA", col: "#ec4899" },
-    { h: "@ines_casa", loc: "Morocco", col: "#f59e0b" },
+    { h: "@noor.dxb",      loc: "UAE",     col: "#06b6d4" },
+    { h: "@layla_k",       loc: "KSA",     col: "#ec4899" },
+    { h: "@ines_casa",     loc: "Morocco", col: "#f59e0b" },
   ];
   return (
     <VStack w={{ base: "260px", md: "320px" }} spacing={2.5} align="stretch">
       <Box
         bg="linear-gradient(135deg, rgba(0,87,184,0.25), rgba(124,58,237,0.2))"
-        border="1px solid rgba(255,255,255,0.1)"
+        border="1px solid rgba(255,255,255,0.12)"
         borderRadius="20px"
         p={4}
         backdropFilter="blur(14px)"
@@ -1001,8 +979,8 @@ const StageHandles = memo(function StageHandles() {
             <Icon as={FiAtSign} color="white" />
           </Flex>
           <VStack align="start" spacing={0}>
-            <Text fontSize="14px" fontWeight="900">@rayofsunshine</Text>
-            <Text fontSize="10px" opacity={0.6}>{t("stage_handles_your_tag")}</Text>
+            <Text fontSize="14px" fontWeight="900" color="white">@rayofsunshine</Text>
+            <Text fontSize="10px" color="rgba(255,255,255,0.6)">{t("stage_handles_your_tag")}</Text>
           </VStack>
         </HStack>
       </Box>
@@ -1011,33 +989,57 @@ const StageHandles = memo(function StageHandles() {
           key={r.h}
           p={2.5}
           borderRadius="14px"
-          bg="rgba(255,255,255,0.04)"
-          border="1px solid rgba(255,255,255,0.08)"
+          bg="rgba(255,255,255,0.05)"
+          border="1px solid rgba(255,255,255,0.09)"
           backdropFilter="blur(12px)"
           style={{ transform: `translateX(${i % 2 === 0 ? -6 : 6}px)` }}
         >
-          <Flex w="28px" h="28px" borderRadius="full" bg={`${r.col}33`} border={`1px solid ${r.col}66`} align="center" justify="center">
+          <Flex w="28px" h="28px" borderRadius="full" bg={`${r.col}33`} border={`1.5px solid ${r.col}77`} align="center" justify="center">
             <Icon as={FiAtSign} color={r.col} boxSize={3} />
           </Flex>
-          <Text fontSize="12px" fontWeight="700" flex={1}>{r.h}</Text>
-          <Text fontSize="10px" opacity={0.6}>{r.loc}</Text>
+          <Text fontSize="12px" fontWeight="700" flex={1} color="white">{r.h}</Text>
+          <Text fontSize="10px" color="rgba(255,255,255,0.55)">{r.loc}</Text>
         </HStack>
       ))}
     </VStack>
   );
-})
+});
 
 const StageCards = memo(function StageCards() {
   const { t } = useTranslate();
   const tiers = [
-    { n: "Starter", c: "#8ab4f8" },
-    { n: "Master", c: "#0057b8" },
-    { n: "Pro", c: "#0a0f1e" },
+    { n: "Starter", c: "#8ab4f8", pan: "•••• 8142", tilt: "-6deg", z: 0, y: "24px"  },
+    { n: "Master",  c: "#0057b8", pan: "•••• 4411", tilt: "0deg",  z: 1, y: "0px"   },
+    { n: "Pro",     c: "#0a0f1e", pan: "•••• 1144", tilt: "6deg",  z: 2, y: "-24px" },
   ];
+
+  const perks = [
+    { l: t("screen_card_cashback"), v: "1%",   col: "#22c55e" },
+    { l: t("stage_card_fx"),        v: "0%",   col: BRAND_LIGHT },
+    { l: t("stage_card_accepted"),  v: "200+", col: "#a78bfa" },
+  ];
+
   return (
-    <VStack w={{ base: "280px", md: "380px" }} spacing={4} align="stretch">
-      {/* 3-card marketing shot */}
-      <Box
+    <VStack w={{ base: "280px", md: "360px" }} spacing={5} align="stretch" position="relative">
+      <Badge
+        position="absolute"
+        top="-10px"
+        right="-4px"
+        zIndex={10}
+        px={3}
+        py={1}
+        borderRadius="full"
+        bg="linear-gradient(135deg, #facc15, #f59e0b)"
+        color="#0a0f1e"
+        fontWeight="900"
+        fontSize="10px"
+        letterSpacing="0.05em"
+        textTransform="uppercase"
+        boxShadow="0 6px 18px rgba(250,204,21,0.45)"
+      >
+        {t("coming_soon")}
+      </Badge>
+       <Box
         position="relative"
         w="100%"
         style={{ aspectRatio: "1024 / 720" }}
@@ -1052,8 +1054,8 @@ const StageCards = memo(function StageCards() {
           priority
         />
       </Box>
-      {/* Tier chips */}
-      <HStack spacing={2}>
+
+      <HStack spacing={2} pt={2}>
         {tiers.map((tier) => (
           <HStack
             key={tier.n}
@@ -1061,33 +1063,26 @@ const StageCards = memo(function StageCards() {
             bg="rgba(255,255,255,0.05)"
             border="1px solid rgba(255,255,255,0.1)"
             borderRadius="full"
-            px={3}
-            py={1.5}
+            px={3} py={1.5}
             spacing={2}
           >
-            <Box w="10px" h="10px" borderRadius="full" bg={tier.c} boxShadow={`0 0 10px ${tier.c}aa`} />
-            <Text fontSize="11px" fontWeight="800">{tier.n}</Text>
+            <Box w="9px" h="9px" borderRadius="full" bg={tier.c} boxShadow={`0 0 8px ${tier.c}aa`} />
+            <Text fontSize="10px" fontWeight="800" color="white">{tier.n}</Text>
           </HStack>
         ))}
       </HStack>
-      {/* perks row */}
+
       <HStack spacing={2}>
-        {[
-          { l: t("screen_card_cashback"), v: "1%", c: "#22c55e" },
-          { l: t("stage_card_fx"), v: "0%", c: BRAND_LIGHT },
-          { l: t("stage_card_accepted"), v: "200+", c: "#a78bfa" },
-        ].map((s) => (
+        {perks.map((s) => (
           <VStack
             key={s.l}
-            flex={1}
-            p={2.5}
-            borderRadius="12px"
+            flex={1} p={2.5} borderRadius="12px"
             bg="rgba(255,255,255,0.04)"
             border="1px solid rgba(255,255,255,0.08)"
             spacing={0}
           >
-            <Text fontSize="13px" fontWeight="900" color={s.c} fontFamily="monospace">{s.v}</Text>
-            <Text fontSize="9px" opacity={0.7} textAlign="center">{s.l}</Text>
+            <Text fontSize="14px" fontWeight="900" color={s.col} fontFamily="monospace">{s.v}</Text>
+            <Text fontSize="9px" color="rgba(255,255,255,0.65)" textAlign="center">{s.l}</Text>
           </VStack>
         ))}
       </HStack>
@@ -1262,109 +1257,69 @@ function SectionSocialFinance() {
   const { colorMode } = useColorMode();
   const dark = colorMode === "dark";
   const textMain = dark ? "white" : "#0a0f1e";
-  const textSub = dark ? "rgba(255,255,255,0.7)" : "#64748b";
-  // More opaque backgrounds for better readability
-  const cardBg = dark 
-    ? "linear-gradient(145deg, rgba(25,35,60,0.95) 0%, rgba(15,25,45,0.98) 100%)" 
-    : "linear-gradient(145deg, #ffffff 0%, #f8fafc 100%)";
+  const textSub  = dark ? "rgba(255,255,255,0.7)" : "#64748b";
+  const cardBg   = dark ? "rgba(20,28,48,0.95)" : "#ffffff";
   const cardBorder = dark ? "rgba(100,130,200,0.2)" : "rgba(0,87,184,0.15)";
-  const chipBg = dark ? "rgba(255,255,255,0.12)" : "rgba(0,87,184,0.06)";
-  const phoneScale = useBreakpointValue({ base: 0.55, sm: 0.7, md: 0.85, lg: 0.95 }) ?? 0.9;
-
-  const sectionRef = useRef<HTMLDivElement | null>(null);
-  const { scrollYProgress } = useScroll({ target: sectionRef, offset: ["start end", "end start"] });
-  const phoneY = useTransform(scrollYProgress, [0, 1], ["18%", "-18%"]);
-  const phoneRotate = useTransform(scrollYProgress, [0, 0.5, 1], [-4, 0, 4]);
-  const copyY = useTransform(scrollYProgress, [0, 1], ["8%", "-8%"]);
-  const cardY = useTransform(scrollYProgress, [0, 1], ["14%", "-14%"]);
+  const chipBg   = dark ? "rgba(255,255,255,0.1)" : "rgba(0,87,184,0.06)";
 
   return (
-    <Box ref={sectionRef} position="relative" py={{ base: 16, md: 24 }} px={{ base: 4, md: 10 }} overflow="hidden">
+    <Box position="relative" py={{ base: 16, md: 24 }} px={{ base: 4, md: 10 }} overflow="hidden">
       <Container maxW="1200px" position="relative" zIndex={2}>
         <SimpleGrid columns={{ base: 1, lg: 2 }} gap={{ base: 12, lg: 16 }} alignItems="center">
           <Flex justify="center" order={{ base: 2, lg: 1 }}>
             <motion.div
-              initial={{ opacity: 0, y: 60, scale: 0.9 }}
+              initial={{ opacity: 0, y: 48, scale: 0.93 }}
               whileInView={{ opacity: 1, y: 0, scale: 1 }}
-              viewport={{ once: true, amount: 0.25 }}
-              transition={{ duration: 0.9, ease: [0.22, 1, 0.36, 1] }}
+              viewport={{ once: true, amount: 0.2 }}
+              transition={{ duration: 0.75, ease: [0.22, 1, 0.36, 1] }}
+              style={{ willChange: "transform" }}
             >
-              <motion.div style={{ y: phoneY, rotate: phoneRotate, willChange: "transform" }}>
-                <Box style={{ transform: `scale(${phoneScale})`, transformOrigin: "center center" }}>
-                  <StaticPhone>
-                    <PhoneSendScreen />
-                  </StaticPhone>
-                </Box>
-              </motion.div>
+              <StaticPhone scale={0.85}>
+                <PhoneSendScreen />
+              </StaticPhone>
             </motion.div>
           </Flex>
-          <motion.div style={{ y: copyY }}>
-            <VStack align={{ base: "center", lg: "start" }} spacing={{ base: 6, md: 8 }} order={{ base: 1, lg: 2 }} textAlign={{ base: "center", lg: "start" }}>
+
+          <motion.div
+            initial={{ opacity: 0, y: 32 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, amount: 0.2 }}
+            transition={{ duration: 0.65, delay: 0.1, ease: [0.22, 1, 0.36, 1] }}
+            style={{ willChange: "transform" }}
+          >
+            <VStack
+              align={{ base: "center", lg: "start" }}
+              spacing={{ base: 6, md: 8 }}
+              order={{ base: 1, lg: 2 }}
+              textAlign={{ base: "center", lg: "start" }}
+            >
               <Heading
                 fontFamily="'DM Sans', sans-serif"
                 fontWeight="800"
                 fontSize={{ base: "40px", md: "64px", xl: "80px" }}
                 letterSpacing="-0.04em"
               >
-                <Box as="span" bgGradient="linear(to-r, #4a8fe0, #0057b8)" bgClip="text">{t("sec_social_title_1")}</Box>
+                <Box as="span" bgGradient="linear(to-r, #4a8fe0, #0057b8)" bgClip="text">
+                  {t("sec_social_title_1")}
+                </Box>
                 <br />
                 <Box as="span" color={textMain}>{t("sec_social_title_2")}</Box>
               </Heading>
               <Text fontSize={{ base: "14.5px", md: "16.5px" }} color={textSub} maxW="460px">
                 {t("sec_social_desc")}
               </Text>
-              <motion.div
-                style={{ y: cardY, willChange: "transform", width: "100%", maxWidth: "460px" }}
-                initial={{ opacity: 0, y: 40, scale: 0.96 }}
-                whileInView={{ opacity: 1, y: 0, scale: 1 }}
-                viewport={{ once: true, amount: 0.3 }}
-                transition={{ duration: 0.8, delay: 0.35, ease: [0.22, 1, 0.36, 1] }}
-              >
-                <Box
-                  w="100%"
-                  bg={cardBg}
-                  border="1px solid"
-                  borderColor={cardBorder}
-                  borderRadius="24px"
-                  p={6}
-                  backdropFilter="blur(14px)"
-                  boxShadow={dark ? "0 20px 50px rgba(0,0,0,0.3)" : "0 20px 50px rgba(0,87,184,0.08)"}
-                >
-                  <HStack align="baseline" spacing={2} mb={4}>
-                    <Text fontSize="13px" color={textSub} fontWeight="700" letterSpacing="0.12em">USDT</Text>
-                    <Heading color={textMain} fontSize={{ base: "36px", md: "44px" }} fontWeight="800" letterSpacing="-0.03em" fontFamily="'DM Sans', sans-serif">
-                      50.00
-                    </Heading>
-                  </HStack>
-                  <HStack
-                    bg={chipBg}
-                    border="1px solid"
-                    borderColor={cardBorder}
-                    borderRadius="full"
-                    px={4}
-                    py={2}
-                    spacing={2}
-                  >
-                    <Text fontSize="13px" color={textSub} flex={1}>
-                      {t("sec_social_add_note")}
-                    </Text>
-                    <Flex
-                      w="30px"
-                      h="30px"
-                      borderRadius="full"
-                      bg={dark ? "white" : "#0a0f1e"}
-                      color={dark ? "black" : "white"}
-                      align="center"
-                      justify="center"
-                      cursor="pointer"
-                      _hover={{ transform: "scale(1.05)" }}
-                      transition="transform 0.15s"
-                    >
-                      <Icon as={FiSend} />
-                    </Flex>
-                  </HStack>
-                </Box>
-              </motion.div>
+              <Box w="100%" maxW="460px" bg={cardBg} border="1px solid" borderColor={cardBorder} borderRadius="24px" p={6} backdropFilter="blur(14px)" boxShadow={dark ? "0 20px 50px rgba(0,0,0,0.3)" : "0 20px 50px rgba(0,87,184,0.08)"}>
+                <HStack align="baseline" spacing={2} mb={4}>
+                  <Text fontSize="13px" color={textSub} fontWeight="700" letterSpacing="0.12em">USDT</Text>
+                  <Heading color={textMain} fontSize={{ base: "36px", md: "44px" }} fontWeight="800" letterSpacing="-0.03em" fontFamily="'DM Sans', sans-serif">50.00</Heading>
+                </HStack>
+                <HStack bg={chipBg} border="1px solid" borderColor={cardBorder} borderRadius="full" px={4} py={2} spacing={2}>
+                  <Text fontSize="13px" color={textSub} flex={1}>{t("sec_social_add_note")}</Text>
+                  <Flex w="30px" h="30px" borderRadius="full" bg={dark ? "white" : "#0a0f1e"} color={dark ? "black" : "white"} align="center" justify="center">
+                    <Icon as={FiSend} />
+                  </Flex>
+                </HStack>
+              </Box>
             </VStack>
           </motion.div>
         </SimpleGrid>
@@ -1379,49 +1334,32 @@ function SectionPayTransferInvest() {
   const { colorMode } = useColorMode();
   const dark = colorMode === "dark";
   const textMain = dark ? "white" : "#0a0f1e";
-  const textSub = dark ? "rgba(255,255,255,0.7)" : "#64748b";
-  // Better tile backgrounds with more opacity
-  const tileBg = dark 
-    ? "linear-gradient(145deg, rgba(25,35,60,0.9) 0%, rgba(15,25,45,0.95) 100%)" 
-    : "linear-gradient(145deg, #ffffff 0%, #f8fafc 100%)";
+  const textSub  = dark ? "rgba(255,255,255,0.7)" : "#64748b";
+  const tileBg   = dark ? "rgba(20,28,48,0.9)" : "#ffffff";
   const tileBorder = dark ? "rgba(100,130,200,0.2)" : "rgba(0,87,184,0.12)";
-  const phoneScale = useBreakpointValue({ base: 0.55, sm: 0.7, md: 0.85, lg: 0.95 }) ?? 0.9;
 
   const features = [
-    { icon: FiWifi, label: t("sec_pay_feat_tap") },
-    { icon: FiRepeat, label: t("sec_pay_feat_transfer") },
-    { icon: FiPieChart, label: t("sec_pay_feat_invest") },
-    { icon: FiHome, label: t("sec_pay_feat_bank") },
+    { icon: FiWifi,    label: t("sec_pay_feat_tap")      },
+    { icon: FiRepeat,  label: t("sec_pay_feat_transfer") },
+    { icon: FiPieChart,label: t("sec_pay_feat_invest")   },
+    { icon: FiHome,    label: t("sec_pay_feat_bank")     },
   ];
 
-  const sectionRef = useRef<HTMLDivElement | null>(null);
-  const { scrollYProgress } = useScroll({ target: sectionRef, offset: ["start end", "end start"] });
-  const phoneY = useTransform(scrollYProgress, [0, 1], ["20%", "-20%"]);
-  const phoneRotate = useTransform(scrollYProgress, [0, 0.5, 1], [5, 0, -5]);
-  const copyY = useTransform(scrollYProgress, [0, 1], ["10%", "-10%"]);
-
   return (
-    <Box ref={sectionRef} position="relative" py={{ base: 16, md: 24 }} px={{ base: 4, md: 10 }} overflow="hidden">
+    <Box position="relative" py={{ base: 16, md: 24 }} px={{ base: 4, md: 10 }} overflow="hidden">
       <Container maxW="1200px" position="relative" zIndex={2}>
         <SimpleGrid columns={{ base: 1, lg: 2 }} gap={{ base: 12, lg: 16 }} alignItems="center">
-          <motion.div style={{ y: copyY }}>
+          <motion.div
+            initial={{ opacity: 0, y: 32 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, amount: 0.15 }}
+            transition={{ duration: 0.65, ease: [0.22, 1, 0.36, 1] }}
+            style={{ willChange: "transform" }}
+          >
             <VStack align={{ base: "center", lg: "start" }} spacing={{ base: 6, md: 8 }} textAlign={{ base: "center", lg: "start" }}>
-              <Heading
-                as="h2"
-                fontFamily="'DM Sans', sans-serif"
-                fontWeight="800"
-                fontSize={{ base: "44px", md: "68px", xl: "88px" }}
-                letterSpacing="-0.04em"
-              >
+              <Heading as="h2" fontFamily="'DM Sans', sans-serif" fontWeight="800" fontSize={{ base: "44px", md: "68px", xl: "88px" }} letterSpacing="-0.04em">
                 {[t("sec_pay_title_1"), t("sec_pay_title_2"), t("sec_pay_title_3")].map((line, i) => (
-                  <motion.span
-                    key={i}
-                    style={{ display: "block" }}
-                    initial={{ opacity: 0, y: 24, filter: "blur(6px)" }}
-                    whileInView={{ opacity: 1, y: 0, filter: "blur(0px)" }}
-                    viewport={{ once: true, amount: 0.35 }}
-                    transition={{ duration: 0.7, delay: 0.15 + i * 0.12, ease: [0.22, 1, 0.36, 1] }}
-                  >
+                  <motion.span key={i} style={{ display: "block" }} initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, amount: 0.3 }} transition={{ duration: 0.6, delay: 0.1 + i * 0.1 }}>
                     <Box as="span" bgGradient="linear(to-r, #4a8fe0, #0057b8)" bgClip="text">{line}</Box>
                   </motion.span>
                 ))}
@@ -1431,26 +1369,9 @@ function SectionPayTransferInvest() {
               </Text>
               <SimpleGrid columns={2} spacing={3} w="100%" maxW="420px">
                 {features.map((f, i) => (
-                  <motion.div
-                    key={f.label}
-                    initial={{ opacity: 0, y: 24, scale: 0.95 }}
-                    whileInView={{ opacity: 1, y: 0, scale: 1 }}
-                    viewport={{ once: true, amount: 0.3 }}
-                    transition={{ duration: 0.55, delay: 0.5 + 0.08 * i, ease: [0.22, 1, 0.36, 1] }}
-                  >
-                    <HStack
-                      h="70px"
-                      bg={tileBg}
-                      border="1px solid"
-                      borderColor={tileBorder}
-                      borderRadius="18px"
-                      px={4}
-                      backdropFilter="blur(12px)"
-                      spacing={3}
-                      transition="all 0.25s ease"
-                      _hover={{ transform: "translateY(-3px)", borderColor: "#0057b8", boxShadow: dark ? "0 10px 30px rgba(0,0,0,0.3)" : "0 10px 30px rgba(0,87,184,0.18)" }}
-                    >
-                      <Flex w="40px" h="40px" borderRadius="12px" border="1px solid rgba(0,87,184,0.25)" align="center" justify="center" flexShrink={0} bg={dark ? "rgba(255,255,255,0.08)" : "rgba(0,87,184,0.06)"}>
+                  <motion.div key={f.label} initial={{ opacity: 0, y: 20, scale: 0.95 }} whileInView={{ opacity: 1, y: 0, scale: 1 }} viewport={{ once: true, amount: 0.2 }} transition={{ duration: 0.45, delay: 0.1 + 0.07 * i }}>
+                    <HStack h="70px" bg={tileBg} border="1px solid" borderColor={tileBorder} borderRadius="18px" px={4} backdropFilter="blur(12px)" spacing={3} transition="all 0.2s ease" _hover={{ transform: "translateY(-3px)", borderColor: "#0057b8" }}>
+                      <Flex w="40px" h="40px" borderRadius="12px" border="1px solid rgba(0,87,184,0.25)" align="center" justify="center" flexShrink={0} bg={dark ? "rgba(255,255,255,0.07)" : "rgba(0,87,184,0.06)"}>
                         <Icon as={f.icon} color={BRAND_LIGHT} />
                       </Flex>
                       <Text fontSize="13.5px" fontWeight="700" color={textMain}>{f.label}</Text>
@@ -1460,20 +1381,18 @@ function SectionPayTransferInvest() {
               </SimpleGrid>
             </VStack>
           </motion.div>
+
           <Flex justify="center">
             <motion.div
-              initial={{ opacity: 0, y: 80, scale: 0.88 }}
+              initial={{ opacity: 0, y: 60, scale: 0.9 }}
               whileInView={{ opacity: 1, y: 0, scale: 1 }}
-              viewport={{ once: true, amount: 0.25 }}
-              transition={{ duration: 1, ease: [0.22, 1, 0.36, 1] }}
+              viewport={{ once: true, amount: 0.15 }}
+              transition={{ duration: 0.85, ease: [0.22, 1, 0.36, 1] }}
+              style={{ willChange: "transform" }}
             >
-              <motion.div style={{ y: phoneY, rotate: phoneRotate, willChange: "transform" }}>
-                <Box style={{ transform: `scale(${phoneScale})`, transformOrigin: "center center" }}>
-                  <StaticPhone>
-                    <PhoneBalanceScreen />
-                  </StaticPhone>
-                </Box>
-              </motion.div>
+              <StaticPhone scale={0.85}>
+                <PhoneBalanceScreen />
+              </StaticPhone>
             </motion.div>
           </Flex>
         </SimpleGrid>
@@ -1628,10 +1547,26 @@ function SectionOnRamp() {
   const dark = colorMode === "dark";
   const textMain = dark ? "white" : "#0a0f1e";
   const textSub = dark ? "rgba(255,255,255,0.5)" : "#64748b";
-  const cardBg = dark ? "rgba(255,255,255,0.03)" : "white";
+  const cardBg = dark ? "rgba(0,0,0)" : "white";
   const cardBorder = dark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)";
 
-  const methods = ["Apple Pay", "Google Pay", "Visa", "Mastercard", "Revolut", "SEPA", "PayPal"];
+  const methods: {
+    label: string;
+    icon?: React.ElementType;
+    iconSize?: number;
+    bg: string;
+    color: string;
+    border?: string;
+    showLabel?: boolean;
+  }[] = [
+    { label: "Apple Pay",   icon: FaApplePay,     iconSize: 36, bg: "#000",     color: "#fff",     border: "rgba(255,255,255,0.18)" },
+    { label: "Google Pay",  icon: FaGooglePay,    iconSize: 34, bg: "#fff",     color: "#5f6368",  border: "rgba(0,0,0,0.08)" },
+    { label: "Visa",        icon: FaCcVisa,       iconSize: 30, bg: "#1a1f71",  color: "#fff" },
+    { label: "Mastercard",  icon: FaCcMastercard, iconSize: 30, bg: "#0a0a0a",  color: "#ff5f00",  border: "rgba(255,255,255,0.12)" },
+    { label: "Revolut",     icon: SiRevolut,      iconSize: 22, bg: "#0075eb",  color: "#fff", showLabel: true },
+    { label: "SEPA",        bg: "#003399",        color: "#ffcc00",            showLabel: true },
+    { label: "PayPal",      icon: FaPaypal,       iconSize: 22, bg: "#003087",  color: "#009cde",  showLabel: true },
+  ];
 
   const cards = [
     { title: t("onramp_buy_title"), desc: t("onramp_buy_desc"), cta: t("onramp_buy_cta"), video: "/videos/Consumer_UIAnims_Desktop-Buy.mp4" },
@@ -1649,13 +1584,46 @@ function SectionOnRamp() {
             </Heading>
           </motion.div>
 
-          {/* Payment methods */}
+          {/* Payment methods — colorful brand chips */}
           <motion.div initial={{ opacity: 0, y: 10 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.5, delay: 0.15 }}>
-            <HStack spacing={{ base: 4, md: 6 }} flexWrap="wrap" justify="center" opacity={0.7}>
-              {methods.map((m) => (
-                <Text key={m} fontSize={{ base: "13px", md: "15px" }} fontWeight="700" color={textSub} letterSpacing="-0.01em">{m}</Text>
+            <Flex gap={{ base: 2, md: 3 }} flexWrap="wrap" justify="center" maxW="800px">
+              {methods.map((m, i) => (
+                <motion.div
+                  key={m.label}
+                  initial={{ opacity: 0, y: 8, scale: 0.92 }}
+                  whileInView={{ opacity: 1, y: 0, scale: 1 }}
+                  viewport={{ once: true, amount: 0.4 }}
+                  transition={{ duration: 0.35, delay: 0.05 * i, ease: [0.22, 1, 0.36, 1] }}
+                  whileHover={{ y: -2 }}
+                >
+                  <HStack
+                    spacing={2}
+                    px={{ base: 3, md: 4 }}
+                    h={{ base: "38px", md: "42px" }}
+                    borderRadius="full"
+                    bg={m.bg}
+                    color={m.color}
+                    border={m.border ? `1px solid ${m.border}` : "none"}
+                    boxShadow="0 4px 14px rgba(0,0,0,0.12)"
+                    transition="box-shadow 0.2s ease"
+                    _hover={{ boxShadow: "0 8px 22px rgba(0,0,0,0.2)" }}
+                  >
+                    {m.icon && (
+                      <Icon as={m.icon} boxSize={`${m.iconSize ?? 24}px`} />
+                    )}
+                    {(m.showLabel || !m.icon) && (
+                      <Text
+                        fontSize={{ base: "12px", md: "13.5px" }}
+                        fontWeight="900"
+                        letterSpacing={m.label === "SEPA" ? "0.12em" : "-0.01em"}
+                      >
+                        {m.label}
+                      </Text>
+                    )}
+                  </HStack>
+                </motion.div>
               ))}
-            </HStack>
+            </Flex>
           </motion.div>
 
           {/* Video cards */}
@@ -2007,204 +1975,6 @@ function PhoneContractScreen() {
 }
 
 /* ═════════════════════════════════════════════════════
-   SECTION — Mint tokens
-   ═════════════════════════════════════════════════════ */
-
-function SectionMint() {
-  const { t } = useTranslate();
-  const { colorMode } = useColorMode();
-  const dark = colorMode === "dark";
-  const textMain = dark ? "white" : "#0a0f1e";
-  const textSub = dark ? "rgba(255,255,255,0.55)" : "#64748b";
-  const cardBg = dark ? "rgba(255,255,255,0.04)" : "white";
-  const cardBorder = dark ? "rgba(255,255,255,0.08)" : "rgba(0,87,184,0.1)";
-  const phoneScale = useBreakpointValue({ base: 0.55, sm: 0.7, md: 0.85, lg: 0.95 }) ?? 0.9;
-
-  const sectionRef = useRef<HTMLDivElement | null>(null);
-  const { scrollYProgress } = useScroll({ target: sectionRef, offset: ["start end", "end start"] });
-  const phoneY = useTransform(scrollYProgress, [0, 1], ["18%", "-18%"]);
-  const phoneRotate = useTransform(scrollYProgress, [0, 0.5, 1], [-4, 0, 4]);
-  const copyY = useTransform(scrollYProgress, [0, 1], ["8%", "-8%"]);
-  const cardY = useTransform(scrollYProgress, [0, 1], ["14%", "-14%"]);
-
-  return (
-    <Box ref={sectionRef} position="relative" py={{ base: 16, md: 24 }} px={{ base: 4, md: 10 }} overflow="hidden">
-      <Container maxW="1200px" position="relative" zIndex={2}>
-        <SimpleGrid columns={{ base: 1, lg: 2 }} gap={{ base: 12, lg: 16 }} alignItems="center">
-          <Flex justify="center" order={{ base: 2, lg: 1 }}>
-            <motion.div
-              initial={{ opacity: 0, y: 60, scale: 0.9 }}
-              whileInView={{ opacity: 1, y: 0, scale: 1 }}
-              viewport={{ once: true, amount: 0.25 }}
-              transition={{ duration: 0.9, ease: [0.22, 1, 0.36, 1] }}
-            >
-              <motion.div style={{ y: phoneY, rotate: phoneRotate, willChange: "transform" }}>
-                <Box style={{ transform: `scale(${phoneScale})`, transformOrigin: "center center" }}>
-                  <StaticPhone>
-                    <PhoneMintBuilderScreen />
-                  </StaticPhone>
-                </Box>
-              </motion.div>
-            </motion.div>
-          </Flex>
-          <motion.div style={{ y: copyY }}>
-            <VStack align={{ base: "center", lg: "start" }} spacing={{ base: 6, md: 8 }} order={{ base: 1, lg: 2 }} textAlign={{ base: "center", lg: "start" }}>
-              <Heading
-                fontFamily="'DM Sans', sans-serif"
-                fontWeight="800"
-                fontSize={{ base: "40px", md: "64px", xl: "80px" }}
-                letterSpacing="-0.04em"
-              >
-                <Box as="span" bgGradient="linear(to-r, #0057b8, #367ed1)" bgClip="text">{t("sec_mint_title_1")}</Box>
-                <br />
-                <Box as="span" color={textMain}>{t("sec_mint_title_2")}</Box>
-              </Heading>
-              <Text fontSize={{ base: "14.5px", md: "16.5px" }} color={textSub} maxW="460px">
-                {t("sec_mint_desc")}
-              </Text>
-              <motion.div style={{ y: cardY, width: "100%", maxWidth: "460px" }}>
-                <SimpleGrid columns={2} spacing={3} w="100%">
-                  {[
-                    { icon: FiZap, label: t("sec_mint_feat_fast") },
-                    { icon: FiCode, label: t("sec_mint_feat_nocode") },
-                    { icon: FiLayers, label: t("sec_mint_feat_chains") },
-                    { icon: FiShield, label: t("sec_mint_feat_audited") },
-                  ].map((f) => (
-                    <HStack
-                      key={f.label}
-                      h="64px"
-                      bg={cardBg}
-                      border="1px solid"
-                      borderColor={cardBorder}
-                      borderRadius="16px"
-                      px={4}
-                      spacing={3}
-                    >
-                      <Flex w="36px" h="36px" borderRadius="10px" border="1px solid rgb(26, 82, 186)" align="center" justify="center" flexShrink={0}>
-                        <Icon as={f.icon} color="#0057b8" />
-                      </Flex>
-                      <Text fontSize="13px" fontWeight="700" color={textMain}>{f.label}</Text>
-                    </HStack>
-                  ))}
-                </SimpleGrid>
-              </motion.div>
-            </VStack>
-          </motion.div>
-        </SimpleGrid>
-      </Container>
-    </Box>
-  );
-}
-
-/* ═════════════════════════════════════════════════════
-   SECTION — Smart contracts
-   ═════════════════════════════════════════════════════ */
-
-function SectionContracts() {
-  const { t } = useTranslate();
-  const { colorMode } = useColorMode();
-  const dark = colorMode === "dark";
-  const textMain = dark ? "white" : "#0a0f1e";
-  const textSub = dark ? "rgba(255,255,255,0.55)" : "#64748b";
-  const tileBorder = dark ? "rgba(255,255,255,0.08)" : "rgba(0,87,184,0.08)";
-  const phoneScale = useBreakpointValue({ base: 0.55, sm: 0.7, md: 0.85, lg: 0.95 }) ?? 0.9;
-
-  const features = [
-    { icon: FiLock, label: t("sec_contract_feat_escrow") },
-    { icon: FiFeather, label: t("sec_contract_feat_vesting") },
-    { icon: FiUsers, label: t("sec_contract_feat_multisig") },
-    { icon: FiCpu, label: t("sec_contract_feat_custom") },
-  ];
-
-  const sectionRef = useRef<HTMLDivElement | null>(null);
-  const { scrollYProgress } = useScroll({ target: sectionRef, offset: ["start end", "end start"] });
-  const phoneY = useTransform(scrollYProgress, [0, 1], ["20%", "-20%"]);
-  const phoneRotate = useTransform(scrollYProgress, [0, 0.5, 1], [5, 0, -5]);
-  const copyY = useTransform(scrollYProgress, [0, 1], ["10%", "-10%"]);
-
-  return (
-    <Box ref={sectionRef} position="relative" py={{ base: 16, md: 24 }} px={{ base: 4, md: 10 }} overflow="hidden">
-      <Container maxW="1200px" position="relative" zIndex={2}>
-        <SimpleGrid columns={{ base: 1, lg: 2 }} gap={{ base: 12, lg: 16 }} alignItems="center">
-          <motion.div style={{ y: copyY }}>
-            <VStack align={{ base: "center", lg: "start" }} spacing={{ base: 6, md: 8 }} textAlign={{ base: "center", lg: "start" }}>
-              <Heading
-                as="h2"
-                fontFamily="'DM Sans', sans-serif"
-                fontWeight="800"
-                fontSize={{ base: "44px", md: "68px", xl: "88px" }}
-                letterSpacing="-0.04em"
-              >
-                {[t("sec_contract_title_1"), t("sec_contract_title_2"), t("sec_contract_title_3")].map((line, i) => (
-                  <motion.span
-                    key={i}
-                    style={{ display: "block" }}
-                    initial={{ opacity: 0, y: 24, filter: "blur(6px)" }}
-                    whileInView={{ opacity: 1, y: 0, filter: "blur(0px)" }}
-                    viewport={{ once: true, amount: 0.35 }}
-                    transition={{ duration: 0.7, delay: 0.1 + i * 0.12 }}
-                  >
-                    <Box as="span" bgGradient="linear(to-r, #4a8fe0, #0057b8)" bgClip="text">
-                      {line}
-                    </Box>
-                  </motion.span>
-                ))}
-              </Heading>
-              <Text fontSize={{ base: "14.5px", md: "16.5px" }} color={textSub} maxW="420px">
-                {t("sec_contract_desc")}
-              </Text>
-              <SimpleGrid columns={2} spacing={3} w="100%" maxW="420px">
-                {features.map((f, i) => (
-                  <motion.div
-                    key={f.label}
-                    initial={{ opacity: 0, y: 24, scale: 0.95 }}
-                    whileInView={{ opacity: 1, y: 0, scale: 1 }}
-                    viewport={{ once: true, amount: 0.3 }}
-                    transition={{ duration: 0.55, delay: 0.4 + 0.08 * i, ease: [0.22, 1, 0.36, 1] }}
-                  >
-                    <HStack
-                      h="70px"
-                      border="1px solid"
-                      borderColor={tileBorder}
-                      borderRadius="18px"
-                      px={4}
-                      spacing={3}
-                      transition="all 0.25s ease"
-                      _hover={{ transform: "translateY(-3px)", borderColor: "#0057b8", boxShadow: "0 10px 30px rgba(0,87,184,0.18)" }}
-                    >
-                      <Flex w="40px" h="40px" borderRadius="12px" border="1px solid rgba(0,87,184,0.25)" align="center" justify="center" flexShrink={0}>
-                        <Icon as={f.icon} color={BRAND_LIGHT} />
-                      </Flex>
-                      <Text fontSize="13.5px" fontWeight="700" color={textMain}>{f.label}</Text>
-                    </HStack>
-                  </motion.div>
-                ))}
-              </SimpleGrid>
-            </VStack>
-          </motion.div>
-          <Flex justify="center">
-            <motion.div
-              initial={{ opacity: 0, y: 80, scale: 0.88 }}
-              whileInView={{ opacity: 1, y: 0, scale: 1 }}
-              viewport={{ once: true, amount: 0.25 }}
-              transition={{ duration: 1, ease: [0.22, 1, 0.36, 1] }}
-            >
-              <motion.div style={{ y: phoneY, rotate: phoneRotate, willChange: "transform" }}>
-                <Box style={{ transform: `scale(${phoneScale})`, transformOrigin: "center center" }}>
-                  <StaticPhone>
-                    <PhoneContractScreen />
-                  </StaticPhone>
-                </Box>
-              </motion.div>
-            </motion.div>
-          </Flex>
-        </SimpleGrid>
-      </Container>
-    </Box>
-  );
-}
-
-/* ═════════════════════════════════════════════════════
    STAGE OVERLAY (rotating copy + widgets around sticky phone)
    ═════════════════════════════════════════════════════ */
 
@@ -2220,102 +1990,108 @@ function StageOverlay({ stages, progress }: { stages: Stage[]; progress: MotionV
   const dark = colorMode === "dark";
   const textMain = dark ? "white" : "#0a0f1e";
   const textSub = dark ? "rgba(255,255,255,0.6)" : "#64748b";
-  const [activeIndex, setActiveIndex] = useState(0);
-  const activeIndexRef = useRef(0); // ← add ref to avoid stale closure
 
-  useMotionValueEvent(progress, "change", (latest) => {
-    const newIndex = Math.min(
-      Math.floor(latest * stages.length),
-      stages.length - 1
+  // Render ALL stages simultaneously, drive each one's opacity via the
+  // scroll progress MotionValue. This guarantees every widget mounts &
+  // shows at its slice (no AnimatePresence skipping on fast scroll).
+  const slice = 1 / stages.length;
+  const fade = Math.min(0.04, slice * 0.25);
+  /* eslint-disable react-hooks/rules-of-hooks */
+  const opacities = stages.map((_, i) => {
+    const start = i * slice;
+    const end = (i + 1) * slice;
+    return useTransform(
+      progress,
+      [
+        Math.max(0, start - fade),
+        start,
+        Math.min(1, end - fade),
+        Math.min(1, end),
+      ],
+      [0, 1, 1, i === stages.length - 1 ? 1 : 0]
     );
-    // Only call setState when the index actually changes
-    if (newIndex !== activeIndexRef.current) {
-      activeIndexRef.current = newIndex;
-      setActiveIndex(newIndex);
-    }
   });
+  /* eslint-enable react-hooks/rules-of-hooks */
 
   return (
     <>
       {/* DESKTOP: left copy col */}
       <Box display={{ base: "none", lg: "block" }} position="absolute" top="50%" left="6%" transform="translateY(-50%)" w="32%" maxW="440px" zIndex={3} pointerEvents="none">
         <Box position="relative" minH="280px">
-          <AnimatePresence mode="wait">
+          {stages.map((s, i) => (
             <motion.div
-              key={activeIndex}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              transition={{ duration: 0.3, ease: "easeOut" }}
-              style={{ position: "absolute", inset: 0 }}
+              key={i}
+              style={{ position: "absolute", inset: 0, opacity: opacities[i], willChange: "opacity" }}
             >
               <VStack align="start" spacing={5}>
                 <Heading fontFamily="'DM Sans', sans-serif" fontWeight="800" fontSize={{ lg: "44px", xl: "56px" }} letterSpacing="-0.04em" color={textMain}>
-                  {stages[activeIndex].title}
+                  {s.title}
                 </Heading>
                 <Text fontSize="16px" color={textSub} maxW="420px">
-                  {stages[activeIndex].desc}
+                  {s.desc}
                 </Text>
               </VStack>
             </motion.div>
-          </AnimatePresence>
+          ))}
         </Box>
       </Box>
 
       {/* DESKTOP: right widget col */}
       <Box display={{ base: "none", lg: "block" }} position="absolute" top="50%" right="4%" transform="translateY(-50%)" zIndex={3} w="440px">
         <Box position="relative" minH="420px" minW="440px">
-          <AnimatePresence mode="wait">
+          {stages.map((s, i) => (
             <motion.div
-              key={activeIndex}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              transition={{ duration: 0.3, ease: "easeOut" }}
-              style={{ position: "absolute", top: "50%", right: 0, transform: "translateY(-50%)" }}
+              key={i}
+              style={{
+                position: "absolute",
+                top: "50%",
+                right: 0,
+                transform: "translateY(-50%)",
+                opacity: opacities[i],
+                willChange: "opacity",
+              }}
             >
-              {stages[activeIndex].widget}
+              {s.widget}
             </motion.div>
-          </AnimatePresence>
+          ))}
         </Box>
       </Box>
 
       {/* MOBILE */}
       <Flex display={{ base: "flex", lg: "none" }} direction="column" align="center" h="100%" justify="space-between" px={5} pt="80px" pb={5} zIndex={3} position="relative" pointerEvents="none">
         <Box position="relative" w="100%" minH="150px" textAlign="center">
-          <AnimatePresence mode="wait">
+          {stages.map((s, i) => (
             <motion.div
-              key={activeIndex}
-              initial={{ opacity: 0, y: 15 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -15 }}
-              transition={{ duration: 0.25, ease: "easeOut" }}
-              style={{ position: "absolute", inset: 0 }}
+              key={i}
+              style={{ position: "absolute", inset: 0, opacity: opacities[i], willChange: "opacity" }}
             >
               <VStack spacing={2}>
                 <Heading fontSize="26px" fontWeight="800" color={textMain} letterSpacing="-0.03em" fontFamily="'DM Sans', sans-serif" maxW="320px">
-                  {stages[activeIndex].title}
+                  {s.title}
                 </Heading>
                 <Text fontSize="13px" color={textSub} maxW="320px" noOfLines={3}>
-                  {stages[activeIndex].desc}
+                  {s.desc}
                 </Text>
               </VStack>
             </motion.div>
-          </AnimatePresence>
+          ))}
         </Box>
         <Box position="relative" w="100%" minH="320px" display="flex" justifyContent="center" alignItems="center">
-          <AnimatePresence mode="wait">
+          {stages.map((s, i) => (
             <motion.div
-              key={activeIndex}
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.2 }}
-              style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)" }}
+              key={i}
+              style={{
+                position: "absolute",
+                top: "50%",
+                left: "50%",
+                transform: "translate(-50%, -50%)",
+                opacity: opacities[i],
+                willChange: "opacity",
+              }}
             >
-              {stages[activeIndex].widget}
+              {s.widget}
             </motion.div>
-          </AnimatePresence>
+          ))}
         </Box>
       </Flex>
     </>
@@ -2329,7 +2105,6 @@ const STAGE_WIDGETS = [
   <StageP2P key="p2p" />,
   <StageHandles key="handles" />,
   <StageCards key="cards" />,
-  <StageMint key="mint" />,
 ];
 
 /* ═════════════════════════════════════════════════════
@@ -2407,7 +2182,6 @@ export default function LandingPage() {
     { eyebrow: t("feat_p2p_eyebrow"),     title: t("feat_p2p_title"),     desc: t("feat_p2p_desc"),     widget: STAGE_WIDGETS[2] },
     { eyebrow: t("feat_wallet_eyebrow"),  title: t("feat_wallet_title"),  desc: t("feat_wallet_desc"),  widget: STAGE_WIDGETS[3] },
     { eyebrow: t("feat_card_eyebrow"),    title: t("feat_card_title"),    desc: t("feat_card_desc"),    widget: STAGE_WIDGETS[4] },
-    { eyebrow: t("feat_mint_eyebrow"),    title: t("feat_mint_title"),    desc: t("feat_mint_desc"),    widget: STAGE_WIDGETS[5] },
   ];
 
   // ✅ SAFE: all hooks already ran
@@ -2446,7 +2220,7 @@ export default function LandingPage() {
         className="snap-section"
         id="features"
         position="relative"
-        h={{ base: "1020vh", md: "1080vh" }}
+        h={{ base: "720vh", md: "840vh" }}
       >
         <Box position="sticky" top={0} h="100vh" overflow="hidden">
           {/* Glow */}
@@ -2549,12 +2323,6 @@ export default function LandingPage() {
 
       {/* ══ SOCIAL PAYMENTS SECTION ══ */}
       <SectionSocialFinance />
-
-      {/* ══ MINT TOKEN SECTION ══ */}
-      <SectionMint />
-
-      {/* ══ SMART CONTRACTS SECTION ══ */}
-      <SectionContracts />
 
       {/* ══ CONNECTED ARCS ══ */}
       <Box className="snap-section" id="connect" py={{ base: 16, md: 24 }} position="relative" overflow="hidden" minH="100vh" display="flex" alignItems="center">

@@ -181,9 +181,6 @@ export default function MarketsPage() {
             variants={containerVariants}
           >
             <VStack spacing={6} textAlign="center">
-              <Text fontSize="11px" fontWeight="800" color="#4a8fe0" letterSpacing="0.22em">
-                ✦ {t("live_markets_title")}
-              </Text>
               <Heading
                 as="h1"
                 fontFamily="'DM Sans', sans-serif"

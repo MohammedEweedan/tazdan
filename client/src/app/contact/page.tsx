@@ -80,9 +80,6 @@ export default function ContactPage() {
         <Box position="absolute" top="20%" left="50%" transform="translateX(-50%)" w="800px" h="440px" bg={glow} filter="blur(140px)" borderRadius="full" pointerEvents="none" />
         <Container maxW="900px" position="relative" zIndex={1}>
           <VStack spacing={5} textAlign="center">
-            <Text fontSize="11px" fontWeight="800" color="#4a8fe0" letterSpacing="0.22em">
-              ✦ {t("page_contact_eyebrow")}
-            </Text>
             <Heading
               as="h1"
               fontFamily="'DM Sans', sans-serif"

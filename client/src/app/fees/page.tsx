@@ -355,9 +355,6 @@ export default function FeesPage() {
             transition={{ duration: 0.7 }}
           >
             <VStack spacing={3} textAlign="center">
-              <Text fontSize="11px" fontWeight="800" color={BRAND_LIGHT} letterSpacing="0.22em">
-                ✦ {t("page_fees_limits_eyebrow", "ACCOUNT TIERS")}
-              </Text>
               <Heading fontSize={{ base: "32px", md: "52px" }} fontWeight="800" letterSpacing="-0.035em" fontFamily="'DM Sans', sans-serif" color={textMain} lineHeight="1">
                 {t("page_fees_limits_title")}
               </Heading>

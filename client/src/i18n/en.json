@@ -882,6 +882,7 @@
   "stats_traders": "Active Traders",
 
   "screen_spot_spot": "Spot Market",
+  "screen_spot_last_24h": "Last 24 hours",
   "screen_spot_orderbook": "ORDER BOOK",
   "screen_spot_size": "SIZE",
   "screen_spot_buy": "Buy",
