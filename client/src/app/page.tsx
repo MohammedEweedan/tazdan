@@ -1868,7 +1868,7 @@ export default function LandingPage() {
   return (
     <Box minH="100vh" overflowX="clip" color={textMain}>
       <PublicNav />
-
+{/* 
       <motion.div
         style={{
           position: "fixed",
@@ -1880,7 +1880,7 @@ export default function LandingPage() {
         }}
       >
         <BackgroundPaths />
-      </motion.div>
+      </motion.div> */}
 
       {/* ══ HERO + STICKY STAGES (one phone — unlocks & cycles) ══
            Desktop: 300vh = 3 × 100vh (intro + 2 stages).
