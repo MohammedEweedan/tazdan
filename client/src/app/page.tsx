@@ -1454,13 +1454,13 @@ function SectionBento() {
   const cardBorder = dark ? "rgba(100,130,200,0.15)" : "rgba(0,87,184,0.12)";
 
   const stats = [
-    { label: t("bento_stat_volume_label"), value: "$80M", sub: "+18.4% " + t("bento_vs_last_month"), icon: FiActivity, span: 2, gradient: "linear-gradient(135deg, #0057b8 0%, #001a3d 100%)", color: "white" },
+    { label: t("bento_stat_volume_label"), value: "$280M", sub: t("bento_vs_last_month"), icon: FiActivity, span: 2, gradient: "linear-gradient(135deg, #0057b8 0%, #001a3d 100%)", color: "white" },
     { label: t("bento_countries_label"), value: "120+", sub: t("bento_countries_desc"), icon: FiGlobe, span: 1, accent: "#4a8fe0" },
-    { label: t("bento_traders_label"), value: "36K", sub: "", icon: FiUsers, span: 1, accent: "#22c55e" },
+    { label: t("bento_traders_label"), value: "35K", sub: "", icon: FiUsers, span: 1, accent: "#22c55e" },
     { label: t("bento_pairs_label"), value: "400+", sub: "", icon: FiBarChart2, span: 1, accent: "#f59e0b" },
     { label: t("bento_security_title"), value: "", sub: t("bento_security_desc"), icon: FiShield, span: 1, accent: "#a78bfa", bg: dark ? "rgba(124,58,237,0.12)" : "rgba(124,58,237,0.08)", border: "rgba(167,139,250,0.3)" },
     { label: t("bento_speed_title"), value: "<2s", sub: t("bento_speed_desc"), icon: FiZap, span: 1, accent: "#facc15" },
-    { label: t("bento_rating_label"), value: "4.9/5", sub: "", icon: FiStar, span: 1, accent: "#f59e0b" },
+    { label: t("bento_rating_label"), value: "4.2/5", sub: "", icon: FiStar, span: 1, accent: "#f59e0b" },
   ];
 
   return (
@@ -1536,9 +1536,9 @@ function SectionBento() {
                     position="absolute" 
                     top="0" 
                     right="0" 
-                    w="60%" 
-                    h="60%" 
-                    bg="linear-gradient(135deg, rgba(255,255,255,0.1) 0%, transparent 60%)" 
+                    w="100%" 
+                    h="100%" 
+                    bg="linear-gradient(135deg, rgba(255,255,255,0.2) 0%, transparent 60%)" 
                     pointerEvents="none"
                     borderTopRightRadius="20px"
                   />
