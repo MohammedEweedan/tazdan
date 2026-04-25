@@ -914,5 +914,7 @@
   "withdraw_submit": "Opname Indienen",
   "withdraw_title": "Geld Opnemen",
   "withdraw_wallet_address": "USDT Portemonnee-adres (TRC20)",
-  "withdraw_you_receive": "U zult ontvangen"
+  "withdraw_you_receive": "U zult ontvangen",
+  "coming_soon": "Binnenkort",
+  "screen_spot_last_24h": "Laatste 24u"
 }

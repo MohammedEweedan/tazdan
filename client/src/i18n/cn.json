@@ -912,5 +912,8 @@
   "withdraw_submit": "提交提现",
   "withdraw_title": "提现资金",
   "withdraw_wallet_address": "USDT 钱包地址（TRC20）",
-  "withdraw_you_receive": "您将收到"
+  "withdraw_you_receive": "您将收到",
+  "coming_soon": "即将推出",
+  "screen_spot_last_24h": "过去24小时",
+  "socialproof_label": "全球已验证用户"
 }

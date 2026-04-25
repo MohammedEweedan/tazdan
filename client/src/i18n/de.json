@@ -914,5 +914,7 @@
   "withdraw_submit": "Auszahlung senden",
   "withdraw_title": "Guthaben abheben",
   "withdraw_wallet_address": "USDT-Wallet-Adresse (TRC20)",
-  "withdraw_you_receive": "Sie erhalten"
+  "withdraw_you_receive": "Sie erhalten",
+  "coming_soon": "Demnächst",
+  "screen_spot_last_24h": "Letzte 24h"
 }

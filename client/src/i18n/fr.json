@@ -914,5 +914,7 @@
   "withdraw_submit": "Soumettre le Retrait",
   "withdraw_title": "Retirer des Fonds",
   "withdraw_wallet_address": "Adresse de Portefeuille USDT (TRC20)",
-  "withdraw_you_receive": "Vous recevrez"
+  "withdraw_you_receive": "Vous recevrez",
+  "coming_soon": "Bientôt disponible",
+  "screen_spot_last_24h": "24 dernières h"
 }

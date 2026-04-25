@@ -915,5 +915,6 @@
   "withdraw_submit": "تقديم طلب السحب",
   "withdraw_title": "سحب الأموال",
   "withdraw_wallet_address": "عنوان محفظة USDT (TRC20)",
-  "withdraw_you_receive": "ستستلم"
+  "withdraw_you_receive": "ستستلم",
+  "coming_soon": "قريباً"
 }

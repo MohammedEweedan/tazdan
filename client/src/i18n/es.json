@@ -914,5 +914,7 @@
   "withdraw_submit": "Enviar Retiro",
   "withdraw_title": "Retirar Fondos",
   "withdraw_wallet_address": "Dirección de Billetera USDT (TRC20)",
-  "withdraw_you_receive": "Recibirás"
+  "withdraw_you_receive": "Recibirás",
+  "coming_soon": "Próximamente",
+  "screen_spot_last_24h": "Últimas 24h"
 }

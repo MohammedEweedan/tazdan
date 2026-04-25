@@ -960,15 +960,15 @@ const StageP2P = memo(function StageP2P() {
 const StageHandles = memo(function StageHandles() {
   const { t } = useTranslate();
   const rows = [
-    { h: "@rayofsunshine", loc: "Tripoli", col: "#facc15" },
-    { h: "@noor.dxb",      loc: "UAE",     col: "#06b6d4" },
-    { h: "@layla_k",       loc: "KSA",     col: "#ec4899" },
-    { h: "@ines_casa",     loc: "Morocco", col: "#f59e0b" },
+    { h: "@aawidan2005", loc: "Tripoli", col: "#facc15" },
+    { h: "@noor.zk",      loc: "UAE",     col: "#06b6d4" },
+    { h: "@moe.ali",       loc: "KSA",     col: "#ec4899" },
+    { h: "@v3ryrich",     loc: "Morocco", col: "#f59e0b" },
   ];
   return (
     <VStack w={{ base: "260px", md: "320px" }} spacing={2.5} align="stretch">
       <Box
-        bg="linear-gradient(135deg, rgba(0,87,184,0.25), rgba(124,58,237,0.2))"
+        bg="linear-gradient(135deg, rgba(0,87,184,0.5), rgba(124,58,237,0.5))"
         border="1px solid rgba(255,255,255,0.12)"
         borderRadius="20px"
         p={4}
@@ -979,8 +979,8 @@ const StageHandles = memo(function StageHandles() {
             <Icon as={FiAtSign} color="white" />
           </Flex>
           <VStack align="start" spacing={0}>
-            <Text fontSize="14px" fontWeight="900" color="white">@rayofsunshine</Text>
-            <Text fontSize="10px" color="rgba(255,255,255,0.6)">{t("stage_handles_your_tag")}</Text>
+            <Text fontSize="14px" fontWeight="900">@rayofsunshine</Text>
+            <Text fontSize="10px">{t("stage_handles_your_tag")}</Text>
           </VStack>
         </HStack>
       </Box>
@@ -989,7 +989,7 @@ const StageHandles = memo(function StageHandles() {
           key={r.h}
           p={2.5}
           borderRadius="14px"
-          bg="rgba(255,255,255,0.05)"
+          bg="rgba(255,255,255,0.25)"
           border="1px solid rgba(255,255,255,0.09)"
           backdropFilter="blur(12px)"
           style={{ transform: `translateX(${i % 2 === 0 ? -6 : 6}px)` }}
@@ -997,8 +997,8 @@ const StageHandles = memo(function StageHandles() {
           <Flex w="28px" h="28px" borderRadius="full" bg={`${r.col}33`} border={`1.5px solid ${r.col}77`} align="center" justify="center">
             <Icon as={FiAtSign} color={r.col} boxSize={3} />
           </Flex>
-          <Text fontSize="12px" fontWeight="700" flex={1} color="white">{r.h}</Text>
-          <Text fontSize="10px" color="rgba(255,255,255,0.55)">{r.loc}</Text>
+          <Text fontSize="12px" fontWeight="700" flex={1}>{r.h}</Text>
+          <Text fontSize="10px">{r.loc}</Text>
         </HStack>
       ))}
     </VStack>
@@ -1039,6 +1039,13 @@ const StageCards = memo(function StageCards() {
       >
         {t("coming_soon")}
       </Badge>
+      {/* CSS-painted card stack — no external image dependency */}
+      <Box
+        position="relative"
+        w="100%"
+        h={{ base: "200px", md: "230px" }}
+        filter="drop-shadow(0 32px 60px rgba(0,87,184,0.45))"
+      >
        <Box
         position="relative"
         w="100%"
@@ -1053,6 +1060,7 @@ const StageCards = memo(function StageCards() {
           style={{ objectFit: "contain" }}
           priority
         />
+      </Box>
       </Box>
 
       <HStack spacing={2} pt={2}>
@@ -1686,13 +1694,13 @@ function SectionOnRamp() {
                     </Button>
                   </VStack>
                   
-                  {/* Mobile: video at bottom, full width, not background */}
-                  <Box 
+                  {/* Mobile: full uncropped video */}
+                  <Box
                     display={{ base: "block", md: "none" }}
-                    position="relative" 
-                    w="100%" 
-                    h="200px"
-                    bg={dark ? "#0a0f1e" : "#f8f9fc"} 
+                    position="relative"
+                    w="100%"
+                    style={{ aspectRatio: "4 / 3" }}
+                    bg={dark ? "#0a0f1e" : "#f8f9fc"}
                     overflow="hidden"
                     borderTop="1px solid"
                     borderColor={cardBorder}
@@ -1703,7 +1711,7 @@ function SectionOnRamp() {
                       loop
                       muted
                       playsInline
-                      style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                      style={{ width: "100%", height: "100%", objectFit: "contain" }}
                     />
                   </Box>
                 </VStack>
@@ -1725,114 +1733,87 @@ function SectionSocialProof() {
   const { colorMode } = useColorMode();
   const dark = colorMode === "dark";
   const textMain = dark ? "white" : "#0a0f1e";
-  const textSub = dark ? "rgba(255,255,255,0.5)" : "#64748b";
 
-  // Bigger avatars on desktop
-  const avatarBaseSizes = { base: 56, md: 72, lg: 88 };
-  const avatars = [
-    { src: "/screenshots/p1.avif", pos: { top: "5%", left: "12%" }, mobilePos: { top: "5%", left: "5%" }, sizeScale: 1 },
-    { src: "/screenshots/p2.avif", pos: { top: "18%", left: "5%" }, mobilePos: { top: "15%", left: "0%" }, sizeScale: 0.8 },
-    { src: "/screenshots/p3.avif", pos: { top: "8%", right: "10%" }, mobilePos: { top: "3%", right: "5%" }, sizeScale: 0.95 },
-    { src: "/screenshots/p4.avif", pos: { top: "22%", right: "4%" }, mobilePos: { top: "18%", right: "0%" }, sizeScale: 0.75 },
-    { src: "/screenshots/p5.avif", pos: { bottom: "12%", left: "8%" }, mobilePos: { bottom: "10%", left: "3%" }, sizeScale: 0.9 },
-    { src: "/screenshots/p6.avif", pos: { bottom: "8%", right: "14%" }, mobilePos: { bottom: "5%", right: "8%" }, sizeScale: 1.1 },
+  // Avatars positioned around the centered "35,000+" headline.
+  // Each entry holds top/left in % of the wrapping stage. Sizes use responsive Chakra props.
+  const avatars: {
+    src: string;
+    top: string;
+    left: string;
+    sizeBase: number;
+    sizeMd: number;
+    delay: number;
+    floatDelay: number;
+  }[] = [
+    { src: "/screenshots/p1.avif", top: "12%", left: "20%", sizeBase: 56, sizeMd: 88,  delay: 0.05, floatDelay: 0   },
+    { src: "/screenshots/p2.avif", top: "8%",  left: "48%", sizeBase: 62, sizeMd: 96,  delay: 0.1,  floatDelay: 0.6 },
+    { src: "/screenshots/p3.avif", top: "16%", left: "78%", sizeBase: 70, sizeMd: 110, delay: 0.15, floatDelay: 1.2 },
+    { src: "/screenshots/p4.avif", top: "58%", left: "10%", sizeBase: 56, sizeMd: 84,  delay: 0.2,  floatDelay: 0.4 },
+    { src: "/screenshots/p5.avif", top: "60%", left: "84%", sizeBase: 58, sizeMd: 88,  delay: 0.25, floatDelay: 0.9 },
+    { src: "/screenshots/p6.avif", top: "86%", left: "50%", sizeBase: 68, sizeMd: 100, delay: 0.3,  floatDelay: 0.2 },
   ];
 
   return (
     <Box
       position="relative"
       overflow="hidden"
-      py={{ base: 20, md: 32 }}
+      py={{ base: 16, md: 28 }}
       px={{ base: 4, md: 10 }}
-      minH={{ base: "500px", md: "640px" }}
     >
-
       <Container maxW="1200px" position="relative" zIndex={2}>
-        <VStack
-          spacing={{ base: 10, md: 12 }}
-          align="center"
-          textAlign="center"
+        <Box
+          position="relative"
+          w="100%"
+          mx="auto"
+          maxW={{ base: "100%", md: "960px" }}
+          h={{ base: "560px", md: "640px" }}
         >
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            whileInView={{ opacity: 1, scale: 1 }}
-            viewport={{ once: true, amount: 0.4 }}
-            transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
-          >
-            <Heading
-              fontFamily="'DM Sans', sans-serif"
-              fontWeight="900"
-              fontSize={{ base: "64px", md: "96px", lg: "120px" }}
-              letterSpacing="-0.04em"
-              color="#0057b8"
-              lineHeight={1}
-              style={{ textShadow: "0 4px 30px rgba(0,0,0,0.4)" }}
+          {/* Floating avatars layer */}
+          {avatars.map((a) => (
+            <motion.div
+              key={a.src}
+              initial={{ opacity: 0, scale: 0.5 }}
+              whileInView={{ opacity: 1, scale: 1 }}
+              viewport={{ once: true, amount: 0.2 }}
+              transition={{
+                duration: 0.55,
+                delay: a.delay,
+                type: "spring",
+                stiffness: 180,
+                damping: 16,
+              }}
+              style={{
+                position: "absolute",
+                top: a.top,
+                left: a.left,
+                transform: "translate(-50%, -50%)",
+                zIndex: 1,
+              }}
             >
-              35,000+
-            </Heading>
-          </motion.div>
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.5, delay: 0.2 }}
-          >
-            <Text
-              fontSize={{ base: "16px", md: "20px" }}
-              color="#0057b8"
-              fontWeight="600"
-              letterSpacing="-0.01em"
-              style={{ textShadow: "0 2px 16px rgba(0,0,0,0.35)" }}
-            >
-              {t("socialproof_label")}
-            </Text>
-          </motion.div>
-
-          {/* Orbiting circular avatars - larger on desktop */}
-          <Box
-            position="relative"
-            w="100%"
-            maxW={{ base: "100%", md: "720px" }}
-            h={{ base: "400px", md: "380px" }}
-            mt={{ base: 6, md: 10 }}
-          >
-            {avatars.map((a, i) => (
               <motion.div
-                key={a.src}
-                initial={{ opacity: 0, scale: 0.5 }}
-                whileInView={{ opacity: 1, scale: 1 }}
-                viewport={{ once: true, amount: 0.3 }}
+                animate={{ y: [0, -10, 0] }}
                 transition={{
-                  duration: 0.5,
-                  delay: 0.3 + i * 0.1,
-                  type: "spring",
-                  stiffness: 200,
+                  duration: 5 + (a.floatDelay % 2),
+                  delay: a.floatDelay,
+                  repeat: Infinity,
+                  ease: "easeInOut",
                 }}
               >
                 <Box
-                  position="absolute"
-                  {...(a.mobilePos || a.pos)}
-                  w={{
-                    base: `${56 * a.sizeScale}px`,
-                    md: `${72 * a.sizeScale}px`,
-                    lg: `${88 * a.sizeScale}px`,
-                  }}
-                  h={{
-                    base: `${56 * a.sizeScale}px`,
-                    md: `${72 * a.sizeScale}px`,
-                    lg: `${88 * a.sizeScale}px`,
-                  }}
+                  w={{ base: `${a.sizeBase}px`, md: `${a.sizeMd}px` }}
+                  h={{ base: `${a.sizeBase}px`, md: `${a.sizeMd}px` }}
                   borderRadius="full"
                   overflow="hidden"
                   border="3px solid"
-                  borderColor="rgba(255,255,255,0.4)"
-                  boxShadow="0 12px 40px rgba(0,0,0,0.4)"
+                  borderColor={dark ? "rgba(255,255,255,0.18)" : "rgba(0,87,184,0.18)"}
+                  boxShadow="0 16px 40px rgba(0,0,0,0.45)"
+                  transition="transform 0.3s ease, border-color 0.3s ease"
                   _hover={{
-                    transform: "scale(1.15)",
-                    zIndex: 10,
-                    borderColor: "rgba(255,255,255,0.8)",
+                    transform: "scale(1.08)",
+                    borderColor: dark ? "rgba(255,255,255,0.55)" : "#0057b8",
                   }}
-                  transition="all 0.3s ease"
+                  position="relative"
+                  bg={dark ? "#0a0f1e" : "#f1f5f9"}
                 >
                   <NextImage
                     src={a.src}
@@ -1843,9 +1824,60 @@ function SectionSocialProof() {
                   />
                 </Box>
               </motion.div>
-            ))}
+            </motion.div>
+          ))}
+
+          {/* Centered headline */}
+          <Box
+            position="absolute"
+            top="50%"
+            left="50%"
+            transform="translate(-50%, -50%)"
+            zIndex={2}
+            textAlign="center"
+            pointerEvents="none"
+            w={{ base: "78%", md: "auto" }}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.92 }}
+              whileInView={{ opacity: 1, scale: 1 }}
+              viewport={{ once: true, amount: 0.4 }}
+              transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
+            >
+              <Heading
+                fontFamily="'DM Sans', sans-serif"
+                fontWeight="900"
+                fontSize={{ base: "56px", md: "104px", lg: "128px" }}
+                letterSpacing="-0.04em"
+                lineHeight={1}
+                color={textMain}
+                style={{ textShadow: dark ? "0 8px 40px rgba(0,87,184,0.55)" : "0 8px 40px rgba(0,87,184,0.25)" }}
+              >
+                <Box as="span" bgGradient="linear(to-r, #4a8fe0, #0057b8)" bgClip="text">
+                  35,000+
+                </Box>
+              </Heading>
+            </motion.div>
+            <motion.div
+              initial={{ opacity: 0, y: 8 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.5, delay: 0.25 }}
+            >
+              <Text
+                mt={{ base: 3, md: 4 }}
+                fontSize={{ base: "13px", md: "17px" }}
+                color={dark ? "rgba(255,255,255,0.7)" : "#64748b"}
+                fontWeight="600"
+                letterSpacing="-0.01em"
+                maxW={{ base: "260px", md: "420px" }}
+                mx="auto"
+              >
+                {t("socialproof_label")}
+              </Text>
+            </motion.div>
           </Box>
-        </VStack>
+        </Box>
       </Container>
     </Box>
   );
@@ -2069,9 +2101,7 @@ function StageOverlay({ stages, progress }: { stages: Stage[]; progress: MotionV
                 <Heading fontSize="26px" fontWeight="800" color={textMain} letterSpacing="-0.03em" fontFamily="'DM Sans', sans-serif" maxW="320px">
                   {s.title}
                 </Heading>
-                <Text fontSize="13px" color={textSub} maxW="320px" noOfLines={3}>
-                  {s.desc}
-                </Text>
+                {/* Description hidden on mobile per design — only title shown */}
               </VStack>
             </motion.div>
           ))}
@@ -2135,8 +2165,12 @@ export default function LandingPage() {
     offset: ["start start", "end end"],
   });
 
-  const TILT_END = 0.08;
-  const STAGE_START = 0.12;
+  // Hero is 600vh = 6 × 100vh: 1 intro segment + 5 stage segments.
+  // Each segment occupies 1/6 of total scroll progress, but useScroll's
+  // [start start → end end] gives total = (height - viewport) = 500vh,
+  // so each 100vh segment = 0.2 of totalProgress.
+  const TILT_END = 0.15;       // phone uprights during intro segment
+  const STAGE_START = 0.20;    // stages begin exactly at end of intro segment
 
   const titleOpacity = useTransform(totalProgress, [0, TILT_END * 0.7, TILT_END], [1, 1, 0]);
   const titleY = useTransform(totalProgress, [0, TILT_END], [0, -80]);
@@ -2214,14 +2248,30 @@ export default function LandingPage() {
         <BackgroundPaths />
       </motion.div>
 
-      {/* ══ HERO + STICKY STAGES (one phone — unlocks & cycles) ══ */}
+      {/* ══ HERO + STICKY STAGES (one phone — unlocks & cycles) ══
+           600vh = 6 × 100vh. First segment = intro, next 5 = stages.
+           Each segment is a scroll-snap target so the user lands cleanly
+           on each stage when scrolling. */}
       <Box
         ref={scrollRef}
-        className="snap-section"
         id="features"
         position="relative"
-        h={{ base: "720vh", md: "840vh" }}
+        h="600vh"
       >
+        {/* Per-stage scroll-snap targets (no visual, just snap anchors) */}
+        {[0, 1, 2, 3, 4, 5].map((i) => (
+          <Box
+            key={i}
+            className="snap-section"
+            position="absolute"
+            top={`${i * 100}vh`}
+            left={0}
+            w="1px"
+            h="100vh"
+            pointerEvents="none"
+            aria-hidden="true"
+          />
+        ))}
         <Box position="sticky" top={0} h="100vh" overflow="hidden">
           {/* Glow */}
           <Box position="absolute" top="50%" left="50%" transform="translate(-50%, -50%)" w="800px" h="800px" bg={glow} filter="blur(140px)" borderRadius="full" pointerEvents="none" />

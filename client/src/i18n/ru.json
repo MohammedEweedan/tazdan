@@ -914,5 +914,7 @@
   "withdraw_submit": "Отправить Вывод",
   "withdraw_title": "Вывести Средства",
   "withdraw_wallet_address": "Адрес USDT Кошелька (TRC20)",
-  "withdraw_you_receive": "Вы получите"
+  "withdraw_you_receive": "Вы получите",
+  "coming_soon": "Скоро",
+  "screen_spot_last_24h": "За 24 часа"
 }
