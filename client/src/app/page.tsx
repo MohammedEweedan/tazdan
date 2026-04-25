@@ -1555,8 +1555,6 @@ function SectionOnRamp() {
     { label: "Visa",        icon: FaCcVisa,       iconSize: 30, bg: "#1a1f71",  color: "#fff" },
     { label: "Mastercard",  icon: FaCcMastercard, iconSize: 30, bg: "#0a0a0a",  color: "#ff5f00",  border: "rgba(255,255,255,0.12)" },
     { label: "Revolut",     icon: SiRevolut,      iconSize: 22, bg: "#0075eb",  color: "#fff", showLabel: true },
-    { label: "SEPA",        bg: "#003399",        color: "#ffcc00",            showLabel: true },
-    { label: "PayPal",      icon: FaPaypal,       iconSize: 22, bg: "#003087",  color: "#009cde",  showLabel: true },
   ];
 
   const cards = [
@@ -1606,7 +1604,6 @@ function SectionOnRamp() {
                       <Text
                         fontSize={{ base: "12px", md: "13.5px" }}
                         fontWeight="900"
-                        letterSpacing={m.label === "SEPA" ? "0.12em" : "-0.01em"}
                       >
                         {m.label}
                       </Text>
@@ -2237,21 +2234,8 @@ export default function LandingPage() {
         id="features"
         position="relative"
         h="300vh"
+        className="snap-none"
       >
-        {/* Per-stage scroll-snap targets (no visual, just snap anchors) */}
-        {[0, 1, 2].map((i) => (
-          <Box
-            key={i}
-            className="snap-section"
-            position="absolute"
-            top={`${i * 100}vh`}
-            left={0}
-            w="1px"
-            h="100vh"
-            pointerEvents="none"
-            aria-hidden="true"
-          />
-        ))}
         <Box position="sticky" top={0} h="100vh" overflow="hidden">
           {/* Glow */}
           <Box position="absolute" top="50%" left="50%" transform="translate(-50%, -50%)" w="800px" h="800px" bg={glow} filter="blur(140px)" borderRadius="full" pointerEvents="none" />
@@ -2314,16 +2298,10 @@ export default function LandingPage() {
                 y: phoneLiftY,
                 scale: phoneScaleMV,
                 transformOrigin: "50% 100%",
-                transformStyle: "preserve-3d",
+                willChange: "transform",
               }}
-              transition={{ type: "tween", ease: "easeOut", duration: 0.1 }}
             >
-              <motion.div 
-                style={{ y: phoneParallaxY }}
-                transition={{ type: "tween", ease: "linear", duration: 0.1 }}
-              >
-                <PhoneFrame progress={stageProgress} scale={phoneScaleResp} logoOpacity={logoOpacity} />
-              </motion.div>
+              <PhoneFrame progress={stageProgress} scale={phoneScaleResp} logoOpacity={logoOpacity} />
             </motion.div>
           </Flex>
 
@@ -2449,7 +2427,7 @@ export default function LandingPage() {
           </Box>
         <VStack position="relative" zIndex={2} spacing={8} maxW="720px" mx="auto" textAlign="center" px={6}>
           <Box bg={dark ? "#000" : "white"} p={6} borderRadius="28px" border="1px solid" borderColor={cardBorder} boxShadow={`0 0 60px ${glow}`}>
-            <IconLogo size={56} />
+            <NextImage src={"/icon.gif"} alt="Gif" width={60} height={60} />
           </Box>
           <Heading fontSize={{ base: "36px", md: "64px" }} fontWeight="800" letterSpacing="-0.04em" fontFamily="'DM Sans', sans-serif" color={textMain}>
             {t("connect_title_1")}{" "}
