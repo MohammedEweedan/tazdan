@@ -609,9 +609,7 @@ function ScreenCard() {
         <Box position="absolute" inset={0} p={4} display="flex" flexDirection="column" justifyContent="space-between">
           {/* Top row: brand + contactless */}
           <HStack justify="space-between" align="center">
-            <Text fontSize="12px" color="white" fontWeight="900" letterSpacing="0.06em">
-              promrkts
-            </Text>
+            <NextImage src="/logo-white.png" width={35} height={25} alt="text"/>
             <Icon as={FiWifi} color="white" boxSize={3.5} transform="rotate(90deg)" opacity={0.9} />
           </HStack>
 
@@ -732,9 +730,6 @@ function ScreenCard() {
 const PHONE_SCREENS = [
   <ScreenSpot key="0" />,
   <ScreenMarkets key="1" />,
-  <ScreenP2P key="2" />,
-  <ScreenSocialWallet key="3" />,
-  <ScreenCard key="4" />,
 ];
 
 
@@ -751,13 +746,10 @@ function PhoneFrame({
   scale?: number;
   logoOpacity?: MotionValue<number>;
 }) {
-  /* 5 equal slices of [0,1], 0.2 each, with 0.03 crossfade */
+  /* 2 equal slices of [0,1], 0.5 each, with 0.05 crossfade */
   const opacities = [
-    useTransform(progress, [0.0,  0.03, 0.17, 0.20], [1, 1, 1, 0]),
-    useTransform(progress, [0.17, 0.20, 0.37, 0.40], [0, 1, 1, 0]),
-    useTransform(progress, [0.37, 0.40, 0.57, 0.60], [0, 1, 1, 0]),
-    useTransform(progress, [0.57, 0.60, 0.77, 0.80], [0, 1, 1, 0]),
-    useTransform(progress, [0.77, 0.80, 0.97, 1.00], [0, 1, 1, 1]),
+    useTransform(progress, [0.0,  0.05, 0.45, 0.50], [1, 1, 1, 0]),
+    useTransform(progress, [0.45, 0.50, 0.95, 1.00], [0, 1, 1, 1]),
   ];
   return (
     <Box
@@ -1005,98 +997,6 @@ const StageHandles = memo(function StageHandles() {
   );
 });
 
-const StageCards = memo(function StageCards() {
-  const { t } = useTranslate();
-  const tiers = [
-    { n: "Starter", c: "#8ab4f8", pan: "•••• 8142", tilt: "-6deg", z: 0, y: "24px"  },
-    { n: "Master",  c: "#0057b8", pan: "•••• 4411", tilt: "0deg",  z: 1, y: "0px"   },
-    { n: "Pro",     c: "#0a0f1e", pan: "•••• 1144", tilt: "6deg",  z: 2, y: "-24px" },
-  ];
-
-  const perks = [
-    { l: t("screen_card_cashback"), v: "1%",   col: "#22c55e" },
-    { l: t("stage_card_fx"),        v: "0%",   col: BRAND_LIGHT },
-    { l: t("stage_card_accepted"),  v: "200+", col: "#a78bfa" },
-  ];
-
-  return (
-    <VStack w={{ base: "280px", md: "360px" }} spacing={5} align="stretch" position="relative">
-      <Badge
-        position="absolute"
-        top="-10px"
-        right="-4px"
-        zIndex={10}
-        px={3}
-        py={1}
-        borderRadius="full"
-        bg="linear-gradient(135deg, #facc15, #f59e0b)"
-        color="#0a0f1e"
-        fontWeight="900"
-        fontSize="10px"
-        letterSpacing="0.05em"
-        textTransform="uppercase"
-        boxShadow="0 6px 18px rgba(250,204,21,0.45)"
-      >
-        {t("coming_soon")}
-      </Badge>
-      {/* CSS-painted card stack — no external image dependency */}
-      <Box
-        position="relative"
-        w="100%"
-        h={{ base: "200px", md: "230px" }}
-        filter="drop-shadow(0 32px 60px rgba(0,87,184,0.45))"
-      >
-       <Box
-        position="relative"
-        w="100%"
-        style={{ aspectRatio: "1024 / 720" }}
-        filter="drop-shadow(0 32px 60px rgba(0,87,184,0.45))"
-      >
-        <NextImage
-          src="/visa.png"
-          alt="promrkts Visa cards — Starter, Master, Pro"
-          fill
-          sizes="380px"
-          style={{ objectFit: "contain" }}
-          priority
-        />
-      </Box>
-      </Box>
-
-      <HStack spacing={2} pt={2}>
-        {tiers.map((tier) => (
-          <HStack
-            key={tier.n}
-            flex={1}
-            bg="rgba(255,255,255,0.05)"
-            border="1px solid rgba(255,255,255,0.1)"
-            borderRadius="full"
-            px={3} py={1.5}
-            spacing={2}
-          >
-            <Box w="9px" h="9px" borderRadius="full" bg={tier.c} boxShadow={`0 0 8px ${tier.c}aa`} />
-            <Text fontSize="10px" fontWeight="800" color="white">{tier.n}</Text>
-          </HStack>
-        ))}
-      </HStack>
-
-      <HStack spacing={2}>
-        {perks.map((s) => (
-          <VStack
-            key={s.l}
-            flex={1} p={2.5} borderRadius="12px"
-            bg="rgba(255,255,255,0.04)"
-            border="1px solid rgba(255,255,255,0.08)"
-            spacing={0}
-          >
-            <Text fontSize="14px" fontWeight="900" color={s.col} fontFamily="monospace">{s.v}</Text>
-            <Text fontSize="9px" color="rgba(255,255,255,0.65)" textAlign="center">{s.l}</Text>
-          </VStack>
-        ))}
-      </HStack>
-    </VStack>
-  );
-});
 
 /* ═════════════════════════════════════════════════════
    STATIC PHONE (used in feature sections below)
@@ -1259,7 +1159,7 @@ function PhoneBalanceScreen() {
   );
 }
 
-/* ── Social Finance section (phone left / copy right) ── */
+/* ── Social Finance section (text left / phone right) ── */
 function SectionSocialFinance() {
   const { t } = useTranslate();
   const { colorMode } = useColorMode();
@@ -1274,7 +1174,7 @@ function SectionSocialFinance() {
     <Box position="relative" py={{ base: 16, md: 24 }} px={{ base: 4, md: 10 }} overflow="hidden">
       <Container maxW="1200px" position="relative" zIndex={2}>
         <SimpleGrid columns={{ base: 1, lg: 2 }} gap={{ base: 12, lg: 16 }} alignItems="center">
-          <Flex justify="center" order={{ base: 2, lg: 1 }}>
+          <Flex justify="center" order={{ base: 2, lg: 2 }}>
             <motion.div
               initial={{ opacity: 0, y: 48, scale: 0.93 }}
               whileInView={{ opacity: 1, y: 0, scale: 1 }}
@@ -1298,7 +1198,7 @@ function SectionSocialFinance() {
             <VStack
               align={{ base: "center", lg: "start" }}
               spacing={{ base: 6, md: 8 }}
-              order={{ base: 1, lg: 2 }}
+              order={{ base: 1, lg: 1 }}
               textAlign={{ base: "center", lg: "start" }}
             >
               <Heading
@@ -1336,73 +1236,156 @@ function SectionSocialFinance() {
   );
 }
 
-/* ── Pay / Transfer / Invest section ── */
-function SectionPayTransferInvest() {
+/* ─────────────────────────────────────────────────────
+   ALTERNATING FEATURE SECTION (phone + copy)
+   Used for P2P, Social Wallet (Handles), Visa Card.
+   ───────────────────────────────────────────────────── */
+function AlternatingFeatureSection({
+  imageSide,
+  eyebrow,
+  title,
+  desc,
+  features,
+  phoneScreen,
+  comingSoon = false,
+  extraBelow,
+}: {
+  imageSide: "left" | "right";
+  eyebrow: string;
+  title: string;
+  desc: string;
+  features: { icon: React.ElementType; label: string }[];
+  phoneScreen: React.ReactNode;
+  comingSoon?: boolean;
+  /** When provided, replaces the 4-feature grid (e.g. an image showcase). */
+  extraBelow?: React.ReactNode;
+}) {
   const { t } = useTranslate();
   const { colorMode } = useColorMode();
   const dark = colorMode === "dark";
   const textMain = dark ? "white" : "#0a0f1e";
-  const textSub  = dark ? "rgba(255,255,255,0.7)" : "#64748b";
-  const tileBg   = dark ? "rgba(20,28,48,0.9)" : "#ffffff";
+  const textSub = dark ? "rgba(255,255,255,0.7)" : "#64748b";
+  const tileBg = dark ? "rgba(20,28,48,0.9)" : "#ffffff";
   const tileBorder = dark ? "rgba(100,130,200,0.2)" : "rgba(0,87,184,0.12)";
 
-  const features = [
-    { icon: FiWifi,    label: t("sec_pay_feat_tap")      },
-    { icon: FiRepeat,  label: t("sec_pay_feat_transfer") },
-    { icon: FiPieChart,label: t("sec_pay_feat_invest")   },
-    { icon: FiHome,    label: t("sec_pay_feat_bank")     },
-  ];
+  const phoneOrder = imageSide === "left" ? 1 : 2;
+  const textOrder = imageSide === "left" ? 2 : 1;
 
   return (
-    <Box position="relative" py={{ base: 16, md: 24 }} px={{ base: 4, md: 10 }} overflow="hidden">
+    <Box className="snap-section-normal" position="relative" py={{ base: 16, md: 24 }} px={{ base: 4, md: 10 }} overflow="hidden">
       <Container maxW="1200px" position="relative" zIndex={2}>
         <SimpleGrid columns={{ base: 1, lg: 2 }} gap={{ base: 12, lg: 16 }} alignItems="center">
+          <Flex justify="center" order={{ base: 2, lg: phoneOrder }}>
+            <motion.div
+              initial={{ opacity: 0, y: 48, scale: 0.93 }}
+              whileInView={{ opacity: 1, y: 0, scale: 1 }}
+              viewport={{ once: true, amount: 0.2 }}
+              transition={{ duration: 0.75, ease: [0.22, 1, 0.36, 1] }}
+              style={{ willChange: "transform" }}
+            >
+              <StaticPhone scale={0.85}>{phoneScreen}</StaticPhone>
+            </motion.div>
+          </Flex>
+
           <motion.div
             initial={{ opacity: 0, y: 32 }}
             whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, amount: 0.15 }}
-            transition={{ duration: 0.65, ease: [0.22, 1, 0.36, 1] }}
-            style={{ willChange: "transform" }}
+            viewport={{ once: true, amount: 0.2 }}
+            transition={{ duration: 0.65, delay: 0.1, ease: [0.22, 1, 0.36, 1] }}
+            style={{ willChange: "transform", order: textOrder }}
           >
-            <VStack align={{ base: "center", lg: "start" }} spacing={{ base: 6, md: 8 }} textAlign={{ base: "center", lg: "start" }}>
-              <Heading as="h2" fontFamily="'DM Sans', sans-serif" fontWeight="800" fontSize={{ base: "44px", md: "68px", xl: "88px" }} letterSpacing="-0.04em">
-                {[t("sec_pay_title_1"), t("sec_pay_title_2"), t("sec_pay_title_3")].map((line, i) => (
-                  <motion.span key={i} style={{ display: "block" }} initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, amount: 0.3 }} transition={{ duration: 0.6, delay: 0.1 + i * 0.1 }}>
-                    <Box as="span" bgGradient="linear(to-r, #4a8fe0, #0057b8)" bgClip="text">{line}</Box>
-                  </motion.span>
-                ))}
+            <VStack
+              align={{ base: "center", lg: "start" }}
+              spacing={{ base: 5, md: 7 }}
+              textAlign={{ base: "center", lg: "start" }}
+            >
+              <HStack spacing={3}>
+                <Text
+                  fontSize={{ base: "11px", md: "12px" }}
+                  fontWeight="900"
+                  color={BRAND_LIGHT}
+                  letterSpacing="0.16em"
+                  textTransform="uppercase"
+                >
+                  {eyebrow}
+                </Text>
+                {comingSoon && (
+                  <Box
+                    px={2.5}
+                    py={0.5}
+                    borderRadius="full"
+                    bg="linear-gradient(135deg, #facc15, #f59e0b)"
+                    color="#0a0f1e"
+                    fontWeight="900"
+                    fontSize="10px"
+                    letterSpacing="0.05em"
+                    textTransform="uppercase"
+                    boxShadow="0 4px 14px rgba(250,204,21,0.4)"
+                  >
+                    {t("coming_soon")}
+                  </Box>
+                )}
+              </HStack>
+              <Heading
+                fontFamily="'DM Sans', sans-serif"
+                fontWeight="800"
+                fontSize={{ base: "36px", md: "56px", xl: "72px" }}
+                letterSpacing="-0.04em"
+                lineHeight={1.05}
+              >
+                <Box as="span" bgGradient="linear(to-r, #4a8fe0, #0057b8)" bgClip="text">
+                  {title}
+                </Box>
               </Heading>
-              <Text fontSize={{ base: "14.5px", md: "16.5px" }} color={textSub} maxW="420px">
-                {t("sec_pay_desc")}
+              <Text fontSize={{ base: "14.5px", md: "16.5px" }} color={textSub} maxW="460px">
+                {desc}
               </Text>
-              <SimpleGrid columns={2} spacing={3} w="100%" maxW="420px">
-                {features.map((f, i) => (
-                  <motion.div key={f.label} initial={{ opacity: 0, y: 20, scale: 0.95 }} whileInView={{ opacity: 1, y: 0, scale: 1 }} viewport={{ once: true, amount: 0.2 }} transition={{ duration: 0.45, delay: 0.1 + 0.07 * i }}>
-                    <HStack h="70px" bg={tileBg} border="1px solid" borderColor={tileBorder} borderRadius="18px" px={4} backdropFilter="blur(12px)" spacing={3} transition="all 0.2s ease" _hover={{ transform: "translateY(-3px)", borderColor: "#0057b8" }}>
-                      <Flex w="40px" h="40px" borderRadius="12px" border="1px solid rgba(0,87,184,0.25)" align="center" justify="center" flexShrink={0} bg={dark ? "rgba(255,255,255,0.07)" : "rgba(0,87,184,0.06)"}>
-                        <Icon as={f.icon} color={BRAND_LIGHT} />
-                      </Flex>
-                      <Text fontSize="13.5px" fontWeight="700" color={textMain}>{f.label}</Text>
-                    </HStack>
-                  </motion.div>
-                ))}
-              </SimpleGrid>
+              {extraBelow ? (
+                <Box w="100%" maxW="460px">{extraBelow}</Box>
+              ) : features.length > 0 && (
+                <SimpleGrid columns={2} spacing={3} w="100%" maxW="460px">
+                  {features.map((f, i) => (
+                    <motion.div
+                      key={f.label}
+                      initial={{ opacity: 0, y: 12, scale: 0.96 }}
+                      whileInView={{ opacity: 1, y: 0, scale: 1 }}
+                      viewport={{ once: true, amount: 0.3 }}
+                      transition={{ duration: 0.4, delay: 0.08 * i }}
+                    >
+                      <HStack
+                        h="64px"
+                        bg={tileBg}
+                        border="1px solid"
+                        borderColor={tileBorder}
+                        borderRadius="16px"
+                        px={4}
+                        spacing={3}
+                        backdropFilter="blur(12px)"
+                        transition="all 0.2s ease"
+                        _hover={{ transform: "translateY(-3px)", borderColor: BRAND_LIGHT }}
+                      >
+                        <Flex
+                          w="36px"
+                          h="36px"
+                          borderRadius="10px"
+                          border="1px solid rgba(0,87,184,0.25)"
+                          align="center"
+                          justify="center"
+                          flexShrink={0}
+                          bg={dark ? "rgba(255,255,255,0.06)" : "rgba(0,87,184,0.05)"}
+                        >
+                          <Icon as={f.icon} color={BRAND_LIGHT} />
+                        </Flex>
+                        <Text fontSize="13px" fontWeight="700" color={textMain}>
+                          {f.label}
+                        </Text>
+                      </HStack>
+                    </motion.div>
+                  ))}
+                </SimpleGrid>
+              )}
             </VStack>
           </motion.div>
-
-          <Flex justify="center">
-            <motion.div
-              initial={{ opacity: 0, y: 60, scale: 0.9 }}
-              whileInView={{ opacity: 1, y: 0, scale: 1 }}
-              viewport={{ once: true, amount: 0.15 }}
-              transition={{ duration: 0.85, ease: [0.22, 1, 0.36, 1] }}
-              style={{ willChange: "transform" }}
-            >
-              <StaticPhone scale={0.85}>
-                <PhoneBalanceScreen />
-              </StaticPhone>
-            </motion.div>
-          </Flex>
         </SimpleGrid>
       </Container>
     </Box>
@@ -2132,9 +2115,6 @@ function StageOverlay({ stages, progress }: { stages: Stage[]; progress: MotionV
 const STAGE_WIDGETS = [
   <StageSpot key="spot" />,
   <StageMarkets key="markets" />,
-  <StageP2P key="p2p" />,
-  <StageHandles key="handles" />,
-  <StageCards key="cards" />,
 ];
 
 /* ═════════════════════════════════════════════════════
@@ -2165,12 +2145,10 @@ export default function LandingPage() {
     offset: ["start start", "end end"],
   });
 
-  // Hero is 600vh = 6 × 100vh: 1 intro segment + 5 stage segments.
-  // Each segment occupies 1/6 of total scroll progress, but useScroll's
-  // [start start → end end] gives total = (height - viewport) = 500vh,
-  // so each 100vh segment = 0.2 of totalProgress.
-  const TILT_END = 0.15;       // phone uprights during intro segment
-  const STAGE_START = 0.20;    // stages begin exactly at end of intro segment
+  // Hero is 300vh = 3 × 100vh: 1 intro segment + 2 stage segments (Spot, Markets).
+  // useScroll travel = (height - viewport) = 200vh, so each 100vh segment = 0.5 of totalProgress.
+  const TILT_END = 0.30;       // phone uprights by end of intro segment
+  const STAGE_START = 0.50;    // stages begin exactly at end of intro (50%)
 
   const titleOpacity = useTransform(totalProgress, [0, TILT_END * 0.7, TILT_END], [1, 1, 0]);
   const titleY = useTransform(totalProgress, [0, TILT_END], [0, -80]);
@@ -2213,9 +2191,6 @@ export default function LandingPage() {
   const stages: Stage[] = [
     { eyebrow: t("feat_spot_eyebrow"),    title: t("feat_spot_title"),    desc: t("feat_spot_desc"),    widget: STAGE_WIDGETS[0] },
     { eyebrow: t("feat_markets_eyebrow"), title: t("feat_markets_title"), desc: t("feat_markets_desc"), widget: STAGE_WIDGETS[1] },
-    { eyebrow: t("feat_p2p_eyebrow"),     title: t("feat_p2p_title"),     desc: t("feat_p2p_desc"),     widget: STAGE_WIDGETS[2] },
-    { eyebrow: t("feat_wallet_eyebrow"),  title: t("feat_wallet_title"),  desc: t("feat_wallet_desc"),  widget: STAGE_WIDGETS[3] },
-    { eyebrow: t("feat_card_eyebrow"),    title: t("feat_card_title"),    desc: t("feat_card_desc"),    widget: STAGE_WIDGETS[4] },
   ];
 
   // ✅ SAFE: all hooks already ran
@@ -2249,17 +2224,16 @@ export default function LandingPage() {
       </motion.div>
 
       {/* ══ HERO + STICKY STAGES (one phone — unlocks & cycles) ══
-           600vh = 6 × 100vh. First segment = intro, next 5 = stages.
-           Each segment is a scroll-snap target so the user lands cleanly
-           on each stage when scrolling. */}
+           300vh = 3 × 100vh. First segment = intro, next 2 = stages (Spot, Markets).
+           P2P / Handles / Cards now live in dedicated alternating sections below. */}
       <Box
         ref={scrollRef}
         id="features"
         position="relative"
-        h="600vh"
+        h="300vh"
       >
         {/* Per-stage scroll-snap targets (no visual, just snap anchors) */}
-        {[0, 1, 2, 3, 4, 5].map((i) => (
+        {[0, 1, 2].map((i) => (
           <Box
             key={i}
             className="snap-section"
@@ -2371,15 +2345,102 @@ export default function LandingPage() {
       {/* ══ SOCIAL PROOF — stat + photo collage ══ */}
       <SectionSocialProof />
 
-      {/* ══ SOCIAL PAYMENTS SECTION ══ */}
+      {/* ══ SOCIAL PAYMENTS SECTION (text left / phone right) ══ */}
       <SectionSocialFinance />
 
-      {/* ══ CONNECTED ARCS ══ */}
-      <Box className="snap-section" id="connect" py={{ base: 16, md: 24 }} position="relative" overflow="hidden" minH="100vh" display="flex" alignItems="center">
-        <Box position="absolute" top="50%" left="50%" transform="translate(-50%, -50%)" w="100%" h="600px" pointerEvents="none">
-          <Box position="absolute" top="0" left="50%" transform="translateX(-50%)" w="1400px" h="1400px" border="1px solid" borderColor={arcColor} borderRadius="full" style={{ clipPath: "inset(0 0 50% 0)", boxShadow: `0 0 60px ${glow}` }} />
-          <Box position="absolute" bottom="0" left="50%" transform="translateX(-50%)" w="1400px" h="1400px" border="1px solid" borderColor={arcColor} borderRadius="full" style={{ clipPath: "inset(50% 0 0 0)", boxShadow: `0 0 60px ${glow}` }} />
-        </Box>
+      {/* ══ STAGE 3 — P2P MARKETPLACE (phone left / text right) ══ */}
+      <AlternatingFeatureSection
+        imageSide="left"
+        eyebrow={t("feat_p2p_eyebrow")}
+        title={t("feat_p2p_title")}
+        desc={t("feat_p2p_desc")}
+        features={[
+          { icon: FiGlobe,   label: "120+ countries" },
+          { icon: FiShield,  label: "Escrow protected" },
+          { icon: FiUsers,   label: "Verified traders" },
+          { icon: FiZap,     label: "Instant settle" },
+        ]}
+        phoneScreen={<ScreenP2P />}
+      />
+
+      {/* ══ STAGE 4 — SOCIAL WALLET / @HANDLES (phone right / text left) ══ */}
+      <AlternatingFeatureSection
+        imageSide="right"
+        eyebrow={t("feat_wallet_eyebrow")}
+        title={t("feat_wallet_title")}
+        desc={t("feat_wallet_desc")}
+        features={[
+          { icon: FiAtSign,  label: "Personal @handle" },
+          { icon: FiSend,    label: "One-tap send" },
+          { icon: FiUsers,   label: "Friends list" },
+          { icon: FiLock,    label: "Privacy first" },
+        ]}
+        phoneScreen={<ScreenSocialWallet />}
+      />
+
+      {/* ══ STAGE 5 — VISA CARD (phone left / text right) ══ */}
+      <AlternatingFeatureSection
+        imageSide="left"
+        eyebrow={t("feat_card_eyebrow")}
+        title={t("feat_card_title")}
+        desc={t("feat_card_desc")}
+        comingSoon
+        features={[]}
+        phoneScreen={<ScreenCard />}
+        extraBelow={
+          <Box
+            position="relative"
+            w="100%"
+            style={{ aspectRatio: "1024 / 720" }}
+            filter="drop-shadow(0 32px 60px rgba(0,87,184,0.45))"
+          >
+            <NextImage
+              src="/visa.png"
+              alt="promrkts Visa cards — Starter, Master, Pro"
+              fill
+              sizes="(max-width: 768px) 90vw, 460px"
+              style={{ objectFit: "contain" }}
+            />
+          </Box>
+        }
+      />
+
+      {/* ══ CONNECTED — text only; arches now live behind the CTA + footer ══ */}
+      <Box className="snap-section" id="connect" py={{ base: 16, md: 24 }} position="relative" minH="100vh" display="flex" alignItems="center">
+        {/* Background hero video — soft, behind everything */}
+          <Box
+            position="absolute"
+            inset={0}
+            zIndex={0}
+            pointerEvents="none"
+            overflow="hidden"
+            style={{
+              maskImage: "radial-gradient(ellipse at center, black 35%, transparent 80%)",
+              WebkitMaskImage: "radial-gradient(ellipse at center, black 35%, transparent 80%)",
+            }}
+          >
+            <video
+              src="/videos/WebHeader.mp4"
+              autoPlay
+              loop
+              muted
+              playsInline
+              style={{
+                width: "100%",
+                height: "100%",
+                objectFit: "cover",
+                opacity: dark ? 0.45 : 0.35,
+                filter: "saturate(1.1) blur(0.5px)",
+              }}
+            />
+            <Box
+              position="absolute"
+              inset={0}
+              bg={dark
+                ? "radial-gradient(ellipse at center, rgba(10,15,30,0) 0%, rgba(10,15,30,0.55) 70%, rgba(10,15,30,0.95) 100%)"
+                : "radial-gradient(ellipse at center, rgba(255,255,255,0) 0%, rgba(255,255,255,0.5) 70%, rgba(255,255,255,0.95) 100%)"}
+            />
+          </Box>
         <VStack position="relative" zIndex={2} spacing={8} maxW="720px" mx="auto" textAlign="center" px={6}>
           <Box bg={dark ? "#000" : "white"} p={6} borderRadius="28px" border="1px solid" borderColor={cardBorder} boxShadow={`0 0 60px ${glow}`}>
             <IconLogo size={56} />
@@ -2406,8 +2467,138 @@ export default function LandingPage() {
         </VStack>
       </Box>
 
+      {/* ══ CTA + FOOTER (with electrified arches behind) ══ */}
+      <Box position="relative" overflow="hidden">
+        {/* Electric arches — pulse + traveling spark */}
+        <Box position="absolute" inset={0} pointerEvents="none" zIndex={0} aria-hidden="true">
+          <Box
+            position="absolute"
+            top="50%"
+            left="50%"
+            transform="translate(-50%, -50%)"
+            w="100%"
+            h="100%"
+            display="flex"
+            alignItems="center"
+            justifyContent="center"
+          >
+            {/* Top arc */}
+            <motion.div
+              animate={{
+                boxShadow: [
+                  "0 0 30px rgba(0,87,184,0.25), inset 0 0 20px rgba(0,87,184,0.15)",
+                  "0 0 90px rgba(0,87,184,0.85), inset 0 0 40px rgba(0,87,184,0.5)",
+                  "0 0 30px rgba(0,87,184,0.25), inset 0 0 20px rgba(0,87,184,0.15)",
+                ],
+                borderColor: [
+                  "rgba(0,87,184,0.25)",
+                  "rgba(74,143,224,0.95)",
+                  "rgba(0,87,184,0.25)",
+                ],
+              }}
+              transition={{ duration: 2.6, repeat: Infinity, ease: "easeInOut" }}
+              style={{
+                position: "absolute",
+                top: "0",
+                left: "50%",
+                width: "1600px",
+                height: "1600px",
+                transform: "translate(-50%, 0)",
+                border: "1.5px solid",
+                borderRadius: "50%",
+                clipPath: "inset(0 0 50% 0)",
+              }}
+            />
+            {/* Bottom arc */}
+            <motion.div
+              animate={{
+                boxShadow: [
+                  "0 0 30px rgba(0,87,184,0.25), inset 0 0 20px rgba(0,87,184,0.15)",
+                  "0 0 90px rgba(0,87,184,0.85), inset 0 0 40px rgba(0,87,184,0.5)",
+                  "0 0 30px rgba(0,87,184,0.25), inset 0 0 20px rgba(0,87,184,0.15)",
+                ],
+                borderColor: [
+                  "rgba(0,87,184,0.25)",
+                  "rgba(74,143,224,0.95)",
+                  "rgba(0,87,184,0.25)",
+                ],
+              }}
+              transition={{ duration: 2.6, repeat: Infinity, ease: "easeInOut", delay: 1.3 }}
+              style={{
+                position: "absolute",
+                bottom: "0",
+                left: "50%",
+                width: "1600px",
+                height: "1600px",
+                transform: "translate(-50%, 0)",
+                border: "1.5px solid",
+                borderRadius: "50%",
+                clipPath: "inset(50% 0 0 0)",
+              }}
+            />
+            {/* Traveling spark on top arc */}
+            <motion.div
+              animate={{ rotate: [180, 360] }}
+              transition={{ duration: 6, repeat: Infinity, ease: "linear" }}
+              style={{
+                position: "absolute",
+                top: "0",
+                left: "50%",
+                width: "1600px",
+                height: "1600px",
+                transform: "translate(-50%, 0)",
+                pointerEvents: "none",
+              }}
+            >
+              <Box
+                position="absolute"
+                top="50%"
+                left="0"
+                w="14px"
+                h="14px"
+                borderRadius="full"
+                bg="#4a8fe0"
+                style={{
+                  transform: "translate(-50%, -50%)",
+                  boxShadow:
+                    "0 0 12px #0057b8, 0 0 24px #0057b8, 0 0 48px rgba(0,87,184,0.7)",
+                }}
+              />
+            </motion.div>
+            {/* Traveling spark on bottom arc */}
+            <motion.div
+              animate={{ rotate: [0, 180] }}
+              transition={{ duration: 6, repeat: Infinity, ease: "linear", delay: 1 }}
+              style={{
+                position: "absolute",
+                bottom: "0",
+                left: "50%",
+                width: "1600px",
+                height: "1600px",
+                transform: "translate(-50%, 0)",
+                pointerEvents: "none",
+              }}
+            >
+              <Box
+                position="absolute"
+                top="50%"
+                left="100%"
+                w="14px"
+                h="14px"
+                borderRadius="full"
+                bg="#4a8fe0"
+                style={{
+                  transform: "translate(-50%, -50%)",
+                  boxShadow:
+                    "0 0 12px #0057b8, 0 0 24px #0057b8, 0 0 48px rgba(0,87,184,0.7)",
+                }}
+              />
+            </motion.div>
+          </Box>
+        </Box>
+
       {/* ══ CTA ══ */}
-      <Box className="snap-section" id="cta" py={{ base: 16, md: 28 }} px={{ base: 6, md: 12 }} minH="100vh" display="flex" alignItems="center" justifyContent="center">
+      <Box className="snap-section" id="cta" position="relative" zIndex={1} py={{ base: 16, md: 28 }} px={{ base: 6, md: 12 }} minH="100vh" display="flex" alignItems="center" justifyContent="center">
         <Box
           maxW="1100px"
           mx="auto"
@@ -2447,7 +2638,10 @@ export default function LandingPage() {
         </Box>
       </Box>
 
-      <PublicFooter />
+        <Box position="relative" zIndex={1}>
+          <PublicFooter />
+        </Box>
+      </Box>
     </Box>
   );
 }
