@@ -2147,8 +2147,10 @@ export default function LandingPage() {
 
   // Hero is 300vh = 3 × 100vh: 1 intro segment + 2 stage segments (Spot, Markets).
   // useScroll travel = (height - viewport) = 200vh, so each 100vh segment = 0.5 of totalProgress.
-  const TILT_END = 0.30;       // phone uprights by end of intro segment
-  const STAGE_START = 0.50;    // stages begin exactly at end of intro (50%)
+  // Snap points: progress 0 (intro), 0.5 (Spot), 1.0 (Markets).
+  // The intro must FULLY complete by progress 0.5 so Stage 1 is at 100% opacity at snap 1.
+  const TILT_END = 0.40;        // phone fully upright by 0.40
+  const STAGE_START = 0.50;     // stages overlay fully on by 0.50 (= snap 1)
 
   const titleOpacity = useTransform(totalProgress, [0, TILT_END * 0.7, TILT_END], [1, 1, 0]);
   const titleY = useTransform(totalProgress, [0, TILT_END], [0, -80]);
@@ -2156,19 +2158,23 @@ export default function LandingPage() {
   const phoneLiftY = useTransform(totalProgress, [0, TILT_END], [40, 0], { clamp: true });
   const phoneScaleMV = useTransform(totalProgress, [0, TILT_END], [0.94, 1], { clamp: true });
 
+  // Logo crossfades to stages between 0.42 and 0.50, so by snap 1 the overlay is 100% on.
   const logoOpacity = useTransform(
     totalProgress,
-    [STAGE_START - 0.03, STAGE_START],
+    [TILT_END + 0.02, STAGE_START],
     [1, 0],
     { clamp: true }
   );
 
+  // stageProgress: 0 at snap 1 (Spot), 1 at snap 2 (Markets).
   const stageProgress = useTransform(totalProgress, [STAGE_START, 1], [0, 1], { clamp: true });
 
+  // Overlay fully on at STAGE_START (snap 1) — no mid-fade dimness when user lands on a snap.
   const stageOverlayOpacity = useTransform(
     totalProgress,
-    [STAGE_START - 0.02, STAGE_START + 0.01],
-    [0, 1]
+    [TILT_END + 0.02, STAGE_START],
+    [0, 1],
+    { clamp: true }
   );
 
   const phoneParallaxY = useTransform(stageProgress, [0, 1], ["-2vh", "2vh"]);
@@ -2429,7 +2435,7 @@ export default function LandingPage() {
                 width: "100%",
                 height: "100%",
                 objectFit: "cover",
-                opacity: dark ? 0.45 : 0.35,
+                opacity: dark ? 0.55 : 0.55,
                 filter: "saturate(1.1) blur(0.5px)",
               }}
             />
@@ -2449,16 +2455,13 @@ export default function LandingPage() {
             {t("connect_title_1")}{" "}
             <Box as="span" bgGradient="linear(to-r, #4a8fe0, #0057b8)" bgClip="text">{t("connect_title_2")}</Box>
           </Heading>
-          <Text fontSize={{ base: "15px", md: "18px" }} color={textSub} maxW="560px">
-            {t("connect_desc")}
-          </Text>
           <HStack spacing={3} flexWrap="wrap" justify="center" pt={2}>
             {[
               { icon: FiZap, label: t("connect_pill_speed") },
               { icon: FiGlobe, label: t("connect_pill_access") },
               { icon: FiShield, label: t("connect_pill_security") },
             ].map((p, i) => (
-              <HStack key={i} bg={dark ? "rgba(255,255,255,0.04)" : "white"} border="1px solid" borderColor={cardBorder} px={4} py={2.5} borderRadius="full">
+              <HStack key={i} bg={dark ? "rgba(0,0,0,0.4)" : "white"} border="1px solid" borderColor={cardBorder} px={4} py={2.5} borderRadius="full">
                 <Icon as={p.icon} color={BRAND_LIGHT} boxSize={4} />
                 <Text fontSize="13px" color={textMain} fontWeight="700">{p.label}</Text>
               </HStack>
