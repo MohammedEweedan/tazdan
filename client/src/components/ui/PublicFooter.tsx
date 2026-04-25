@@ -67,7 +67,6 @@ export default function PublicFooter() {
       pt={{ base: 10, md: 14 }}
       pb={{ base: 6, md: 8 }}
       px={{ base: 5, md: 10 }}
-      borderTop="1px solid"
       borderColor={border}
     >
       <Box maxW="1280px" mx="auto">

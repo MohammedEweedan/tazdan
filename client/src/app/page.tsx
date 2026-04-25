@@ -195,34 +195,17 @@ const ScreenLogo = memo(function ScreenLogo() {
         position="absolute"
         top="50%"
         left="50%"
-        w="340px"
-        h="340px"
-        mt="-170px"
-        ml="-170px"
+        w="260px"
+        h="260px"
+        mt="-130px"
+        ml="-130px"
         borderRadius="full"
         pointerEvents="none"
-        opacity={0.55}
+        opacity={0.4}
         style={{
-          filter: "blur(60px)",
-          background:
-            "conic-gradient(from 0deg, #0057b8 0%, #4a8fe0 25%, #7c3aed 50%, #06b6d4 75%, #0057b8 100%)",
-        }}
-      />
-      <Box
-        position="absolute"
-        top="50%"
-        left="50%"
-        w="220px"
-        h="220px"
-        mt="-110px"
-        ml="-110px"
-        borderRadius="full"
-        pointerEvents="none"
-        opacity={0.85}
-        style={{
-          filter: "blur(36px)",
-          background:
-            "conic-gradient(from 180deg, #4a8fe0 0%, #1d4ed8 30%, #0057b8 60%, #6ea8ee 90%, #4a8fe0 100%)",
+          filter: "blur(48px)",
+          background: "conic-gradient(from 0deg, #0057b8 0%, #4a8fe0 25%, #7c3aed 50%, #06b6d4 75%, #0057b8 100%)",
+          willChange: "auto",
         }}
       />
       <Box
@@ -414,82 +397,6 @@ function ScreenP2P() {
           </Box>
         ))}
       </VStack>
-    </VStack>
-  );
-}
-
-function ScreenMint() {
-  const { t } = useTranslate();
-  return (
-    <VStack h="100%" w="100%" p={5} align="stretch" spacing={3} bg="#000">
-      <HStack pt={6}>
-        <Text fontSize="14px" color="white" fontWeight="800" flex={1} textAlign="center">{t("screen_mint_title")}</Text>
-      </HStack>
-      <Box
-        borderRadius="18px"
-        p={4}
-        bg="linear-gradient(135deg, #0057b8 0%, #1e63b2 100%)"
-        position="relative"
-        overflow="hidden"
-      >
-        <HStack>
-          <Flex w="40px" h="40px" borderRadius="full" bg="rgba(255,255,255,0.2)" align="center" justify="center">
-            <Text fontSize="20px">🚀</Text>
-          </Flex>
-          <VStack align="start" spacing={0}>
-            <Text fontSize="13px" color="white" fontWeight="800">MOON</Text>
-            <Text fontSize="9px" color="rgba(255,255,255,0.7)">MoonCoin · BNB Chain</Text>
-          </VStack>
-        </HStack>
-        <HStack mt={3} spacing={3}>
-          <VStack align="start" spacing={0}>
-            <Text fontSize="8px" color="rgba(255,255,255,0.6)" letterSpacing="0.1em">{t("screen_mint_supply")}</Text>
-            <Text fontSize="11px" color="white" fontWeight="800">1,000,000,000</Text>
-          </VStack>
-          <VStack align="start" spacing={0}>
-            <Text fontSize="8px" color="rgba(255,255,255,0.6)" letterSpacing="0.1em">{t("screen_mint_decimals")}</Text>
-            <Text fontSize="11px" color="white" fontWeight="800">18</Text>
-          </VStack>
-        </HStack>
-      </Box>
-      <Text fontSize="9px" color="rgba(255,255,255,0.4)" fontWeight="700" letterSpacing="0.1em" textTransform="uppercase">
-        {t("screen_mint_chain")}
-      </Text>
-      <SimpleGrid columns={4} spacing={1.5}>
-        {[
-          { n: "BNB", c: "#f3ba2f", active: true },
-          { n: "ETH", c: "#627eea" },
-          { n: "SOL", c: "#14f195" },
-          { n: "AVAX", c: "#e84142" },
-        ].map((c) => (
-          <VStack
-            key={c.n}
-            py={2}
-            spacing={0.5}
-            borderRadius="10px"
-            bg={c.active ? `${c.c}22` : "rgba(255,255,255,0.03)"}
-            border="1px solid"
-            borderColor={c.active ? `${c.c}66` : "rgba(255,255,255,0.06)"}
-          >
-            <Box w="14px" h="14px" borderRadius="full" bg={c.c} />
-            <Text fontSize="9px" color="white" fontWeight="700">{c.n}</Text>
-          </VStack>
-        ))}
-      </SimpleGrid>
-      <Box flex={1} />
-      <VStack align="stretch" spacing={1.5} bg="rgba(255,255,255,0.03)" p={3} borderRadius="12px">
-        <HStack justify="space-between">
-          <Text fontSize="10px" color="rgba(255,255,255,0.5)">{t("screen_mint_fee")}</Text>
-          <Text fontSize="10px" color="white" fontWeight="700" fontFamily="monospace">25 USDT</Text>
-        </HStack>
-        <HStack justify="space-between">
-          <Text fontSize="10px" color="rgba(255,255,255,0.5)">{t("screen_mint_gas")}</Text>
-          <Text fontSize="10px" color="white" fontWeight="700" fontFamily="monospace">~$0.08</Text>
-        </HStack>
-      </VStack>
-      <Button h="38px" bg={BRAND} color="white" borderRadius="12px" fontSize="12px" fontWeight="800">
-        {t("screen_mint_deploy")}
-      </Button>
     </VStack>
   );
 }
@@ -906,94 +813,6 @@ const StageMarkets = memo(function StageMarkets() {
   );
 })
 
-const StageP2P = memo(function StageP2P() {
-  const { t } = useTranslate();
-  const offers = [
-    { n: "Rayan G.", flag: "RG", rate: "67,240.50", lim: "100 – 50,000 USD", grad: "linear-gradient(135deg, #facc15, #b45309)" },
-    { n: "Ali A.", flag: "AA", rate: "3.67", lim: "114.20 – 41,120 AED", grad: "linear-gradient(135deg, #06b6d4, #0369a1)" },
-    { n: "Moe A.", flag: "MA", rate: "3.75", lim: "41.12 – 11,420 SAR", grad: "linear-gradient(135deg, #ec4899, #be185d)" },
-  ];
-  return (
-    <VStack w={{ base: "260px", md: "320px" }} spacing={2.5} align="stretch">
-      {offers.map((o, i) => (
-        <HStack
-          key={i}
-          p={3}
-          borderRadius="18px"
-          bg="rgba(255,255,255,0.04)"
-          border="1px solid rgb(31, 77, 169)"
-          backdropFilter="blur(14px)"
-          boxShadow="0 8px 24px rgba(0,0,0,0.25)"
-          style={{ transform: `translateX(${i % 2 === 0 ? -10 : 10}px)` }}
-        >
-          <Flex w="38px" h="38px" borderRadius="full" bg={o.grad} align="center" justify="center" flexShrink={0} fontSize="16px">
-            {o.flag}
-          </Flex>
-          <VStack align="start" spacing={0} flex={1}>
-            <Text fontSize="12px" fontWeight="800">{o.n}</Text>
-            <HStack spacing={2}>
-              <Text fontSize="10px" fontFamily="monospace">{o.rate}</Text>
-              <Text fontSize="10px" opacity={0.5}>·</Text>
-              <Text fontSize="10px" opacity={0.65}>{o.lim}</Text>
-            </HStack>
-          </VStack>
-          <Button size="xs" h="26px" bg={BRAND} color="white" borderRadius="8px" fontSize="10px" fontWeight="800" flexShrink={0}>
-            {t("stage_p2p_trade")}
-          </Button>
-        </HStack>
-      ))}
-    </VStack>
-  );
-})
-
-const StageHandles = memo(function StageHandles() {
-  const { t } = useTranslate();
-  const rows = [
-    { h: "@aawidan2005", loc: "Tripoli", col: "#facc15" },
-    { h: "@noor.zk",      loc: "UAE",     col: "#06b6d4" },
-    { h: "@moe.ali",       loc: "KSA",     col: "#ec4899" },
-    { h: "@v3ryrich",     loc: "Morocco", col: "#f59e0b" },
-  ];
-  return (
-    <VStack w={{ base: "260px", md: "320px" }} spacing={2.5} align="stretch">
-      <Box
-        bg="linear-gradient(135deg, rgba(0,87,184,0.5), rgba(124,58,237,0.5))"
-        border="1px solid rgba(255,255,255,0.12)"
-        borderRadius="20px"
-        p={4}
-        backdropFilter="blur(14px)"
-      >
-        <HStack>
-          <Flex w="40px" h="40px" borderRadius="full" bg={BRAND} align="center" justify="center">
-            <Icon as={FiAtSign} color="white" />
-          </Flex>
-          <VStack align="start" spacing={0}>
-            <Text fontSize="14px" fontWeight="900">@rayofsunshine</Text>
-            <Text fontSize="10px">{t("stage_handles_your_tag")}</Text>
-          </VStack>
-        </HStack>
-      </Box>
-      {rows.map((r, i) => (
-        <HStack
-          key={r.h}
-          p={2.5}
-          borderRadius="14px"
-          bg="rgba(255,255,255,0.25)"
-          border="1px solid rgba(255,255,255,0.09)"
-          backdropFilter="blur(12px)"
-          style={{ transform: `translateX(${i % 2 === 0 ? -6 : 6}px)` }}
-        >
-          <Flex w="28px" h="28px" borderRadius="full" bg={`${r.col}33`} border={`1.5px solid ${r.col}77`} align="center" justify="center">
-            <Icon as={FiAtSign} color={r.col} boxSize={3} />
-          </Flex>
-          <Text fontSize="12px" fontWeight="700" flex={1}>{r.h}</Text>
-          <Text fontSize="10px">{r.loc}</Text>
-        </HStack>
-      ))}
-    </VStack>
-  );
-});
-
 
 /* ═════════════════════════════════════════════════════
    LAZY BACKGROUND VIDEO
@@ -1139,77 +958,6 @@ function PhoneSendScreen() {
           </Flex>
         ))}
       </SimpleGrid>
-    </VStack>
-  );
-}
-
-/* ── Balance-home screen (Pay / Transfer / Invest) ── */
-function PhoneBalanceScreen() {
-  const { t } = useTranslate();
-  return (
-    <VStack h="100%" w="100%" align="stretch" p={6} spacing={3}>
-      <HStack pt={8}>
-        <Box w="18px" h="14px" bg="rgba(255,255,255,0.12)" borderRadius="3px" />
-        <Box flex={1} />
-        <HStack spacing={1.5}>
-          <Box w="6px" h="6px" bg="rgba(255,255,255,0.6)" borderRadius="full" />
-          <Box w="6px" h="6px" bg="rgba(255,255,255,0.6)" borderRadius="full" />
-        </HStack>
-      </HStack>
-      <Text fontSize="11.5px" color="rgba(255,255,255,0.55)" fontWeight="600" textAlign="center">
-        {t("sec_pay_home_title")}
-      </Text>
-      <HStack justify="center" align="baseline" spacing={2}>
-        <Text fontSize="13px" color="rgba(255,255,255,0.6)" fontWeight="700" letterSpacing="0.12em">USDT</Text>
-        <Heading color="white" fontSize="46px" fontWeight="800" letterSpacing="-0.035em" fontFamily="'DM Sans', sans-serif">
-          41,120
-        </Heading>
-        <Text fontSize="16px" color="rgba(255,255,255,0.7)" fontWeight="700">.02</Text>
-      </HStack>
-      <Flex justify="center">
-        <Box bg="rgba(255,255,255,0.08)" border="1px solid rgba(255,255,255,0.1)" px={3} py={1} borderRadius="full">
-          <Text fontSize="10px" color="rgba(255,255,255,0.75)" fontWeight="700" letterSpacing="0.08em">USDT · AED · SAR</Text>
-        </Box>
-      </Flex>
-      <SimpleGrid columns={3} spacing={3} pt={8}>
-        {[
-          { icon: FiArrowDownLeft, label: t("sec_pay_home_deposit") },
-          { icon: FiSend, label: t("sec_pay_home_send") },
-          { icon: FiArrowUpRight, label: t("sec_pay_home_withdraw") },
-        ].map((a) => (
-          <VStack key={a.label} spacing={1.5}>
-            <Flex w="44px" h="44px" borderRadius="14px" bg="rgba(255,255,255,0.06)" border="1px solid rgba(255,255,255,0.08)" align="center" justify="center">
-              <Icon as={a.icon} color="white" boxSize={4} />
-            </Flex>
-            <Text fontSize="10px" color="rgba(255,255,255,0.7)" fontWeight="600">{a.label}</Text>
-          </VStack>
-        ))}
-      </SimpleGrid>
-      <HStack pt={8}>
-        <Text fontSize="11px" color="white" fontWeight="700">{t("sec_pay_home_recent")}</Text>
-        <Box flex={1} />
-        <Text fontSize="10px" color={BRAND_LIGHT} fontWeight="600">{t("sec_pay_home_view_all")}</Text>
-      </HStack>
-      <VStack align="stretch" spacing={2}>
-        {[
-          { n: "@rayofsunshine", d: "Today · 11:44 am", amt: "-USDT 11.44", neg: true, ini: "R", grad: "linear-gradient(135deg, #facc15, #f59e0b)" },
-          { n: "Bought BTC", d: "Today · 1:11 am", amt: "+114,200.2", neg: false, ini: "₿", grad: "linear-gradient(135deg, #f7931a, #b86508)" },
-          { n: "Bought ETH", d: "Today · 4:44 am", amt: "+4,111.02", neg: false, ini: "Ξ", grad: "linear-gradient(135deg, #627eea, #3b5ac9)" },
-        ].map((r) => (
-          <HStack key={r.n} bg="rgba(255,255,255,0.03)" p={2.5} borderRadius="12px" border="1px solid rgba(255,255,255,0.05)">
-            <Flex w="32px" h="32px" borderRadius="full" bg={r.grad} align="center" justify="center">
-              <Text fontSize="11px" color="white" fontWeight="800">{r.ini}</Text>
-            </Flex>
-            <VStack align="start" spacing={0} flex={1}>
-              <Text fontSize="11px" color="white" fontWeight="700">{r.n}</Text>
-              <Text fontSize="9px" color="rgba(255,255,255,0.4)">{r.d}</Text>
-            </VStack>
-            <Text fontSize="11px" color={r.neg ? "rgba(255,255,255,0.85)" : "#22c55e"} fontWeight="800" fontFamily="monospace">
-              {r.amt}
-            </Text>
-          </HStack>
-        ))}
-      </VStack>
     </VStack>
   );
 }
@@ -1903,129 +1651,6 @@ function SectionSocialProof() {
   );
 }
 
-/* ── Token mint screen used by "Mint anything" section ── */
-function PhoneMintBuilderScreen() {
-  const { t } = useTranslate();
-  return (
-    <VStack h="100%" w="100%" p={6} align="stretch" spacing={3.5}>
-      <HStack pt={8}>
-        <Text fontSize="14px" color="rgba(255,255,255,0.55)">←</Text>
-        <Text fontSize="14px" color="white" fontWeight="700" flex={1} textAlign="center">{t("sec_mint_screen_title")}</Text>
-        <Box w="10px" />
-      </HStack>
-      {/* Name */}
-      <VStack align="stretch" spacing={1}>
-        <Text fontSize="10px" color="rgba(255,255,255,0.5)" fontWeight="700" letterSpacing="0.1em">{t("sec_mint_name")}</Text>
-        <Box bg="rgba(255,255,255,0.05)" border="1px solid rgba(255,255,255,0.08)" borderRadius="12px" px={3} py={2.5}>
-          <Text fontSize="13px" color="white" fontWeight="700">MoonCoin</Text>
-        </Box>
-      </VStack>
-      {/* Symbol */}
-      <VStack align="stretch" spacing={1}>
-        <Text fontSize="10px" color="rgba(255,255,255,0.5)" fontWeight="700" letterSpacing="0.1em">{t("sec_mint_symbol")}</Text>
-        <Box bg="rgba(255,255,255,0.05)" border="1px solid rgba(255,255,255,0.08)" borderRadius="12px" px={3} py={2.5}>
-          <Text fontSize="13px" color="white" fontWeight="700" fontFamily="monospace">$MOON</Text>
-        </Box>
-      </VStack>
-      {/* Supply */}
-      <VStack align="stretch" spacing={1}>
-        <Text fontSize="10px" color="rgba(255,255,255,0.5)" fontWeight="700" letterSpacing="0.1em">{t("sec_mint_total_supply")}</Text>
-        <Box bg="rgba(255,255,255,0.05)" border="1px solid rgba(255,255,255,0.08)" borderRadius="12px" px={3} py={2.5}>
-          <Text fontSize="13px" color="white" fontWeight="700" fontFamily="monospace">1,000,000,000</Text>
-        </Box>
-      </VStack>
-      {/* Chain select */}
-      <VStack align="stretch" spacing={1}>
-        <Text fontSize="10px" color="rgba(255,255,255,0.5)" fontWeight="700" letterSpacing="0.1em">{t("sec_mint_chain")}</Text>
-        <SimpleGrid columns={4} spacing={1.5}>
-          {[
-            { n: "BNB", c: "#f3ba2f", active: true },
-            { n: "ETH", c: "#627eea" },
-            { n: "SOL", c: "#14f195" },
-            { n: "AVAX", c: "#e84142" },
-          ].map((c) => (
-            <VStack
-              key={c.n}
-              py={2}
-              spacing={0.5}
-              borderRadius="10px"
-              bg={c.active ? `${c.c}22` : "rgba(255,255,255,0.03)"}
-              border="1px solid"
-              borderColor={c.active ? `${c.c}77` : "rgba(255,255,255,0.06)"}
-            >
-              <Box w="14px" h="14px" borderRadius="full" bg={c.c} />
-              <Text fontSize="9px" color="white" fontWeight="700">{c.n}</Text>
-            </VStack>
-          ))}
-        </SimpleGrid>
-      </VStack>
-      <Box flex={1} />
-      <Button h="42px" bg="white" color="black" borderRadius="12px" fontSize="13px" fontWeight="800" rightIcon={<Icon as={FiZap} />}>
-        {t("sec_mint_deploy_btn")}
-      </Button>
-    </VStack>
-  );
-}
-
-/* ── Smart contract screen for "Deploy contracts" section ── */
-function PhoneContractScreen() {
-  const { t } = useTranslate();
-  const templates = [
-    { icon: FiLock, name: t("sec_contract_tpl_escrow"), desc: t("sec_contract_tpl_escrow_d"), active: true },
-    { icon: FiFeather, name: t("sec_contract_tpl_vesting"), desc: t("sec_contract_tpl_vesting_d") },
-    { icon: FiUsers, name: t("sec_contract_tpl_multisig"), desc: t("sec_contract_tpl_multisig_d") },
-    { icon: FiBox, name: t("sec_contract_tpl_lock"), desc: t("sec_contract_tpl_lock_d") },
-  ];
-  return (
-    <VStack h="100%" w="100%" p={6} align="stretch" spacing={3}>
-      <HStack pt={8}>
-        <Text fontSize="14px" color="rgba(255,255,255,0.55)">←</Text>
-        <Text fontSize="14px" color="white" fontWeight="700" flex={1} p={2} textAlign="center">{t("sec_contract_screen_title")}</Text>
-        <Box w="10px" />
-      </HStack>
-      <Text fontSize="10px" color="rgba(255,255,255,0.45)" fontWeight="700" letterSpacing="0.1em" textTransform="uppercase">
-        {t("sec_contract_choose")}
-      </Text>
-      <VStack align="stretch" spacing={2} flex={1}>
-        {templates.map((tpl) => (
-          <HStack
-            key={tpl.name}
-            p={3}
-            bg={tpl.active ? "rgba(0,87,184,0.18)" : "rgba(255,255,255,0.03)"}
-            border="1px solid"
-            borderColor={tpl.active ? "rgba(0,87,184,0.5)" : "rgba(255,255,255,0.06)"}
-            borderRadius="14px"
-          >
-            <Flex
-              w="36px"
-              h="36px"
-              borderRadius="10px"
-              bg={tpl.active ? BRAND : "rgba(255,255,255,0.06)"}
-              align="center"
-              justify="center"
-              flexShrink={0}
-            >
-              <Icon as={tpl.icon} color="white" boxSize={4} />
-            </Flex>
-            <VStack align="start" spacing={0} flex={1}>
-              <Text fontSize="12px" color="white" fontWeight="800">{tpl.name}</Text>
-              <Text fontSize="9px" color="rgba(255,255,255,0.55)">{tpl.desc}</Text>
-            </VStack>
-            {tpl.active && (
-              <Flex w="18px" h="18px" borderRadius="full" bg={BRAND} align="center" justify="center">
-                <Icon as={FiCheck} color="white" boxSize={2.5} />
-              </Flex>
-            )}
-          </HStack>
-        ))}
-      </VStack>
-      <Button h="42px" bg="white" color="black" borderRadius="12px" fontSize="13px" fontWeight="800" rightIcon={<Icon as={FiArrowRight} />}>
-        {t("sec_contract_deploy_btn")}
-      </Button>
-    </VStack>
-  );
-}
-
 /* ═════════════════════════════════════════════════════
    STAGE OVERLAY (rotating copy + widgets around sticky phone)
    ═════════════════════════════════════════════════════ */
@@ -2168,12 +1793,9 @@ export default function LandingPage() {
   const phoneScaleResp =
     useBreakpointValue({ base: 0.5, sm: 0.6, md: 0.72, lg: 0.82, xl: 0.92 }) ?? 0.9;
 
-  const pageBg = dark ? "#000000" : "#fafbfe";
   const textMain = dark ? "#ffffff" : "#0a0f1e";
-  const textSub = dark ? "rgba(255,255,255,0.55)" : "#64748b";
   const cardBorder = dark ? "rgba(255,255,255,0.08)" : "rgba(0,87,184,0.1)";
   const glow = dark ? "rgba(0,87,184,0.22)" : "rgba(0,87,184,0.08)";
-  const arcColor = dark ? "rgba(0,87,184,0.35)" : "rgba(0,87,184,0.25)";
 
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -2185,18 +1807,14 @@ export default function LandingPage() {
   // Hero height: desktop 300vh (3 segments), mobile 200vh (2 compressed segments).
   // useScroll travel = (height - viewport). On desktop: 200vh travel, each 100vh = 0.5 progress.
   // On mobile: 100vh travel, so progress moves faster. Adjust timeline for mobile.
-  const isMobile = useBreakpointValue({ base: true, md: false }) ?? false;
-  const TILT_END = isMobile ? 0.35 : 0.40;     // phone fully upright earlier on mobile (shorter scroll)
-  const STAGE_START = isMobile ? 0.40 : 0.50;  // stages overlay fully on earlier on mobile
+  const STAGE_START = 0.45;
+  const TILT_END = 0.40; // kept for logoOpacity / stageOverlayOpacity references below
 
-  const titleOpacity = useTransform(totalProgress, [0, TILT_END * 0.7, TILT_END], [1, 1, 0]);
-  // On mobile, skip title Y transform — y transforms cause layout thrashing, opacity-only is cheaper
-  const titleY = useTransform(totalProgress, isMobile ? [0, 0] : [0, TILT_END], isMobile ? [0, 0] : [0, -80]);
-  // On mobile, skip the phone tilt animation entirely — it's expensive and less visible on small screens
-  const phoneRotateX = useTransform(totalProgress, isMobile ? [0, 0] : [0, TILT_END], isMobile ? [0, 0] : [32, 0], { clamp: true });
-  // On mobile, skip phone lift and scale — subtle effects that add scroll computation cost
-  const phoneLiftY = useTransform(totalProgress, isMobile ? [0, 0] : [0, TILT_END], isMobile ? [0, 0] : [40, 0], { clamp: true });
-  const phoneScaleMV = useTransform(totalProgress, isMobile ? [0, 0] : [0, TILT_END], isMobile ? [1, 1] : [0.94, 1], { clamp: true });
+  // Phone fades in from slightly below — pure opacity+translate, compositor-only
+  const titleOpacity = useTransform(totalProgress, [0, 0.28, 0.38], [1, 1, 0]);
+  const titleY = useTransform(totalProgress, [0, 0.38], [0, -40]);
+  const phoneOpacity = useTransform(totalProgress, [0, 0.12], [0, 1]);
+  const phoneY = useTransform(totalProgress, [0, 0.18], [32, 0]);
 
   // Logo crossfades to stages between 0.42 and 0.50, so by snap 1 the overlay is 100% on.
   const logoOpacity = useTransform(
@@ -2248,12 +1866,11 @@ export default function LandingPage() {
   }
 
   return (
-    <Box minH="100vh" bg={pageBg} overflowX="clip" color={textMain}>
+    <Box minH="100vh" overflowX="clip" color={textMain}>
       <PublicNav />
 
-      {/* <motion.div
+      <motion.div
         style={{
-          opacity: pathsOpacity,
           position: "fixed",
           inset: 0,
           zIndex: 0,
@@ -2263,7 +1880,7 @@ export default function LandingPage() {
         }}
       >
         <BackgroundPaths />
-      </motion.div> */}
+      </motion.div>
 
       {/* ══ HERO + STICKY STAGES (one phone — unlocks & cycles) ══
            Desktop: 300vh = 3 × 100vh (intro + 2 stages).
@@ -2275,18 +1892,19 @@ export default function LandingPage() {
         position="relative"
         h={{ base: "200vh", md: "300vh" }}
         className="snap-none"
+        style={{ contain: "layout" }}
       >
-        <Box position="sticky" top={0} h="100vh" overflow="hidden">
+        <Box position="sticky" top={0} h="100vh" overflow="hidden" style={{ transform: "translateZ(0)" }}>
           {/* Glow — smaller on mobile and reduced blur to save GPU; large blurred elements are expensive */}
-          <Box
+         <Box
             position="absolute"
             top="50%"
             left="50%"
             transform="translate(-50%, -50%)"
-            w={{ base: "400px", md: "800px" }}
-            h={{ base: "400px", md: "800px" }}
+            w={{ base: "300px", md: "500px" }}
+            h={{ base: "300px", md: "500px" }}
             bg={glow}
-            filter={{ base: "blur(40px)", md: "blur(140px)" }}
+            filter="blur(60px)"
             borderRadius="full"
             pointerEvents="none"
           />
@@ -2343,15 +1961,12 @@ export default function LandingPage() {
             justify="center"
             zIndex={2}
             pointerEvents="none"
-            style={{ perspective: isMobile ? "none" : "1200px" }}
           >
             <motion.div
               style={{
-                rotateX: phoneRotateX,
-                y: phoneLiftY,
-                scale: phoneScaleMV,
-                transformOrigin: "50% 100%",
-                willChange: "transform",
+                opacity: phoneOpacity,
+                y: phoneY,
+                willChange: "opacity, transform",
               }}
             >
               <PhoneFrame progress={stageProgress} scale={phoneScaleResp} logoOpacity={logoOpacity} />
@@ -2451,13 +2066,13 @@ export default function LandingPage() {
             zIndex={0}
             pointerEvents="none"
             style={{
-              maskImage: "radial-gradient(ellipse at center, black 35%, transparent 80%)",
-              WebkitMaskImage: "radial-gradient(ellipse at center, black 35%, transparent 80%)",
+              maskImage: "radial-gradient(ellipse at center, black 1%, transparent 60%)",
+              WebkitMaskImage: "radial-gradient(ellipse at center, black 15%, transparent 60%)",
             }}
           >
             <LazyBackgroundVideo
               src="/videos/WebHeader.mp4"
-              opacity={0.85}
+              opacity={0.95}
             />
             <Box
               position="absolute"
@@ -2467,9 +2082,9 @@ export default function LandingPage() {
                 : "radial-gradient(ellipse at center, rgba(255,255,255,0) 0%, rgba(255,255,255,0.5) 70%, rgba(255,255,255,0.95) 100%)"}
             />
           </Box>
-        <VStack position="relative" zIndex={2} spacing={8} maxW="720px" mx="auto" textAlign="center" px={6}>
-          <Box bg={dark ? "#000" : "white"} p={6} borderRadius="28px" border="1px solid" borderColor={cardBorder} boxShadow={`0 0 60px ${glow}`}>
-            <NextImage src={"/icon.gif"} alt="Gif" width={60} height={60} />
+        <VStack position="relative" zIndex={20} spacing={8} maxW="720px" mx="auto" textAlign="center" px={6}>
+          <Box p={6} borderColor={cardBorder} >
+            <NextImage src={"/icon-black.png"} alt="Gif" width={60} height={60} />
           </Box>
           <Heading fontSize={{ base: "36px", md: "64px" }} fontWeight="800" letterSpacing="-0.04em" fontFamily="'DM Sans', sans-serif" color={textMain}>
             {t("connect_title_1")}{" "}
@@ -2496,7 +2111,7 @@ export default function LandingPage() {
         <Box position="absolute" inset={0} pointerEvents="none" aria-hidden="true">
           <Box
             position="absolute"
-            top="50%"
+            top="75%"
             left="50%"
             transform="translate(-50%, -50%)"
             w="100%"
@@ -2554,7 +2169,7 @@ export default function LandingPage() {
           textAlign="center"
           boxShadow="0 40px 100px rgba(0,87,184,0.3)"
         >
-          <Box position="absolute" inset={0} opacity={0.08} backgroundImage="radial-gradient(circle at 2px 2px, white 1px, transparent 0)" backgroundSize="36px 36px" pointerEvents="none" />
+          <Box position="absolute" inset={0} opacity={0.08} backgroundImage="radial-gradient(circle at 2px 2px, white 2px, transparent 0)" backgroundSize="36px 36px" pointerEvents="none" />
           <VStack spacing={7} position="relative" zIndex={2}>
             <Heading fontSize={{ base: "36px", md: "64px" }} fontWeight="800" color="white" letterSpacing="-0.04em" fontFamily="'DM Sans', sans-serif">
               {t("cta_title")}
