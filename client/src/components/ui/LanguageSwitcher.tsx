@@ -34,7 +34,7 @@ export default function LanguageThemeSwitcher() {
 
   const iconColor = useColorModeValue("gray.600", "gray.300");
   const hoverBg = useColorModeValue("gray.100", "whiteAlpha.200");
-  const activeBg = useColorModeValue("blue.50", "blue.900");
+  const activeBg = useColorModeValue("blue.100", "blue.900");
   const activeText = useColorModeValue("blue.600", "blue.300");
 
   const languages = [
