@@ -63,7 +63,7 @@ export default function LanguageThemeSwitcher() {
       <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} isCentered>
         <ModalOverlay />
         <ModalContent>
-          <ModalHeader textAlign="center">Select Language</ModalHeader>
+          <ModalHeader textAlign="center"></ModalHeader>
           <ModalCloseButton />
           <ModalBody pb={6}>
             <VStack spacing={2}>

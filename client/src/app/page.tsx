@@ -1260,10 +1260,13 @@ function SectionSocialFinance() {
   const { colorMode } = useColorMode();
   const dark = colorMode === "dark";
   const textMain = dark ? "white" : "#0a0f1e";
-  const textSub = dark ? "rgba(255,255,255,0.55)" : "#64748b";
-  const cardBg = dark ? "rgba(255,255,255,0.04)" : "white";
-  const cardBorder = dark ? "rgba(255,255,255,0.08)" : "rgba(0,87,184,0.1)";
-  const chipBg = dark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)";
+  const textSub = dark ? "rgba(255,255,255,0.7)" : "#64748b";
+  // More opaque backgrounds for better readability
+  const cardBg = dark 
+    ? "linear-gradient(145deg, rgba(25,35,60,0.95) 0%, rgba(15,25,45,0.98) 100%)" 
+    : "linear-gradient(145deg, #ffffff 0%, #f8fafc 100%)";
+  const cardBorder = dark ? "rgba(100,130,200,0.2)" : "rgba(0,87,184,0.15)";
+  const chipBg = dark ? "rgba(255,255,255,0.12)" : "rgba(0,87,184,0.06)";
   const phoneScale = useBreakpointValue({ base: 0.55, sm: 0.7, md: 0.85, lg: 0.95 }) ?? 0.9;
 
   const sectionRef = useRef<HTMLDivElement | null>(null);
@@ -1374,8 +1377,12 @@ function SectionPayTransferInvest() {
   const { colorMode } = useColorMode();
   const dark = colorMode === "dark";
   const textMain = dark ? "white" : "#0a0f1e";
-  const textSub = dark ? "rgba(255,255,255,0.55)" : "#64748b";
-  const tileBorder = dark ? "rgba(255,255,255,0.08)" : "rgba(0,87,184,0.08)";
+  const textSub = dark ? "rgba(255,255,255,0.7)" : "#64748b";
+  // Better tile backgrounds with more opacity
+  const tileBg = dark 
+    ? "linear-gradient(145deg, rgba(25,35,60,0.9) 0%, rgba(15,25,45,0.95) 100%)" 
+    : "linear-gradient(145deg, #ffffff 0%, #f8fafc 100%)";
+  const tileBorder = dark ? "rgba(100,130,200,0.2)" : "rgba(0,87,184,0.12)";
   const phoneScale = useBreakpointValue({ base: 0.55, sm: 0.7, md: 0.85, lg: 0.95 }) ?? 0.9;
 
   const features = [
@@ -1431,6 +1438,7 @@ function SectionPayTransferInvest() {
                   >
                     <HStack
                       h="70px"
+                      bg={tileBg}
                       border="1px solid"
                       borderColor={tileBorder}
                       borderRadius="18px"
@@ -1438,9 +1446,9 @@ function SectionPayTransferInvest() {
                       backdropFilter="blur(12px)"
                       spacing={3}
                       transition="all 0.25s ease"
-                      _hover={{ transform: "translateY(-3px)", borderColor: "#0057b8", boxShadow: "0 10px 30px rgba(0,87,184,0.18)" }}
+                      _hover={{ transform: "translateY(-3px)", borderColor: "#0057b8", boxShadow: dark ? "0 10px 30px rgba(0,0,0,0.3)" : "0 10px 30px rgba(0,87,184,0.18)" }}
                     >
-                      <Flex w="40px" h="40px" borderRadius="12px" border="1px solid rgba(0,87,184,0.25)" align="center" justify="center" flexShrink={0}>
+                      <Flex w="40px" h="40px" borderRadius="12px" border="1px solid rgba(0,87,184,0.25)" align="center" justify="center" flexShrink={0} bg={dark ? "rgba(255,255,255,0.08)" : "rgba(0,87,184,0.06)"}>
                         <Icon as={f.icon} color={BRAND_LIGHT} />
                       </Flex>
                       <Text fontSize="13.5px" fontWeight="700" color={textMain}>{f.label}</Text>
@@ -1761,76 +1769,108 @@ function SectionSocialProof() {
   ];
 
   return (
-    <Box position="relative" overflow="hidden" py={{ base: 20, md: 32 }} px={{ base: 4, md: 10 }} minH={{ base: "500px", md: "640px" }}>
-      {/* Background globe video */}
-      <video
-        src="/videos/Web_GlobeVideo.webm"
-        autoPlay
-        loop
-        muted
-        playsInline
-        style={{
-          position: "absolute",
-          inset: 0,
-          width: "100%",
-          height: "100%",
-          objectFit: "cover",
-          zIndex: 0,
-        }}
-      />
-      {/* Dark/light overlay for readability */}
-      <Box
-        position="absolute"
-        inset={0}
-        bg={dark ? "rgba(0,0,0,0.35)" : "rgba(255,255,255,0.25)"}
-        zIndex={1}
-      />
+    <Box
+      position="relative"
+      overflow="hidden"
+      py={{ base: 20, md: 32 }}
+      px={{ base: 4, md: 10 }}
+      minH={{ base: "500px", md: "640px" }}
+    >
 
       <Container maxW="1200px" position="relative" zIndex={2}>
-        <VStack spacing={{ base: 10, md: 12 }} align="center" textAlign="center">
-          <motion.div initial={{ opacity: 0, scale: 0.95 }} whileInView={{ opacity: 1, scale: 1 }} viewport={{ once: true, amount: 0.4 }} transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}>
+        <VStack
+          spacing={{ base: 10, md: 12 }}
+          align="center"
+          textAlign="center"
+        >
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            whileInView={{ opacity: 1, scale: 1 }}
+            viewport={{ once: true, amount: 0.4 }}
+            transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
+          >
             <Heading
               fontFamily="'DM Sans', sans-serif"
               fontWeight="900"
               fontSize={{ base: "64px", md: "96px", lg: "120px" }}
               letterSpacing="-0.04em"
-              color="white"
+              color="#0057b8"
               lineHeight={1}
               style={{ textShadow: "0 4px 30px rgba(0,0,0,0.4)" }}
             >
-              35,000,000+
+              35,000+
             </Heading>
           </motion.div>
-          <motion.div initial={{ opacity: 0, y: 10 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.5, delay: 0.2 }}>
-            <Text fontSize={{ base: "16px", md: "20px" }} color="white" fontWeight="600" letterSpacing="-0.01em" style={{ textShadow: "0 2px 16px rgba(0,0,0,0.35)" }}>
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.5, delay: 0.2 }}
+          >
+            <Text
+              fontSize={{ base: "16px", md: "20px" }}
+              color="#0057b8"
+              fontWeight="600"
+              letterSpacing="-0.01em"
+              style={{ textShadow: "0 2px 16px rgba(0,0,0,0.35)" }}
+            >
               {t("socialproof_label")}
             </Text>
           </motion.div>
 
           {/* Orbiting circular avatars - larger on desktop */}
-          <Box position="relative" w="100%" maxW={{ base: "100%", md: "720px" }} h={{ base: "400px", md: "380px" }} mt={{ base: 6, md: 10 }}>
+          <Box
+            position="relative"
+            w="100%"
+            maxW={{ base: "100%", md: "720px" }}
+            h={{ base: "400px", md: "380px" }}
+            mt={{ base: 6, md: 10 }}
+          >
             {avatars.map((a, i) => (
               <motion.div
                 key={a.src}
                 initial={{ opacity: 0, scale: 0.5 }}
                 whileInView={{ opacity: 1, scale: 1 }}
                 viewport={{ once: true, amount: 0.3 }}
-                transition={{ duration: 0.5, delay: 0.3 + i * 0.1, type: "spring", stiffness: 200 }}
+                transition={{
+                  duration: 0.5,
+                  delay: 0.3 + i * 0.1,
+                  type: "spring",
+                  stiffness: 200,
+                }}
               >
                 <Box
                   position="absolute"
                   {...(a.mobilePos || a.pos)}
-                  w={{ base: `${56 * a.sizeScale}px`, md: `${72 * a.sizeScale}px`, lg: `${88 * a.sizeScale}px` }}
-                  h={{ base: `${56 * a.sizeScale}px`, md: `${72 * a.sizeScale}px`, lg: `${88 * a.sizeScale}px` }}
+                  w={{
+                    base: `${56 * a.sizeScale}px`,
+                    md: `${72 * a.sizeScale}px`,
+                    lg: `${88 * a.sizeScale}px`,
+                  }}
+                  h={{
+                    base: `${56 * a.sizeScale}px`,
+                    md: `${72 * a.sizeScale}px`,
+                    lg: `${88 * a.sizeScale}px`,
+                  }}
                   borderRadius="full"
                   overflow="hidden"
                   border="3px solid"
                   borderColor="rgba(255,255,255,0.4)"
                   boxShadow="0 12px 40px rgba(0,0,0,0.4)"
-                  _hover={{ transform: "scale(1.15)", zIndex: 10, borderColor: "rgba(255,255,255,0.8)" }}
+                  _hover={{
+                    transform: "scale(1.15)",
+                    zIndex: 10,
+                    borderColor: "rgba(255,255,255,0.8)",
+                  }}
                   transition="all 0.3s ease"
                 >
-                  <NextImage src={a.src} alt="" fill style={{ objectFit: "cover" }} sizes="120px" />
+                  <NextImage
+                    src={a.src}
+                    alt=""
+                    fill
+                    style={{ objectFit: "cover" }}
+                    sizes="120px"
+                  />
                 </Box>
               </motion.div>
             ))}

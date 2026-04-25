@@ -760,6 +760,19 @@
   "page_fees_limits_pro": "Pro (tier 3)",
   "page_fees_limits_pro_d": "Unlimited · dedicated account manager",
 
+  "onramp_headline": "The easiest way to buy, sell, and send crypto",
+  "onramp_buy_title": "Buy",
+  "onramp_buy_desc": "Purchase crypto instantly with your preferred payment method. Apple Pay, Google Pay, cards, and bank transfers supported.",
+  "onramp_buy_cta": "Buy Crypto",
+  "onramp_sell_title": "Sell",
+  "onramp_sell_desc": "Cash out your crypto to your bank account or card. Fast settlement, competitive rates, no hidden fees.",
+  "onramp_sell_cta": "Sell Crypto",
+  "onramp_send_title": "Send",
+  "onramp_send_desc": "Transfer crypto to anyone, anywhere in the world. Just enter their @handle or wallet address.",
+  "onramp_send_cta": "Send Crypto",
+
+  "socialproof_label": "Verified users worldwide",
+
   "page_help_eyebrow": "HELP CENTER",
   "page_help_title": "How can we help?",
   "page_help_sub": "Search our help center or browse the most common topics below.",
