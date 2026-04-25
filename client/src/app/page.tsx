@@ -2435,7 +2435,7 @@ export default function LandingPage() {
                 width: "100%",
                 height: "100%",
                 objectFit: "cover",
-                opacity: dark ? 0.55 : 0.55,
+                opacity: dark ? 0.75 : 0.75,
                 filter: "saturate(1.1) blur(0.5px)",
               }}
             />

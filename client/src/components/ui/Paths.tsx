@@ -67,7 +67,7 @@ function FloatingPaths({ position, stroke }: { position: number; stroke: string 
 
 export function BackgroundPaths() {
   const { colorMode } = useColorMode();
-  const stroke = colorMode === "dark" ? "#ffffff53" : "#1149cc53";
+  const stroke = colorMode === "dark" ? "#ffffff70" : "#1149cc53";
 
   return (
     <Box
