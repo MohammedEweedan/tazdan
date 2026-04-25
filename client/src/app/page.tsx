@@ -50,7 +50,7 @@ import {
   FiMapPin,
   FiAtSign,
 } from "react-icons/fi";
-import { motion, useScroll, useTransform, MotionValue } from "framer-motion";
+import { motion, useScroll, useTransform, MotionValue, AnimatePresence, useMotionValueEvent } from "framer-motion";
 import { IconLogo } from "@/components/ui/Logo";
 import PublicNav from "@/components/ui/PublicNav";
 import PublicFooter from "@/components/ui/PublicFooter";
@@ -1472,146 +1472,370 @@ function SectionPayTransferInvest() {
   );
 }
 
-/* ── Bento grid: flex stats + key features ── */
+/* ── Bento grid: sleek MoonPay-style stats ── */
 function SectionBento() {
   const { t } = useTranslate();
   const { colorMode } = useColorMode();
   const dark = colorMode === "dark";
   const textMain = dark ? "white" : "#0a0f1e";
-  const textSub = dark ? "rgba(255,255,255,0.55)" : "#64748b";
-  const cardBg = dark ? "rgba(255,255,255,0.03)" : "rgba(255,255,255,0.8)";
-  const cardBorder = dark ? "rgba(255,255,255,0.08)" : "rgba(0,87,184,0.08)";
+  const textSub = dark ? "rgba(255,255,255,0.6)" : "#475569";
+  // Better contrast for mobile
+  const cardBg = dark 
+    ? "linear-gradient(145deg, rgba(20,25,40,0.9) 0%, rgba(10,15,30,0.95) 100%)" 
+    : "linear-gradient(145deg, #ffffff 0%, #f8fafc 100%)";
+  const cardBorder = dark ? "rgba(100,130,200,0.15)" : "rgba(0,87,184,0.12)";
+
+  const stats = [
+    { label: t("bento_stat_volume_label"), value: "$80M", sub: "+18.4% " + t("bento_vs_last_month"), icon: FiActivity, span: 2, gradient: "linear-gradient(135deg, #0057b8 0%, #001a3d 100%)", color: "white" },
+    { label: t("bento_countries_label"), value: "120+", sub: t("bento_countries_desc"), icon: FiGlobe, span: 1, accent: "#4a8fe0" },
+    { label: t("bento_traders_label"), value: "36K", sub: "", icon: FiUsers, span: 1, accent: "#22c55e" },
+    { label: t("bento_pairs_label"), value: "400+", sub: "", icon: FiBarChart2, span: 1, accent: "#f59e0b" },
+    { label: t("bento_security_title"), value: "", sub: t("bento_security_desc"), icon: FiShield, span: 1, accent: "#a78bfa", bg: dark ? "rgba(124,58,237,0.12)" : "rgba(124,58,237,0.08)", border: "rgba(167,139,250,0.3)" },
+    { label: t("bento_speed_title"), value: "<2s", sub: t("bento_speed_desc"), icon: FiZap, span: 1, accent: "#facc15" },
+    { label: t("bento_rating_label"), value: "4.9/5", sub: "", icon: FiStar, span: 1, accent: "#f59e0b" },
+  ];
 
   return (
-    <Box py={{ base: 20, md: 32 }} px={{ base: 4, md: 10 }} position="relative">
-      <Container maxW="1200px">
-        <VStack align={{ base: "center", lg: "center" }} spacing={4} mb={12} textAlign={{ base: "center", lg: "start" }}>
-          <Heading fontFamily="'DM Sans', sans-serif" fontWeight="800" fontSize={{ base: "40px", md: "64px" }} letterSpacing="-0.04em" color={textMain}>
-            {t("bento_title_1")}{" "}
-            <Box as="span" bgGradient="linear(to-r, #4a8fe0, #0057b8)" bgClip="text">{t("bento_title_2")}</Box>
-          </Heading>
-        </VStack>
-
-        <SimpleGrid columns={{ base: 1, md: 6 }} gap={4} gridAutoRows={{ md: "160px" }}>
-          {/* Big stat: 24h volume */}
-          <Box
-            gridColumn={{ md: "span 3" }}
-            gridRow={{ md: "span 2" }}
-            p={8}
-            borderRadius="24px"
-            bg="linear-gradient(135deg, #0057b8 0%, #001a3d 100%)"
-            color="white"
-            position="relative"
-            overflow="hidden"
-            boxShadow="0 20px 60px rgba(0,87,184,0.35)"
-          >
-            <Box position="absolute" top="-30%" right="-10%" w="300px" h="300px" borderRadius="full" bg="rgba(74,143,224,0.3)" filter="blur(60px)" />
-            <VStack align="start" spacing={3} position="relative">
-              <Icon as={FiActivity} boxSize={7} />
-              <Text fontSize="11px" opacity={0.7} letterSpacing="0.12em" fontWeight="700">{t("bento_stat_volume_label")}</Text>
-              <Heading fontSize={{ base: "48px", md: "72px" }} fontWeight="900" letterSpacing="-0.04em" fontFamily="'DM Sans', sans-serif">
-                $2.8B
-              </Heading>
-              <Text fontSize="14px" opacity={0.8} maxW="320px">{t("bento_stat_volume_desc")}</Text>
-              <HStack bg="rgba(34,197,94,0.18)" px={3} py={1.5} borderRadius="full" mt={2}>
-                <Icon as={FiTrendingUp} boxSize={3.5} color="#22c55e" />
-                <Text fontSize="11px" color="#22c55e" fontWeight="800">+18.4% {t("bento_vs_last_month")}</Text>
-              </HStack>
-            </VStack>
-          </Box>
-
-          {/* Countries */}
-          <Box gridColumn={{ md: "span 3" }} p={6} borderRadius="24px" bg={cardBg} border="1px solid" borderColor={cardBorder} backdropFilter="blur(14px)">
-            <HStack mb={2}>
-              <Icon as={FiGlobe} color={BRAND_LIGHT} boxSize={5} />
-              <Text fontSize="11px" fontWeight="700" letterSpacing="0.12em" color={textSub}>{t("bento_countries_label")}</Text>
-            </HStack>
-            <Heading fontSize={{ base: "36px", md: "48px" }} fontWeight="900" letterSpacing="-0.04em" fontFamily="'DM Sans', sans-serif" color={textMain}>
-              120+
+    <Box py={{ base: 16, md: 32 }} px={{ base: 4, md: 10 }} position="relative" overflow="hidden">
+      {/* Background glow effect */}
+      <Box 
+        position="absolute" 
+        top="20%" 
+        left="50%" 
+        transform="translateX(-50%)" 
+        w="800px" 
+        h="600px" 
+        bg={dark ? "rgba(0,87,184,0.08)" : "rgba(0,87,184,0.04)"} 
+        filter="blur(120px)" 
+        borderRadius="full" 
+        pointerEvents="none" 
+      />
+      
+      <Container maxW="1200px" position="relative" zIndex={1}>
+        <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, amount: 0.4 }} transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}>
+          <VStack align="center" spacing={3} mb={{ base: 10, md: 16 }} textAlign="center">
+            <Heading fontFamily="'DM Sans', sans-serif" fontWeight="800" fontSize={{ base: "32px", md: "56px", lg: "64px" }} letterSpacing="-0.04em" color={textMain} lineHeight={1.1}>
+              {t("bento_title_1")}{" "}
+              <Box as="span" bgGradient="linear(to-r, #4a8fe0, #0057b8)" bgClip="text">{t("bento_title_2")}</Box>
             </Heading>
-            <Text fontSize="13px" color={textSub} mt={1}>{t("bento_countries_desc")}</Text>
-          </Box>
+          </VStack>
+        </motion.div>
 
-          {/* Traders */}
-          <Box gridColumn={{ md: "span 2" }} p={6} borderRadius="24px" bg={cardBg} border="1px solid" borderColor={cardBorder} backdropFilter="blur(14px)">
-            <Icon as={FiUsers} color={BRAND_LIGHT} boxSize={5} mb={2} />
-            <Heading fontSize="32px" fontWeight="900" letterSpacing="-0.04em" fontFamily="'DM Sans', sans-serif">1.4M</Heading>
-            <Text fontSize="12px" color={textSub}>{t("bento_traders_label")}</Text>
-          </Box>
-
-          {/* Pairs */}
-          <Box gridColumn={{ md: "span 1" }} p={6} borderRadius="24px" bg={cardBg} border="1px solid" borderColor={cardBorder} backdropFilter="blur(14px)">
-            <Icon as={FiBarChart2} color={BRAND_LIGHT} boxSize={5} mb={2} />
-            <Heading fontSize="28px" fontWeight="900" letterSpacing="-0.04em" fontFamily="'DM Sans', sans-serif">400+</Heading>
-            <Text fontSize="11px" color={textSub}>{t("bento_pairs_label")}</Text>
-          </Box>
-
-          {/* Security pill card */}
-          <Box
-            gridColumn={{ md: "span 3" }}
-            p={6}
-            borderRadius="24px"
-            bg="rgba(124,58,237,0.08)"
-            border="1px solid rgba(124,58,237,0.25)"
-            backdropFilter="blur(14px)"
-          >
-            <HStack mb={2}>
-              <Flex w="36px" h="36px" borderRadius="12px" bg="rgba(124,58,237,0.2)" align="center" justify="center">
-                <Icon as={FiShield} color="#a78bfa" />
-              </Flex>
-              <Text fontWeight="800" fontSize="14px" color={textMain}>{t("bento_security_title")}</Text>
-            </HStack>
-            <Text fontSize="13px" color={textSub}>{t("bento_security_desc")}</Text>
-          </Box>
-
-          {/* MENA roots card */}
-          <Box
-            gridColumn={{ md: "span 3" }}
-            p={6}
-            borderRadius="24px"
-            bg="rgba(245,158,11,0.08)"
-            border="1px solid rgba(245,158,11,0.3)"
-            backdropFilter="blur(14px)"
-          >
-            <HStack mb={2}>
-              <Flex w="36px" h="36px" borderRadius="12px" bg="rgba(245,158,11,0.2)" align="center" justify="center">
-                <Icon as={FiMapPin} color="#f59e0b" />
-              </Flex>
-              <Text fontWeight="800" fontSize="14px" color={textMain}>{t("bento_mena_title")}</Text>
-            </HStack>
-            <Text fontSize="13px" color={textSub}>{t("bento_mena_desc")}</Text>
-            <HStack mt={3} spacing={2} flexWrap="wrap">
-              {["🇱🇾", "🇦🇪", "🇸🇦", "🇪🇬", "🇲🇦", "🇯🇴", "🇹🇳", "🇶🇦"].map((f) => (
-                <Box key={f} fontSize="18px">{f}</Box>
-              ))}
-            </HStack>
-          </Box>
-
-          {/* Speed card */}
-          <Box gridColumn={{ md: "span 2" }} p={6} borderRadius="24px" bg={cardBg} border="1px solid" borderColor={cardBorder} backdropFilter="blur(14px)">
-            <Icon as={FiZap} color="#facc15" boxSize={5} mb={2} />
-            <Text fontWeight="800" fontSize="14px" color={textMain} mb={1}>{t("bento_speed_title")}</Text>
-            <Text fontSize="12px" color={textSub}>{t("bento_speed_desc")}</Text>
-          </Box>
-
-          {/* Global card */}
-          <Box gridColumn={{ md: "span 2" }} p={6} borderRadius="24px" bg={cardBg} border="1px solid" borderColor={cardBorder} backdropFilter="blur(14px)">
-            <Icon as={FiGlobe} color={BRAND_LIGHT} boxSize={5} mb={2} />
-            <Text fontWeight="800" fontSize="14px" color={textMain} mb={1}>{t("bento_global_title")}</Text>
-            <Text fontSize="12px" color={textSub}>{t("bento_global_desc")}</Text>
-          </Box>
-
-          {/* Stars / ratings */}
-          <Box gridColumn={{ md: "span 2" }} p={6} borderRadius="24px" bg={cardBg} border="1px solid" borderColor={cardBorder} backdropFilter="blur(14px)">
-            <HStack mb={2}>
-              {[0, 1, 2, 3, 4].map((i) => (
-                <Icon key={i} as={FiStar} color="#facc15" boxSize={4} />
-              ))}
-            </HStack>
-            <Heading fontSize="24px" fontWeight="900" letterSpacing="-0.03em" fontFamily="'DM Sans', sans-serif" color={textMain}>4.9/5</Heading>
-            <Text fontSize="11px" color={textSub}>{t("bento_rating_label")}</Text>
-          </Box>
+        <SimpleGrid columns={{ base: 2, sm: 2, md: 4 }} gap={{ base: 3, md: 4 }}>
+          {stats.map((s, i) => (
+            <motion.div
+              key={s.label}
+              initial={{ opacity: 0, y: 30, scale: 0.95 }}
+              whileInView={{ opacity: 1, y: 0, scale: 1 }}
+              viewport={{ once: true, amount: 0.25 }}
+              transition={{ delay: i * 0.06, duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+              style={{ gridColumn: s.span && s.span > 1 ? `span ${s.span}` : undefined }}
+            >
+              <Box
+                h="100%"
+                minH={{ base: s.span && s.span > 1 ? "140px" : "110px", md: "auto" }}
+                p={{ base: s.span && s.span > 1 ? 5 : 4, md: 7 }}
+                borderRadius={{ base: "20px", md: "28px" }}
+                bg={s.gradient || s.bg || cardBg}
+                border="1px solid"
+                borderColor={s.border || cardBorder}
+                backdropFilter="blur(14px)"
+                color={s.color || textMain}
+                position="relative"
+                overflow="hidden"
+                transition="all 0.3s ease"
+                _hover={{ 
+                  transform: "translateY(-4px)", 
+                  boxShadow: s.gradient 
+                    ? "0 24px 60px rgba(0,87,184,0.4)" 
+                    : dark 
+                      ? "0 20px 50px rgba(0,0,0,0.4)" 
+                      : "0 20px 50px rgba(0,87,184,0.15)",
+                  borderColor: s.border ? s.border : dark ? "rgba(100,130,200,0.3)" : "rgba(0,87,184,0.25)"
+                }}
+              >
+                {/* Gradient orb for featured card */}
+                {s.gradient && (
+                  <>
+                    <Box position="absolute" top="-40%" right="-15%" w="300px" h="300px" borderRadius="full" bg="rgba(74,143,224,0.3)" filter="blur(70px)" pointerEvents="none" />
+                    <Box position="absolute" bottom="-30%" left="-15%" w="200px" h="200px" borderRadius="full" bg="rgba(34,197,94,0.15)" filter="blur(60px)" pointerEvents="none" />
+                  </>
+                )}
+                
+                {/* Subtle shine effect on non-gradient cards */}
+                {!s.gradient && (
+                  <Box 
+                    position="absolute" 
+                    top="0" 
+                    right="0" 
+                    w="60%" 
+                    h="60%" 
+                    bg="linear-gradient(135deg, rgba(255,255,255,0.1) 0%, transparent 60%)" 
+                    pointerEvents="none"
+                    borderTopRightRadius="20px"
+                  />
+                )}
+                
+                <VStack align="start" spacing={{ base: 2, md: 4 }} position="relative">
+                  <Flex
+                    w={{ base: "36px", md: "44px" }}
+                    h={{ base: "36px", md: "44px" }}
+                    borderRadius="12px"
+                    bg={s.gradient ? "rgba(255,255,255,0.15)" : dark ? "rgba(255,255,255,0.08)" : "rgba(0,87,184,0.08)"}
+                    align="center"
+                    justify="center"
+                  >
+                    <Icon as={s.icon} color={s.accent || (s.gradient ? "white" : BRAND_LIGHT)} boxSize={{ base: 5, md: 6 }} />
+                  </Flex>
+                  <Box>
+                    <Text fontSize={{ base: "10px", md: "12px" }} fontWeight="700" letterSpacing="0.1em" opacity={0.6} mb={0.5} textTransform="uppercase">{s.label}</Text>
+                    {s.value && (
+                      <Heading fontSize={{ base: "28px", md: "44px", lg: "52px" }} fontWeight="900" letterSpacing="-0.04em" fontFamily="'DM Sans', sans-serif" lineHeight={1}>
+                        {s.value}
+                      </Heading>
+                    )}
+                    {s.sub && (
+                      <Text fontSize={{ base: "12px", md: "14px" }} opacity={0.8} mt={1} maxW="260px" fontWeight="500">{s.sub}</Text>
+                    )}
+                  </Box>
+                </VStack>
+              </Box>
+            </motion.div>
+          ))}
         </SimpleGrid>
+      </Container>
+    </Box>
+  );
+}
+
+/* ═════════════════════════════════════════════════════
+   SECTION — OnRamp (MoonPay-style Buy/Sell/Send videos)
+   ═════════════════════════════════════════════════════ */
+
+function SectionOnRamp() {
+  const { t } = useTranslate();
+  const { colorMode } = useColorMode();
+  const dark = colorMode === "dark";
+  const textMain = dark ? "white" : "#0a0f1e";
+  const textSub = dark ? "rgba(255,255,255,0.5)" : "#64748b";
+  const cardBg = dark ? "rgba(255,255,255,0.03)" : "white";
+  const cardBorder = dark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)";
+
+  const methods = ["Apple Pay", "Google Pay", "Visa", "Mastercard", "Revolut", "SEPA", "PayPal"];
+
+  const cards = [
+    { title: t("onramp_buy_title"), desc: t("onramp_buy_desc"), cta: t("onramp_buy_cta"), video: "/videos/Consumer_UIAnims_Desktop-Buy.mp4" },
+    { title: t("onramp_sell_title"), desc: t("onramp_sell_desc"), cta: t("onramp_sell_cta"), video: "/videos/Consumer_UIAnims_Desktop-Sell.mp4" },
+    { title: t("onramp_send_title"), desc: t("onramp_send_desc"), cta: t("onramp_send_cta"), video: "/videos/Consumer_UIAnims_Desktop-SendReceive.mp4" },
+  ];
+
+  return (
+    <Box py={{ base: 20, md: 28 }} px={{ base: 4, md: 10 }} position="relative" overflow="hidden">
+      <Container maxW="1200px">
+        <VStack spacing={{ base: 12, md: 16 }} align="center" textAlign="center">
+          <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, amount: 0.4 }} transition={{ duration: 0.6 }}>
+            <Heading fontFamily="'DM Sans', sans-serif" fontWeight="800" fontSize={{ base: "36px", md: "52px", lg: "64px" }} letterSpacing="-0.04em" color={textMain} lineHeight={1.1} maxW="720px">
+              {t("onramp_headline")}
+            </Heading>
+          </motion.div>
+
+          {/* Payment methods */}
+          <motion.div initial={{ opacity: 0, y: 10 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.5, delay: 0.15 }}>
+            <HStack spacing={{ base: 4, md: 6 }} flexWrap="wrap" justify="center" opacity={0.7}>
+              {methods.map((m) => (
+                <Text key={m} fontSize={{ base: "13px", md: "15px" }} fontWeight="700" color={textSub} letterSpacing="-0.01em">{m}</Text>
+              ))}
+            </HStack>
+          </motion.div>
+
+          {/* Video cards */}
+          <SimpleGrid columns={{ base: 1, md: 3 }} spacing={{ base: 4, md: 5 }} w="100%">
+            {cards.map((c, i) => (
+              <motion.div
+                key={c.title}
+                initial={{ opacity: 0, y: 40 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true, amount: 0.2 }}
+                transition={{ duration: 0.6, delay: 0.2 + i * 0.12, ease: [0.22, 1, 0.36, 1] }}
+              >
+                <VStack
+                  bg={cardBg}
+                  border="1px solid"
+                  borderColor={cardBorder}
+                  borderRadius={{ base: "24px", md: "32px" }}
+                  overflow="hidden"
+                  align="stretch"
+                  spacing={0}
+                  transition="all 0.3s ease"
+                  _hover={{ transform: { md: "translateY(-6px)" }, boxShadow: dark ? "0 24px 60px rgba(0,0,0,0.4)" : "0 24px 60px rgba(0,87,184,0.12)" }}
+                >
+                  {/* Desktop: video on top with 4:3 ratio */}
+                  <Box 
+                    display={{ base: "none", md: "block" }}
+                    position="relative" 
+                    w="100%" 
+                    style={{ aspectRatio: "4 / 3" }} 
+                    bg={dark ? "#0a0f1e" : "#f8f9fc"} 
+                    overflow="hidden"
+                  >
+                    <video
+                      src={c.video}
+                      autoPlay
+                      loop
+                      muted
+                      playsInline
+                      style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                    />
+                  </Box>
+                  
+                  {/* Text content */}
+                  <VStack p={{ base: 5, md: 7 }} align="start" spacing={3}>
+                    <Heading fontSize={{ base: "20px", md: "24px" }} fontWeight="800" color={textMain} fontFamily="'DM Sans', sans-serif">{c.title}</Heading>
+                    <Text fontSize={{ base: "13px", md: "15px" }} color={textSub} lineHeight={1.5}>{c.desc}</Text>
+                    <Button
+                      variant="ghost"
+                      px={0}
+                      h="auto"
+                      py={1}
+                      color={BRAND}
+                      fontWeight="800"
+                      fontSize="14px"
+                      rightIcon={<Icon as={FiArrowRight} boxSize={4} />}
+                      _hover={{ bg: "transparent", transform: "translateX(3px)" }}
+                      transition="all 0.2s"
+                    >
+                      {c.cta}
+                    </Button>
+                  </VStack>
+                  
+                  {/* Mobile: video at bottom, full width, not background */}
+                  <Box 
+                    display={{ base: "block", md: "none" }}
+                    position="relative" 
+                    w="100%" 
+                    h="200px"
+                    bg={dark ? "#0a0f1e" : "#f8f9fc"} 
+                    overflow="hidden"
+                    borderTop="1px solid"
+                    borderColor={cardBorder}
+                  >
+                    <video
+                      src={c.video}
+                      autoPlay
+                      loop
+                      muted
+                      playsInline
+                      style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                    />
+                  </Box>
+                </VStack>
+              </motion.div>
+            ))}
+          </SimpleGrid>
+        </VStack>
+      </Container>
+    </Box>
+  );
+}
+
+/* ═════════════════════════════════════════════════════
+   SECTION — Social Proof (MoonPay-style stat + collage)
+   ═════════════════════════════════════════════════════ */
+
+function SectionSocialProof() {
+  const { t } = useTranslate();
+  const { colorMode } = useColorMode();
+  const dark = colorMode === "dark";
+  const textMain = dark ? "white" : "#0a0f1e";
+  const textSub = dark ? "rgba(255,255,255,0.5)" : "#64748b";
+
+  // Bigger avatars on desktop
+  const avatarBaseSizes = { base: 56, md: 72, lg: 88 };
+  const avatars = [
+    { src: "/screenshots/p1.avif", pos: { top: "5%", left: "12%" }, mobilePos: { top: "5%", left: "5%" }, sizeScale: 1 },
+    { src: "/screenshots/p2.avif", pos: { top: "18%", left: "5%" }, mobilePos: { top: "15%", left: "0%" }, sizeScale: 0.8 },
+    { src: "/screenshots/p3.avif", pos: { top: "8%", right: "10%" }, mobilePos: { top: "3%", right: "5%" }, sizeScale: 0.95 },
+    { src: "/screenshots/p4.avif", pos: { top: "22%", right: "4%" }, mobilePos: { top: "18%", right: "0%" }, sizeScale: 0.75 },
+    { src: "/screenshots/p5.avif", pos: { bottom: "12%", left: "8%" }, mobilePos: { bottom: "10%", left: "3%" }, sizeScale: 0.9 },
+    { src: "/screenshots/p6.avif", pos: { bottom: "8%", right: "14%" }, mobilePos: { bottom: "5%", right: "8%" }, sizeScale: 1.1 },
+  ];
+
+  return (
+    <Box position="relative" overflow="hidden" py={{ base: 20, md: 32 }} px={{ base: 4, md: 10 }} minH={{ base: "500px", md: "640px" }}>
+      {/* Background globe video */}
+      <video
+        src="/videos/Web_GlobeVideo.webm"
+        autoPlay
+        loop
+        muted
+        playsInline
+        style={{
+          position: "absolute",
+          inset: 0,
+          width: "100%",
+          height: "100%",
+          objectFit: "cover",
+          zIndex: 0,
+        }}
+      />
+      {/* Dark/light overlay for readability */}
+      <Box
+        position="absolute"
+        inset={0}
+        bg={dark ? "rgba(0,0,0,0.35)" : "rgba(255,255,255,0.25)"}
+        zIndex={1}
+      />
+
+      <Container maxW="1200px" position="relative" zIndex={2}>
+        <VStack spacing={{ base: 10, md: 12 }} align="center" textAlign="center">
+          <motion.div initial={{ opacity: 0, scale: 0.95 }} whileInView={{ opacity: 1, scale: 1 }} viewport={{ once: true, amount: 0.4 }} transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}>
+            <Heading
+              fontFamily="'DM Sans', sans-serif"
+              fontWeight="900"
+              fontSize={{ base: "64px", md: "96px", lg: "120px" }}
+              letterSpacing="-0.04em"
+              color="white"
+              lineHeight={1}
+              style={{ textShadow: "0 4px 30px rgba(0,0,0,0.4)" }}
+            >
+              35,000,000+
+            </Heading>
+          </motion.div>
+          <motion.div initial={{ opacity: 0, y: 10 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.5, delay: 0.2 }}>
+            <Text fontSize={{ base: "16px", md: "20px" }} color="white" fontWeight="600" letterSpacing="-0.01em" style={{ textShadow: "0 2px 16px rgba(0,0,0,0.35)" }}>
+              {t("socialproof_label")}
+            </Text>
+          </motion.div>
+
+          {/* Orbiting circular avatars - larger on desktop */}
+          <Box position="relative" w="100%" maxW={{ base: "100%", md: "720px" }} h={{ base: "400px", md: "380px" }} mt={{ base: 6, md: 10 }}>
+            {avatars.map((a, i) => (
+              <motion.div
+                key={a.src}
+                initial={{ opacity: 0, scale: 0.5 }}
+                whileInView={{ opacity: 1, scale: 1 }}
+                viewport={{ once: true, amount: 0.3 }}
+                transition={{ duration: 0.5, delay: 0.3 + i * 0.1, type: "spring", stiffness: 200 }}
+              >
+                <Box
+                  position="absolute"
+                  {...(a.mobilePos || a.pos)}
+                  w={{ base: `${56 * a.sizeScale}px`, md: `${72 * a.sizeScale}px`, lg: `${88 * a.sizeScale}px` }}
+                  h={{ base: `${56 * a.sizeScale}px`, md: `${72 * a.sizeScale}px`, lg: `${88 * a.sizeScale}px` }}
+                  borderRadius="full"
+                  overflow="hidden"
+                  border="3px solid"
+                  borderColor="rgba(255,255,255,0.4)"
+                  boxShadow="0 12px 40px rgba(0,0,0,0.4)"
+                  _hover={{ transform: "scale(1.15)", zIndex: 10, borderColor: "rgba(255,255,255,0.8)" }}
+                  transition="all 0.3s ease"
+                >
+                  <NextImage src={a.src} alt="" fill style={{ objectFit: "cover" }} sizes="120px" />
+                </Box>
+              </motion.div>
+            ))}
+          </Box>
+        </VStack>
       </Container>
     </Box>
   );
@@ -1954,90 +2178,98 @@ function StageOverlay({ stages, progress }: { stages: Stage[]; progress: MotionV
   const dark = colorMode === "dark";
   const textMain = dark ? "white" : "#0a0f1e";
   const textSub = dark ? "rgba(255,255,255,0.6)" : "#64748b";
+  const [activeIndex, setActiveIndex] = useState(0);
 
-  /* Evenly space N windows across [0,1] with short crossfade */
-  const slice = 1 / stages.length;
-  const fade = Math.min(0.04, slice * 0.2);
-  const windows: [number, number, number, number][] = stages.map((_, i) => {
-    const start = i * slice;
-    const end = (i + 1) * slice;
-    return [
-      Math.max(0, start),
-      Math.min(1, start + fade),
-      Math.max(0, end - fade),
-      Math.min(1, end),
-    ] as [number, number, number, number];
+  // Use useMotionValueEvent instead of creating multiple transforms
+  useMotionValueEvent(progress, "change", (latest) => {
+    const newIndex = Math.min(
+      Math.floor(latest * stages.length),
+      stages.length - 1
+    );
+    setActiveIndex(newIndex);
   });
-  /* eslint-disable react-hooks/rules-of-hooks */
-  const opacities = windows.map((w) => useTransform(progress, w, [0, 1, 1, 0]));
-  const translates = windows.map((w) => useTransform(progress, w, [40, 0, 0, -40]));
-  /* eslint-enable react-hooks/rules-of-hooks */
 
   return (
     <>
       {/* DESKTOP: left copy col */}
       <Box display={{ base: "none", lg: "block" }} position="absolute" top="50%" left="6%" transform="translateY(-50%)" w="32%" maxW="440px" zIndex={3} pointerEvents="none">
         <Box position="relative" minH="280px">
-          {stages.map((s, i) => (
+          <AnimatePresence mode="wait">
             <motion.div
-              key={i}
-              style={{ position: "absolute", inset: 0, opacity: opacities[i], y: translates[i] }}
+              key={activeIndex}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              transition={{ duration: 0.3, ease: "easeOut" }}
+              style={{ position: "absolute", inset: 0 }}
             >
               <VStack align="start" spacing={5}>
                 <Heading fontFamily="'DM Sans', sans-serif" fontWeight="800" fontSize={{ lg: "44px", xl: "56px" }} letterSpacing="-0.04em" color={textMain}>
-                  {s.title}
+                  {stages[activeIndex].title}
                 </Heading>
                 <Text fontSize="16px" color={textSub} maxW="420px">
-                  {s.desc}
+                  {stages[activeIndex].desc}
                 </Text>
               </VStack>
             </motion.div>
-          ))}
+          </AnimatePresence>
         </Box>
       </Box>
 
       {/* DESKTOP: right widget col */}
       <Box display={{ base: "none", lg: "block" }} position="absolute" top="50%" right="4%" transform="translateY(-50%)" zIndex={3} w="440px">
         <Box position="relative" minH="420px" minW="440px">
-          {stages.map((s, i) => (
+          <AnimatePresence mode="wait">
             <motion.div
-              key={i}
-              style={{ position: "absolute", top: "50%", right: 0, transform: "translateY(-50%)", opacity: opacities[i] }}
+              key={activeIndex}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              transition={{ duration: 0.3, ease: "easeOut" }}
+              style={{ position: "absolute", top: "50%", right: 0, transform: "translateY(-50%)" }}
             >
-              <motion.div style={{ y: translates[i] }}>{s.widget}</motion.div>
+              {stages[activeIndex].widget}
             </motion.div>
-          ))}
+          </AnimatePresence>
         </Box>
       </Box>
 
       {/* MOBILE */}
       <Flex display={{ base: "flex", lg: "none" }} direction="column" align="center" h="100%" justify="space-between" px={5} pt="80px" pb={5} zIndex={3} position="relative" pointerEvents="none">
         <Box position="relative" w="100%" minH="150px" textAlign="center">
-          {stages.map((s, i) => (
+          <AnimatePresence mode="wait">
             <motion.div
-              key={i}
-              style={{ position: "absolute", inset: 0, opacity: opacities[i], y: translates[i] }}
+              key={activeIndex}
+              initial={{ opacity: 0, y: 15 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -15 }}
+              transition={{ duration: 0.25, ease: "easeOut" }}
+              style={{ position: "absolute", inset: 0 }}
             >
               <VStack spacing={2}>
                 <Heading fontSize="26px" fontWeight="800" color={textMain} letterSpacing="-0.03em" fontFamily="'DM Sans', sans-serif" maxW="320px">
-                  {s.title}
+                  {stages[activeIndex].title}
                 </Heading>
                 <Text fontSize="13px" color={textSub} maxW="320px" noOfLines={3}>
-                  {s.desc}
+                  {stages[activeIndex].desc}
                 </Text>
               </VStack>
             </motion.div>
-          ))}
+          </AnimatePresence>
         </Box>
         <Box position="relative" w="100%" minH="320px" display="flex" justifyContent="center" alignItems="center">
-          {stages.map((s, i) => (
+          <AnimatePresence mode="wait">
             <motion.div
-              key={i}
-              style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)", opacity: opacities[i] }}
+              key={activeIndex}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)" }}
             >
-              {s.widget}
+              {stages[activeIndex].widget}
             </motion.div>
-          ))}
+          </AnimatePresence>
         </Box>
       </Flex>
     </>
@@ -2158,7 +2390,7 @@ export default function LandingPage() {
         className="snap-section"
         id="features"
         position="relative"
-        h={{ base: "820vh", md: "840vh" }}
+        h={{ base: "1020vh", md: "1080vh" }}
       >
         <Box position="sticky" top={0} h="100vh" overflow="hidden">
           {/* Glow */}
@@ -2178,7 +2410,8 @@ export default function LandingPage() {
               pointerEvents: "none",
             }}
           >
-            <Container maxW="1200px">
+            <Container maxW="1200px" position="relative">
+              
               <VStack textAlign="center" spacing={0} px={6}>
                 <Heading
                   as="h2"
@@ -2213,7 +2446,7 @@ export default function LandingPage() {
             justify="center"
             zIndex={2}
             pointerEvents="none"
-            style={{ perspective: "1600px" }}
+            style={{ perspective: "1200px" }}
           >
             <motion.div
               style={{
@@ -2222,10 +2455,13 @@ export default function LandingPage() {
                 scale: phoneScaleMV,
                 transformOrigin: "50% 100%",
                 transformStyle: "preserve-3d",
-                willChange: "transform",
               }}
+              transition={{ type: "tween", ease: "easeOut", duration: 0.1 }}
             >
-              <motion.div style={{ y: phoneParallaxY }}>
+              <motion.div 
+                style={{ y: phoneParallaxY }}
+                transition={{ type: "tween", ease: "linear", duration: 0.1 }}
+              >
                 <PhoneFrame progress={stageProgress} scale={phoneScaleResp} logoOpacity={logoOpacity} />
               </motion.div>
             </motion.div>
@@ -2248,6 +2484,12 @@ export default function LandingPage() {
 
       {/* ══ BENTO GRID — flex stats & features ══ */}
       <SectionBento />
+
+      {/* ══ ONRAMP (Buy / Sell / Send) — MoonPay-style videos ══ */}
+      <SectionOnRamp />
+
+      {/* ══ SOCIAL PROOF — stat + photo collage ══ */}
+      <SectionSocialProof />
 
       {/* ══ SOCIAL PAYMENTS SECTION ══ */}
       <SectionSocialFinance />
