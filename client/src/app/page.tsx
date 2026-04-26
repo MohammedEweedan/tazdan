@@ -20,7 +20,12 @@ import {
   useBreakpointValue,
 } from "@chakra-ui/react";
 import { useTranslate } from "@tolgee/react";
-import AuthenticatedHome from "@/components/ui/AuthenticatedHome";
+// Loaded only when isAuthenticated. Keeps the public landing bundle small,
+// improving Lighthouse FCP/TBT/LCP for unauthenticated visitors.
+const AuthenticatedHome = dynamic(() => import("@/components/ui/AuthenticatedHome"), {
+  ssr: false,
+  loading: () => null,
+});
 import { useAuthStore } from "@/stores/authStore";
 import {
   FiArrowRight,
@@ -54,7 +59,7 @@ import {
 } from "react-icons/fi";
 import { FaApplePay, FaGooglePay, FaCcVisa, FaCcMastercard, FaPaypal } from "react-icons/fa";
 import { SiRevolut } from "react-icons/si";
-import { motion, useScroll, useTransform, MotionValue, AnimatePresence, useMotionValueEvent } from "framer-motion";
+import { motion, useScroll, useTransform, useMotionValue, MotionValue, AnimatePresence, useMotionValueEvent } from "framer-motion";
 import { IconLogo } from "@/components/ui/Logo";
 import PublicNav from "@/components/ui/PublicNav";
 import PublicFooter from "@/components/ui/PublicFooter";
@@ -103,10 +108,20 @@ function MiniChart({ up, height = 110 }: { up: boolean; height?: number }) {
   );
 }
 
-function LockScreen({ unlockProgress }: { unlockProgress: MotionValue<number> }) {
-  const slideY    = useTransform(unlockProgress, [0, 1], ["0%", "-100%"]);
+// Slide distance — overshoot generously so the lock ALWAYS clears the screen
+// regardless of phone size, scale, or device pixel ratio. PHONE_H is 630, so
+// 1000px guarantees full clearance even on 2x scaled viewports.
+const LOCK_SLIDE_PX = -1000;
+
+const LockScreen = memo(function LockScreen({ unlockProgress }: { unlockProgress: MotionValue<number> }) {
+  const slideY    = useTransform(unlockProgress, [0, 1], [0, LOCK_SLIDE_PX]);
   const fadeNotif = useTransform(unlockProgress, [0, 0.4], [1, 0]);
-  const scaleWall = useTransform(unlockProgress, [0, 1], [1, 1.08]);
+  // Aggressive opacity safety net — fully invisible by 60% unlock, so even if
+  // slide transform under-shoots or scroll measurement stalls, the dashboard
+  // is guaranteed to be visible.
+  const lockOpacity = useTransform(unlockProgress, [0, 0.5, 0.6], [1, 1, 0]);
+  // Pointer-events flip so the (now invisible) lock never blocks dashboard taps
+  const lockPointerEvents = useTransform(unlockProgress, (v: number) => (v >= 0.6 ? "none" : "auto"));
 
   return (
     <motion.div
@@ -114,36 +129,20 @@ function LockScreen({ unlockProgress }: { unlockProgress: MotionValue<number> })
         position: "absolute",
         inset: 0,
         y: slideY,
+        opacity: lockOpacity,
+        pointerEvents: lockPointerEvents as unknown as "auto" | "none",
         zIndex: 6,
         overflow: "hidden",
         borderRadius: "inherit",
-        willChange: "transform",
+        willChange: "transform, opacity",
       }}
     >
-      {/* Wallpaper */}
-      <motion.div style={{ scale: scaleWall, position: "absolute", inset: 0, transformOrigin: "center center" }}>
-        <Box
-          position="absolute"
-          inset={0}
-          bg="linear-gradient(180deg, #030818 0%, #071240 35%, #0a1f6e 65%, #050d30 100%)"
-        />
-        {/* Star field */}
-        {[
-          { top: "8%",  left: "15%", size: 1.5, op: 0.9 },
-        ].map((s, i) => (
-          <Box
-            key={i}
-            position="absolute"
-            top={s.top}
-            left={s.left}
-            w={`${s.size}px`}
-            h={`${s.size}px`}
-            borderRadius="full"
-            bg="white"
-            opacity={s.op}
-          />
-        ))}
-      </motion.div>
+      {/* Wallpaper — static, no animation. Painted once. */}
+      <Box
+        position="absolute"
+        inset={0}
+        bg="linear-gradient(180deg, #030818 0%, #071240 35%, #0a1f6e 65%, #050d30 100%)"
+      />
 
       {/* Status bar */}
       <HStack
@@ -154,8 +153,8 @@ function LockScreen({ unlockProgress }: { unlockProgress: MotionValue<number> })
         justify="space-between"
         zIndex={2}
       >
-        <Text fontSize="13px" color="white" fontWeight="700" letterSpacing="0.01em">
-          11:44
+        <Text fontSize="8px" color="white" fontWeight="700" letterSpacing="0.01em">
+          promrkts
         </Text>
         <HStack spacing={1.5}>
           {/* Signal bars */}
@@ -191,6 +190,16 @@ function LockScreen({ unlockProgress }: { unlockProgress: MotionValue<number> })
 
       {/* Time */}
       <motion.div style={{ opacity: fadeNotif, position: "absolute", top: "80px", left: 0, right: 0, textAlign: "center", zIndex: 2 }}>
+        <Text
+          fontSize="8px"
+          fontWeight="200"
+          color="white"
+          letterSpacing="-0.04em"
+          lineHeight={1}
+          style={{ textShadow: "0 2px 20px rgba(0,0,0,0.4)" }}
+        >
+          <Icon as={FiLock} color="rgba(255,255,255,0.7)" fontSize={30} />
+        </Text>
         <Text
           fontSize="78px"
           fontWeight="200"
@@ -244,7 +253,7 @@ function LockScreen({ unlockProgress }: { unlockProgress: MotionValue<number> })
       </motion.div>
     </motion.div>
   );
-}
+});
 
 const ScreenDashboard = memo(function ScreenDashboard() {
   const assets = [
@@ -735,26 +744,18 @@ function ScreenCard() {
    PHONE FRAME (crossfade across 6 screens)
    ═════════════════════════════════════════════════════ */
 
-function PhoneFrame({
-  scale = 1,
+const PhoneFrame = memo(function PhoneFrame({
   unlockProgress,
 }: {
-  progress: MotionValue<number>;
-  scale?: number;
+  progress?: MotionValue<number>;
   unlockProgress: MotionValue<number>;
 }) {
-  const isMobilePhone = useBreakpointValue({ base: true, md: false }) ?? false;
-
   return (
     <Box
       position="relative"
       w={`${PHONE_W}px`}
       h={`${PHONE_H}px`}
       mx="auto"
-      style={{
-        transform: `scale(${scale})`,
-        transformOrigin: "center center",
-      }}
     >
       <Box
         position="absolute"
@@ -765,11 +766,10 @@ function PhoneFrame({
         borderRadius="40px"
         overflow="hidden"
         bg="#000"
-        boxShadow={
-          isMobilePhone
-            ? "0 20px 50px rgba(0,87,184,0.25)"
-            : "0 40px 100px rgba(0,87,184,0.4)"
-        }
+        boxShadow={{
+          base: "0 20px 50px rgba(0,87,184,0.25)",
+          md: "0 40px 100px rgba(0,87,184,0.4)",
+        }}
       >
         {/* App screen underneath — always mounted */}
         <Box position="absolute" inset={0}>
@@ -785,12 +785,12 @@ function PhoneFrame({
         alt=""
         fill
         priority
-        sizes="100vw"
+        sizes="(max-width: 768px) 200px, 320px"
         style={{ objectFit: "contain", pointerEvents: "none", zIndex: 10 }}
       />
     </Box>
   );
-}
+});
 
 /* ═════════════════════════════════════════════════════
    LAZY BACKGROUND VIDEO
@@ -838,7 +838,7 @@ function LazyBackgroundVideo({
       loop
       muted
       playsInline
-      preload="metadata"
+      preload="none"
       style={{
         width: "100%",
         height: "100%",
@@ -855,7 +855,6 @@ function LazyBackgroundVideo({
    ═════════════════════════════════════════════════════ */
 
 function StaticPhone({ children, scale = 1 }: { children: React.ReactNode; scale?: number }) {
-    const isMobilePhone = useBreakpointValue({ base: true, md: false }) ?? false;
   return (
     <Box
       position="relative"
@@ -876,9 +875,10 @@ function StaticPhone({ children, scale = 1 }: { children: React.ReactNode; scale
         borderRadius="40px"
         overflow="hidden"
         bg="#000"
-        boxShadow={isMobilePhone 
-          ? "0 20px 50px rgba(0,87,184,0.25)" 
-          : "0 40px 100px rgba(0,87,184,0.4)"}
+        boxShadow={{
+          base: "0 20px 50px rgba(0,87,184,0.25)",
+          md: "0 40px 100px rgba(0,87,184,0.4)",
+        }}
       >
         {children}
       </Box>
@@ -886,8 +886,8 @@ function StaticPhone({ children, scale = 1 }: { children: React.ReactNode; scale
         src="/iphone-frame.png" 
         alt="" 
         fill 
-        priority 
-        sizes="100vw"
+        loading="lazy"
+        sizes="(max-width: 768px) 200px, 320px"
         placeholder="blur"
         blurDataURL="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
         style={{ objectFit: "contain", pointerEvents: "none", zIndex: 10 }} 
@@ -943,8 +943,18 @@ function PhoneSendScreen() {
   );
 }
 
+const TX_POOL = [
+  { name: "@noran.g",  icon: "🌙" },
+  { name: "@rahma.a",  icon: "⚡" },
+  { name: "@rayan.z",  icon: "💫" },
+  { name: "@sam.v",    icon: "💎" },
+  { name: "@amira.h",  icon: "🔥" },
+  { name: "@omar.s",   icon: "🚀" },
+  { name: "@kylie.m",  icon: "✨" },
+  { name: "@keiran",   icon: "🌐" },
+];
+
 function LiveTxFeed() {
-  const maxVisible = useBreakpointValue({ base: 2, lg: 5 }) ?? 5;
   const [txns, setTxns] = useState([
     { id: 1, name: "@moe.ali",       amt: "+$1,114.20", color: "#22c55e", icon: "⚡", ts: "just now" },
     { id: 2, name: "@rayofsunshine", amt: "+$40,141.28", color: "#22c55e", icon: "🌍", ts: "2s ago" },
@@ -952,21 +962,18 @@ function LiveTxFeed() {
     { id: 4, name: "@rahma.a",       amt: "+$280.00",   color: "#22c55e", icon: "🌙", ts: "8s ago" },
   ]);
   const nextId = useRef(10);
+  const containerRef = useRef<HTMLDivElement>(null);
 
-  const POOL = [
-    { name: "@noran.g",  icon: "🌙" },
-    { name: "@rahma.a",  icon: "⚡" },
-    { name: "@rayan.z",  icon: "💫" },
-    { name: "@sam.v",    icon: "💎" },
-    { name: "@amira.h",  icon: "🔥" },
-    { name: "@omar.s",   icon: "🚀" },
-    { name: "@kylie.m",  icon: "✨" },
-    { name: "@keiran",   icon: "🌐" },
-  ];
-
+  // Only run the interval when the feed is visible AND the tab is active.
+  // Previous version ran every 1.6s constantly — re-rendering the feed mid-scroll
+  // even when it was offscreen, which caused massive jank on mobile production.
   useEffect(() => {
-    const interval = setInterval(() => {
-      const p = POOL[Math.floor(Math.random() * POOL.length)];
+    let interval: ReturnType<typeof setInterval> | null = null;
+    let visible = false;
+
+    const tick = () => {
+      if (document.hidden) return;
+      const p = TX_POOL[Math.floor(Math.random() * TX_POOL.length)];
       const up = Math.random() > 0.3;
       const val = (Math.random() * 900 + 11).toFixed(2);
       setTxns(prev => [
@@ -980,24 +987,73 @@ function LiveTxFeed() {
         },
         ...prev,
       ].slice(0, 6));
-    }, 1600);
-    return () => clearInterval(interval);
+    };
+
+    const start = () => {
+      if (interval) return;
+      // Slower cadence (3s) on mobile — fast updates aren't worth the scroll cost
+      interval = setInterval(tick, 3000);
+    };
+    const stop = () => {
+      if (interval) {
+        clearInterval(interval);
+        interval = null;
+      }
+    };
+
+    const el = containerRef.current;
+    if (!el || typeof IntersectionObserver === "undefined") {
+      start();
+      return stop;
+    }
+
+    const io = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries) {
+          visible = e.isIntersecting;
+          if (visible && !document.hidden) start();
+          else stop();
+        }
+      },
+      { threshold: 0.1 }
+    );
+    io.observe(el);
+
+    const onVis = () => {
+      if (document.hidden) stop();
+      else if (visible) start();
+    };
+    document.addEventListener("visibilitychange", onVis);
+
+    return () => {
+      io.disconnect();
+      document.removeEventListener("visibilitychange", onVis);
+      stop();
+    };
   }, []);
 
   return (
     <VStack
+      ref={containerRef}
       align="stretch"
       spacing={3}
       w={{ base: "100%", lg: "300px" }}
       maxW={{ base: "100%", lg: "300px" }}
       mx={{ base: "auto", lg: 0 }}
     >
-      {/* Transaction cards */}
+      {/* Transaction cards. Mobile shows 2, desktop shows 5 — controlled via
+          Chakra responsive `display` prop (CSS-only, no useBreakpointValue
+          re-render storm during scroll). */}
       <VStack align="stretch" spacing={2} position="relative">
         <AnimatePresence initial={false}>
-          {txns.slice(0, maxVisible).map((tx, i) => (
-            <motion.div
+          {txns.slice(0, 5).map((tx, i) => (
+            <Box
               key={tx.id}
+              // Cards beyond index 1 hidden on mobile via CSS — replaces previous
+              // useBreakpointValue+slice() which was triggering re-renders during scroll.
+              display={i >= 2 ? { base: "none", lg: "block" } : "block"}
+            >
+            <motion.div
               initial={{ opacity: 0, y: -20, scale: 0.93 }}
               animate={{
                 opacity: 1 - i * 0.18,
@@ -1049,6 +1105,7 @@ function LiveTxFeed() {
                 </Text>
               </HStack>
             </motion.div>
+            </Box>
           ))}
         </AnimatePresence>
       </VStack>
@@ -1736,10 +1793,9 @@ interface Stage {
 
 function StageOverlay({
   stages,
-  progress,
 }: {
   stages: Stage[];
-  progress: MotionValue<number>;
+  progress?: MotionValue<number>;
 }) {
   const { colorMode } = useColorMode();
   const dark = colorMode === "dark";
@@ -1747,39 +1803,77 @@ function StageOverlay({
   const textSub  = dark ? "rgba(255,255,255,0.6)" : "#64748b";
 
   const s = stages[0];
-  const overlayOpacity = useTransform(progress, [0, 0.3, 1], [0, 1, 1]);
 
+  // Layout:
+  //   • Mobile (base / sm): title stacked ABOVE phone, live tx feed BELOW phone
+  //   • Desktop (md+):      title to the LEFT of phone, live tx feed to the RIGHT
   return (
-    <motion.div
-      style={{
-        position: "absolute",
-        inset: 0,
-        zIndex: 3,
-        pointerEvents: "none",
-      }}
+    <Box
+      position="absolute"
+      inset={0}
+      zIndex={3}
+      pointerEvents="none"
     >
+      {/* ── MOBILE: title above phone ── */}
+      <Box
+        display={{ base: "block", md: "none" }}
+        position="absolute"
+        top={{ base: "90px", sm: "110px" }}
+        left={0}
+        right={0}
+        textAlign="center"
+        px={5}
+      >
+        <Heading
+          fontFamily="'DM Sans', sans-serif"
+          fontWeight="800"
+          fontSize={{ base: "22px", sm: "28px" }}
+          letterSpacing="-0.03em"
+          color={textMain}
+          lineHeight={1.15}
+        >
+          {s.title}
+        </Heading>
+      </Box>
+
+      {/* ── MOBILE: live tx feed below phone ── */}
+      <Box
+        display={{ base: "block", md: "none" }}
+        position="absolute"
+        bottom={{ base: "20px", sm: "32px" }}
+        left={0}
+        right={0}
+        px={5}
+      >
+        <LiveTxFeed />
+      </Box>
+
       {/* ── DESKTOP: left text column ── */}
       <Box
-        display={{ base: "none", lg: "block" }}
+        display={{ base: "none", md: "block" }}
         position="absolute"
         top="50%"
-        left="5%"
+        left={{ md: "5%" }}
         transform="translateY(-50%)"
-        w="28%"
-        maxW="380px"
+        w={{ md: "28%" }}
+        maxW={{ md: "320px", xl: "380px" }}
       >
         <VStack align="start" spacing={5}>
           <Heading
             fontFamily="'DM Sans', sans-serif"
             fontWeight="800"
-            fontSize={{ lg: "40px", xl: "52px" }}
+            fontSize={{ md: "30px", lg: "40px", xl: "52px" }}
             letterSpacing="-0.04em"
             color={textMain}
             lineHeight={1.1}
           >
             {s.title}
           </Heading>
-          <Text fontSize="15px" color={textSub} maxW="340px" lineHeight={1.6}>
+          <Text
+            fontSize={{ md: "13px", lg: "15px" }}
+            color={textSub}
+            lineHeight={1.5}
+          >
             {s.desc}
           </Text>
         </VStack>
@@ -1787,57 +1881,17 @@ function StageOverlay({
 
       {/* ── DESKTOP: right live feed ── */}
       <Box
-        display={{ base: "none", lg: "flex" }}
+        display={{ base: "none", md: "block" }}
         position="absolute"
         top="50%"
-        right="4%"
+        right={{ md: "4%" }}
         transform="translateY(-50%)"
-        alignItems="center"
-        justifyContent="flex-start"
-        w="28%"
-        maxW="320px"
+        w={{ md: "28%" }}
+        maxW={{ md: "260px", xl: "320px" }}
       >
         <LiveTxFeed />
       </Box>
-
-      {/* ── MOBILE: title above phone ── */}
-      <Box
-        display={{ base: "block", lg: "none" }}
-        position="absolute"
-        top="100px"
-        left={0}
-        right={0}
-        textAlign="center"
-        px={6}
-        pointerEvents="none"
-      >
-        <Heading
-          fontSize={{ base: "24px", sm: "28px" }}
-          fontWeight="800"
-          color={textMain}
-          letterSpacing="-0.03em"
-          fontFamily="'DM Sans', sans-serif"
-          lineHeight={1.2}
-        >
-          {s.title}
-        </Heading>
-      </Box>
-
-      {/* ── MOBILE: live feed below phone ── */}
-        <Box
-          display={{ base: "block", lg: "none" }}
-          position="absolute"
-          bottom="16px"
-          left={0}
-          right={0}
-          px={5}
-          maxH="160px"
-          overflow="hidden"
-          pointerEvents="none"
-        >
-          <LiveTxFeed />
-        </Box>
-    </motion.div>
+    </Box>
   );
 }
 
@@ -1852,8 +1906,10 @@ export default function LandingPage() {
 
   const { isAuthenticated, isLoading, fetchUser } = useAuthStore();
 
-  const phoneScaleResp =
-    useBreakpointValue({ base: 0.5, sm: 0.6, md: 0.72, lg: 0.82, xl: 0.92 }) ?? 0.9;
+  // NOTE: previously used useBreakpointValue for phoneScaleResp — on iOS Safari,
+  // the URL bar collapse triggers media query changes which re-fires useBreakpointValue
+  // mid-scroll, re-rendering the entire LandingPage tree and causing severe jank in
+  // production builds. Switched to pure CSS responsive scale (no JS subscription).
 
   const textMain = dark ? "#ffffff" : "#0a0f1e";
   const cardBorder = dark ? "rgba(255,255,255,0.08)" : "rgba(0,87,184,0.1)";
@@ -1878,12 +1934,38 @@ export default function LandingPage() {
   const phoneOpacity = useTransform(totalProgress, [0, 0.05], [1, 1]); // always 1
   const phoneY = useTransform(totalProgress, [0, 0.15], [0, 0]);       
 
-  // unlockProgress: 0 = fully locked, 1 = fully unlocked
-  // starts at 30% scroll, fully open by 60%
-  const unlockProgress = useTransform(totalProgress, [0.15, 0.50], [0, 1], { clamp: true });
+  // unlockProgress: 0 = fully locked, 1 = fully unlocked.
+  // Bulletproof implementation: a vanilla scroll listener that measures
+  // pixel-distance scrolled past the hero's top in viewport pixels.
+  // Why not useScroll? In production builds + Chrome mobile inspect, useScroll
+  // with `target` and `offset` was returning stale/clamped values causing the
+  // lock to "stop midway". Measuring with getBoundingClientRect on every scroll
+  // tick is dead-simple and works on every browser.
+  const unlockProgress = useMotionValue(0);
+  const stageOverlayOpacity = useMotionValue(0);
 
-  // stageOverlay fades in after unlock
-  const stageOverlayOpacity = useTransform(totalProgress, [0.48, 0.62], [0, 1], { clamp: true });
+  useEffect(() => {
+    const compute = () => {
+      const el = scrollRef.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      // pixels scrolled past the hero's top (clamped to >= 0)
+      const scrolledPast = Math.max(0, -rect.top);
+      // Full unlock after just 60px of scroll past hero start
+      const u = Math.min(1, scrolledPast / 60);
+      unlockProgress.set(u);
+      // Stage overlay fades in between 80px and 280px of scroll
+      const s = Math.max(0, Math.min(1, (scrolledPast - 80) / 200));
+      stageOverlayOpacity.set(s);
+    };
+    compute();
+    window.addEventListener("scroll", compute, { passive: true });
+    window.addEventListener("resize", compute);
+    return () => {
+      window.removeEventListener("scroll", compute);
+      window.removeEventListener("resize", compute);
+    };
+  }, [unlockProgress, stageOverlayOpacity]);
 
 
   // For StageOverlay, single stage progress is just stageOverlayOpacity — 
@@ -1939,7 +2021,7 @@ export default function LandingPage() {
         }}
       >
         <BackgroundPaths />
-      </motion.div> */}
+      </motion.div> */} 
 
       {/* ══ HERO + STICKY STAGES (one phone — unlocks & cycles) ══
            Desktop: 300vh = 3 × 100vh (intro + 2 stages).
@@ -1951,9 +2033,8 @@ export default function LandingPage() {
         position="relative"
         h={{ base: "200vh", md: "300vh" }}
         className="snap-none"
-        style={{ contain: "layout" }}
       >
-        <Box position="sticky" top={0} h="100vh" overflow="hidden" style={{ transform: "translateZ(0)" }}>
+        <Box position="sticky" top={0} h="100vh" overflow="hidden">
 
           {/* Hero title (fades out as phone uprights) */}
           <motion.div
@@ -2005,12 +2086,24 @@ export default function LandingPage() {
                 willChange: "opacity, transform",
               }}
             >
-                            
-              <PhoneFrame
-                progress={staticProgress}
-                scale={phoneScaleResp}
-                unlockProgress={unlockProgress}
-              />
+              {/* CSS-only responsive scale wrapper — replaces useBreakpointValue.
+                  No JS subscription = no re-render on iOS Safari URL-bar resize. */}
+              <Box
+                transform={{
+                  base: "scale(0.5)",
+                  sm: "scale(0.6)",
+                  md: "scale(0.72)",
+                  lg: "scale(0.82)",
+                  xl: "scale(0.92)",
+                }}
+                transformOrigin="center center"
+                style={{ willChange: "transform" }}
+              >
+                <PhoneFrame
+                  progress={staticProgress}
+                  unlockProgress={unlockProgress}
+                />
+              </Box>
             </motion.div>
           </Flex>
 
@@ -2021,6 +2114,55 @@ export default function LandingPage() {
         </Box>
       </Box>
 
+
+      {/* ══ CONNECTED — text only; arches now live behind the CTA + footer ══ */}
+      <Box className="snap-section" id="connect" py={{ base: 16, md: 24 }} position="relative" minH="100vh" display="flex" alignItems="center">
+        {/* Background hero video — only plays when section is on-screen (saves mobile GPU/battery) */}
+          <Box
+            position="absolute"
+            inset={0}
+            zIndex={0}
+            pointerEvents="none"
+            style={{
+              maskImage: "radial-gradient(ellipse at center, black 1%, transparent 60%)",
+              WebkitMaskImage: "radial-gradient(ellipse at center, black 15%, transparent 60%)",
+            }}
+          >
+            <LazyBackgroundVideo
+              src="/videos/WebHeader.mp4"
+              opacity={0.95}
+            />
+            <Box
+              position="absolute"
+              inset={0}
+              bg={dark
+                ? "radial-gradient(ellipse at center, rgba(10,15,30,0) 0%, rgba(10,15,30,0.55) 70%, rgba(10,15,30,0.95) 100%)"
+                : "radial-gradient(ellipse at center, rgba(255,255,255,0) 0%, rgba(255,255,255,0.5) 70%, rgba(255,255,255,0.95) 100%)"}
+            />
+          </Box>
+        <VStack position="relative" zIndex={20} spacing={8} maxW="720px" mx="auto" textAlign="center" px={6}>
+          <Box p={6} borderColor={cardBorder} >
+            <NextImage src={"/icon-black.png"} alt="Gif" width={60} height={60} />
+          </Box>
+          <Heading fontSize={{ base: "36px", md: "64px" }} fontWeight="800" letterSpacing="-0.04em" fontFamily="'DM Sans', sans-serif" color={textMain}>
+            {t("connect_title_1")}{" "}
+            <Box as="span" bgGradient="linear(to-r, #4a8fe0, #0057b8)" bgClip="text">{t("connect_title_2")}</Box>
+          </Heading>
+          <HStack spacing={3} flexWrap="wrap" justify="center" pt={2}>
+            {[
+              { icon: FiZap, label: t("connect_pill_speed") },
+              { icon: FiGlobe, label: t("connect_pill_access") },
+              { icon: FiShield, label: t("connect_pill_security") },
+            ].map((p, i) => (
+              <HStack key={i} bg={dark ? "rgba(0,0,0,0.4)" : "white"} border="1px solid" borderColor={cardBorder} px={4} py={2.5} borderRadius="full">
+                <Icon as={p.icon} color={BRAND_LIGHT} boxSize={4} />
+                <Text fontSize="13px" color={textMain} fontWeight="700">{p.label}</Text>
+              </HStack>
+            ))}
+          </HStack>
+        </VStack>
+      </Box>
+      
       {/* ══ BENTO GRID — flex stats & features ══ */}
       <SectionBento />
 
@@ -2088,54 +2230,6 @@ export default function LandingPage() {
           </Box>
         }
       />
-
-      {/* ══ CONNECTED — text only; arches now live behind the CTA + footer ══ */}
-      <Box className="snap-section" id="connect" py={{ base: 16, md: 24 }} position="relative" minH="100vh" display="flex" alignItems="center">
-        {/* Background hero video — only plays when section is on-screen (saves mobile GPU/battery) */}
-          <Box
-            position="absolute"
-            inset={0}
-            zIndex={0}
-            pointerEvents="none"
-            style={{
-              maskImage: "radial-gradient(ellipse at center, black 1%, transparent 60%)",
-              WebkitMaskImage: "radial-gradient(ellipse at center, black 15%, transparent 60%)",
-            }}
-          >
-            <LazyBackgroundVideo
-              src="/videos/WebHeader.mp4"
-              opacity={0.95}
-            />
-            <Box
-              position="absolute"
-              inset={0}
-              bg={dark
-                ? "radial-gradient(ellipse at center, rgba(10,15,30,0) 0%, rgba(10,15,30,0.55) 70%, rgba(10,15,30,0.95) 100%)"
-                : "radial-gradient(ellipse at center, rgba(255,255,255,0) 0%, rgba(255,255,255,0.5) 70%, rgba(255,255,255,0.95) 100%)"}
-            />
-          </Box>
-        <VStack position="relative" zIndex={20} spacing={8} maxW="720px" mx="auto" textAlign="center" px={6}>
-          <Box p={6} borderColor={cardBorder} >
-            <NextImage src={"/icon-black.png"} alt="Gif" width={60} height={60} />
-          </Box>
-          <Heading fontSize={{ base: "36px", md: "64px" }} fontWeight="800" letterSpacing="-0.04em" fontFamily="'DM Sans', sans-serif" color={textMain}>
-            {t("connect_title_1")}{" "}
-            <Box as="span" bgGradient="linear(to-r, #4a8fe0, #0057b8)" bgClip="text">{t("connect_title_2")}</Box>
-          </Heading>
-          <HStack spacing={3} flexWrap="wrap" justify="center" pt={2}>
-            {[
-              { icon: FiZap, label: t("connect_pill_speed") },
-              { icon: FiGlobe, label: t("connect_pill_access") },
-              { icon: FiShield, label: t("connect_pill_security") },
-            ].map((p, i) => (
-              <HStack key={i} bg={dark ? "rgba(0,0,0,0.4)" : "white"} border="1px solid" borderColor={cardBorder} px={4} py={2.5} borderRadius="full">
-                <Icon as={p.icon} color={BRAND_LIGHT} boxSize={4} />
-                <Text fontSize="13px" color={textMain} fontWeight="700">{p.label}</Text>
-              </HStack>
-            ))}
-          </HStack>
-        </VStack>
-      </Box>
 
       {/* ══ CTA + FOOTER (with electrified arches behind) ══ */}
       <Box position="relative" overflow="hidden">
