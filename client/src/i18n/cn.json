@@ -113,6 +113,8 @@
   "bento_speed_title": "闪电结算",
   "bento_stat_volume_desc": "过去 24 小时内在 promrkts 上结算的全球加密货币交易量，跨越 400+ 交易对和 9+ 链。",
   "bento_stat_volume_label": "24H 交易量",
+  "feat_dashboard_title": "您的资产，\n尽在掌握。",
+  "feat_dashboard_desc": "一个仪表盘，掌握每一笔资产、余额与实时交易。",
   "bento_title_1": "一个钱包。",
   "bento_title_2": "每种加密货币。",
   "bento_traders_label": "全球活跃交易者",

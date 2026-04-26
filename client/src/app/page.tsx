@@ -130,17 +130,6 @@ function LockScreen({ unlockProgress }: { unlockProgress: MotionValue<number> })
         {/* Star field */}
         {[
           { top: "8%",  left: "15%", size: 1.5, op: 0.9 },
-          { top: "12%", left: "72%", size: 2,   op: 0.7 },
-          { top: "20%", left: "38%", size: 1,   op: 0.8 },
-          { top: "6%",  left: "55%", size: 1.5, op: 0.6 },
-          { top: "28%", left: "82%", size: 1,   op: 0.9 },
-          { top: "18%", left: "25%", size: 1,   op: 0.5 },
-          { top: "32%", left: "60%", size: 1.5, op: 0.7 },
-          { top: "10%", left: "88%", size: 1,   op: 0.8 },
-          { top: "40%", left: "18%", size: 2,   op: 0.4 },
-          { top: "35%", left: "45%", size: 1,   op: 0.6 },
-          { top: "22%", left: "8%",  size: 1.5, op: 0.7 },
-          { top: "48%", left: "75%", size: 1,   op: 0.5 },
         ].map((s, i) => (
           <Box
             key={i}
@@ -154,34 +143,7 @@ function LockScreen({ unlockProgress }: { unlockProgress: MotionValue<number> })
             opacity={s.op}
           />
         ))}
-        {/* Aurora glow */}
-        <Box
-          position="absolute"
-          bottom="30%"
-          left="50%"
-          transform="translateX(-50%)"
-          w="280px"
-          h="180px"
-          bg="radial-gradient(ellipse, rgba(0,87,184,0.5) 0%, rgba(74,143,224,0.2) 50%, transparent 70%)"
-          style={{ filter: "blur(30px)" }}
-        />
-        <Box
-          position="absolute"
-          bottom="25%"
-          left="30%"
-          w="200px"
-          h="120px"
-          bg="radial-gradient(ellipse, rgba(124,58,237,0.35) 0%, transparent 65%)"
-          style={{ filter: "blur(25px)" }}
-        />
       </motion.div>
-
-      {/* Frosted overlay */}
-      <Box
-        position="absolute"
-        inset={0}
-        bg="rgba(0,0,0,0.12)"
-      />
 
       {/* Status bar */}
       <HStack
@@ -774,7 +736,6 @@ function ScreenCard() {
    ═════════════════════════════════════════════════════ */
 
 function PhoneFrame({
-  progress,
   scale = 1,
   unlockProgress,
 }: {
@@ -981,54 +942,125 @@ function PhoneSendScreen() {
     </VStack>
   );
 }
-const StageSpot = memo(function StageSpot() {
-  const { t } = useTranslate();
-  const up = true;
-  const stroke = "#22c55e";
+
+function LiveTxFeed() {
+  const maxVisible = useBreakpointValue({ base: 2, lg: 5 }) ?? 5;
+  const [txns, setTxns] = useState([
+    { id: 1, name: "@moe.ali",       amt: "+$1,114.20", color: "#22c55e", icon: "⚡", ts: "just now" },
+    { id: 2, name: "@rayofsunshine", amt: "+$40,141.28", color: "#22c55e", icon: "🌍", ts: "2s ago" },
+    { id: 3, name: "@noran.g",       amt: "-$11.44",    color: "#ef4444", icon: "💸", ts: "5s ago" },
+    { id: 4, name: "@rahma.a",       amt: "+$280.00",   color: "#22c55e", icon: "🌙", ts: "8s ago" },
+  ]);
+  const nextId = useRef(10);
+
+  const POOL = [
+    { name: "@noran.g",  icon: "🌙" },
+    { name: "@rahma.a",  icon: "⚡" },
+    { name: "@rayan.z",  icon: "💫" },
+    { name: "@sam.v",    icon: "💎" },
+    { name: "@amira.h",  icon: "🔥" },
+    { name: "@omar.s",   icon: "🚀" },
+    { name: "@kylie.m",  icon: "✨" },
+    { name: "@keiran",   icon: "🌐" },
+  ];
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const p = POOL[Math.floor(Math.random() * POOL.length)];
+      const up = Math.random() > 0.3;
+      const val = (Math.random() * 900 + 11).toFixed(2);
+      setTxns(prev => [
+        {
+          id: nextId.current++,
+          name: p.name,
+          amt: `${up ? "+" : "-"}$${val}`,
+          color: up ? "#22c55e" : "#ef4444",
+          icon: p.icon,
+          ts: "just now",
+        },
+        ...prev,
+      ].slice(0, 6));
+    }, 1600);
+    return () => clearInterval(interval);
+  }, []);
+
   return (
-    <Box
-      w={{ base: "260px", md: "320px" }}
-      p={5}
-      borderRadius="24px"
-      border="1px solid rgba(0,87,184,0.3)"
-      bg="rgba(10,18,40,0.92)"
-      boxShadow="0 20px 60px rgba(0,87,184,0.25)"
+    <VStack
+      align="stretch"
+      spacing={3}
+      w={{ base: "100%", lg: "300px" }}
+      maxW={{ base: "100%", lg: "300px" }}
+      mx={{ base: "auto", lg: 0 }}
     >
-      <HStack mb={3}>
-        <Flex w="32px" h="32px" borderRadius="full" border="1px solid #f7931a55" align="center" justify="center">
-          <Text fontSize="13px" color="#f7931a" fontWeight="900">₿</Text>
-        </Flex>
-        <VStack align="start" spacing={0}>
-          <Text fontSize="13px" fontWeight="800" color="white">BTC/USDT</Text>
-          <Text fontSize="10px" color="rgba(255,255,255,0.5)">Spot Market</Text>
-        </VStack>
-        <Box flex={1} />
-        <Badge bg="rgba(34,197,94,0.2)" color={stroke} px={2.5} py={1} borderRadius="full" fontSize="10px" fontWeight="800">
-          +2.34%
-        </Badge>
-      </HStack>
-      <Heading fontWeight="700" fontSize={{ base: "28px", md: "34px" }} letterSpacing="-0.03em" fontFamily="'DM Sans', sans-serif" color="white">
-        $114,200.20
-      </Heading>
-      <Box h="56px" mt={2}>
-        <svg viewBox="0 0 200 60" width="100%" height="100%" preserveAspectRatio="none">
-          <defs>
-            <linearGradient id="sparkfill" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor={stroke} stopOpacity="0.4" />
-              <stop offset="100%" stopColor={stroke} stopOpacity="0" />
-            </linearGradient>
-          </defs>
-          <path d="M0 45 L20 40 L40 48 L60 32 L80 36 L100 22 L120 26 L140 14 L160 18 L180 8 L200 12 L200 60 L0 60 Z" fill="url(#sparkfill)" />
-          <path d="M0 45 L20 40 L40 48 L60 32 L80 36 L100 22 L120 26 L140 14 L160 18 L180 8 L200 12" stroke={stroke} strokeWidth="2" fill="none" />
-        </svg>
-      </Box>
-      <HStack mt={3} spacing={2}>
-        <Button flex={1} h="36px" bg="#22c55e" color="white" borderRadius="10px" fontSize="12px" fontWeight="800">Buy</Button>
-        <Button flex={1} h="36px" bg="rgba(239,68,68,0.15)" color="#ef4444" border="1px solid rgba(239,68,68,0.3)" borderRadius="10px" fontSize="12px" fontWeight="800">Sell</Button>
-      </HStack>
-    </Box>
+      {/* Transaction cards */}
+      <VStack align="stretch" spacing={2} position="relative">
+        <AnimatePresence initial={false}>
+          {txns.slice(0, maxVisible).map((tx, i) => (
+            <motion.div
+              key={tx.id}
+              initial={{ opacity: 0, y: -20, scale: 0.93 }}
+              animate={{
+                opacity: 1 - i * 0.18,
+                y: 0,
+                scale: 1 - i * 0.015,
+              }}
+              exit={{ opacity: 0, y: 8, scale: 0.9 }}
+              transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+              layout
+            >
+              <HStack
+                bg={i === 0 ? "rgba(255,255,255,0.09)" : "rgba(255,255,255,0.04)"}
+                border="1px solid"
+                borderColor={i === 0 ? "rgba(255,255,255,0.14)" : "rgba(255,255,255,0.06)"}
+                borderRadius="14px"
+                px={{ base: 3, lg: 4 }}
+                py={{ base: 2.5, lg: 3 }}
+                spacing={3}
+                boxShadow={i === 0 ? "0 8px 24px rgba(0,0,0,0.3)" : "none"}
+              >
+                <Flex
+                  w={{ base: "30px", lg: "36px" }}
+                  h={{ base: "30px", lg: "36px" }}
+                  borderRadius="full"
+                  bg="rgba(255,255,255,0.08)"
+                  align="center"
+                  justify="center"
+                  flexShrink={0}
+                  fontSize={{ base: "13px", lg: "16px" }}
+                >
+                  {tx.icon}
+                </Flex>
+                <VStack align="start" spacing={0} flex={1} minW={0}>
+                  <Text fontSize={{ base: "12px", lg: "13px" }} fontWeight="700" isTruncated w="100%">
+                    {tx.name}
+                  </Text>
+                  <Text fontSize={{ base: "9px", lg: "10px" }} fontWeight="500" opacity={0.5}>
+                    {tx.ts}
+                  </Text>
+                </VStack>
+                <Text
+                  fontSize={{ base: "12px", lg: "14px" }}
+                  color={tx.color}
+                  fontWeight="800"
+                  fontFamily="monospace"
+                  flexShrink={0}
+                >
+                  {tx.amt}
+                </Text>
+              </HStack>
+            </motion.div>
+          ))}
+        </AnimatePresence>
+      </VStack>
+
+      <style>{`
+        @keyframes liveping {
+          75%, 100% { transform: scale(2.6); opacity: 0; }
+        }
+      `}</style>
+    </VStack>
   );
-});
+}
 
 /* ── Social Finance section (text left / phone right) ── */
 function SectionSocialFinance() {
@@ -1500,23 +1532,9 @@ function SectionOnRamp() {
                   </Box>
                   
                   {/* Text content */}
-                  <VStack p={{ base: 5, md: 7 }} align="start" spacing={3}>
-                    <Heading fontSize={{ base: "20px", md: "24px" }} fontWeight="800" color={textMain} fontFamily="'DM Sans', sans-serif">{c.title}</Heading>
-                    <Text fontSize={{ base: "13px", md: "15px" }} color={textSub} lineHeight={1.5}>{c.desc}</Text>
-                    <Button
-                      variant="ghost"
-                      px={0}
-                      h="auto"
-                      py={1}
-                      color={BRAND}
-                      fontWeight="800"
-                      fontSize="14px"
-                      rightIcon={<Icon as={FiArrowRight} boxSize={4} />}
-                      _hover={{ bg: "transparent", transform: "translateX(3px)" }}
-                      transition="all 0.2s"
-                    >
-                      {c.cta}
-                    </Button>
+                  <VStack p={{ base: 5, md: 7 }} align="center" >
+                    <Heading fontWeight="800" color={textMain} fontFamily="'DM Sans', sans-serif">{c.title}</Heading>
+                    <Text color={textSub} lineHeight={1.5}>{c.desc}</Text>
                   </VStack>
                   
                   {/* Mobile: full uncropped video */}
@@ -1713,87 +1731,115 @@ interface Stage {
   eyebrow: string;
   title: string;
   desc: string;
-  widget: React.ReactNode;
+  widget?: React.ReactNode; // optional, no longer required
 }
 
-function StageOverlay({ stages, progress }: { stages: Stage[]; progress: MotionValue<number> }) {
+function StageOverlay({
+  stages,
+  progress,
+}: {
+  stages: Stage[];
+  progress: MotionValue<number>;
+}) {
   const { colorMode } = useColorMode();
   const dark = colorMode === "dark";
   const textMain = dark ? "white" : "#0a0f1e";
   const textSub  = dark ? "rgba(255,255,255,0.6)" : "#64748b";
 
-  // Only show stage[0] — single stage, no crossfade needed
   const s = stages[0];
   const overlayOpacity = useTransform(progress, [0, 0.3, 1], [0, 1, 1]);
 
   return (
-    <motion.div style={{ opacity: overlayOpacity, position: "absolute", inset: 0, zIndex: 3, pointerEvents: "none" }}>
-      {/* DESKTOP: left copy */}
+    <motion.div
+      style={{
+        position: "absolute",
+        inset: 0,
+        zIndex: 3,
+        pointerEvents: "none",
+      }}
+    >
+      {/* ── DESKTOP: left text column ── */}
       <Box
         display={{ base: "none", lg: "block" }}
         position="absolute"
         top="50%"
-        left="6%"
+        left="5%"
         transform="translateY(-50%)"
-        w="32%"
-        maxW="440px"
+        w="28%"
+        maxW="380px"
       >
         <VStack align="start" spacing={5}>
           <Heading
             fontFamily="'DM Sans', sans-serif"
             fontWeight="800"
-            fontSize={{ lg: "44px", xl: "56px" }}
+            fontSize={{ lg: "40px", xl: "52px" }}
             letterSpacing="-0.04em"
             color={textMain}
+            lineHeight={1.1}
           >
             {s.title}
           </Heading>
-          <Text fontSize="16px" color={textSub} maxW="420px">
+          <Text fontSize="15px" color={textSub} maxW="340px" lineHeight={1.6}>
             {s.desc}
           </Text>
         </VStack>
       </Box>
 
-      {/* DESKTOP: right widget */}
+      {/* ── DESKTOP: right live feed ── */}
       <Box
-        display={{ base: "none", lg: "block" }}
+        display={{ base: "none", lg: "flex" }}
         position="absolute"
         top="50%"
         right="4%"
         transform="translateY(-50%)"
-        zIndex={3}
+        alignItems="center"
+        justifyContent="flex-start"
+        w="28%"
+        maxW="320px"
       >
-        {s.widget}
+        <LiveTxFeed />
       </Box>
 
-      {/* MOBILE: title above phone */}
+      {/* ── MOBILE: title above phone ── */}
       <Box
         display={{ base: "block", lg: "none" }}
         position="absolute"
-        top="72px"
+        top="100px"
         left={0}
         right={0}
         textAlign="center"
-        px={5}
+        px={6}
+        pointerEvents="none"
       >
         <Heading
-          fontSize="26px"
+          fontSize={{ base: "24px", sm: "28px" }}
           fontWeight="800"
           color={textMain}
           letterSpacing="-0.03em"
           fontFamily="'DM Sans', sans-serif"
+          lineHeight={1.2}
         >
           {s.title}
         </Heading>
       </Box>
+
+      {/* ── MOBILE: live feed below phone ── */}
+        <Box
+          display={{ base: "block", lg: "none" }}
+          position="absolute"
+          bottom="16px"
+          left={0}
+          right={0}
+          px={5}
+          maxH="160px"
+          overflow="hidden"
+          pointerEvents="none"
+        >
+          <LiveTxFeed />
+        </Box>
     </motion.div>
   );
 }
-
-// At module level (outside LandingPage):
-const STAGE_WIDGETS = [
-  <StageSpot key="spot" />,
-];
 
 /* ═════════════════════════════════════════════════════
    LANDING PAGE
@@ -1829,15 +1875,16 @@ export default function LandingPage() {
   // Phone fades in from slightly below — pure opacity+translate, compositor-only
   const titleOpacity = useTransform(totalProgress, [0, 0.28, 0.38], [1, 1, 0]);
   const titleY = useTransform(totalProgress, [0, 0.38], [0, -40]);
-  const phoneOpacity = useTransform(totalProgress, [0, 0.12], [0, 1]);
-  const phoneY = useTransform(totalProgress, [0, 0.18], [32, 0]);
+  const phoneOpacity = useTransform(totalProgress, [0, 0.05], [1, 1]); // always 1
+  const phoneY = useTransform(totalProgress, [0, 0.15], [0, 0]);       
 
   // unlockProgress: 0 = fully locked, 1 = fully unlocked
   // starts at 30% scroll, fully open by 60%
-  const unlockProgress = useTransform(totalProgress, [0.30, 0.60], [0, 1], { clamp: true });
+  const unlockProgress = useTransform(totalProgress, [0.15, 0.50], [0, 1], { clamp: true });
 
   // stageOverlay fades in after unlock
-  const stageOverlayOpacity = useTransform(totalProgress, [0.55, 0.75], [0, 1], { clamp: true });
+  const stageOverlayOpacity = useTransform(totalProgress, [0.48, 0.62], [0, 1], { clamp: true });
+
 
   // For StageOverlay, single stage progress is just stageOverlayOpacity — 
   // pass a static MotionValue since there's only one stage now
@@ -1857,7 +1904,12 @@ export default function LandingPage() {
     : "linear(to-b, #0057b8 0%, #bbbbbb 95%, rgba(10,15,30,0.35) 100%)";
 
   const stages: Stage[] = [
-    { eyebrow: t("feat_dashboard_eyebrow"), title: t("feat_dashboard_title"), desc: t("feat_dashboard_desc"), widget: STAGE_WIDGETS[0] },
+    {
+      eyebrow: t("feat_dashboard_eyebrow"),
+      title: t("feat_dashboard_title"),
+      desc: t("feat_dashboard_desc"),
+      widget: null, // no longer used
+    },
   ];
 
   // ✅ SAFE: all hooks already ran
@@ -1909,7 +1961,7 @@ export default function LandingPage() {
               opacity: titleOpacity,
               y: titleY,
               position: "absolute",
-              top: 0,
+              top: -25,
               left: 0,
               right: 0,
               paddingTop: "120px",
@@ -1919,27 +1971,19 @@ export default function LandingPage() {
           >
             <Container maxW="1200px" position="relative">
               
-              <VStack textAlign="center" spacing={0} px={6}>
+              <VStack spacing={1}>
                 <Heading
-                  as="h2"
+                  as="h1"
                   fontFamily="'DM Sans', sans-serif"
                   fontWeight="900"
                   fontSize={{ base: "28px", sm: "34px", md: "44px", xl: "52px" }}
                   letterSpacing="-0.05em"
-                  bgGradient={{ base: "none", md: titleGradient }}
-                  bgClip={{ base: "unset", md: "text" }}
-                  color={{ base: textMain, md: "transparent" }}
+                  bgGradient={titleGradient}
+                  bgClip="text"
+                  color="transparent"
+                  whiteSpace="nowrap"
                 >
-                  {t("hero_line1")}
-                  <Text
-                  fontSize={{ base: "22px", sm: "28px", md: "38px", xl: "46px" }}
-                  bgGradient={{ base: "none", md: titleGradient }}
-                  bgClip={{ base: "unset", md: "text" }}
-                  color={{ base: textMain, md: "transparent" }}
-                  minW={{ base: "auto", md: 1100 }}
-                  >
-                  {t("hero_line2")}
-                  </Text>
+                  {t("hero_line1")} {t("hero_line2")}
                 </Heading>
               </VStack>
             </Container>
@@ -1972,7 +2016,7 @@ export default function LandingPage() {
 
           {/* Stage copy + widgets — fade in once the phone is upright/unlocked */}
           <motion.div style={{ opacity: stageOverlayOpacity, position: "absolute", inset: 0, zIndex: 3, pointerEvents: "none" }}>
-            <StageOverlay stages={stages} progress={staticProgress} />
+            <StageOverlay stages={stages} progress={staticProgress}/>
           </motion.div>
         </Box>
       </Box>

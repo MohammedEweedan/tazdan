@@ -917,6 +917,9 @@
   "feat_mint_title": "Launch your own coin in minutes.",
   "feat_mint_desc": "Mint memecoins, utility tokens, or governance assets on BNB, ETH, Solana and Avalanche — no code, audited templates, instant deploy.",
 
+  "feat_dashboard_title": "Your finances,\nunlocked.",
+  "feat_dashboard_desc": "One dashboard. Every asset, balance, and live transaction — all in real time.",
+
   "sec_mint_eyebrow": "TOKEN STUDIO",
   "sec_mint_title_1": "Mint anything.",
   "sec_mint_title_2": "Ship it anywhere.",
