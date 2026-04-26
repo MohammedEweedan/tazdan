@@ -18,10 +18,43 @@ interface RateRecord {
   isActive: boolean;
 }
 
+/**
+ * Hardcoded USD price map for fiat-value computation.
+ * In production this should come from the live ticker / FX feed.
+ */
+const USD_PRICE: Record<string, number> = {
+  USDT: 1,    USD:  1,
+  BTC:  65_240, ETH:  3_215, SOL: 150,   BNB: 602,
+  XRP:  0.55,   ADA:  0.45,  DOGE: 0.12, MATIC: 0.62,
+  DOT:  7.40,   AVAX: 34.20,
+  EUR:  1.08,   GBP:  1.25,
+  AED:  0.272,  SAR:  0.267, EGP: 0.0202, LYD: 0.206,
+};
+
+function fiatValueUsd(currency: string, balance: number): number {
+  const rate = USD_PRICE[currency] ?? 0;
+  return +(balance * rate).toFixed(2);
+}
+
 export class WalletController {
   static async getAll(req: AuthRequest, res: Response, next: NextFunction) {
     try {
-      const wallets = await prisma.wallet.findMany({ where: { userId: req.user!.id } });
+      const rows = await prisma.wallet.findMany({
+        where: { userId: req.user!.id },
+        orderBy: { createdAt: 'asc' },
+      });
+      // Decorate every wallet with `fiatValueUsd` so the mobile dashboard can
+      // sum the portfolio without doing a separate FX call.
+      const wallets = rows.map((w) => {
+        const balance = parseFloat(w.balance.toString());
+        return {
+          id: w.id,
+          currency: w.currency,
+          balance: w.balance.toString(),
+          frozen: w.frozen.toString(),
+          fiatValueUsd: fiatValueUsd(w.currency, balance).toString(),
+        };
+      });
       res.json({ wallets });
     } catch (error) {
       next(error);

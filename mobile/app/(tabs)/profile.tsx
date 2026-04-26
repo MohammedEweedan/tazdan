@@ -1,135 +1,179 @@
 /**
- * Profile tab — premium account hub. Shows user header + KYC tier + grouped
- * settings rows. Logout calls `useAuthStore`.
+ * Profile tab — theme-aware, every Pressable is real.
  */
 
-import { ScrollView, Text, View, Pressable } from 'react-native';
+import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { GradientBackground } from '@/components/ui/GradientBackground';
-import { Avatar } from '@/components/ui/Avatar';
-import { Card } from '@/components/ui/Card';
+
 import { useAuthStore } from '@/store/authStore';
 import { useHaptics } from '@/hooks';
+import { useTheme, useThemedPalette } from '@/store/themeStore';
+import { useI18n, LOCALE_META } from '@/store/i18nStore';
+import { Panel, PanelRow } from '@/components/ui/ScreenShell';
 
-interface Row { label: string; icon: keyof typeof Ionicons.glyphMap; href?: string; danger?: boolean; onPress?: () => void; }
+interface Row {
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  href?: string;
+  onPress?: () => void;
+  danger?: boolean;
+  right?: React.ReactNode;
+}
 
 export default function Profile() {
   const router = useRouter();
   const h = useHaptics();
   const { user, logout } = useAuthStore();
+  const p = useThemedPalette();
+  const themeMode = useTheme((s) => s.mode);
+  const toggleTheme = useTheme((s) => s.toggle);
+  const locale = useI18n((s) => s.locale);
+  const cycleLocale = useI18n((s) => s.cycle);
+
+  const initial = (user?.firstName?.[0] ?? user?.email?.[0] ?? 'P').toUpperCase();
+  const fullName = `${user?.firstName ?? ''} ${user?.lastName ?? ''}`.trim() || 'Promrkts user';
+  const handle = user?.username ?? user?.email?.split('@')[0] ?? 'me';
 
   const groups: { title: string; rows: Row[] }[] = [
     {
-      title: 'Account',
+      title: 'PREFERENCES',
       rows: [
-        { label: 'Personal info',        icon: 'person-outline',          href: '/settings' },
-        { label: 'Identity verification',icon: 'shield-checkmark-outline',href: '/(auth)/kyc' },
-        { label: 'Linked cards',         icon: 'card-outline',            href: '/cards' },
+        {
+          icon: themeMode === 'dark' ? 'moon-outline' : 'sunny-outline',
+          label: `Theme · ${themeMode === 'dark' ? 'Dark' : 'Light'}`,
+          onPress: () => { h.selection(); toggleTheme(); },
+          right: <Ionicons name="swap-horizontal" size={16} color={p.fgFaint} />,
+        },
+        {
+          icon: 'language-outline',
+          label: `Language · ${LOCALE_META[locale].label}`,
+          onPress: () => { h.selection(); cycleLocale(); },
+          right: <Text style={{ fontSize: 16 }}>{LOCALE_META[locale].flag}</Text>,
+        },
       ],
     },
     {
-      title: 'Money',
+      title: 'ACCOUNT',
       rows: [
-        { label: 'Transaction history', icon: 'receipt-outline',  href: '/history' },
-        { label: 'Top up',              icon: 'add-circle-outline',href: '/topup' },
-        { label: 'Refer & earn',        icon: 'gift-outline',     href: '/referral' },
+        { icon: 'person-outline',           label: 'Personal info',         href: '/settings' },
+        { icon: 'shield-checkmark-outline', label: 'Identity verification', href: '/kyc' },
+        { icon: 'card-outline',             label: 'Linked cards',          href: '/cards' },
       ],
     },
     {
-      title: 'Preferences',
+      title: 'MONEY',
       rows: [
-        { label: 'Notifications', icon: 'notifications-outline', href: '/notifications' },
-        { label: 'Settings',      icon: 'settings-outline',      href: '/settings' },
+        { icon: 'receipt-outline',     label: 'Transaction history', href: '/history' },
+        { icon: 'add-circle-outline',  label: 'Top up balance',      href: '/topup' },
+        { icon: 'gift-outline',        label: 'Refer & earn',        href: '/referral' },
       ],
     },
     {
-      title: 'Session',
+      title: 'APP',
       rows: [
-        { label: 'Log out', icon: 'log-out-outline', danger: true, onPress: () => { h.warning(); logout(); } },
+        { icon: 'notifications-outline', label: 'Notifications', href: '/notifications' },
+        { icon: 'settings-outline',      label: 'Settings',      href: '/settings' },
+      ],
+    },
+    {
+      title: 'SESSION',
+      rows: [
+        {
+          icon: 'log-out-outline',
+          label: 'Log out',
+          danger: true,
+          onPress: () => { h.warning(); logout(); },
+        },
       ],
     },
   ];
 
   return (
-    <GradientBackground>
+    <View style={{ flex: 1, backgroundColor: p.bg }}>
+      <StatusBar style={themeMode === 'dark' ? 'light' : 'dark'} />
       <SafeAreaView style={{ flex: 1 }} edges={['top']}>
-        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 120 }}>
-          <View className="px-5 pt-3 pb-1">
-            <Text className="text-ink-primary text-xl font-bold" style={{ letterSpacing: -0.4 }}>Profile</Text>
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingBottom: 140 }}
+        >
+          {/* Title */}
+          <View style={{ paddingHorizontal: 24, paddingTop: 6 }}>
+            <Text style={{ color: p.fg, fontSize: 22, fontWeight: '700', letterSpacing: -0.4 }}>
+              Profile
+            </Text>
           </View>
 
-          {/* User card */}
-          <View className="px-5 mt-4">
-            <Card padding={20} radius={24}>
-              <View className="flex-row items-center" style={{ gap: 14 }}>
-                <Avatar name={`${user?.firstName ?? 'P'} ${user?.lastName ?? ''}`} size={56} />
-                <View style={{ flex: 1 }}>
-                  <Text className="text-ink-primary text-base font-bold">
-                    {user?.firstName} {user?.lastName}
-                  </Text>
-                  <Text className="text-ink-tertiary text-xs mt-0.5">@{user?.username ?? '—'}</Text>
+          {/* User panel */}
+          <View style={{ paddingHorizontal: 24, marginTop: 18 }}>
+            <Panel>
+              <View style={{ flexDirection: 'row', alignItems: 'center', padding: 18, gap: 14 }}>
+                <View style={{
+                  width: 56, height: 56, borderRadius: 28,
+                  backgroundColor: themeMode === 'dark' ? '#a78bfa' : '#7c3aed',
+                  alignItems: 'center', justifyContent: 'center',
+                }}>
+                  <Text style={{ color: '#fff', fontWeight: '800', fontSize: 22 }}>{initial}</Text>
                 </View>
-                <View
-                  style={{
-                    paddingHorizontal: 10, paddingVertical: 5, borderRadius: 10,
-                    backgroundColor: 'rgba(34,197,94,0.16)',
-                    flexDirection: 'row', alignItems: 'center', gap: 4,
-                  }}
-                >
-                  <Ionicons name="shield-checkmark" size={11} color="#22c55e" />
-                  <Text style={{ color: '#22c55e', fontSize: 10.5, fontWeight: '800', letterSpacing: 0.4 }}>
-                    {user?.kycTier?.replace('_', ' ') ?? 'TIER 0'}
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: p.fg, fontSize: 16, fontWeight: '700' }}>{fullName}</Text>
+                  <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '500', marginTop: 2 }}>
+                    @{handle}
+                  </Text>
+                </View>
+                <View style={{
+                  flexDirection: 'row', alignItems: 'center', gap: 4,
+                  paddingHorizontal: 10, paddingVertical: 5, borderRadius: 10,
+                  backgroundColor: p.greenBg,
+                }}>
+                  <Ionicons name="shield-checkmark" size={11} color={p.greenFg} />
+                  <Text style={{ color: p.greenFg, fontSize: 10.5, fontWeight: '800', letterSpacing: 0.4 }}>
+                    {(user?.kycTier ?? 'TIER_0').replace('_', ' ')}
                   </Text>
                 </View>
               </View>
-            </Card>
+            </Panel>
           </View>
 
           {/* Groups */}
           {groups.map((g) => (
-            <View key={g.title} className="mt-7 px-5">
-              <Text className="text-ink-tertiary text-xs font-semibold mb-2 ml-2" style={{ letterSpacing: 1 }}>
-                {g.title.toUpperCase()}
+            <View key={g.title} style={{ paddingHorizontal: 24, marginTop: 24 }}>
+              <Text style={{
+                color: p.fgFaint, fontSize: 11, fontWeight: '700', letterSpacing: 1.2,
+                marginBottom: 8, marginLeft: 4,
+              }}>
+                {g.title}
               </Text>
-              <View className="bg-white/[0.03] rounded-2xl border border-white/[0.06]">
+              <Panel>
                 {g.rows.map((r, i) => (
-                  <Pressable
+                  <PanelRow
                     key={r.label}
-                    onPress={() => { h.selection(); r.onPress ? r.onPress() : r.href && router.push(r.href as never); }}
-                    style={({ pressed }) => ({
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      paddingVertical: 14, paddingHorizontal: 14,
-                      borderTopWidth: i === 0 ? 0 : 1,
-                      borderColor: 'rgba(255,255,255,0.05)',
-                      opacity: pressed ? 0.7 : 1,
-                    })}
-                  >
-                    <View
-                      style={{
-                        width: 32, height: 32, borderRadius: 10,
-                        alignItems: 'center', justifyContent: 'center',
-                        backgroundColor: r.danger ? 'rgba(239,68,68,0.14)' : 'rgba(74,143,224,0.14)',
-                        marginRight: 12,
-                      }}
-                    >
-                      <Ionicons name={r.icon} size={16} color={r.danger ? '#ef4444' : '#4A8FE0'} />
-                    </View>
-                    <Text style={{ color: r.danger ? '#ef4444' : '#fff', fontSize: 14, fontWeight: '600', flex: 1 }}>
-                      {r.label}
-                    </Text>
-                    {!r.danger && <Ionicons name="chevron-forward" size={16} color="rgba(255,255,255,0.32)" />}
-                  </Pressable>
+                    icon={r.icon}
+                    label={r.label}
+                    danger={r.danger}
+                    last={i === g.rows.length - 1}
+                    right={r.right}
+                    onPress={() => {
+                      h.selection();
+                      if (r.onPress) r.onPress();
+                      else if (r.href) router.push(r.href as never);
+                    }}
+                  />
                 ))}
-              </View>
+              </Panel>
             </View>
           ))}
 
-          <Text className="text-ink-muted text-xs text-center mt-8">Promrkts · v0.1.0</Text>
+          <Text style={{
+            color: p.fgFaint, fontSize: 11, fontWeight: '500',
+            textAlign: 'center', marginTop: 28,
+          }}>
+            Promrkts · v0.1.0
+          </Text>
         </ScrollView>
       </SafeAreaView>
-    </GradientBackground>
+    </View>
   );
 }

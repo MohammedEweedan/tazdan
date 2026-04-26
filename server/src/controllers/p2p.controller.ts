@@ -108,6 +108,73 @@ export class P2PController {
     }
   }
 
+  /**
+   * GET /api/p2p/offers — public marketplace feed.
+   *
+   * Reshapes `P2PListing` rows into the `P2POffer` shape consumed by the
+   * mobile + web UI. No auth required.
+   */
+  static async getOffers(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const limit  = parseInt(req.query.limit as string)  || 50;
+      const sideQ  = (req.query.side as string | undefined)?.toUpperCase();
+
+      const where: any = { status: 'ACTIVE' };
+      if (sideQ === 'BUY' || sideQ === 'SELL') where.side = sideQ;
+
+      const listings = await (prisma as any).p2PListing.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        take: limit,
+        include: {
+          user: {
+            select: {
+              id: true, firstName: true, lastName: true, username: true,
+              kycStatus: true, country: true, avatarUrl: true,
+              _count: { select: { p2pTradesAsBuyer: true, p2pTradesAsSeller: true } },
+            },
+          },
+        },
+      });
+
+      const offers = listings.map((l: any) => {
+        const orders = (l.user._count?.p2pTradesAsBuyer ?? 0)
+                     + (l.user._count?.p2pTradesAsSeller ?? 0);
+        const handle = l.user.username
+          ? `@${l.user.username}`
+          : `@${(l.user.firstName ?? 'user').toLowerCase()}`;
+        const remaining = Math.max(
+          0,
+          parseFloat(l.amount.toString()) - parseFloat(l.filled.toString()),
+        );
+        return {
+          id: l.id,
+          side: l.side,
+          trader: {
+            handle,
+            name: `${l.user.firstName ?? ''} ${l.user.lastName ?? ''}`.trim() || 'Trader',
+            rating: 4.7,            // placeholder until reputation is wired
+            orders,
+            verified: l.user.kycStatus === 'APPROVED',
+            avatarUrl: l.user.avatarUrl ?? undefined,
+          },
+          base: l.currency,
+          quote: l.fiatCurrency,
+          price: l.price.toString(),
+          available: remaining.toString(),
+          minLimit: l.minLimit.toString(),
+          maxLimit: l.maxLimit.toString(),
+          paymentMethods: l.paymentMethods ?? [],
+          country: l.country ?? l.user.country ?? undefined,
+        };
+      });
+
+      res.json({ offers });
+    } catch (error) {
+      next(error);
+    }
+  }
+
   /** Get my listings */
   static async getMyListings(req: AuthRequest, res: Response, next: NextFunction) {
     try {

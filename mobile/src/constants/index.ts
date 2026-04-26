@@ -1,10 +1,35 @@
+import Constants from 'expo-constants';
+import { Platform } from 'react-native';
 import type { Currency, CurrencyMeta } from '@/types';
+
+/**
+ * Auto-resolve API base URL.
+ *  1. Explicit override via `EXPO_PUBLIC_API_BASE` wins.
+ *  2. On a physical device or LAN simulator, use Expo's Metro `hostUri`
+ *     (your dev machine's LAN IP) — `localhost` would mean the device itself.
+ *  3. On Android emulator, `10.0.2.2` reaches the host machine.
+ *  4. Web + iOS Simulator can use `localhost` directly.
+ */
+const API_PORT = 5001;
+function resolveApiBase(): string {
+  const fromEnv = process.env.EXPO_PUBLIC_API_BASE;
+  if (fromEnv) return fromEnv;
+
+  // hostUri looks like "192.168.1.42:8081" when launched from `expo start`
+  const hostUri = (Constants.expoConfig?.hostUri ?? Constants.expoGoConfig?.debuggerHost) as string | undefined;
+  const lanHost = hostUri?.split(':')[0];
+
+  if (Platform.OS === 'web')                 return `http://localhost:${API_PORT}/api`;
+  if (Platform.OS === 'android' && !lanHost) return `http://10.0.2.2:${API_PORT}/api`;
+  if (lanHost && lanHost !== 'localhost')    return `http://${lanHost}:${API_PORT}/api`;
+  return `http://localhost:${API_PORT}/api`;
+}
 
 export const APP = {
   name: 'Promrkts',
   tagline: 'Money. Crypto. One app.',
   supportEmail: 'support@promrkts.app',
-  apiBaseUrl: process.env.EXPO_PUBLIC_API_BASE ?? 'http://localhost:5000/api',
+  apiBaseUrl: resolveApiBase(),
 };
 
 export const STORAGE_KEYS = {

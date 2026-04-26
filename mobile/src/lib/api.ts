@@ -12,7 +12,7 @@ import { secureStore } from './secureStore';
 
 export const api = axios.create({
   baseURL: APP.apiBaseUrl,
-  timeout: 15_000,
+  timeout: 8_000,
   headers: { 'Content-Type': 'application/json' },
 });
 

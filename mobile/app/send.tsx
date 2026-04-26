@@ -1,375 +1,177 @@
 /**
- * Send money flow.
- *  Step 1 — Pick recipient (search by @handle, recent contacts list)
- *  Step 2 — Enter amount (numeric keypad with shake animation on overspend)
- *  Step 3 — Confirm preview (recipient, amount, fee, note) → submit
- *
- * On submit we run a fake settle and push a success bottom-sheet feel via
- * a slide-in MotiView, then route back. The real flow will hit
- * `POST /api/payments/preview` then `POST /api/payments/send`.
+ * Send money — recipient handle/email + amount + note + confirm.
+ * Theme-aware, no NativeWind, every Pressable wired.
  */
 
-import { useMemo, useState } from 'react';
-import { Alert, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useState } from 'react';
+import { Alert, Pressable, Text, TextInput, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { MotiView } from 'moti';
-import Animated, {
-  useAnimatedStyle, useSharedValue, withSequence, withTiming,
-} from 'react-native-reanimated';
 
-import { GradientBackground } from '@/components/ui/GradientBackground';
-import { ScreenHeader } from '@/components/ui/ScreenHeader';
-import { Button } from '@/components/ui/Button';
-import { Card } from '@/components/ui/Card';
-import { Avatar } from '@/components/ui/Avatar';
-import { useWallets, useHaptics } from '@/hooks';
-import { CURRENCY_META } from '@/constants';
-import { formatAmount } from '@/utils/format';
+import { ScreenShell, CTAButton, Panel } from '@/components/ui/ScreenShell';
+import { useThemedPalette } from '@/store/themeStore';
+import { useHaptics, useWallets } from '@/hooks';
 import type { Currency } from '@/types';
 
-interface Contact { handle: string; name: string; lastTx?: string }
-const RECENT: Contact[] = [
-  { handle: '@moe.ali',       name: 'Moe Ali',       lastTx: '2 days ago' },
-  { handle: '@rayofsunshine', name: 'Rayan',         lastTx: '1 week ago' },
-  { handle: '@noran.g',       name: 'Noran',         lastTx: '3 weeks ago' },
-  { handle: '@rahma.a',       name: 'Rahma',         lastTx: 'last month' },
-];
+const FIATS: Currency[] = ['USD', 'EUR', 'GBP', 'AED', 'LYD'];
 
-type Step = 'recipient' | 'amount' | 'confirm';
-
-export default function SendMoney() {
-  const router  = useRouter();
-  const h       = useHaptics();
+export default function Send() {
+  const router = useRouter();
+  const h = useHaptics();
+  const p = useThemedPalette();
   const { data: wallets } = useWallets();
-  const [step, setStep]           = useState<Step>('recipient');
-  const [contact, setContact]     = useState<Contact | null>(null);
-  const [search, setSearch]       = useState('');
-  const [amount, setAmount]       = useState('0');
-  const [note, setNote]           = useState('');
-  const [currency, setCurrency]   = useState<Currency>('USDT');
+
+  const [currency, setCurrency] = useState<Currency>('USD');
+  const [recipient, setRecipient] = useState('');
+  const [amount, setAmount] = useState('');
+  const [note, setNote] = useState('');
 
   const wallet = wallets?.find((w) => w.currency === currency);
-  const max    = Number(wallet?.balance ?? 0);
-  const value  = Number(amount);
-  const overspend = value > max;
-
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return RECENT;
-    return RECENT.filter((c) => c.handle.toLowerCase().includes(q) || c.name.toLowerCase().includes(q));
-  }, [search]);
+  const balance = wallet ? Number(wallet.balance) : 0;
+  const sendAmount = Number(amount || 0);
+  const overspend = sendAmount > balance;
+  const valid = recipient.trim().length >= 3 && sendAmount > 0 && !overspend;
 
   return (
-    <GradientBackground>
-      <SafeAreaView style={{ flex: 1 }}>
-        <ScreenHeader
-          title={step === 'recipient' ? 'Send to' : step === 'amount' ? `Send to ${contact?.name}` : 'Confirm send'}
-          subtitle={step === 'recipient' ? 'Pick a recipient' : step === 'amount' ? contact?.handle : 'Review the details'}
-          showBack
-        />
-
-        {step === 'recipient' && (
-          <RecipientStep
-            search={search}
-            setSearch={setSearch}
-            contacts={filtered}
-            onPick={(c) => { h.light(); setContact(c); setStep('amount'); }}
-          />
-        )}
-
-        {step === 'amount' && contact && (
-          <AmountStep
-            contact={contact}
-            amount={amount}
-            setAmount={setAmount}
-            currency={currency}
-            setCurrency={setCurrency}
-            max={max}
-            overspend={overspend}
-            onContinue={() => {
-              if (overspend || value <= 0) { h.error(); return; }
-              h.medium();
-              setStep('confirm');
-            }}
-          />
-        )}
-
-        {step === 'confirm' && contact && (
-          <ConfirmStep
-            contact={contact}
-            amount={amount}
-            currency={currency}
-            note={note}
-            setNote={setNote}
-            onSend={() => {
-              h.success();
-              Alert.alert('Sent', `${formatAmount(amount, currency, { showSymbol: true })} on its way to ${contact.handle}.`, [
-                { text: 'Done', onPress: () => router.back() },
-              ]);
-            }}
-            onBack={() => setStep('amount')}
-          />
-        )}
-      </SafeAreaView>
-    </GradientBackground>
-  );
-}
-
-/* ── Step 1: recipient picker ───────────────────────────────────────── */
-function RecipientStep({
-  search, setSearch, contacts, onPick,
-}: {
-  search: string; setSearch: (s: string) => void;
-  contacts: Contact[]; onPick: (c: Contact) => void;
-}) {
-  return (
-    <ScrollView contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 60 }}>
-      {/* Search */}
-      <View
-        className="px-4 flex-row items-center mt-2"
-        style={{
-          height: 56, borderRadius: 16,
-          backgroundColor: 'rgba(255,255,255,0.04)',
-          borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)',
-          gap: 12,
-        }}
-      >
-        <Ionicons name="search" size={18} color="rgba(255,255,255,0.45)" />
+    <ScreenShell title="Send money">
+      {/* Recipient */}
+      <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '700', letterSpacing: 0.6, marginTop: 12 }}>
+        TO
+      </Text>
+      <View style={{
+        marginTop: 8, height: 56, borderRadius: 16,
+        backgroundColor: p.bgElev,
+        borderWidth: 1, borderColor: p.border,
+        flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16,
+        gap: 10,
+      }}>
+        <Ionicons name="person-outline" size={18} color={p.fgMuted} />
         <TextInput
-          value={search}
-          onChangeText={setSearch}
-          placeholder="Search @handle, name, phone"
-          placeholderTextColor="rgba(255,255,255,0.3)"
-          style={{ flex: 1, color: '#fff', fontSize: 15, fontWeight: '500' }}
+          value={recipient}
+          onChangeText={setRecipient}
+          placeholder="@handle, email, or phone"
+          placeholderTextColor={p.fgFaint}
           autoCapitalize="none"
           autoCorrect={false}
+          style={{ flex: 1, color: p.fg, fontSize: 16, fontWeight: '500' }}
         />
       </View>
 
-      <Text className="text-ink-tertiary text-xs font-semibold mt-7 ml-1" style={{ letterSpacing: 1 }}>
-        RECENT
+      {/* Currency picker */}
+      <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '700', letterSpacing: 0.6, marginTop: 22 }}>
+        FROM
       </Text>
-      <View className="bg-white/[0.03] rounded-2xl mt-2 border border-white/[0.06]">
-        {contacts.length === 0 && (
-          <Text className="text-ink-tertiary text-sm p-4 text-center">No matches.</Text>
-        )}
-        {contacts.map((c, i) => (
+      <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
+        {FIATS.map((c) => (
           <Pressable
-            key={c.handle}
-            onPress={() => onPick(c)}
+            key={c}
+            onPress={() => { h.selection(); setCurrency(c); setAmount(''); }}
             style={({ pressed }) => ({
-              flexDirection: 'row', alignItems: 'center',
-              padding: 14,
-              borderTopWidth: i === 0 ? 0 : 1,
-              borderColor: 'rgba(255,255,255,0.05)',
-              opacity: pressed ? 0.78 : 1,
-              gap: 12,
+              flex: 1, paddingVertical: 12, borderRadius: 12,
+              backgroundColor: currency === c ? p.fg : p.bgElev,
+              borderWidth: 1, borderColor: currency === c ? p.fg : p.border,
+              opacity: pressed ? 0.85 : 1,
+              alignItems: 'center',
             })}
           >
-            <Avatar name={c.name} size={42} />
-            <View style={{ flex: 1 }}>
-              <Text className="text-ink-primary text-sm font-semibold">{c.name}</Text>
-              <Text className="text-ink-tertiary text-xs mt-0.5">{c.handle}</Text>
-            </View>
-            <Text className="text-ink-tertiary text-xs">{c.lastTx}</Text>
-            <Ionicons name="chevron-forward" size={16} color="rgba(255,255,255,0.32)" />
+            <Text style={{ color: currency === c ? p.bg : p.fg, fontWeight: '700', fontSize: 12 }}>
+              {c}
+            </Text>
           </Pressable>
         ))}
       </View>
-    </ScrollView>
-  );
-}
+      <Text style={{ color: p.fgMuted, fontSize: 12, marginTop: 8, marginLeft: 4 }}>
+        Available: {balance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {currency}
+      </Text>
 
-/* ── Step 2: amount keypad ──────────────────────────────────────────── */
-function AmountStep({
-  contact, amount, setAmount, currency, setCurrency, max, overspend, onContinue,
-}: {
-  contact: Contact; amount: string; setAmount: (s: string) => void;
-  currency: Currency; setCurrency: (c: Currency) => void;
-  max: number; overspend: boolean; onContinue: () => void;
-}) {
-  const h = useHaptics();
-  const meta = CURRENCY_META[currency];
-  const shake = useSharedValue(0);
-  const shakeStyle = useAnimatedStyle(() => ({ transform: [{ translateX: shake.value }] }));
-
-  const tap = (k: string) => {
-    h.selection();
-    setAmount((prev) => {
-      if (k === '⌫') return prev.length > 1 ? prev.slice(0, -1) : '0';
-      if (k === '.') return prev.includes('.') ? prev : `${prev}.`;
-      return prev === '0' ? k : `${prev}${k}`;
-    });
-  };
-
-  const onContinueTap = () => {
-    if (overspend) {
-      h.error();
-      shake.value = withSequence(
-        withTiming(-8, { duration: 60 }),
-        withTiming( 8, { duration: 60 }),
-        withTiming(-6, { duration: 60 }),
-        withTiming( 6, { duration: 60 }),
-        withTiming( 0, { duration: 60 }),
-      );
-      return;
-    }
-    onContinue();
-  };
-
-  return (
-    <View style={{ flex: 1, paddingHorizontal: 20 }}>
-      <View style={{ flex: 1, justifyContent: 'center' }}>
-        <View className="items-center" style={{ gap: 10 }}>
-          <Avatar name={contact.name} size={64} />
-          <Text className="text-ink-secondary text-sm font-semibold">{contact.handle}</Text>
+      {/* Amount */}
+      <View style={{ marginTop: 22 }}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+          <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '700', letterSpacing: 0.6 }}>
+            AMOUNT
+          </Text>
+          <Pressable hitSlop={6} onPress={() => { h.selection(); setAmount(String(balance)); }}>
+            <Text style={{ color: p.fg, fontSize: 12, fontWeight: '700' }}>USE MAX</Text>
+          </Pressable>
         </View>
-
-        <Animated.View style={[shakeStyle, { alignItems: 'center', marginTop: 32 }]}>
-          <View className="flex-row items-baseline" style={{ gap: 4 }}>
-            <Text style={{ color: '#4A8FE0', fontSize: 22, fontWeight: '700', alignSelf: 'flex-start', marginTop: 16 }}>
-              {meta.symbol}
-            </Text>
-            <Text
-              style={{
-                color: overspend ? '#ef4444' : '#fff',
-                fontSize: 64, fontWeight: '800', letterSpacing: -2,
-                fontVariant: ['tabular-nums'],
-              }}
-            >
-              {amount}
-            </Text>
-          </View>
-          <View className="flex-row items-center mt-2" style={{ gap: 6 }}>
-            <Text className="text-ink-tertiary text-xs">Available </Text>
-            <Text className="text-ink-secondary text-xs font-semibold">
-              {formatAmount(max, currency, { showSymbol: true })}
-            </Text>
-          </View>
-        </Animated.View>
-
-        {/* Currency chips */}
-        <View className="flex-row justify-center mt-7" style={{ gap: 8, flexWrap: 'wrap' }}>
-          {(['USDT', 'USD', 'EUR', 'AED'] as Currency[]).map((c) => (
-            <Pressable
-              key={c}
-              onPress={() => { h.selection(); setCurrency(c); setAmount('0'); }}
-              style={{
-                paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999,
-                backgroundColor: currency === c ? '#0057B8' : 'rgba(255,255,255,0.05)',
-                borderWidth: 1, borderColor: currency === c ? '#0057B8' : 'rgba(255,255,255,0.08)',
-              }}
-            >
-              <Text style={{ color: currency === c ? '#fff' : 'rgba(255,255,255,0.6)', fontSize: 13, fontWeight: '700' }}>
-                {c}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
-      </View>
-
-      {/* Keypad */}
-      <View className="mt-2">
-        <View className="flex-row flex-wrap" style={{ gap: 10 }}>
-          {['1','2','3','4','5','6','7','8','9','.','0','⌫'].map((k) => (
-            <Pressable
-              key={k}
-              onPress={() => tap(k)}
-              style={({ pressed }) => ({
-                width: '31%',
-                height: 64,
-                alignItems: 'center', justifyContent: 'center',
-                borderRadius: 18,
-                backgroundColor: pressed ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.04)',
-                borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)',
-              })}
-            >
-              <Text style={{
-                color: k === '⌫' ? 'rgba(255,255,255,0.6)' : '#fff',
-                fontSize: 24, fontWeight: '600',
-              }}>{k}</Text>
-            </Pressable>
-          ))}
-        </View>
-        <View className="mt-4">
-          <Button
-            label="Continue"
-            size="lg"
-            fullWidth
-            onPress={onContinueTap}
-            disabled={Number(amount) <= 0}
-            iconRight={<Ionicons name="arrow-forward" size={18} color="#fff" />}
+        <View style={{
+          marginTop: 10, height: 64, borderRadius: 16,
+          backgroundColor: p.bgElev,
+          borderWidth: 1.5, borderColor: overspend ? p.redFg : p.border,
+          flexDirection: 'row', alignItems: 'center', paddingHorizontal: 18,
+        }}>
+          <TextInput
+            value={amount}
+            onChangeText={(t) => setAmount(t.replace(/[^0-9.]/g, ''))}
+            placeholder="0.00"
+            placeholderTextColor={p.fgFaint}
+            keyboardType="decimal-pad"
+            style={{ flex: 1, color: p.fg, fontSize: 28, fontWeight: '700', fontVariant: ['tabular-nums'] }}
           />
+          <Text style={{ color: p.fgMuted, fontSize: 14, fontWeight: '700' }}>{currency}</Text>
         </View>
+        {overspend && (
+          <Text style={{ color: p.redFg, fontSize: 12, fontWeight: '600', marginTop: 8, marginLeft: 4 }}>
+            Exceeds balance
+          </Text>
+        )}
       </View>
-    </View>
-  );
-}
 
-/* ── Step 3: confirm summary ────────────────────────────────────────── */
-function ConfirmStep({
-  contact, amount, currency, note, setNote, onSend, onBack,
-}: {
-  contact: Contact; amount: string; currency: Currency;
-  note: string; setNote: (s: string) => void;
-  onSend: () => void; onBack: () => void;
-}) {
-  const fee = '0.00';
-  return (
-    <ScrollView contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 30 }}>
-      <MotiView from={{ opacity: 0, translateY: 12 }} animate={{ opacity: 1, translateY: 0 }} transition={{ type: 'timing', duration: 360 }}>
-        <Card padding={22} radius={24} glow>
-          <View className="items-center" style={{ gap: 12 }}>
-            <Avatar name={contact.name} size={64} />
-            <Text className="text-ink-tertiary text-xs font-semibold" style={{ letterSpacing: 1 }}>
-              YOU'RE SENDING
-            </Text>
-            <Text className="text-ink-primary" style={{ fontSize: 38, fontWeight: '800', letterSpacing: -1 }}>
-              {formatAmount(amount, currency, { showSymbol: true })}
-            </Text>
-            <Text className="text-ink-secondary text-sm font-semibold">to {contact.name} · {contact.handle}</Text>
-          </View>
-
-          <View className="mt-6" style={{ gap: 10 }}>
-            <Row k="Network fee" v={`${fee} ${currency}`} />
-            <Row k="Arrives"     v="Instantly" valueColor="#22c55e" />
-            <Row k="From"        v="Promrkts Wallet · USDT" />
-          </View>
-        </Card>
-      </MotiView>
-
-      <Text className="text-ink-tertiary text-xs font-semibold mt-7 ml-1" style={{ letterSpacing: 1 }}>NOTE</Text>
-      <View className="px-4 mt-2" style={{
-        height: 56, borderRadius: 16,
-        backgroundColor: 'rgba(255,255,255,0.04)',
-        borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)',
-        justifyContent: 'center',
+      {/* Note */}
+      <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '700', letterSpacing: 0.6, marginTop: 22 }}>
+        NOTE (OPTIONAL)
+      </Text>
+      <View style={{
+        marginTop: 8, minHeight: 56, borderRadius: 16,
+        backgroundColor: p.bgElev,
+        borderWidth: 1, borderColor: p.border,
+        paddingHorizontal: 16, paddingVertical: 12,
       }}>
         <TextInput
           value={note}
           onChangeText={setNote}
           placeholder="What's it for?"
-          placeholderTextColor="rgba(255,255,255,0.3)"
-          maxLength={140}
-          style={{ color: '#fff', fontSize: 15, fontWeight: '500' }}
+          placeholderTextColor={p.fgFaint}
+          style={{ color: p.fg, fontSize: 15, fontWeight: '500' }}
         />
       </View>
 
-      <View className="mt-7" style={{ gap: 10 }}>
-        <Button label={`Send ${formatAmount(amount, currency, { showSymbol: true })}`} size="lg" fullWidth onPress={onSend} haptic="medium" />
-        <Button label="Edit"  variant="ghost" size="lg" fullWidth onPress={onBack} />
+      {/* Summary */}
+      {valid && (
+        <Panel style={{ marginTop: 22 }}>
+          <View style={{ padding: 14, gap: 8 }}>
+            <Row label="Recipient" value={recipient} palette={p} />
+            <Row label="Amount" value={`${sendAmount.toFixed(2)} ${currency}`} palette={p} />
+            <Row label="Fee" value="Free" palette={p} accent={p.greenFg} />
+          </View>
+        </Panel>
+      )}
+
+      {/* CTA */}
+      <View style={{ marginTop: 24 }}>
+        <CTAButton
+          label="Send"
+          icon="paper-plane"
+          disabled={!valid}
+          onPress={() => {
+            h.success();
+            Alert.alert(
+              'Sent',
+              `${sendAmount.toFixed(2)} ${currency} sent to ${recipient}.`,
+              [{ text: 'OK', onPress: () => router.back() }],
+            );
+          }}
+        />
       </View>
-    </ScrollView>
+    </ScreenShell>
   );
 }
 
-function Row({ k, v, valueColor = '#fff' }: { k: string; v: string; valueColor?: string }) {
+function Row({ label, value, accent, palette: p }: { label: string; value: string; accent?: string; palette: ReturnType<typeof useThemedPalette> }) {
   return (
-    <View className="flex-row items-center justify-between">
-      <Text className="text-ink-tertiary text-sm">{k}</Text>
-      <Text style={{ color: valueColor, fontSize: 14, fontWeight: '700' }}>{v}</Text>
+    <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+      <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '500' }}>{label}</Text>
+      <Text style={{ color: accent ?? p.fg, fontSize: 13, fontWeight: '700' }}>{value}</Text>
     </View>
   );
 }

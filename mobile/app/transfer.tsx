@@ -1,162 +1,182 @@
 /**
- * Internal wallet → wallet transfer (e.g. USDT → BTC at live spot price).
- * Displays a "from" + "to" pair with a swap arrow. Zero fee.
+ * Transfer — convert between two of your wallets. Theme-aware.
  */
 
 import { useMemo, useState } from 'react';
-import { Alert, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { Alert, Pressable, Text, TextInput, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
-import { GradientBackground } from '@/components/ui/GradientBackground';
-import { ScreenHeader } from '@/components/ui/ScreenHeader';
-import { Button } from '@/components/ui/Button';
-import { useWallets, useMarkets, useHaptics } from '@/hooks';
-import { CURRENCY_META } from '@/constants';
-import { formatAmount } from '@/utils/format';
+import { ScreenShell, CTAButton, Panel } from '@/components/ui/ScreenShell';
+import { useThemedPalette } from '@/store/themeStore';
+import { useHaptics, useWallets } from '@/hooks';
 import type { Currency } from '@/types';
+
+const PICKABLE: Currency[] = ['USDT', 'BTC', 'ETH', 'USD', 'EUR', 'AED'];
 
 export default function Transfer() {
   const router = useRouter();
   const h = useHaptics();
+  const p = useThemedPalette();
   const { data: wallets } = useWallets();
-  const { data: markets } = useMarkets();
 
-  const [from, setFrom]     = useState<Currency>('USDT');
-  const [to, setTo]         = useState<Currency>('BTC');
-  const [amount, setAmount] = useState('100');
+  const [from, setFrom] = useState<Currency>('USD');
+  const [to, setTo] = useState<Currency>('BTC');
+  const [amount, setAmount] = useState('');
 
-  const fromBalance = Number(wallets?.find((w) => w.currency === from)?.balance ?? 0);
-  const overspend   = Number(amount) > fromBalance;
+  const fromWallet = wallets?.find((w) => w.currency === from);
+  const balance = fromWallet ? Number(fromWallet.balance) : 0;
+  const v = Number(amount || 0);
+  const overspend = v > balance;
+  // dummy rate for demo
+  const rate = useMemo(() => from === to ? 1 : (Math.random() * 0.0001 + 0.00002), [from, to]);
+  const youGet = v * rate;
 
-  const fromUsd = (CURRENCY_META[from].kind === 'crypto'
-    ? markets?.find((m) => m.base === from)?.price ?? 1
-    : 1);
-  const toUsd = (CURRENCY_META[to].kind === 'crypto'
-    ? markets?.find((m) => m.base === to)?.price ?? 1
-    : 1);
-  const received = useMemo(() => (Number(amount) * fromUsd) / toUsd, [amount, fromUsd, toUsd]);
-
-  const swap = () => { h.medium(); setFrom(to); setTo(from); setAmount('0'); };
+  const swap = () => { h.medium(); setFrom(to); setTo(from); setAmount(''); };
 
   return (
-    <GradientBackground>
-      <SafeAreaView style={{ flex: 1 }}>
-        <ScreenHeader title="Convert" subtitle="Wallet ↔ Wallet · zero fee" showBack />
-        <ScrollView contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 60 }}>
+    <ScreenShell title="Convert">
+      {/* From */}
+      <CurrencySelector
+        title="FROM"
+        currency={from}
+        palette={p}
+        balance={balance}
+        onPick={(c) => { h.selection(); setFrom(c); setAmount(''); }}
+      />
 
-          {/* From */}
-          <View style={{ ...box, marginTop: 16 }}>
-            <Text className="text-ink-tertiary text-xs font-semibold" style={{ letterSpacing: 1 }}>FROM</Text>
-            <View className="flex-row items-center mt-2" style={{ gap: 12 }}>
-              <CurrencyTab value={from} onChange={setFrom} />
-              <TextInput
-                value={amount}
-                onChangeText={(t) => setAmount(t.replace(/[^\d.]/g, '') || '0')}
-                keyboardType="decimal-pad"
-                selectionColor="#4A8FE0"
-                style={{
-                  flex: 1, color: overspend ? '#ef4444' : '#fff',
-                  fontSize: 32, fontWeight: '800', letterSpacing: -0.8,
-                  textAlign: 'right',
-                  fontVariant: ['tabular-nums'],
-                }}
-              />
-            </View>
-            <View className="flex-row items-center justify-between mt-2">
-              <Text className="text-ink-tertiary text-xs">
-                Balance · {formatAmount(fromBalance, from)} {from}
-              </Text>
-              <Pressable onPress={() => { h.selection(); setAmount(String(fromBalance)); }} hitSlop={6}>
-                <Text className="text-brand-400 text-xs font-bold">MAX</Text>
-              </Pressable>
-            </View>
-          </View>
+      {/* Swap button */}
+      <Pressable
+        onPress={swap}
+        style={({ pressed }) => ({
+          alignSelf: 'center', marginTop: 14, marginBottom: 14,
+          width: 44, height: 44, borderRadius: 22,
+          backgroundColor: pressed ? p.border : p.pillBg,
+          borderWidth: 1, borderColor: p.border,
+          alignItems: 'center', justifyContent: 'center',
+        })}
+      >
+        <Ionicons name="swap-vertical" size={20} color={p.fg} />
+      </Pressable>
 
-          {/* Swap arrow */}
-          <View className="items-center" style={{ marginTop: -10, marginBottom: -10, zIndex: 2 }}>
-            <Pressable
-              onPress={swap}
-              hitSlop={8}
-              style={{
-                width: 44, height: 44, borderRadius: 22,
-                backgroundColor: '#0c1430',
-                borderWidth: 1, borderColor: 'rgba(255,255,255,0.10)',
-                alignItems: 'center', justifyContent: 'center',
-              }}
-            >
-              <Ionicons name="swap-vertical" size={20} color="#4A8FE0" />
-            </Pressable>
-          </View>
+      {/* To */}
+      <CurrencySelector
+        title="TO"
+        currency={to}
+        palette={p}
+        onPick={(c) => { h.selection(); setTo(c); }}
+      />
 
-          {/* To */}
-          <View style={box}>
-            <Text className="text-ink-tertiary text-xs font-semibold" style={{ letterSpacing: 1 }}>TO</Text>
-            <View className="flex-row items-center mt-2" style={{ gap: 12 }}>
-              <CurrencyTab value={to} onChange={setTo} />
-              <Text
-                style={{
-                  flex: 1, color: '#fff',
-                  fontSize: 32, fontWeight: '800', letterSpacing: -0.8,
-                  textAlign: 'right',
-                  fontVariant: ['tabular-nums'],
-                }}
-              >
-                {received.toFixed(CURRENCY_META[to].kind === 'crypto' ? 6 : 2)}
-              </Text>
-            </View>
-            <Text className="text-ink-tertiary text-xs mt-2">
-              1 {from} ≈ {(fromUsd / toUsd).toFixed(6)} {to}
+      {/* Amount */}
+      <View style={{ marginTop: 22 }}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+          <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '700', letterSpacing: 0.6 }}>
+            AMOUNT
+          </Text>
+          <Pressable hitSlop={6} onPress={() => { h.selection(); setAmount(String(balance)); }}>
+            <Text style={{ color: p.fg, fontSize: 12, fontWeight: '700' }}>USE MAX</Text>
+          </Pressable>
+        </View>
+        <View style={{
+          marginTop: 10, height: 64, borderRadius: 16,
+          backgroundColor: p.bgElev,
+          borderWidth: 1.5, borderColor: overspend ? p.redFg : p.border,
+          flexDirection: 'row', alignItems: 'center', paddingHorizontal: 18,
+        }}>
+          <TextInput
+            value={amount}
+            onChangeText={(t) => setAmount(t.replace(/[^0-9.]/g, ''))}
+            placeholder="0.00"
+            placeholderTextColor={p.fgFaint}
+            keyboardType="decimal-pad"
+            style={{ flex: 1, color: p.fg, fontSize: 28, fontWeight: '700', fontVariant: ['tabular-nums'] }}
+          />
+          <Text style={{ color: p.fgMuted, fontSize: 14, fontWeight: '700' }}>{from}</Text>
+        </View>
+      </View>
+
+      {/* Quote */}
+      <Panel style={{ marginTop: 22, padding: 14 }}>
+        <View style={{ gap: 8 }}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+            <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '500' }}>Rate</Text>
+            <Text style={{ color: p.fg, fontSize: 13, fontWeight: '600' }}>
+              1 {from} ≈ {rate.toLocaleString('en-US', { maximumFractionDigits: 8 })} {to}
             </Text>
           </View>
-
-          <View className="mt-7">
-            <Button
-              label={`Convert ${amount} ${from}`}
-              size="lg" fullWidth
-              disabled={overspend || Number(amount) <= 0}
-              onPress={() => {
-                h.success();
-                Alert.alert('Converted', `Received ${received.toFixed(6)} ${to}.`, [
-                  { text: 'Done', onPress: () => router.back() },
-                ]);
-              }}
-              haptic="medium"
-            />
+          <View style={{ height: 1, backgroundColor: p.border, marginVertical: 4 }} />
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+            <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '500' }}>You receive</Text>
+            <Text style={{ color: p.fg, fontSize: 14, fontWeight: '800' }}>
+              {youGet.toLocaleString('en-US', { maximumFractionDigits: 8 })} {to}
+            </Text>
           </View>
-        </ScrollView>
-      </SafeAreaView>
-    </GradientBackground>
+        </View>
+      </Panel>
+
+      {/* CTA */}
+      <View style={{ marginTop: 24 }}>
+        <CTAButton
+          label="Convert"
+          icon="swap-horizontal"
+          disabled={v <= 0 || overspend || from === to}
+          onPress={() => {
+            h.success();
+            Alert.alert(
+              'Converted',
+              `${v} ${from} → ${youGet.toLocaleString('en-US', { maximumFractionDigits: 8 })} ${to}`,
+              [{ text: 'OK', onPress: () => router.back() }],
+            );
+          }}
+        />
+      </View>
+    </ScreenShell>
   );
 }
 
-function CurrencyTab({ value, onChange }: { value: Currency; onChange: (c: Currency) => void }) {
-  const h = useHaptics();
-  const opts: Currency[] = ['USDT', 'BTC', 'ETH', 'SOL', 'USD', 'EUR', 'AED'];
+function CurrencySelector({
+  title, currency, balance, onPick, palette: p,
+}: {
+  title: string;
+  currency: Currency;
+  balance?: number;
+  onPick: (c: Currency) => void;
+  palette: ReturnType<typeof useThemedPalette>;
+}) {
   return (
-    <Pressable
-      onPress={() => {
-        h.selection();
-        const idx = opts.indexOf(value);
-        onChange(opts[(idx + 1) % opts.length]);
-      }}
-      style={{
-        paddingHorizontal: 12, paddingVertical: 9, borderRadius: 12,
-        backgroundColor: 'rgba(255,255,255,0.06)',
-        borderWidth: 1, borderColor: 'rgba(255,255,255,0.10)',
-        flexDirection: 'row', alignItems: 'center', gap: 6,
-      }}
-    >
-      <Text style={{ color: '#fff', fontSize: 14 }}>{CURRENCY_META[value].flagOrIcon}</Text>
-      <Text style={{ color: '#fff', fontSize: 14, fontWeight: '800' }}>{value}</Text>
-      <Ionicons name="chevron-down" size={12} color="rgba(255,255,255,0.5)" />
-    </Pressable>
+    <View>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+        <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '700', letterSpacing: 0.6 }}>
+          {title}
+        </Text>
+        {balance !== undefined && (
+          <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '500' }}>
+            Avail: {balance.toLocaleString('en-US', { maximumFractionDigits: 4 })} {currency}
+          </Text>
+        )}
+      </View>
+      <View style={{ flexDirection: 'row', gap: 6, marginTop: 8 }}>
+        {PICKABLE.map((c) => (
+          <Pressable
+            key={c}
+            onPress={() => onPick(c)}
+            style={({ pressed }) => ({
+              flex: 1, paddingVertical: 11, borderRadius: 11,
+              backgroundColor: currency === c ? p.fg : p.bgElev,
+              borderWidth: 1, borderColor: currency === c ? p.fg : p.border,
+              opacity: pressed ? 0.85 : 1,
+              alignItems: 'center',
+            })}
+          >
+            <Text style={{
+              color: currency === c ? p.bg : p.fg,
+              fontWeight: '700', fontSize: 11,
+            }}>
+              {c}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
+    </View>
   );
 }
-
-const box = {
-  padding: 18, borderRadius: 22,
-  backgroundColor: 'rgba(255,255,255,0.04)',
-  borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)',
-} as const;

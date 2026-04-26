@@ -2,6 +2,9 @@
 module.exports = {
   content: ['./app/**/*.{js,jsx,ts,tsx}', './src/**/*.{js,jsx,ts,tsx}'],
   presets: [require('nativewind/preset')],
+  // Web throws "dark mode is type 'media'" without this. We control theme
+  // ourselves through `useTheme`, not via system media queries.
+  darkMode: 'class',
   theme: {
     extend: {
       colors: {

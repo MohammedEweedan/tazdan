@@ -4,6 +4,10 @@ import { P2PController } from '../controllers/p2p.controller';
 
 export const p2pRouter = Router();
 
+// Public marketplace feed (used by mobile dashboard + landing page)
+// Returns listings reshaped into the `P2POffer` shape consumed by the UI.
+p2pRouter.get('/offers', P2PController.getOffers);
+
 // Listings
 p2pRouter.get('/listings', authenticate, P2PController.getListings);
 p2pRouter.get('/listings/mine', authenticate, P2PController.getMyListings);

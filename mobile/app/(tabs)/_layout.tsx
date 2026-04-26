@@ -1,12 +1,11 @@
 /**
- * Tab bar — 4 tabs (Home / Wallet / P2P / Profile). Custom dark glass surface,
- * brand-blue active tint, hairline top border. iOS-style centered icons.
+ * Tab bar — minimal, theme-aware, icon-only.
  */
 
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { Platform, View } from 'react-native';
-import { BlurView } from 'expo-blur';
+import { Platform } from 'react-native';
+import { useThemedPalette } from '@/store/themeStore';
 
 const ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   index:   'home',
@@ -16,31 +15,26 @@ const ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
 };
 
 export default function TabsLayout() {
+  const p = useThemedPalette();
   return (
     <Tabs
       screenOptions={({ route }) => ({
         headerShown: false,
-        tabBarActiveTintColor:   '#4A8FE0',
-        tabBarInactiveTintColor: 'rgba(255,255,255,0.40)',
-        tabBarShowLabel: true,
-        tabBarLabelStyle: { fontSize: 11, fontWeight: '600', marginTop: 2 },
+        tabBarActiveTintColor:   p.fg,
+        tabBarInactiveTintColor: p.fgFaint,
+        tabBarShowLabel: false,
         tabBarStyle: {
-          position: 'absolute',
-          height: Platform.OS === 'ios' ? 86 : 72,
-          paddingTop: 8,
-          backgroundColor: Platform.OS === 'ios' ? 'transparent' : '#070d22',
-          borderTopColor: 'rgba(255,255,255,0.06)',
+          height: Platform.OS === 'ios' ? 82 : 64,
+          paddingTop: 12,
+          backgroundColor: p.bg,
+          borderTopColor: p.border,
           borderTopWidth: 1,
         },
-        tabBarBackground: () =>
-          Platform.OS === 'ios' ? (
-            <BlurView intensity={40} tint="dark" style={{ flex: 1, backgroundColor: 'rgba(7,13,34,0.72)' }} />
-          ) : (
-            <View style={{ flex: 1, backgroundColor: '#070d22' }} />
-          ),
-        tabBarIcon: ({ color, focused }) => (
-          <Ionicons name={focused ? ICONS[route.name] : `${ICONS[route.name]}-outline` as never} size={22} color={color} />
-        ),
+        tabBarIcon: ({ color, focused }) => {
+          const base = ICONS[route.name];
+          const name = (focused ? base : (`${base}-outline` as keyof typeof Ionicons.glyphMap));
+          return <Ionicons name={name} size={24} color={color} />;
+        },
       })}
     >
       <Tabs.Screen name="index"   options={{ title: 'Home' }} />

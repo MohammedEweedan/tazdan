@@ -34,6 +34,7 @@ import { securityRouter } from './routes/security';
 import { apiKeyRouter } from './routes/apikey';
 import { exportRouter } from './routes/export';
 import { cardRouter } from './routes/card';
+import { marketsRouter } from './routes/markets';
 import { errorHandler } from './middleware/errorHandler';
 import { prisma } from './utils/prisma';
 import { seedAdmin } from './utils/seed';
@@ -41,20 +42,33 @@ import { seedAdmin } from './utils/seed';
 const app = express();
 const httpServer = createServer(app);
 
+/**
+ * CORS — accepts a comma-separated list in CLIENT_URL, plus any
+ * Expo dev origin (localhost on any port + LAN IPs). Native (no
+ * `Origin` header) is always allowed.
+ */
+const ALLOWED_ORIGINS = (process.env.CLIENT_URL ?? 'http://localhost:3000')
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean);
+
+const corsOrigin: cors.CorsOptions['origin'] = (origin, cb) => {
+  if (!origin) return cb(null, true);                              // native apps / curl
+  if (ALLOWED_ORIGINS.includes(origin)) return cb(null, true);
+  // Expo dev: any localhost or 127.0.0.1 or LAN IP on any port
+  if (/^https?:\/\/(localhost|127\.0\.0\.1|10\.0\.2\.2|192\.168\.[0-9]+\.[0-9]+|10\.[0-9]+\.[0-9]+\.[0-9]+):\d+$/.test(origin)) {
+    return cb(null, true);
+  }
+  return cb(new Error(`CORS: origin ${origin} not allowed`));
+};
+
 const io = new Server(httpServer, {
-  cors: {
-    origin: process.env.CLIENT_URL || 'http://localhost:3000',
-    methods: ['GET', 'POST'],
-    credentials: true,
-  },
+  cors: { origin: corsOrigin, methods: ['GET', 'POST'], credentials: true },
 });
 
 // Global middleware
 app.use(helmet());
-app.use(cors({
-  origin: process.env.CLIENT_URL || 'http://localhost:3000',
-  credentials: true,
-}));
+app.use(cors({ origin: corsOrigin, credentials: true }));
 app.use(cookieParser());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
@@ -98,6 +112,7 @@ app.use('/api/security', securityRouter);
 app.use('/api/api-keys', apiKeyRouter);
 app.use('/api/export', exportRouter);
 app.use('/api/cards', cardRouter);
+app.use('/api/markets', marketsRouter);
 
 // Health check
 app.get('/api/health', (_req, res) => {

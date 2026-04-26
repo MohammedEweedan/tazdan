@@ -1,43 +1,94 @@
 /**
- * Transaction history — full list with date grouping.
- * Currently mounts the same TransactionItem component used on the home
- * screen, just paginated and unfiltered. Will get filters + search in v2.
+ * Transaction history — theme-aware list of recent activity.
  */
 
-import { ScrollView, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { GradientBackground } from '@/components/ui/GradientBackground';
-import { ScreenHeader } from '@/components/ui/ScreenHeader';
-import { TransactionItem } from '@/components/transactions/TransactionItem';
-import { SkeletonRow } from '@/components/ui/Skeleton';
-import { useTransactions } from '@/hooks';
+import { Pressable, Text, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { ScreenShell, Panel } from '@/components/ui/ScreenShell';
+import { useThemedPalette } from '@/store/themeStore';
+import { useTransactions, useHaptics } from '@/hooks';
 
 export default function History() {
-  const { data, isLoading } = useTransactions(1);
+  const h = useHaptics();
+  const p = useThemedPalette();
+  const { data } = useTransactions(1);
+  const items = data?.items ?? [];
 
   return (
-    <GradientBackground>
-      <SafeAreaView style={{ flex: 1 }}>
-        <ScreenHeader title="Activity" subtitle="All transactions" showBack />
-        <ScrollView contentContainerStyle={{ paddingBottom: 60, paddingHorizontal: 20 }}>
-          <View className="bg-white/[0.03] rounded-2xl px-3 mt-2 border border-white/[0.06]">
-            {isLoading ? (
-              <View className="py-2">
-                {Array.from({ length: 6 }).map((_, i) => <SkeletonRow key={i} />)}
-              </View>
-            ) : (
-              data?.items.map((tx, i) => (
-                <View key={tx.id} style={{ borderTopWidth: i === 0 ? 0 : 1, borderColor: 'rgba(255,255,255,0.05)' }}>
-                  <TransactionItem tx={tx} />
-                </View>
-              ))
-            )}
-          </View>
-          <Text className="text-ink-muted text-xs text-center mt-6">
-            Showing {data?.items.length ?? 0} of {data?.total ?? 0}
+    <ScreenShell title="Transaction history">
+      {items.length === 0 ? (
+        <View style={{ alignItems: 'center', paddingVertical: 64 }}>
+          <Ionicons name="receipt-outline" size={36} color={p.fgFaint} />
+          <Text style={{ color: p.fgMuted, fontSize: 14, fontWeight: '600', marginTop: 14 }}>
+            No transactions yet.
           </Text>
-        </ScrollView>
-      </SafeAreaView>
-    </GradientBackground>
+        </View>
+      ) : (
+        <Panel style={{ marginTop: 14 }}>
+          {items.map((tx, i) => {
+            const negative = ['SEND', 'WITHDRAW', 'BUY'].includes(tx.type);
+            const sign = negative ? '-' : '+';
+            const color = negative ? p.fg : p.greenFg;
+            return (
+              <Pressable
+                key={tx.id}
+                onPress={() => h.selection()}
+                style={({ pressed }) => ({
+                  flexDirection: 'row', alignItems: 'center',
+                  padding: 14, gap: 12,
+                  backgroundColor: pressed ? p.border : 'transparent',
+                  borderBottomWidth: i === items.length - 1 ? 0 : 1,
+                  borderBottomColor: p.border,
+                })}
+              >
+                <View style={{
+                  width: 38, height: 38, borderRadius: 19,
+                  backgroundColor: p.pillBg,
+                  borderWidth: 1, borderColor: p.border,
+                  alignItems: 'center', justifyContent: 'center',
+                }}>
+                  <Ionicons
+                    name={typeIcon(tx.type)}
+                    size={16}
+                    color={p.fg}
+                  />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: p.fg, fontSize: 14, fontWeight: '700' }} numberOfLines={1}>
+                    {tx.counterpartyName ?? prettyType(tx.type)}
+                  </Text>
+                  <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '500', marginTop: 2 }}>
+                    {new Date(tx.createdAt).toLocaleDateString()} · {tx.status}
+                  </Text>
+                </View>
+                <Text style={{
+                  color, fontSize: 14, fontWeight: '700',
+                  fontVariant: ['tabular-nums'],
+                }}>
+                  {sign}{Number(tx.amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {tx.currency}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </Panel>
+      )}
+    </ScreenShell>
   );
+}
+
+function typeIcon(t: string): keyof typeof import('@expo/vector-icons').Ionicons.glyphMap {
+  switch (t) {
+    case 'SEND':     return 'arrow-up';
+    case 'RECEIVE':  return 'arrow-down';
+    case 'BUY':      return 'cart';
+    case 'SELL':     return 'cash';
+    case 'DEPOSIT':  return 'add-circle';
+    case 'WITHDRAW': return 'remove-circle';
+    case 'CONVERT':  return 'swap-horizontal';
+    default:         return 'ellipse';
+  }
+}
+
+function prettyType(t: string): string {
+  return t.charAt(0) + t.slice(1).toLowerCase();
 }

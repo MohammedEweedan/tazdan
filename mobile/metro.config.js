@@ -1,6 +1,8 @@
+// NativeWind metro plugin disabled — see babel.config.js for the rationale.
+// Re-enable per-file by adding the `// @jsxImportSource nativewind` pragma
+// to the top of files that use `className`.
 const { getDefaultConfig } = require('expo/metro-config');
-const { withNativeWind } = require('nativewind/metro');
 
 const config = getDefaultConfig(__dirname);
 
-module.exports = withNativeWind(config, { input: './global.css' });
+module.exports = config;

@@ -1,40 +1,34 @@
 /**
- * Wallet detail tab — full breakdown of every wallet held.
- *  - Hero: total value + 24h change
- *  - Tabs: All / Crypto / Fiat (segmented control, NW classes)
- *  - List: each wallet with icon, name, balance, USD value, % change
- *
- * Tapping a row scrolls to a detail bottom sheet (TODO — left as `console.log`
- * placeholder so you can wire BottomSheet later).
+ * Wallet tab — same minimal aesthetic as the home dashboard.
+ *  - Title "Wallets"
+ *  - Net worth amount + "Across N assets"
+ *  - All / Crypto / Fiat segmented filter
+ *  - Asset rows (icon + name + amount-in-currency / USD value)
  */
 
 import { useMemo, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
-import { MotiView } from 'moti';
-import { GradientBackground } from '@/components/ui/GradientBackground';
-import { Card } from '@/components/ui/Card';
-import { Sparkline } from '@/components/ui/Sparkline';
-import { AnimatedNumber } from '@/components/ui/AnimatedNumber';
+import { useRouter } from 'expo-router';
+import { useWallets, useCards, useHaptics } from '@/hooks';
 import { CURRENCY_META } from '@/constants';
-import { formatAmount, formatPercent } from '@/utils/format';
-import { useWallets, useMarkets, useHaptics } from '@/hooks';
+import { useTheme, useThemedPalette, type Palette } from '@/store/themeStore';
+import { useT } from '@/store/i18nStore';
 import type { Wallet } from '@/types';
 
 type Filter = 'ALL' | 'CRYPTO' | 'FIAT';
 
 export default function WalletScreen() {
+  const router = useRouter();
   const h = useHaptics();
+  const t = useT();
+  const p = useThemedPalette();
+  const themeMode = useTheme((s) => s.mode);
   const { data: wallets } = useWallets();
-  const { data: markets } = useMarkets();
+  const { data: cards } = useCards();
   const [filter, setFilter] = useState<Filter>('ALL');
-
-  const sparkFor = useMemo(() => {
-    const map: Record<string, number[]> = {};
-    markets?.forEach((m) => { map[m.base] = m.sparkline; });
-    return map;
-  }, [markets]);
 
   const filtered = useMemo(() => {
     if (!wallets) return [] as Wallet[];
@@ -45,151 +39,177 @@ export default function WalletScreen() {
   const totalUsd = (wallets ?? []).reduce((s, w) => s + Number(w.fiatValueUsd), 0);
 
   return (
-    <GradientBackground>
+    <View style={{ flex: 1, backgroundColor: p.bg }}>
+      <StatusBar style={themeMode === 'dark' ? 'light' : 'dark'} />
       <SafeAreaView style={{ flex: 1 }} edges={['top']}>
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 120 }}>
+
           {/* Header */}
-          <View className="px-5 pt-3 pb-1 flex-row items-center justify-between">
-            <Text className="text-ink-primary text-xl font-bold" style={{ letterSpacing: -0.4 }}>
-              Wallets
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 24, paddingTop: 4, paddingBottom: 4 }}>
+            <Text style={{ color: p.fg, fontSize: 22, fontWeight: '700', letterSpacing: -0.4 }}>
+              {t('wallet.title') || 'Wallets'}
             </Text>
             <Pressable
-              hitSlop={8}
-              className="w-10 h-10 rounded-full items-center justify-center bg-white/[0.06] border border-white/[0.08]"
+              hitSlop={6}
+              onPress={() => { h.light(); router.push('/cards'); }}
+              style={{
+                width: 34, height: 34, borderRadius: 17,
+                backgroundColor: p.pillBg,
+                borderWidth: 1, borderColor: p.border,
+                alignItems: 'center', justifyContent: 'center',
+              }}
             >
-              <Ionicons name="add" size={20} color="#fff" />
+              <Ionicons name="add" size={18} color={p.fg} />
             </Pressable>
           </View>
 
-          {/* Hero card */}
-          <View className="px-5 mt-4">
-            <Card padding={20} radius={24} glow>
-              <Text className="text-ink-tertiary text-xs font-semibold" style={{ letterSpacing: 1.2 }}>
-                NET WORTH
+          {/* Issued Cards */}
+          {cards && cards.length > 0 && (
+            <View style={{ paddingHorizontal: 24, marginTop: 16 }}>
+              <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '600', marginBottom: 10 }}>
+                {t('wallet.cards') || 'Your Cards'}
               </Text>
-              <AnimatedNumber
-                value={totalUsd}
-                prefix="$"
-                style={{ color: '#fff', fontSize: 38, fontWeight: '800', letterSpacing: -1.2, marginTop: 4 }}
-              />
-              <View className="flex-row items-center mt-1" style={{ gap: 6 }}>
-                <View
-                  style={{
-                    paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8,
-                    backgroundColor: 'rgba(34,197,94,0.15)',
-                  }}
-                >
-                  <Text style={{ color: '#22c55e', fontSize: 11, fontWeight: '700' }}>▲ 1.42%</Text>
-                </View>
-                <Text className="text-ink-tertiary text-xs">vs yesterday</Text>
-              </View>
-            </Card>
-          </View>
-
-          {/* Segmented control */}
-          <View className="px-5 mt-6">
-            <View
-              className="flex-row p-1 rounded-2xl bg-white/[0.04] border border-white/[0.06]"
-              style={{ gap: 4 }}
-            >
-              {(['ALL', 'CRYPTO', 'FIAT'] as Filter[]).map((f) => (
-                <Pressable
-                  key={f}
-                  onPress={() => { h.selection(); setFilter(f); }}
-                  style={{ flex: 1 }}
-                >
-                  <View
-                    style={{
-                      paddingVertical: 10,
-                      borderRadius: 14,
-                      alignItems: 'center',
-                      backgroundColor: filter === f ? '#0057B8' : 'transparent',
-                    }}
-                  >
-                    <Text
-                      style={{
-                        color: filter === f ? '#fff' : 'rgba(255,255,255,0.55)',
-                        fontWeight: '700', fontSize: 13, letterSpacing: 0.5,
-                      }}
-                    >
-                      {f}
-                    </Text>
-                  </View>
-                </Pressable>
-              ))}
-            </View>
-          </View>
-
-          {/* Wallet list */}
-          <View className="px-5 mt-5">
-            {filtered.map((w, i) => {
-              const meta = CURRENCY_META[w.currency];
-              const positive = (w.changePct24h ?? 0) >= 0;
-              return (
-                <MotiView
-                  key={w.id}
-                  from={{ opacity: 0, translateY: 20 }}
-                  animate={{ opacity: 1, translateY: 0 }}
-                  transition={{ type: 'timing', duration: 320, delay: 30 * i }}
-                >
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexDirection: 'row', gap: 12 }}>
+                {cards.map((card) => (
                   <Pressable
-                    onPress={() => { h.light(); /* TODO: open detail sheet */ }}
+                    key={card.id}
+                    onPress={() => { h.selection(); router.push('/cards'); }}
                     style={({ pressed }) => ({
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      paddingVertical: 14,
-                      paddingHorizontal: 14,
-                      borderRadius: 18,
-                      backgroundColor: pressed ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.03)',
-                      borderWidth: 1,
-                      borderColor: 'rgba(255,255,255,0.06)',
-                      marginBottom: 10,
+                      width: 160, height: 100, borderRadius: 16,
+                      backgroundColor: pressed ? p.border : p.bgElev,
+                      borderWidth: 1, borderColor: p.border,
+                      padding: 14,
+                      opacity: pressed ? 0.85 : 1,
                     })}
                   >
-                    <View
-                      style={{
-                        width: 44, height: 44, borderRadius: 22,
-                        backgroundColor: 'rgba(74,143,224,0.18)',
-                        alignItems: 'center', justifyContent: 'center',
-                        marginRight: 12,
-                      }}
-                    >
-                      <Text style={{ color: '#fff', fontWeight: '800', fontSize: 17 }}>{meta.flagOrIcon}</Text>
-                    </View>
-
-                    <View style={{ flex: 1 }}>
-                      <Text className="text-ink-primary text-sm font-semibold">{meta.name}</Text>
-                      <Text className="text-ink-tertiary text-xs mt-0.5">
-                        {formatAmount(w.balance, w.currency)} {w.currency}
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                      <Text style={{ color: p.fg, fontSize: 14, fontWeight: '700' }}>
+                        {card.tier}
                       </Text>
+                      <View style={{
+                        width: 32, height: 20, borderRadius: 4,
+                        backgroundColor: card.colorway === 'platinum' ? '#e5e4e2' :
+                                   card.colorway === 'obsidian' ? '#1a1a1a' :
+                                   card.colorway === 'sapphire' ? '#0f52ba' :
+                                   card.colorway === 'rose' ? '#b76e79' :
+                                   card.colorway === 'emerald' ? '#50c878' : '#ccc',
+                      }} />
                     </View>
-
-                    {meta.kind === 'crypto' && sparkFor[w.currency] && (
-                      <Sparkline
-                        data={sparkFor[w.currency]}
-                        width={56}
-                        height={20}
-                        color={positive ? '#22c55e' : '#ef4444'}
-                      />
-                    )}
-
-                    <View style={{ alignItems: 'flex-end', marginLeft: 10, minWidth: 80 }}>
-                      <Text className="text-ink-primary text-sm font-bold" style={{ fontVariant: ['tabular-nums'] }}>
-                        ${Number(w.fiatValueUsd).toLocaleString('en-US', { maximumFractionDigits: 2 })}
-                      </Text>
-                      {meta.kind === 'crypto' && w.changePct24h != null && (
-                        <Text style={{ color: positive ? '#22c55e' : '#ef4444', fontSize: 11, fontWeight: '700', marginTop: 2 }}>
-                          {formatPercent(w.changePct24h, { signed: true })}
-                        </Text>
-                      )}
-                    </View>
+                    <Text style={{ color: p.fg, fontSize: 18, fontWeight: '800', marginTop: 'auto', letterSpacing: 1 }}>
+                      •••• {card.last4}
+                    </Text>
+                    <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '500', marginTop: 4 }}>
+                      {card.expiryMonth}/{card.expiryYear}
+                    </Text>
                   </Pressable>
-                </MotiView>
-              );
-            })}
+                ))}
+              </ScrollView>
+            </View>
+          )}
+
+          {/* Net worth */}
+          <Text style={{
+            color: p.fgMuted, fontSize: 14, fontWeight: '500',
+            marginTop: 24, textAlign: 'center',
+          }}>
+            {t('wallet.netWorth') || 'Net worth'}
+          </Text>
+          <Text style={{
+            color: p.fg, fontSize: 44, fontWeight: '800', letterSpacing: -1.4,
+            marginTop: 4, textAlign: 'center', fontVariant: ['tabular-nums'],
+          }}>
+            ${totalUsd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </Text>
+          <Text style={{
+            color: p.fgMuted, fontSize: 13, fontWeight: '500',
+            marginTop: 4, textAlign: 'center',
+          }}>
+            {t('wallet.acrossAssets') || `Across ${wallets?.length ?? 0} assets`} · 24h
+          </Text>
+
+          {/* Segmented filter */}
+          <View style={{
+            flexDirection: 'row',
+            marginHorizontal: 24, marginTop: 24,
+            padding: 4,
+            borderRadius: 14,
+            backgroundColor: p.pillBg,
+            gap: 4,
+          }}>
+            {(['ALL', 'CRYPTO', 'FIAT'] as Filter[]).map((f) => (
+              <Pressable
+                key={f}
+                onPress={() => { h.selection(); setFilter(f); }}
+                style={{ flex: 1 }}
+              >
+                <View style={{
+                  paddingVertical: 9,
+                  borderRadius: 10,
+                  alignItems: 'center',
+                  backgroundColor: filter === f ? p.fg : 'transparent',
+                }}>
+                  <Text style={{
+                    color: filter === f ? p.bg : p.fgMuted,
+                    fontWeight: '700',
+                    fontSize: 12,
+                    letterSpacing: 0.4,
+                  }}>
+                    {f}
+                  </Text>
+                </View>
+              </Pressable>
+            ))}
           </View>
+
+          {/* Hairline */}
+          <View style={{ height: 1, backgroundColor: p.border, marginTop: 24 }} />
+
+          {/* Rows */}
+          {filtered.map((w) => {
+            const meta = CURRENCY_META[w.currency];
+            return (
+              <Pressable
+                key={w.id}
+                style={({ pressed }) => ({
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  paddingHorizontal: 24,
+                  paddingVertical: 16,
+                  backgroundColor: pressed ? p.bgElev : 'transparent',
+                  borderBottomWidth: 1,
+                  borderBottomColor: p.border,
+                })}
+              >
+                <View style={{
+                  width: 38, height: 38, borderRadius: 19,
+                  backgroundColor: p.pillBg,
+                  alignItems: 'center', justifyContent: 'center',
+                  borderWidth: 1, borderColor: p.border,
+                  marginRight: 14,
+                }}>
+                  <Text style={{ color: p.fg, fontWeight: '700', fontSize: 14 }}>
+                    {meta.flagOrIcon}
+                  </Text>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: p.fg, fontSize: 16, fontWeight: '700' }}>
+                    {meta.name}
+                  </Text>
+                  <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '500', marginTop: 2 }}>
+                    {Number(w.balance).toLocaleString('en-US', { maximumFractionDigits: meta.decimals })} {w.currency}
+                  </Text>
+                </View>
+                <Text style={{
+                  color: p.fg, fontSize: 15, fontWeight: '700',
+                  fontVariant: ['tabular-nums'],
+                }}>
+                  ${Number(w.fiatValueUsd).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </Text>
+              </Pressable>
+            );
+          })}
         </ScrollView>
       </SafeAreaView>
-    </GradientBackground>
+    </View>
   );
 }

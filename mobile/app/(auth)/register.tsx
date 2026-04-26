@@ -221,7 +221,7 @@ export default function Register() {
 
             <View className="flex-row items-center justify-center mt-auto pt-10 pb-2">
               <Text className="text-ink-tertiary text-sm">Have an account? </Text>
-              <Pressable onPress={() => router.replace('/(auth)/login')} hitSlop={6}>
+              <Pressable onPress={() => router.replace('/login')} hitSlop={6}>
                 <Text className="text-brand-400 text-sm font-bold">Log in</Text>
               </Pressable>
             </View>
