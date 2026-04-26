@@ -4,10 +4,19 @@ import speakeasy from 'speakeasy';
 import QRCode from 'qrcode';
 import { z } from 'zod';
 import { prisma } from '../utils/prisma';
-import { generateTokens } from '../middleware/auth';
+import {
+  generateTokens,
+  persistRefreshToken,
+  verifyAndConsumeRefreshToken,
+  revokeRefreshToken,
+} from '../middleware/auth';
 import { AppError } from '../middleware/errorHandler';
 import { generateReferralCode } from '../utils/helpers';
 import { AuthRequest } from '../types';
+
+const refreshSchema = z.object({
+  refreshToken: z.string().min(10),
+});
 
 const registerSchema = z.object({
   email: z.string().email(),
@@ -60,16 +69,20 @@ export class AuthController {
         },
       });
 
-      // Create wallets for LYD, USD, USDT
+      // Create wallets for the standard initial currency set.
+      // (Currency enum now includes all MENA + major fiat — see schema.prisma.)
+      const initialCurrencies = ['USDT', 'USD', 'EUR', 'GBP', 'AED', 'SAR', 'EGP', 'LYD'] as const;
       await prisma.wallet.createMany({
-        data: [
-          { userId: user.id, currency: 'LYD' },
-          { userId: user.id, currency: 'USD' },
-          { userId: user.id, currency: 'USDT' },
-        ],
+        data: initialCurrencies.map((currency) => ({ userId: user.id, currency })),
       });
 
       const tokens = generateTokens({ id: user.id, email: user.email, role: user.role });
+      await persistRefreshToken({
+        userId: user.id,
+        rawToken: tokens.refreshToken,
+        ipAddress: req.ip,
+        userAgent: req.headers['user-agent']?.toString(),
+      });
 
       res.status(201).json({
         user: {
@@ -109,6 +122,12 @@ export class AuthController {
       });
 
       const tokens = generateTokens({ id: user.id, email: user.email, role: user.role });
+      await persistRefreshToken({
+        userId: user.id,
+        rawToken: tokens.refreshToken,
+        ipAddress: req.ip,
+        userAgent: req.headers['user-agent']?.toString(),
+      });
 
       res.json({
         user: {
@@ -118,6 +137,62 @@ export class AuthController {
         },
         ...tokens,
       });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * POST /api/auth/refresh
+   * Body: { refreshToken }
+   * Rotates the refresh token: revokes the presented one, issues a new pair.
+   * Reuse of an already-revoked token revokes ALL sessions for the user.
+   */
+  static async refresh(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const { refreshToken: presented } = refreshSchema.parse(req.body);
+
+      // Verifies signature, DB presence, expiry, and not-revoked.
+      const stored = await verifyAndConsumeRefreshToken(presented);
+
+      const user = await prisma.user.findUnique({ where: { id: stored.userId } });
+      if (!user) throw new AppError('User not found', 404);
+      if (user.status === 'BANNED' || user.status === 'SUSPENDED') {
+        throw new AppError('Account is suspended or banned', 403);
+      }
+
+      // Issue a new pair, persist it, then revoke the old one and link them.
+      const tokens = generateTokens({ id: user.id, email: user.email, role: user.role });
+      const newRow = await persistRefreshToken({
+        userId: user.id,
+        rawToken: tokens.refreshToken,
+        ipAddress: req.ip,
+        userAgent: req.headers['user-agent']?.toString(),
+        replacedById: undefined,
+      });
+      await prisma.refreshToken.update({
+        where: { id: stored.id },
+        data: { revokedAt: new Date(), replacedById: newRow.id },
+      });
+
+      res.json({ ...tokens });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * POST /api/auth/logout
+   * Body: { refreshToken }
+   * Revokes the presented refresh token. Access token simply expires (24h).
+   * If you need instant access-token revocation, add a denylist with the JWT
+   * `jti` claim — out of scope here.
+   */
+  static async logout(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const { refreshToken: presented } = refreshSchema.parse(req.body);
+      await revokeRefreshToken(presented);
+      res.json({ message: 'Logged out' });
     } catch (error) {
       next(error);
     }

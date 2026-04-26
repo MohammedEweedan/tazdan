@@ -90,4 +90,25 @@ export async function seedAdmin() {
 
     console.log('Admin user and default settings seeded');
   }
+
+  // Seed market listings (idempotent — safe to run on every boot)
+  const listings = [
+    { symbol: 'BTCUSDT',   baseAsset: 'BTC',   displayName: 'Bitcoin',   rank: 1 },
+    { symbol: 'ETHUSDT',   baseAsset: 'ETH',   displayName: 'Ethereum',  rank: 2 },
+    { symbol: 'SOLUSDT',   baseAsset: 'SOL',   displayName: 'Solana',    rank: 3 },
+    { symbol: 'BNBUSDT',   baseAsset: 'BNB',   displayName: 'BNB',       rank: 4 },
+    { symbol: 'XRPUSDT',   baseAsset: 'XRP',   displayName: 'XRP',       rank: 5 },
+    { symbol: 'ADAUSDT',   baseAsset: 'ADA',   displayName: 'Cardano',   rank: 6 },
+    { symbol: 'DOGEUSDT',  baseAsset: 'DOGE',  displayName: 'Dogecoin',  rank: 7 },
+    { symbol: 'MATICUSDT', baseAsset: 'MATIC', displayName: 'Polygon',   rank: 8 },
+    { symbol: 'DOTUSDT',   baseAsset: 'DOT',   displayName: 'Polkadot',  rank: 9 },
+    { symbol: 'AVAXUSDT',  baseAsset: 'AVAX',  displayName: 'Avalanche', rank: 10 },
+  ] as const;
+  for (const l of listings) {
+    await prisma.marketListing.upsert({
+      where:  { symbol: l.symbol },
+      update: { isActive: true, displayName: l.displayName, rank: l.rank },
+      create: { symbol: l.symbol, baseAsset: l.baseAsset, displayName: l.displayName, rank: l.rank, isActive: true, isNew: false },
+    });
+  }
 }

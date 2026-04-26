@@ -6,6 +6,8 @@ export const authRouter = Router();
 
 authRouter.post('/register', AuthController.register);
 authRouter.post('/login', AuthController.login);
+authRouter.post('/refresh', AuthController.refresh);   // rotates refresh token
+authRouter.post('/logout', AuthController.logout);     // revokes presented refresh token
 authRouter.get('/me', authenticate, AuthController.me);
 authRouter.post('/2fa/enable', authenticate, AuthController.enable2FA);
 authRouter.post('/2fa/verify', authenticate, AuthController.verify2FA);

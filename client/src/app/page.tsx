@@ -1818,7 +1818,7 @@ function StageOverlay({
       <Box
         display={{ base: "block", md: "none" }}
         position="absolute"
-        top={{ base: "90px", sm: "110px" }}
+        top={{ base: "120px", sm: "130px" }}
         left={0}
         right={0}
         textAlign="center"
@@ -1922,25 +1922,13 @@ export default function LandingPage() {
     offset: ["start start", "end end"],
   });
 
-  // Hero height: desktop 300vh (3 segments), mobile 200vh (2 compressed segments).
-  // useScroll travel = (height - viewport). On desktop: 200vh travel, each 100vh = 0.5 progress.
-  // On mobile: 100vh travel, so progress moves faster. Adjust timeline for mobile.
-  const STAGE_START = 0.45;
-  const TILT_END = 0.40; // kept for logoOpacity / stageOverlayOpacity references below
 
   // Phone fades in from slightly below — pure opacity+translate, compositor-only
-  const titleOpacity = useTransform(totalProgress, [0, 0.28, 0.38], [1, 1, 0]);
-  const titleY = useTransform(totalProgress, [0, 0.38], [0, -40]);
+  const titleOpacity = useTransform(totalProgress, [0, 0.18, 0.08], [1, 1, 0]);
+  const titleY = useTransform(totalProgress, [0, 0.08], [0, -40]);
   const phoneOpacity = useTransform(totalProgress, [0, 0.05], [1, 1]); // always 1
   const phoneY = useTransform(totalProgress, [0, 0.15], [0, 0]);       
 
-  // unlockProgress: 0 = fully locked, 1 = fully unlocked.
-  // Bulletproof implementation: a vanilla scroll listener that measures
-  // pixel-distance scrolled past the hero's top in viewport pixels.
-  // Why not useScroll? In production builds + Chrome mobile inspect, useScroll
-  // with `target` and `offset` was returning stale/clamped values causing the
-  // lock to "stop midway". Measuring with getBoundingClientRect on every scroll
-  // tick is dead-simple and works on every browser.
   const unlockProgress = useMotionValue(0);
   const stageOverlayOpacity = useMotionValue(0);
 
@@ -2057,7 +2045,7 @@ export default function LandingPage() {
                   as="h1"
                   fontFamily="'DM Sans', sans-serif"
                   fontWeight="900"
-                  fontSize={{ base: "28px", sm: "34px", md: "44px", xl: "52px" }}
+                  fontSize={{ base: "38px", sm: "44px", md: "54px", xl: "62px" }}
                   letterSpacing="-0.05em"
                   bgGradient={titleGradient}
                   bgClip="text"
