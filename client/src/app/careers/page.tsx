@@ -19,7 +19,6 @@ export default function CareersPage() {
   const cardBg = useColorModeValue('white', 'gray.800');
   const cardBorder = useColorModeValue('gray.200', 'gray.700');
   const subtleText = useColorModeValue('gray.600', 'gray.400');
-  const pageBg = useColorModeValue('#fafbfe', '#000000');
   const accentBg = useColorModeValue('brand.50', 'whiteAlpha.100');
 
   const benefits = [
@@ -83,7 +82,7 @@ export default function CareersPage() {
   ];
 
   return (
-    <Box minH="100vh" bg={pageBg}>
+    <Box minH="100vh">
       {/* Hero Section */}
       <Box py={{ base: 20, md: 28 }} bgGradient="linear(to-b, brand.50, transparent 50%)">
         <Container maxW="7xl">
@@ -184,7 +183,6 @@ export default function CareersPage() {
                 <Box
                   key={i}
                   p={6}
-                  bg={pageBg}
                   borderWidth="1px"
                   borderColor={cardBorder}
                   rounded="2xl"

@@ -18,7 +18,6 @@ export function useDashboardTokens() {
     dark,
     brand: "#0057b8",
     brandLight: "#4a8fe0",
-    pageBg: dark ? "#060a18" : "#f4f7fb",
     panelBg: dark ? "rgba(255,255,255,0.025)" : "rgba(255,255,255,0.96)",
     panelBorder: dark ? "rgba(255,255,255,0.06)" : "rgba(0,87,184,0.08)",
     panelInner: dark ? "rgba(255,255,255,0.02)" : "rgba(0,87,184,0.03)",
@@ -37,7 +36,7 @@ export function useDashboardTokens() {
 export function PageShell({ children, maxW = "1440px" }: { children: ReactNode; maxW?: string }) {
   const t = useDashboardTokens();
   return (
-    <Box minH="calc(100vh - 60px)" bg={t.pageBg} px={{ base: 3, md: 5, lg: 6 }} py={{ base: 4, md: 6 }}>
+    <Box minH="calc(100vh - 60px)" px={{ base: 3, md: 5, lg: 6 }} py={{ base: 4, md: 6 }}>
       <Box maxW={maxW} mx="auto">{children}</Box>
     </Box>
   );

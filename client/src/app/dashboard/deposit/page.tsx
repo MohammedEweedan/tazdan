@@ -254,7 +254,6 @@ export default function DepositPage() {
     return () => clearInterval(id);
   }, []);
 
-  const pageBg = "#060a18";
   const cardBg = "rgba(255,255,255,0.03)";
   const cardBorder = "rgba(255,255,255,0.07)";
   const muted = "#64748b";
@@ -387,7 +386,6 @@ export default function DepositPage() {
         minH="100vh"
         align="center"
         justify="center"
-        bg={pageBg}
         direction="column"
         gap={4}
       >

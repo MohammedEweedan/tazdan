@@ -120,7 +120,6 @@ export default function MarketsPage() {
   const { colorMode } = useColorMode();
   const dark = colorMode === "dark";
 
-  const pageBg = dark ? "#000000" : "#fafbfe";
   const cardBg = dark ? "rgba(255,255,255,0.03)" : "white";
   const border = dark ? "rgba(255,255,255,0.08)" : "rgba(0,87,184,0.1)";
   const textMain = dark ? "white" : "#0a0f1e";
@@ -168,7 +167,7 @@ export default function MarketsPage() {
   };
 
   return (
-    <Box minH="100vh" bg={pageBg} color={textMain} overflowX="clip">
+    <Box minH="100vh" color={textMain} overflowX="clip">
       <PublicNav />
 
       {/* Hero */}

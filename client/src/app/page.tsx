@@ -50,6 +50,7 @@ import {
   FiStar,
   FiMapPin,
   FiAtSign,
+  FiSettings,
 } from "react-icons/fi";
 import { FaApplePay, FaGooglePay, FaCcVisa, FaCcMastercard, FaPaypal } from "react-icons/fa";
 import { SiRevolut } from "react-icons/si";
@@ -60,91 +61,12 @@ import PublicFooter from "@/components/ui/PublicFooter";
 import { BackgroundPaths } from "@/components/ui/Paths";
 
 /* iPhone frame geometry */
-const PHONE_W = 340;
-const PHONE_H = 690;
+const PHONE_W = 300;
+const PHONE_H = 630;
 const SCREEN_INSET = { top: 10, bottom: 10, x: 10 };
 
 const BRAND = "#0057b8";
 const BRAND_LIGHT = "#4a8fe0";
-
-/* ═════════════════════════════════════════════════════
-   LIVE PRICES (Binance public REST, TradingView-grade data)
-   ═════════════════════════════════════════════════════ */
-
-type TickerMap = Record<string, { price: number; change: number }>;
-
-const TRACKED_SYMBOLS = [
-  "BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", "XRPUSDT", "ADAUSDT",
-];
-
-/* Seed values so first paint is not empty while the request is in-flight */
-const SEED_PRICES: TickerMap = {
-  BTCUSDT: { price: 114200.2, change: 2.34 },
-  ETHUSDT: { price: 4111.02, change: 1.82 },
-  SOLUSDT: { price: 162.44, change: 5.12 },
-  BNBUSDT: { price: 612.30, change: -0.42 },
-  XRPUSDT: { price: 0.612, change: 0.88 },
-  ADAUSDT: { price: 0.445, change: -1.20 },
-};
-
-// ── Module-level singleton: one poll, zero duplicate fetches ──
-let _prices: TickerMap = SEED_PRICES;
-let _listeners = new Set<() => void>();
-let _started = false;
-
-function _startPricePolling() {
-  if (_started || typeof window === "undefined") return;
-  _started = true;
-  const fetchPrices = async () => {
-    try {
-      const url = `https://api.binance.com/api/v3/ticker/24hr?symbols=${encodeURIComponent(
-        JSON.stringify(TRACKED_SYMBOLS)
-      )}`;
-      const res = await fetch(url, { cache: "no-store" });
-      if (!res.ok) return;
-      const data: Array<{ symbol: string; lastPrice: string; priceChangePercent: string }> =
-        await res.json();
-      const next: TickerMap = {};
-      for (const d of data) {
-        next[d.symbol] = {
-          price: parseFloat(d.lastPrice),
-          change: parseFloat(d.priceChangePercent),
-        };
-      }
-      const hasChanges = Object.keys(next).some(
-        (sym) => next[sym].price !== _prices[sym]?.price
-      );
-      if (hasChanges) {
-        _prices = { ..._prices, ...next };
-        _listeners.forEach((fn) => fn());
-      }
-    } catch {}
-  };
-  fetchPrices();
-  setInterval(fetchPrices, 12000); // slower poll — 12s is fine for a landing page
-}
-
-function useLivePrices(): TickerMap {
-  const [, rerender] = useState(0);
-  useEffect(() => {
-    _startPricePolling();
-    const trigger = () => rerender((n) => n + 1);
-    _listeners.add(trigger);
-    return () => { _listeners.delete(trigger); };
-  }, []);
-  return _prices;
-}
-
-function fmtPrice(n: number): string {
-  if (n >= 1000) return n.toLocaleString("en-US", { maximumFractionDigits: 2, minimumFractionDigits: 2 });
-  if (n >= 1) return n.toLocaleString("en-US", { maximumFractionDigits: 2, minimumFractionDigits: 2 });
-  return n.toLocaleString("en-US", { maximumFractionDigits: 4 });
-}
-
-function fmtChange(n: number): string {
-  const s = n >= 0 ? "+" : "";
-  return `${s}${n.toFixed(2)}%`;
-}
 
 /* ═════════════════════════════════════════════════════
    PHONE SCREENS
@@ -181,182 +103,392 @@ function MiniChart({ up, height = 110 }: { up: boolean; height?: number }) {
   );
 }
 
-/* ── Brand logo screen (first state of the sticky-scroll phone) ── */
-const ScreenLogo = memo(function ScreenLogo() {
-  const { t } = useTranslate();
+function LockScreen({ unlockProgress }: { unlockProgress: MotionValue<number> }) {
+  const slideY    = useTransform(unlockProgress, [0, 1], ["0%", "-100%"]);
+  const fadeNotif = useTransform(unlockProgress, [0, 0.4], [1, 0]);
+  const scaleWall = useTransform(unlockProgress, [0, 1], [1, 1.08]);
+
   return (
-    <VStack
-      h="100%"
-      w="100%"
-      bg="linear-gradient(180deg, #05060c 0%, #0a1024 55%, #0b2260 100%)"
-      align="center"
-      justify="center"
-      spacing={5}
-      position="relative"
-      overflow="hidden"
+    <motion.div
+      style={{
+        position: "absolute",
+        inset: 0,
+        y: slideY,
+        zIndex: 6,
+        overflow: "hidden",
+        borderRadius: "inherit",
+        willChange: "transform",
+      }}
     >
-      {/* Static chameleon glow — same Apple-Pay-style brand halo, no infinite blur+rotation
-          (rotating a blur-filtered element forces the GPU to re-blur every frame, which
-          was a major scroll-jank source on mobile). Layers are now composited once. */}
-      <Box
-        position="absolute"
-        top="50%"
-        left="50%"
-        w="260px"
-        h="260px"
-        mt="-130px"
-        ml="-130px"
-        borderRadius="full"
-        pointerEvents="none"
-        opacity={0.4}
-        style={{
-          filter: "blur(48px)",
-          background: "conic-gradient(from 0deg, #0057b8 0%, #4a8fe0 25%, #7c3aed 50%, #06b6d4 75%, #0057b8 100%)",
-          willChange: "auto",
-        }}
-      />
-      <Box
-        position="absolute"
-        top="50%"
-        left="50%"
-        w="140px"
-        h="140px"
-        mt="-70px"
-        ml="-70px"
-        borderRadius="full"
-        pointerEvents="none"
-        style={{
-          filter: "blur(20px)",
-          background:
-            "radial-gradient(circle, rgba(255,255,255,0.5) 0%, rgba(74,143,224,0.6) 40%, rgba(0,87,184,0.2) 70%, transparent 100%)",
-        }}
-      />
-      <Box position="relative" w="140px" h="140px" zIndex={2}>
-        <NextImage 
-          src="/icon-black.png" 
-          alt="promrkts" 
-          fill 
-          priority 
-          sizes="140px"
-          placeholder="blur"
-          blurDataURL="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
-          style={{ objectFit: "contain" }} 
+      {/* Wallpaper */}
+      <motion.div style={{ scale: scaleWall, position: "absolute", inset: 0, transformOrigin: "center center" }}>
+        <Box
+          position="absolute"
+          inset={0}
+          bg="linear-gradient(180deg, #030818 0%, #071240 35%, #0a1f6e 65%, #050d30 100%)"
         />
-      </Box>
-    </VStack>
-  );
-});
+        {/* Star field */}
+        {[
+          { top: "8%",  left: "15%", size: 1.5, op: 0.9 },
+          { top: "12%", left: "72%", size: 2,   op: 0.7 },
+          { top: "20%", left: "38%", size: 1,   op: 0.8 },
+          { top: "6%",  left: "55%", size: 1.5, op: 0.6 },
+          { top: "28%", left: "82%", size: 1,   op: 0.9 },
+          { top: "18%", left: "25%", size: 1,   op: 0.5 },
+          { top: "32%", left: "60%", size: 1.5, op: 0.7 },
+          { top: "10%", left: "88%", size: 1,   op: 0.8 },
+          { top: "40%", left: "18%", size: 2,   op: 0.4 },
+          { top: "35%", left: "45%", size: 1,   op: 0.6 },
+          { top: "22%", left: "8%",  size: 1.5, op: 0.7 },
+          { top: "48%", left: "75%", size: 1,   op: 0.5 },
+        ].map((s, i) => (
+          <Box
+            key={i}
+            position="absolute"
+            top={s.top}
+            left={s.left}
+            w={`${s.size}px`}
+            h={`${s.size}px`}
+            borderRadius="full"
+            bg="white"
+            opacity={s.op}
+          />
+        ))}
+        {/* Aurora glow */}
+        <Box
+          position="absolute"
+          bottom="30%"
+          left="50%"
+          transform="translateX(-50%)"
+          w="280px"
+          h="180px"
+          bg="radial-gradient(ellipse, rgba(0,87,184,0.5) 0%, rgba(74,143,224,0.2) 50%, transparent 70%)"
+          style={{ filter: "blur(30px)" }}
+        />
+        <Box
+          position="absolute"
+          bottom="25%"
+          left="30%"
+          w="200px"
+          h="120px"
+          bg="radial-gradient(ellipse, rgba(124,58,237,0.35) 0%, transparent 65%)"
+          style={{ filter: "blur(25px)" }}
+        />
+      </motion.div>
 
-const ScreenSpot = memo(function ScreenSpot(){
-  const { t } = useTranslate();
-  const prices = useLivePrices();
-  const btc = prices.BTCUSDT ?? SEED_PRICES.BTCUSDT;
-  const up = btc.change >= 0;
-  const ranges = ["1H", "1D", "1W", "1M", "1Y"];
-  return (
-    <VStack h="100%" w="100%" p={5} align="stretch" spacing={3} bg="#000">
-      <HStack justify="space-between" pt={8}>
-        <HStack spacing={2}>
-          <Flex w="28px" h="28px" borderRadius="full" bg="#f7931a22" border="1px solid #f7931a55" align="center" justify="center">
-            <Text fontSize="11px" fontWeight="900" color="#f7931a">₿</Text>
-          </Flex>
-          <VStack align="start" spacing={0}>
-            <Text fontSize="12px" color="white" fontWeight="800">BTC/USDT</Text>
-            <Text fontSize="8px" color="rgba(255,255,255,0.4)">{t("screen_spot_spot")}</Text>
-          </VStack>
-        </HStack>
-        <Badge
-          bg={up ? "rgba(34,197,94,0.15)" : "rgba(239,68,68,0.15)"}
-          color={up ? "#22c55e" : "#ef4444"}
-          px={2}
-          py={1}
-          borderRadius="full"
-          fontSize="9px"
-          fontWeight="800"
-        >
-          {fmtChange(btc.change)}
-        </Badge>
-      </HStack>
-      <VStack align="start" spacing={0}>
-        <Heading color="white" fontFamily="'DM Sans', sans-serif" fontWeight="700" fontSize="30px" letterSpacing="-0.03em">
-          ${fmtPrice(btc.price)}
-        </Heading>
-        <Text fontSize="10px" color="rgba(255,255,255,0.45)">
-          {t("screen_spot_last_24h")} · {up ? "+" : ""}
-          {(btc.price * (btc.change / 100)).toLocaleString("en-US", { maximumFractionDigits: 2 })} USDT
+      {/* Frosted overlay */}
+      <Box
+        position="absolute"
+        inset={0}
+        bg="rgba(0,0,0,0.12)"
+      />
+
+      {/* Status bar */}
+      <HStack
+        position="absolute"
+        top="14px"
+        left="20px"
+        right="20px"
+        justify="space-between"
+        zIndex={2}
+      >
+        <Text fontSize="13px" color="white" fontWeight="700" letterSpacing="0.01em">
+          11:44
         </Text>
-      </VStack>
-      {/* Line chart (no order book) */}
-      <MiniChart up={up} height={150} />
-      {/* Range selector */}
-      <HStack bg="rgba(255,255,255,0.04)" borderRadius="10px" p={1}>
-        {ranges.map((r, i) => (
-          <Box key={r} flex={1} py={1.5} textAlign="center" bg={i === 1 ? BRAND : "transparent"} borderRadius="8px">
-            <Text fontSize="10px" fontWeight="700" color={i === 1 ? "white" : "rgba(255,255,255,0.5)"}>{r}</Text>
-          </Box>
-        ))}
+        <HStack spacing={1.5}>
+          {/* Signal bars */}
+          <HStack spacing="2px" align="flex-end" h="12px">
+            {[5, 7, 9, 11].map((h, i) => (
+              <Box key={i} w="3px" h={`${h}px`} bg="white" borderRadius="1px" opacity={i < 3 ? 1 : 0.35} />
+            ))}
+          </HStack>
+          {/* WiFi */}
+          <Icon as={FiWifi} color="white" boxSize={3.5} />
+          {/* Battery */}
+          <HStack spacing="1px" align="center">
+            <Box w="20px" h="10px" border="1.5px solid white" borderRadius="2px" position="relative" overflow="hidden">
+              <Box position="absolute" inset="1px" right="2px" bg="white" borderRadius="1px" />
+            </Box>
+            <Box w="2px" h="5px" bg="white" borderRadius="0 1px 1px 0" opacity={0.6} />
+          </HStack>
+        </HStack>
       </HStack>
-      <Box flex={1} />
-      <HStack spacing={2}>
-        <Button flex={1} h="40px" bg="#22c55e" color="white" borderRadius="12px" fontSize="12px" fontWeight="800">{t("screen_spot_buy")}</Button>
-        <Button flex={1} h="40px" bg="#ef4444" color="white" borderRadius="12px" fontSize="12px" fontWeight="800">{t("screen_spot_sell")}</Button>
-      </HStack>
-    </VStack>
-  );
-});
 
-const ScreenMarkets = memo(function ScreenMarkets() {
-  const { t } = useTranslate();
-  const live = useLivePrices();
-  const meta = [
-    { sym: "BTC", k: "BTCUSDT", name: "Bitcoin", c: "#f7931a" },
-    { sym: "ETH", k: "ETHUSDT", name: "Ethereum", c: "#627eea" },
-    { sym: "SOL", k: "SOLUSDT", name: "Solana", c: "#14f195" },
-    { sym: "BNB", k: "BNBUSDT", name: "BNB", c: "#f3ba2f" },
-    { sym: "XRP", k: "XRPUSDT", name: "XRP", c: "#23292f" },
-    { sym: "ADA", k: "ADAUSDT", name: "Cardano", c: "#0033ad" },
-  ];
-  const coins = meta.map((m) => {
-    const p = live[m.k] ?? SEED_PRICES[m.k];
-    return {
-      sym: m.sym,
-      name: m.name,
-      c: m.c,
-      price: fmtPrice(p.price),
-      chg: fmtChange(p.change),
-      up: p.change >= 0,
-    };
-  });
-  return (
-    <VStack h="100%" w="100%" p={5} align="stretch" spacing={3} bg="#000">
-      <HStack pt={8}>
-        <Text fontSize="14px" color="white" fontWeight="800" flex={1}>{t("screen_markets_title")}</Text>
-        <Badge bg="rgba(34,197,94,0.15)" color="#22c55e" px={2} py={0.5} borderRadius="full" fontSize="8px" fontWeight="800">● {t("screen_markets_live")}</Badge>
-      </HStack>
-      <HStack bg="rgba(255,255,255,0.04)" borderRadius="10px" p={1}>
-        {["All", "Gainers", "New"].map((tab, i) => (
-          <Box key={tab} flex={1} py={1.5} textAlign="center" bg={i === 0 ? BRAND : "transparent"} borderRadius="8px">
-            <Text fontSize="10px" fontWeight="700" color={i === 0 ? "white" : "rgba(255,255,255,0.5)"}>{tab}</Text>
+      {/* Dynamic Island */}
+      <Box
+        position="absolute"
+        top="10px"
+        left="50%"
+        transform="translateX(-50%)"
+        w="90px"
+        h="26px"
+        bg="black"
+        borderRadius="full"
+        zIndex={3}
+      />
+
+      {/* Time */}
+      <motion.div style={{ opacity: fadeNotif, position: "absolute", top: "80px", left: 0, right: 0, textAlign: "center", zIndex: 2 }}>
+        <Text
+          fontSize="78px"
+          fontWeight="200"
+          color="white"
+          letterSpacing="-0.04em"
+          lineHeight={1}
+          style={{ textShadow: "0 2px 20px rgba(0,0,0,0.4)" }}
+        >
+          11:44
+        </Text>
+        <Text fontSize="15px" color="rgba(255,255,255,0.85)" fontWeight="500" mt={1} letterSpacing="0.01em">
+          Sunday, April 27
+        </Text>
+      </motion.div>
+
+      {/* Notifications */}
+      <motion.div style={{ opacity: fadeNotif, position: "absolute", top: "230px", left: "16px", right: "16px", zIndex: 2 }}>
+        <VStack spacing={2} align="stretch">
+          {/* Notification 2 */}
+          <Box
+            bg="rgba(255,255,255,0.10)"
+            borderRadius="16px"
+            p={3}
+            style={{ backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)" }}
+            border="1px solid rgba(255,255,255,0.08)"
+          >
+            <HStack spacing={2.5}>
+              <Flex w="32px" h="32px" borderRadius="8px" bg="linear-gradient(135deg, #0057b8, #4a6ba5)" align="center" justify="center" flexShrink={0}>
+                <Text fontSize="14px">💸</Text>
+              </Flex>
+              <VStack align="start" spacing={0} flex={1}>
+                <HStack justify="space-between" w="100%">
+                  <Text fontSize="11px" color="rgba(255,255,255,0.7)" fontWeight="700" letterSpacing="0.04em" textTransform="uppercase">promrkts</Text>
+                  <Text fontSize="10px" color="rgba(255,255,255,0.5)">1m ago</Text>
+                </HStack>
+                <Text fontSize="12px" color="white" fontWeight="600">@rayofsunshine sent you +$1,144.28</Text>
+              </VStack>
+            </HStack>
           </Box>
-        ))}
-      </HStack>
-      <VStack align="stretch" spacing={1.5} flex={1} overflow="hidden">
-        {coins.map((c) => (
-          <HStack key={c.sym} bg="rgba(255,255,255,0.03)" p={2.5} borderRadius="12px" border="1px solid rgba(255,255,255,0.05)">
-            <Flex w="28px" h="28px" borderRadius="full" bg={`${c.c}22`} border={`1px solid ${c.c}55`} align="center" justify="center" flexShrink={0}>
-              <Text fontSize="10px" fontWeight="800" color={c.c}>{c.sym[0]}</Text>
+        </VStack>
+      </motion.div>
+
+      {/* Dock-style home indicator area */}
+      <motion.div style={{ opacity: fadeNotif, position: "absolute", bottom: "28px", left: 0, right: 0, zIndex: 2 }}>
+        <VStack spacing={2}>
+          <Text fontSize="12px" color="rgba(255,255,255,0.55)" fontWeight="500" letterSpacing="0.02em">
+            Swipe up to unlock
+          </Text>
+          <Box w="120px" h="4px" bg="rgba(255,255,255,0.35)" borderRadius="full" />
+        </VStack>
+      </motion.div>
+    </motion.div>
+  );
+}
+
+const ScreenDashboard = memo(function ScreenDashboard() {
+  const assets = [
+    {
+      name: "promrkts Balance",
+      sub: null,
+      val: "$41,120.00",
+      icon: (
+        <Flex w="40px" h="40px" borderRadius="full" bg="#1a1a1a" border="1.5px solid rgba(255,255,255,0.12)" align="center" justify="center" flexShrink={0}>
+          <Flex w="22px" h="22px" borderRadius="full" bg="white" align="center" justify="center">
+            <Text fontSize="11px" fontWeight="900" color="black">$</Text>
+          </Flex>
+        </Flex>
+      ),
+    },
+    {
+      name: "USDT (SOL)",
+      sub: "USDT",
+      val: "$11,444.28",
+      icon: (
+        <Box position="relative" w="40px" h="40px" flexShrink={0}>
+          <Flex w="40px" h="40px" borderRadius="full" bg="#2775ca" align="center" justify="center">
+            <Text fontSize="13px" fontWeight="900" color="white">$</Text>
+          </Flex>
+          <Flex position="absolute" bottom="-1px" right="-1px" w="18px" h="18px" borderRadius="full" bg="#9945ff" align="center" justify="center" border="1.5px solid #050810">
+            <Text fontSize="7px" fontWeight="900" color="white">◎</Text>
+          </Flex>
+        </Box>
+      ),
+    },
+    {
+      name: "Bitcoin",
+      sub: null,
+      val: "$114,200.20",
+      icon: (
+        <Flex w="40px" h="40px" borderRadius="full" bg="#f7931a" align="center" justify="center" flexShrink={0}>
+          <Text fontSize="16px" fontWeight="900" color="white">₿</Text>
+        </Flex>
+      ),
+    },
+    {
+      name: "Ethereum",
+      sub: null,
+      val: "$4,111.02",
+      icon: (
+        <Flex w="40px" h="40px" borderRadius="full" bg="#627eea" align="center" justify="center" flexShrink={0}>
+          <Text fontSize="15px" fontWeight="700" color="white">Ξ</Text>
+        </Flex>
+      ),
+    },
+  ];
+
+  return (
+    <VStack h="100%" w="100%" align="stretch" spacing={0} bg="#0a0a0a" overflow="hidden">
+
+      {/* ── Status bar spacer ── */}
+      <Box h="48px" />
+
+      {/* ── Header: avatar + handle + settings ── */}
+      <HStack px={5} pb={4} justify="space-between" align="center">
+        <HStack spacing={2.5}>
+          <Box
+            w="34px" h="34px" borderRadius="full"
+            bg="linear-gradient(135deg, #667eea, #764ba2)"
+            overflow="hidden"
+            position="relative"
+            flexShrink={0}
+          >
+            <Flex w="100%" h="100%" align="center" justify="center">
+              <Text fontSize="14px">🧑‍💻</Text>
             </Flex>
+          </Box>
+          <Text fontSize="14px" color="white" fontWeight="700" letterSpacing="-0.01em">
+            @rayofsunshine
+          </Text>
+        </HStack>
+        <Flex
+          w="32px" h="32px" borderRadius="full"
+          bg="rgba(255,255,255,0.07)"
+          align="center" justify="center"
+        >
+          <Icon as={FiSettings} color="rgba(255,255,255,0.7)" boxSize={3.5} />
+        </Flex>
+      </HStack>
+
+      {/* ── Balance block ── */}
+      <VStack align="start" spacing={2} px={5} pb={5}>
+        <HStack spacing={1.5}>
+          <Text fontSize="12px" color="rgba(255,255,255,0.45)" fontWeight="500">
+            Total value
+          </Text>
+          <Flex
+            w="14px" h="14px" borderRadius="full"
+            bg="rgba(255,255,255,0.1)"
+            align="center" justify="center"
+          >
+            <Text fontSize="8px" color="rgba(255,255,255,0.5)">i</Text>
+          </Flex>
+        </HStack>
+
+        <Text
+          fontSize="40px" color="white" fontWeight="700"
+          letterSpacing="-0.04em" lineHeight={1}
+          fontFamily="'DM Sans', sans-serif"
+        >
+          $41,120.02
+        </Text>
+
+        <HStack spacing={2}>
+          <Text fontSize="13px" color="#22c55e" fontWeight="600">
+            +$1,244.02
+          </Text>
+          <HStack
+            spacing={1}
+            bg="rgba(34,197,94,0.15)"
+            px={1.5} py={0.5}
+            borderRadius="6px"
+          >
+            <Text fontSize="10px" color="#22c55e">▲</Text>
+            <Text fontSize="11px" color="#22c55e" fontWeight="700">3.12%</Text>
+          </HStack>
+        </HStack>
+      </VStack>
+
+      {/* ── Action buttons ── */}
+      <HStack px={5} pb={5} spacing={2}>
+        {/* Buy — filled pill */}
+        <HStack
+          flex={1}
+          h="42px"
+          bg="rgba(255,255,255,0.10)"
+          borderRadius="full"
+          justify="center"
+          spacing={1.5}
+          border="1px solid rgba(255,255,255,0.08)"
+        >
+          <Text fontSize="16px" color="white" fontWeight="300">+</Text>
+          <Text fontSize="13px" color="white" fontWeight="700">Buy</Text>
+        </HStack>
+
+        {/* Deposit — filled pill */}
+        <HStack
+          flex={1}
+          h="42px"
+          bg="rgba(255,255,255,0.10)"
+          borderRadius="full"
+          justify="center"
+          spacing={1.5}
+          border="1px solid rgba(255,255,255,0.08)"
+        >
+          <Icon as={FiArrowDownLeft} color="white" boxSize={3.5} />
+          <Text fontSize="13px" color="white" fontWeight="700">Deposit</Text>
+        </HStack>
+
+        {/* More — icon pill */}
+        <Flex
+          w="42px" h="42px"
+          bg="rgba(255,255,255,0.10)"
+          borderRadius="full"
+          align="center" justify="center"
+          border="1px solid rgba(255,255,255,0.08)"
+          flexShrink={0}
+        >
+          <Text fontSize="16px" color="white" letterSpacing="0.05em">···</Text>
+        </Flex>
+      </HStack>
+
+      {/* ── Assets / Wallets tab bar ── */}
+      <HStack px={5} pb={3} spacing={5}>
+        <VStack spacing={1}>
+          <Text fontSize="13px" color="white" fontWeight="700">Assets</Text>
+          <Box w="100%" h="2px" bg="white" borderRadius="full" />
+        </VStack>
+        <VStack spacing={1}>
+          <Text fontSize="13px" color="rgba(255,255,255,0.35)" fontWeight="600">Wallets</Text>
+          <Box w="100%" h="2px" bg="transparent" borderRadius="full" />
+        </VStack>
+      </HStack>
+
+      {/* ── Hairline divider ── */}
+      <Box h="1px" bg="rgba(255,255,255,0.07)" mx={0} />
+
+      {/* ── Asset list ── */}
+      <VStack align="stretch" spacing={0} flex={1} overflowY="hidden">
+        {assets.map((a, i) => (
+          <HStack
+            key={a.name}
+            px={5}
+            py={3.5}
+            spacing={3}
+            borderBottom="1px solid rgba(255,255,255,0.05)"
+          >
+            {a.icon}
             <VStack align="start" spacing={0} flex={1}>
-              <Text fontSize="11px" color="white" fontWeight="700">{c.sym}</Text>
-              <Text fontSize="8px" color="rgba(255,255,255,0.4)">{c.name}</Text>
+              <Text fontSize="13px" color="white" fontWeight="600">{a.name}</Text>
+              {a.sub && (
+                <Text fontSize="11px" color="rgba(255,255,255,0.38)">{a.sub}</Text>
+              )}
             </VStack>
-            <VStack align="end" spacing={0}>
-              <Text fontSize="11px" color="white" fontWeight="700" fontFamily="monospace">${c.price}</Text>
-              <Text fontSize="9px" color={c.up ? "#22c55e" : "#ef4444"} fontWeight="700">{c.chg}</Text>
-            </VStack>
+            <Text fontSize="13px" color="white" fontWeight="600" fontFamily="monospace">
+              {a.val}
+            </Text>
           </HStack>
         ))}
       </VStack>
+
     </VStack>
   );
 });
@@ -637,12 +769,6 @@ function ScreenCard() {
   );
 }
 
-const PHONE_SCREENS = [
-  <ScreenSpot key="0" />,
-  <ScreenMarkets key="1" />,
-];
-
-
 /* ═════════════════════════════════════════════════════
    PHONE FRAME (crossfade across 6 screens)
    ═════════════════════════════════════════════════════ */
@@ -650,18 +776,14 @@ const PHONE_SCREENS = [
 function PhoneFrame({
   progress,
   scale = 1,
-  logoOpacity,
+  unlockProgress,
 }: {
   progress: MotionValue<number>;
   scale?: number;
-  logoOpacity?: MotionValue<number>;
+  unlockProgress: MotionValue<number>;
 }) {
-  /* 2 equal slices of [0,1], 0.5 each, with 0.05 crossfade */
-  const opacities = [
-    useTransform(progress, [0.0,  0.05, 0.45, 0.50], [1, 1, 1, 0]),
-    useTransform(progress, [0.45, 0.50, 0.95, 1.00], [0, 1, 1, 1]),
-  ];
   const isMobilePhone = useBreakpointValue({ base: true, md: false }) ?? false;
+
   return (
     <Box
       position="relative"
@@ -682,145 +804,32 @@ function PhoneFrame({
         borderRadius="40px"
         overflow="hidden"
         bg="#000"
-        boxShadow={isMobilePhone 
-          ? "0 20px 50px rgba(0,87,184,0.25)" 
-          : "0 40px 100px rgba(0,87,184,0.4)"}
+        boxShadow={
+          isMobilePhone
+            ? "0 20px 50px rgba(0,87,184,0.25)"
+            : "0 40px 100px rgba(0,87,184,0.4)"
+        }
       >
-        {PHONE_SCREENS.map((s, i) => (
-          <motion.div key={i} style={{ position: "absolute", inset: 0, opacity: opacities[i] }}>
-            {s}
-          </motion.div>
-        ))}
-        {/* Logo "home/lock" screen on top — driven by logoOpacity; fades to reveal the app */}
-        {logoOpacity && (
-          <motion.div
-            style={{ position: "absolute", inset: 0, opacity: logoOpacity, zIndex: 5 }}
-          >
-            <ScreenLogo />
-          </motion.div>
-        )}
+        {/* App screen underneath — always mounted */}
+        <Box position="absolute" inset={0}>
+          <ScreenDashboard />
+        </Box>
+
+        {/* Lock screen slides up over it on scroll */}
+        <LockScreen unlockProgress={unlockProgress} />
       </Box>
-      <NextImage 
-        src="/iphone-frame.png" 
-        alt="" 
-        fill 
-        priority 
+
+      <NextImage
+        src="/iphone-frame.png"
+        alt=""
+        fill
+        priority
         sizes="100vw"
-        placeholder="blur"
-        blurDataURL="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
-        style={{ objectFit: "contain", pointerEvents: "none", zIndex: 10 }} 
+        style={{ objectFit: "contain", pointerEvents: "none", zIndex: 10 }}
       />
     </Box>
   );
 }
-
-/* ═════════════════════════════════════════════════════
-   RIGHT-SIDE STAGE WIDGETS
-   ═════════════════════════════════════════════════════ */
-
-const StageSpot = memo(function StageSpot() {
-  const { t } = useTranslate();
-  const live = useLivePrices();
-  const btc = live.BTCUSDT ?? SEED_PRICES.BTCUSDT;
-  const up = btc.change >= 0;
-  const stroke = up ? "#22c55e" : "#ef4444";
-  return (
-    <Box
-      w={{ base: "260px", md: "320px" }}
-      p={5}
-      borderRadius="24px"
-      border="1px solid rgba(0,87,184,0.3)"
-      bg="rgba(10, 18, 40, 0.92)"
-      boxShadow="0 20px 60px rgba(0,87,184,0.25)"
-    >
-      <HStack mb={3}>
-        <Flex w="32px" h="32px" borderRadius="full" border="1px solid #f7931a55" align="center" justify="center">
-          <Text fontSize="13px" color="#f7931a" fontWeight="900">₿</Text>
-        </Flex>
-        <VStack align="start" spacing={0}>
-          <Text fontSize="13px" fontWeight="800">BTC/USDT</Text>
-          <Text fontSize="10px" opacity={0.6}>{t("stage_spot_spot_market")}</Text>
-        </VStack>
-        <Box flex={1} />
-        <Badge bg={up ? "rgba(34,197,94,0.2)" : "rgba(239,68,68,0.2)"} color={stroke} px={2.5} py={1} borderRadius="full" fontSize="10px" fontWeight="800">
-          {fmtChange(btc.change)}
-        </Badge>
-      </HStack>
-      <Heading fontWeight="700" fontSize={{ base: "28px", md: "34px" }} letterSpacing="-0.03em" fontFamily="'DM Sans', sans-serif">
-        ${fmtPrice(btc.price)}
-      </Heading>
-      {/* mini-sparkline */}
-      <Box h="56px" mt={2} position="relative">
-        <svg viewBox="0 0 200 60" width="100%" height="100%" preserveAspectRatio="none">
-          <defs>
-            <linearGradient id="sparkfill" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor={stroke} stopOpacity="0.4" />
-              <stop offset="100%" stopColor={stroke} stopOpacity="0" />
-            </linearGradient>
-          </defs>
-          <path d="M0 45 L20 40 L40 48 L60 32 L80 36 L100 22 L120 26 L140 14 L160 18 L180 8 L200 12 L200 60 L0 60 Z" fill="url(#sparkfill)" />
-          <path d="M0 45 L20 40 L40 48 L60 32 L80 36 L100 22 L120 26 L140 14 L160 18 L180 8 L200 12" stroke={stroke} strokeWidth="2" fill="none" />
-        </svg>
-      </Box>
-      <HStack mt={3} spacing={2}>
-        <Button flex={1} h="36px" bg="#22c55e" color="white" borderRadius="10px" fontSize="12px" fontWeight="800">{t("stage_spot_buy")}</Button>
-        <Button flex={1} h="36px" bg="rgba(239,68,68,0.15)" color="#ef4444" border="1px solid rgba(239,68,68,0.3)" borderRadius="10px" fontSize="12px" fontWeight="800">{t("stage_spot_sell")}</Button>
-      </HStack>
-    </Box>
-  );
-});
-
-const StageMarkets = memo(function StageMarkets() {
-  const live = useLivePrices();
-  const meta = [
-    { sym: "BTC", k: "BTCUSDT", n: "Bitcoin", c: "#f7931a" },
-    { sym: "ETH", k: "ETHUSDT", n: "Ethereum", c: "#627eea" },
-    { sym: "SOL", k: "SOLUSDT", n: "Solana", c: "#14f195" },
-    { sym: "BNB", k: "BNBUSDT", n: "BNB", c: "#f3ba2f" },
-  ];
-  const rows = meta.map((m) => {
-    const p = live[m.k] ?? SEED_PRICES[m.k];
-    return {
-      sym: m.sym,
-      n: m.n,
-      c: m.c,
-      p: fmtPrice(p.price),
-      chg: fmtChange(p.change),
-      up: p.change >= 0,
-    };
-  });
-  return (
-    <VStack w={{ base: "260px", md: "320px" }} spacing={2} align="stretch">
-      {rows.map((r, i) => (
-        <HStack
-          key={r.sym}
-          p={3}
-          borderRadius="16px"
-          border="1px solid rgba(255,255,255,0.08)"
-          bg="rgba(18, 24, 44, 0.95)"
-          boxShadow="0 8px 24px rgba(0,0,0,0.25)"
-          style={{ transform: `translateX(${i % 2 === 0 ? -8 : 8}px)` }}
-        >
-          <Flex w="30px" h="30px" borderRadius="full" bg={`${r.c}22`} border={`1px solid ${r.c}55`} align="center" justify="center" flexShrink={0}>
-            <Text fontSize="11px" fontWeight="800" color={r.c}>{r.sym[0]}</Text>
-          </Flex>
-          <VStack align="start" spacing={0} flex={1}>
-            <Text fontSize="12px" fontWeight="800">{r.sym}/USDT</Text>
-            <Text fontSize="10px" opacity={0.55}>{r.n}</Text>
-          </VStack>
-          <VStack align="end" spacing={0}>
-            <Text fontSize="12px" fontWeight="800" fontFamily="monospace">${r.p}</Text>
-            <HStack spacing={1}>
-              <Icon as={r.up ? FiTrendingUp : FiTrendingDown} boxSize={3} color={r.up ? "#22c55e" : "#ef4444"} />
-              <Text fontSize="10px" color={r.up ? "#22c55e" : "#ef4444"} fontWeight="700">{r.chg}</Text>
-            </HStack>
-          </VStack>
-        </HStack>
-      ))}
-    </VStack>
-  );
-})
-
 
 /* ═════════════════════════════════════════════════════
    LAZY BACKGROUND VIDEO
@@ -972,6 +981,54 @@ function PhoneSendScreen() {
     </VStack>
   );
 }
+const StageSpot = memo(function StageSpot() {
+  const { t } = useTranslate();
+  const up = true;
+  const stroke = "#22c55e";
+  return (
+    <Box
+      w={{ base: "260px", md: "320px" }}
+      p={5}
+      borderRadius="24px"
+      border="1px solid rgba(0,87,184,0.3)"
+      bg="rgba(10,18,40,0.92)"
+      boxShadow="0 20px 60px rgba(0,87,184,0.25)"
+    >
+      <HStack mb={3}>
+        <Flex w="32px" h="32px" borderRadius="full" border="1px solid #f7931a55" align="center" justify="center">
+          <Text fontSize="13px" color="#f7931a" fontWeight="900">₿</Text>
+        </Flex>
+        <VStack align="start" spacing={0}>
+          <Text fontSize="13px" fontWeight="800" color="white">BTC/USDT</Text>
+          <Text fontSize="10px" color="rgba(255,255,255,0.5)">Spot Market</Text>
+        </VStack>
+        <Box flex={1} />
+        <Badge bg="rgba(34,197,94,0.2)" color={stroke} px={2.5} py={1} borderRadius="full" fontSize="10px" fontWeight="800">
+          +2.34%
+        </Badge>
+      </HStack>
+      <Heading fontWeight="700" fontSize={{ base: "28px", md: "34px" }} letterSpacing="-0.03em" fontFamily="'DM Sans', sans-serif" color="white">
+        $114,200.20
+      </Heading>
+      <Box h="56px" mt={2}>
+        <svg viewBox="0 0 200 60" width="100%" height="100%" preserveAspectRatio="none">
+          <defs>
+            <linearGradient id="sparkfill" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={stroke} stopOpacity="0.4" />
+              <stop offset="100%" stopColor={stroke} stopOpacity="0" />
+            </linearGradient>
+          </defs>
+          <path d="M0 45 L20 40 L40 48 L60 32 L80 36 L100 22 L120 26 L140 14 L160 18 L180 8 L200 12 L200 60 L0 60 Z" fill="url(#sparkfill)" />
+          <path d="M0 45 L20 40 L40 48 L60 32 L80 36 L100 22 L120 26 L140 14 L160 18 L180 8 L200 12" stroke={stroke} strokeWidth="2" fill="none" />
+        </svg>
+      </Box>
+      <HStack mt={3} spacing={2}>
+        <Button flex={1} h="36px" bg="#22c55e" color="white" borderRadius="10px" fontSize="12px" fontWeight="800">Buy</Button>
+        <Button flex={1} h="36px" bg="rgba(239,68,68,0.15)" color="#ef4444" border="1px solid rgba(239,68,68,0.3)" borderRadius="10px" fontSize="12px" fontWeight="800">Sell</Button>
+      </HStack>
+    </Box>
+  );
+});
 
 /* ── Social Finance section (text left / phone right) ── */
 function SectionSocialFinance() {
@@ -1216,7 +1273,7 @@ function SectionBento() {
   const cardBorder = dark ? "rgba(100,130,200,0.15)" : "rgba(0,87,184,0.12)";
 
   const stats = [
-    { label: t("bento_stat_volume_label"), value: "$280M", sub: t("bento_vs_last_month"), icon: FiActivity, span: 2, gradient: "linear-gradient(135deg, #0057b8 0%, #001a3d 100%)", color: "white" },
+    { label: t("bento_stat_volume_label"), value: "$280,000,000", sub: t("bento_vs_last_month"), icon: FiActivity, span: 2, gradient: "linear-gradient(135deg, #0057b8 0%, #001a3d 100%)", color: "white" },
     { label: t("bento_countries_label"), value: "120+", sub: t("bento_countries_desc"), icon: FiGlobe, span: 1, accent: "#4a8fe0" },
     { label: t("bento_traders_label"), value: "35K", sub: "", icon: FiUsers, span: 1, accent: "#22c55e" },
     { label: t("bento_pairs_label"), value: "400+", sub: "", icon: FiBarChart2, span: 1, accent: "#f59e0b" },
@@ -1227,19 +1284,6 @@ function SectionBento() {
 
   return (
     <Box py={{ base: 16, md: 32 }} px={{ base: 4, md: 10 }} position="relative" overflow="hidden">
-      {/* Background glow effect */}
-      <Box 
-        position="absolute" 
-        top="20%" 
-        left="50%" 
-        transform="translateX(-50%)" 
-        w="800px" 
-        h="600px" 
-        bg={dark ? "rgba(0,87,184,0.08)" : "rgba(0,87,184,0.04)"} 
-        filter="blur(120px)" 
-        borderRadius="full" 
-        pointerEvents="none" 
-      />
       
       <Container maxW="1200px" position="relative" zIndex={1}>
         <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, amount: 0.4 }} transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}>
@@ -1676,117 +1720,79 @@ function StageOverlay({ stages, progress }: { stages: Stage[]; progress: MotionV
   const { colorMode } = useColorMode();
   const dark = colorMode === "dark";
   const textMain = dark ? "white" : "#0a0f1e";
-  const textSub = dark ? "rgba(255,255,255,0.6)" : "#64748b";
+  const textSub  = dark ? "rgba(255,255,255,0.6)" : "#64748b";
 
-  // Render ALL stages simultaneously, drive each one's opacity via the
-  // scroll progress MotionValue. This guarantees every widget mounts &
-  // shows at its slice (no AnimatePresence skipping on fast scroll).
-  const slice = 1 / stages.length;
-  const fade = Math.min(0.04, slice * 0.25);
-  /* eslint-disable react-hooks/rules-of-hooks */
-  const opacities = stages.map((_, i) => {
-    const start = i * slice;
-    const end = (i + 1) * slice;
-    return useTransform(
-      progress,
-      [
-        Math.max(0, start - fade),
-        start,
-        Math.min(1, end - fade),
-        Math.min(1, end),
-      ],
-      [0, 1, 1, i === stages.length - 1 ? 1 : 0]
-    );
-  });
-  /* eslint-enable react-hooks/rules-of-hooks */
+  // Only show stage[0] — single stage, no crossfade needed
+  const s = stages[0];
+  const overlayOpacity = useTransform(progress, [0, 0.3, 1], [0, 1, 1]);
 
   return (
-    <>
-      {/* DESKTOP: left copy col */}
-      <Box display={{ base: "none", lg: "block" }} position="absolute" top="50%" left="6%" transform="translateY(-50%)" w="32%" maxW="440px" zIndex={3} pointerEvents="none">
-        <Box position="relative" minH="280px">
-          {stages.map((s, i) => (
-            <motion.div
-              key={i}
-              style={{ position: "absolute", inset: 0, opacity: opacities[i], willChange: "opacity" }}
-            >
-              <VStack align="start" spacing={5}>
-                <Heading fontFamily="'DM Sans', sans-serif" fontWeight="800" fontSize={{ lg: "44px", xl: "56px" }} letterSpacing="-0.04em" color={textMain}>
-                  {s.title}
-                </Heading>
-                <Text fontSize="16px" color={textSub} maxW="420px">
-                  {s.desc}
-                </Text>
-              </VStack>
-            </motion.div>
-          ))}
-        </Box>
+    <motion.div style={{ opacity: overlayOpacity, position: "absolute", inset: 0, zIndex: 3, pointerEvents: "none" }}>
+      {/* DESKTOP: left copy */}
+      <Box
+        display={{ base: "none", lg: "block" }}
+        position="absolute"
+        top="50%"
+        left="6%"
+        transform="translateY(-50%)"
+        w="32%"
+        maxW="440px"
+      >
+        <VStack align="start" spacing={5}>
+          <Heading
+            fontFamily="'DM Sans', sans-serif"
+            fontWeight="800"
+            fontSize={{ lg: "44px", xl: "56px" }}
+            letterSpacing="-0.04em"
+            color={textMain}
+          >
+            {s.title}
+          </Heading>
+          <Text fontSize="16px" color={textSub} maxW="420px">
+            {s.desc}
+          </Text>
+        </VStack>
       </Box>
 
-      {/* DESKTOP: right widget col */}
-      <Box display={{ base: "none", lg: "block" }} position="absolute" top="50%" right="4%" transform="translateY(-50%)" zIndex={3} w="440px">
-        <Box position="relative" minH="420px" minW="440px">
-          {stages.map((s, i) => (
-            <motion.div
-              key={i}
-              style={{
-                position: "absolute",
-                top: "50%",
-                right: 0,
-                transform: "translateY(-50%)",
-                opacity: opacities[i],
-                willChange: "opacity",
-              }}
-            >
-              {s.widget}
-            </motion.div>
-          ))}
-        </Box>
+      {/* DESKTOP: right widget */}
+      <Box
+        display={{ base: "none", lg: "block" }}
+        position="absolute"
+        top="50%"
+        right="4%"
+        transform="translateY(-50%)"
+        zIndex={3}
+      >
+        {s.widget}
       </Box>
 
-      {/* MOBILE */}
-      <Flex display={{ base: "flex", lg: "none" }} direction="column" align="center" h="100%" justify="space-between" px={5} pt="80px" pb={5} zIndex={3} position="relative" pointerEvents="none">
-        <Box position="relative" w="100%" minH="150px" textAlign="center">
-          {stages.map((s, i) => (
-            <motion.div
-              key={i}
-              style={{ position: "absolute", inset: 0, opacity: opacities[i], willChange: "opacity" }}
-            >
-              <VStack spacing={2}>
-                <Heading fontSize="26px" fontWeight="800" color={textMain} letterSpacing="-0.03em" fontFamily="'DM Sans', sans-serif" maxW="320px">
-                  {s.title}
-                </Heading>
-                {/* Description hidden on mobile per design — only title shown */}
-              </VStack>
-            </motion.div>
-          ))}
-        </Box>
-        <Box position="relative" w="100%" minH="320px" display="flex" justifyContent="center" alignItems="center">
-          {stages.map((s, i) => (
-            <motion.div
-              key={i}
-              style={{
-                position: "absolute",
-                top: "50%",
-                left: "50%",
-                transform: "translate(-50%, -50%)",
-                opacity: opacities[i],
-                willChange: "opacity",
-              }}
-            >
-              {s.widget}
-            </motion.div>
-          ))}
-        </Box>
-      </Flex>
-    </>
+      {/* MOBILE: title above phone */}
+      <Box
+        display={{ base: "block", lg: "none" }}
+        position="absolute"
+        top="72px"
+        left={0}
+        right={0}
+        textAlign="center"
+        px={5}
+      >
+        <Heading
+          fontSize="26px"
+          fontWeight="800"
+          color={textMain}
+          letterSpacing="-0.03em"
+          fontFamily="'DM Sans', sans-serif"
+        >
+          {s.title}
+        </Heading>
+      </Box>
+    </motion.div>
   );
 }
 
 // At module level (outside LandingPage):
 const STAGE_WIDGETS = [
   <StageSpot key="spot" />,
-  <StageMarkets key="markets" />,
 ];
 
 /* ═════════════════════════════════════════════════════
@@ -1826,24 +1832,16 @@ export default function LandingPage() {
   const phoneOpacity = useTransform(totalProgress, [0, 0.12], [0, 1]);
   const phoneY = useTransform(totalProgress, [0, 0.18], [32, 0]);
 
-  // Logo crossfades to stages between 0.42 and 0.50, so by snap 1 the overlay is 100% on.
-  const logoOpacity = useTransform(
-    totalProgress,
-    [TILT_END + 0.02, STAGE_START],
-    [1, 0],
-    { clamp: true }
-  );
+  // unlockProgress: 0 = fully locked, 1 = fully unlocked
+  // starts at 30% scroll, fully open by 60%
+  const unlockProgress = useTransform(totalProgress, [0.30, 0.60], [0, 1], { clamp: true });
 
-  // stageProgress: 0 at snap 1 (Spot), 1 at snap 2 (Markets).
-  const stageProgress = useTransform(totalProgress, [STAGE_START, 1], [0, 1], { clamp: true });
+  // stageOverlay fades in after unlock
+  const stageOverlayOpacity = useTransform(totalProgress, [0.55, 0.75], [0, 1], { clamp: true });
 
-  // Overlay fully on at STAGE_START (snap 1) — no mid-fade dimness when user lands on a snap.
-  const stageOverlayOpacity = useTransform(
-    totalProgress,
-    [TILT_END + 0.02, STAGE_START],
-    [0, 1],
-    { clamp: true }
-  );
+  // For StageOverlay, single stage progress is just stageOverlayOpacity — 
+  // pass a static MotionValue since there's only one stage now
+  const staticProgress = useTransform(totalProgress, [0], [0]); // always 0
 
   // Removed phoneParallaxY — subtle parallax effect that added scroll cost without visible benefit
 
@@ -1859,8 +1857,7 @@ export default function LandingPage() {
     : "linear(to-b, #0057b8 0%, #bbbbbb 95%, rgba(10,15,30,0.35) 100%)";
 
   const stages: Stage[] = [
-    { eyebrow: t("feat_spot_eyebrow"),    title: t("feat_spot_title"),    desc: t("feat_spot_desc"),    widget: STAGE_WIDGETS[0] },
-    { eyebrow: t("feat_markets_eyebrow"), title: t("feat_markets_title"), desc: t("feat_markets_desc"), widget: STAGE_WIDGETS[1] },
+    { eyebrow: t("feat_dashboard_eyebrow"), title: t("feat_dashboard_title"), desc: t("feat_dashboard_desc"), widget: STAGE_WIDGETS[0] },
   ];
 
   // ✅ SAFE: all hooks already ran
@@ -1905,19 +1902,6 @@ export default function LandingPage() {
         style={{ contain: "layout" }}
       >
         <Box position="sticky" top={0} h="100vh" overflow="hidden" style={{ transform: "translateZ(0)" }}>
-          {/* Glow — smaller on mobile and reduced blur to save GPU; large blurred elements are expensive */}
-         <Box
-            position="absolute"
-            top="50%"
-            left="50%"
-            transform="translate(-50%, -50%)"
-            w={{ base: "300px", md: "500px" }}
-            h={{ base: "300px", md: "500px" }}
-            bg={glow}
-            filter="blur(60px)"
-            borderRadius="full"
-            pointerEvents="none"
-          />
 
           {/* Hero title (fades out as phone uprights) */}
           <motion.div
@@ -1940,24 +1924,22 @@ export default function LandingPage() {
                   as="h2"
                   fontFamily="'DM Sans', sans-serif"
                   fontWeight="900"
-                  fontSize={{ base: "52px", sm: "54px", md: "104px", xl: "102px" }}
-                  letterSpacing="-0.075em"
+                  fontSize={{ base: "28px", sm: "34px", md: "44px", xl: "52px" }}
+                  letterSpacing="-0.05em"
                   bgGradient={{ base: "none", md: titleGradient }}
                   bgClip={{ base: "unset", md: "text" }}
                   color={{ base: textMain, md: "transparent" }}
                 >
                   {t("hero_line1")}
-                  <br />
-                  <Heading
-                  fontStyle={"italic"}
-                  fontSize={{ base: "52px", sm: "54px", md: "92px", xl: "92px" }}
+                  <Text
+                  fontSize={{ base: "22px", sm: "28px", md: "38px", xl: "46px" }}
                   bgGradient={{ base: "none", md: titleGradient }}
                   bgClip={{ base: "unset", md: "text" }}
                   color={{ base: textMain, md: "transparent" }}
                   minW={{ base: "auto", md: 1100 }}
                   >
                   {t("hero_line2")}
-                  </Heading>
+                  </Text>
                 </Heading>
               </VStack>
             </Container>
@@ -1979,21 +1961,18 @@ export default function LandingPage() {
                 willChange: "opacity, transform",
               }}
             >
-              <PhoneFrame progress={stageProgress} scale={phoneScaleResp} logoOpacity={logoOpacity} />
+                            
+              <PhoneFrame
+                progress={staticProgress}
+                scale={phoneScaleResp}
+                unlockProgress={unlockProgress}
+              />
             </motion.div>
           </Flex>
 
           {/* Stage copy + widgets — fade in once the phone is upright/unlocked */}
-          <motion.div
-            style={{
-              opacity: stageOverlayOpacity,
-              position: "absolute",
-              inset: 0,
-              zIndex: 3,
-              pointerEvents: "none",
-            }}
-          >
-            <StageOverlay stages={stages} progress={stageProgress} />
+          <motion.div style={{ opacity: stageOverlayOpacity, position: "absolute", inset: 0, zIndex: 3, pointerEvents: "none" }}>
+            <StageOverlay stages={stages} progress={staticProgress} />
           </motion.div>
         </Box>
       </Box>
@@ -2054,7 +2033,6 @@ export default function LandingPage() {
             position="relative"
             w="100%"
             style={{ aspectRatio: "1024 / 720" }}
-            filter="drop-shadow(0 32px 60px rgba(0,87,184,0.45))"
           >
             <NextImage
               src="/visa.png"

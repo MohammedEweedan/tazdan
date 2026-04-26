@@ -172,7 +172,6 @@ export default function SettingsPage() {
     return () => clearInterval(id);
   }, []);
 
-  const pageBg = "#060a18";
   const cardBg = "rgba(255,255,255,0.03)";
   const cardBorder = "rgba(255,255,255,0.07)";
   const muted = "#64748b";
@@ -304,7 +303,6 @@ export default function SettingsPage() {
         minH="100vh"
         align="center"
         justify="center"
-        bg={pageBg}
         direction="column"
         gap={4}
       >
@@ -333,8 +331,6 @@ export default function SettingsPage() {
   return (
     <Box
       minH="100vh"
-      bg={pageBg}
-      color="white"
       fontFamily="'DM Sans', system-ui, sans-serif"
     >
       <style>{`

@@ -46,7 +46,6 @@ export default function HelpPage() {
   const dark = colorMode === "dark";
   const [q, setQ] = useState("");
 
-  const pageBg = dark ? "#000000" : "#fafbfe";
   const textMain = dark ? "#ffffff" : "#0a0f1e";
   const textSub = dark ? "rgba(255,255,255,0.6)" : "#475569";
   const cardBg = dark ? "rgba(255,255,255,0.03)" : "white";
@@ -84,7 +83,7 @@ export default function HelpPage() {
     : faqs;
 
   return (
-    <Box minH="100vh" bg={pageBg} color={textMain} overflowX="clip">
+    <Box minH="100vh" color={textMain} overflowX="clip">
       <PublicNav />
 
       {/* Hero + Search */}

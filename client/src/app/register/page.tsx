@@ -47,7 +47,6 @@ export default function RegisterPage() {
   ]);
 
   const dark = colorMode === "dark";
-  const pageBg = dark ? "#000000" : "#fafbfe";
   const cardBg = dark ? "rgba(255,255,255,0.025)" : "rgba(255,255,255,0.9)";
   const cardBorder = dark ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.08)";
   const textSub = dark ? "#94a3b8" : "#64748b";
@@ -139,7 +138,7 @@ export default function RegisterPage() {
   const goToDashboard = () => router.push("/dashboard");
 
   return (
-    <Box minH="100vh" bg={pageBg} display="flex" alignItems="center" justifyContent="center" position="relative" overflow="hidden" py={8}>
+    <Box minH="100vh" display="flex" alignItems="center" justifyContent="center" position="relative" overflow="hidden" py={8}>
       <style>{`@keyframes fadeUp{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:translateY(0)}}`}</style>
 
       {/* Background orbs */}

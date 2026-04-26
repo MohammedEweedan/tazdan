@@ -31,7 +31,6 @@ export default function LegalPage({ eyebrow, title, updated, intro, sections }: 
   const { colorMode } = useColorMode();
   const dark = colorMode === "dark";
 
-  const pageBg = dark ? "#000000" : "#fafbfe";
   const textMain = dark ? "#ffffff" : "#0a0f1e";
   const textSub = dark ? "rgba(255,255,255,0.6)" : "#475569";
   const titleGradient = dark
@@ -40,7 +39,7 @@ export default function LegalPage({ eyebrow, title, updated, intro, sections }: 
   const glow = dark ? "rgba(0,87,184,0.15)" : "rgba(0,87,184,0.06)";
 
   return (
-    <Box minH="100vh" bg={pageBg} color={textMain} overflowX="clip">
+    <Box minH="100vh" color={textMain} overflowX="clip">
       <PublicNav />
 
       <Box position="relative" pt={{ base: "110px", md: "150px" }} pb={{ base: 8, md: 14 }}>

@@ -86,7 +86,6 @@ export default function TrustPage() {
   useScrollReveal();
 
   const dark = colorMode === "dark";
-  const pageBg = dark ? "#000000" : "#fafbfe";
   const navBg = dark ? "rgba(0,0,0,0.85)" : "rgba(250,251,254,0.85)";
   const navBorder = dark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.07)";
   const cardBg = dark ? "rgba(255,255,255,0.025)" : "rgba(255,255,255,0.9)";
@@ -156,7 +155,7 @@ export default function TrustPage() {
   ];
 
   return (
-    <Box minH="100vh" bg={pageBg} overflowX="hidden">
+    <Box minH="100vh" overflowX="hidden">
       <style>{`
         html { scroll-behavior: smooth; }
         ::-webkit-scrollbar { width: 6px; }

@@ -47,7 +47,6 @@ export default function LoginPage() {
 
   const dark = colorMode === "dark";
   const brand = "#0057b8";
-  const pageBg = dark ? "#000000" : "#fafbfe";
   const cardBg = dark ? "rgba(255,255,255,0.025)" : "rgba(255,255,255,0.95)";
   const cardBorder = dark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)";
   const textMain = dark ? "white" : "#0f172a";
@@ -115,7 +114,7 @@ export default function LoginPage() {
   // ─── Welcome Transition Screen ────────────────────────────────
   if (view === "welcome") {
     return (
-      <Box minH="100vh" bg={pageBg} display="flex" alignItems="center" justifyContent="center" position="relative" overflow="hidden">
+      <Box minH="100vh" display="flex" alignItems="center" justifyContent="center" position="relative" overflow="hidden">
         <style>{`
           @keyframes welcomePulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.7;transform:scale(1.05)}}
           @keyframes welcomeFade{from{opacity:0;transform:translateY(24px)}to{opacity:1;transform:translateY(0)}}
@@ -154,7 +153,7 @@ export default function LoginPage() {
   // ─── 2FA Code Entry (Full-screen) ────────────────────────────
   if (view === "2fa") {
     return (
-      <Box minH="100vh" bg={pageBg} display="flex" alignItems="center" justifyContent="center" position="relative" overflow="hidden">
+      <Box minH="100vh" display="flex" alignItems="center" justifyContent="center" position="relative" overflow="hidden">
         <style>{`
           @keyframes fadeUp{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:translateY(0)}}
           @keyframes pulse2fa{0%,100%{box-shadow:0 0 0 0 rgba(0,87,184,0.2)}50%{box-shadow:0 0 0 20px rgba(0,87,184,0)}}
@@ -226,7 +225,7 @@ export default function LoginPage() {
 
   // ─── Main Login View ─────────────────────────────────────────
   return (
-    <Box minH="100vh" bg={pageBg} display="flex" alignItems="center" justifyContent="center" position="relative" overflow="hidden">
+    <Box minH="100vh" display="flex" alignItems="center" justifyContent="center" position="relative" overflow="hidden">
       <style>{`
         @keyframes fadeUp{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:translateY(0)}}
         @keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-12px)}}

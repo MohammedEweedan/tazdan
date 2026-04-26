@@ -187,7 +187,6 @@ export default function BankAccountsPage() {
   const [now, setNow] = useState(new Date());
   const { isOpen, onOpen, onClose } = useDisclosure();
 
-  const pageBg = "#07071a";
   const cardBg = "rgba(8,8,22,0.98)";
   const cardBorder = "rgba(255,255,255,0.05)";
   const muted = "#64748b";
@@ -278,7 +277,7 @@ export default function BankAccountsPage() {
 
   if (loading) {
     return (
-      <Flex minH="100vh" align="center" justify="center" bg={pageBg} direction="column" gap={4}>
+      <Flex minH="100vh" align="center" justify="center" direction="column" gap={4}>
         <Box w="32px" h="32px" borderRadius="full" border="2px solid" borderColor="#3b82f6" borderTopColor="transparent" style={{ animation: "spin 0.8s linear infinite" }} />
         <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
         <Text fontSize="12px" color="#475569" letterSpacing=".08em" textTransform="uppercase">Loading bank accounts</Text>
@@ -287,7 +286,7 @@ export default function BankAccountsPage() {
   }
 
   return (
-    <Box minH="100vh" bg={pageBg} color="white" fontFamily="'DM Sans', system-ui, sans-serif">
+    <Box minH="100vh" color="white" fontFamily="'DM Sans', system-ui, sans-serif">
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@400;500;600&display=swap');
         ::-webkit-scrollbar{width:4px;height:4px}
