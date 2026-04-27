@@ -46,7 +46,10 @@ export const QUERY_KEYS = {
   ticker:       (symbol: string) => ['ticker', symbol] as const,
   ohlcv:        (symbol: string, range: string) => ['ohlcv', symbol, range] as const,
   p2pOffers:    (filter: string) => ['p2p-offers', filter] as const,
+  p2pMyListings: ['p2p-my-listings'] as const,
+  p2pMyTrades:   ['p2p-my-trades'] as const,
   cards:        ['cards'] as const,
+  publicProfile: (handle: string) => ['public-profile', handle] as const,
 };
 
 export const CURRENCY_META: Record<Currency, CurrencyMeta> = {

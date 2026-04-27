@@ -8,7 +8,7 @@ import { useRouter } from 'expo-router';
 
 import { ScreenShell, CTAButton, Panel } from '@/components/ui/ScreenShell';
 import { useThemedPalette } from '@/store/themeStore';
-import { useHaptics, useMarkets, useWallets } from '@/hooks';
+import { useHaptics, useMarkets, useSwap, useWallets, extractErrorMessage } from '@/hooks';
 import type { Currency } from '@/types';
 
 const COINS: Currency[] = ['BTC', 'ETH', 'USDT', 'SOL'];
@@ -19,6 +19,9 @@ export default function Sell() {
   const p = useThemedPalette();
   const { data: tickers } = useMarkets();
   const { data: wallets } = useWallets();
+  const swap = useSwap();
+  const [ctaState, setCtaState] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
+  const [ctaError, setCtaError] = useState<string | null>(null);
 
   const [coin, setCoin] = useState<Currency>('BTC');
   const [amount, setAmount] = useState('');
@@ -113,16 +116,32 @@ export default function Sell() {
       {/* CTA */}
       <View style={{ marginTop: 28 }}>
         <CTAButton
-          label={`Sell ${coin}`}
+          label={
+            ctaState === 'loading'
+              ? 'Selling…'
+              : cryptoAmount > 0
+                ? `Sell ${cryptoAmount.toLocaleString('en-US', { maximumFractionDigits: 8 })} ${coin}`
+                : `Sell ${coin}`
+          }
           icon="cash-outline"
           disabled={cryptoAmount <= 0 || overspend}
-          onPress={() => {
-            h.success();
-            Alert.alert(
-              'Order confirmed',
-              `Sold ${cryptoAmount.toFixed(8)} ${coin} for $${usdAmount.toFixed(2)}.`,
-              [{ text: 'OK', onPress: () => router.back() }],
-            );
+          state={ctaState}
+          successLabel={`Sold ${coin}`}
+          errorLabel={ctaError ?? 'Order failed'}
+          onPress={async () => {
+            setCtaState('loading');
+            setCtaError(null);
+            try {
+              await swap.mutateAsync({ from: coin, to: 'USD', amount: cryptoAmount });
+              h.success();
+              setCtaState('success');
+              setTimeout(() => router.back(), 900);
+            } catch (e: any) {
+              h.error();
+              setCtaError(extractErrorMessage(e, 'Order failed'));
+              setCtaState('error');
+              setTimeout(() => setCtaState('idle'), 1800);
+            }
           }}
         />
       </View>

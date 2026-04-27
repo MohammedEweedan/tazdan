@@ -143,8 +143,8 @@ export default function Onboarding() {
           }}
         >
           <Image
-            source={require('../../assets/icon-color.png')}
-            style={{ width: 32, height: 32 }}
+            source={require('../../assets/logo-color.png')}
+            style={{ width: 52, height: 52 }}
             resizeMode="contain"
           />
           <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>

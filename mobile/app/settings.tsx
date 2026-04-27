@@ -2,13 +2,14 @@
  * Settings — theme + language + account preferences.
  */
 
-import { Alert, Text, View } from 'react-native';
+import { useState } from 'react';
+import { Alert, Switch, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { ScreenShell, Panel, PanelRow } from '@/components/ui/ScreenShell';
 import { useTheme, useThemedPalette } from '@/store/themeStore';
 import { useI18n, LOCALE_META } from '@/store/i18nStore';
 import { useAuthStore } from '@/store/authStore';
-import { useHaptics } from '@/hooks';
+import { useHaptics, useUpdateMyProfile } from '@/hooks';
 
 export default function Settings() {
   const h = useHaptics();
@@ -19,6 +20,17 @@ export default function Settings() {
   const locale = useI18n((s) => s.locale);
   const setLocale = useI18n((s) => s.setLocale);
   const user = useAuthStore((s) => s.user);
+  const updateProfile = useUpdateMyProfile();
+  // Mirror the server flag locally so the switch flips instantly while the
+  // mutation is in-flight; we revert if the request fails.
+  const [isPublic, setIsPublic] = useState<boolean>(user?.profilePublic ?? true);
+  const togglePublic = (v: boolean) => {
+    h.selection();
+    setIsPublic(v);
+    updateProfile.mutate({ profilePublic: v }, {
+      onError: () => setIsPublic(!v),
+    });
+  };
 
   return (
     <ScreenShell title="Settings">
@@ -33,6 +45,48 @@ export default function Settings() {
         <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '500', marginTop: 2 }}>
           {user?.email ?? '—'}
         </Text>
+      </Panel>
+
+      {/* Privacy */}
+      <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '700', letterSpacing: 1.2, marginTop: 22, marginLeft: 4 }}>
+        PRIVACY
+      </Text>
+      <Panel style={{ marginTop: 8 }}>
+        <View style={{
+          flexDirection: 'row', alignItems: 'center', gap: 12,
+          padding: 14,
+          borderBottomWidth: 1, borderBottomColor: p.border,
+        }}>
+          <View style={{
+            width: 32, height: 32, borderRadius: 10,
+            backgroundColor: p.pillBg,
+            alignItems: 'center', justifyContent: 'center',
+          }}>
+            <Ionicons name={isPublic ? 'globe-outline' : 'lock-closed-outline'} size={16} color={p.fg} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={{ color: p.fg, fontSize: 14, fontWeight: '700' }}>
+              Public profile
+            </Text>
+            <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '500', marginTop: 2 }}>
+              {isPublic
+                ? `Visible at promrkts.app/u/${user?.username ?? 'me'}`
+                : 'Only you can see your @handle.'}
+            </Text>
+          </View>
+          <Switch
+            value={isPublic}
+            onValueChange={togglePublic}
+            disabled={!user?.username || updateProfile.isPending}
+          />
+        </View>
+        <PanelRow
+          icon="at-outline"
+          label={user?.username ? `@${user.username}` : 'Set a handle'}
+          last
+          right={<Ionicons name="chevron-forward" size={16} color={p.fgFaint} />}
+          onPress={() => Alert.alert('Change handle', 'Handle changes are coming soon. Each handle change resets your trade reputation.')}
+        />
       </Panel>
 
       {/* Theme */}

@@ -6,6 +6,7 @@ import { useState } from 'react';
 import { Alert, Pressable, Share, Text, View } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 
 import { ScreenShell, Panel } from '@/components/ui/ScreenShell';
 import { useThemedPalette } from '@/store/themeStore';
@@ -15,11 +16,15 @@ import { useHaptics } from '@/hooks';
 type Tab = 'HANDLE' | 'BANK';
 
 export default function Receive() {
+  const router = useRouter();
   const h = useHaptics();
   const p = useThemedPalette();
   const user = useAuthStore((s) => s.user);
   const [tab, setTab] = useState<Tab>('HANDLE');
   const handle = user?.username ?? user?.email?.split('@')[0] ?? 'me';
+  // Universal link a counterparty's app deep-links into when they scan
+  // the QR code — resolves to /u/[handle] in the Promrkts app.
+  const profileLink = `https://promrkts.app/u/${handle}`;
 
   return (
     <ScreenShell title="Receive money">
@@ -67,16 +72,40 @@ export default function Receive() {
           }}>
             @{handle}
           </Text>
-          <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '500', marginTop: 6 }}>
-            Anyone on Promrkts can pay you with your handle.
+          <Text
+            selectable
+            style={{ color: p.fgMuted, fontSize: 12, fontWeight: '500', marginTop: 4 }}
+          >
+            {profileLink}
+          </Text>
+          <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '500', marginTop: 8, textAlign: 'center', paddingHorizontal: 12 }}>
+            Scanning the QR opens your public profile so anyone can pay you,
+            see your KYC tier, and view your P2P offers.
           </Text>
 
-          <View style={{ flexDirection: 'row', gap: 12, marginTop: 28 }}>
+          <Pressable
+            onPress={() => { h.selection(); router.push(`/u/${handle}`); }}
+            hitSlop={6}
+            style={({ pressed }) => ({
+              marginTop: 14,
+              paddingHorizontal: 14, paddingVertical: 8, borderRadius: 14,
+              backgroundColor: pressed ? p.border : p.pillBg,
+              borderWidth: 1, borderColor: p.border,
+              flexDirection: 'row', alignItems: 'center', gap: 6,
+            })}
+          >
+            <Ionicons name="person-outline" size={14} color={p.fg} />
+            <Text style={{ color: p.fg, fontSize: 12, fontWeight: '700' }}>
+              Preview public profile
+            </Text>
+          </Pressable>
+
+          <View style={{ flexDirection: 'row', gap: 12, marginTop: 22 }}>
             <Pressable
               onPress={async () => {
                 h.success();
-                await Clipboard.setStringAsync(`@${handle}`);
-                Alert.alert('Copied', `@${handle} copied to clipboard.`);
+                await Clipboard.setStringAsync(profileLink);
+                Alert.alert('Copied', 'Profile link copied to clipboard.');
               }}
               style={({ pressed }) => ({
                 flex: 1, height: 50, borderRadius: 25,
@@ -92,7 +121,9 @@ export default function Receive() {
             <Pressable
               onPress={() => {
                 h.light();
-                Share.share({ message: `Pay me on Promrkts: @${handle}` });
+                Share.share({
+                  message: `Pay me on Promrkts → @${handle}\n${profileLink}`,
+                });
               }}
               style={({ pressed }) => ({
                 flex: 1, height: 50, borderRadius: 25,

@@ -19,6 +19,7 @@ type Side = 'BUY' | 'SELL';
 const FIATS: Currency[] = ['USD', 'AED', 'SAR', 'EUR', 'EGP'];
 
 export default function P2P() {
+  const router = useRouter();
   const h = useHaptics();
   const p = useThemedPalette();
   const themeMode = useTheme((s) => s.mode);
@@ -38,23 +39,43 @@ export default function P2P() {
         {/* Header */}
         <View style={{
           flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-          paddingHorizontal: 24, paddingTop: 6, paddingBottom: 4,
+          paddingHorizontal: 24, paddingTop: 18, paddingBottom: 8,
         }}>
           <Text style={{ color: p.fg, fontSize: 22, fontWeight: '700', letterSpacing: -0.4 }}>
             P2P market
           </Text>
-          <Pressable
-            onPress={() => h.light()}
-            hitSlop={6}
-            style={{
-              width: 36, height: 36, borderRadius: 18,
-              alignItems: 'center', justifyContent: 'center',
-              backgroundColor: p.pillBg,
-              borderWidth: 1, borderColor: p.border,
-            }}
-          >
-            <Ionicons name="add" size={18} color={p.fg} />
-          </Pressable>
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <Pressable
+              onPress={() => { h.light(); router.push('/p2p/trades'); }}
+              hitSlop={6}
+              accessibilityLabel="My trades and escrow"
+              style={{
+                height: 36, borderRadius: 18,
+                paddingHorizontal: 12,
+                alignItems: 'center', justifyContent: 'center',
+                backgroundColor: p.pillBg,
+                borderWidth: 1, borderColor: p.border,
+                flexDirection: 'row', gap: 6,
+              }}
+            >
+              <Ionicons name="lock-closed-outline" size={14} color={p.fg} />
+              <Text style={{ color: p.fg, fontSize: 12, fontWeight: '700' }}>
+                Trades
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={() => { h.light(); router.push('/p2p/new'); }}
+              hitSlop={6}
+              accessibilityLabel="Create new P2P listing"
+              style={{
+                width: 36, height: 36, borderRadius: 18,
+                alignItems: 'center', justifyContent: 'center',
+                backgroundColor: p.ctaBg,
+              }}
+            >
+              <Ionicons name="add" size={20} color={p.ctaFg} />
+            </Pressable>
+          </View>
         </View>
 
         {/* Segmented BUY / SELL */}

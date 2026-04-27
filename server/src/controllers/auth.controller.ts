@@ -23,6 +23,10 @@ const registerSchema = z.object({
   password: z.string().min(8).max(128),
   firstName: z.string().min(1).max(100),
   lastName: z.string().min(1).max(100),
+  // Optional public @handle. When provided we save it as `username` and
+  // default `profilePublic = true` so the user is immediately discoverable
+  // via /u/[handle] for QR-pay flows.
+  username: z.string().min(3).max(30).regex(/^[a-z0-9._]+$/i, 'Handle: a-z 0-9 . _').optional(),
   phone: z.string().optional(),
   referralCode: z.string().optional(),
 });
@@ -46,6 +50,11 @@ export class AuthController {
         if (existingPhone) throw new AppError('Phone number already registered', 400);
       }
 
+      if (data.username) {
+        const existingHandle = await prisma.user.findFirst({ where: { username: data.username.toLowerCase() } });
+        if (existingHandle) throw new AppError('Handle already taken', 400);
+      }
+
       let referrerId: string | undefined;
       if (data.referralCode) {
         const referrer = await prisma.user.findUnique({ where: { referralCode: data.referralCode } });
@@ -63,6 +72,11 @@ export class AuthController {
           firstName: data.firstName,
           lastName: data.lastName,
           phone: data.phone,
+          // The handle the user picked at registration becomes their public
+          // @username. Public-by-default so QR-code payments work out of the
+          // box; can be flipped private from Settings.
+          username: data.username?.toLowerCase(),
+          profilePublic: !!data.username,
           referralCode,
           referredBy: referrerId,
           status: 'ACTIVE',
@@ -87,7 +101,9 @@ export class AuthController {
       res.status(201).json({
         user: {
           id: user.id, email: user.email, firstName: user.firstName,
-          lastName: user.lastName, role: user.role, kycStatus: user.kycStatus,
+          lastName: user.lastName, username: user.username,
+          profilePublic: user.profilePublic,
+          role: user.role, kycStatus: user.kycStatus,
           referralCode: user.referralCode,
         },
         ...tokens,

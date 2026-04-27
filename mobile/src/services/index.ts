@@ -44,7 +44,7 @@ export const authService = {
     const { data } = await api.post('/auth/login', { email, password });
     return data;
   },
-  async register(payload: { email: string; password: string; firstName: string; lastName: string }): Promise<{ user: User; accessToken: string; refreshToken: string }> {
+  async register(payload: { email: string; password: string; firstName: string; lastName: string; username?: string }): Promise<{ user: User; accessToken: string; refreshToken: string }> {
     const { data } = await api.post('/auth/register', payload);
     return data;
   },
@@ -87,17 +87,147 @@ export const marketsService = {
 };
 
 // ───────── P2P ─────────
+export interface P2PTrade {
+  id: string;
+  listingId: string;
+  buyerId: string;
+  sellerId: string;
+  amount: string;
+  price: string;
+  totalFiat: string;
+  status: 'PENDING' | 'PAYMENT_SENT' | 'COMPLETED' | 'CANCELLED' | 'DISPUTED';
+  paymentMethod?: string;
+  reference?: string;
+  createdAt: string;
+  listing?: { currency: string; fiatCurrency: string; side: 'BUY' | 'SELL' };
+  counterparty?: { username?: string; firstName?: string; lastName?: string };
+}
+
+export interface P2PListing {
+  id: string;
+  side: 'BUY' | 'SELL';
+  currency: string;
+  fiatCurrency: string;
+  price: string;
+  amount: string;
+  remainingAmount: string;
+  minLimit: string;
+  maxLimit: string;
+  paymentMethods: string[];
+  status: 'ACTIVE' | 'PAUSED' | 'COMPLETED' | 'CANCELLED';
+  createdAt: string;
+}
+
 export const p2pService = {
   offers: (filter: 'BUY' | 'SELL' | 'ALL' = 'ALL') => withFallback<P2POffer[]>(
     async () => (await api.get('/p2p/offers', { params: { side: filter } })).data.offers,
     filter === 'ALL' ? MOCK_P2P_OFFERS : MOCK_P2P_OFFERS.filter((o) => o.side === filter),
   ),
+  myListings: (): Promise<P2PListing[]> =>
+    withFallback<P2PListing[]>(
+      async () => (await api.get('/p2p/listings/mine')).data.listings,
+      [],
+    ),
+  myTrades: (): Promise<P2PTrade[]> =>
+    withFallback<P2PTrade[]>(
+      async () => (await api.get('/p2p/trades')).data.trades,
+      [],
+    ),
+  createListing: async (payload: {
+    side: 'BUY' | 'SELL';
+    currency: string;
+    fiatCurrency: string;
+    price: number;
+    amount: number;
+    minLimit: number;
+    maxLimit: number;
+    paymentMethods: string[];
+    terms?: string;
+  }): Promise<P2PListing> => {
+    const { data } = await api.post('/p2p/listings', payload);
+    return data.listing;
+  },
+  cancelListing: (id: string) => api.put(`/p2p/listings/${id}/cancel`),
+  initiateTrade: async (payload: { listingId: string; amount: number; paymentMethod?: string }) => {
+    const { data } = await api.post('/p2p/trades', payload);
+    return data.trade;
+  },
+  markPaymentSent: (id: string) => api.put(`/p2p/trades/${id}/payment-sent`),
+  confirmPayment:  (id: string) => api.put(`/p2p/trades/${id}/confirm`),
+  cancelTrade:     (id: string) => api.put(`/p2p/trades/${id}/cancel`),
+};
+
+// ───────── Wallet swap ─────────
+export const swapService = {
+  swap: async (payload: { from: string; to: string; amount: number }) => {
+    const { data } = await api.post('/wallets/swap', payload);
+    return data.swap as { from: string; to: string; amount: number; credited: number; rate: number };
+  },
+};
+
+// ───────── Public profile (for /u/[handle]) ─────────
+export interface PublicProfile {
+  id: string;
+  username: string;
+  firstName: string;
+  lastName: string;
+  bio?: string;
+  avatarUrl?: string;
+  acceptedCurrencies: string[];
+  kycVerified: boolean;
+  kycStatus: string;
+  totalTrades: number;
+  completedTrades: number;
+  completionRate: number;
+  createdAt: string;
+}
+export const profileService = {
+  byHandle: async (handle: string): Promise<PublicProfile> => {
+    const { data } = await api.get(`/profile/${handle}`);
+    return data.profile;
+  },
+  /** Authenticated PUT for current user's public profile settings. */
+  updateMe: async (payload: { username?: string; bio?: string; profilePublic?: boolean; acceptedCurrencies?: string[] }) => {
+    const { data } = await api.put('/profile/me', payload);
+    return data.profile as { id: string; username: string; profilePublic: boolean; bio?: string };
+  },
+  me: async () => {
+    const { data } = await api.get('/profile/me');
+    return data.profile;
+  },
+  /** Type-ahead search by @handle prefix. Used by the Send screen. */
+  search: async (q: string): Promise<Array<{ id: string; username: string; firstName: string; lastName: string; avatarUrl?: string; kycTier?: string }>> => {
+    if (!q || q.trim().length === 0) return [];
+    try {
+      const { data } = await api.get('/profile/search', { params: { q } });
+      return data.profiles ?? [];
+    } catch {
+      return [];
+    }
+  },
 };
 
 // ───────── Cards ─────────
+export interface CardTransaction {
+  id: string;
+  cardId: string;
+  amount: string;
+  currency: string;
+  merchant?: string;
+  category?: string;
+  status: 'PENDING' | 'COMPLETED' | 'DECLINED' | 'REFUNDED';
+  createdAt: string;
+}
 export const cardsService = {
   list: () => withFallback<CardEntity[]>(
     async () => (await api.get('/cards')).data.cards,
     MOCK_CARDS,
   ),
+  freeze:   (id: string) => api.post(`/cards/${id}/freeze`),
+  unfreeze: (id: string) => api.post(`/cards/${id}/unfreeze`),
+  transactions: (id: string): Promise<CardTransaction[]> =>
+    withFallback<CardTransaction[]>(
+      async () => (await api.get(`/cards/${id}/transactions`)).data.transactions,
+      [],
+    ),
 };

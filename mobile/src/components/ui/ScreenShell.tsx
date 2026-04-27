@@ -49,7 +49,7 @@ export function ScreenShell({
         {/* Header */}
         <View style={{
           flexDirection: 'row', alignItems: 'center',
-          paddingHorizontal: 24, paddingTop: 4, paddingBottom: 8,
+          paddingHorizontal: 24, paddingTop: 18, paddingBottom: 10,
           gap: 12,
         }}>
           {back ? (
@@ -90,27 +90,64 @@ export function ScreenShell({
   );
 }
 
-/** Solid-fill primary CTA pill — theme-aware, high-contrast. */
+/**
+ * Solid-fill primary CTA pill — theme-aware, high-contrast.
+ *
+ * Now supports four visual states the caller can flip between:
+ *   - 'idle'    (default, brand colour)
+ *   - 'loading' (dim + label override)
+ *   - 'success' (green flash + check icon)
+ *   - 'error'   (red flash + x icon)
+ *
+ * The button is the source of feedback - no global toast required.
+ * Pass optional `successLabel` / `errorLabel` to override the text.
+ */
+export type CTAState = 'idle' | 'loading' | 'success' | 'error';
+
 export function CTAButton({
   label, onPress, disabled, loading, icon,
+  state, successLabel, errorLabel,
 }: {
   label: string;
   onPress: () => void;
   disabled?: boolean;
   loading?: boolean;
   icon?: keyof typeof Ionicons.glyphMap;
+  state?: CTAState;
+  successLabel?: string;
+  errorLabel?: string;
 }) {
   const p = useThemedPalette();
   const themeMode = useTheme((s) => s.mode);
+
+  const effective: CTAState = state ?? (loading ? 'loading' : 'idle');
+
+  let bg = p.ctaBg;
+  let fg = p.ctaFg;
+  let displayLabel = label;
+  let displayIcon = icon;
+
+  if (effective === 'success') {
+    bg = '#10b981';
+    fg = '#ffffff';
+    displayLabel = successLabel ?? 'Done';
+    displayIcon = 'checkmark-circle';
+  } else if (effective === 'error') {
+    bg = '#ef4444';
+    fg = '#ffffff';
+    displayLabel = errorLabel ?? 'Try again';
+    displayIcon = 'close-circle';
+  }
+
   return (
     <Pressable
       onPress={onPress}
-      disabled={disabled || loading}
+      disabled={disabled || effective === 'loading' || effective === 'success'}
       style={({ pressed }) => ({
         height: 56,
         borderRadius: 28,
-        backgroundColor: p.ctaBg,
-        opacity: disabled ? 0.4 : loading ? 0.7 : pressed ? 0.85 : 1,
+        backgroundColor: bg,
+        opacity: disabled ? 0.4 : effective === 'loading' ? 0.7 : pressed ? 0.85 : 1,
         alignItems: 'center', justifyContent: 'center',
         flexDirection: 'row', gap: 8,
         shadowColor: '#000',
@@ -120,9 +157,9 @@ export function CTAButton({
         elevation: 3,
       })}
     >
-      {icon && <Ionicons name={icon} size={18} color={p.ctaFg} />}
-      <Text style={{ color: p.ctaFg, fontSize: 16, fontWeight: '700', letterSpacing: -0.2 }}>
-        {label}
+      {displayIcon && <Ionicons name={displayIcon} size={18} color={fg} />}
+      <Text style={{ color: fg, fontSize: 16, fontWeight: '700', letterSpacing: -0.2 }}>
+        {displayLabel}
       </Text>
     </Pressable>
   );

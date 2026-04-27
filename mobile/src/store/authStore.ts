@@ -16,7 +16,7 @@ interface AuthState {
 
   hydrate: () => Promise<void>;
   login: (email: string, password: string) => Promise<void>;
-  register: (p: { email: string; password: string; firstName: string; lastName: string }) => Promise<void>;
+  register: (p: { email: string; password: string; firstName: string; lastName: string; username?: string }) => Promise<void>;
   logout: () => Promise<void>;
 }
 

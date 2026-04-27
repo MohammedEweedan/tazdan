@@ -12,6 +12,29 @@ const updateProfileSchema = z.object({
 });
 
 export class ProfileController {
+  /**
+   * Search public profiles by handle prefix. Used by the mobile Send
+   * screen for the "type-ahead" recipient picker. Returns up to 10
+   * matches (only profiles flagged `profilePublic = true`).
+   */
+  static async searchProfiles(req: Request, res: Response, next: NextFunction) {
+    try {
+      const q = String(req.query.q ?? '').trim().toLowerCase().replace(/^@/, '');
+      if (q.length < 1) return res.json({ profiles: [] });
+      const matches = await prisma.user.findMany({
+        where: {
+          profilePublic: true,
+          username: { startsWith: q, mode: 'insensitive' },
+        },
+        select: { id: true, username: true, firstName: true, lastName: true, avatarUrl: true, kycTier: true },
+        take: 10,
+      });
+      res.json({ profiles: matches });
+    } catch (error) {
+      next(error);
+    }
+  }
+
   /** Get own public profile settings */
   static async getMyProfile(req: AuthRequest, res: Response, next: NextFunction) {
     try {

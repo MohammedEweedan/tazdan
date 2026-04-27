@@ -17,7 +17,7 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { ScreenShell, CTAButton } from '@/components/ui/ScreenShell';
 import { useTheme, useThemedPalette, type Palette } from '@/store/themeStore';
-import { useHaptics, useMarkets, useWallets } from '@/hooks';
+import { useHaptics, useMarkets, useSwap, useWallets, extractErrorMessage } from '@/hooks';
 import type { Currency } from '@/types';
 
 const CRYPTO: Currency[] = ['BTC', 'ETH', 'USDT', 'SOL', 'BNB', 'XRP', 'ADA', 'DOGE'];
@@ -32,6 +32,10 @@ export default function Buy() {
   const themeMode = useTheme((s) => s.mode);
   const { data: tickers } = useMarkets();
   const { data: wallets }  = useWallets();
+  const swap = useSwap();
+  // The CTA itself flashes green / red (no toast) — caller drives the state.
+  const [ctaState, setCtaState] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
+  const [ctaError, setCtaError] = useState<string | null>(null);
 
   const [coin, setCoin] = useState<Currency>('BTC');
   const [fiat, setFiat] = useState<Currency>('USD');
@@ -261,19 +265,35 @@ export default function Buy() {
         <View style={{ marginTop: 12 }}>
           <CTAButton
             label={
-              valid
-                ? `Buy ${cryptoAmount.toLocaleString('en-US', { maximumFractionDigits: 8 })} ${coin}`
-                : `Buy ${coin}`
+              ctaState === 'loading'
+                ? 'Buying…'
+                : valid
+                  ? `Buy ${cryptoAmount.toLocaleString('en-US', { maximumFractionDigits: 8 })} ${coin}`
+                  : `Buy ${coin}`
             }
             icon="checkmark-circle"
             disabled={!valid}
-            onPress={() => {
-              h.success();
-              Alert.alert(
-                'Order confirmed',
-                `Buying ${cryptoAmount.toFixed(8)} ${coin} for ${fiatSymbol(fiat)}${fiatAmount.toFixed(2)}.`,
-                [{ text: 'OK', onPress: () => router.back() }],
-              );
+            state={ctaState}
+            successLabel={`Bought ${coin}`}
+            errorLabel={ctaError ?? 'Order failed'}
+            onPress={async () => {
+              setCtaState('loading');
+              setCtaError(null);
+              try {
+                await swap.mutateAsync({ from: fiat, to: coin, amount: fiatAmount });
+                h.success();
+                setCtaState('success');
+                // Hold the green flash briefly so the user sees it,
+                // then dismiss the modal back to home (which now shows
+                // the updated holdings).
+                setTimeout(() => router.back(), 900);
+              } catch (e: any) {
+                h.error();
+                setCtaError(extractErrorMessage(e, 'Order failed'));
+                setCtaState('error');
+                // Auto-revert to idle after a moment so the user can retry.
+                setTimeout(() => setCtaState('idle'), 1800);
+              }
             }}
           />
         </View>

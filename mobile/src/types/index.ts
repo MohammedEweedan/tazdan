@@ -33,6 +33,9 @@ export interface User {
   kycTier:   'TIER_0' | 'TIER_1' | 'TIER_2' | 'TIER_3';
   twoFactorEnabled: boolean;
   referralCode: string;
+  /** True when the user's @handle is publicly visible at /u/[handle]. */
+  profilePublic?: boolean;
+  bio?: string;
   createdAt: string;
 }
 
