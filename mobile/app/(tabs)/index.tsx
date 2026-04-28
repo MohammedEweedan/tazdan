@@ -58,10 +58,12 @@ export default function Home() {
   };
   const priceMap = useMemo(() => {
     const map: Partial<Record<Currency, number>> = {};
-    (gecko ?? []).forEach((m) => {
-      const sym = ID_TO_SYM[m.id];
-      if (sym) map[sym] = m.current_price;
-    });
+    if (Array.isArray(gecko)) {
+      gecko.forEach((m) => {
+        const sym = ID_TO_SYM[m.id];
+        if (sym) map[sym] = m.current_price;
+      });
+    }
     return map;
   }, [gecko]);
 
