@@ -13,7 +13,7 @@ import {
   FiCreditCard, FiCamera, FiImage, FiUpload, FiX, FiCheck, FiCheckCircle,
 } from "react-icons/fi";
 import { useAuthStore } from "@/stores/authStore";
-import { userAPI } from "@/lib/api";
+import { userAPI, authAPI } from "@/lib/api";
 import Logo from "@/components/ui/Logo";
 
 // ─── Palette (mirrors mobile themeStore tokens) ───────────────────
@@ -34,7 +34,7 @@ function usePalette(dark: boolean) {
 }
 
 type P = ReturnType<typeof usePalette>;
-type Step = 1 | 2 | 3;
+type Step = 1 | 2 | 3 | 4;
 
 interface KycDoc {
   label: string;
@@ -569,15 +569,15 @@ export default function RegisterPage() {
 
   const [step, setStep] = useState<Step>(1);
   const [form, setForm] = useState({
-    firstName: "", lastName: "", email: "", phone: "", password: "", referralCode: "",
+    firstName: "", lastName: "", email: "", phone: "", password: "", referralCode: "", username: "", avatarUrl: "",
   });
   const [showPw, setShowPw] = useState(false);
-  const [handle, setHandle] = useState("");
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [showTerms, setShowTerms] = useState(false);
   const [showPrivacy, setShowPrivacy] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [verificationCode, setVerificationCode] = useState("");
   const [kycDocs, setKycDocs] = useState<KycDoc[]>([
     { label: "ID Front", hint: "Passport, national ID or driver's license", icon: FiCreditCard, type: "id_front", file: null, preview: null },
     { label: "ID Back", hint: "Back side of the same document", icon: FiImage, type: "id_back", file: null, preview: null },
@@ -587,8 +587,8 @@ export default function RegisterPage() {
   const upd = (key: string) => (v: string) =>
     setForm((f) => ({ ...f, [key]: v }));
 
-  // Validate & go to step 2
-  const submitAccount = (e: React.FormEvent) => {
+  // Validate, create account, then go to email verification
+  const submitAccount = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     if (!form.firstName || !form.lastName || !form.email || !form.password) {
@@ -603,7 +603,51 @@ export default function RegisterPage() {
       setError("Please agree to the Terms of Service and Privacy Policy to continue.");
       return;
     }
-    setStep(2);
+    setLoading(true);
+    try {
+      await register({
+        ...form,
+        phone: form.phone || undefined,
+        referralCode: form.referralCode || undefined,
+        username: form.username || undefined,
+        avatarUrl: form.avatarUrl || undefined,
+      });
+      setStep(2);
+    } catch (err: any) {
+      setError(err?.response?.data?.error || err?.message || "Registration failed. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const submitVerification = async () => {
+    setError("");
+    if (verificationCode.length !== 6) {
+      setError("Please enter the 6-digit code.");
+      return;
+    }
+    setLoading(true);
+    try {
+      await authAPI.verifyEmailCode(verificationCode);
+      setStep(3);
+    } catch (err: any) {
+      setError(err?.response?.data?.error || err?.message || "Invalid or expired code. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const resendCode = async () => {
+    setError("");
+    setLoading(true);
+    try {
+      await authAPI.resendVerification();
+      setError("A new code has been sent to your email.");
+    } catch (err: any) {
+      setError(err?.response?.data?.error || err?.message || "Failed to resend code.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   // KYC file handlers
@@ -626,21 +670,15 @@ export default function RegisterPage() {
     }
     setLoading(true);
     try {
-      // Register the account first, then upload KYC
-      await register({
-        ...form,
-        phone: form.phone || undefined,
-        referralCode: form.referralCode || undefined,
-      });
       const fd = new FormData();
       kycDocs.forEach((d) => {
         if (d.file) fd.append("documents", d.file, `${d.type}-${d.file.name}`);
       });
       fd.append("documentType", "identity");
       await userAPI.submitKYC(fd);
-      setStep(3);
+      setStep(4);
     } catch (err: any) {
-      setError(err?.response?.data?.error || "Upload failed. Please try again.");
+      setError(err?.response?.data?.error || err?.message || "Upload failed. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -656,7 +694,7 @@ export default function RegisterPage() {
   };
 
   const handleAvailable =
-    handle.length >= 3 && !/[^a-z0-9._]/i.test(handle);
+    form.username.length >= 3 && !/[^a-z0-9._]/i.test(form.username);
 
   // ── Pill button style ──
   const pillStyle: React.CSSProperties = {
@@ -705,7 +743,7 @@ export default function RegisterPage() {
 
         {/* ── Step indicator (segmented bars, mirrors mobile) ── */}
         <Flex align="center" gap="6px" mb="26px">
-          {[1, 2, 3].map((n) => (
+          {[1, 2, 3, 4].map((n) => (
             <Box
               key={n}
               h="6px"
@@ -723,7 +761,7 @@ export default function RegisterPage() {
             ml="6px"
             flexShrink={0}
           >
-            {step}/3
+            {step}/4
           </Text>
         </Flex>
 
@@ -771,6 +809,42 @@ export default function RegisterPage() {
               <Field label={t("auth_phone")} value={form.phone} onChange={upd("phone")} type="tel" p={p} autoComplete="tel" />
 
               <Field
+                label="@handle (optional)"
+                value={form.username}
+                onChange={upd("username")}
+                p={p}
+                autoComplete="username"
+              />
+
+              {/* Emoji avatar picker */}
+              <Box w="100%">
+                <Text fontSize="13px" fontWeight="700" color={p.fg} mb="8px">Choose an avatar</Text>
+                <Flex gap="8px" flexWrap="wrap">
+                  {["🦁","🐯","🐻","🐨","🐼","🐸","🐙","🦊","🐰","🐹","🐱","🐶","🐺","🐗","🐴","🦄","🐝","🐛","🦋","🐌","🐞","🐜","🦟","🦗","🕷","🦂","🐢","🐍","🦎","🦖","🦕","🐙","🦑","🦐","🦞","🦀","🐡","🐠","🐟","🐬","🐳","🦈","🐊","🐅","🐆","🦓","🦍","🦧","🐘","🦛","🦏","🐪","🐫","🦒","🦘","🐃","🐂","🐄","🐎","🐖","🐏","🐑","🦙","🐐","🦌","🐕","🐩","🦮","🐕‍🦺","🐈","🐈‍⬛","🐓","🦃","🦚","🦜","🦢","🦩","🕊","🐇","🦝","🦨","🦡","🦦","🦥","🐁","🐀","🐿","🦔","🐾","🐉","🐲","🌵","🎄","🌲","🌳","🌴","🌱","🌿","☘️","🍀","🎍","🎋","🍃","🍂","🍁","🍄","🐚","🌾","💐","🌷","🌹","🥀","🌺","🌸","🌼","🌻","🌞","🌝","🌛","🌜","🌚","🌕","🌖","🌗","🌘","🌑","🌒","🌓","🌔","🌙","🌎","🌍","🌏","🪐","💫","⭐","🌟","✨","⚡","🔥","💥","☄️","☀️","🌤","⛅","🌥","☁️","🌦","🌧","⛈","🌩","🌨","❄️","☃️","⛄","🌬","💨","💧","💦","☔","☂️","🌊","🌫"].slice(0, 24).map((emoji) => (
+                    <Box
+                      key={emoji}
+                      as="button"
+                      type="button"
+                      onClick={() => setForm((f) => ({ ...f, avatarUrl: emoji }))}
+                      borderRadius="12px"
+                      p="8px"
+                      bg={form.avatarUrl === emoji ? p.fg : p.bgElev}
+                      border="1.5px solid"
+                      borderColor={form.avatarUrl === emoji ? p.fg : p.border}
+                      transition="all 0.15s"
+                      fontSize="22px"
+                      lineHeight="1"
+                      cursor="pointer"
+                      _hover={{ borderColor: p.fg }}
+                      aria-label={`Select ${emoji} avatar`}
+                    >
+                      {emoji}
+                    </Box>
+                  ))}
+                </Flex>
+              </Box>
+
+              <Field
                 label={t("auth_password")}
                 value={form.password}
                 onChange={upd("password")}
@@ -804,12 +878,99 @@ export default function RegisterPage() {
               />
             </Box>
 
-            <PrimaryCTA label={t("auth_continue") || "Continue"} type="submit" p={p} />
+            <PrimaryCTA label={loading ? "Creating account…" : t("auth_continue") || "Continue"} type="submit" loading={loading} p={p} />
           </Box>
         )}
 
-        {/* ══ STEP 2 · KYC documents ══ */}
+        {/* ══ STEP 2 · Email verification ══ */}
         {step === 2 && (
+          <Box>
+            <Heading fontSize="34px" fontWeight="800" letterSpacing="-1.1px" color={p.fg} lineHeight="1.1">
+              Verify your email
+            </Heading>
+            <Text color={p.fgMuted} fontSize="15px" lineHeight="22px" mt="8px">
+              Enter the 6-digit code we sent to <strong style={{ color: p.fg }}>{form.email}</strong>
+            </Text>
+
+            <VStack spacing="12px" mt="28px" align="stretch">
+              <Box
+                position="relative"
+                h="60px"
+                borderRadius="16px"
+                border="1.5px solid"
+                borderColor={error ? p.redFg : p.border}
+                bg={p.bgElev}
+                transition="border-color 0.15s"
+                overflow="hidden"
+              >
+                <Text
+                  as="span"
+                  position="absolute"
+                  left="16px"
+                  top="10px"
+                  fontSize="11px"
+                  fontWeight="500"
+                  color={p.fgMuted}
+                  pointerEvents="none"
+                  userSelect="none"
+                >
+                  6-digit code
+                </Text>
+                <Input
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={6}
+                  value={verificationCode}
+                  onChange={(e) => setVerificationCode(e.target.value.replace(/[^0-9]/g, ""))}
+                  position="absolute"
+                  bottom="0"
+                  left="0"
+                  right="0"
+                  h="38px"
+                  px="16px"
+                  border="none"
+                  bg="transparent"
+                  borderRadius="0"
+                  fontSize="16px"
+                  fontWeight="500"
+                  color={p.fg}
+                  letterSpacing="8px"
+                  _focus={{ boxShadow: "none", border: "none" }}
+                  autoFocus
+                />
+              </Box>
+            </VStack>
+
+            <PrimaryCTA
+              label={loading ? "Verifying…" : "Verify"}
+              onClick={submitVerification}
+              loading={loading}
+              p={p}
+            />
+
+            <Flex justify="center" mt="14px">
+              <Box
+                as="button"
+                type="button"
+                onClick={resendCode}
+                style={{
+                  background: "none",
+                  border: "none",
+                  cursor: "pointer",
+                  color: p.fgMuted,
+                  fontSize: "13px",
+                  fontWeight: "700",
+                  padding: "6px 0",
+                }}
+              >
+                Didn’t receive it? Resend →
+              </Box>
+            </Flex>
+          </Box>
+        )}
+
+        {/* ══ STEP 3 · KYC documents ══ */}
+        {step === 3 && (
           <Box>
             <Heading fontSize="34px" fontWeight="800" letterSpacing="-1.1px" color={p.fg} lineHeight="1.1">
               Verify your identity
@@ -854,8 +1015,8 @@ export default function RegisterPage() {
           </Box>
         )}
 
-        {/* ══ STEP 3 · All set ══ */}
-        {step === 3 && (
+        {/* ══ STEP 4 · All set ══ */}
+        {step === 4 && (
           <Flex direction="column" align="center" pt="24px" gap="20px">
             {/* Success circle */}
             <Flex

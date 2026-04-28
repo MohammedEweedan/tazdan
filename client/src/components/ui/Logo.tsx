@@ -20,8 +20,8 @@ function resolveVariant(variant: LogoVariant, dark: boolean): "color" | "black" 
 
 const LOGO_SRC: Record<"color" | "black" | "white", string> = {
   color: "/logo-color.png",
-  black: "/logo-color.png",
-  white: "/logo-color.png",
+  black: "/logo-black.png",
+  white: "/logo-white.png",
 };
 
 const ICON_SRC: Record<"color" | "black" | "white", string> = {

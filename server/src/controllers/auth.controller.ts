@@ -33,6 +33,7 @@ const registerSchema = z.object({
   // default `profilePublic = true` so the user is immediately discoverable
   // via /u/[handle] for QR-pay flows.
   username: z.string().min(3).max(30).regex(/^[a-z0-9._]+$/i, 'Handle: a-z 0-9 . _').optional(),
+  avatarUrl: z.string().optional(),
   phone: z.string().optional(),
   referralCode: z.string().optional(),
 });
@@ -82,10 +83,11 @@ export class AuthController {
           // @username. Public-by-default so QR-code payments work out of the
           // box; can be flipped private from Settings.
           username: data.username?.toLowerCase(),
+          avatarUrl: data.avatarUrl || null,
           profilePublic: !!data.username,
           referralCode,
           referredBy: referrerId,
-          status: 'ACTIVE',
+          status: 'PENDING',
         },
       });
 
@@ -104,17 +106,17 @@ export class AuthController {
         userAgent: req.headers['user-agent']?.toString(),
       });
 
-      // Send welcome & verification emails (fire-and-forget)
-      const emailToken = crypto.randomBytes(32).toString('hex');
+      // Generate 6-digit email verification code
+      const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
       await prisma.user.update({
         where: { id: user.id },
         data: {
-          emailVerificationToken: emailToken,
-          emailVerificationExpires: new Date(Date.now() + 24 * 60 * 60 * 1000),
+          emailVerificationCode: verificationCode,
+          emailVerificationCodeExpires: new Date(Date.now() + 24 * 60 * 60 * 1000),
         },
       });
-      sendWelcomeEmail({ to: user.email, firstName: user.firstName }).catch(() => {});
-      sendVerificationEmail({ to: user.email, firstName: user.firstName, token: emailToken }).catch(() => {});
+      sendWelcomeEmail({ to: user.email, firstName: user.firstName }).catch((e) => console.error('[email] welcome failed:', e));
+      sendVerificationEmail({ to: user.email, firstName: user.firstName, code: verificationCode }).catch((e) => console.error('[email] verification failed:', e));
 
       res.status(201).json({
         user: {
@@ -123,6 +125,7 @@ export class AuthController {
           profilePublic: user.profilePublic,
           role: user.role, kycStatus: user.kycStatus,
           referralCode: user.referralCode,
+          emailVerified: false,
         },
         ...tokens,
       });
@@ -328,7 +331,46 @@ export class AuthController {
           emailVerified: true,
           emailVerificationToken: null,
           emailVerificationExpires: null,
+          emailVerificationCode: null,
+          emailVerificationCodeExpires: null,
           status: user.status === 'PENDING' ? 'ACTIVE' : user.status,
+        },
+      });
+
+      res.json({ message: 'Email verified successfully' });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async verifyEmailCode(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const user = req.user;
+      if (!user) throw new AppError('Authentication required', 401);
+
+      const { code } = z.object({ code: z.string().length(6) }).parse(req.body);
+
+      const dbUser = await prisma.user.findUnique({ where: { id: user.id } });
+      if (!dbUser) throw new AppError('User not found', 404);
+      if (dbUser.emailVerified) throw new AppError('Email already verified', 400);
+      if (
+        !dbUser.emailVerificationCode ||
+        dbUser.emailVerificationCode !== code ||
+        !dbUser.emailVerificationCodeExpires ||
+        dbUser.emailVerificationCodeExpires < new Date()
+      ) {
+        throw new AppError('Invalid or expired verification code', 400);
+      }
+
+      await prisma.user.update({
+        where: { id: dbUser.id },
+        data: {
+          emailVerified: true,
+          emailVerificationToken: null,
+          emailVerificationExpires: null,
+          emailVerificationCode: null,
+          emailVerificationCodeExpires: null,
+          status: dbUser.status === 'PENDING' ? 'ACTIVE' : dbUser.status,
         },
       });
 
@@ -347,20 +389,20 @@ export class AuthController {
       if (!dbUser) throw new AppError('User not found', 404);
       if (dbUser.emailVerified) throw new AppError('Email already verified', 400);
 
-      const token = crypto.randomBytes(32).toString('hex');
+      const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
       await prisma.user.update({
         where: { id: dbUser.id },
         data: {
-          emailVerificationToken: token,
-          emailVerificationExpires: new Date(Date.now() + 24 * 60 * 60 * 1000),
+          emailVerificationCode: verificationCode,
+          emailVerificationCodeExpires: new Date(Date.now() + 24 * 60 * 60 * 1000),
         },
       });
 
       sendVerificationEmail({
         to: dbUser.email,
         firstName: dbUser.firstName,
-        token,
-      }).catch(() => {});
+        code: verificationCode,
+      }).catch((e) => console.error('[email] resend verification failed:', e));
 
       res.json({ message: 'Verification email sent' });
     } catch (error) {
@@ -392,7 +434,7 @@ export class AuthController {
         to: user.email,
         firstName: user.firstName,
         token,
-      }).catch(() => {});
+      }).catch((e) => console.error('[email] password reset failed:', e));
 
       res.json({ message: 'If an account exists, a reset email has been sent.' });
     } catch (error) {

@@ -7,6 +7,10 @@ const SMTP_PASS = process.env.SMTP_PASS;
 const SMTP_FROM = process.env.SMTP_FROM || process.env.MAIL_FROM || 'noreply@promrkts.com';
 const CLIENT_URL = process.env.CLIENT_URL || process.env.FRONTEND_URL || 'https://promrkts.com';
 
+// Hosted logos — swap these URLs for your actual CDN paths
+const LOGO_WHITE = `${CLIENT_URL}/assets/logo-white.png`;
+const LOGO_BLACK = `${CLIENT_URL}/assets/logo-black.png`;
+
 const hasCredentials = !!(SMTP_HOST && SMTP_USER && SMTP_PASS);
 
 const transporter = hasCredentials
@@ -18,46 +22,128 @@ const transporter = hasCredentials
     })
   : null;
 
+/**
+ * Base template — reacts to dark/light mode via prefers-color-scheme.
+ * Logo switches between logo-white.png (dark) and logo-black.png (light).
+ */
 function baseTemplate(title: string, body: string): string {
-  return `
-<!DOCTYPE html>
+  return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>${title}</title>
   <style>
-    body { margin: 0; padding: 0; background-color: #0b1120; color: #f1f5f9; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
-    .container { max-width: 600px; margin: 0 auto; padding: 40px 24px; }
-    .logo { text-align: center; margin-bottom: 32px; }
-    .logo-text { font-size: 24px; font-weight: 800; color: #4a8fe0; letter-spacing: -0.02em; }
-    .card { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); border-radius: 20px; padding: 32px; }
-    h1 { font-size: 20px; font-weight: 800; margin: 0 0 16px; color: #f1f5f9; }
-    p { font-size: 14px; line-height: 1.6; color: #94a3b8; margin: 0 0 16px; }
-    .btn { display: inline-block; padding: 14px 28px; border-radius: 12px; background: linear-gradient(135deg, #0057b8, #4a8fe0); color: #fff; text-decoration: none; font-weight: 700; font-size: 14px; }
-    .btn:hover { opacity: 0.92; }
-    .footer { text-align: center; margin-top: 32px; font-size: 12px; color: #475569; }
-    .footer a { color: #4a8fe0; text-decoration: none; }
-    .divider { height: 1px; background: rgba(255,255,255,0.06); margin: 24px 0; }
-    .highlight { color: #22c55e; font-weight: 700; }
-    .warning { color: #ef4444; font-weight: 700; }
+    /* ── Reset ── */
+    *, *::before, *::after { box-sizing: border-box; }
+    body, table, td, a { -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }
+    table, td { mso-table-lspace: 0pt; mso-table-rspace: 0pt; }
+    img { border: 0; height: auto; line-height: 100%; outline: none; text-decoration: none; }
+
+    /* ── Light mode (default) ── */
+    body {
+      margin: 0;
+      padding: 0;
+      background-color: #ffffff;
+      color: #0b0f19;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    }
+    .email-bg   { background-color: #ffffff; }
+    .card       { background-color: #f5f5f5; border: 1px solid #e5e5e5; }
+    .text-muted { color: #6b7280; }
+    .text-main  { color: #0b0f19; }
+    .divider    { background-color: #e5e5e5; }
+    .code-box   { background-color: #f0f0f0; border: 1px solid #e0e0e0; }
+    .code-text  { color: #0b0f19; }
+    .btn        { background-color: #0b0f19; color: #ffffff !important; }
+    .footer-text{ color: #9ca3af; }
+    .logo-light { display: block !important; }
+    .logo-dark  { display: none !important; }
+
+    /* ── Dark mode ── */
+    @media (prefers-color-scheme: dark) {
+      body        { background-color: #080b14 !important; color: #f1f5f9 !important; }
+      .email-bg   { background-color: #080b14 !important; }
+      .card       { background-color: rgba(255,255,255,0.03) !important; border-color: rgba(255,255,255,0.07) !important; }
+      .text-muted { color: #94a3b8 !important; }
+      .text-main  { color: #f1f5f9 !important; }
+      .divider    { background-color: rgba(255,255,255,0.07) !important; }
+      .code-box   { background-color: rgba(255,255,255,0.04) !important; border-color: rgba(255,255,255,0.08) !important; }
+      .code-text  { color: #f1f5f9 !important; }
+      .btn        { background-color: #ffffff !important; color: #0b0f19 !important; }
+      .footer-text{ color: #475569 !important; }
+      .logo-light { display: none !important; }
+      .logo-dark  { display: block !important; }
+    }
+
+    /* ── Layout ── */
+    .wrapper    { max-width: 560px; margin: 0 auto; padding: 48px 24px; }
+    .logo-wrap  { text-align: left; margin-bottom: 40px; }
+    .logo-wrap img { height: 28px; width: auto; }
+    .card       { border-radius: 20px; padding: 36px 32px; }
+    h1 {
+      font-size: 22px;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      margin: 0 0 12px;
+      line-height: 1.2;
+    }
+    p  { font-size: 14px; line-height: 1.7; margin: 0 0 14px; }
+    .btn {
+      display: inline-block;
+      padding: 13px 26px;
+      border-radius: 100px;
+      text-decoration: none;
+      font-weight: 700;
+      font-size: 14px;
+      letter-spacing: -0.01em;
+    }
+    .btn-wrap   { margin: 28px 0; }
+    .divider    { height: 1px; margin: 24px 0; }
+    .code-box   { border-radius: 16px; padding: 28px; text-align: center; margin: 24px 0; }
+    .code-text  { font-size: 38px; font-weight: 800; letter-spacing: 12px; font-variant-numeric: tabular-nums; font-family: 'Courier New', monospace; }
+    .footer     { margin-top: 36px; text-align: left; }
+    .footer p   { font-size: 12px; margin: 0 0 4px; }
+    .footer a   { color: inherit; text-decoration: underline; }
+    ul          { color: #6b7280; font-size: 14px; line-height: 1.8; padding-left: 20px; margin: 12px 0 20px; }
+    li span     { font-weight: 700; }
+
+    /* Subtle notice box */
+    .notice { border-radius: 10px; padding: 14px 16px; margin-top: 12px; background: rgba(0,0,0,0.04); }
+    @media (prefers-color-scheme: dark) {
+      .notice { background: rgba(255,255,255,0.04) !important; }
+      ul      { color: #94a3b8 !important; }
+    }
   </style>
 </head>
 <body>
-  <div class="container">
-    <div class="logo"><div class="logo-text">promrkts</div></div>
-    <div class="card">
-      ${body}
-    </div>
-    <div class="footer">
-      <p>Need help? Contact us at <a href="mailto:support@promrkts.com">support@promrkts.com</a></p>
-      <p>promrkts — crypto, simplified</p>
+  <div class="email-bg">
+    <div class="wrapper">
+
+      <!-- Logo: switches on dark/light -->
+      <div class="logo-wrap">
+        <img class="logo-light" src="${LOGO_BLACK}" alt="promrkts" />
+        <img class="logo-dark"  src="${LOGO_WHITE}" alt="promrkts" />
+      </div>
+
+      <div class="card">
+        ${body}
+      </div>
+
+      <div class="footer">
+        <p class="footer-text">Need help? <a href="mailto:support@promrkts.com">support@promrkts.com</a></p>
+        <p class="footer-text">promrkts — crypto, simplified</p>
+      </div>
+
     </div>
   </div>
 </body>
 </html>`;
 }
 
+/* ─────────────────────────────────────────────────────────────
+   Core send
+───────────────────────────────────────────────────────────── */
 export async function sendEmail({
   to,
   subject,
@@ -79,6 +165,9 @@ export async function sendEmail({
   });
 }
 
+/* ─────────────────────────────────────────────────────────────
+   Welcome — sent AFTER email verification is confirmed
+───────────────────────────────────────────────────────────── */
 export async function sendWelcomeEmail({
   to,
   firstName,
@@ -88,54 +177,69 @@ export async function sendWelcomeEmail({
 }) {
   const html = baseTemplate(
     'Welcome to promrkts',
-    `<h1>Welcome aboard, ${firstName}!</h1>
-    <p>Your promrkts account is ready. Here is how to get started:</p>
-    <ul style="color:#94a3b8; font-size:14px; line-height:1.7; padding-left:20px;">
-      <li><span class="highlight">Deposit funds</span> — head to your Wallet and top up via bank transfer or crypto.</li>
-      <li><span class="highlight">Trade instantly</span> — buy & sell BTC, ETH, SOL and more at live market rates.</li>
-      <li><span class="highlight">Send & Receive</span> — transfer to other promrkts users or any external wallet.</li>
-      <li><span class="highlight">P2P Marketplace</span> — trade directly with verified peers in your local currency.</li>
+    `<h1 class="text-main">Welcome, ${firstName}.</h1>
+    <p class="text-muted">Your account is verified and ready. Here's everything you can do from day one:</p>
+
+    <ul>
+      <li><span class="text-main">Deposit</span> — top up via bank transfer or crypto to your wallet.</li>
+      <li><span class="text-main">Trade</span> — buy & sell BTC, ETH, SOL and 400+ pairs at live rates.</li>
+      <li><span class="text-main">Send & Receive</span> — transfer to any promrkts user or external wallet.</li>
+      <li><span class="text-main">P2P Marketplace</span> — trade peer-to-peer in your local currency.</li>
     </ul>
-    <div style="text-align:center; margin: 28px 0;">
+
+    <div class="btn-wrap">
       <a href="${CLIENT_URL}/dashboard" class="btn">Open Dashboard</a>
     </div>
+
     <div class="divider"></div>
-    <p><strong>Download the mobile app</strong></p>
-    <p>Take promrkts with you everywhere:</p>
-    <div style="text-align:center; margin: 16px 0;">
-      <a href="https://apps.apple.com" style="display:inline-block; margin:0 8px; padding:10px 18px; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.1); border-radius:10px; color:#f1f5f9; text-decoration:none; font-size:13px; font-weight:600;">App Store (iOS)</a>
-      <a href="https://play.google.com" style="display:inline-block; margin:0 8px; padding:10px 18px; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.1); border-radius:10px; color:#f1f5f9; text-decoration:none; font-size:13px; font-weight:600;">Google Play (Android)</a>
-    </div>
-    <p style="font-size:12px; color:#475569;">Or access the web portal at <a href="${CLIENT_URL}" style="color:#4a8fe0;">${CLIENT_URL}</a></p>`
+
+    <p class="text-muted" style="font-size:13px; margin-bottom:8px;">Get the app</p>
+    <table cellpadding="0" cellspacing="0" border="0">
+      <tr>
+        <td style="padding-right:8px;">
+          <a href="https://apps.apple.com" style="display:inline-block; padding:10px 18px; border-radius:100px; border:1px solid currentColor; color:inherit; text-decoration:none; font-size:13px; font-weight:600;">iOS</a>
+        </td>
+        <td>
+          <a href="https://play.google.com" style="display:inline-block; padding:10px 18px; border-radius:100px; border:1px solid currentColor; color:inherit; text-decoration:none; font-size:13px; font-weight:600;">Android</a>
+        </td>
+      </tr>
+    </table>`
   );
-  await sendEmail({ to, subject: 'Welcome to promrkts — let\'s get started', html });
+  await sendEmail({ to, subject: 'Welcome to promrkts', html });
 }
 
+/* ─────────────────────────────────────────────────────────────
+   Email Verification
+   After the user enters this code correctly → call sendWelcomeEmail
+───────────────────────────────────────────────────────────── */
 export async function sendVerificationEmail({
   to,
   firstName,
-  token,
+  code,
 }: {
   to: string;
   firstName: string;
-  token: string;
+  code: string;
 }) {
-  const verifyUrl = `${CLIENT_URL}/auth/verify-email?token=${token}`;
   const html = baseTemplate(
     'Verify your email — promrkts',
-    `<h1>Confirm your email</h1>
-    <p>Hi ${firstName},</p>
-    <p>Please verify your email address to secure your promrkts account and unlock all features.</p>
-    <div style="text-align:center; margin: 28px 0;">
-      <a href="${verifyUrl}" class="btn">Verify Email</a>
+    `<h1 class="text-main">Confirm your email</h1>
+    <p class="text-muted">Hi ${firstName}, enter this code to verify your promrkts account.</p>
+
+    <div class="code-box">
+      <div class="code-text">${code}</div>
     </div>
-    <p style="font-size:12px; color:#475569;">Or copy and paste this link into your browser:</p>
-    <p style="font-size:12px; word-break:break-all; color:#475569;">${verifyUrl}</p>
-    <p style="font-size:12px; color:#475569; margin-top:16px;">This link expires in 24 hours. If you did not create an account, you can safely ignore this email.</p>`
+
+    <div class="notice">
+      <p class="text-muted" style="margin:0; font-size:13px;">Expires in 24 hours. Didn't sign up? You can safely ignore this.</p>
+    </div>`
   );
-  await sendEmail({ to, subject: 'Verify your promrkts email address', html });
+  await sendEmail({ to, subject: 'Your promrkts verification code', html });
 }
 
+/* ─────────────────────────────────────────────────────────────
+   Password Reset
+───────────────────────────────────────────────────────────── */
 export async function sendPasswordResetEmail({
   to,
   firstName,
@@ -148,15 +252,19 @@ export async function sendPasswordResetEmail({
   const resetUrl = `${CLIENT_URL}/auth/reset-password?token=${token}`;
   const html = baseTemplate(
     'Reset your password — promrkts',
-    `<h1>Reset your password</h1>
-    <p>Hi ${firstName},</p>
-    <p>We received a request to reset the password for your promrkts account. Click the button below to choose a new password.</p>
-    <div style="text-align:center; margin: 28px 0;">
-      <a href="${resetUrl}" class="btn">Reset Password</a>
+    `<h1 class="text-main">Reset your password</h1>
+    <p class="text-muted">Hi ${firstName}, we received a request to reset your promrkts password.</p>
+
+    <div class="btn-wrap">
+      <a href="${resetUrl}" class="btn">Set New Password</a>
     </div>
-    <p style="font-size:12px; color:#475569;">Or copy and paste this link into your browser:</p>
-    <p style="font-size:12px; word-break:break-all; color:#475569;">${resetUrl}</p>
-    <p style="font-size:12px; color:#475569; margin-top:16px;">This link expires in 1 hour. If you did not request a password reset, you can safely ignore this email — your account remains secure.</p>`
+
+    <div class="notice">
+      <p class="text-muted" style="margin:0 0 6px; font-size:13px;">Or copy this link:</p>
+      <p class="text-muted" style="margin:0; font-size:11px; word-break:break-all;">${resetUrl}</p>
+    </div>
+
+    <p class="text-muted" style="font-size:12px; margin-top:16px;">This link expires in 1 hour. Didn't request this? Your account is safe — ignore this email.</p>`
   );
   await sendEmail({ to, subject: 'Reset your promrkts password', html });
 }

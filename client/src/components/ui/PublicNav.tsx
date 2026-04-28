@@ -65,7 +65,7 @@ export default function PublicNav() {
   const textSub = dark ? "rgba(255,255,255,0.6)" : "#475569";
   const pillBg = dark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.035)";
   const pillBorder = dark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)";
-  const ctaBg = dark ? "white" : "#0057b8";
+  const ctaBg = dark ? "white" : "black";
   const ctaFg = dark ? "#0a0f1e" : "white";
 
   const links = isAuthenticated

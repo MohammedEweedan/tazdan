@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const api = axios.create({
-  baseURL: 'https://api.promrkts.com/api',
+  baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api',
   headers: {
     'Content-Type': 'application/json',
   },
@@ -37,6 +37,7 @@ export const authAPI = {
   login: (data: any) => api.post('/auth/login', data),
   me: () => api.get('/auth/me'),
   verifyEmail: (token: string) => api.get(`/auth/verify-email?token=${token}`),
+  verifyEmailCode: (code: string) => api.post('/auth/verify-email-code', { code }),
   resendVerification: () => api.post('/auth/resend-verification'),
   forgotPassword: (email: string) => api.post('/auth/forgot-password', { email }),
   resetPassword: (token: string, password: string) => api.post('/auth/reset-password', { token, password }),

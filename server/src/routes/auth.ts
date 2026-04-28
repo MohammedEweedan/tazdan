@@ -10,6 +10,7 @@ authRouter.post('/refresh', AuthController.refresh);   // rotates refresh token
 authRouter.post('/logout', AuthController.logout);     // revokes presented refresh token
 authRouter.get('/me', authenticate, AuthController.me);
 authRouter.get('/verify-email', AuthController.verifyEmail);
+authRouter.post('/verify-email-code', authenticate, AuthController.verifyEmailCode);
 authRouter.post('/resend-verification', authenticate, AuthController.resendVerification);
 authRouter.post('/forgot-password', AuthController.forgotPassword);
 authRouter.post('/reset-password', AuthController.resetPassword);

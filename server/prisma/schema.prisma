@@ -158,6 +158,8 @@ model User {
   emailVerified           Boolean    @default(false)
   emailVerificationToken  String?    @unique
   emailVerificationExpires DateTime?
+  emailVerificationCode   String?
+  emailVerificationCodeExpires DateTime?
   passwordResetToken      String?    @unique
   passwordResetExpires    DateTime?
   phoneVerified           Boolean    @default(false)
