@@ -226,18 +226,20 @@ function PrimaryCTA({
 function TermsCheckbox({
   checked,
   onChange,
+  onOpenTerms,
+  onOpenPrivacy,
   p,
 }: {
   checked: boolean;
   onChange: (v: boolean) => void;
+  onOpenTerms: () => void;
+  onOpenPrivacy: () => void;
   p: P;
 }) {
   return (
     <Flex
-      as="label"
       align="flex-start"
       gap="10px"
-      cursor="pointer"
       mt="4px"
       style={{ userSelect: "none" }}
     >
@@ -255,6 +257,7 @@ function TermsCheckbox({
         alignItems="center"
         justifyContent="center"
         transition="all 0.15s"
+        cursor="pointer"
         onClick={() => onChange(!checked)}
       >
         {checked && (
@@ -270,38 +273,41 @@ function TermsCheckbox({
         )}
       </Box>
 
-      <input
-        type="checkbox"
-        checked={checked}
-        onChange={(e) => onChange(e.target.checked)}
-        style={{ display: "none" }}
-      />
-
       <Text fontSize="13px" color={p.fgMuted} lineHeight="20px">
         I agree to the{" "}
         <Box
-          as={NextLink}
-          href="/terms"
-          target="_blank"
+          as="button"
+          type="button"
+          onClick={(e: React.MouseEvent) => { e.stopPropagation(); onOpenTerms(); }}
           style={{
             color: p.fg,
             fontWeight: "700",
             textDecoration: "underline",
             textUnderlineOffset: "2px",
+            background: "none",
+            border: "none",
+            cursor: "pointer",
+            padding: 0,
+            fontSize: "13px",
           }}
         >
           Terms of Service
         </Box>
         {" "}and{" "}
         <Box
-          as={NextLink}
-          href="/privacy"
-          target="_blank"
+          as="button"
+          type="button"
+          onClick={(e: React.MouseEvent) => { e.stopPropagation(); onOpenPrivacy(); }}
           style={{
             color: p.fg,
             fontWeight: "700",
             textDecoration: "underline",
             textUnderlineOffset: "2px",
+            background: "none",
+            border: "none",
+            cursor: "pointer",
+            padding: 0,
+            fontSize: "13px",
           }}
         >
           Privacy Policy
@@ -309,6 +315,119 @@ function TermsCheckbox({
         . I confirm I am 18+ and not a U.S. person.
       </Text>
     </Flex>
+  );
+}
+
+// ─── Legal Modal ──────────────────────────────────────────────────
+function LegalModal({
+  open,
+  onClose,
+  title,
+  sections,
+  eyebrow,
+  updated,
+  intro,
+  p,
+}: {
+  open: boolean;
+  onClose: () => void;
+  title: string;
+  eyebrow: string;
+  updated: string;
+  intro: string;
+  sections: { title: string; body: string }[];
+  p: P;
+}) {
+  if (!open) return null;
+  return (
+    <Box
+      position="fixed"
+      inset="0"
+      zIndex={50}
+      display="flex"
+      alignItems="center"
+      justifyContent="center"
+      bg="rgba(0,0,0,0.6)"
+      backdropFilter="blur(4px)"
+      onClick={onClose}
+    >
+      <Box
+        bg={p.bgElev}
+        border={`1px solid ${p.border}`}
+        borderRadius="20px"
+        maxW="640px"
+        w="calc(100% - 32px)"
+        maxH="80vh"
+        overflowY="auto"
+        p="28px"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <Flex justify="space-between" align="center" mb="20px">
+          <Box>
+            <Text fontSize="12px" fontWeight="700" color="#4a8fe0" letterSpacing="0.08em" textTransform="uppercase">
+              {eyebrow}
+            </Text>
+            <Heading fontSize="20px" fontWeight="800" color={p.fg} mt="4px">
+              {title}
+            </Heading>
+          </Box>
+          <Box
+            as="button"
+            onClick={onClose}
+            style={{
+              width: "32px",
+              height: "32px",
+              borderRadius: "9999px",
+              background: p.pillBg,
+              border: `1px solid ${p.border}`,
+              color: p.fgMuted,
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <path d="M1 1l12 12M13 1L1 13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+            </svg>
+          </Box>
+        </Flex>
+
+        <Text fontSize="12px" color={p.fgFaint} mb="16px">{updated}</Text>
+        <Text fontSize="14px" color={p.fgMuted} lineHeight="22px" mb="24px">{intro}</Text>
+
+        <VStack align="stretch" spacing="20px">
+          {sections.map((s, i) => (
+            <Box key={i}>
+              <Text fontSize="14px" fontWeight="700" color={p.fg} mb="6px">
+                {s.title}
+              </Text>
+              <Text fontSize="13px" color={p.fgMuted} lineHeight="20px">
+                {s.body}
+              </Text>
+            </Box>
+          ))}
+        </VStack>
+
+        <Box mt="28px">
+          <Box
+            as="button"
+            onClick={onClose}
+            w="100%"
+            h="48px"
+            borderRadius="14px"
+            bg={p.ctaBg}
+            color={p.ctaFg}
+            fontWeight="700"
+            fontSize="14px"
+            textAlign="center"
+            style={{ cursor: "pointer", border: "none" }}
+          >
+            Close
+          </Box>
+        </Box>
+      </Box>
+    </Box>
   );
 }
 
@@ -455,6 +574,8 @@ export default function RegisterPage() {
   const [showPw, setShowPw] = useState(false);
   const [handle, setHandle] = useState("");
   const [termsAccepted, setTermsAccepted] = useState(false);
+  const [showTerms, setShowTerms] = useState(false);
+  const [showPrivacy, setShowPrivacy] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [kycDocs, setKycDocs] = useState<KycDoc[]>([
@@ -674,7 +795,13 @@ export default function RegisterPage() {
 
             {/* ── T&C disclaimer ── */}
             <Box mt="20px">
-              <TermsCheckbox checked={termsAccepted} onChange={setTermsAccepted} p={p} />
+              <TermsCheckbox
+                checked={termsAccepted}
+                onChange={setTermsAccepted}
+                onOpenTerms={() => setShowTerms(true)}
+                onOpenPrivacy={() => setShowPrivacy(true)}
+                p={p}
+              />
             </Box>
 
             <PrimaryCTA label={t("auth_continue") || "Continue"} type="submit" p={p} />
@@ -769,6 +896,49 @@ export default function RegisterPage() {
           </Box>
         </Flex>
       </Box>
+
+      {/* ── Terms Modal ── */}
+      <LegalModal
+        open={showTerms}
+        onClose={() => setShowTerms(false)}
+        eyebrow={t("page_terms_eyebrow") || "Legal"}
+        title={t("page_terms_title") || "Terms of Service"}
+        updated={t("page_terms_updated") || "Last updated: April 2026"}
+        intro={t("page_terms_intro") || ""}
+        sections={[
+          { title: t("page_terms_s1_t") || "1. Acceptance of Terms", body: t("page_terms_s1_d") || "" },
+          { title: t("page_terms_s2_t") || "2. Eligibility", body: t("page_terms_s2_d") || "" },
+          { title: t("page_terms_s3_t") || "3. Account Registration", body: t("page_terms_s3_d") || "" },
+          { title: t("page_terms_s4_t") || "4. Services", body: t("page_terms_s4_d") || "" },
+          { title: t("page_terms_s5_t") || "5. Fees", body: t("page_terms_s5_d") || "" },
+          { title: t("page_terms_s6_t") || "6. Prohibited Activities", body: t("page_terms_s6_d") || "" },
+          { title: t("page_terms_s7_t") || "7. Termination", body: t("page_terms_s7_d") || "" },
+          { title: t("page_terms_s8_t") || "8. Limitation of Liability", body: t("page_terms_s8_d") || "" },
+          { title: t("page_terms_s9_t") || "9. Governing Law", body: t("page_terms_s9_d") || "" },
+          { title: t("page_terms_s10_t") || "10. Contact", body: t("page_terms_s10_d") || "" },
+        ]}
+        p={p}
+      />
+
+      {/* ── Privacy Modal ── */}
+      <LegalModal
+        open={showPrivacy}
+        onClose={() => setShowPrivacy(false)}
+        eyebrow={t("page_privacy_eyebrow") || "Legal"}
+        title={t("page_privacy_title") || "Privacy Policy"}
+        updated={t("page_privacy_updated") || "Last updated: April 2026"}
+        intro={t("page_privacy_intro") || ""}
+        sections={[
+          { title: t("page_privacy_s1_t") || "1. Information We Collect", body: t("page_privacy_s1_d") || "" },
+          { title: t("page_privacy_s2_t") || "2. How We Use Your Information", body: t("page_privacy_s2_d") || "" },
+          { title: t("page_privacy_s3_t") || "3. Information Sharing", body: t("page_privacy_s3_d") || "" },
+          { title: t("page_privacy_s4_t") || "4. Data Security", body: t("page_privacy_s4_d") || "" },
+          { title: t("page_privacy_s5_t") || "5. Your Rights", body: t("page_privacy_s5_d") || "" },
+          { title: t("page_privacy_s6_t") || "6. Cookies", body: t("page_privacy_s6_d") || "" },
+          { title: t("page_privacy_s7_t") || "7. Contact Us", body: t("page_privacy_s7_d") || "" },
+        ]}
+        p={p}
+      />
     </Box>
   );
 }
