@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import AppProviders from '@/providers/AppProviders';
+import PageTitle from '@/components/PageTitle';
 
 export const metadata: Metadata = {
   title: 'promrkts - crypto, simplified',
@@ -34,6 +35,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body>
         <AppProviders>
+          <PageTitle />
           {children}
         </AppProviders>
       </body>

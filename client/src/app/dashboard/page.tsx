@@ -1,406 +1,478 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import NextLink from "next/link";
 import {
-  Box, Text, VStack, HStack, Flex, Button, Icon, Badge,
+  Box, Text, VStack, HStack, Flex, Button, Icon, Badge, Avatar,
+  Spinner, useToast,
 } from "@chakra-ui/react";
-import { useTranslate } from "@tolgee/react";
 import {
-  FiArrowUpRight, FiArrowDownLeft, FiRepeat, FiSend,
-  FiTrendingUp, FiTrendingDown, FiEye, FiEyeOff,
-  FiCreditCard, FiShoppingBag, FiDollarSign, FiBarChart2,
-  FiGift, FiArrowRight, FiZap, FiInbox,
+  FiArrowDownLeft, FiArrowUpRight, FiRepeat, FiSend,
+  FiTrendingUp, FiTrendingDown, FiBell, FiSettings,
+  FiPlus, FiMinus, FiCopy, FiCreditCard, FiInbox,
+  FiArrowRight,
 } from "react-icons/fi";
+import { motion } from "framer-motion";
 import { useAuthStore } from "@/stores/authStore";
-import { walletAPI, exchangeAPI } from "@/lib/api";
-import {
-  PageShell, PageHeader, GlassCard, SectionHeader, StatTile, Sparkline,
-  PageSpinner, EmptyState, useDashboardTokens, PairAvatar, COIN_COLOR,
-} from "@/components/dashboard/DashboardUI";
+import { walletAPI, transferAPI, exchangeAPI } from "@/lib/api";
+import { useDashboardTokens, PageShell } from "@/components/dashboard/DashboardUI";
 
-const TXN_MAP: Record<string, { icon: any; label: string; dir: "in" | "out" }> = {
-  DEPOSIT: { icon: FiArrowDownLeft, label: "Deposit", dir: "in" },
-  WITHDRAWAL: { icon: FiArrowUpRight, label: "Withdrawal", dir: "out" },
-  BUY: { icon: FiArrowDownLeft, label: "Buy", dir: "in" },
-  SELL: { icon: FiArrowUpRight, label: "Sell", dir: "out" },
-  TRANSFER_IN: { icon: FiArrowDownLeft, label: "Received", dir: "in" },
-  TRANSFER_OUT: { icon: FiArrowUpRight, label: "Sent", dir: "out" },
-  AGENT_DEPOSIT: { icon: FiArrowDownLeft, label: "Agent deposit", dir: "in" },
-  AGENT_WITHDRAWAL: { icon: FiArrowUpRight, label: "Agent withdrawal", dir: "out" },
+/* ─── Types ─── */
+type TabKey = "ASSETS" | "WALLETS" | "ACTIVITY";
+
+/* ─── Currency meta ─── */
+const ASSET_META: Record<string, { title: string; decimals: number }> = {
+  BTC: { title: "Bitcoin", decimals: 8 },
+  ETH: { title: "Ethereum", decimals: 6 },
+  USDT: { title: "Tether", decimals: 2 },
+  SOL: { title: "Solana", decimals: 4 },
+  BNB: { title: "BNB", decimals: 4 },
+  XRP: { title: "XRP", decimals: 4 },
+  ADA: { title: "Cardano", decimals: 4 },
+  DOGE: { title: "Dogecoin", decimals: 4 },
+  MATIC: { title: "Polygon", decimals: 4 },
+  DOT: { title: "Polkadot", decimals: 4 },
+  AVAX: { title: "Avalanche", decimals: 4 },
+  USD: { title: "US Dollar", decimals: 2 },
+  EUR: { title: "Euro", decimals: 2 },
+  GBP: { title: "British Pound", decimals: 2 },
+  AED: { title: "UAE Dirham", decimals: 2 },
+  SAR: { title: "Saudi Riyal", decimals: 2 },
+  EGP: { title: "Egyptian Pound", decimals: 2 },
+  LYD: { title: "Libyan Dinar", decimals: 3 },
+  DEFAULT: { title: "Asset", decimals: 4 },
 };
 
+const ICON_CFG: Record<string, { bg: string; fg: string; glyph: string }> = {
+  BTC: { bg: "#f7931a", fg: "#fff", glyph: "₿" },
+  ETH: { bg: "#627eea", fg: "#fff", glyph: "Ξ" },
+  USDT: { bg: "#26a17b", fg: "#fff", glyph: "₮" },
+  SOL: { bg: "#9945ff", fg: "#fff", glyph: "◎" },
+  BNB: { bg: "#f3ba2f", fg: "#000", glyph: "B" },
+  XRP: { bg: "#23292f", fg: "#fff", glyph: "✕" },
+  ADA: { bg: "#0033ad", fg: "#fff", glyph: "₳" },
+  DOGE: { bg: "#c3a634", fg: "#fff", glyph: "Ð" },
+  MATIC: { bg: "#8247e5", fg: "#fff", glyph: "◆" },
+  DOT: { bg: "#e6007a", fg: "#fff", glyph: "●" },
+  AVAX: { bg: "#e84142", fg: "#fff", glyph: "▲" },
+  USD: { bg: "#2775ca", fg: "#fff", glyph: "$" },
+  EUR: { bg: "#1a73e8", fg: "#fff", glyph: "€" },
+  GBP: { bg: "#7c3aed", fg: "#fff", glyph: "£" },
+  AED: { bg: "#0f766e", fg: "#fff", glyph: "د" },
+  SAR: { bg: "#15803d", fg: "#fff", glyph: "﷼" },
+  EGP: { bg: "#dc2626", fg: "#fff", glyph: "£" },
+  LYD: { bg: "#16a34a", fg: "#fff", glyph: "د" },
+  DEFAULT: { bg: "rgba(125,125,125,0.2)", fg: "#888", glyph: "?" },
+};
+
+const CHAIN_LABEL: Record<string, string> = {
+  BTC: "Bitcoin", ETH: "Ethereum (ERC-20)", USDT: "Tron (TRC-20)",
+  SOL: "Solana", BNB: "BNB Smart Chain", XRP: "XRP Ledger",
+  ADA: "Cardano", DOGE: "Dogecoin", MATIC: "Polygon",
+  DOT: "Polkadot", AVAX: "Avalanche C-Chain",
+};
+
+const TXN_ICON: Record<string, { icon: any; label: string; color: string }> = {
+  BUY: { icon: FiPlus, label: "Buy", color: "#22c55e" },
+  SELL: { icon: FiMinus, label: "Sell", color: "#ef4444" },
+  DEPOSIT: { icon: FiArrowDownLeft, label: "Deposit", color: "#22c55e" },
+  WITHDRAW: { icon: FiArrowUpRight, label: "Withdraw", color: "#ef4444" },
+  SEND: { icon: FiSend, label: "Send", color: "#ef4444" },
+  TRANSFER_OUT: { icon: FiSend, label: "Sent", color: "#ef4444" },
+  RECEIVE: { icon: FiArrowDownLeft, label: "Received", color: "#22c55e" },
+  TRANSFER_IN: { icon: FiArrowDownLeft, label: "Received", color: "#22c55e" },
+  AGENT_DEPOSIT: { icon: FiArrowDownLeft, label: "Agent Deposit", color: "#22c55e" },
+  AGENT_WITHDRAWAL: { icon: FiArrowUpRight, label: "Agent Withdrawal", color: "#ef4444" },
+  DEFAULT: { icon: FiRepeat, label: "Transaction", color: "#94a3b8" },
+};
+
+/* ─── Counter animation ─── */
+function Counter({ to }: { to: number }) {
+  const [val, setVal] = useState(0);
+  const raf = useRef<number>();
+  useEffect(() => {
+    const start = performance.now();
+    const dur = 1200;
+    const tick = (now: number) => {
+      const t = Math.min((now - start) / dur, 1);
+      const ease = t < 0.5 ? 8 * t * t * t * t : 1 - Math.pow(-2 * t + 2, 4) / 2;
+      setVal(to * ease);
+      if (t < 1) raf.current = requestAnimationFrame(tick);
+    };
+    raf.current = requestAnimationFrame(tick);
+    return () => { if (raf.current) cancelAnimationFrame(raf.current); };
+  }, [to]);
+  return <>${val.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</>;
+}
+
+/* ─── Live prices hook (Binance) ─── */
+const SEED_PRICES: Record<string, { price: number; change: number }> = {
+  BTCUSDT: { price: 114200.20, change: 2.34 },
+  ETHUSDT: { price: 4111.02, change: 1.82 },
+  SOLUSDT: { price: 162.44, change: 5.12 },
+  BNBUSDT: { price: 612.30, change: -0.42 },
+  XRPUSDT: { price: 0.612, change: 0.88 },
+};
+
+function useLivePrices() {
+  const [prices, setPrices] = useState(SEED_PRICES);
+  useEffect(() => {
+    let alive = true;
+    const go = async () => {
+      try {
+        const symbols = Object.keys(SEED_PRICES);
+        const url = `https://api.binance.com/api/v3/ticker/24hr?symbols=${encodeURIComponent(JSON.stringify(symbols))}`;
+        const res = await fetch(url, { cache: "no-store" });
+        if (!res.ok) return;
+        const data: Array<{ symbol: string; lastPrice: string; priceChangePercent: string }> = await res.json();
+        if (!alive) return;
+        const next: typeof SEED_PRICES = {};
+        for (const d of data) next[d.symbol] = { price: parseFloat(d.lastPrice), change: parseFloat(d.priceChangePercent) };
+        setPrices((p) => ({ ...p, ...next }));
+      } catch { /* keep seed */ }
+    };
+    go();
+    const id = setInterval(go, 15000);
+    return () => { alive = false; clearInterval(id); };
+  }, []);
+  return prices;
+}
+
+/* ══════════════════════════════════════
+   COMPONENT
+══════════════════════════════════════ */
 export default function DashboardPage() {
-  const { t } = useTranslate();
   const { user } = useAuthStore();
   const tok = useDashboardTokens();
+  const toast = useToast();
+  const prices = useLivePrices();
+
+  const [tab, setTab] = useState<TabKey>("ASSETS");
   const [wallets, setWallets] = useState<any[]>([]);
   const [transactions, setTransactions] = useState<any[]>([]);
-  const [rates, setRates] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [showBalance, setShowBalance] = useState(true);
 
   useEffect(() => {
     Promise.all([
       walletAPI.getAll().catch(() => ({ data: { wallets: [] } })),
-      exchangeAPI.getRates().catch(() => ({ data: { rates: [] } })),
-    ]).then(([wRes, rRes]: any[]) => {
+      transferAPI.getHistory(1).catch(() => ({ data: { data: [] } })),
+    ]).then(([wRes, tRes]: any[]) => {
       const w = wRes.data.wallets || wRes.data || [];
       setWallets(Array.isArray(w) ? w : []);
-      const r = rRes.data.rates || rRes.data || [];
-      const btcRate = (Array.isArray(r) ? r : []).find((x: any) => x.quoteCurrency === "BTC") || { buyPrice: "67240.50", sellPrice: "67180.30" };
-      setRates(btcRate);
-
-      const usdtWallet = (Array.isArray(w) ? w : []).find((x: any) => x.currency === "USDT");
-      if (usdtWallet) {
-        walletAPI.getTransactions("USDT", 1).then((tRes: any) => {
-          setTransactions((tRes.data.transactions || tRes.data || []).slice(0, 8));
-        }).catch(() => {});
-      }
+      const t = tRes.data.data || tRes.data || [];
+      setTransactions(Array.isArray(t) ? t : []);
       setLoading(false);
     });
   }, []);
 
-  const mask = (s: string) => (showBalance ? s : "••••••");
-  const totalUSD = wallets.reduce((sum, w) => sum + parseFloat(w.balance || 0) * (w.usdRate || 1), 0);
-  const totalFrozen = wallets.reduce((sum, w) => sum + parseFloat(w.frozen || 0) * (w.usdRate || 1), 0);
-  const available = totalUSD - totalFrozen;
+  const priceMap = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const [sym, p] of Object.entries(prices)) {
+      const cur = sym.replace("USDT", "");
+      map[cur] = p.price;
+    }
+    return map;
+  }, [prices]);
 
-  const quickActions = [
-    { href: "/dashboard/deposit", icon: FiArrowDownLeft, label: "Deposit", color: tok.success },
-    { href: "/dashboard/withdraw", icon: FiArrowUpRight, label: "Withdraw", color: tok.danger },
-    { href: "/dashboard/trade", icon: FiRepeat, label: "Trade", color: tok.brand },
-    { href: "/dashboard/p2p", icon: FiShoppingBag, label: "P2P", color: "#8b5cf6" },
-    { href: "/dashboard/wallet", icon: FiSend, label: "Send", color: "#0891b2" },
-    { href: "/dashboard/referrals", icon: FiGift, label: "Refer", color: "#f59e0b" },
+  const totalUsd = useMemo(() => {
+    return wallets.reduce((sum, w) => {
+      const live = priceMap[w.currency];
+      if (live !== undefined) return sum + Number(w.balance) * live;
+      return sum + Number(w.fiatValueUsd || w.balance * (w.usdRate || 1));
+    }, 0);
+  }, [wallets, priceMap]);
+
+  const deltaPct = useMemo(() => {
+    if (totalUsd <= 0) return 0;
+    let weighted = 0;
+    wallets.forEach((w) => {
+      const sym = `${w.currency}USDT`;
+      const p = prices[sym];
+      if (!p) return;
+      const exposure = Number(w.balance) * p.price;
+      weighted += (exposure / totalUsd) * p.change;
+    });
+    return weighted;
+  }, [wallets, prices, totalUsd]);
+
+  const mask = (s: string) => (showBalance ? s : "••••••");
+  const positive = deltaPct >= 0;
+  const handle = (user as any)?.username ?? user?.email?.split("@")[0] ?? "me";
+  const initial = (user?.firstName?.[0] ?? user?.email?.[0] ?? "P").toUpperCase();
+
+  const actions = [
+    { href: "/dashboard/trade", icon: FiPlus, label: "Buy", accent: "#22c55e" },
+    { href: "/dashboard/trade", icon: FiMinus, label: "Sell", accent: "#ef4444" },
+    { href: "/dashboard/send", icon: FiSend, label: "Send", accent: tok.brand },
+    { href: "/dashboard/wallet", icon: FiArrowDownLeft, label: "Receive", accent: "#8b5cf6" },
+    { href: "/dashboard/deposit", icon: FiArrowDownLeft, label: "Deposit", accent: "#0891b2" },
   ];
 
-  if (loading) return <PageShell><PageSpinner /></PageShell>;
+  if (loading) {
+    return (
+      <PageShell>
+        <Flex align="center" justify="center" minH="60vh">
+          <VStack spacing={4}>
+            <Spinner size="xl" color={tok.brand} />
+            <Text color={tok.textMuted} fontSize="13px">Loading your portfolio...</Text>
+          </VStack>
+        </Flex>
+      </PageShell>
+    );
+  }
 
   return (
     <PageShell>
-      <PageHeader
-        eyebrow={`Welcome back, ${user?.firstName || "trader"}`}
-        title="Dashboard"
-        subtitle="Your portfolio at a glance."
-        right={
-          <HStack spacing={2}>
-            <Button
-              size="sm"
-              h="36px"
-              px={3}
-              variant="ghost"
-              color={tok.textSub}
-              _hover={{ color: tok.textMain, bg: tok.hover }}
-              leftIcon={showBalance ? <FiEyeOff /> : <FiEye />}
-              onClick={() => setShowBalance((v) => !v)}
-            >
-              {showBalance ? "Hide" : "Show"}
-            </Button>
-            <Button
-              as={NextLink}
-              href="/dashboard/trade"
-              size="sm"
-              h="36px"
-              px={4}
-              bg={`linear-gradient(135deg, ${tok.brand}, #003d82)`}
-              color="white"
-              fontWeight="800"
-              borderRadius="10px"
-              leftIcon={<FiZap />}
-              _hover={{ transform: "translateY(-1px)", boxShadow: `0 8px 24px ${tok.brand}44` }}
-              transition="all 0.2s"
-            >
-              Trade
-            </Button>
-          </HStack>
-        }
-      />
+      {/* ── Header ── */}
+      <Flex justify="space-between" align="center" mb={6}>
+        <HStack spacing={3}>
+          <Avatar size="sm" name={initial} bg="linear-gradient(135deg, #7c3aed, #4a8fe0)" color="white" fontWeight="800" />
+          <Text fontSize="17px" fontWeight="700" color={tok.textMain}>@{handle}</Text>
+        </HStack>
+        <HStack spacing={2}>
+          <Button as={NextLink} href="/dashboard/notifications" size="sm" variant="ghost" borderRadius="full" w="36px" h="36px" p={0} color={tok.textSub} _hover={{ bg: tok.hover }}>
+            <Icon as={FiBell} boxSize={4} />
+          </Button>
+          <Button as={NextLink} href="/dashboard/settings" size="sm" variant="ghost" borderRadius="full" w="36px" h="36px" p={0} color={tok.textSub} _hover={{ bg: tok.hover }}>
+            <Icon as={FiSettings} boxSize={4} />
+          </Button>
+        </HStack>
+      </Flex>
 
-      {/* Portfolio hero */}
-      <Box
-        mb={4}
-        p={{ base: 5, md: 6 }}
-        borderRadius="18px"
-        position="relative"
-        overflow="hidden"
-        bg={tok.dark
-          ? "linear-gradient(135deg, rgba(0,87,184,0.25), rgba(0,87,184,0.06))"
-          : "linear-gradient(135deg, rgba(0,87,184,0.14), rgba(0,87,184,0.04))"}
-        border="1px solid"
-        borderColor={`${tok.brand}33`}
-      >
-        {/* Blobs */}
-        <Box position="absolute" top="-40%" right="-5%" w="260px" h="260px" borderRadius="full"
-          bg={`radial-gradient(circle, ${tok.brand}44, transparent 65%)`} filter="blur(40px)" pointerEvents="none" />
-        <Box position="absolute" bottom="-40%" left="-5%" w="220px" h="220px" borderRadius="full"
-          bg={`radial-gradient(circle, ${tok.brandLight}33, transparent 65%)`} filter="blur(40px)" pointerEvents="none" />
-
-        <Flex direction={{ base: "column", md: "row" }} gap={6} justify="space-between" align={{ base: "stretch", md: "center" }} position="relative" zIndex={1}>
-          <Box>
-            <Text fontSize="10.5px" fontWeight="800" color={tok.textMuted} letterSpacing=".14em" textTransform="uppercase" mb={1}>
-              Total portfolio value
-            </Text>
-            <HStack spacing={3} align="flex-end">
-              <Text fontSize={{ base: "36px", md: "48px" }} fontWeight="900" color={tok.textMain} letterSpacing="-0.03em" lineHeight="1" fontFamily="'DM Sans', sans-serif">
-                {mask(`$${totalUSD.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`)}
-              </Text>
-              <Badge bg="rgba(34,197,94,0.15)" color={tok.success} fontSize="11px" fontWeight="900" px={2.5} py={1} borderRadius="full" mb={1}>
-                ▲ 2.14%
-              </Badge>
-            </HStack>
-            <HStack mt={2} spacing={5}>
-              <Box>
-                <Text fontSize="10px" color={tok.textMuted} fontWeight="700" letterSpacing=".1em" textTransform="uppercase">
-                  Available
-                </Text>
-                <Text fontSize="13px" fontWeight="800" color={tok.textMain} fontFamily="monospace">
-                  {mask(`$${available.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`)}
-                </Text>
-              </Box>
-              <Box>
-                <Text fontSize="10px" color={tok.textMuted} fontWeight="700" letterSpacing=".1em" textTransform="uppercase">
-                  Locked
-                </Text>
-                <Text fontSize="13px" fontWeight="800" color={tok.warning} fontFamily="monospace">
-                  {mask(`$${totalFrozen.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`)}
-                </Text>
-              </Box>
-            </HStack>
-          </Box>
-          <Box display={{ base: "none", md: "block" }}>
-            <Sparkline up w={260} h={70} />
-          </Box>
-        </Flex>
+      {/* ── Total Balance ── */}
+      <Box textAlign="center" mb={2}>
+        <Text fontSize={{ base: "38px", md: "52px" }} fontWeight="900" color={tok.textMain} letterSpacing="-0.04em" lineHeight={1} fontFamily="'DM Sans', sans-serif">
+          <Counter to={totalUsd} />
+        </Text>
       </Box>
 
-      {/* Quick actions */}
-      <Box display="grid" gridTemplateColumns={{ base: "repeat(3, 1fr)", md: "repeat(6, 1fr)" }} gap={3} mb={4}>
-        {quickActions.map((a) => (
-          <GlassCard key={a.label} hover p={4}>
-            <Box as={NextLink} href={a.href} display="block" textAlign="center">
-              <Flex
-                w="40px"
-                h="40px"
-                mx="auto"
-                borderRadius="12px"
-                bg={`${a.color}15`}
-                color={a.color}
-                align="center"
-                justify="center"
-                mb={2}
-              >
-                <Icon as={a.icon} />
-              </Flex>
-              <Text fontSize="12px" fontWeight="800" color={tok.textMain}>{a.label}</Text>
-            </Box>
-          </GlassCard>
+      {/* ── 24h Delta ── */}
+      <Flex justify="center" align="center" gap={3} mb={8}>
+        <Text color={positive ? tok.success : tok.danger} fontSize="14px" fontWeight="600">
+          {positive ? "+" : "-"}${Math.abs(totalUsd * deltaPct / 100).toFixed(2)}
+        </Text>
+        <Badge
+          bg={positive ? "rgba(34,197,94,0.15)" : "rgba(239,68,68,0.15)"}
+          color={positive ? tok.success : tok.danger}
+          px={2.5} py={1} borderRadius="full" fontSize="12px" fontWeight="700"
+        >
+          <Icon as={positive ? FiTrendingUp : FiTrendingDown} mr={1} boxSize={3} />
+          {Math.abs(deltaPct).toFixed(2)}%
+        </Badge>
+      </Flex>
+
+      {/* ── 5 Action Buttons ── */}
+      <Flex justify="center" gap={{ base: 2, md: 4 }} mb={8}>
+        {actions.map((a) => (
+          <VStack key={a.label} as={NextLink} href={a.href} spacing={1.5} align="center" role="group" cursor="pointer">
+            <Flex
+              w={{ base: "52px", md: "56px" }} h={{ base: "52px", md: "56px" }}
+              borderRadius="full"
+              bg={tok.dark ? "rgba(255,255,255,0.06)" : "rgba(0,87,184,0.06)"}
+              border="1px solid"
+              borderColor={tok.dark ? "rgba(255,255,255,0.1)" : "rgba(0,87,184,0.1)"}
+              align="center" justify="center"
+              transition="all 0.18s"
+              _groupHover={{ bg: `${a.accent}15`, transform: "translateY(-2px)", borderColor: `${a.accent}40` }}
+            >
+              <Icon as={a.icon} color={a.accent} boxSize={5} />
+            </Flex>
+            <Text fontSize="11px" fontWeight="700" color={tok.textMain}>{a.label}</Text>
+          </VStack>
         ))}
-      </Box>
+      </Flex>
 
-      {/* KPI row */}
-      <Box display="grid" gridTemplateColumns={{ base: "repeat(2, 1fr)", md: "repeat(4, 1fr)" }} gap={3} mb={4}>
-        <StatTile
-          label="BTC / USDT"
-          value={rates ? `${parseFloat(rates.buyPrice).toFixed(2)}` : "—"}
-          hint="Live rate"
-          icon={FiBarChart2}
-          delta={{ value: "0.84%", positive: true }}
-        />
-        <StatTile
-          label="Assets"
-          value={String(wallets.length)}
-          hint="Active wallets"
-          icon={FiCreditCard}
-        />
-        <StatTile
-          label="24h volume"
-          value="$—"
-          hint="Coming soon"
-          icon={FiTrendingUp}
-        />
-        <StatTile
-          label="Realised P/L"
-          value="$0.00"
-          hint="Last 30 days"
-          icon={FiDollarSign}
-        />
-      </Box>
-
-      {/* Two columns */}
-      <Box
-        display="grid"
-        gridTemplateColumns={{ base: "1fr", lg: "minmax(0, 1fr) minmax(0, 1fr)" }}
-        gap={4}
-      >
-        {/* Holdings */}
-        <GlassCard p={0}>
-          <Box px={4} pt={4}>
-            <SectionHeader
-              title="Your holdings"
-              subtitle={`${wallets.length} assets`}
-              right={
-                <Button as={NextLink} href="/dashboard/wallet" size="xs" variant="ghost" color={tok.brand} fontWeight="700" rightIcon={<FiArrowRight />} _hover={{ bg: tok.hover }}>
-                  Wallet
-                </Button>
-              }
-            />
-          </Box>
-          <HDivList>
-            {wallets.length === 0 ? (
-              <Box p={4}><EmptyState icon={FiInbox} title="No holdings yet" hint="Deposit funds to start trading." /></Box>
-            ) : (
-              wallets.slice(0, 6).map((w) => {
-                const color = COIN_COLOR[w.currency] ?? tok.brand;
-                const bal = parseFloat(w.balance || 0);
-                const usd = bal * (w.usdRate || 1);
-                return (
-                  <Flex
-                    key={w.currency}
-                    px={4}
-                    py={3}
-                    as={NextLink}
-                    href="/dashboard/wallet"
-                    align="center"
-                    justify="space-between"
-                    _hover={{ bg: tok.hover }}
-                    transition="background 0.15s"
-                  >
-                    <HStack spacing={3}>
-                      <PairAvatar symbol={w.currency} color={color} size={34} />
-                      <Box>
-                        <Text fontSize="13px" fontWeight="800" color={tok.textMain}>{w.currency}</Text>
-                        <Text fontSize="10.5px" color={tok.textMuted}>
-                          {(w.usdRate ?? 1) >= 1 ? `$${(w.usdRate ?? 1).toFixed(2)}` : `$${(w.usdRate ?? 1).toFixed(4)}`}
-                        </Text>
-                      </Box>
-                    </HStack>
-                    <HStack spacing={3}>
-                      <Sparkline up={Math.random() > 0.5} w={60} h={20} />
-                      <VStack align="flex-end" spacing={0}>
-                        <Text fontSize="12.5px" fontWeight="800" color={tok.textMain} fontFamily="monospace">
-                          {mask(bal.toLocaleString(undefined, { maximumFractionDigits: 6 }))}
-                        </Text>
-                        <Text fontSize="10.5px" color={tok.textMuted} fontFamily="monospace">
-                          {mask(`$${usd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`)}
-                        </Text>
-                      </VStack>
-                    </HStack>
-                  </Flex>
-                );
-              })
+      {/* ── Tabs: Assets | Wallets | Activity ── */}
+      <Flex justify="center" gap={8} mb={2} borderBottom="1px solid" borderColor={tok.panelBorder}>
+        {(["ASSETS", "WALLETS", "ACTIVITY"] as TabKey[]).map((t) => (
+          <Box key={t} position="relative" pb={3} cursor="pointer" onClick={() => setTab(t)}>
+            <Text fontSize="15px" fontWeight={tab === t ? 700 : 600} color={tab === t ? tok.textMain : tok.textMuted}>
+              {t}
+            </Text>
+            {tab === t && (
+              <Box position="absolute" bottom="-1px" left={0} right={0} h="2px" bg={tok.brand} borderRadius="full" />
             )}
-          </HDivList>
-        </GlassCard>
-
-        {/* Recent activity */}
-        <GlassCard p={0}>
-          <Box px={4} pt={4}>
-            <SectionHeader
-              title="Recent activity"
-              subtitle="Last 8 transactions"
-              right={
-                <Button as={NextLink} href="/dashboard/wallet" size="xs" variant="ghost" color={tok.brand} fontWeight="700" rightIcon={<FiArrowRight />} _hover={{ bg: tok.hover }}>
-                  All
-                </Button>
-              }
-            />
           </Box>
-          <HDivList>
-            {transactions.length === 0 ? (
-              <Box p={4}><EmptyState icon={FiInbox} title="No activity yet" hint="Your transactions will appear here." /></Box>
-            ) : (
-              transactions.map((tx: any) => {
-                const m = TXN_MAP[tx.type] ?? TXN_MAP.TRANSFER_OUT;
-                const isIn = m.dir === "in";
-                return (
-                  <Flex key={tx.id} px={4} py={3} align="center" justify="space-between" _hover={{ bg: tok.hover }} transition="background 0.15s">
-                    <HStack spacing={3}>
-                      <Flex
-                        w="34px"
-                        h="34px"
-                        borderRadius="10px"
-                        bg={isIn ? "rgba(34,197,94,0.12)" : "rgba(239,68,68,0.12)"}
-                        color={isIn ? tok.success : tok.danger}
-                        align="center"
-                        justify="center"
-                      >
-                        <Icon as={m.icon} boxSize={4} />
-                      </Flex>
-                      <Box>
-                        <Text fontSize="12.5px" fontWeight="700" color={tok.textMain}>{m.label}</Text>
-                        <Text fontSize="10.5px" color={tok.textMuted}>
-                          {new Date(tx.createdAt).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
-                        </Text>
-                      </Box>
-                    </HStack>
-                    <Text fontSize="12.5px" fontWeight="800" color={isIn ? tok.success : tok.danger} fontFamily="monospace">
-                      {isIn ? "+" : "-"}{parseFloat(tx.amount || 0).toLocaleString(undefined, { maximumFractionDigits: 4 })} {tx.currency}
-                    </Text>
-                  </Flex>
-                );
-              })
-            )}
-          </HDivList>
-        </GlassCard>
-      </Box>
+        ))}
+      </Flex>
 
-      {/* Market highlights */}
+      {/* ── Tab Content ── */}
       <Box mt={4}>
-        <GlassCard p={4}>
-          <SectionHeader
-            title="Market highlights"
-            subtitle="Top movers this hour"
-            right={
-              <Button as={NextLink} href="/markets" size="xs" variant="ghost" color={tok.brand} fontWeight="700" rightIcon={<FiArrowRight />} _hover={{ bg: tok.hover }}>
-                Markets
-              </Button>
-            }
-          />
-          <Box display="grid" gridTemplateColumns={{ base: "repeat(2, 1fr)", md: "repeat(4, 1fr)" }} gap={3} mt={2}>
-            {MOCK_MOVERS.map((m) => (
-              <Box key={m.sym} p={3} borderRadius="12px" border="1px solid" borderColor={tok.panelBorder} bg={tok.panelInner}>
-                <HStack spacing={2} mb={2}>
-                  <PairAvatar symbol={m.sym} color={m.color} size={28} />
-                  <Box flex={1}>
-                    <Text fontSize="12px" fontWeight="800" color={tok.textMain}>{m.sym}/USDT</Text>
-                    <Text fontSize="10px" color={tok.textMuted}>{m.name}</Text>
-                  </Box>
-                </HStack>
-                <Text fontSize="15px" fontWeight="900" color={tok.textMain} fontFamily="'DM Sans', sans-serif" letterSpacing="-0.01em">
-                  ${m.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </Text>
-                <HStack spacing={2} mt={0.5}>
-                  <Icon as={m.up ? FiTrendingUp : FiTrendingDown} color={m.up ? tok.success : tok.danger} boxSize={3} />
-                  <Text fontSize="11px" fontWeight="800" color={m.up ? tok.success : tok.danger}>
-                    {m.up ? "+" : ""}{m.change}%
-                  </Text>
-                  <Box flex={1} />
-                  <Sparkline up={m.up} w={60} h={18} />
-                </HStack>
-              </Box>
-            ))}
-          </Box>
-        </GlassCard>
+        {tab === "ACTIVITY" ? (
+          <ActivityList items={transactions} tok={tok} />
+        ) : tab === "WALLETS" ? (
+          <WalletList wallets={wallets} tok={tok} toast={toast} />
+        ) : (
+          <AssetList wallets={wallets} priceMap={priceMap} tok={tok} mask={mask} />
+        )}
       </Box>
     </PageShell>
   );
 }
 
-/* Small helper: bordered list with dividers (used by the two lists above). */
-function HDivList({ children }: { children: React.ReactNode }) {
-  const tok = useDashboardTokens();
+/* ── Asset List ── */
+function AssetList({ wallets, priceMap, tok, mask }: { wallets: any[]; priceMap: Record<string, number>; tok: any; mask: (s: string) => string }) {
+  if (wallets.length === 0) {
+    return (
+      <Box textAlign="center" py={12}>
+        <Icon as={FiInbox} boxSize={8} color={tok.textMuted} mb={3} />
+        <Text color={tok.textMuted} fontSize="13px">No assets yet.</Text>
+        <Button as={NextLink} href="/dashboard/deposit" mt={4} size="sm" borderRadius="full" bg={tok.brand} color="white" fontWeight="700">
+          Top up to start
+        </Button>
+      </Box>
+    );
+  }
   return (
-    <VStack align="stretch" spacing={0} mt={2} borderTop="1px solid" borderColor={tok.panelBorder}
-      sx={{ "& > *:not(:last-child)": { borderBottom: "1px solid", borderColor: tok.panelBorder } }}>
-      {children}
+    <VStack align="stretch" spacing={0}>
+      {wallets.map((w) => {
+        const meta = ASSET_META[w.currency] ?? ASSET_META.DEFAULT;
+        const cfg = ICON_CFG[w.currency] ?? ICON_CFG.DEFAULT;
+        const live = priceMap[w.currency];
+        const usd = live !== undefined ? Number(w.balance) * live : Number(w.fiatValueUsd || 0);
+        return (
+          <Flex
+            key={w.id}
+            as={NextLink}
+            href={`/dashboard/wallet`}
+            align="center" justify="space-between"
+            py={4} px={2}
+            borderBottom="1px solid" borderColor={tok.panelBorder}
+            _hover={{ bg: tok.hover }} transition="background 0.15s"
+          >
+            <HStack spacing={3}>
+              <Flex w="38px" h="38px" borderRadius="full" bg={cfg.bg} align="center" justify="center">
+                <Text fontSize="15px" fontWeight="700" color={cfg.fg}>{cfg.glyph}</Text>
+              </Flex>
+              <Box>
+                <Text fontSize="14px" fontWeight="700" color={tok.textMain}>{meta.title}</Text>
+                <Text fontSize="12px" color={tok.textMuted}>
+                  {Number(w.balance).toLocaleString("en-US", { minimumFractionDigits: meta.decimals, maximumFractionDigits: meta.decimals })} {w.currency}
+                </Text>
+              </Box>
+            </HStack>
+            <VStack align="flex-end" spacing={0}>
+              <Text fontSize="14px" fontWeight="700" color={tok.textMain} fontFamily="monospace">
+                {mask(`$${usd.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`)}
+              </Text>
+            </VStack>
+          </Flex>
+        );
+      })}
     </VStack>
   );
 }
 
-const MOCK_MOVERS = [
-  { sym: "BTC", name: "Bitcoin", price: 67240.5, change: 2.34, up: true, color: COIN_COLOR.BTC },
-  { sym: "ETH", name: "Ethereum", price: 3520.8, change: -0.87, up: false, color: COIN_COLOR.ETH },
-  { sym: "SOL", name: "Solana", price: 172.4, change: 5.67, up: true, color: COIN_COLOR.SOL },
-  { sym: "DOGE", name: "Dogecoin", price: 0.1547, change: 8.92, up: true, color: COIN_COLOR.DOGE },
-];
+/* ── Wallet List (addresses) ── */
+function WalletList({ wallets, tok, toast }: { wallets: any[]; tok: any; toast: any }) {
+  const crypto = ["BTC", "ETH", "USDT", "SOL", "BNB", "XRP", "ADA", "DOGE", "MATIC", "DOT", "AVAX"];
+  if (wallets.length === 0) {
+    return (
+      <Box textAlign="center" py={12}>
+        <Icon as={FiCreditCard} boxSize={8} color={tok.textMuted} mb={3} />
+        <Text color={tok.textMuted} fontSize="13px">No wallets yet.</Text>
+      </Box>
+    );
+  }
+  return (
+    <VStack align="stretch" spacing={0}>
+      {wallets.map((w) => {
+        const isCrypto = crypto.includes(w.currency);
+        const addr = isCrypto
+          ? deriveAddress(w.id, w.currency)
+          : `PRMK-${w.currency}-${w.id.slice(0, 8).toUpperCase()}`;
+        const chain = CHAIN_LABEL[w.currency] ?? w.currency;
+        const meta = ASSET_META[w.currency] ?? ASSET_META.DEFAULT;
+        return (
+          <Box key={w.id} py={4} px={2} borderBottom="1px solid" borderColor={tok.panelBorder}>
+            <HStack spacing={3} mb={2}>
+              <CurrencyIcon currency={w.currency} />
+              <Box flex={1}>
+                <Text fontSize="14px" fontWeight="700" color={tok.textMain}>{meta.title}</Text>
+                <Text fontSize="11px" color={tok.textMuted}>{isCrypto ? `${chain} network` : "Bank reference"}</Text>
+              </Box>
+              <Text fontSize="13px" fontWeight="700" color={tok.textMuted} fontFamily="monospace">
+                {Number(w.balance).toLocaleString("en-US", { maximumFractionDigits: meta.decimals })} {w.currency}
+              </Text>
+            </HStack>
+            <Flex gap={2}>
+              <Flex
+                flex={1} align="center" gap={2} px={3} py={2} borderRadius="10px"
+                bg={tok.dark ? "rgba(255,255,255,0.04)" : "rgba(0,87,184,0.03)"}
+                border="1px solid" borderColor={tok.panelBorder}
+                cursor="pointer"
+                onClick={() => {
+                  navigator.clipboard.writeText(addr);
+                  toast({ title: "Copied", status: "success", duration: 1500 });
+                }}
+                _hover={{ borderColor: tok.brand }}
+              >
+                <Icon as={isCrypto ? FiCreditCard : FiCreditCard} boxSize={3} color={tok.textMuted} />
+                <Text flex={1} fontSize="12px" fontWeight="600" fontFamily="monospace" color={tok.textMain} noOfLines={1}>{addr}</Text>
+                <Icon as={FiCopy} boxSize={3} color={tok.textMuted} />
+              </Flex>
+            </Flex>
+          </Box>
+        );
+      })}
+    </VStack>
+  );
+}
+
+/* ── Activity List ── */
+function ActivityList({ items, tok }: { items: any[]; tok: any }) {
+  if (items.length === 0) {
+    return (
+      <Box textAlign="center" py={12}>
+        <Icon as={FiInbox} boxSize={8} color={tok.textMuted} mb={3} />
+        <Text color={tok.textMuted} fontSize="13px">No activity yet.</Text>
+      </Box>
+    );
+  }
+  return (
+    <VStack align="stretch" spacing={0}>
+      {items.slice(0, 10).map((t) => {
+        const cfg = TXN_ICON[t.type] ?? TXN_ICON.DEFAULT;
+        const amt = Number(t.amount);
+        const isIn = t.type === "DEPOSIT" || t.type === "RECEIVE" || t.type === "TRANSFER_IN" || t.type === "BUY";
+        return (
+          <Flex key={t.id} align="center" gap={3} py={3} px={2} borderBottom="1px solid" borderColor={tok.panelBorder} _hover={{ bg: tok.hover }} transition="background 0.15s">
+            <Flex w="38px" h="38px" borderRadius="12px" bg={`${cfg.color}15`} border={`1px solid ${cfg.color}28`} align="center" justify="center" flexShrink={0}>
+              <Icon as={cfg.icon} color={cfg.color} boxSize={4} />
+            </Flex>
+            <Box flex={1} minW={0}>
+              <Text fontSize="13px" fontWeight="700" color={tok.textMain} noOfLines={1}>{cfg.label}</Text>
+              <Text fontSize="11px" color={tok.textMuted}>{new Date(t.createdAt).toLocaleDateString()} · {t.type}</Text>
+            </Box>
+            <Text fontSize="13px" fontWeight="700" fontFamily="monospace" flexShrink={0} color={isIn ? tok.success : tok.textMain}>
+              {isIn ? "+" : "-"}{Math.abs(amt).toLocaleString("en-US", { maximumFractionDigits: 6 })} {t.currency || "USDT"}
+            </Text>
+          </Flex>
+        );
+      })}
+      <Button as={NextLink} href="/dashboard/wallet" mt={4} variant="ghost" borderRadius="full" color={tok.brand} fontWeight="700">
+        See all transactions <Icon as={FiArrowRight} ml={1} />
+      </Button>
+    </VStack>
+  );
+}
+
+/* ── Helpers ── */
+function CurrencyIcon({ currency }: { currency: string }) {
+  const cfg = ICON_CFG[currency] ?? ICON_CFG.DEFAULT;
+  return (
+    <Flex w="38px" h="38px" borderRadius="full" bg={cfg.bg} align="center" justify="center">
+      <Text fontSize="15px" fontWeight="700" color={cfg.fg}>{cfg.glyph}</Text>
+    </Flex>
+  );
+}
+
+function deriveAddress(walletId: string, currency: string): string {
+  const seed = walletId.replace(/-/g, "");
+  if (currency === "BTC") return `bc1q${seed.slice(0, 38)}`;
+  if (currency === "SOL") return seed.slice(0, 44);
+  if (currency === "XRP") return `r${seed.slice(0, 33)}`;
+  if (currency === "ADA") return `addr1${seed.slice(0, 56)}`;
+  return `0x${seed.slice(0, 40)}`;
+}

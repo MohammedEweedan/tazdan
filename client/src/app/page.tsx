@@ -66,8 +66,8 @@ import PublicFooter from "@/components/ui/PublicFooter";
 import { BackgroundPaths } from "@/components/ui/Paths";
 
 /* iPhone frame geometry */
-const PHONE_W = 300;
-const PHONE_H = 630;
+const PHONE_W = 60;
+const PHONE_H = 230;
 const SCREEN_INSET = { top: 10, bottom: 10, x: 10 };
 
 const BRAND = "#0057b8";
