@@ -13,6 +13,12 @@ import {
 import { AppError } from '../middleware/errorHandler';
 import { generateReferralCode } from '../utils/helpers';
 import { AuthRequest } from '../types';
+import crypto from 'crypto';
+import {
+  sendWelcomeEmail,
+  sendVerificationEmail,
+  sendPasswordResetEmail,
+} from '../services/email';
 
 const refreshSchema = z.object({
   refreshToken: z.string().min(10),
@@ -97,6 +103,18 @@ export class AuthController {
         ipAddress: req.ip,
         userAgent: req.headers['user-agent']?.toString(),
       });
+
+      // Send welcome & verification emails (fire-and-forget)
+      const emailToken = crypto.randomBytes(32).toString('hex');
+      await prisma.user.update({
+        where: { id: user.id },
+        data: {
+          emailVerificationToken: emailToken,
+          emailVerificationExpires: new Date(Date.now() + 24 * 60 * 60 * 1000),
+        },
+      });
+      sendWelcomeEmail({ to: user.email, firstName: user.firstName }).catch(() => {});
+      sendVerificationEmail({ to: user.email, firstName: user.firstName, token: emailToken }).catch(() => {});
 
       res.status(201).json({
         user: {
@@ -285,6 +303,135 @@ export class AuthController {
         data: { twoFactorEnabled: false, twoFactorSecret: null },
       });
       res.json({ message: '2FA disabled successfully' });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /* ─── Email verification ─── */
+  static async verifyEmail(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const { token } = req.query as { token: string };
+      if (!token) throw new AppError('Token required', 400);
+
+      const user = await prisma.user.findFirst({
+        where: {
+          emailVerificationToken: token,
+          emailVerificationExpires: { gt: new Date() },
+        },
+      });
+      if (!user) throw new AppError('Invalid or expired verification token', 400);
+
+      await prisma.user.update({
+        where: { id: user.id },
+        data: {
+          emailVerified: true,
+          emailVerificationToken: null,
+          emailVerificationExpires: null,
+          status: user.status === 'PENDING' ? 'ACTIVE' : user.status,
+        },
+      });
+
+      res.json({ message: 'Email verified successfully' });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async resendVerification(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const user = req.user;
+      if (!user) throw new AppError('Authentication required', 401);
+
+      const dbUser = await prisma.user.findUnique({ where: { id: user.id } });
+      if (!dbUser) throw new AppError('User not found', 404);
+      if (dbUser.emailVerified) throw new AppError('Email already verified', 400);
+
+      const token = crypto.randomBytes(32).toString('hex');
+      await prisma.user.update({
+        where: { id: dbUser.id },
+        data: {
+          emailVerificationToken: token,
+          emailVerificationExpires: new Date(Date.now() + 24 * 60 * 60 * 1000),
+        },
+      });
+
+      sendVerificationEmail({
+        to: dbUser.email,
+        firstName: dbUser.firstName,
+        token,
+      }).catch(() => {});
+
+      res.json({ message: 'Verification email sent' });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /* ─── Password reset ─── */
+  static async forgotPassword(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const { email } = z.object({ email: z.string().email() }).parse(req.body);
+
+      const user = await prisma.user.findUnique({ where: { email } });
+      if (!user) {
+        // Always return success to prevent email enumeration
+        return res.json({ message: 'If an account exists, a reset email has been sent.' });
+      }
+
+      const token = crypto.randomBytes(32).toString('hex');
+      await prisma.user.update({
+        where: { id: user.id },
+        data: {
+          passwordResetToken: token,
+          passwordResetExpires: new Date(Date.now() + 60 * 60 * 1000),
+        },
+      });
+
+      sendPasswordResetEmail({
+        to: user.email,
+        firstName: user.firstName,
+        token,
+      }).catch(() => {});
+
+      res.json({ message: 'If an account exists, a reset email has been sent.' });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async resetPassword(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const { token, password } = z.object({
+        token: z.string().min(10),
+        password: z.string().min(8).max(128),
+      }).parse(req.body);
+
+      const user = await prisma.user.findFirst({
+        where: {
+          passwordResetToken: token,
+          passwordResetExpires: { gt: new Date() },
+        },
+      });
+      if (!user) throw new AppError('Invalid or expired reset token', 400);
+
+      const passwordHash = await bcrypt.hash(password, 12);
+      await prisma.user.update({
+        where: { id: user.id },
+        data: {
+          passwordHash,
+          passwordResetToken: null,
+          passwordResetExpires: null,
+        },
+      });
+
+      // Revoke all refresh tokens for this user as a security measure
+      await prisma.refreshToken.updateMany({
+        where: { userId: user.id },
+        data: { revokedAt: new Date() },
+      });
+
+      res.json({ message: 'Password reset successfully. Please log in again.' });
     } catch (error) {
       next(error);
     }

@@ -314,11 +314,8 @@ export default function LoginPage() {
           {/* Forgot password */}
           <Flex justify="flex-end" mt="8px">
             <Box
-              as="button"
-              type="button"
-              onClick={() =>
-                alert("Password reset coming soon. Contact support@promrkts.app for now.")
-              }
+              as={NextLink}
+              href="/forgot-password"
               style={{
                 background: "none",
                 border: "none",
@@ -327,6 +324,7 @@ export default function LoginPage() {
                 fontSize: "13px",
                 fontWeight: "700",
                 padding: "4px 0",
+                textDecoration: "none",
               }}
             >
               Forgot password?

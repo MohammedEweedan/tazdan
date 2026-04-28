@@ -49,8 +49,9 @@ const TITLE_MAP: Record<string, string> = {
   "/admin/rates": "Rates - Admin - promrkts",
   "/admin/settings": "Settings - Admin - promrkts",
   "/admin/aml": "AML - Admin - promrkts",
-  "/auth/login": "Login - promrkts",
-  "/auth/register": "Register - promrkts",
+  "/verify-email": "Verify Email - promrkts",
+  "/forgot-password": "Forgot Password - promrkts",
+  "/reset-password": "Reset Password - promrkts",
   "/pay": "Pay - promrkts",
 };
 
