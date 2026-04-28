@@ -17,6 +17,9 @@ import {
 import type {
   CardEntity, MarketTicker, P2POffer, Transaction, User, Wallet,
 } from '@/types';
+import type {
+  ApiMessage, Conversation, BlockedUser,
+} from '@/types/messages';
 
 // Allow `EXPO_PUBLIC_FALLBACK_TO_MOCKS=true` to use seed data when the
 // backend is unreachable OR the route isn't implemented yet (404/5xx).
@@ -72,8 +75,8 @@ export const walletService = {
 
 // ───────── Transactions ─────────
 export const transactionService = {
-  list: (page = 1, limit = 20) => withFallback<{ items: Transaction[]; total: number }>(
-    async () => (await api.get('/wallets/transactions', { params: { page, limit } })).data,
+  list: (page = 1, limit = 20, type?: string, currency?: string) => withFallback<{ items: Transaction[]; total: number }>(
+    async () => (await api.get('/transactions', { params: { page, limit, type, currency } })).data,
     { items: MOCK_TRANSACTIONS.slice((page - 1) * limit, page * limit), total: MOCK_TRANSACTIONS.length },
   ),
 };
@@ -195,6 +198,20 @@ export const profileService = {
     const { data } = await api.get('/profile/me');
     return data.profile;
   },
+  /** Look up a user by id (auth-gated). Used by Messages thread header. */
+  byId: async (id: string): Promise<{
+    id: string; firstName?: string; lastName?: string;
+    username?: string | null; avatarUrl?: string | null;
+    role?: string; kycStatus?: string;
+  } | null> => {
+    try {
+      const { data } = await api.get(`/profile/by-id/${id}`);
+      return data.user ?? null;
+    } catch {
+      return null;
+    }
+  },
+
   /** Type-ahead search by @handle prefix. Used by the Send screen. */
   search: async (q: string): Promise<Array<{ id: string; username: string; firstName: string; lastName: string; avatarUrl?: string; kycTier?: string }>> => {
     if (!q || q.trim().length === 0) return [];
@@ -204,6 +221,78 @@ export const profileService = {
     } catch {
       return [];
     }
+  },
+};
+
+// ───────── Messages ─────────
+
+export const messageService = {
+  conversations: async (): Promise<Conversation[]> => {
+    const { data } = await api.get('/messages/conversations');
+    return data.conversations ?? [];
+  },
+
+  // ───────── Transfers ─────────
+
+  /** Internal wallet-to-wallet transfer (used by /send page) */
+  transfer: async (payload: {
+    receiverId: string;
+    currency: string;
+    amount: number;
+    note?: string;
+  }) => {
+    const { data } = await api.post('/transactions/transfer', payload);
+    return data;
+  },
+  thread: async (userId: string): Promise<ApiMessage[]> => {
+    const { data } = await api.get(`/messages/${userId}`);
+    return data.messages ?? [];
+  },
+  send: async (payload: {
+    receiverId: string;
+    content: string;
+    type?: 'TEXT' | 'PAYMENT' | 'P2P_NOTE';
+    metadata?: Record<string, any>;
+    tradeId?: string;
+  }): Promise<ApiMessage> => {
+    const { data } = await api.post('/messages', payload);
+    return data.message;
+  },
+  edit: async (id: string, content: string): Promise<ApiMessage> => {
+    const { data } = await api.patch(`/messages/${id}`, { content });
+    return data.message;
+  },
+  remove: async (id: string): Promise<ApiMessage> => {
+    const { data } = await api.delete(`/messages/${id}`);
+    return data.message;
+  },
+  markRead: (userId: string) => api.post(`/messages/read/${userId}`),
+
+  // Block / unblock / list
+  block:   (userId: string, reason?: string) => api.post('/messages/block', { userId, reason }),
+  unblock: (userId: string) => api.delete(`/messages/block/${userId}`),
+  blocks:  async (): Promise<BlockedUser[]> => {
+    const { data } = await api.get('/messages/blocks');
+    return data.blocks ?? [];
+  },
+
+  // Report
+  report: (payload: {
+    reportedUserId: string;
+    messageId?: string;
+    reason: string;
+    details?: string;
+  }) => api.post('/messages/report', payload),
+
+  // Escalate to support
+  escalate: async (payload: {
+    counterpartyId: string;
+    tradeId?: string;
+    reason: string;
+    details?: string;
+  }): Promise<{ escalation: any; supportThreadWith: string }> => {
+    const { data } = await api.post('/messages/escalate', payload);
+    return data;
   },
 };
 

@@ -8,6 +8,7 @@ import cookieParser from 'cookie-parser';
 import rateLimit from 'express-rate-limit';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
+import jwt from 'jsonwebtoken';
 import path from 'path';
 
 import { authRouter } from './routes/auth';
@@ -35,6 +36,7 @@ import { apiKeyRouter } from './routes/apikey';
 import { exportRouter } from './routes/export';
 import { cardRouter } from './routes/card';
 import { marketsRouter } from './routes/markets';
+import transactionRouter from './routes/transactions';
 import { errorHandler } from './middleware/errorHandler';
 import { prisma } from './utils/prisma';
 import { seedAdmin } from './utils/seed';
@@ -113,6 +115,7 @@ app.use('/api/api-keys', apiKeyRouter);
 app.use('/api/export', exportRouter);
 app.use('/api/cards', cardRouter);
 app.use('/api/markets', marketsRouter);
+app.use('/api/transactions', transactionRouter);
 
 // Health check
 app.get('/api/health', (_req, res) => {
@@ -122,21 +125,42 @@ app.get('/api/health', (_req, res) => {
 // Error handler
 app.use(errorHandler);
 
-// Socket.IO
+/**
+ * Socket.IO — authenticated namespace.
+ *
+ * Clients pass a JWT either via `auth.token` on the handshake or as a
+ * `?token=` query string. Authenticated sockets are auto-joined to
+ * `user:{id}` so controllers can emit per-user events without the
+ * client having to subscribe explicitly.
+ */
+io.use((socket, next) => {
+  const raw =
+    (socket.handshake.auth as any)?.token ??
+    (socket.handshake.query?.token as string | undefined);
+  if (!raw) return next();   // allow unauthenticated for public events
+  try {
+    const decoded = jwt.verify(raw, process.env.JWT_SECRET || 'secret') as {
+      id: string; email: string; role: string;
+    };
+    (socket.data as any).user = decoded;
+    next();
+  } catch {
+    next();                  // invalid token → unauthenticated socket, no rooms
+  }
+});
+
 io.on('connection', (socket) => {
-  console.log('Client connected:', socket.id);
+  const user = (socket.data as any).user as { id: string } | undefined;
+  if (user?.id) {
+    socket.join(`user:${user.id}`);
+  }
 
-  socket.on('subscribe:prices', () => {
-    socket.join('prices');
-  });
+  socket.on('subscribe:prices', () => socket.join('prices'));
 
-  socket.on('subscribe:orders', (userId: string) => {
-    socket.join(`user:${userId}`);
-  });
+  // Legacy explicit subscribe (kept for backward compat with older clients).
+  socket.on('subscribe:orders', (userId: string) => socket.join(`user:${userId}`));
 
-  socket.on('disconnect', () => {
-    console.log('Client disconnected:', socket.id);
-  });
+  socket.on('disconnect', () => { /* nothing to clean up */ });
 });
 
 const PORT = parseInt(process.env.PORT || '5000');

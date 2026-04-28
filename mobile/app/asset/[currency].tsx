@@ -1,29 +1,39 @@
 /**
  * Asset detail screen — opens when the user taps a held crypto on Home or
- * a coin from the Buy picker. Renders:
- *   - Big price + 24h change pill
- *   - SVG line chart of the sparkline (with optional area fill)
- *   - 1H / 24H / 7D / 30D timeframe buttons (re-samples client-side)
- *   - Volume + market-cap stat tiles
- *   - Holdings (if any) with "Buy" + "Sell" CTAs
+ * a coin from the Buy picker.
  *
- * Uses `react-native-svg` (already a project dep) so no new packages are
- * needed. Market-cap is heuristically derived from price × circulating
- * supply pulled from a static table.
+ * Real-time data sources:
+ *   - `useMarkets()`   — CoinGecko `/coins/markets` (price, % change per
+ *                        range, market cap, volume, ATH, sparkline).
+ *   - `useLivePrice()` — Binance WebSocket miniTicker for second-by-second
+ *                        price updates that override the REST snapshot.
+ *   - `useOHLC()`      — CoinGecko `/market_chart` for the selected range,
+ *                        already down-sampled to ~60 points.
+ *
+ * Holdings USD value re-renders on every WebSocket tick because it's
+ * derived from `livePrice * wallet.balance` inside the component.
  */
 
 import { useMemo, useState } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import Svg, { Defs, LinearGradient, Path, Stop, Line as SvgLine } from 'react-native-svg';
+import Svg, { Circle, Defs, LinearGradient, Path, Stop, Line as SvgLine } from 'react-native-svg';
 
 import { ScreenShell, Panel } from '@/components/ui/ScreenShell';
 import { useThemedPalette, type Palette } from '@/store/themeStore';
-import { useHaptics, useMarkets, useWallets } from '@/hooks';
+import { useHaptics, useWallets } from '@/hooks';
+import { useMarkets, ID_TO_SYM, type CoinGeckoMarket } from '@/hooks/useMarkets';
+import { useLivePrice } from '@/hooks/useLivePrice';
+import { useOHLC } from '@/hooks/useOHLC';
 import type { Currency } from '@/types';
 
 type Range = '1H' | '24H' | '7D' | '30D';
+
+/** Reverse of `ID_TO_SYM` so we can look up a CoinGecko id by ticker. */
+const SYM_TO_ID: Record<string, string> = Object.fromEntries(
+  Object.entries(ID_TO_SYM).map(([id, sym]) => [sym, id]),
+);
 
 export default function AssetDetail() {
   const { currency } = useLocalSearchParams<{ currency: string }>();
@@ -31,40 +41,86 @@ export default function AssetDetail() {
   const router = useRouter();
   const h = useHaptics();
   const p = useThemedPalette();
-  const { data: tickers } = useMarkets();
+
+  const { data: markets, isLoading: marketsLoading } = useMarkets();
   const { data: wallets } = useWallets();
   const [range, setRange] = useState<Range>('24H');
 
-  const ticker = useMemo(
-    () => tickers?.find((t) => t.base === sym),
-    [tickers, sym],
+  // CoinGecko market record for this currency (may be undefined for fiat).
+  const market: CoinGeckoMarket | undefined = useMemo(
+    () => markets?.find((m) => ID_TO_SYM[m.id] === sym),
+    [markets, sym],
   );
-  const wallet = wallets?.find((w) => w.currency === sym);
+  const coinId = SYM_TO_ID[sym];
 
-  const price = ticker ? Number(ticker.price) : 0;
-  const change = ticker ? Number(ticker.changePct24h) : 0;
+  // Real-time price from Binance WS. USDT is a stablecoin and isn't
+  // tradeable as USDT/USDT so the hook silently fails and we fall back
+  // to the REST snapshot (~$1.00).
+  const wsPrice = useLivePrice(sym);
+  const price = wsPrice ?? market?.current_price ?? 0;
+  const isLive = wsPrice !== null && sym !== 'USDT';
+
+  // Pick the right pre-computed % change for the selected timeframe so
+  // the pill stays consistent with the chart shape below it.
+  const change = useMemo(() => {
+    if (!market) return 0;
+    switch (range) {
+      case '1H':  return market.price_change_percentage_1h_in_currency  ?? 0;
+      case '24H': return market.price_change_percentage_24h             ?? 0;
+      case '7D':  return market.price_change_percentage_7d_in_currency  ?? 0;
+      case '30D': return market.price_change_percentage_30d_in_currency ?? 0;
+    }
+  }, [market, range]);
   const positive = change >= 0;
 
-  // Re-sample sparkline based on range. The backend serves a single
-  // 24-point sparkline; we synthesize the other timeframes from that
-  // by extending or down-sampling deterministically so the screen feels
-  // alive without a real history endpoint.
-  const series = useMemo(() => makeSeries(ticker?.sparkline ?? [], range, price), [ticker, range, price]);
+  // Real OHLC for the chart. While loading we render a skeleton.
+  const { data: ohlc, isLoading: ohlcLoading } = useOHLC(coinId ?? 'bitcoin', range);
+  // For 1H we slice to the most-recent ~12 points of the 24h fetch.
+  const series = useMemo(() => {
+    if (!ohlc || ohlc.length === 0) return [];
+    if (range === '1H') return ohlc.slice(-12);
+    return ohlc;
+  }, [ohlc, range]);
 
-  const supply = SUPPLY[sym];
-  const marketCap = supply ? supply * price : null;
-  const volume = ticker?.volume24h ?? 0;
+  // Holdings — value fluctuates on every price tick because we recompute
+  // here instead of trusting the stale `wallet.fiatValueUsd` field.
+  const wallet = wallets?.find((w) => w.currency === sym);
+  const balance = wallet ? Number(wallet.balance) : 0;
+  const holdingsUsd = balance * price;
+  // Compute the holdings' P/L for the selected range using the same %
+  // change so users see "your $1,200 of BTC moved +2.3% (+$28) in 24H".
+  const holdingsDelta = (holdingsUsd * change) / (100 + change || 1);
 
   return (
-    <ScreenShell title={ticker?.displayName ?? sym} subtitle={`${sym} / USD`}>
+    <ScreenShell title={market?.name ?? sym} subtitle={`${sym} / USD`}>
       {/* Hero price */}
       <View style={{ alignItems: 'center', marginTop: 6 }}>
-        <Text style={{
-          color: p.fg, fontSize: 40, fontWeight: '800',
-          letterSpacing: -1.2, fontVariant: ['tabular-nums'],
-        }}>
-          ${price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-        </Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <Text style={{
+            color: p.fg, fontSize: 40, fontWeight: '800',
+            letterSpacing: -1.2, fontVariant: ['tabular-nums'],
+          }}>
+            ${formatPrice(price)}
+          </Text>
+          {/* Live badge — green dot when WebSocket is feeding ticks */}
+          <View style={{
+            flexDirection: 'row', alignItems: 'center', gap: 4,
+            paddingHorizontal: 6, paddingVertical: 3, borderRadius: 6,
+            backgroundColor: isLive ? p.greenBg : p.pillBg,
+          }}>
+            <View style={{
+              width: 6, height: 6, borderRadius: 3,
+              backgroundColor: isLive ? p.greenFg : p.fgFaint,
+            }} />
+            <Text style={{
+              color: isLive ? p.greenFg : p.fgMuted,
+              fontSize: 9, fontWeight: '800', letterSpacing: 0.5,
+            }}>
+              {isLive ? 'LIVE' : 'DELAYED'}
+            </Text>
+          </View>
+        </View>
+
         <View style={{
           flexDirection: 'row', alignItems: 'center', gap: 4,
           marginTop: 6,
@@ -87,11 +143,22 @@ export default function AssetDetail() {
 
       {/* Chart */}
       <View style={{ marginTop: 22 }}>
-        <SparklineChart
-          values={series}
-          color={positive ? '#10b981' : '#ef4444'}
-          palette={p}
-        />
+        {ohlcLoading ? (
+          <View style={{
+            height: 160, borderRadius: 16,
+            backgroundColor: p.bgElev,
+            borderWidth: 1, borderColor: p.border,
+            alignItems: 'center', justifyContent: 'center',
+          }}>
+            <ActivityIndicator color={p.fgMuted} />
+          </View>
+        ) : (
+          <SparklineChart
+            values={series}
+            color={positive ? '#10b981' : '#ef4444'}
+            palette={p}
+          />
+        )}
       </View>
 
       {/* Timeframe selector */}
@@ -128,13 +195,13 @@ export default function AssetDetail() {
       <View style={{ flexDirection: 'row', gap: 10, marginTop: 18 }}>
         <StatTile
           label="24H VOLUME"
-          value={fmtUsdCompact(volume)}
+          value={market ? fmtUsdCompact(market.total_volume) : '—'}
           icon="pulse-outline"
           palette={p}
         />
         <StatTile
           label="MARKET CAP"
-          value={marketCap ? fmtUsdCompact(marketCap) : '—'}
+          value={market ? fmtUsdCompact(market.market_cap) : '—'}
           icon="layers-outline"
           palette={p}
         />
@@ -142,37 +209,64 @@ export default function AssetDetail() {
       <View style={{ flexDirection: 'row', gap: 10, marginTop: 10 }}>
         <StatTile
           label="CIRC. SUPPLY"
-          value={supply ? `${(supply / 1e6).toFixed(1)}M ${sym}` : '—'}
+          value={market?.circulating_supply ? fmtSupply(market.circulating_supply, sym) : '—'}
           icon="infinite-outline"
           palette={p}
         />
         <StatTile
           label="ALL-TIME HIGH"
-          value={ATH[sym] ? `$${ATH[sym]!.toLocaleString('en-US')}` : '—'}
+          value={market?.ath ? `$${formatPrice(market.ath)}` : '—'}
           icon="trending-up-outline"
           palette={p}
         />
       </View>
 
-      {/* Holdings panel */}
+      {/* Holdings panel — recomputed every render → fluctuates with WS ticks */}
       <Panel style={{ marginTop: 18 }}>
         <View style={{ padding: 16 }}>
-          <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '700', letterSpacing: 0.6 }}>
-            YOUR HOLDINGS
-          </Text>
-          {wallet ? (
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: 6 }}>
-              <View>
-                <Text style={{ color: p.fg, fontSize: 22, fontWeight: '800', fontVariant: ['tabular-nums'] }}>
-                  {Number(wallet.balance).toLocaleString('en-US', { maximumFractionDigits: 8 })} {sym}
-                </Text>
-                <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '600', marginTop: 2 }}>
-                  ≈ ${Number(wallet.fiatValueUsd).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '700', letterSpacing: 0.6 }}>
+              YOUR HOLDINGS
+            </Text>
+            {wallet && balance > 0 && (
+              <View style={{
+                flexDirection: 'row', alignItems: 'center', gap: 3,
+                paddingHorizontal: 7, paddingVertical: 3, borderRadius: 7,
+                backgroundColor: positive ? p.greenBg : 'rgba(239,68,68,0.16)',
+              }}>
+                <Ionicons
+                  name={positive ? 'caret-up' : 'caret-down'}
+                  size={8}
+                  color={positive ? p.greenFg : p.redFg}
+                />
+                <Text style={{
+                  color: positive ? p.greenFg : p.redFg,
+                  fontSize: 10, fontWeight: '800',
+                }}>
+                  {positive ? '+' : ''}${Math.abs(holdingsDelta).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </Text>
               </View>
-            </View>
+            )}
+          </View>
+
+          {wallet && balance > 0 ? (
+            <>
+              <Text style={{
+                color: p.fg, fontSize: 26, fontWeight: '800',
+                fontVariant: ['tabular-nums'], marginTop: 8, letterSpacing: -0.4,
+              }}>
+                ${holdingsUsd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </Text>
+              <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '600', marginTop: 2 }}>
+                {balance.toLocaleString('en-US', { maximumFractionDigits: 8 })} {sym}
+                {' · '}
+                <Text style={{ color: positive ? p.greenFg : p.redFg }}>
+                  {positive ? '+' : ''}{change.toFixed(2)}% over {range}
+                </Text>
+              </Text>
+            </>
           ) : (
-            <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '500', marginTop: 4 }}>
+            <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '500', marginTop: 6 }}>
               You don&apos;t own any {sym} yet.
             </Text>
           )}
@@ -195,20 +289,26 @@ export default function AssetDetail() {
         </Pressable>
         <Pressable
           onPress={() => { h.medium(); router.push('/sell'); }}
-          disabled={!wallet || Number(wallet?.balance ?? 0) <= 0}
+          disabled={!wallet || balance <= 0}
           style={({ pressed }) => ({
             flex: 1, height: 52, borderRadius: 26,
             backgroundColor: pressed ? p.border : p.pillBg,
             borderWidth: 1, borderColor: p.border,
             alignItems: 'center', justifyContent: 'center',
             flexDirection: 'row', gap: 6,
-            opacity: !wallet || Number(wallet?.balance ?? 0) <= 0 ? 0.4 : 1,
+            opacity: !wallet || balance <= 0 ? 0.4 : 1,
           })}
         >
           <Ionicons name="remove" size={16} color={p.fg} />
           <Text style={{ color: p.fg, fontSize: 15, fontWeight: '800' }}>Sell</Text>
         </Pressable>
       </View>
+
+      {marketsLoading && !market && (
+        <Text style={{ color: p.fgMuted, fontSize: 12, textAlign: 'center', marginBottom: 12 }}>
+          Loading market data…
+        </Text>
+      )}
     </ScreenShell>
   );
 }
@@ -251,6 +351,8 @@ function SparklineChart({
     return { x, y };
   });
 
+  const last = pts[pts.length - 1];
+
   const linePath = pts
     .map((pt, i) => (i === 0 ? `M ${pt.x} ${pt.y}` : `L ${pt.x} ${pt.y}`))
     .join(' ');
@@ -267,7 +369,7 @@ function SparklineChart({
       borderWidth: 1, borderColor: p.border,
       padding: 8,
     }}>
-      <Svg width="100%" height={H} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none">
+      <Svg width="100%" height={H} viewBox={`0 0 ${W} ${H}`}>
         <Defs>
           <LinearGradient id="grad" x1="0" y1="0" x2="0" y2="1">
             <Stop offset="0" stopColor={color} stopOpacity="0.35" />
@@ -283,6 +385,8 @@ function SparklineChart({
         ))}
         <Path d={areaPath} fill="url(#grad)" />
         <Path d={linePath} stroke={color} strokeWidth={2.2} fill="none" strokeLinejoin="round" strokeLinecap="round" />
+        <Circle cx={last.x} cy={last.y} r={8} fill={color} opacity={0.25} />
+        <Circle cx={last.x} cy={last.y} r={4} fill={color} />
       </Svg>
     </View>
   );
@@ -323,6 +427,15 @@ function StatTile({
 
 /* ── Helpers ─── */
 
+/** Smart price formatter — more decimals for cheap coins (DOGE, ADA, …). */
+function formatPrice(n: number): string {
+  if (n === 0)    return '0.00';
+  if (n >= 1000)  return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  if (n >= 1)     return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 });
+  if (n >= 0.01)  return n.toLocaleString('en-US', { minimumFractionDigits: 4, maximumFractionDigits: 4 });
+  return n.toLocaleString('en-US', { minimumFractionDigits: 6, maximumFractionDigits: 8 });
+}
+
 function fmtUsdCompact(n: number): string {
   if (n >= 1e12) return `$${(n / 1e12).toFixed(2)}T`;
   if (n >= 1e9)  return `$${(n / 1e9).toFixed(2)}B`;
@@ -331,48 +444,9 @@ function fmtUsdCompact(n: number): string {
   return `$${n.toFixed(2)}`;
 }
 
-/**
- * Take the backend's 24h sparkline and synthesise plausible historical
- * shapes for the other ranges, deterministic per (price, range).
- */
-function makeSeries(base: number[], range: Range, currentPrice: number): number[] {
-  if (!base || base.length === 0) return [];
-  const N = range === '1H' ? 12 : range === '24H' ? 24 : range === '7D' ? 28 : 30;
-
-  // Seed a tiny LCG so the same price + range always produces the same path.
-  const seed = Math.floor(currentPrice * 1000) + range.charCodeAt(0);
-  let s = seed % 2147483647;
-  const rand = () => { s = (s * 16807) % 2147483647; return (s / 2147483647) - 0.5; };
-
-  const factor = range === '1H' ? 0.005 : range === '24H' ? 0.02 : range === '7D' ? 0.06 : 0.18;
-  const out: number[] = [];
-  let v = currentPrice * (1 - factor / 2);
-  for (let i = 0; i < N; i++) {
-    v += currentPrice * factor * rand() / Math.max(N / 4, 1);
-    out.push(v);
-  }
-  // Anchor the last point to the current price so the chart ends "now".
-  out[out.length - 1] = currentPrice;
-  return out;
+function fmtSupply(n: number, sym: string): string {
+  if (n >= 1e9) return `${(n / 1e9).toFixed(2)}B ${sym}`;
+  if (n >= 1e6) return `${(n / 1e6).toFixed(2)}M ${sym}`;
+  if (n >= 1e3) return `${(n / 1e3).toFixed(2)}K ${sym}`;
+  return `${n.toLocaleString('en-US', { maximumFractionDigits: 0 })} ${sym}`;
 }
-
-/** Approximate circulating supply (mid-2026 figures) used for market cap. */
-const SUPPLY: Record<string, number | undefined> = {
-  BTC:  19_750_000,
-  ETH:  120_500_000,
-  USDT: 110_000_000_000,
-  SOL:  475_000_000,
-  BNB:  150_000_000,
-  XRP:  56_000_000_000,
-  ADA:  35_500_000_000,
-  DOGE: 145_000_000_000,
-  MATIC: 9_300_000_000,
-  DOT:  1_500_000_000,
-  AVAX: 410_000_000,
-};
-
-/** All-time-high prices (USD) for context. */
-const ATH: Record<string, number | undefined> = {
-  BTC: 108_000, ETH: 4_900, SOL: 295, BNB: 720,
-  XRP: 3.84, ADA: 3.10, DOGE: 0.74, MATIC: 2.92, DOT: 55, AVAX: 146,
-};

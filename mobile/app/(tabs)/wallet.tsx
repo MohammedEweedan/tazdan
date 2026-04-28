@@ -19,10 +19,12 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 
 import { useWallets, useCards, useHaptics } from '@/hooks';
+import { useMarkets as useGeckoMarkets, ID_TO_SYM } from '@/hooks/useMarkets';
 import { CURRENCY_META } from '@/constants';
 import { useTheme, useThemedPalette, type Palette } from '@/store/themeStore';
 import { useT } from '@/store/i18nStore';
-import type { Wallet } from '@/types';
+import { CardVisual } from '@/components/cards/CardVisual';
+import type { Wallet, Currency, CardEntity } from '@/types';
 
 type Filter = 'ALL' | 'CRYPTO' | 'FIAT' | 'CARDS';
 
@@ -34,16 +36,39 @@ export default function WalletScreen() {
   const themeMode = useTheme((s) => s.mode);
   const { data: wallets } = useWallets();
   const { data: cards } = useCards();
+  const { data: gecko } = useGeckoMarkets();
   const [filter, setFilter] = useState<Filter>('ALL');
 
+  /** Symbol -> live USD price. */
+  const priceMap = useMemo(() => {
+    const map: Partial<Record<Currency, number>> = {};
+    (gecko ?? []).forEach((m) => {
+      const sym = ID_TO_SYM[m.id];
+      if (sym) map[sym] = m.current_price;
+    });
+    return map;
+  }, [gecko]);
+
+  /** Live USD value for a single wallet (balance × spot, with fiat fallback). */
+  const valueOf = (w: Wallet) => {
+    const live = priceMap[w.currency];
+    if (live !== undefined) return Number(w.balance) * live;
+    return Number(w.fiatValueUsd ?? 0);
+  };
+
   /** Buckets the user actually cares about. */
-  const cryptoUsd = useMemo(() => sumByKind(wallets, 'crypto'), [wallets]);
-  const fiatUsd   = useMemo(() => sumByKind(wallets, 'fiat'),   [wallets]);
-  const cardsUsd  = useMemo(
+  const cryptoUsd = useMemo(
+    () => (wallets ?? []).filter((w) => CURRENCY_META[w.currency]?.kind === 'crypto').reduce((s, w) => s + valueOf(w), 0),
+    [wallets, priceMap],
+  );
+  const fiatUsd = useMemo(
+    () => (wallets ?? []).filter((w) => CURRENCY_META[w.currency]?.kind === 'fiat').reduce((s, w) => s + valueOf(w), 0),
+    [wallets, priceMap],
+  );
+  const cardsUsd = useMemo(
     () => (cards ?? []).reduce((s, c: any) => s + Number(c.balance ?? 0), 0),
     [cards],
   );
-  const totalUsd  = cryptoUsd + fiatUsd + cardsUsd;
 
   const list = useMemo<Wallet[]>(() => {
     if (!wallets) return [];
@@ -83,36 +108,18 @@ export default function WalletScreen() {
             </Pressable>
           </View>
 
-          {/* Net worth */}
-          <Text style={{
-            color: p.fgMuted, fontSize: 13, fontWeight: '500',
-            marginTop: 22, textAlign: 'center', letterSpacing: 0.2,
-          }}>
-            {t('wallet.netWorth') || 'Net worth'}
-          </Text>
-          <Text style={{
-            color: p.fg, fontSize: 46, fontWeight: '800',
-            letterSpacing: -1.4, marginTop: 4, textAlign: 'center',
-            fontVariant: ['tabular-nums'],
-          }}>
-            ${totalUsd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-          </Text>
-          <View style={{
-            flexDirection: 'row', alignSelf: 'center', alignItems: 'center', gap: 4,
-            marginTop: 6,
-            paddingHorizontal: 9, paddingVertical: 4, borderRadius: 9,
-            backgroundColor: p.greenBg,
-          }}>
-            <Ionicons name="caret-up" size={9} color={p.greenFg} />
-            <Text style={{ color: p.greenFg, fontSize: 12, fontWeight: '700' }}>
-              3.12% · 24h
-            </Text>
-          </View>
+          {/*
+           * Net-worth summary intentionally removed. The home dashboard
+           * already shows the user's total + 24h delta with the live
+           * count-up animation, so duplicating it here just added
+           * cognitive load. The segmented filter is now the first thing
+           * the user sees on this tab.
+           */}
 
           {/* Segmented filter */}
           <View style={{
             flexDirection: 'row',
-            marginHorizontal: 24, marginTop: 24,
+            marginHorizontal: 24, marginTop: 18,
             padding: 4,
             borderRadius: 14,
             backgroundColor: p.pillBg,
@@ -170,39 +177,39 @@ export default function WalletScreen() {
                 </View>
               ) : (
                 <>
-                  {cards!.map((c: any) => (
-                    <Pressable
-                      key={c.id}
-                      onPress={() => { h.selection(); router.push('/cards'); }}
-                      style={({ pressed }) => ({
-                        borderRadius: 18,
-                        padding: 18,
-                        backgroundColor: pressed ? p.border : p.bgElev,
-                        borderWidth: 1, borderColor: p.border,
-                      })}
-                    >
-                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                  {/*
+                   * Premium card carousel - real artwork (Starter / Master /
+                   * Pro PNGs), masked PAN/CVV/expiry by default, biometric
+                   * reveal on tap of the eye icon. See `CardVisual` for the
+                   * full security flow.
+                   */}
+                  {(cards as CardEntity[]).map((c) => (
+                    <View key={c.id} style={{ gap: 12 }}>
+                      <CardVisual card={c} />
+                      <Pressable
+                        onPress={() => { h.selection(); router.push('/cards'); }}
+                        style={({ pressed }) => ({
+                          flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+                          paddingHorizontal: 14, paddingVertical: 12, borderRadius: 14,
+                          backgroundColor: pressed ? p.border : p.bgElev,
+                          borderWidth: 1, borderColor: p.border,
+                        })}
+                      >
                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
                           <View style={{
-                            width: 38, height: 38, borderRadius: 12,
-                            backgroundColor: p.pillBg,
-                            alignItems: 'center', justifyContent: 'center',
-                            borderWidth: 1, borderColor: p.border,
-                          }}>
-                            <Ionicons name={c.status === 'FROZEN' ? 'snow' : 'card'} size={18} color={p.fg} />
-                          </View>
-                          <View>
-                            <Text style={{ color: p.fg, fontSize: 14, fontWeight: '800' }}>
-                              {c.tier ?? 'Card'} · •••• {c.last4}
-                            </Text>
-                            <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '600', marginTop: 2 }}>
-                              {c.cardHolder} · ${Number(c.balance ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                            </Text>
-                          </View>
+                            width: 8, height: 8, borderRadius: 4,
+                            backgroundColor: c.status === 'ACTIVE' ? '#10b981' : c.status === 'FROZEN' ? '#60a5fa' : p.fgFaint,
+                          }} />
+                          <Text style={{ color: p.fg, fontSize: 13, fontWeight: '700' }}>
+                            {c.status === 'ACTIVE' ? 'Active' : c.status === 'FROZEN' ? 'Frozen' : c.status}
+                          </Text>
+                          <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '600' }}>
+                            · ${Number((c as any).spentMonth ?? 0).toLocaleString('en-US', { maximumFractionDigits: 2 })} this month
+                          </Text>
                         </View>
                         <Ionicons name="chevron-forward" size={16} color={p.fgFaint} />
-                      </View>
-                    </Pressable>
+                      </Pressable>
+                    </View>
                   ))}
                   <Pressable
                     onPress={() => { h.light(); router.push('/cards'); }}
@@ -262,7 +269,7 @@ export default function WalletScreen() {
                       color: p.fg, fontSize: 15, fontWeight: '700',
                       fontVariant: ['tabular-nums'],
                     }}>
-                      ${Number(w.fiatValueUsd).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      ${valueOf(w).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </Text>
                   </Pressable>
                 );
@@ -276,13 +283,6 @@ export default function WalletScreen() {
 }
 
 /* ── Helpers ─────────────────────────────────────── */
-
-function sumByKind(wallets: Wallet[] | undefined, kind: 'crypto' | 'fiat') {
-  if (!wallets) return 0;
-  return wallets
-    .filter((w) => CURRENCY_META[w.currency]?.kind === kind)
-    .reduce((s, w) => s + Number(w.fiatValueUsd ?? 0), 0);
-}
 
 function BucketTile({
   palette: p, icon, label, usd, count, accent,

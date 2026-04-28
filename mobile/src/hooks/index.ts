@@ -11,9 +11,25 @@ import {
 } from '@/services';
 
 export { useHaptics } from './useHaptics';
+export {
+  useConversations, useThread, useBlocks,
+  useSendMessage, useEditMessage, useDeleteMessage,
+  useBlockUser, useUnblockUser, useReportMessage, useEscalateP2P,
+  useMessageRealtime,
+} from './useMessages';
 
 export const useWallets = () =>
-  useQuery({ queryKey: QUERY_KEYS.wallets, queryFn: walletService.list });
+  useQuery({
+    queryKey: QUERY_KEYS.wallets,
+    queryFn: walletService.list,
+    // Auto-refresh every 5s so the home dashboard always reflects the
+    // latest balances even if a transaction lands while the user is
+    // looking at the screen. The query stays "fresh" between refetches
+    // so we don't double-fire on focus.
+    refetchInterval: 5_000,
+    refetchIntervalInBackground: false,
+    staleTime: 4_000,
+  });
 
 export const useTransactions = (page = 1) =>
   useQuery({

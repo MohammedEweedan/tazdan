@@ -198,6 +198,12 @@ model User {
   // Messages
   sentMessages     Message[] @relation("MessageSender")
   receivedMessages Message[] @relation("MessageReceiver")
+  blocksMade       UserBlock[] @relation("BlocksMade")
+  blocksAgainst    UserBlock[] @relation("BlocksAgainst")
+  reportsFiled     MessageReport[] @relation("ReportsFiled")
+  reportsAgainst   MessageReport[] @relation("ReportsAgainst")
+  escalationsRaised SupportEscalation[] @relation("EscalationsRaised")
+  escalationsAssigned SupportEscalation[] @relation("EscalationsAssigned")
 
   // Memecoins & Smart Contracts
   memeTokens     MemeToken[]
@@ -349,7 +355,9 @@ model Transaction {
   metadata      Json?
   createdAt     DateTime        @default(now())
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  senderMessage Message? @relation("MessageSenderTx")
+  receiverMessage Message? @relation("MessageReceiverTx")
 
   @@index([userId])
   @@index([type])
@@ -559,8 +567,9 @@ model Transfer {
   note       String?
   createdAt  DateTime @default(now())
 
-  sender   User @relation("TransferSender", fields: [senderId], references: [id], onDelete: Cascade)
-  receiver User @relation("TransferReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
+  sender   User     @relation("TransferSender", fields: [senderId], references: [id], onDelete: Cascade)
+  receiver User     @relation("TransferReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
+  message  Message? @relation("MessageTransfer")
 
   @@index([senderId])
   @@index([receiverId])
@@ -689,21 +698,126 @@ model P2PDispute {
 // ── In-App Messaging ─────────────────────────────────────────────────
 
 model Message {
-  id         String   @id @default(uuid())
+  id         String    @id @default(uuid())
   senderId   String
   receiverId String
   content    String
-  type       String   @default("TEXT") // TEXT, PAYMENT_NOTE, SYSTEM
-  metadata   Json? // payment reference, amount, etc.
-  isRead     Boolean  @default(false)
-  createdAt  DateTime @default(now())
+  /// TEXT, PAYMENT, SYSTEM, P2P_NOTE, ESCALATION
+  type       String    @default("TEXT")
+  /// Structured payload: for PAYMENT { amount, currency, txRef, status }
+  metadata   Json?
+  isRead     Boolean   @default(false)
+  readAt     DateTime?
+  editedAt   DateTime?
+  /// Soft-delete: bubble shows "Message deleted" but preserves audit trail.
+  deletedAt  DateTime?
+  /// Optional link back to a P2P trade so escalations + escrow chats join up.
+  tradeId    String?
+  createdAt  DateTime  @default(now())
 
-  sender   User @relation("MessageSender", fields: [senderId], references: [id], onDelete: Cascade)
-  receiver User @relation("MessageReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
+  sender   User      @relation("MessageSender", fields: [senderId], references: [id], onDelete: Cascade)
+  receiver User      @relation("MessageReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
+  reports  MessageReport[]
+
+  // Financial linkage: PAYMENT messages can reference the underlying Transfer
+  // and the Transaction records that moved the funds.
+  transfer     Transfer?    @relation("MessageTransfer", fields: [transferId], references: [id])
+  transferId   String?      @unique
+  senderTx     Transaction? @relation("MessageSenderTx", fields: [senderTxId], references: [id])
+  senderTxId   String?      @unique
+  receiverTx   Transaction? @relation("MessageReceiverTx", fields: [receiverTxId], references: [id])
+  receiverTxId String?      @unique
 
   @@index([senderId])
   @@index([receiverId])
   @@index([senderId, receiverId])
+  @@index([tradeId])
+  @@index([transferId])
+  @@index([createdAt])
+}
+
+/// Per-direction block. A block by A on B prevents B from messaging A.
+/// Two-way blocks just become two rows; keeps the lookup trivially indexed.
+model UserBlock {
+  id        String   @id @default(uuid())
+  blockerId String
+  blockedId String
+  reason    String?
+  createdAt DateTime @default(now())
+
+  blocker User @relation("BlocksMade",    fields: [blockerId], references: [id], onDelete: Cascade)
+  blocked User @relation("BlocksAgainst", fields: [blockedId], references: [id], onDelete: Cascade)
+
+  @@unique([blockerId, blockedId])
+  @@index([blockerId])
+  @@index([blockedId])
+}
+
+enum ReportStatus {
+  OPEN
+  REVIEWING
+  RESOLVED
+  REJECTED
+}
+
+/// Reports against a specific message OR a user (messageId optional).
+/// Admin reviews these in the dashboard; status drives moderation queue.
+model MessageReport {
+  id              String       @id @default(uuid())
+  reporterId      String
+  reportedUserId  String
+  messageId       String?
+  reason          String
+  details         String?
+  status          ReportStatus @default(OPEN)
+  resolvedById    String?
+  resolvedAt      DateTime?
+  resolutionNote  String?
+  createdAt       DateTime     @default(now())
+
+  reporter     User     @relation("ReportsFiled",   fields: [reporterId],     references: [id], onDelete: Cascade)
+  reportedUser User     @relation("ReportsAgainst", fields: [reportedUserId], references: [id], onDelete: Cascade)
+  message      Message? @relation(                  fields: [messageId],      references: [id], onDelete: SetNull)
+
+  @@index([reporterId])
+  @@index([reportedUserId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+enum EscalationStatus {
+  OPEN
+  ASSIGNED
+  RESOLVED
+  CLOSED
+}
+
+/// Escalates a P2P escrow conversation into a support thread. The
+/// support agent gets read access to the original participants' chat
+/// and can post into a shared thread keyed by escalationId.
+model SupportEscalation {
+  id              String           @id @default(uuid())
+  raisedById      String
+  /// Opposite participant on the original P2P chat (so support can see both sides).
+  counterpartyId  String
+  /// Optional — populated when escalation originates from a P2P trade.
+  tradeId         String?
+  reason          String
+  details         String?
+  status          EscalationStatus @default(OPEN)
+  assignedAgentId String?
+  resolvedAt      DateTime?
+  resolutionNote  String?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  raisedBy       User  @relation("EscalationsRaised",   fields: [raisedById],      references: [id], onDelete: Cascade)
+  assignedAgent  User? @relation("EscalationsAssigned", fields: [assignedAgentId], references: [id], onDelete: SetNull)
+
+  @@index([raisedById])
+  @@index([counterpartyId])
+  @@index([tradeId])
+  @@index([status])
   @@index([createdAt])
 }
 

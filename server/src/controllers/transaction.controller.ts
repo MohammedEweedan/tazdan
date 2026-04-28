@@ -1,0 +1,198 @@
+/**
+ * TransactionController — unified entry point for all financial operations.
+ *
+ *   • internalTransfer: wallet-to-wallet transfers (used by in-chat PAYMENT
+ *     and the /send page). Atomically creates Transfer + two Transaction
+ *     records and updates balances.
+ *
+ * All operations are wrapped in a Prisma transaction to guarantee
+ * consistency. The controller validates balance sufficiency, applies
+ * optional fees, and records balanceBefore / balanceAfter for audit.
+ */
+
+import { Response, NextFunction } from 'express';
+import { prisma } from '../utils/prisma';
+import { AppError } from '../middleware/errorHandler';
+import { AuthRequest } from '../types';
+import { v4 as uuidv4 } from 'uuid';
+
+export class TransactionController {
+  /**
+   * Internal wallet-to-wallet transfer.
+   *
+   * Creates:
+   *   - One Transfer record (senderId, receiverId, currency, amount, fee, reference, note)
+   *   - Two Transaction records (TRANSFER_OUT for sender, TRANSFER_IN for receiver)
+   *   - Updates both wallets' balances atomically
+   *
+   * Used by:
+   *   - In-chat PAYMENT messages (MessageController will link the Transfer to the Message)
+   *   - /send page (future)
+   *
+   * Body: { receiverId, currency, amount, note?, fee? }
+   */
+  static async internalTransfer(req: AuthRequest, res: Response, next: NextFunction) {
+    const { receiverId, currency, amount, note, fee = 0 } = req.body;
+    const senderId = req.user!.id;
+
+    const amountNum = Number(amount);
+    const feeNum = Number(fee);
+    const totalDeduction = amountNum + feeNum;
+
+    if (!receiverId || !currency || isNaN(amountNum) || amountNum <= 0) {
+      throw new AppError('Invalid transfer parameters', 400);
+    }
+    if (receiverId === senderId) {
+      throw new AppError('Cannot transfer to yourself', 400);
+    }
+
+    try {
+      const result = await prisma.$transaction(async (tx) => {
+        // Fetch sender and receiver wallets, create if missing
+        const [senderWallet, receiverWallet] = await Promise.all([
+          tx.wallet.upsert({
+            where: { userId_currency: { userId: senderId, currency } },
+            create: { userId: senderId, currency, balance: 0, frozen: 0 },
+            update: {},
+          }),
+          tx.wallet.upsert({
+            where: { userId_currency: { userId: receiverId, currency } },
+            create: { userId: receiverId, currency, balance: 0, frozen: 0 },
+            update: {},
+          }),
+        ]);
+
+        const senderBalance = Number(senderWallet.balance);
+        const senderFrozen = Number(senderWallet.frozen ?? 0);
+        const available = senderBalance - senderFrozen;
+
+        if (available < totalDeduction) {
+          throw new AppError(`Insufficient ${currency} balance. Available: ${available}`, 400);
+        }
+
+        // Generate reference
+        const reference = `TRF-${uuidv4().slice(0, 8).toUpperCase()}`;
+
+        // Update balances
+        const senderNewBalance = senderBalance - totalDeduction;
+        const receiverNewBalance = Number(receiverWallet.balance) + amountNum;
+
+        await Promise.all([
+          tx.wallet.update({
+            where: { id: senderWallet.id },
+            data: { balance: senderNewBalance },
+          }),
+          tx.wallet.update({
+            where: { id: receiverWallet.id },
+            data: { balance: receiverNewBalance },
+          }),
+        ]);
+
+        // Create Transfer record
+        const transfer = await tx.transfer.create({
+          data: {
+            senderId,
+            receiverId,
+            currency: currency as any,
+            amount: amountNum,
+            fee: feeNum,
+            reference,
+            note: note || undefined,
+          },
+        });
+
+        // Create sender Transaction (TRANSFER_OUT)
+        const senderTx = await tx.transaction.create({
+          data: {
+            userId: senderId,
+            type: 'TRANSFER_OUT',
+            currency: currency as any,
+            amount: amountNum,
+            fee: feeNum,
+            balanceBefore: senderBalance,
+            balanceAfter: senderNewBalance,
+            reference,
+            description: note ? `Transfer to @${note}` : `Transfer to ${receiverId}`,
+            metadata: { transferId: transfer.id, receiverId, note },
+          },
+        });
+
+        // Create receiver Transaction (TRANSFER_IN)
+        const receiverTx = await tx.transaction.create({
+          data: {
+            userId: receiverId,
+            type: 'TRANSFER_IN',
+            currency: currency as any,
+            amount: amountNum,
+            fee: 0,
+            balanceBefore: Number(receiverWallet.balance),
+            balanceAfter: receiverNewBalance,
+            reference,
+            description: note ? `Transfer from @${note}` : `Transfer from ${senderId}`,
+            metadata: { transferId: transfer.id, senderId, note },
+          },
+        });
+
+        return { transfer, senderTx, receiverTx };
+      });
+
+      // If res is provided (HTTP request), send JSON response
+      if (res) {
+        res.json({
+          transfer: result.transfer,
+          senderTx: result.senderTx,
+          receiverTx: result.receiverTx,
+        });
+      }
+
+      // Always return the data for internal use (e.g., by MessageController)
+      return result;
+    } catch (error) {
+      if (error instanceof AppError) {
+        next(error);
+      } else {
+        next(new AppError('Transfer failed', 500));
+      }
+    }
+  }
+
+  /**
+   * Get all transactions for the authenticated user.
+   *
+   * Query params:
+   *   - type?: filter by TransactionType
+   *   - currency?: filter by Currency
+   *   - page?: pagination (default 1)
+   *   - limit?: per-page (default 20)
+   */
+  static async list(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const { type, currency, page = '1', limit = '20' } = req.query;
+      const userId = req.user!.id;
+      const pageNum = Math.max(1, Number(page));
+      const limitNum = Math.min(100, Math.max(1, Number(limit)));
+      const skip = (pageNum - 1) * limitNum;
+
+      const where: any = { userId };
+      if (type) where.type = type as string;
+      if (currency) where.currency = currency as string;
+
+      const [transactions, total] = await Promise.all([
+        prisma.transaction.findMany({
+          where,
+          orderBy: { createdAt: 'desc' },
+          skip,
+          take: limitNum,
+        }),
+        prisma.transaction.count({ where }),
+      ]);
+
+      res.json({
+        items: transactions,
+        total,
+      });
+    } catch (error) {
+      next(new AppError('Failed to fetch transactions', 500));
+    }
+  }
+}

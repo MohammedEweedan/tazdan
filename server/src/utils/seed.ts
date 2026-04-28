@@ -91,6 +91,33 @@ export async function seedAdmin() {
     console.log('Admin user and default settings seeded');
   }
 
+  // Seed the system "support" user — every user can DM this account
+  // and escalation threads route to it. Idempotent: only created once,
+  // identified by the reserved `username = 'support'`.
+  const supportEmail = process.env.SUPPORT_EMAIL || 'support@promrkts.com';
+  const supportExisting = await prisma.user.findFirst({
+    where: { OR: [{ username: 'support' }, { email: supportEmail }] },
+  });
+  if (!supportExisting) {
+    const passwordHash = await bcrypt.hash(uuidv4(), 12);
+    await prisma.user.create({
+      data: {
+        email:         supportEmail,
+        passwordHash,
+        firstName:     'Promrkts',
+        lastName:      'Support',
+        username:      'support',
+        role:          'AGENT',
+        status:        'ACTIVE',
+        kycStatus:     'APPROVED',
+        emailVerified: true,
+        profilePublic: true,
+        referralCode:  `SUP${uuidv4().slice(0, 8).toUpperCase()}`,
+      },
+    });
+    console.log('Support user seeded');
+  }
+
   // Seed market listings (idempotent — safe to run on every boot)
   const listings = [
     { symbol: 'BTCUSDT',   baseAsset: 'BTC',   displayName: 'Bitcoin',   rank: 1 },

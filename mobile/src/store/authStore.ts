@@ -52,6 +52,10 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   logout: async () => {
     await authService.logout();
+    // Drop the websocket so the server doesn't keep emitting events
+    // into a dead user room and a fresh JWT is picked up on next login.
+    const { disconnectSocket } = await import('@/lib/socket');
+    disconnectSocket();
     set({ user: null, isAuthenticated: false });
   },
 }));

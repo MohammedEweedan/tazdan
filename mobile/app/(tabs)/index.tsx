@@ -10,8 +10,8 @@
  * theme-aware modal.
  */
 
-import { useMemo, useState } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Animated, Image, Modal, Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
@@ -20,6 +20,7 @@ import * as Clipboard from 'expo-clipboard';
 
 import { useAuthStore } from '@/store/authStore';
 import { useWallets, useHaptics, useTransactions } from '@/hooks';
+import { useMarkets as useGeckoMarkets, ID_TO_SYM } from '@/hooks/useMarkets';
 import { useTheme, useThemedPalette, type Palette } from '@/store/themeStore';
 import type { Wallet, Currency } from '@/types';
 
@@ -29,16 +30,67 @@ export default function Home() {
   const router = useRouter();
   const h = useHaptics();
   const user = useAuthStore((s) => s.user);
-  const { data: wallets } = useWallets();
-  const { data: txData } = useTransactions(1);
+  const { data: wallets, refetch: refetchWallets } = useWallets();
+  const { data: txData, refetch: refetchTxs } = useTransactions(1);
   const p = useThemedPalette();
   const themeMode = useTheme((s) => s.mode);
   const [tab, setTab] = useState<Tab>('ASSETS');
 
   const list = wallets ?? [];
-  const totalUsd = useMemo(() => list.reduce((s, w) => s + Number(w.fiatValueUsd), 0), [list]);
-  const deltaPct = 3.12;
+
+  // Live USD price map keyed by ticker (e.g. { BTC: 67_432.10, ETH: 3_240.50 }).
+  // Computed from CoinGecko + 60s REST poll. We re-derive `totalUsd` from
+  // these so the home balance fluctuates in real time exactly like the
+  // asset detail screen.
+  const { data: gecko, refetch: refetchMarkets } = useGeckoMarkets();
+
+  // Pull-to-refresh — refetches every live data source the home screen
+  // depends on. Triggers a haptic tap on release for that polished feel.
+  const [refreshing, setRefreshing] = useState(false);
+  const onRefresh = async () => {
+    setRefreshing(true);
+    h.light();
+    try {
+      await Promise.all([refetchWallets(), refetchTxs(), refetchMarkets()]);
+    } finally {
+      setRefreshing(false);
+    }
+  };
+  const priceMap = useMemo(() => {
+    const map: Partial<Record<Currency, number>> = {};
+    (gecko ?? []).forEach((m) => {
+      const sym = ID_TO_SYM[m.id];
+      if (sym) map[sym] = m.current_price;
+    });
+    return map;
+  }, [gecko]);
+
+  const totalUsd = useMemo(() => {
+    return list.reduce((sum, w) => {
+      const live = priceMap[w.currency];
+      // For crypto wallets we recompute USD from the live spot. For fiat
+      // wallets we trust the server-side `fiatValueUsd` (which already has
+      // FX baked in).
+      if (live !== undefined) return sum + Number(w.balance) * live;
+      return sum + Number(w.fiatValueUsd);
+    }, 0);
+  }, [list, priceMap]);
+
+  // Aggregate 24h change weighted by USD exposure so the green/red pill
+  // truly reflects today's portfolio move.
+  const deltaPct = useMemo(() => {
+    if (totalUsd <= 0 || !gecko) return 0;
+    let weightedChange = 0;
+    list.forEach((w) => {
+      const m = (gecko ?? []).find((g) => ID_TO_SYM[g.id] === w.currency);
+      if (!m) return;
+      const exposure = Number(w.balance) * m.current_price;
+      weightedChange += (exposure / totalUsd) * (m.price_change_percentage_24h ?? 0);
+    });
+    return weightedChange;
+  }, [list, gecko, totalUsd]);
   const deltaUsd = (totalUsd * deltaPct) / 100;
+  const positive = deltaPct >= 0;
 
   const initial = (user?.firstName?.[0] ?? user?.email?.[0] ?? 'P').toUpperCase();
   const handle = user?.username ?? user?.email?.split('@')[0] ?? 'me';
@@ -58,6 +110,15 @@ export default function Home() {
         <ScrollView
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{ paddingBottom: 140 }}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor={p.fg}
+              colors={[p.fg]}
+              progressBackgroundColor={p.bgElev}
+            />
+          }
         >
           {/* Header */}
           <View style={{
@@ -105,51 +166,31 @@ export default function Home() {
               </Pressable>
             </View>
           </View>
+          <AnimatedTotal value={totalUsd} palette={p} />
 
-          {/* Total value — centered */}
-          <View style={{
-            flexDirection: 'row', alignItems: 'center', gap: 6,
-            justifyContent: 'center',
-            paddingHorizontal: 24, marginTop: 14,
-          }}>
-            <Text style={{ color: p.fgMuted, fontSize: 14, fontWeight: '500' }}>
-              Total value
-            </Text>
-            <View style={{
-              width: 15, height: 15, borderRadius: 7.5,
-              backgroundColor: p.pillBg,
-              alignItems: 'center', justifyContent: 'center',
-            }}>
-              <Text style={{ color: p.fgMuted, fontSize: 9, fontWeight: '700' }}>i</Text>
-            </View>
-          </View>
-
-          <Text style={{
-            color: p.fg, fontSize: 48, fontWeight: '800', letterSpacing: -1.6,
-            paddingHorizontal: 24, marginTop: 4,
-            textAlign: 'center',
-            fontVariant: ['tabular-nums'],
-          }}>
-            ${totalUsd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-          </Text>
-
-          {/* Delta */}
+          {/* 24h delta */}
           <View style={{
             flexDirection: 'row', alignItems: 'center', gap: 10,
             justifyContent: 'center',
             paddingHorizontal: 24, marginTop: 6,
           }}>
-            <Text style={{ color: p.greenFg, fontSize: 14, fontWeight: '600', fontVariant: ['tabular-nums'] }}>
-              +${deltaUsd.toFixed(2)}
+            <Text style={{
+              color: positive ? p.greenFg : p.redFg,
+              fontSize: 14, fontWeight: '600', fontVariant: ['tabular-nums'],
+            }}>
+              {positive ? '+' : '-'}${Math.abs(deltaUsd).toFixed(2)}
             </Text>
             <View style={{
               flexDirection: 'row', alignItems: 'center', gap: 4,
               paddingHorizontal: 8, paddingVertical: 3, borderRadius: 7,
-              backgroundColor: p.greenBg,
+              backgroundColor: positive ? p.greenBg : 'rgba(239,68,68,0.16)',
             }}>
-              <Ionicons name="caret-up" size={9} color={p.greenFg} />
-              <Text style={{ color: p.greenFg, fontSize: 12, fontWeight: '700' }}>
-                {deltaPct.toFixed(2)}%
+              <Ionicons name={positive ? 'caret-up' : 'caret-down'} size={9} color={positive ? p.greenFg : p.redFg} />
+              <Text style={{
+                color: positive ? p.greenFg : p.redFg,
+                fontSize: 12, fontWeight: '700',
+              }}>
+                {Math.abs(deltaPct).toFixed(2)}%
               </Text>
             </View>
           </View>
@@ -171,10 +212,11 @@ export default function Home() {
             ))}
           </View>
 
-          {/* Tabs */}
+          {/* Tabs - center-aligned */}
           <View style={{
-            flexDirection: 'row', gap: 22,
+            flexDirection: 'row', gap: 32,
             paddingHorizontal: 24, marginTop: 32,
+            justifyContent: 'center',
           }}>
             <TabBtn label="Assets"   active={tab === 'ASSETS'}   palette={p} onPress={() => { h.selection(); setTab('ASSETS'); }} />
             <TabBtn label="Wallets"  active={tab === 'WALLETS'}  palette={p} onPress={() => { h.selection(); setTab('WALLETS'); }} />
@@ -196,6 +238,9 @@ export default function Home() {
                 key={w.id}
                 wallet={w}
                 palette={p}
+                liveUsd={priceMap[w.currency] !== undefined
+                  ? Number(w.balance) * (priceMap[w.currency] as number)
+                  : undefined}
                 onPress={() => { h.selection(); router.push(`/asset/${w.currency}`); }}
               />
             ))
@@ -216,6 +261,144 @@ export default function Home() {
           )}
         </ScrollView>
       </SafeAreaView>
+    </View>
+  );
+}
+
+/* ── Animated total balance ──
+ *
+ *  Behaviour:
+ *   1. On the FIRST mount the displayed number animates from 0 → value
+ *      over ~900ms (count-up effect).
+ *   2. Every time `value` changes after that we animate from the
+ *      previously-displayed number to the new one (so live price ticks
+ *      smoothly cascade through the digits instead of jump-cutting).
+ *   3. When `value` rises we briefly flash the text green and slide a
+ *      pill (+$X.YZ) up beside it; when it falls we flash red. The pill
+ *      fades out after 1.8s so the user sees the cause of the change.
+ *
+ *  Implementation note: we don't use Reanimated here because the digits
+ *  need to be re-stringified on every frame (Reanimated runs on the UI
+ *  thread and can't easily mutate Text content). A 60Hz JS interval is
+ *  fine for a single label.
+ */
+function AnimatedTotal({ value, palette: p }: { value: number; palette: Palette }) {
+  const [displayed, setDisplayed] = useState(0);
+  const fromRef = useRef(0);
+  const targetRef = useRef(value);
+  const startTsRef = useRef<number | null>(null);
+
+  // Flash state: { dir: 'up' | 'down' | null, delta: number }
+  const flashOpacity = useRef(new Animated.Value(0)).current;
+  const flashTranslateY = useRef(new Animated.Value(6)).current;
+  const [flash, setFlash] = useState<{ dir: 'up' | 'down'; delta: number } | null>(null);
+  const prevValueRef = useRef<number | null>(null);
+
+  // Drive the count-up tween whenever the target changes.
+  // The first mount uses a 2.4s ramp - slow + deliberate, like a wealth
+  // app revealing your net worth. Subsequent retargets use 1.4s so live
+  // price ticks still feel responsive without ever snapping.
+  // Easing: a tuned ease-in-out-quart so the digits accelerate from
+  // rest, glide through the middle, and settle gently at the target.
+  useEffect(() => {
+    fromRef.current = displayed;
+    targetRef.current = value;
+    startTsRef.current = Date.now();
+    const isFirstReveal = prevValueRef.current === null;
+    const dur = isFirstReveal ? 2400 : 1400;
+    let raf: any;
+    let lastFrameTs = 0;
+    const tick = () => {
+      const now = Date.now();
+      // Throttle to ~30 fps for the long ramp - looks smooth, halves the
+      // re-renders compared to 60 fps and avoids jank on slower devices.
+      if (now - lastFrameTs < 33) {
+        raf = requestAnimationFrame(tick);
+        return;
+      }
+      lastFrameTs = now;
+      const elapsed = now - (startTsRef.current ?? now);
+      const t = Math.min(1, elapsed / dur);
+      // ease-in-out quart - slow start, glide, slow finish.
+      const eased = t < 0.5
+        ? 8 * t * t * t * t
+        : 1 - Math.pow(-2 * t + 2, 4) / 2;
+      const next = fromRef.current + (targetRef.current - fromRef.current) * eased;
+      setDisplayed(next);
+      if (t < 1) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [value]);
+
+  // Detect transactions: when the value changes by a non-trivial amount,
+  // pop the green/red flash pill.
+  useEffect(() => {
+    if (prevValueRef.current === null) {
+      prevValueRef.current = value;
+      return;
+    }
+    const diff = value - prevValueRef.current;
+    prevValueRef.current = value;
+    // Ignore tiny price-tick noise (< $0.50). Real txs move balances by
+    // dollars or more so this still catches a deposit / send / fill.
+    if (Math.abs(diff) < 0.5) return;
+    setFlash({ dir: diff > 0 ? 'up' : 'down', delta: diff });
+    flashOpacity.setValue(0);
+    flashTranslateY.setValue(6);
+    Animated.sequence([
+      Animated.parallel([
+        Animated.timing(flashOpacity,    { toValue: 1, duration: 220, useNativeDriver: true }),
+        Animated.timing(flashTranslateY, { toValue: 0, duration: 220, useNativeDriver: true }),
+      ]),
+      Animated.delay(1300),
+      Animated.parallel([
+        Animated.timing(flashOpacity,    { toValue: 0, duration: 350, useNativeDriver: true }),
+        Animated.timing(flashTranslateY, { toValue: -6, duration: 350, useNativeDriver: true }),
+      ]),
+    ]).start(() => setFlash(null));
+  }, [value]);
+
+  // Tint the main text briefly while a flash is active.
+  const flashColor = flash?.dir === 'up' ? p.greenFg : flash?.dir === 'down' ? p.redFg : p.fg;
+
+  return (
+    <View style={{ alignItems: 'center', marginTop: 4, paddingHorizontal: 24 }}>
+      <Text style={{
+        color: flash ? flashColor : p.fg,
+        fontSize: 48, fontWeight: '800', letterSpacing: -1.6,
+        textAlign: 'center',
+        fontVariant: ['tabular-nums'],
+      }}>
+        ${displayed.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+      </Text>
+
+      {flash && (
+        <Animated.View
+          style={{
+            position: 'absolute', top: -6, right: '8%',
+            opacity: flashOpacity,
+            transform: [{ translateY: flashTranslateY }],
+            flexDirection: 'row', alignItems: 'center', gap: 4,
+            paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8,
+            backgroundColor: flash.dir === 'up' ? p.greenBg : 'rgba(239,68,68,0.16)',
+            borderWidth: 1,
+            borderColor: flash.dir === 'up' ? p.greenFg : p.redFg,
+          }}
+        >
+          <Ionicons
+            name={flash.dir === 'up' ? 'arrow-up' : 'arrow-down'}
+            size={10}
+            color={flash.dir === 'up' ? p.greenFg : p.redFg}
+          />
+          <Text style={{
+            color: flash.dir === 'up' ? p.greenFg : p.redFg,
+            fontSize: 11, fontWeight: '800', fontVariant: ['tabular-nums'],
+          }}>
+            {flash.dir === 'up' ? '+' : '-'}${Math.abs(flash.delta).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </Text>
+        </Animated.View>
+      )}
     </View>
   );
 }
@@ -327,12 +510,14 @@ function ActivityList({
             }}>
               <Ionicons
                 name={
-                  t.type === 'BUY'      ? 'cart' :
-                  t.type === 'SELL'     ? 'cash' :
-                  t.type === 'DEPOSIT'  ? 'add-circle' :
-                  t.type === 'WITHDRAW' ? 'remove-circle' :
-                  t.type === 'SEND'     ? 'arrow-up' :
-                  t.type === 'RECEIVE'  ? 'arrow-down' :
+                  t.type === 'BUY'          ? 'cart' :
+                  t.type === 'SELL'         ? 'cash' :
+                  t.type === 'DEPOSIT'      ? 'add-circle' :
+                  t.type === 'WITHDRAW'     ? 'remove-circle' :
+                  t.type === 'SEND'         ? 'arrow-up' :
+                  t.type === 'TRANSFER_OUT' ? 'arrow-up' :
+                  t.type === 'RECEIVE'      ? 'arrow-down' :
+                  t.type === 'TRANSFER_IN'  ? 'arrow-down' :
                   'swap-horizontal'
                 }
                 size={16}
@@ -394,6 +579,9 @@ function WalletAddressList({
   wallets: Wallet[];
   onCopy: () => void;
 }) {
+  // Whichever wallet's QR is currently being shown in the modal.
+  const [qrFor, setQrFor] = useState<{ wallet: Wallet; address: string; chain: string } | null>(null);
+
   if (wallets.length === 0) {
     return (
       <View style={{ paddingVertical: 48, alignItems: 'center' }}>
@@ -409,7 +597,9 @@ function WalletAddressList({
       {wallets.map((w) => {
         const meta = ASSET_META[w.currency] ?? ASSET_META.DEFAULT;
         const isCrypto = ['BTC','ETH','USDT','SOL','BNB','XRP','ADA','DOGE','MATIC','DOT','AVAX'].includes(w.currency);
-        const addr = isCrypto ? deriveAddress(w.id, w.currency) : null;
+        const addr = isCrypto
+          ? deriveAddress(w.id, w.currency)
+          : `PRMK-${w.currency}-${w.id.slice(0, 8).toUpperCase()}`;
         const chain = CHAIN_LABEL[w.currency] ?? w.currency;
         return (
           <View
@@ -435,36 +625,192 @@ function WalletAddressList({
               </Text>
             </View>
 
-            <Pressable
-              onPress={async () => {
-                onCopy();
-                const target = addr ?? `PRMK-${w.currency}-${w.id.slice(0, 8).toUpperCase()}`;
-                await Clipboard.setStringAsync(target);
-              }}
-              style={({ pressed }) => ({
-                flexDirection: 'row', alignItems: 'center', gap: 8,
-                paddingHorizontal: 12, paddingVertical: 10, borderRadius: 14,
-                backgroundColor: pressed ? p.border : p.bgElev,
-                borderWidth: 1, borderColor: p.border,
-              })}
-            >
-              <Ionicons name={isCrypto ? 'qr-code-outline' : 'card-outline'} size={14} color={p.fgMuted} />
-              <Text
-                numberOfLines={1}
-                style={{
-                  flex: 1,
-                  color: p.fg, fontSize: 12, fontWeight: '600',
-                  fontFamily: 'Menlo' as any,
+            {/*
+             * Two pressables side-by-side:
+             *  - the long address pill copies on tap
+             *  - the QR icon on the right opens the QR modal
+             * Both are needed so a tap anywhere on the address is a copy
+             * (the most common action) without accidentally losing the QR.
+             */}
+            <View style={{ flexDirection: 'row', gap: 8 }}>
+              <Pressable
+                onPress={async () => {
+                  onCopy();
+                  await Clipboard.setStringAsync(addr);
                 }}
+                style={({ pressed }) => ({
+                  flex: 1,
+                  flexDirection: 'row', alignItems: 'center', gap: 8,
+                  paddingHorizontal: 12, paddingVertical: 10, borderRadius: 14,
+                  backgroundColor: pressed ? p.border : p.bgElev,
+                  borderWidth: 1, borderColor: p.border,
+                })}
               >
-                {addr ?? `PRMK-${w.currency}-${w.id.slice(0, 8).toUpperCase()}`}
-              </Text>
-              <Ionicons name="copy-outline" size={14} color={p.fgMuted} />
-            </Pressable>
+                <Ionicons name={isCrypto ? 'wallet-outline' : 'card-outline'} size={14} color={p.fgMuted} />
+                <Text
+                  numberOfLines={1}
+                  style={{
+                    flex: 1,
+                    color: p.fg, fontSize: 12, fontWeight: '600',
+                    fontFamily: 'Menlo' as any,
+                  }}
+                >
+                  {addr}
+                </Text>
+                <Ionicons name="copy-outline" size={14} color={p.fgMuted} />
+              </Pressable>
+
+              <Pressable
+                onPress={() => {
+                  onCopy();
+                  setQrFor({ wallet: w, address: addr, chain: isCrypto ? chain : 'Bank reference' });
+                }}
+                style={({ pressed }) => ({
+                  width: 44, height: 44, borderRadius: 14,
+                  backgroundColor: pressed ? p.border : p.bgElev,
+                  borderWidth: 1, borderColor: p.border,
+                  alignItems: 'center', justifyContent: 'center',
+                })}
+                accessibilityLabel={`Show QR code for ${meta.title} address`}
+              >
+                <Ionicons name="qr-code-outline" size={18} color={p.fg} />
+              </Pressable>
+            </View>
           </View>
         );
       })}
+
+      <QrModal palette={p} info={qrFor} onClose={() => setQrFor(null)} />
     </View>
+  );
+}
+
+/**
+ * Full-screen QR sheet for receiving on a wallet. Renders the QR via the
+ * public qrserver.com endpoint so we don't need a new RN dependency. The
+ * background colour matches the palette; the inner card is always white
+ * so the QR is high-contrast and reliably scannable.
+ */
+function QrModal({
+  info, palette: p, onClose,
+}: {
+  info: { wallet: Wallet; address: string; chain: string } | null;
+  palette: Palette;
+  onClose: () => void;
+}) {
+  if (!info) return null;
+  const { wallet, address, chain } = info;
+  const meta = ASSET_META[wallet.currency] ?? ASSET_META.DEFAULT;
+  // Use bg=white + black foreground so the code scans regardless of theme.
+  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=440x440&margin=12&data=${encodeURIComponent(address)}&bgcolor=ffffff&color=000000`;
+
+  return (
+    <Modal visible={!!info} transparent animationType="fade" onRequestClose={onClose}>
+      <Pressable
+        onPress={onClose}
+        style={{
+          flex: 1, backgroundColor: 'rgba(0,0,0,0.6)',
+          alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24,
+        }}
+      >
+        <Pressable
+          onPress={(e) => e.stopPropagation()}
+          style={{
+            width: '100%', maxWidth: 380,
+            backgroundColor: p.bg,
+            borderRadius: 28, padding: 22,
+            borderWidth: 1, borderColor: p.border,
+          }}
+        >
+          {/* Header */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+            <CurrencyIcon currency={wallet.currency} />
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: p.fg, fontSize: 16, fontWeight: '800' }}>
+                Receive {meta.title}
+              </Text>
+              <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '600', marginTop: 1 }}>
+                {chain}
+              </Text>
+            </View>
+            <Pressable onPress={onClose} hitSlop={8} style={{ padding: 4 }}>
+              <Ionicons name="close" size={18} color={p.fgMuted} />
+            </Pressable>
+          </View>
+
+          {/* QR */}
+          <View style={{
+            marginTop: 18,
+            backgroundColor: '#ffffff',
+            borderRadius: 20,
+            padding: 14,
+            alignItems: 'center', justifyContent: 'center',
+          }}>
+            <Image
+              source={{ uri: qrUrl }}
+              style={{ width: 220, height: 220, borderRadius: 8 }}
+              resizeMode="contain"
+            />
+          </View>
+
+          {/* Address */}
+          <View style={{
+            marginTop: 16,
+            paddingHorizontal: 12, paddingVertical: 12, borderRadius: 14,
+            backgroundColor: p.bgElev,
+            borderWidth: 1, borderColor: p.border,
+          }}>
+            <Text style={{ color: p.fgFaint, fontSize: 10, fontWeight: '700', letterSpacing: 0.6 }}>
+              ADDRESS
+            </Text>
+            <Text
+              selectable
+              style={{
+                color: p.fg, fontSize: 12, fontWeight: '600',
+                fontFamily: 'Menlo' as any,
+                marginTop: 4,
+              }}
+            >
+              {address}
+            </Text>
+          </View>
+
+          {/* Actions */}
+          <View style={{ flexDirection: 'row', gap: 10, marginTop: 16 }}>
+            <Pressable
+              onPress={async () => { await Clipboard.setStringAsync(address); }}
+              style={({ pressed }) => ({
+                flex: 1, height: 48, borderRadius: 24,
+                backgroundColor: pressed ? p.border : p.pillBg,
+                borderWidth: 1, borderColor: p.border,
+                alignItems: 'center', justifyContent: 'center',
+                flexDirection: 'row', gap: 6,
+              })}
+            >
+              <Ionicons name="copy-outline" size={14} color={p.fg} />
+              <Text style={{ color: p.fg, fontWeight: '800', fontSize: 14 }}>Copy</Text>
+            </Pressable>
+            <Pressable
+              onPress={onClose}
+              style={({ pressed }) => ({
+                flex: 1, height: 48, borderRadius: 24,
+                backgroundColor: pressed ? '#000' : p.ctaBg,
+                alignItems: 'center', justifyContent: 'center',
+              })}
+            >
+              <Text style={{ color: p.ctaFg, fontWeight: '800', fontSize: 14 }}>Done</Text>
+            </Pressable>
+          </View>
+
+          <Text style={{
+            color: p.fgFaint, fontSize: 11, fontWeight: '600',
+            textAlign: 'center', marginTop: 14,
+          }}>
+            Send only {wallet.currency} on the {chain} network. Other assets will be lost.
+          </Text>
+        </Pressable>
+      </Pressable>
+    </Modal>
   );
 }
 
@@ -488,8 +834,13 @@ function deriveAddress(walletId: string, currency: string): string {
 }
 
 /* ── Asset row ─── */
-function AssetRow({ wallet, palette: p, onPress }: { wallet: Wallet; palette: Palette; onPress?: () => void }) {
+function AssetRow({ wallet, palette: p, onPress, liveUsd }: {
+  wallet: Wallet; palette: Palette; onPress?: () => void; liveUsd?: number;
+}) {
   const meta = ASSET_META[wallet.currency] ?? ASSET_META.DEFAULT;
+  // Prefer the freshly-computed live value; fall back to the server's
+  // snapshot only when CoinGecko hasn't loaded yet.
+  const usd = liveUsd ?? Number(wallet.fiatValueUsd);
   return (
     <Pressable
       onPress={onPress}
@@ -515,7 +866,7 @@ function AssetRow({ wallet, palette: p, onPress }: { wallet: Wallet; palette: Pa
       <Text style={{
         color: p.fg, fontSize: 15, fontWeight: '700', fontVariant: ['tabular-nums'],
       }}>
-        ${Number(wallet.fiatValueUsd).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+        ${usd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
       </Text>
     </Pressable>
   );

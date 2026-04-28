@@ -35,6 +35,27 @@ export class ProfileController {
     }
   }
 
+  /**
+   * Look up a user by id for in-app surfaces (message thread headers,
+   * notifications, etc). Auth-gated; returns only non-sensitive fields.
+   */
+  static async getById(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const { id } = req.params;
+      const user = await prisma.user.findUnique({
+        where: { id },
+        select: {
+          id: true, firstName: true, lastName: true, username: true,
+          avatarUrl: true, role: true, kycStatus: true,
+        },
+      });
+      if (!user) throw new AppError('User not found', 404);
+      res.json({ user });
+    } catch (error) {
+      next(error);
+    }
+  }
+
   /** Get own public profile settings */
   static async getMyProfile(req: AuthRequest, res: Response, next: NextFunction) {
     try {

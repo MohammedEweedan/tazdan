@@ -18,7 +18,7 @@ import { useQuery } from '@tanstack/react-query';
 import { ScreenShell, CTAButton, Panel } from '@/components/ui/ScreenShell';
 import { useThemedPalette, type Palette } from '@/store/themeStore';
 import { useHaptics, useWallets, extractErrorMessage } from '@/hooks';
-import { profileService } from '@/services';
+import { profileService, messageService } from '@/services';
 import type { Currency } from '@/types';
 
 const FIATS:  Currency[] = ['USD', 'EUR', 'GBP', 'AED', 'SAR', 'EGP', 'LYD'];
@@ -360,13 +360,18 @@ export default function Send() {
               setCtaState('loading');
               setCtaError(null);
               try {
-                // TODO: replace with real /transfers/send call once backend
-                // route exists. For now we simulate with a 700ms latency so
-                // the success state is visible.
-                await new Promise<void>((resolve, reject) => setTimeout(() => {
-                  if (overspend) reject(new Error('Insufficient balance'));
-                  else resolve();
-                }, 700));
+                const receiverId = picked?.id;
+                if (!receiverId) {
+                  throw new Error('Please select a recipient');
+                }
+
+                await messageService.transfer({
+                  receiverId,
+                  currency,
+                  amount: sendAmount,
+                  note: note || undefined,
+                });
+
                 h.success();
                 setCtaState('success');
                 setTimeout(() => router.back(), 900);

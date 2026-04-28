@@ -220,15 +220,17 @@ function StatusPill({ status, palette: p }: { status: string; palette: Palette }
 
 function typeIcon(t: string): keyof typeof import('@expo/vector-icons').Ionicons.glyphMap {
   switch (t) {
-    case 'SEND':     return 'arrow-up';
-    case 'RECEIVE':  return 'arrow-down';
-    case 'BUY':      return 'cart';
-    case 'SELL':     return 'cash';
-    case 'DEPOSIT':  return 'add-circle';
-    case 'WITHDRAW': return 'remove-circle';
+    case 'SEND':
+    case 'TRANSFER_OUT': return 'arrow-up';
+    case 'RECEIVE':
+    case 'TRANSFER_IN':  return 'arrow-down';
+    case 'BUY':          return 'cart';
+    case 'SELL':         return 'cash';
+    case 'DEPOSIT':      return 'add-circle';
+    case 'WITHDRAW':     return 'remove-circle';
     case 'CONVERT':
-    case 'SWAP':     return 'swap-horizontal';
-    default:         return 'ellipse';
+    case 'SWAP':         return 'swap-horizontal';
+    default:             return 'ellipse';
   }
 }
 
@@ -236,10 +238,12 @@ function typeBg(t: string, p: Palette) {
   switch (t) {
     case 'BUY':
     case 'RECEIVE':
+    case 'TRANSFER_IN':
     case 'DEPOSIT':  return p.greenBg;
     case 'SELL':
     case 'WITHDRAW':
-    case 'SEND':     return 'rgba(239,68,68,0.16)';
+    case 'SEND':
+    case 'TRANSFER_OUT': return 'rgba(239,68,68,0.16)';
     default:         return p.pillBg;
   }
 }
@@ -248,10 +252,12 @@ function typeFg(t: string, p: Palette) {
   switch (t) {
     case 'BUY':
     case 'RECEIVE':
+    case 'TRANSFER_IN':
     case 'DEPOSIT':  return p.greenFg;
     case 'SELL':
     case 'WITHDRAW':
-    case 'SEND':     return p.redFg;
+    case 'SEND':
+    case 'TRANSFER_OUT': return p.redFg;
     default:         return p.fg;
   }
 }

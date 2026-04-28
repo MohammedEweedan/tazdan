@@ -12,5 +12,9 @@ profileRouter.put('/me', authenticate, ProfileController.updateProfile);
 // captured as a username path param).
 profileRouter.get('/search', ProfileController.searchProfiles);
 
+// User lookup by id — used by Messages thread header etc. Same-rule
+// ordering: must come BEFORE the /:username wildcard.
+profileRouter.get('/by-id/:id', authenticate, ProfileController.getById);
+
 // Public route (no auth)
 profileRouter.get('/:username', ProfileController.getPublicProfile);

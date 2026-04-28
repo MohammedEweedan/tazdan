@@ -205,7 +205,11 @@ export default function PublicProfile() {
           icon="paper-plane"
           onPress={() => {
             h.medium();
-            router.push({ pathname: '/send', params: { recipient: data.username } });
+            // Route into the chat thread with the payment sheet pre-opened.
+            // No need to retype the username — partner id comes from the
+            // public profile payload, and the sheet picks the source asset
+            // from the user's actual holdings.
+            router.push({ pathname: '/messages/[id]', params: { id: data.id, openPay: '1' } });
           }}
         />
         <Pressable

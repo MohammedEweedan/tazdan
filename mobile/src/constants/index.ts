@@ -50,6 +50,9 @@ export const QUERY_KEYS = {
   p2pMyTrades:   ['p2p-my-trades'] as const,
   cards:        ['cards'] as const,
   publicProfile: (handle: string) => ['public-profile', handle] as const,
+  conversations:  ['conversations']                              as const,
+  thread:         (userId: string) => ['thread', userId]         as const,
+  blocks:         ['message-blocks']                             as const,
 };
 
 export const CURRENCY_META: Record<Currency, CurrencyMeta> = {

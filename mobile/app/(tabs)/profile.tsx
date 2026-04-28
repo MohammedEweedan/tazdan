@@ -100,7 +100,10 @@ export default function Profile() {
           contentContainerStyle={{ paddingBottom: 140 }}
         >
           {/* Title */}
-          <View style={{ paddingHorizontal: 24, paddingTop: 6 }}>
+          <View style={{
+            flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+            paddingHorizontal: 24, paddingTop: 18, paddingBottom: 8,
+          }}>
             <Text style={{ color: p.fg, fontSize: 22, fontWeight: '700', letterSpacing: -0.4 }}>
               Profile
             </Text>
