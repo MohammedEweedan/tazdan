@@ -49,10 +49,11 @@ const httpServer = createServer(app);
  * Expo dev origin (localhost on any port + LAN IPs). Native (no
  * `Origin` header) is always allowed.
  */
-const ALLOWED_ORIGINS = (process.env.CLIENT_URL ?? 'http://localhost:3000')
-  .split(',')
-  .map((s) => s.trim())
-  .filter(Boolean);
+const ALLOWED_ORIGINS = [process.env.CLIENT_URL ?? 'https://promrkts.com',
+  'https://www.promrkts.com',
+  'https://api.promrkts.com',
+  'http://localhost:3003',
+  'http://localhost:5000'];
 
 const corsOrigin: cors.CorsOptions['origin'] = (origin, cb) => {
   if (!origin) return cb(null, true);                              // native apps / curl
