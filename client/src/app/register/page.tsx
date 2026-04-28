@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import NextLink from "next/link";
 import {
   Box, Flex, Heading, Text, VStack, SimpleGrid,
-  Input, Icon, useColorMode,
+  Input, Icon, useColorMode, Tabs, TabList, TabPanels, Tab, TabPanel,
 } from "@chakra-ui/react";
 import { useTranslate } from "@tolgee/react";
 import {
@@ -818,30 +818,111 @@ export default function RegisterPage() {
 
               {/* Emoji avatar picker */}
               <Box w="100%">
-                <Text fontSize="13px" fontWeight="700" color={p.fg} mb="8px">Choose an avatar</Text>
-                <Flex gap="8px" flexWrap="wrap">
-                  {["🦁","🐯","🐻","🐨","🐼","🐸","🐙","🦊","🐰","🐹","🐱","🐶","🐺","🐗","🐴","🦄","🐝","🐛","🦋","🐌","🐞","🐜","🦟","🦗","🕷","🦂","🐢","🐍","🦎","🦖","🦕","🐙","🦑","🦐","🦞","🦀","🐡","🐠","🐟","🐬","🐳","🦈","🐊","🐅","🐆","🦓","🦍","🦧","🐘","🦛","🦏","🐪","🐫","🦒","🦘","🐃","🐂","🐄","🐎","🐖","🐏","🐑","🦙","🐐","🦌","🐕","🐩","🦮","🐕‍🦺","🐈","🐈‍⬛","🐓","🦃","🦚","🦜","🦢","🦩","🕊","🐇","🦝","🦨","🦡","🦦","🦥","🐁","🐀","🐿","🦔","🐾","🐉","🐲","🌵","🎄","🌲","🌳","🌴","🌱","🌿","☘️","🍀","🎍","🎋","🍃","🍂","🍁","🍄","🐚","🌾","💐","🌷","🌹","🥀","🌺","🌸","🌼","🌻","🌞","🌝","🌛","🌜","🌚","🌕","🌖","🌗","🌘","🌑","🌒","🌓","🌔","🌙","🌎","🌍","🌏","🪐","💫","⭐","🌟","✨","⚡","🔥","💥","☄️","☀️","🌤","⛅","🌥","☁️","🌦","🌧","⛈","🌩","🌨","❄️","☃️","⛄","🌬","💨","💧","💦","☔","☂️","🌊","🌫"].slice(0, 24).map((emoji) => (
-                    <Box
-                      key={emoji}
-                      as="button"
-                      type="button"
-                      onClick={() => setForm((f) => ({ ...f, avatarUrl: emoji }))}
-                      borderRadius="12px"
-                      p="8px"
-                      bg={form.avatarUrl === emoji ? p.fg : p.bgElev}
-                      border="1.5px solid"
-                      borderColor={form.avatarUrl === emoji ? p.fg : p.border}
-                      transition="all 0.15s"
-                      fontSize="22px"
-                      lineHeight="1"
-                      cursor="pointer"
-                      _hover={{ borderColor: p.fg }}
-                      aria-label={`Select ${emoji} avatar`}
-                    >
-                      {emoji}
-                    </Box>
-                  ))}
-                </Flex>
+                <Text fontSize="13px" fontWeight="700" color={p.fg} mb="10px">
+                  Choose an avatar
+                </Text>
+
+                {(() => {
+                  const emojiGroups = {
+                    Cool: [
+                      "🔥","⚡","💀","☠️","👑","😈","😎","🫡","💯","🚀","🎯","🥷",
+                      "🦾","🔒","💸","🏴","⭐","✨","🌙","☄️","🪐","⚔️","🛡️","🏁"
+                    ],
+
+                    Animals: [
+                      "🦁","🐺","🦅","🦊","🐆","🐅","🦈","🐊","🐍","🦂","🕷","🐉",
+                      "🐎","🦌","🦍","🐘","🦏","🦓","🐪","🦜","🐬","🐳","👽","🦇"
+                    ],
+
+                    Faces: [
+                      "😎","😈","🤠","🫡","🥶","🥷","😏","😤","🤝","🫶","🖤","❤️",
+                      "💙","💚","💜","🤍","🩶","💛","🧠","👀","🫥","🫠","🤫","🧿"
+                    ],
+
+                    Symbols: [
+                      "👑","💎","💸","💯","🔒","⚡","🔥","⭐","✨","☠️","💀","🚀",
+                      "🎯","🏴","🏁","⚔️","🛡️","📿","🧿","🪬","🌍","☄️","🪐","🌊"
+                    ],
+
+                    Nature: [
+                      "☀️","🌙","☁️","❄️","🌊","🌴","🌵","🌍","🌎","🌏","🪐","☄️",
+                      "⭐","✨","🌊","🌴","🍂","🍁","🌸","🌹","🌺","🌻","🌼","🌿"
+                    ],
+
+                    Faith: [
+                      "📿","☪️","🕋","🤲","🙏","🧿","🪬","🕊️","🤍","🌙","⭐","☀️"
+                    ],
+
+                    Flags: [
+                      "🇱🇾","🇵🇸","🇸🇦","🇦🇪","🇪🇬","🇹🇳","🇩🇿","🇲🇦","🇹🇷","🇮🇹"
+                    ],
+                  };
+
+                  return (
+                    <Tabs variant="soft-rounded" colorScheme="gray" isFitted>
+                      <TabList
+                        overflowX="auto"
+                        whiteSpace="nowrap"
+                        gap="6px"
+                        pb="6px"
+                        sx={{
+                          scrollbarWidth: "none",
+                          "&::-webkit-scrollbar": { display: "none" },
+                        }}
+                      >
+                        {Object.keys(emojiGroups).map((group) => (
+                          <Tab
+                            key={group}
+                            fontSize="12px"
+                            fontWeight="700"
+                            borderRadius="999px"
+                            minW="fit-content"
+                            px="14px"
+                            py="8px"
+                          >
+                            {group}
+                          </Tab>
+                        ))}
+                      </TabList>
+
+                      <TabPanels mt="12px">
+                        {Object.entries(emojiGroups).map(([group, emojis]) => (
+                          <TabPanel key={group} p={0}>
+                            <Flex gap="8px" flexWrap="wrap">
+                              {emojis.map((emoji) => (
+                                <Box
+                                  key={emoji}
+                                  as="button"
+                                  type="button"
+                                  onClick={() =>
+                                    setForm((f) => ({
+                                      ...f,
+                                      avatarUrl: emoji,
+                                    }))
+                                  }
+                                  borderRadius="12px"
+                                  p="8px"
+                                  bg={form.avatarUrl === emoji ? p.fg : p.bgElev}
+                                  border="1.5px solid"
+                                  borderColor={
+                                    form.avatarUrl === emoji ? p.fg : p.border
+                                  }
+                                  fontSize="22px"
+                                  lineHeight="1"
+                                  cursor="pointer"
+                                  transition="all 0.15s"
+                                  _hover={{ borderColor: p.fg }}
+                                >
+                                  {emoji}
+                                </Box>
+                              ))}
+                            </Flex>
+                          </TabPanel>
+                        ))}
+                      </TabPanels>
+                    </Tabs>
+                  );
+                })()}
               </Box>
 
               <Field
