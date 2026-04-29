@@ -200,6 +200,7 @@ export default function DashboardPage() {
   const positive = deltaPct >= 0;
   const handle = (user as any)?.username ?? user?.email?.split("@")[0] ?? "me";
   const initial = (user?.firstName?.[0] ?? user?.email?.[0] ?? "P").toUpperCase();
+  const userEmoji = (user as any)?.avatarUrl;
 
   const actions = [
     { href: "/dashboard/trade", icon: FiPlus, label: "Buy", accent: "#22c55e" },
@@ -227,7 +228,20 @@ export default function DashboardPage() {
       {/* ── Header ── */}
       <Flex justify="space-between" align="center" mb={6}>
         <HStack spacing={3}>
-          <Avatar size="sm" name={initial} bg="linear-gradient(135deg, #7c3aed, #4a8fe0)" color="white" fontWeight="800" />
+          {userEmoji ? (
+            <Flex
+              w="32px" h="32px" borderRadius="full"
+              bg={tok.dark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)"}
+              border="1px solid"
+              borderColor={tok.panelBorder}
+              align="center" justify="center"
+              fontSize="18px"
+            >
+              {userEmoji}
+            </Flex>
+          ) : (
+            <Avatar size="sm" name={initial} bg="linear-gradient(135deg, #7c3aed, #4a8fe0)" color="white" fontWeight="800" />
+          )}
           <Text fontSize="17px" fontWeight="700" color={tok.textMain}>@{handle}</Text>
         </HStack>
         <HStack spacing={2}>

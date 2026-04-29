@@ -111,8 +111,8 @@ export class AuthController {
       await prisma.user.update({
         where: { id: user.id },
         data: {
-          emailVerificationCode: verificationCode,
-          emailVerificationCodeExpires: new Date(Date.now() + 24 * 60 * 60 * 1000),
+          emailVerificationToken: verificationCode,
+          emailVerificationExpires: new Date(Date.now() + 24 * 60 * 60 * 1000),
         },
       });
       sendWelcomeEmail({ to: user.email, firstName: user.firstName }).catch((e) => console.error('[email] welcome failed:', e));
@@ -241,6 +241,7 @@ export class AuthController {
         where: { id: req.user!.id },
         select: {
           id: true, email: true, phone: true, firstName: true, lastName: true,
+          username: true, avatarUrl: true,
           role: true, status: true, kycStatus: true, twoFactorEnabled: true,
           emailVerified: true, phoneVerified: true, referralCode: true,
           lastLoginAt: true, createdAt: true,
@@ -354,10 +355,10 @@ export class AuthController {
       if (!dbUser) throw new AppError('User not found', 404);
       if (dbUser.emailVerified) throw new AppError('Email already verified', 400);
       if (
-        !dbUser.emailVerificationCode ||
-        dbUser.emailVerificationCode !== code ||
-        !dbUser.emailVerificationCodeExpires ||
-        dbUser.emailVerificationCodeExpires < new Date()
+        !dbUser.emailVerificationToken ||
+        dbUser.emailVerificationToken !== code ||
+        !dbUser.emailVerificationExpires ||
+        dbUser.emailVerificationExpires < new Date()
       ) {
         throw new AppError('Invalid or expired verification code', 400);
       }
@@ -368,8 +369,6 @@ export class AuthController {
           emailVerified: true,
           emailVerificationToken: null,
           emailVerificationExpires: null,
-          emailVerificationCode: null,
-          emailVerificationCodeExpires: null,
           status: dbUser.status === 'PENDING' ? 'ACTIVE' : dbUser.status,
         },
       });

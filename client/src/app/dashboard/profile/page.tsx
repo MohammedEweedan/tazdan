@@ -196,14 +196,26 @@ export default function ProfilePage() {
         {/* ── Profile card ── */}
         <GlassCard p={5}>
           <Flex gap={4} align="center" mb={5}>
-            <Avatar
-              size="lg"
-              name={initials}
-              bg={`linear-gradient(135deg, ${tok.brand}, #003d82)`}
-              color="white"
-              fontSize="20px"
-              fontWeight="900"
-            />
+            {(user as any)?.avatarUrl ? (
+              <Flex
+                w="56px" h="56px" borderRadius="full"
+                bg={tok.dark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)"}
+                border="1px solid" borderColor={tok.panelBorder}
+                align="center" justify="center"
+                fontSize="28px"
+              >
+                {(user as any).avatarUrl}
+              </Flex>
+            ) : (
+              <Avatar
+                size="lg"
+                name={initials}
+                bg={`linear-gradient(135deg, ${tok.brand}, #003d82)`}
+                color="white"
+                fontSize="20px"
+                fontWeight="900"
+              />
+            )}
             <Box>
               <Text fontSize="16px" fontWeight="900" color={tok.textMain}>
                 {user?.firstName} {user?.lastName}

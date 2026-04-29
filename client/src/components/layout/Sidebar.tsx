@@ -112,7 +112,13 @@ export default function Sidebar() {
         {/* User info */}
         <Box px={isCollapsed ? 2 : 5} py={4} borderBottomWidth="1px" borderColor={borderColor}>
           <Flex align="center" gap={3} justify={isCollapsed ? 'center' : 'flex-start'}>
-            <Avatar size="sm" name={`${user?.firstName} ${user?.lastName}`} />
+            {(user as any)?.avatarUrl ? (
+              <Flex w="32px" h="32px" borderRadius="full" bg="rgba(125,125,125,0.15)" border="1px solid" borderColor="rgba(125,125,125,0.2)" align="center" justify="center" fontSize="18px">
+                {(user as any).avatarUrl}
+              </Flex>
+            ) : (
+              <Avatar size="sm" name={`${user?.firstName} ${user?.lastName}`} />
+            )}
             <Collapse in={!isCollapsed} animateOpacity>
               <VStack align="start" spacing={1}>
                 <Text fontSize="sm" fontWeight="semibold">{user?.firstName} {user?.lastName}</Text>

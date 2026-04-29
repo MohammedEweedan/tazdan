@@ -271,11 +271,15 @@ function Row({
     >
       <View style={{
         width: 46, height: 46, borderRadius: 23,
-        backgroundColor: isSupport ? BRAND_BLUE : '#7c3aed',
+        backgroundColor: isSupport ? BRAND_BLUE : (c.partner.avatarUrl ? p.bgElev : '#7c3aed'),
         alignItems: 'center', justifyContent: 'center',
+        borderWidth: !isSupport && c.partner.avatarUrl ? 1 : 0,
+        borderColor: p.border,
       }}>
         {isSupport ? (
           <Ionicons name="headset" size={20} color="#fff" />
+        ) : c.partner.avatarUrl ? (
+          <Text style={{ fontSize: 22 }}>{c.partner.avatarUrl}</Text>
         ) : (
           <Text style={{ color: '#fff', fontSize: 17, fontWeight: '800' }}>
             {(fullName[0] ?? '?').toUpperCase()}

@@ -19,9 +19,10 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 
 import { useAuthStore } from '@/store/authStore';
-import { useWallets, useHaptics, useTransactions } from '@/hooks';
+import { useWallets, useHaptics, useTransactions, useUnreadCount } from '@/hooks';
 import { useMarkets as useGeckoMarkets, ID_TO_SYM } from '@/hooks/useMarkets';
 import { useTheme, useThemedPalette, type Palette } from '@/store/themeStore';
+import { formatFiat } from '@/utils/format';
 import type { Wallet, Currency } from '@/types';
 
 type Tab = 'ASSETS' | 'WALLETS' | 'ACTIVITY';
@@ -32,6 +33,7 @@ export default function Home() {
   const user = useAuthStore((s) => s.user);
   const { data: wallets, refetch: refetchWallets } = useWallets();
   const { data: txData, refetch: refetchTxs } = useTransactions(1);
+  const { data: unreadData } = useUnreadCount();
   const p = useThemedPalette();
   const themeMode = useTheme((s) => s.mode);
   const [tab, setTab] = useState<Tab>('ASSETS');
@@ -96,6 +98,7 @@ export default function Home() {
 
   const initial = (user?.firstName?.[0] ?? user?.email?.[0] ?? 'P').toUpperCase();
   const handle = user?.username ?? user?.email?.split('@')[0] ?? 'me';
+  const userEmoji = user?.avatarUrl;
 
   const ACTIONS: ActionDef[] = [
     { key: 'buy',     icon: 'add',                   label: 'Buy',     to: '/buy' },
@@ -134,10 +137,16 @@ export default function Home() {
             >
               <View style={{
                 width: 36, height: 36, borderRadius: 18,
-                backgroundColor: themeMode === 'dark' ? '#a78bfa' : '#7c3aed',
+                backgroundColor: userEmoji ? (themeMode === 'dark' ? '#1a1d27' : '#f5f5f7') : (themeMode === 'dark' ? '#a78bfa' : '#7c3aed'),
                 alignItems: 'center', justifyContent: 'center',
+                borderWidth: userEmoji ? 1 : 0,
+                borderColor: userEmoji ? (themeMode === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.09)') : 'transparent',
               }}>
-                <Text style={{ color: '#fff', fontWeight: '800', fontSize: 16 }}>{initial}</Text>
+                {userEmoji ? (
+                  <Text style={{ fontSize: 20 }}>{userEmoji}</Text>
+                ) : (
+                  <Text style={{ color: '#fff', fontWeight: '800', fontSize: 16 }}>{initial}</Text>
+                )}
               </View>
               <Text style={{ color: p.fg, fontSize: 17, fontWeight: '700', letterSpacing: -0.3 }}>
                 @{handle}
@@ -154,9 +163,23 @@ export default function Home() {
                 }}
               >
                 <Ionicons name="notifications-outline" size={17} color={p.fg} />
+                {(unreadData ?? 0) > 0 && (
+                  <View style={{
+                    position: 'absolute',
+                    top: -2, right: -2,
+                    minWidth: 16, height: 16, borderRadius: 8,
+                    backgroundColor: '#ef4444',
+                    alignItems: 'center', justifyContent: 'center',
+                    paddingHorizontal: 3,
+                  }}>
+                    <Text style={{ color: '#fff', fontSize: 10, fontWeight: '800' }}>
+                      {unreadData && unreadData > 9 ? '9+' : unreadData}
+                    </Text>
+                  </View>
+                )}
               </Pressable>
               <Pressable
-                onPress={() => { h.selection(); router.push('/settings'); }}
+                onPress={() => { h.selection(); router.push('/scanner'); }}
                 hitSlop={6}
                 style={{
                   width: 36, height: 36, borderRadius: 18,
@@ -164,7 +187,7 @@ export default function Home() {
                   alignItems: 'center', justifyContent: 'center',
                 }}
               >
-                <Ionicons name="settings-outline" size={17} color={p.fg} />
+                <Ionicons name="scan-outline" size={18} color={p.fg} />
               </Pressable>
             </View>
           </View>
@@ -180,7 +203,7 @@ export default function Home() {
               color: positive ? p.greenFg : p.redFg,
               fontSize: 14, fontWeight: '600', fontVariant: ['tabular-nums'],
             }}>
-              {positive ? '+' : '-'}${Math.abs(deltaUsd).toFixed(2)}
+              {positive ? '+' : '-'}${formatFiat(Math.abs(deltaUsd))}
             </Text>
             <View style={{
               flexDirection: 'row', alignItems: 'center', gap: 4,
@@ -364,15 +387,19 @@ function AnimatedTotal({ value, palette: p }: { value: number; palette: Palette 
   // Tint the main text briefly while a flash is active.
   const flashColor = flash?.dir === 'up' ? p.greenFg : flash?.dir === 'down' ? p.redFg : p.fg;
 
+  const totalStr = displayed.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const digitCount = totalStr.replace(/[^0-9]/g, '').length;
+  const fontSize = digitCount <= 7 ? 48 : digitCount <= 9 ? 40 : digitCount <= 11 ? 34 : 28;
+
   return (
     <View style={{ alignItems: 'center', marginTop: 4, paddingHorizontal: 24 }}>
       <Text style={{
         color: flash ? flashColor : p.fg,
-        fontSize: 48, fontWeight: '800', letterSpacing: -1.6,
+        fontSize, fontWeight: '800', letterSpacing: -1.6,
         textAlign: 'center',
         fontVariant: ['tabular-nums'],
       }}>
-        ${displayed.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+        ${totalStr}
       </Text>
 
       {flash && (
@@ -397,7 +424,7 @@ function AnimatedTotal({ value, palette: p }: { value: number; palette: Palette 
             color: flash.dir === 'up' ? p.greenFg : p.redFg,
             fontSize: 11, fontWeight: '800', fontVariant: ['tabular-nums'],
           }}>
-            {flash.dir === 'up' ? '+' : '-'}${Math.abs(flash.delta).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            {flash.dir === 'up' ? '+' : '-'}${formatFiat(Math.abs(flash.delta))}
           </Text>
         </Animated.View>
       )}
@@ -538,7 +565,7 @@ function ActivityList({
               color: negative ? p.fg : p.greenFg,
               fontSize: 14, fontWeight: '700', fontVariant: ['tabular-nums'],
             }}>
-              {negative ? '-' : '+'}{abs.toLocaleString('en-US', { maximumFractionDigits: 6 })} {t.currency}
+              {negative ? '-' : '+'}{formatFiat(abs)} {t.currency}
             </Text>
           </View>
         );
@@ -868,7 +895,7 @@ function AssetRow({ wallet, palette: p, onPress, liveUsd }: {
       <Text style={{
         color: p.fg, fontSize: 15, fontWeight: '700', fontVariant: ['tabular-nums'],
       }}>
-        ${usd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+        ${formatFiat(usd)}
       </Text>
     </Pressable>
   );
@@ -879,11 +906,11 @@ function CurrencyIcon({ currency }: { currency: Currency }) {
   const cfg = ICON_CFG[currency] ?? ICON_CFG.DEFAULT;
   return (
     <View style={{
-      width: 38, height: 38, borderRadius: 19,
+      width: 44, height: 44, borderRadius: 22,
       backgroundColor: cfg.bg,
       alignItems: 'center', justifyContent: 'center',
     }}>
-      <Text style={{ color: cfg.fg, fontWeight: '700', fontSize: cfg.fontSize ?? 15 }}>
+      <Text style={{ color: cfg.fg, fontWeight: '700', fontSize: cfg.fontSize ? cfg.fontSize + 2 : 17 }}>
         {cfg.glyph}
       </Text>
     </View>

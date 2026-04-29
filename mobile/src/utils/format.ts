@@ -43,6 +43,14 @@ export function formatPercent(p: number, opts: { signed?: boolean } = {}): strin
   return `${sign}${p.toFixed(2)}%`;
 }
 
+/**
+ * Format a number as "xxx,xxx,xxx.xx" with exactly 2 decimal places.
+ * Used for fiat balance display and currency approximation.
+ */
+export function formatFiat(n: number): string {
+  return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
 export function formatRelativeTime(iso: string): string {
   const date = new Date(iso);
   const seconds = Math.round((Date.now() - date.getTime()) / 1000);

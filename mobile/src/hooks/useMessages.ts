@@ -86,7 +86,11 @@ export const useSendMessage = (partnerId: string) => {
     },
     onSuccess: (real, _vars, ctx) => {
       qc.setQueryData<ApiMessage[]>(QUERY_KEYS.thread(partnerId), (cur = []) => {
-        // Replace the optimistic placeholder with the server row.
+        // If the websocket already pushed this message, just remove the placeholder.
+        if (cur.some((m) => m.id === real.id)) {
+          return cur.filter((m) => m.id !== ctx?.placeholderId);
+        }
+        // Otherwise replace the optimistic placeholder with the server row.
         return cur.map((m) => (m.id === ctx?.placeholderId ? real : m));
       });
       qc.invalidateQueries({ queryKey: QUERY_KEYS.conversations });
@@ -178,6 +182,14 @@ export function useMessageRealtime(currentUserId: string | undefined) {
         const partnerId = m.senderId === currentUserId ? m.receiverId : m.senderId;
         qc.setQueryData<ApiMessage[]>(QUERY_KEYS.thread(partnerId), (cur = []) => {
           if (cur.some((x) => x.id === m.id)) return cur;
+          // If there's a local placeholder with the same content, replace it
+          // instead of appending (avoids duplicates when ws races with mutation).
+          const placeholderIdx = cur.findIndex(
+            (x) => x.id.startsWith('local_') && x.content === m.content && x.senderId === 'me',
+          );
+          if (placeholderIdx !== -1) {
+            return cur.map((x, i) => (i === placeholderIdx ? m : x));
+          }
           return [...cur, m];
         });
         qc.invalidateQueries({ queryKey: QUERY_KEYS.conversations });

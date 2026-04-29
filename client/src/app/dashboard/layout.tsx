@@ -13,7 +13,7 @@ import {
   FiHome, FiRepeat, FiCreditCard, FiSettings, FiInbox,
   FiArrowDownCircle, FiArrowUpCircle, FiShield,
   FiLogOut, FiChevronLeft, FiChevronRight, FiShoppingBag, FiUser,
-  FiMessageSquare, FiBarChart2, FiBell, FiGift, FiPieChart, FiLock, FiSend,
+  FiMessageSquare, FiBarChart2, FiGift, FiPieChart, FiLock, FiSend,
 } from "react-icons/fi";
 import { useAuthStore } from "@/stores/authStore";
 import { TextLogo, IconLogo } from "@/components/ui/Logo";
@@ -66,6 +66,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   const isAgent = user?.role === "AGENT";
   const initials = `${user?.firstName?.[0] || ""}${user?.lastName?.[0] || ""}`.toUpperCase() || "U";
+  const userEmoji = (user as any)?.avatarUrl;
 
   type NavSection = { title?: string; items: { href: string; icon: any; label: string; badge?: string }[] };
 
@@ -372,7 +373,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             transition="all 0.18s cubic-bezier(0.2, 0.8, 0.2, 1)"
             justify={collapsed ? "center" : "flex-start"}
           >
-            <Avatar size="sm" name={initials} bg={`linear-gradient(135deg, ${brand}, #003d82)`} color="white" fontSize="12px" fontWeight="700" />
+            {userEmoji ? (
+              <Flex w="32px" h="32px" borderRadius="full" bg={dk ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)"} border="1px solid" borderColor={sidebarBorder} align="center" justify="center" fontSize="18px">
+                {userEmoji}
+              </Flex>
+            ) : (
+              <Avatar size="sm" name={initials} bg={`linear-gradient(135deg, ${brand}, #003d82)`} color="white" fontSize="12px" fontWeight="700" />
+            )}
             <AnimatePresence initial={false}>
               {!collapsed && (
                 <motion.div
@@ -427,24 +434,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <LanguageSwitcher />
             <ColorModeToggle />
 
-            {/* Notifications bell (links to the notifications page we kept) */}
-            <Box
-              as={NextLink}
-              href="/dashboard/notifications"
-              position="relative"
-              display="inline-flex"
-              alignItems="center"
-              justifyContent="center"
-              w="36px"
-              h="36px"
-              borderRadius="full"
-              color={textSecondary}
-              _hover={{ bg: hoverBg, color: brand, transform: "scale(1.06)" }}
-              transition="all 0.18s"
-            >
-              <Icon as={FiBell} boxSize={4} />
-            </Box>
-
             {/* Profile avatar — opens dropdown with account + logout */}
             <Menu placement="bottom-end">
               <MenuButton
@@ -463,7 +452,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 _hover={{ borderColor: brand, transform: "translateY(-1px)", boxShadow: `0 6px 20px ${dk ? "rgba(0,87,184,0.25)" : "rgba(0,87,184,0.15)"}` }}
                 transition="all 0.18s cubic-bezier(0.2, 0.8, 0.2, 1)"
               >
-                <Avatar size="xs" name={initials} bg={`linear-gradient(135deg, ${brand}, #003d82)`} color="white" fontSize="10px" fontWeight="800" />
+                {userEmoji ? (
+                  <Flex w="24px" h="24px" borderRadius="full" bg={dk ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)"} border="1px solid" borderColor={sidebarBorder} align="center" justify="center" fontSize="14px">
+                    {userEmoji}
+                  </Flex>
+                ) : (
+                  <Avatar size="xs" name={initials} bg={`linear-gradient(135deg, ${brand}, #003d82)`} color="white" fontSize="10px" fontWeight="800" />
+                )}
               </MenuButton>
               <MenuList
                 bg={sidebarBg}

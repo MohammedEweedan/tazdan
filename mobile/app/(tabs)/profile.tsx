@@ -36,6 +36,7 @@ export default function Profile() {
   const initial = (user?.firstName?.[0] ?? user?.email?.[0] ?? 'P').toUpperCase();
   const fullName = `${user?.firstName ?? ''} ${user?.lastName ?? ''}`.trim() || 'Promrkts user';
   const handle = user?.username ?? user?.email?.split('@')[0] ?? 'me';
+  const userEmoji = user?.avatarUrl;
 
   const groups: { title: string; rows: Row[] }[] = [
     {
@@ -115,10 +116,16 @@ export default function Profile() {
               <View style={{ flexDirection: 'row', alignItems: 'center', padding: 18, gap: 14 }}>
                 <View style={{
                   width: 56, height: 56, borderRadius: 28,
-                  backgroundColor: themeMode === 'dark' ? '#a78bfa' : '#7c3aed',
+                  backgroundColor: userEmoji ? (themeMode === 'dark' ? '#1a1d27' : '#f5f5f7') : (themeMode === 'dark' ? '#a78bfa' : '#7c3aed'),
                   alignItems: 'center', justifyContent: 'center',
+                  borderWidth: userEmoji ? 1 : 0,
+                  borderColor: themeMode === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.09)',
                 }}>
-                  <Text style={{ color: '#fff', fontWeight: '800', fontSize: 22 }}>{initial}</Text>
+                  {userEmoji ? (
+                    <Text style={{ fontSize: 28 }}>{userEmoji}</Text>
+                  ) : (
+                    <Text style={{ color: '#fff', fontWeight: '800', fontSize: 22 }}>{initial}</Text>
+                  )}
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={{ color: p.fg, fontSize: 16, fontWeight: '700' }}>{fullName}</Text>

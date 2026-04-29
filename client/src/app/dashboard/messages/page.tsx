@@ -67,6 +67,26 @@ export default function MessagesPage() {
     } finally { setSending(false); }
   };
 
+  const [showStickers, setShowStickers] = useState(false);
+  const STICKERS = [
+    '👍','❤️','😂','🔥','🎉','👏','😭','🤔','👀','🙏',
+    '🚀','💯','✅','⭐','👋','🤝','💪','😎','🥳','😍',
+    '🤯','😤','🫡','🥷','💀','👑','🎯','🏆','🎁','💸',
+    '📈','📉','🌍','🌙','☀️','🔒','⚡','💎','🍀','🦅',
+  ];
+
+  const sendSticker = async (sticker: string) => {
+    if (!selectedPartner) return;
+    setSending(true);
+    try {
+      await messageAPI.send({ receiverId: selectedPartner.id, content: sticker });
+      setShowStickers(false);
+      await loadMessages(selectedPartner.id, false);
+    } catch (e: any) {
+      toast({ title: "Failed to send", description: e?.response?.data?.error || "Try again", status: "error", duration: 3000 });
+    } finally { setSending(false); }
+  };
+
   const fmtTime = (d: string) => {
     const date = new Date(d);
     const diff = Date.now() - date.getTime();
@@ -143,14 +163,26 @@ export default function MessagesPage() {
                       transition="all 0.15s"
                       onClick={() => open(c.partner)}
                     >
-                      <Avatar
-                        size="sm"
-                        name={`${c.partner?.firstName || ""} ${c.partner?.lastName || ""}`}
-                        bg={`linear-gradient(135deg, ${tok.brand}, #003d82)`}
-                        color="white"
-                        fontSize="11px"
-                        fontWeight="900"
-                      />
+                      {c.partner?.avatarUrl ? (
+                        <Flex
+                          w="32px" h="32px" borderRadius="full"
+                          bg={tok.dark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)"}
+                          border="1px solid" borderColor={tok.panelBorder}
+                          align="center" justify="center"
+                          fontSize="18px"
+                        >
+                          {c.partner.avatarUrl}
+                        </Flex>
+                      ) : (
+                        <Avatar
+                          size="sm"
+                          name={`${c.partner?.firstName || ""} ${c.partner?.lastName || ""}`}
+                          bg={`linear-gradient(135deg, ${tok.brand}, #003d82)`}
+                          color="white"
+                          fontSize="11px"
+                          fontWeight="900"
+                        />
+                      )}
                       <Box flex={1} minW={0}>
                         <Flex justify="space-between" align="center">
                           <Text fontSize="13px" fontWeight="800" color={tok.textMain} noOfLines={1}>
@@ -224,14 +256,26 @@ export default function MessagesPage() {
                   >
                     <FiArrowLeft />
                   </Button>
-                  <Avatar
-                    size="sm"
-                    name={`${selectedPartner.firstName} ${selectedPartner.lastName}`}
-                    bg={`linear-gradient(135deg, ${tok.brand}, #003d82)`}
-                    color="white"
-                    fontSize="11px"
-                    fontWeight="900"
-                  />
+                  {selectedPartner?.avatarUrl ? (
+                    <Flex
+                      w="32px" h="32px" borderRadius="full"
+                      bg={tok.dark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)"}
+                      border="1px solid" borderColor={tok.panelBorder}
+                      align="center" justify="center"
+                      fontSize="18px"
+                    >
+                      {selectedPartner.avatarUrl}
+                    </Flex>
+                  ) : (
+                    <Avatar
+                      size="sm"
+                      name={`${selectedPartner.firstName} ${selectedPartner.lastName}`}
+                      bg={`linear-gradient(135deg, ${tok.brand}, #003d82)`}
+                      color="white"
+                      fontSize="11px"
+                      fontWeight="900"
+                    />
+                  )}
                   <Box>
                     <Text fontSize="13px" fontWeight="800" color={tok.textMain}>
                       {selectedPartner.firstName} {selectedPartner.lastName}
@@ -308,6 +352,18 @@ export default function MessagesPage() {
                     _placeholder={{ color: tok.textMuted }}
                   />
                   <Button
+                    onClick={() => setShowStickers((s) => !s)}
+                    h="42px"
+                    w="42px"
+                    minW="42px"
+                    borderRadius="12px"
+                    variant="ghost"
+                    color={tok.textSub}
+                    fontSize="20px"
+                  >
+                    {showStickers ? '✕' : '🙂'}
+                  </Button>
+                  <Button
                     onClick={send}
                     isLoading={sending}
                     isDisabled={!content.trim()}
@@ -324,6 +380,28 @@ export default function MessagesPage() {
                     <FiSend />
                   </Button>
                 </Flex>
+                {showStickers && (
+                  <Flex flexWrap="wrap" gap={2} pt={2}>
+                    {STICKERS.map((s) => (
+                      <Box
+                        key={s}
+                        as="button"
+                        onClick={() => sendSticker(s)}
+                        w="36px" h="36px" borderRadius="10px"
+                        bg={tok.panelInner}
+                        border="1px solid"
+                        borderColor={tok.panelBorder}
+                        display="flex" alignItems="center" justifyContent="center"
+                        fontSize="18px"
+                        cursor="pointer"
+                        _hover={{ borderColor: tok.brand, bg: tok.hover }}
+                        transition="all 0.15s"
+                      >
+                        {s}
+                      </Box>
+                    ))}
+                  </Flex>
+                )}
               </>
             )}
           </Flex>

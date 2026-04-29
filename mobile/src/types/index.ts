@@ -29,9 +29,11 @@ export interface User {
   lastName: string;
   avatarUrl?: string;
   country?: string;
+  status?: string;
   kycStatus: 'NOT_SUBMITTED' | 'PENDING' | 'APPROVED' | 'REJECTED';
   kycTier:   'TIER_0' | 'TIER_1' | 'TIER_2' | 'TIER_3';
   twoFactorEnabled: boolean;
+  emailVerified?: boolean;
   referralCode: string;
   /** True when the user's @handle is publicly visible at /u/[handle]. */
   profilePublic?: boolean;

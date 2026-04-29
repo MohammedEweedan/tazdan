@@ -85,6 +85,14 @@ const { data: messages = [], isLoading } = useThread(partnerId);  const sendMut 
   const [editing, setEditing] = useState<ApiMessage | null>(null);
   const [paymentSheet, setPaymentSheet] = useState(false);
   const [reportTarget, setReportTarget] = useState<{ messageId?: string } | null>(null);
+  const [showStickers, setShowStickers] = useState(false);
+
+  const STICKERS = useMemo(() => [
+    '👍','❤️','😂','🔥','🎉','👏','😭','🤔','👀','🙏',
+    '🚀','💯','✅','⭐','👋','🤝','💪','😎','🥳','😍',
+    '🤯','😤','🫡','🥷','💀','👑','🎯','🏆','🎁','💸',
+    '📈','📉','🌍','🌙','☀️','🔒','⚡','💎','🍀','🦅',
+  ], []);
 
   // Auto-open the payment sheet when arriving with ?openPay=1 (e.g. from
   // the public profile page's "Send money" CTA). Tiny delay so the
@@ -118,6 +126,12 @@ const { data: messages = [], isLoading } = useThread(partnerId);  const sendMut 
       metadata: { amount, currency, note, status: 'COMPLETED' },
     });
     setPaymentSheet(false);
+  };
+
+  const sendSticker = (sticker: string) => {
+    h.light();
+    sendMut.mutate({ receiverId: partnerId, content: sticker });
+    setShowStickers(false);
   };
 
   // ── Header overflow menu ────────────────────────────────────────
@@ -281,12 +295,16 @@ const { data: messages = [], isLoading } = useThread(partnerId);  const sendMut 
             <Ionicons name="chevron-back" size={18} color={p.fg} />
           </Pressable>
           <View style={{
-            width: 38, height: 38, borderRadius: 19,
-            backgroundColor: isSupport ? BRAND_BLUE : '#7c3aed',
+            width: 32, height: 32, borderRadius: 16,
+            backgroundColor: isSupport ? BRAND_BLUE : (partner?.avatarUrl ? p.bgElev : '#7c3aed'),
             alignItems: 'center', justifyContent: 'center',
+            borderWidth: !isSupport && partner?.avatarUrl ? 1 : 0,
+            borderColor: p.border,
           }}>
             {isSupport ? (
               <Ionicons name="headset" size={16} color="#fff" />
+            ) : partner?.avatarUrl ? (
+              <Text style={{ fontSize: 18 }}>{partner.avatarUrl}</Text>
             ) : (
               <Text style={{ color: '#fff', fontSize: 14, fontWeight: '800' }}>
                 {(partner?.firstName?.[0] ?? partner?.username?.[0] ?? '?').toUpperCase()}
@@ -416,9 +434,21 @@ const { data: messages = [], isLoading } = useThread(partnerId);  const sendMut 
               >
                 <Ionicons name="cash-outline" size={18} color={p.fgMuted} />
               </Pressable>
+              <Pressable
+                onPress={() => { h.selection(); setShowStickers((s) => !s); }}
+                hitSlop={6}
+                style={({ pressed }) => ({
+                  width: 32, height: 32, borderRadius: 16,
+                  backgroundColor: pressed ? p.border : 'transparent',
+                  alignItems: 'center', justifyContent: 'center',
+                })}
+                accessibilityLabel="Stickers"
+              >
+                <Ionicons name={showStickers ? 'close' : 'happy-outline'} size={18} color={p.fgMuted} />
+              </Pressable>
               <TextInput
                 value={draft}
-                onChangeText={setDraft}
+                onChangeText={(t) => { setDraft(t); if (showStickers) setShowStickers(false); }}
                 placeholder="Message"
                 placeholderTextColor={p.fgFaint}
                 multiline
@@ -442,6 +472,29 @@ const { data: messages = [], isLoading } = useThread(partnerId);  const sendMut 
                 <Ionicons name={editing ? 'checkmark' : 'arrow-up'} size={18} color="#fff" />
               </Pressable>
             </View>
+
+            {/* Sticker picker */}
+            {showStickers && (
+              <View style={{
+                flexDirection: 'row', flexWrap: 'wrap',
+                gap: 8, paddingTop: 10, paddingBottom: 4,
+              }}>
+                {STICKERS.map((s) => (
+                  <Pressable
+                    key={s}
+                    onPress={() => sendSticker(s)}
+                    style={({ pressed }) => ({
+                      width: 40, height: 40, borderRadius: 12,
+                      alignItems: 'center', justifyContent: 'center',
+                      backgroundColor: pressed ? p.pillBg : p.bgElev,
+                      borderWidth: 1, borderColor: p.border,
+                    })}
+                  >
+                    <Text style={{ fontSize: 20 }}>{s}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            )}
           </View>
         </KeyboardAvoidingView>
       </SafeAreaView>

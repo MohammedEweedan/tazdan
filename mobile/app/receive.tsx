@@ -3,7 +3,7 @@
  */
 
 import { useState } from 'react';
-import { Alert, Pressable, Share, Text, View } from 'react-native';
+import { Alert, Image, Pressable, Share, Text, View } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -24,7 +24,9 @@ export default function Receive() {
   const handle = user?.username ?? user?.email?.split('@')[0] ?? 'me';
   // Universal link a counterparty's app deep-links into when they scan
   // the QR code — resolves to /u/[handle] in the Promrkts app.
-  const profileLink = `https://promrkts.app/u/${handle}`;
+  const profileLink = `https://promrkts.com/u/${handle}`;
+  // Real QR code via qrserver.com — white bg + black foreground for reliable scanning.
+  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&margin=12&data=${encodeURIComponent(profileLink)}&bgcolor=ffffff&color=000000`;
 
   return (
     <ScreenShell title="Receive money">
@@ -59,12 +61,17 @@ export default function Receive() {
 
       {tab === 'HANDLE' ? (
         <View style={{ marginTop: 28, alignItems: 'center' }}>
-          {/* Pseudo QR — large rounded square with handle text */}
+          {/* Real QR code */}
           <View style={{
-            width: 200, height: 200, borderRadius: 24,
-            backgroundColor: p.fg, alignItems: 'center', justifyContent: 'center',
+            width: 220, height: 220, borderRadius: 20,
+            backgroundColor: '#ffffff', alignItems: 'center', justifyContent: 'center',
+            padding: 10,
           }}>
-            <Ionicons name="qr-code" size={140} color={p.bg} />
+            <Image
+              source={{ uri: qrUrl }}
+              style={{ width: 200, height: 200 }}
+              resizeMode="contain"
+            />
           </View>
           <Text style={{
             color: p.fg, fontSize: 28, fontWeight: '800',

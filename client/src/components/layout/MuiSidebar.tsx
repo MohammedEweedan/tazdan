@@ -97,9 +97,15 @@ export default function MuiSidebar({ open, onClose, isMobile }: MuiSidebarProps)
       {/* User Info */}
       <Box sx={{ p: 2, borderBottom: 1, borderColor: 'divider' }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-          <Avatar sx={{ width: 40, height: 40 }}>
-            {user?.firstName?.[0]}{user?.lastName?.[0]}
-          </Avatar>
+          {(user as any)?.avatarUrl ? (
+            <Box sx={{ width: 40, height: 40, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px', bgcolor: 'rgba(125,125,125,0.12)', border: '1px solid rgba(125,125,125,0.2)' }}>
+              {(user as any).avatarUrl}
+            </Box>
+          ) : (
+            <Avatar sx={{ width: 40, height: 40 }}>
+              {user?.firstName?.[0]}{user?.lastName?.[0]}
+            </Avatar>
+          )}
           <Box sx={{ flex: 1, minWidth: 0 }}>
             <Typography variant="body2" sx={{ fontWeight: 600 }} noWrap>
               {user?.firstName} {user?.lastName}

@@ -7,7 +7,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { QUERY_KEYS } from '@/constants';
 import {
   walletService, transactionService, marketsService, p2pService, cardsService,
-  swapService, profileService,
+  swapService, profileService, notificationService,
 } from '@/services';
 
 export { useHaptics } from './useHaptics';
@@ -130,6 +130,44 @@ export function useInitiateP2PTrade() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: QUERY_KEYS.p2pMyTrades });
       qc.invalidateQueries({ queryKey: QUERY_KEYS.wallets });
+    },
+  });
+}
+
+/* ── Notifications ──────────────────────────────────── */
+
+export const useNotifications = () =>
+  useQuery({
+    queryKey: QUERY_KEYS.notifications,
+    queryFn: () => notificationService.list(),
+    refetchInterval: 15_000,
+  });
+
+export const useUnreadCount = () =>
+  useQuery({
+    queryKey: QUERY_KEYS.unreadCount,
+    queryFn: () => notificationService.unreadCount(),
+    refetchInterval: 15_000,
+  });
+
+export function useMarkRead() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: notificationService.markRead,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: QUERY_KEYS.notifications });
+      qc.invalidateQueries({ queryKey: QUERY_KEYS.unreadCount });
+    },
+  });
+}
+
+export function useMarkAllRead() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: notificationService.markAllRead,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: QUERY_KEYS.notifications });
+      qc.invalidateQueries({ queryKey: QUERY_KEYS.unreadCount });
     },
   });
 }

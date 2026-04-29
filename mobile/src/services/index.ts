@@ -47,9 +47,15 @@ export const authService = {
     const { data } = await api.post('/auth/login', { email, password });
     return data;
   },
-  async register(payload: { email: string; password: string; firstName: string; lastName: string; username?: string }): Promise<{ user: User; accessToken: string; refreshToken: string }> {
+  async register(payload: { email: string; password: string; firstName: string; lastName: string; username?: string; avatarUrl?: string; phone?: string; referralCode?: string }): Promise<{ user: User; accessToken: string; refreshToken: string }> {
     const { data } = await api.post('/auth/register', payload);
     return data;
+  },
+  async verifyEmailCode(code: string): Promise<void> {
+    await api.post('/auth/verify-email-code', { code });
+  },
+  async resendVerification(): Promise<void> {
+    await api.post('/auth/resend-verification');
   },
   async logout() {
     const refreshToken = await secureStore.get(STORAGE_KEYS.refreshToken);
@@ -222,6 +228,20 @@ export const profileService = {
       return [];
     }
   },
+};
+
+// ───────── Notifications ─────────
+export const notificationService = {
+  list: async (page = 1): Promise<{ notifications: any[]; total: number; unreadCount: number; page: number; pages: number }> => {
+    const { data } = await api.get('/notifications', { params: { page } });
+    return data;
+  },
+  unreadCount: async (): Promise<number> => {
+    const { data } = await api.get('/notifications/unread-count');
+    return data.count ?? 0;
+  },
+  markRead: (id: string) => api.put(`/notifications/${id}/read`),
+  markAllRead: () => api.put('/notifications/read-all'),
 };
 
 // ───────── Messages ─────────
