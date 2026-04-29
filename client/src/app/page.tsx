@@ -1625,7 +1625,7 @@ export default function LandingPage() {
               <VStack spacing={1}>
                 <Heading as="h1" fontFamily="'DM Sans', sans-serif" fontWeight="900"
                   fontSize={{ base: "38px", sm: "44px", md: "54px", xl: "62px" }}
-                  letterSpacing="-0.05em" bgGradient={titleGradient} bgClip="text" color="transparent" whiteSpace="nowrap"
+                  letterSpacing="-0.05em" whiteSpace="nowrap"
                 >
                   {t("hero_line1")} {t("hero_line2")}
                 </Heading>

@@ -132,7 +132,7 @@ function baseTemplate(title: string, body: string): string {
 
       <div class="footer">
         <p class="footer-text">Need help? <a href="mailto:support@promrkts.com">support@promrkts.com</a></p>
-        <p class="footer-text">promrkts — crypto, simplified</p>
+        <p class="footer-text">promrkts — 💸, simplified</p>
       </div>
 
     </div>
