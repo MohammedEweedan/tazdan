@@ -202,6 +202,7 @@ export default function PublicNav() {
                 color={ctaFg}
                 borderRadius="full"
                 fontWeight="700"
+                boxShadow="0 0 20px rgba(74,143,224,0.3)"
                 fontSize="13px"
                 px={5}
                 h="36px"

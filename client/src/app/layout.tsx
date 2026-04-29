@@ -3,7 +3,7 @@ import AppProviders from '@/providers/AppProviders';
 import PageTitle from '@/components/PageTitle';
 
 export const metadata: Metadata = {
-  title: 'promrkts - 💸, simplified',
+  title: 'promrkts - money, simplified',
   description: 'Buy and sell crypto easily and swiftly.',
   manifest: '/manifest.json',
 };

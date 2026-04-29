@@ -543,6 +543,27 @@ function Bubble({
 }) {
   const isMe = m.senderId === meId;
   const time = new Date(m.createdAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+  const isSoloEmoji = !m.deletedAt && /^\p{Emoji_Presentation}$/u.test(m.content.trim());
+
+  if (isSoloEmoji) {
+    return (
+      <Pressable
+        onLongPress={onLongPress}
+        delayLongPress={350}
+        style={{ alignSelf: isMe ? 'flex-end' : 'flex-start', marginTop: 1 }}
+      >
+        <Text style={{ fontSize: 44, lineHeight: 52 }}>{m.content.trim()}</Text>
+        {isLastInRun && (
+          <Text style={{
+            color: p.fgFaint, fontSize: 10, fontWeight: '600', marginTop: 3,
+            textAlign: isMe ? 'right' : 'left', paddingHorizontal: 4,
+          }}>
+            {time}
+          </Text>
+        )}
+      </Pressable>
+    );
+  }
 
   // SYSTEM = centered chip.
   if (m.type === 'SYSTEM') {

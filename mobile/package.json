@@ -5,8 +5,8 @@
   "private": true,
   "scripts": {
     "start": "expo start",
-    "ios": "expo start --ios",
-    "android": "expo start --android",
+    "ios": "expo run:ios",
+    "android": "expo run:android",
     "web": "expo start --web",
     "lint": "expo lint",
     "typecheck": "tsc --noEmit"
@@ -23,6 +23,7 @@
     "expo-camera": "~16.0.0",
     "expo-clipboard": "~8.0.8",
     "expo-constants": "~18.0.0",
+    "expo-dev-client": "~6.0.21",
     "expo-haptics": "~15.0.0",
     "expo-image": "~3.0.0",
     "expo-linear-gradient": "~15.0.0",
