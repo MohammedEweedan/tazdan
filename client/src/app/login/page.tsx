@@ -283,10 +283,10 @@ export default function LoginPage() {
         <Box as="form" onSubmit={handleSubmit} noValidate mt="28px">
           <VStack spacing="12px">
             <Field
-              label={t("auth_email")}
+              label="Email or @handle"
               value={email}
               onChange={setEmail}
-              type="email"
+              type="text"
               dark={dark}
               p={p}
             />

@@ -26,8 +26,6 @@ const DOC_CONFIG: Record<DocType, { label: string; icon: any; description: strin
 const FEATURES = [
   "Withdrawals above $500/day",
   "P2P marketplace",
-  "Token minting",
-  "Smart contract deployment",
   "External wallet transfers",
   "Increased deposit limits",
 ];
@@ -108,7 +106,7 @@ export default function KYCPage() {
       <PageHeader
         eyebrow="Identity"
         title="KYC verification"
-        subtitle="Verify your identity to unlock withdrawals, P2P, token minting and higher limits."
+        subtitle="Verify your identity to unlock withdrawals, P2P and higher limits."
         right={
           <HStack
             spacing={1.5}
@@ -164,7 +162,7 @@ export default function KYCPage() {
           )}
           {user?.kycStatus === "APPROVED" && (
             <Alert color={tok.success} icon={FiCheckCircle} title="Identity verified" tok={tok}>
-              You have full access to all features: P2P, token minting, smart contracts and higher limits.
+              You have full access to all features: P2P and higher limits.
             </Alert>
           )}
           {user?.kycStatus === "PENDING" && (

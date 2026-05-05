@@ -11,7 +11,7 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, Image, Modal, Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
+import { ActivityIndicator, Animated, Dimensions, Image, KeyboardAvoidingView, Modal, Platform, Pressable, RefreshControl, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
@@ -23,6 +23,12 @@ import { useWallets, useHaptics, useTransactions, useUnreadCount } from '@/hooks
 import { useMarkets as useGeckoMarkets, ID_TO_SYM } from '@/hooks/useMarkets';
 import { useTheme, useThemedPalette, type Palette } from '@/store/themeStore';
 import { formatFiat } from '@/utils/format';
+import { Sparkline } from '@/components/ui/Sparkline';
+import { BuyWidget } from '@/components/exchange/BuyWidget';
+import { SellWidget } from '@/components/exchange/SellWidget';
+import { SendWidget } from '@/components/exchange/SendWidget';
+import { ReceiveWidget } from '@/components/exchange/ReceiveWidget';
+import { DepositWidget } from '@/components/exchange/DepositWidget';
 import type { Wallet, Currency } from '@/types';
 
 type Tab = 'ASSETS' | 'WALLETS' | 'ACTIVITY';
@@ -37,6 +43,11 @@ export default function Home() {
   const p = useThemedPalette();
   const themeMode = useTheme((s) => s.mode);
   const [tab, setTab] = useState<Tab>('ASSETS');
+  const [buyModalVisible, setBuyModalVisible] = useState(false);
+  const [sellModalVisible, setSellModalVisible] = useState(false);
+  const [sendModalVisible, setSendModalVisible] = useState(false);
+  const [receiveModalVisible, setReceiveModalVisible] = useState(false);
+  const [depositModalVisible, setDepositModalVisible] = useState(false);
 
   const list = wallets ?? [];
 
@@ -68,6 +79,66 @@ export default function Home() {
     }
     return map;
   }, [gecko]);
+
+  // Per-asset 7d sparkline (already-real CoinGecko data) so each asset row
+  // can render a mini chart between the name and the price — same data
+  // source as the asset-detail screen, just downsampled inline.
+  const sparklineMap = useMemo(() => {
+    const map: Partial<Record<Currency, number[]>> = {};
+    if (Array.isArray(gecko)) {
+      gecko.forEach((m) => {
+        const sym = ID_TO_SYM[m.id];
+        const points = m.sparkline_in_7d?.price;
+        if (!sym || !Array.isArray(points) || points.length < 2) return;
+        // Keep ~32 points — enough for a smooth curve at row size.
+        const stride = Math.max(1, Math.floor(points.length / 32));
+        map[sym] = points.filter((_, i) => i % stride === 0);
+      });
+    }
+    return map;
+  }, [gecko]);
+
+  // 24h change map — colors the sparkline green/red per-asset.
+  const changeMap = useMemo(() => {
+    const map: Partial<Record<Currency, number>> = {};
+    if (Array.isArray(gecko)) {
+      gecko.forEach((m) => {
+        const sym = ID_TO_SYM[m.id];
+        if (sym) map[sym] = m.price_change_percentage_24h ?? 0;
+      });
+    }
+    return map;
+  }, [gecko]);
+
+  // "Assets" tab only shows wallets the user actually holds. This turns
+  // the implicit "you have 7 empty wallets" into the correct "no assets
+  // owned" empty state.
+  const ownedAssets = useMemo(
+    () => list.filter((w) => Number(w.balance) > 0),
+    [list],
+  );
+
+  // Crypto and fiat categorization
+  const CRYPTO_CURRENCIES: Currency[] = ['BTC', 'ETH', 'SOL', 'USDT'];
+  const FIAT_CURRENCIES: Currency[] = ['USD', 'EUR', 'GBP', 'AED', 'SAR', 'EGP'];
+
+  const cryptoAssets = useMemo(
+    () => ownedAssets.filter((w) => CRYPTO_CURRENCIES.includes(w.currency)),
+    [ownedAssets],
+  );
+  const fiatAssets = useMemo(
+    () => ownedAssets.filter((w) => FIAT_CURRENCIES.includes(w.currency)),
+    [ownedAssets],
+  );
+
+  const cryptoWallets = useMemo(
+    () => list.filter((w) => CRYPTO_CURRENCIES.includes(w.currency)),
+    [list],
+  );
+  const fiatWallets = useMemo(
+    () => list.filter((w) => FIAT_CURRENCIES.includes(w.currency)),
+    [list],
+  );
 
   const totalUsd = useMemo(() => {
     return list.reduce((sum, w) => {
@@ -101,11 +172,11 @@ export default function Home() {
   const userEmoji = user?.avatarUrl;
 
   const ACTIONS: ActionDef[] = [
-    { key: 'buy',     icon: 'add',                   label: 'Buy',     to: '/buy' },
-    { key: 'sell',    icon: 'cash-outline',          label: 'Sell',    to: '/sell' },
-    { key: 'send',    icon: 'paper-plane-outline',   label: 'Send',    to: '/send' },
-    { key: 'receive', icon: 'qr-code-outline',       label: 'Receive', to: '/receive' },
-    { key: 'deposit', icon: 'arrow-down',            label: 'Deposit', to: '/topup' },
+    { key: 'buy',     icon: 'add',                   label: 'Buy',     onPress: () => setBuyModalVisible(true) },
+    { key: 'sell',    icon: 'cash-outline',          label: 'Sell',    onPress: () => setSellModalVisible(true) },
+    { key: 'send',    icon: 'paper-plane-outline',   label: 'Send',    onPress: () => setSendModalVisible(true) },
+    { key: 'receive', icon: 'qr-code-outline',       label: 'Receive', onPress: () => setReceiveModalVisible(true) },
+    { key: 'deposit', icon: 'arrow-down',            label: 'Deposit', onPress: () => setDepositModalVisible(true) },
   ];
 
   return (
@@ -231,8 +302,9 @@ export default function Home() {
                 key={a.key}
                 icon={a.icon}
                 label={a.label}
+                to={a.to}
+                onPress={a.onPress}
                 palette={p}
-                onPress={() => { h.light(); router.push(a.to); }}
               />
             ))}
           </View>
@@ -254,38 +326,266 @@ export default function Home() {
           {tab === 'ACTIVITY' ? (
             <ActivityList palette={p} items={txData?.items ?? []} onSeeAll={() => { h.light(); router.push('/history'); }} />
           ) : tab === 'WALLETS' ? (
-            // Receive addresses for the user's crypto wallets - this is the
-            // genuinely-different "Wallets" view, not just another asset list.
-            <WalletAddressList palette={p} wallets={list} onCopy={() => h.success()} />
-          ) : list.length > 0 ? (
-            list.map((w) => (
-              <AssetRow
-                key={w.id}
-                wallet={w}
-                palette={p}
-                liveUsd={priceMap[w.currency] !== undefined
-                  ? Number(w.balance) * (priceMap[w.currency] as number)
-                  : undefined}
-                onPress={() => { h.selection(); router.push(`/asset/${w.currency}`); }}
-              />
-            ))
+            // Wallets tab - divided into crypto and fiat sections
+            <>
+              {/* Crypto Wallets Section */}
+              <View style={{ marginTop: 16, paddingHorizontal: 24 }}>
+                <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '700', letterSpacing: 0.6, marginBottom: 12 }}>
+                  CRYPTO WALLETS
+                </Text>
+                {cryptoWallets.length > 0 ? (
+                  cryptoWallets.map((w) => (
+                    <WalletRow
+                      key={w.id}
+                      wallet={w}
+                      palette={p}
+                      onPress={() => { h.selection(); router.push(`/asset/${w.currency}`); }}
+                    />
+                  ))
+                ) : (
+                  <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '500', paddingVertical: 12 }}>
+                    No crypto wallets
+                  </Text>
+                )}
+              </View>
+
+              {/* Fiat Wallets Section */}
+              <View style={{ marginTop: 24, paddingHorizontal: 24 }}>
+                <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '700', letterSpacing: 0.6, marginBottom: 12 }}>
+                  FIAT WALLETS
+                </Text>
+                {fiatWallets.length > 0 ? (
+                  fiatWallets.map((w) => (
+                    <WalletRow
+                      key={w.id}
+                      wallet={w}
+                      palette={p}
+                      onPress={() => { h.selection(); router.push(`/asset/${w.currency}`); }}
+                    />
+                  ))
+                ) : (
+                  <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '500', paddingVertical: 12 }}>
+                    No fiat wallets
+                  </Text>
+                )}
+              </View>
+            </>
+          ) : ownedAssets.length > 0 ? (
+            // Assets tab - divided into crypto and fiat sections
+            <>
+              {/* Crypto Assets Section */}
+              {cryptoAssets.length > 0 && (
+                <View style={{ marginTop: 16, paddingHorizontal: 16 }}>
+                  <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '700', letterSpacing: 0.6, marginBottom: 12 }}>
+                    CRYPTO ASSETS
+                  </Text>
+                  {cryptoAssets.map((w) => (
+                    <AssetRow
+                      key={w.id}
+                      wallet={w}
+                      palette={p}
+                      sparkline={sparklineMap[w.currency]}
+                      changePct={changeMap[w.currency]}
+                      liveUsd={priceMap[w.currency] !== undefined
+                        ? Number(w.balance) * (priceMap[w.currency] as number)
+                        : undefined}
+                      onPress={() => { h.selection(); router.push(`/asset/${w.currency}`); }}
+                    />
+                  ))}
+                </View>
+              )}
+
+              {/* Fiat Assets Section */}
+              {fiatAssets.length > 0 && (
+                <View style={{ marginTop: 24, paddingHorizontal: 16 }}>
+                  <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '700', letterSpacing: 0.6, marginBottom: 12 }}>
+                    FIAT ASSETS
+                  </Text>
+                  {fiatAssets.map((w) => (
+                    <AssetRow
+                      key={w.id}
+                      wallet={w}
+                      palette={p}
+                      sparkline={sparklineMap[w.currency]}
+                      changePct={changeMap[w.currency]}
+                      liveUsd={priceMap[w.currency] !== undefined
+                        ? Number(w.balance) * (priceMap[w.currency] as number)
+                        : undefined}
+                      onPress={() => { h.selection(); router.push(`/asset/${w.currency}`); }}
+                    />
+                  ))}
+                </View>
+              )}
+            </>
           ) : (
-            <View style={{ paddingVertical: 48, alignItems: 'center' }}>
-              <Ionicons name="wallet-outline" size={28} color={p.fgFaint} />
-              <Text style={{ color: p.fgMuted, fontSize: 13, marginTop: 12, fontWeight: '500' }}>
-                No assets yet.
+            <View style={{ paddingVertical: 56, alignItems: 'center', paddingHorizontal: 24 }}>
+              <View style={{
+                width: 56, height: 56, borderRadius: 28,
+                backgroundColor: p.pillBg, borderWidth: 1, borderColor: p.border,
+                alignItems: 'center', justifyContent: 'center',
+              }}>
+                <Ionicons name="wallet-outline" size={26} color={p.fgMuted} />
+              </View>
+              <Text style={{ color: p.fg, fontSize: 16, fontWeight: '800', marginTop: 14, letterSpacing: -0.2 }}>
+                No assets owned
               </Text>
-              <Pressable
-                hitSlop={8}
-                onPress={() => { h.medium(); router.push('/topup'); }}
-                style={{ marginTop: 14, paddingHorizontal: 18, paddingVertical: 10, borderRadius: 20, backgroundColor: p.ctaBg }}
-              >
-                <Text style={{ color: p.ctaFg, fontSize: 13, fontWeight: '700' }}>Top up to start</Text>
-              </Pressable>
+              <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '500', marginTop: 4, textAlign: 'center' }}>
+                Buy or deposit crypto to get started.
+              </Text>
+              <View style={{ flexDirection: 'row', gap: 10, marginTop: 18 }}>
+                <Pressable
+                  onPress={() => { h.medium(); setBuyModalVisible(true); }}
+                  style={({ pressed }) => ({
+                    paddingHorizontal: 20, paddingVertical: 12, borderRadius: 22,
+                    backgroundColor: p.ctaBg, opacity: pressed ? 0.85 : 1,
+                    flexDirection: 'row', alignItems: 'center', gap: 6,
+                  })}
+                >
+                  <Ionicons name="add" size={14} color={p.ctaFg} />
+                  <Text style={{ color: p.ctaFg, fontSize: 13, fontWeight: '800' }}>Buy crypto</Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => { h.medium(); setDepositModalVisible(true); }}
+                  style={({ pressed }) => ({
+                    paddingHorizontal: 20, paddingVertical: 12, borderRadius: 22,
+                    backgroundColor: p.pillBg, borderWidth: 1, borderColor: p.border,
+                    opacity: pressed ? 0.85 : 1,
+                    flexDirection: 'row', alignItems: 'center', gap: 6,
+                  })}
+                >
+                  <Ionicons name="arrow-down" size={14} color={p.fg} />
+                  <Text style={{ color: p.fg, fontSize: 13, fontWeight: '800' }}>Deposit</Text>
+                </Pressable>
+              </View>
             </View>
           )}
         </ScrollView>
       </SafeAreaView>
+
+      {/* Buy Widget Modal */}
+      <Modal
+        visible={buyModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setBuyModalVisible(false)}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={{ flex: 1 }}
+        >
+          <Pressable
+            style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', padding: 20 }}
+            onPress={() => setBuyModalVisible(false)}
+          >
+            <Pressable
+              style={{ backgroundColor: p.bg, borderRadius: 20, padding: 20, width: '100%', maxWidth: 400, maxHeight: '85%' }}
+              onPress={(e) => e.stopPropagation()}
+            >
+              <BuyWidget />
+            </Pressable>
+          </Pressable>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* Sell Widget Modal */}
+      <Modal
+        visible={sellModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setSellModalVisible(false)}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={{ flex: 1 }}
+        >
+          <Pressable
+            style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', padding: 20 }}
+            onPress={() => setSellModalVisible(false)}
+          >
+            <Pressable
+              style={{ backgroundColor: p.bg, borderRadius: 20, padding: 20, width: '100%', maxWidth: 400, maxHeight: '85%' }}
+              onPress={(e) => e.stopPropagation()}
+            >
+              <SellWidget />
+            </Pressable>
+          </Pressable>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* Send Widget Modal */}
+      <Modal
+        visible={sendModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setSendModalVisible(false)}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={{ flex: 1 }}
+        >
+          <Pressable
+            style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', padding: 20 }}
+            onPress={() => setSendModalVisible(false)}
+          >
+            <Pressable
+              style={{ backgroundColor: p.bg, borderRadius: 20, padding: 20, width: '100%', maxWidth: 400, maxHeight: '85%' }}
+              onPress={(e) => e.stopPropagation()}
+            >
+              <SendWidget />
+            </Pressable>
+          </Pressable>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* Receive Widget Modal */}
+      <Modal
+        visible={receiveModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setReceiveModalVisible(false)}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={{ flex: 1 }}
+        >
+          <Pressable
+            style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', padding: 20 }}
+            onPress={() => setReceiveModalVisible(false)}
+          >
+            <Pressable
+              style={{ backgroundColor: p.bg, borderRadius: 20, padding: 20, width: '100%', maxWidth: 400, maxHeight: '85%' }}
+              onPress={(e) => e.stopPropagation()}
+            >
+              <ReceiveWidget />
+            </Pressable>
+          </Pressable>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* Deposit Widget Modal */}
+      <Modal
+        visible={depositModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setDepositModalVisible(false)}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={{ flex: 1 }}
+        >
+          <Pressable
+            style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', padding: 20 }}
+            onPress={() => setDepositModalVisible(false)}
+          >
+            <Pressable
+              style={{ backgroundColor: p.bg, borderRadius: 20, padding: 20, width: '100%', maxWidth: 400, maxHeight: '85%' }}
+              onPress={(e) => e.stopPropagation()}
+            >
+              <DepositWidget />
+            </Pressable>
+          </Pressable>
+        </KeyboardAvoidingView>
+      </Modal>
     </View>
   );
 }
@@ -420,51 +720,55 @@ function AnimatedTotal({ value, palette: p }: { value: number; palette: Palette 
             size={10}
             color={flash.dir === 'up' ? p.greenFg : p.redFg}
           />
-          <Text style={{
+          {/* <Text style={{
             color: flash.dir === 'up' ? p.greenFg : p.redFg,
             fontSize: 11, fontWeight: '800', fontVariant: ['tabular-nums'],
           }}>
             {flash.dir === 'up' ? '+' : '-'}${formatFiat(Math.abs(flash.delta))}
-          </Text>
+          </Text> */}
         </Animated.View>
       )}
     </View>
   );
 }
 
-/* ── Action button — icon circle + label below ─── */
-interface ActionDef { key: string; icon: keyof typeof Ionicons.glyphMap; label: string; to: string }
+/* ── Action button — icon only + label below (no circles) ─── */
+interface ActionDef { key: string; icon: keyof typeof Ionicons.glyphMap; label: string; to?: string; onPress?: () => void }
 
 function ActionButton({
-  icon, label, onPress, palette: p,
+  icon, label, onPress, to, palette: p,
 }: {
   icon: keyof typeof Ionicons.glyphMap;
   label: string;
-  onPress: () => void;
+  onPress?: () => void;
+  to?: string;
   palette: Palette;
 }) {
+  const router = useRouter();
+  
+  const handlePress = () => {
+    if (onPress) {
+      onPress();
+    } else if (to) {
+      router.push(to);
+    }
+  };
+  
   return (
     <Pressable
-      onPress={onPress}
+      onPress={handlePress}
       hitSlop={4}
       style={({ pressed }) => ({
         flex: 1,
         alignItems: 'center',
         opacity: pressed ? 0.7 : 1,
-        gap: 8,
+        gap: 6,
       })}
     >
-      <View style={{
-        width: 52, height: 52, borderRadius: 26,
-        backgroundColor: p.pillBg,
-        borderWidth: 1, borderColor: p.border,
-        alignItems: 'center', justifyContent: 'center',
-      }}>
-        <Ionicons name={icon} size={20} color={p.fg} />
-      </View>
+      <Ionicons name={icon} size={24} color={p.fg} />
       <Text
         numberOfLines={1}
-        style={{ color: p.fg, fontSize: 11, fontWeight: '700' }}
+        style={{ color: p.fgMuted, fontSize: 11, fontWeight: '600' }}
       >
         {label}
       </Text>
@@ -640,7 +944,7 @@ function WalletAddressList({
             }}
           >
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-              <CurrencyIcon currency={w.currency} />
+              <CurrencyIcon currency={w.currency} palette={p} />
               <View style={{ flex: 1 }}>
                 <Text style={{ color: p.fg, fontSize: 15, fontWeight: '700' }}>
                   {meta.title}
@@ -753,7 +1057,7 @@ function QrModal({
         >
           {/* Header */}
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-            <CurrencyIcon currency={wallet.currency} />
+            <CurrencyIcon currency={wallet.currency} palette={p} />
             <View style={{ flex: 1 }}>
               <Text style={{ color: p.fg, fontSize: 16, fontWeight: '800' }}>
                 Receive {meta.title}
@@ -863,54 +1167,122 @@ function deriveAddress(walletId: string, currency: string): string {
 }
 
 /* ── Asset row ─── */
-function AssetRow({ wallet, palette: p, onPress, liveUsd }: {
-  wallet: Wallet; palette: Palette; onPress?: () => void; liveUsd?: number;
+function AssetRow({ wallet, palette: p, onPress, liveUsd, sparkline, changePct }: {
+  wallet: Wallet;
+  palette: Palette;
+  onPress?: () => void;
+  liveUsd?: number;
+  sparkline?: number[];
+  changePct?: number;
 }) {
   const meta = ASSET_META[wallet.currency] ?? ASSET_META.DEFAULT;
   // Prefer the freshly-computed live value; fall back to the server's
   // snapshot only when CoinGecko hasn't loaded yet.
   const usd = liveUsd ?? Number(wallet.fiatValueUsd);
+  const positive = (changePct ?? 0) >= 0;
+  const sparkColor = positive ? '#22c55e' : '#ef4444';
+  
   return (
     <Pressable
       onPress={onPress}
       style={({ pressed }) => ({
         flexDirection: 'row', alignItems: 'center',
-        paddingHorizontal: 24, paddingVertical: 16,
+        paddingHorizontal: 16, paddingVertical: 12,
         backgroundColor: pressed ? p.bgElev : 'transparent',
         borderBottomWidth: 1, borderBottomColor: p.border,
       })}
     >
-      <CurrencyIcon currency={wallet.currency} />
-      <View style={{ flex: 1, marginLeft: 14 }}>
-        <Text style={{ color: p.fg, fontSize: 16, fontWeight: '700' }}>
-          {meta.title}
+      {/* Icon with minimal spacing */}
+      <View style={{ width: 36, alignItems: 'center' }}>
+        <CurrencyIcon currency={wallet.currency} palette={p} />
+      </View>
+      
+      {/* Token name and holdings */}
+      <View style={{ flex: 1, marginLeft: 10, minWidth: 0 }}>
+        <Text style={{ color: p.fg, fontSize: 15, fontWeight: '700' }} numberOfLines={1}>
+          {wallet.currency}
         </Text>
-        <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '500', marginTop: 2 }}>
+        <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '500', marginTop: 1 }} numberOfLines={1}>
           {Number(wallet.balance).toLocaleString('en-US', {
             minimumFractionDigits: meta.subDecimals,
             maximumFractionDigits: meta.subDecimals,
           })} {wallet.currency}
         </Text>
       </View>
-      <Text style={{
-        color: p.fg, fontSize: 15, fontWeight: '700', fontVariant: ['tabular-nums'],
-      }}>
-        ${formatFiat(usd)}
-      </Text>
+
+      {/* Live sparkline — centered in row */}
+      {sparkline && sparkline.length >= 2 && (
+        <View style={{ marginHorizontal: 8, opacity: 0.9 }}>
+          <Sparkline data={sparkline} width={60} height={28} color={sparkColor} strokeWidth={1.5} />
+        </View>
+      )}
+
+      {/* Value in USD/base currency */}
+      <View style={{ alignItems: 'flex-end', minWidth: 70 }}>
+        <Text style={{
+          color: p.fg, fontSize: 14, fontWeight: '700', fontVariant: ['tabular-nums'],
+        }}>
+          ${formatFiat(usd)}
+        </Text>
+        <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '500', marginTop: 1 }}>
+          {meta.title}
+        </Text>
+      </View>
+    </Pressable>
+  );
+}
+
+/* ── Wallet row (for Wallets tab) ─── */
+function WalletRow({ wallet, palette: p, onPress }: {
+  wallet: Wallet;
+  palette: Palette;
+  onPress?: () => void;
+}) {
+  const meta = ASSET_META[wallet.currency] ?? ASSET_META.DEFAULT;
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => ({
+        flexDirection: 'row', alignItems: 'center',
+        paddingHorizontal: 16, paddingVertical: 14,
+        backgroundColor: pressed ? p.bgElev : 'transparent',
+        borderRadius: 12,
+        marginBottom: 4,
+      })}
+    >
+      <CurrencyIcon currency={wallet.currency} palette={p} />
+      <View style={{ flex: 1, marginLeft: 14, minWidth: 0 }}>
+        <Text style={{ color: p.fg, fontSize: 16, fontWeight: '700' }} numberOfLines={1}>
+          {meta.title}
+        </Text>
+        <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '500', marginTop: 2 }} numberOfLines={1}>
+          {Number(wallet.balance).toLocaleString('en-US', {
+            minimumFractionDigits: meta.subDecimals,
+            maximumFractionDigits: meta.subDecimals,
+          })} {wallet.currency}
+        </Text>
+      </View>
+      <View style={{ alignItems: 'flex-end' }}>
+        <Text style={{
+          color: p.fg, fontSize: 14, fontWeight: '600', fontVariant: ['tabular-nums'],
+        }}>
+          ${formatFiat(Number(wallet.fiatValueUsd))}
+        </Text>
+      </View>
     </Pressable>
   );
 }
 
 /* ── Currency icons ── */
-function CurrencyIcon({ currency }: { currency: Currency }) {
+function CurrencyIcon({ currency, palette: p }: { currency: Currency; palette: Palette }) {
   const cfg = ICON_CFG[currency] ?? ICON_CFG.DEFAULT;
   return (
     <View style={{
       width: 44, height: 44, borderRadius: 22,
-      backgroundColor: cfg.bg,
+      backgroundColor: 'transparent',
       alignItems: 'center', justifyContent: 'center',
     }}>
-      <Text style={{ color: cfg.fg, fontWeight: '700', fontSize: cfg.fontSize ? cfg.fontSize + 2 : 17 }}>
+      <Text style={{ color: p.fg, fontWeight: '700', fontSize: cfg.fontSize ? cfg.fontSize + 4 : 22 }}>
         {cfg.glyph}
       </Text>
     </View>
@@ -936,7 +1308,6 @@ const ASSET_META: Record<string, AssetMeta> = {
   AED:   { title: 'UAE Dirham',        subDecimals: 2 },
   SAR:   { title: 'Saudi Riyal',       subDecimals: 2 },
   EGP:   { title: 'Egyptian Pound',    subDecimals: 2 },
-  LYD:   { title: 'Libyan Dinar',      subDecimals: 3 },
   DEFAULT: { title: 'Asset', subDecimals: 4 },
 };
 
@@ -959,6 +1330,5 @@ const ICON_CFG: Record<string, IconCfg> = {
   AED:   { bg: '#0f766e', fg: '#fff', glyph: 'د', fontSize: 13 },
   SAR:   { bg: '#15803d', fg: '#fff', glyph: '﷼', fontSize: 14 },
   EGP:   { bg: '#dc2626', fg: '#fff', glyph: '£', fontSize: 16 },
-  LYD:   { bg: '#16a34a', fg: '#fff', glyph: 'د', fontSize: 13 },
   DEFAULT: { bg: 'rgba(125,125,125,0.2)', fg: '#888', glyph: '?', fontSize: 14 },
 };

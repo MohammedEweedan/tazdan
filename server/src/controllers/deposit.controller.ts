@@ -8,7 +8,7 @@ import { AuthRequest } from '../types';
 const depositSchema = z.object({
   currency: z.enum(['USD', 'USDT']),
   amount: z.number().positive(),
-  paymentMethod: z.enum(['BANK_TRANSFER', 'CASH_DEPOSIT']),
+  paymentMethod: z.enum(['BANK_TRANSFER']),
   bankName: z.string().optional(),
   accountNumber: z.string().optional(),
   senderName: z.string().optional(),
@@ -78,7 +78,7 @@ export class DepositController {
             balanceBefore,
             balanceAfter: balanceBefore + data.amount,
             reference,
-            description: `Instant LYD deposit via ${data.paymentMethod}`,
+            description: `Instant deposit via ${data.paymentMethod}`,
           },
         });
 
@@ -168,7 +168,6 @@ export class DepositController {
     try {
       const paymentMethods = [
         { id: 'BANK_TRANSFER', name: 'Bank Transfer', description: 'Direct bank wire transfer', currencies: ['USD', 'USDT'], instant: false, processingTime: '1-3 business days' },
-        { id: 'CASH_DEPOSIT', name: 'Cash Deposit', description: 'Cash deposit at bank branch', currencies: ['USD', 'USDT'], instant: false, processingTime: '1-24 hours' },
       ];
       res.json({ paymentMethods });
     } catch (error) {

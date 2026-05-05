@@ -29,16 +29,33 @@ import { authService } from '@/services';
 import { useHaptics } from '@/hooks';
 import { useTheme, useThemedPalette, type Palette } from '@/store/themeStore';
 import { useI18n, LOCALE_META } from '@/store/i18nStore';
+import { COUNTRIES, COUNTRY_BY_ISO, type Country } from '@/data/countries';
+import { Modal, FlatList } from 'react-native';
 
 /* ── Schemas ─────────────────────────────────────── */
+
+/**
+ * 18+ check — server enforces this too, but we mirror it here for fast
+ * client-side feedback.
+ */
+function isAdultDateString(dob: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dob)) return false;
+  const d = new Date(dob);
+  if (Number.isNaN(d.getTime())) return false;
+  const cutoff = new Date();
+  cutoff.setFullYear(cutoff.getFullYear() - 18);
+  return d.getTime() <= cutoff.getTime();
+}
 
 const stepOneSchema = z.object({
   firstName: z.string().min(1, 'Required'),
   lastName:  z.string().min(1, 'Required'),
   email:     z.string().email('Enter a valid email'),
-  phone:     z.string().optional(),
+  country:   z.string().length(2, 'Select your country'),
+  phone:     z.string().regex(/^\d{4,20}$/, 'Enter a valid phone number'),
+  dateOfBirth: z.string().refine(isAdultDateString, 'You must be 18 or older (YYYY-MM-DD)'),
   password:  z.string().min(8, 'At least 8 characters'),
-  username:  z.string().min(3).regex(/^[a-z0-9._]+$/i, 'Handle: a-z 0-9 . _').optional(),
+  username:  z.string().min(3, 'Handle is required (3+ chars)').regex(/^[a-z0-9._]+$/i, 'Handle: a-z 0-9 . _'),
   referralCode: z.string().optional(),
 });
 type StepOne = z.infer<typeof stepOneSchema>;
@@ -96,11 +113,19 @@ export default function Register() {
   const [verificationCode, setVerificationCode] = useState('');
   const [error, setError] = useState('');
   const [emojiCategory, setEmojiCategory] = useState(Object.keys(EMOJI_GROUPS)[0]);
+  const [showCountryPicker, setShowCountryPicker] = useState(false);
 
   const formOne = useForm<StepOne>({
     resolver: zodResolver(stepOneSchema),
-    defaultValues: { firstName: '', lastName: '', email: '', phone: '', password: '', username: '', referralCode: '' },
+    defaultValues: {
+      firstName: '', lastName: '', email: '',
+      country: '', phone: '', dateOfBirth: '',
+      password: '', username: '', referralCode: '',
+    },
   });
+
+  const selectedCountryCode = formOne.watch('country') || 'LY';
+  const selectedCountry: Country = COUNTRY_BY_ISO[selectedCountryCode] ?? COUNTRY_BY_ISO['LY'];
 
   const handleAvailable = (formOne.watch('username')?.length ?? 0) >= 3 && !/[^a-z0-9._]/i.test(formOne.watch('username') ?? '');
 
@@ -108,6 +133,10 @@ export default function Register() {
     setError('');
     if (!termsAccepted) {
       setError('Please agree to the Terms of Service and Privacy Policy to continue.');
+      return;
+    }
+    if (!data.country || !COUNTRY_BY_ISO[data.country]) {
+      setError('Please select your country.');
       return;
     }
     setSubmitting(true);
@@ -118,8 +147,11 @@ export default function Register() {
         password: data.password,
         firstName: data.firstName.trim(),
         lastName: data.lastName.trim(),
-        phone: data.phone || undefined,
-        username: data.username || undefined,
+        country: data.country,
+        phoneCountryCode: COUNTRY_BY_ISO[data.country].dialCode,
+        phone: data.phone,
+        dateOfBirth: data.dateOfBirth, // YYYY-MM-DD
+        username: data.username,
         avatarUrl: avatarUrl || undefined,
         referralCode: data.referralCode || undefined,
       }, { skipStateUpdate: true });
@@ -352,17 +384,115 @@ export default function Register() {
                       />
                     )}
                   />
+                  {/* Country selector — opens a modal list. Drives phone dial code. */}
+                  <Controller
+                    control={formOne.control}
+                    name="country"
+                    render={({ field: { value } }) => {
+                      const c = COUNTRY_BY_ISO[value];
+                      return (
+                        <Pressable
+                          onPress={() => { h.selection(); setShowCountryPicker(true); }}
+                          style={{
+                            height: 60,
+                            borderRadius: 16,
+                            paddingHorizontal: 16,
+                            backgroundColor: p.bgElev,
+                            borderWidth: 1,
+                            borderColor: formOne.formState.errors.country ? p.redFg : p.border,
+                            justifyContent: 'center',
+                          }}
+                        >
+                          <Text style={{
+                            position: 'absolute', left: 16, top: 10,
+                            color: p.fgMuted, fontSize: 11, fontWeight: '500',
+                          }}>
+                            Country
+                          </Text>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 14 }}>
+                            <Text style={{ fontSize: 18, marginRight: 8 }}>
+                              {c?.flag ?? '🌐'}
+                            </Text>
+                            <Text style={{ color: c ? p.fg : p.fgFaint, fontSize: 16, fontWeight: '500', flex: 1 }}>
+                              {c ? `${c.name}  +${c.dialCode}` : 'Select your country'}
+                            </Text>
+                            <Ionicons name="chevron-down" size={18} color={p.fgMuted} />
+                          </View>
+                        </Pressable>
+                      );
+                    }}
+                  />
+
+                  {/* Phone with country dial-code prefix. */}
                   <Controller
                     control={formOne.control}
                     name="phone"
                     render={({ field: { onChange, onBlur, value } }) => (
+                      <View style={{
+                        height: 60,
+                        borderRadius: 16,
+                        paddingHorizontal: 16,
+                        backgroundColor: p.bgElev,
+                        borderWidth: 1,
+                        borderColor: formOne.formState.errors.phone ? p.redFg : p.border,
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                      }}>
+                        <Text style={{
+                          position: 'absolute', left: 16, top: 10,
+                          color: p.fgMuted, fontSize: 11, fontWeight: '500',
+                        }}>
+                          Phone number
+                        </Text>
+                        <Text style={{
+                          color: p.fgMuted, fontSize: 16, fontWeight: '600',
+                          marginTop: 14, marginRight: 6,
+                        }}>
+                          +{selectedCountry.dialCode}
+                        </Text>
+                        <TextInput
+                          value={value}
+                          onChangeText={(t) => onChange(t.replace(/[^0-9]/g, ''))}
+                          onBlur={onBlur}
+                          keyboardType="phone-pad"
+                          autoCorrect={false}
+                          selectionColor={p.fg}
+                          placeholderTextColor={p.fgFaint}
+                          style={{
+                            color: p.fg, fontSize: 16, fontWeight: '500',
+                            flex: 1, marginTop: 14,
+                          }}
+                        />
+                      </View>
+                    )}
+                  />
+                  {formOne.formState.errors.phone && (
+                    <Text style={{ color: p.redFg, fontSize: 12, fontWeight: '600', marginLeft: 4 }}>
+                      {formOne.formState.errors.phone.message as string}
+                    </Text>
+                  )}
+
+                  {/* Date of birth (YYYY-MM-DD; manual entry to avoid native date-picker dep). */}
+                  <Controller
+                    control={formOne.control}
+                    name="dateOfBirth"
+                    render={({ field: { onChange, onBlur, value } }) => (
                       <Field
-                        label="Phone (optional)"
+                        label="Date of birth (YYYY-MM-DD)"
                         value={value || ''}
-                        onChangeText={onChange}
+                        onChangeText={(t) => {
+                          // Auto-insert dashes for friendlier typing.
+                          const digits = t.replace(/\D/g, '').slice(0, 8);
+                          let out = digits;
+                          if (digits.length > 4) out = `${digits.slice(0, 4)}-${digits.slice(4)}`;
+                          if (digits.length > 6) out = `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6)}`;
+                          onChange(out);
+                        }}
                         onBlur={onBlur}
-                        keyboardType="phone-pad"
-                        error={formOne.formState.errors.phone?.message}
+                        keyboardType="number-pad"
+                        autoCapitalize="none"
+                        autoCorrect={false}
+                        error={formOne.formState.errors.dateOfBirth?.message}
                         palette={p}
                       />
                     )}
@@ -372,7 +502,7 @@ export default function Register() {
                     name="username"
                     render={({ field: { onChange, onBlur, value } }) => (
                       <Field
-                        label="@handle (optional)"
+                        label="@handle"
                         value={value || ''}
                         onChangeText={(t) => onChange(t.toLowerCase().replace(/[^a-z0-9._]/g, ''))}
                         onBlur={onBlur}
@@ -646,6 +776,71 @@ export default function Register() {
           </ScrollView>
         </SafeAreaView>
       </KeyboardAvoidingView>
+
+      {/* Country picker modal */}
+      <Modal
+        visible={showCountryPicker}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setShowCountryPicker(false)}
+      >
+        <Pressable
+          onPress={() => setShowCountryPicker(false)}
+          style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' }}
+        >
+          <Pressable
+            onPress={() => {}}
+            style={{
+              backgroundColor: p.bg,
+              borderTopLeftRadius: 24, borderTopRightRadius: 24,
+              maxHeight: '80%', paddingTop: 12,
+            }}
+          >
+            <View style={{ alignItems: 'center', paddingVertical: 8 }}>
+              <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: p.border }} />
+            </View>
+            <Text style={{
+              color: p.fg, fontSize: 18, fontWeight: '800',
+              paddingHorizontal: 20, paddingVertical: 12,
+            }}>
+              Select your country
+            </Text>
+            <FlatList
+              data={COUNTRIES}
+              keyExtractor={(c) => c.code}
+              keyboardShouldPersistTaps="handled"
+              renderItem={({ item }) => {
+                const active = selectedCountryCode === item.code;
+                return (
+                  <Pressable
+                    onPress={() => {
+                      h.selection();
+                      formOne.setValue('country', item.code, { shouldValidate: true });
+                      setShowCountryPicker(false);
+                    }}
+                    style={{
+                      flexDirection: 'row', alignItems: 'center',
+                      paddingHorizontal: 20, paddingVertical: 14,
+                      backgroundColor: active ? p.pillBg : 'transparent',
+                    }}
+                  >
+                    <Text style={{ fontSize: 22, marginRight: 14 }}>{item.flag}</Text>
+                    <Text style={{ color: p.fg, fontSize: 16, fontWeight: '500', flex: 1 }}>
+                      {item.name}
+                    </Text>
+                    <Text style={{ color: p.fgMuted, fontSize: 14, fontWeight: '600' }}>
+                      +{item.dialCode}
+                    </Text>
+                    {active && (
+                      <Ionicons name="checkmark" size={18} color={p.fg} style={{ marginLeft: 10 }} />
+                    )}
+                  </Pressable>
+                );
+              }}
+            />
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }

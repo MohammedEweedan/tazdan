@@ -19,27 +19,49 @@ import {
   sendVerificationEmail,
   sendPasswordResetEmail,
 } from '../services/email';
+import { createUserWallets } from '../services/wallet/walletDerivation.service';
 
 const refreshSchema = z.object({
   refreshToken: z.string().min(10),
 });
+
+/**
+ * Eighteen-years-ago cutoff. We compute it once per request rather than
+ * baking it into the schema — Zod doesn't have built-in age validation.
+ */
+function isAdult(dob: Date): boolean {
+  const now = new Date();
+  const cutoff = new Date(now.getFullYear() - 18, now.getMonth(), now.getDate());
+  return dob.getTime() <= cutoff.getTime();
+}
 
 const registerSchema = z.object({
   email: z.string().email(),
   password: z.string().min(8).max(128),
   firstName: z.string().min(1).max(100),
   lastName: z.string().min(1).max(100),
-  // Optional public @handle. When provided we save it as `username` and
-  // default `profilePublic = true` so the user is immediately discoverable
-  // via /u/[handle] for QR-pay flows.
-  username: z.string().min(3).max(30).regex(/^[a-z0-9._]+$/i, 'Handle: a-z 0-9 . _').optional(),
+  // Required public @handle. Becomes the user's @username and the slug
+  // for /u/[handle] (QR-pay flows). Lower-cased server-side.
+  username: z
+    .string()
+    .min(3, 'Handle must be 3-30 characters')
+    .max(30, 'Handle must be 3-30 characters')
+    .regex(/^[a-z0-9._]+$/i, 'Handle: a-z 0-9 . _ only'),
+  // ISO 3166-1 alpha-2.
+  country: z.string().length(2, 'Select your country'),
+  // Dial code WITHOUT the '+' prefix (server normalises). E.g. "218".
+  phoneCountryCode: z.string().min(1).max(4).regex(/^\d+$/, 'Country code must be digits'),
+  // Local phone number (national subscriber number).
+  phone: z.string().min(4, 'Phone number required').max(20),
+  // ISO date string (YYYY-MM-DD). Coerced to Date.
+  dateOfBirth: z.coerce.date({ errorMap: () => ({ message: 'Enter a valid date of birth' }) }),
   avatarUrl: z.string().optional(),
-  phone: z.string().optional(),
   referralCode: z.string().optional(),
 });
 
 const loginSchema = z.object({
-  email: z.string().email(),
+  // Can be an email or a handle (username).
+  email: z.string().min(1, 'Email or handle is required'),
   password: z.string(),
   twoFactorCode: z.string().optional(),
 });
@@ -49,18 +71,24 @@ export class AuthController {
     try {
       const data = registerSchema.parse(req.body);
 
+      // 18+ check (legal requirement for trading + AML).
+      if (!isAdult(data.dateOfBirth)) {
+        throw new AppError('You must be 18 or older to register', 400);
+      }
+
+      // Normalise phone to E.164: + + countryCode + nationalNumber, digits only.
+      const normalisedPhone = `+${data.phoneCountryCode}${data.phone.replace(/\D/g, '')}`;
+
       const existing = await prisma.user.findUnique({ where: { email: data.email } });
       if (existing) throw new AppError('Email already registered', 400);
 
-      if (data.phone) {
-        const existingPhone = await prisma.user.findUnique({ where: { phone: data.phone } });
-        if (existingPhone) throw new AppError('Phone number already registered', 400);
-      }
+      const existingPhone = await prisma.user.findUnique({ where: { phone: normalisedPhone } });
+      if (existingPhone) throw new AppError('Phone number already registered', 400);
 
-      if (data.username) {
-        const existingHandle = await prisma.user.findFirst({ where: { username: data.username.toLowerCase() } });
-        if (existingHandle) throw new AppError('Handle already taken', 400);
-      }
+      const existingHandle = await prisma.user.findFirst({
+        where: { username: data.username.toLowerCase() },
+      });
+      if (existingHandle) throw new AppError('Handle already taken', 400);
 
       let referrerId: string | undefined;
       if (data.referralCode) {
@@ -78,13 +106,16 @@ export class AuthController {
           passwordHash,
           firstName: data.firstName,
           lastName: data.lastName,
-          phone: data.phone,
+          phone: normalisedPhone,
+          phoneCountryCode: data.phoneCountryCode,
+          country: data.country.toUpperCase(),
+          dateOfBirth: data.dateOfBirth,
           // The handle the user picked at registration becomes their public
           // @username. Public-by-default so QR-code payments work out of the
           // box; can be flipped private from Settings.
-          username: data.username?.toLowerCase(),
+          username: data.username.toLowerCase(),
           avatarUrl: data.avatarUrl || null,
-          profilePublic: !!data.username,
+          profilePublic: true,
           referralCode,
           referredBy: referrerId,
           status: 'PENDING',
@@ -93,9 +124,16 @@ export class AuthController {
 
       // Create wallets for the standard initial currency set.
       // (Currency enum now includes all MENA + major fiat — see schema.prisma.)
-      const initialCurrencies = ['USDT', 'USD', 'EUR', 'GBP', 'AED', 'SAR', 'EGP', 'LYD'] as const;
+      const initialCurrencies = ['USDT', 'USD', 'EUR', 'GBP', 'AED', 'SAR', 'EGP'] as const;
       await prisma.wallet.createMany({
         data: initialCurrencies.map((currency) => ({ userId: user.id, currency })),
+      });
+
+      // Derive ETH/BTC/SOL/TRON custody addresses from the master BIP-39
+      // seed. Non-fatal on failure — user can still log in; wallet
+      // endpoints will lazily back-fill.
+      createUserWallets(user.id).catch((e) => {
+        console.error('[wallet] createUserWallets failed for', user.id, e);
       });
 
       const tokens = generateTokens({ id: user.id, email: user.email, role: user.role });
@@ -115,8 +153,10 @@ export class AuthController {
           emailVerificationExpires: new Date(Date.now() + 24 * 60 * 60 * 1000),
         },
       });
-      sendWelcomeEmail({ to: user.email, firstName: user.firstName }).catch((e) => console.error('[email] welcome failed:', e));
-      sendVerificationEmail({ to: user.email, firstName: user.firstName, code: verificationCode }).catch((e) => console.error('[email] verification failed:', e));
+      // Welcome email is intentionally NOT sent here — it goes out from
+      // verifyEmailCode() once the user proves they own the address.
+      sendVerificationEmail({ to: user.email, firstName: user.firstName, code: verificationCode })
+        .catch((e) => console.error('[email] verification failed:', e));
 
       res.status(201).json({
         user: {
@@ -138,8 +178,17 @@ export class AuthController {
     try {
       const data = loginSchema.parse(req.body);
 
-      const user = await prisma.user.findUnique({ where: { email: data.email } });
-      if (!user) throw new AppError('Invalid email or password', 401);
+      // Support login by email OR handle (@username).
+      const loginIdentifier = data.email.toLowerCase().replace(/^@/, ''); // Strip @ if they typed it
+      const isEmail = loginIdentifier.includes('@');
+
+      const user = await prisma.user.findFirst({
+        where: isEmail
+          ? { email: loginIdentifier }
+          : { username: loginIdentifier },
+      });
+
+      if (!user) throw new AppError('Invalid credentials', 401);
       if (user.status === 'BANNED' || user.status === 'SUSPENDED') throw new AppError('Account is suspended or banned', 403);
 
       const validPassword = await bcrypt.compare(data.password, user.passwordHash);
@@ -372,6 +421,11 @@ export class AuthController {
           status: dbUser.status === 'PENDING' ? 'ACTIVE' : dbUser.status,
         },
       });
+
+      // Welcome email is sent ONLY now — proves the address is real and
+      // avoids polluting inboxes for half-finished signups.
+      sendWelcomeEmail({ to: dbUser.email, firstName: dbUser.firstName })
+        .catch((e) => console.error('[email] welcome failed:', e));
 
       res.json({ message: 'Email verified successfully' });
     } catch (error) {

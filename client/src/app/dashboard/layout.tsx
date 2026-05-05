@@ -64,39 +64,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   if (!isAuthenticated) return null;
 
-  const isAgent = user?.role === "AGENT";
+  
   const initials = `${user?.firstName?.[0] || ""}${user?.lastName?.[0] || ""}`.toUpperCase() || "U";
   const userEmoji = (user as any)?.avatarUrl;
 
   type NavSection = { title?: string; items: { href: string; icon: any; label: string; badge?: string }[] };
 
-  const navSections: NavSection[] = isAgent
-    ? [
-        {
-          title: "Menu",
-          items: [
-            { href: "/dashboard", icon: FiHome, label: t("nav_home") },
-            { href: "/dashboard/agent-panel", icon: FiInbox, label: t("nav_queue") },
-            { href: "/dashboard/trade", icon: FiRepeat, label: t("nav_trade") },
-          ],
-        },
-        {
-          title: "Finance",
-          items: [
-            { href: "/dashboard/wallet", icon: FiCreditCard, label: t("nav_wallet") },
-            { href: "/dashboard/deposit", icon: FiArrowDownCircle, label: t("nav_deposit") },
-            { href: "/dashboard/withdraw", icon: FiArrowUpCircle, label: t("nav_withdraw") },
-          ],
-        },
-        {
-          title: "Account",
-          items: [
-            { href: "/dashboard/profile", icon: FiUser, label: "My Profile" },
-            { href: "/dashboard/settings", icon: FiSettings, label: t("nav_settings") },
-          ],
-        },
-      ]
-    : [
+  const navSections: NavSection[] = [
+
         {
           title: "Trade",
           items: [
@@ -134,15 +109,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       ];
 
   // Mobile bottom nav (5 key items)
-  const mobileNavItems = isAgent
-    ? [
-        { href: "/dashboard", icon: FiHome, label: t("nav_home") },
-        { href: "/dashboard/agent-panel", icon: FiInbox, label: t("nav_queue") },
-        { href: "/dashboard/trade", icon: FiRepeat, label: t("nav_trade") },
-        { href: "/dashboard/wallet", icon: FiCreditCard, label: t("nav_wallet") },
-        { href: "/dashboard/settings", icon: FiSettings, label: t("nav_settings") },
-      ]
-    : [
+  const mobileNavItems = [
+
         { href: "/dashboard", icon: FiHome, label: t("nav_home") },
         { href: "/dashboard/trade", icon: FiRepeat, label: t("nav_trade") },
         { href: "/dashboard/wallet", icon: FiCreditCard, label: t("nav_wallet") },

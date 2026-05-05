@@ -16,6 +16,7 @@ import {
   PageShell, PageHeader, GlassCard, SectionHeader, StatTile,
   PageSpinner, EmptyState, useDashboardTokens, PairAvatar, COIN_COLOR,
 } from "@/components/dashboard/DashboardUI";
+import { WalletAddressCard } from "@/components/wallet/WalletAddressCard";
 
 export default function WalletPage() {
   const { t } = useTranslate();
@@ -302,6 +303,15 @@ export default function WalletPage() {
                   </Box>
                 </Box>
               </GlassCard>
+
+              {/* Deposit Address Card */}
+              {selectedWalletData && ['BTC', 'ETH', 'USDT', 'SOL'].includes(selectedWalletData.currency) && (
+                <WalletAddressCard
+                  asset={selectedWalletData.currency as 'ETH' | 'BTC' | 'SOL' | 'USDT'}
+                  network={selectedWalletData.currency === 'USDT' ? 'ERC20' : selectedWalletData.currency}
+                  label={`${selectedWalletData.currency} Deposit`}
+                />
+              )}
 
               {/* Transactions */}
               <GlassCard p={0}>

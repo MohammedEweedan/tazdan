@@ -33,23 +33,6 @@ export async function seedAdmin() {
       where: {
         baseCurrency_quoteCurrency: {
           baseCurrency: 'USDT',
-          quoteCurrency: 'LYD',
-        },
-      },
-      update: {},
-      create: {
-        baseCurrency: 'USDT',
-        quoteCurrency: 'LYD',
-        buyPrice: 7.50,
-        sellPrice: 7.30,
-        isActive: true,
-      },
-    });
-
-    await prisma.exchangeRate.upsert({
-      where: {
-        baseCurrency_quoteCurrency: {
-          baseCurrency: 'USDT',
           quoteCurrency: 'USD',
         },
       },
@@ -65,19 +48,13 @@ export async function seedAdmin() {
 
     // Seed platform settings
     const settings = [
-      { key: 'min_deposit_lyd', value: '50', description: 'Minimum LYD deposit amount' },
       { key: 'min_deposit_usd', value: '10', description: 'Minimum USD deposit amount' },
-      { key: 'min_withdrawal_lyd', value: '100', description: 'Minimum LYD withdrawal amount' },
       { key: 'min_withdrawal_usdt', value: '10', description: 'Minimum USDT withdrawal amount' },
       { key: 'trading_fee_percent', value: '0.5', description: 'Trading fee percentage' },
-      { key: 'withdrawal_fee_lyd', value: '5', description: 'LYD withdrawal fee' },
       { key: 'withdrawal_fee_usdt', value: '1', description: 'USDT withdrawal fee' },
       { key: 'platform_usdt_wallet', value: 'TRC20_WALLET_ADDRESS_HERE', description: 'Platform USDT TRC20 wallet' },
       { key: 'kyc_required_for_trading', value: 'true', description: 'Require KYC for trading' },
-      { key: 'max_daily_withdrawal_lyd', value: '50000', description: 'Max daily LYD withdrawal' },
       { key: 'transfer_fee_usdt', value: '0', description: 'USDT internal transfer fee' },
-      { key: 'agent_deposit_fee_percent', value: '0', description: 'Agent deposit fee %' },
-      { key: 'agent_withdrawal_fee_percent', value: '0', description: 'Agent withdrawal fee %' },
     ];
 
     for (const setting of settings) {
@@ -107,7 +84,7 @@ export async function seedAdmin() {
         firstName:     'Promrkts',
         lastName:      'Support',
         username:      'support',
-        role:          'AGENT',
+        role:          'ADMIN',
         status:        'ACTIVE',
         kycStatus:     'APPROVED',
         emailVerified: true,

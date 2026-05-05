@@ -168,7 +168,7 @@ function BarIcon({
         style={{
           padding: focused ? 2 : 0,
           borderRadius: 14,
-          backgroundColor: focused ? 'rgba(74,143,224,0.2)' : 'transparent',
+          backgroundColor: focused ? 'transparent' : 'transparent',
         }}
       >
         <Ionicons name={iconName} size={24} color={color} />

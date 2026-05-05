@@ -11,7 +11,7 @@
 // NativeWind globals were removed — see babel.config.js for the rationale.
 // import '../global.css';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Image, View } from 'react-native';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -20,6 +20,7 @@ import { StatusBar } from 'expo-status-bar';
 import { LinearGradient } from 'expo-linear-gradient';
 import { QueryClientProvider } from '@tanstack/react-query';
 import * as SystemUI from 'expo-system-ui';
+import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 
 import { queryClient } from '@/lib/queryClient';
 import { setUnauthorizedHandler } from '@/lib/api';
@@ -58,25 +59,41 @@ function AuthGate() {
 /** Full-screen splash with looping WebHeader.mp4 + brand icon. Shown only
  *  while the auth store is hydrating from SecureStore on cold start. */
 function SplashOverlay() {
+  const isHydrating = useAuthStore((s) => s.isHydrating);
+  const [show, setShow] = useState(true);
+
+  // Keep it mounted for a split second after hydration finishes so the Reanimated FadeOut can run.
+  useEffect(() => {
+    if (!isHydrating) {
+      const t = setTimeout(() => setShow(false), 800);
+      return () => clearTimeout(t);
+    }
+  }, [isHydrating]);
+
+  if (!show) return null;
+
   return (
-    <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#000', zIndex: 1000 }}>
+    <Animated.View
+      exiting={FadeOut.duration(600)}
+      style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#000', zIndex: 1000 }}
+    >
       <LoopVideo
         source={require('../assets/WebHeader.mp4')}
         style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
-        opacity={0.7}
+        opacity={0.6}
       />
       <LinearGradient
-        colors={['rgba(0,0,0,0.55)', 'rgba(0,0,0,0.2)', 'rgba(0,0,0,0.85)']}
+        colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.4)', '#000000']}
         style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
       />
-      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+      <Animated.View entering={FadeIn.duration(800)} style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
         <Image
-          source={require('../assets/icon-color.png')}
+          source={require('../assets/logo-white.png')}
           style={{ width: 80, height: 80 }}
           resizeMode="contain"
         />
-      </View>
-    </View>
+      </Animated.View>
+    </Animated.View>
   );
 }
 
@@ -87,10 +104,11 @@ export default function RootLayout() {
         <QueryClientProvider client={queryClient}>
           <StatusBar style="light" />
           <AuthGate />
+          <SplashOverlay />
           <Stack
             screenOptions={{
               headerShown: false,
-              animation: 'slide_from_right',
+              animation: 'fade',
               contentStyle: { backgroundColor: '#000' },
             }}
           >

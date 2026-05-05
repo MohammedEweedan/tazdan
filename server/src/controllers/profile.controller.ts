@@ -7,6 +7,8 @@ import { AuthRequest } from '../types';
 const updateProfileSchema = z.object({
   username: z.string().min(3).max(30).regex(/^[a-zA-Z0-9_]+$/, 'Username can only contain letters, numbers, and underscores').optional(),
   bio: z.string().max(500).optional(),
+  avatarUrl: z.string().optional(),
+  baseCurrency: z.enum(['USD', 'EUR', 'GBP', 'AED', 'SAR', 'EGP', 'USDT', 'BTC', 'ETH', 'BNB', 'SOL', 'XRP', 'ADA', 'DOGE', 'MATIC', 'DOT', 'AVAX']).optional(),
   profilePublic: z.boolean().optional(),
   acceptedCurrencies: z.array(z.string()).optional(),
 });
@@ -63,7 +65,7 @@ export class ProfileController {
         where: { id: req.user!.id },
         select: {
           id: true, username: true, firstName: true, lastName: true,
-          bio: true, avatarUrl: true, profilePublic: true,
+          bio: true, avatarUrl: true, baseCurrency: true, profilePublic: true,
           acceptedCurrencies: true, referralCode: true,
           kycStatus: true, createdAt: true,
         },
@@ -93,12 +95,14 @@ export class ProfileController {
         data: {
           username: data.username,
           bio: data.bio,
+          avatarUrl: data.avatarUrl,
+          baseCurrency: data.baseCurrency,
           profilePublic: data.profilePublic,
           acceptedCurrencies: data.acceptedCurrencies,
         },
         select: {
           id: true, username: true, firstName: true, lastName: true,
-          bio: true, avatarUrl: true, profilePublic: true,
+          bio: true, avatarUrl: true, baseCurrency: true, profilePublic: true,
           acceptedCurrencies: true, referralCode: true,
         },
       });

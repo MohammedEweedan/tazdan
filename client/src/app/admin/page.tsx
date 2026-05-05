@@ -68,7 +68,6 @@ export default function AdminDashboardPage() {
     { label: t('admin_today_orders'), value: s.todayOrders || 0, sub: `${fmt(s.totalOrdersMonth || 0)} this month`, icon: FiList, color: greenC },
     { label: t('admin_total_revenue'), value: '$' + fmtD(s.totalFees), sub: `$${fmtD(s.todayFees)} today`, icon: FiDollarSign, color: '#0070e0' },
     { label: t('admin_today_volume'), value: '$' + fmtD(s.todayOrderVolume), sub: `$${fmtD(s.monthOrderVolume)} 30d`, icon: FiTrendingUp, color: brand },
-    { label: t('admin_total_agents'), value: s.totalAgents || 0, sub: `${s.totalTransfers || 0} transfers`, icon: FiRepeat, color: '#06b6d4' },
   ];
 
   const userGrowth = (s.userGrowth || []).map((d: any) => ({

@@ -9,7 +9,6 @@ datasource db {
 
 enum UserRole {
   USER
-  AGENT
   ADMIN
 }
 
@@ -67,8 +66,6 @@ enum TransactionType {
   SELL
   TRANSFER_IN
   TRANSFER_OUT
-  AGENT_DEPOSIT
-  AGENT_WITHDRAWAL
   FEE
   COMMISSION
   REFERRAL_BONUS
@@ -97,7 +94,6 @@ enum Currency {
   AED // UAE Dirham
   SAR // Saudi Riyal
   EGP // Egyptian Pound
-  LYD // Libyan Dinar (referenced by existing seed/auth code)
 }
 
 // ── KYC tier (gates daily/monthly limits, P2P verified badge,
@@ -110,13 +106,7 @@ enum KYCTier {
 }
 
 enum PaymentMethod {
-  SADAD
-  MASREFY
-  MOAMALAT
-  TADAWUL
   BANK_TRANSFER
-  CASH_DEPOSIT
-  AGENT
 }
 
 enum CardTier {
@@ -142,96 +132,89 @@ enum CardTxType {
 }
 
 model User {
-  id               String     @id @default(uuid())
-  email            String     @unique
-  phone            String?    @unique
-  passwordHash     String
-  firstName        String
-  lastName         String
-  role             UserRole   @default(USER)
-  status           UserStatus @default(PENDING)
-  kycStatus        KYCStatus  @default(NOT_SUBMITTED)
-  kycTier          KYCTier    @default(TIER_0) // gates daily limits, card issuance, off-ramp
-  country          String? // ISO 3166-1 alpha-2 (e.g. "AE", "SA", "LY") — drives P2P & compliance
-  twoFactorSecret         String?
-  twoFactorEnabled        Boolean    @default(false)
-  emailVerified           Boolean    @default(false)
-  emailVerificationToken  String?    @unique
-  emailVerificationExpires DateTime?
-  emailVerificationCode   String?
+  id                           String               @id @default(uuid())
+  email                        String               @unique
+  phone                        String?              @unique
+  passwordHash                 String
+  firstName                    String
+  lastName                     String
+  role                         UserRole             @default(USER)
+  status                       UserStatus           @default(PENDING)
+  kycStatus                    KYCStatus            @default(NOT_SUBMITTED)
+  kycTier                      KYCTier              @default(TIER_0) // gates daily limits, card issuance, off-ramp
+  country                      String? // ISO 3166-1 alpha-2 (e.g. "AE", "SA", "LY") — drives P2P & compliance
+  phoneCountryCode             String? // dial code WITHOUT '+' (e.g. "218", "971", "966")
+  dateOfBirth                  DateTime? // 18+ enforced at registration; required for KYC and AML
+  twoFactorSecret              String?
+  twoFactorEnabled             Boolean              @default(false)
+  emailVerified                Boolean              @default(false)
+  emailVerificationToken       String?              @unique
+  emailVerificationExpires     DateTime?
+  emailVerificationCode        String?
   emailVerificationCodeExpires DateTime?
-  passwordResetToken      String?    @unique
-  passwordResetExpires    DateTime?
-  phoneVerified           Boolean    @default(false)
-  referralCode     String     @unique
-  referredBy       String?
-  lastLoginAt      DateTime?
-  lastLoginIp      String?
-  createdAt        DateTime   @default(now())
-  updatedAt        DateTime   @updatedAt
-
-  wallets           Wallet[]
-  deposits          Deposit[]
-  withdrawals       Withdrawal[]
-  orders            Order[]
-  transactions      Transaction[]
-  kycDocuments      KYCDocument[]
-  notifications     Notification[]
-  sessions          Session[]
-  bankAccounts      BankAccount[]
-  linkedWallets     LinkedWallet[]
-  referrals         User[]             @relation("Referrals")
-  referrer          User?              @relation("Referrals", fields: [referredBy], references: [id])
-  agentTransactions AgentTransaction[]
-  whatsappMessages  WhatsAppMessage[]
-  agentProfile      Agent?
-  sentTransfers     Transfer[]         @relation("TransferSender")
-  receivedTransfers Transfer[]         @relation("TransferReceiver")
-
+  passwordResetToken           String?              @unique
+  passwordResetExpires         DateTime?
+  phoneVerified                Boolean              @default(false)
+  referralCode                 String               @unique
+  referredBy                   String?
+  lastLoginAt                  DateTime?
+  lastLoginIp                  String?
+  createdAt                    DateTime             @default(now())
+  updatedAt                    DateTime             @updatedAt
+  wallets                      Wallet[]
+  deposits                     Deposit[]
+  withdrawals                  Withdrawal[]
+  orders                       Order[]
+  transactions                 Transaction[]
+  kycDocuments                 KYCDocument[]
+  notifications                Notification[]
+  sessions                     Session[]
+  bankAccounts                 BankAccount[]
+  linkedWallets                LinkedWallet[]
+  referrals                    User[]               @relation("Referrals")
+  referrer                     User?                @relation("Referrals", fields: [referredBy], references: [id])
+  whatsappMessages             WhatsAppMessage[]
+  sentTransfers                Transfer[]           @relation("TransferSender")
+  receivedTransfers            Transfer[]           @relation("TransferReceiver")
   // Public profile
-  username           String?  @unique
-  bio                String?
-  avatarUrl          String?
-  profilePublic      Boolean  @default(false)
-  acceptedCurrencies String[] @default(["USDT", "USD", "BTC", "ETH"])
-
+  username                     String?              @unique
+  bio                          String?
+  avatarUrl                    String?
+  baseCurrency                 Currency             @default(USD)
+  profilePublic                Boolean              @default(false)
+  acceptedCurrencies           String[]             @default(["USDT", "USD", "BTC", "ETH"])
   // P2P relations
-  p2pListings       P2PListing[]
-  p2pTradesAsBuyer  P2PTrade[]   @relation("P2PBuyer")
-  p2pTradesAsSeller P2PTrade[]   @relation("P2PSeller")
-  p2pDisputes       P2PDispute[]
-
+  p2pListings                  P2PListing[]
+  p2pTradesAsBuyer             P2PTrade[]           @relation("P2PBuyer")
+  p2pTradesAsSeller            P2PTrade[]           @relation("P2PSeller")
+  p2pDisputes                  P2PDispute[]
   // Messages
-  sentMessages     Message[] @relation("MessageSender")
-  receivedMessages Message[] @relation("MessageReceiver")
-  blocksMade       UserBlock[] @relation("BlocksMade")
-  blocksAgainst    UserBlock[] @relation("BlocksAgainst")
-  reportsFiled     MessageReport[] @relation("ReportsFiled")
-  reportsAgainst   MessageReport[] @relation("ReportsAgainst")
-  escalationsRaised SupportEscalation[] @relation("EscalationsRaised")
-  escalationsAssigned SupportEscalation[] @relation("EscalationsAssigned")
-
+  sentMessages                 Message[]            @relation("MessageSender")
+  receivedMessages             Message[]            @relation("MessageReceiver")
+  blocksMade                   UserBlock[]          @relation("BlocksMade")
+  blocksAgainst                UserBlock[]          @relation("BlocksAgainst")
+  reportsFiled                 MessageReport[]      @relation("ReportsFiled")
+  reportsAgainst               MessageReport[]      @relation("ReportsAgainst")
+  escalationsRaised            SupportEscalation[]  @relation("EscalationsRaised")
+  escalationsAssigned          SupportEscalation[]  @relation("EscalationsAssigned")
   // Memecoins & Smart Contracts
-  memeTokens     MemeToken[]
-  smartContracts SmartContract[]
-
   // AML
-  amlFlags AMLFlag[]
-
+  amlFlags                     AMLFlag[]
   // Referral rewards, API keys, login history
-  apiKeys      APIKey[]
-  loginHistory LoginHistory[]
-
+  apiKeys                      APIKey[]
+  loginHistory                 LoginHistory[]
   // Virtual Visa cards
-  cards            Card[]
-  cardTransactions CardTransaction[]
-
+  cards                        Card[]
+  cardTransactions             CardTransaction[]
   // Refresh tokens (rotation-friendly — multiple active sessions)
-  refreshTokens RefreshToken[]
-
+  refreshTokens                RefreshToken[]
   // On-ramp / off-ramp transactions
-  onRampTxns  OnRampTransaction[]
-  offRampTxns OffRampTransaction[]
+  onRampTxns                   OnRampTransaction[]
+  offRampTxns                  OffRampTransaction[]
+  // Crypto custody (BIP-39 derived multi-chain wallet)
+  cryptoWallet                 UserWallet?
+  cryptoOrders                 CryptoOrder[]
+  onChainTxs                   OnChainTransaction[]
 
   @@index([email])
   @@index([referralCode])
@@ -248,8 +231,7 @@ model Session {
   userAgent String?
   expiresAt DateTime
   createdAt DateTime @default(now())
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([token])
   @@index([userId])
@@ -263,8 +245,7 @@ model Wallet {
   frozen    Decimal  @default(0) @db.Decimal(20, 8)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, currency])
   @@index([userId])
@@ -288,8 +269,7 @@ model Deposit {
   confirmedBy   String?
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([status])
@@ -316,9 +296,8 @@ model Withdrawal {
   processedBy   String?
   createdAt     DateTime         @default(now())
   updatedAt     DateTime         @updatedAt
-
-  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  onChainTxs OnChainTx[]
+  user          User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  onChainTxs    OnChainTx[]
 
   @@index([userId])
   @@index([status])
@@ -339,8 +318,7 @@ model Order {
   status        OrderStatus @default(PENDING)
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([status])
@@ -348,22 +326,21 @@ model Order {
 }
 
 model Transaction {
-  id            String          @id @default(uuid())
-  userId        String
-  type          TransactionType
-  currency      Currency
-  amount        Decimal         @db.Decimal(20, 8)
-  fee           Decimal         @default(0) @db.Decimal(20, 8)
-  balanceBefore Decimal         @db.Decimal(20, 8)
-  balanceAfter  Decimal         @db.Decimal(20, 8)
-  reference     String?
-  description   String?
-  metadata      Json?
-  createdAt     DateTime        @default(now())
-
-  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  senderMessage Message? @relation("MessageSenderTx")
-  receiverMessage Message? @relation("MessageReceiverTx")
+  id              String          @id @default(uuid())
+  userId          String
+  type            TransactionType
+  currency        Currency
+  amount          Decimal         @db.Decimal(20, 8)
+  fee             Decimal         @default(0) @db.Decimal(20, 8)
+  balanceBefore   Decimal         @db.Decimal(20, 8)
+  balanceAfter    Decimal         @db.Decimal(20, 8)
+  reference       String?
+  description     String?
+  metadata        Json?
+  createdAt       DateTime        @default(now())
+  user            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  senderMessage   Message?        @relation("MessageSenderTx")
+  receiverMessage Message?        @relation("MessageReceiverTx")
 
   @@index([userId])
   @@index([type])
@@ -381,8 +358,7 @@ model KYCDocument {
   reviewedAt      DateTime?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
 }
@@ -397,8 +373,7 @@ model BankAccount {
   isDefault     Boolean  @default(false)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
 }
@@ -437,8 +412,7 @@ model Notification {
   isRead    Boolean  @default(false)
   metadata  Json?
   createdAt DateTime @default(now())
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([isRead])
@@ -470,8 +444,7 @@ model LinkedWallet {
   isDefault Boolean  @default(false)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
 }
@@ -497,69 +470,11 @@ model OnChainTx {
   error        String?
   createdAt    DateTime        @default(now())
   updatedAt    DateTime        @updatedAt
-
-  withdrawal Withdrawal @relation(fields: [withdrawalId], references: [id], onDelete: Cascade)
+  withdrawal   Withdrawal      @relation(fields: [withdrawalId], references: [id], onDelete: Cascade)
 
   @@index([withdrawalId])
   @@index([status])
   @@index([txHash])
-}
-
-model Agent {
-  id              String   @id @default(uuid())
-  userId          String   @unique
-  name            String
-  phone           String
-  email           String?
-  address         String
-  city            String
-  region          String
-  googleMapsLink  String?
-  commissionRate  Decimal  @default(0.0100) @db.Decimal(5, 4) // 1%
-  isActive        Boolean  @default(true)
-  maxDailyLimit   Decimal  @default(10000) @db.Decimal(20, 8) // USD
-  totalCommission Decimal  @default(0) @db.Decimal(20, 8)
-  dailyVolume     Decimal  @default(0) @db.Decimal(20, 8)
-  dailyVolumeDate DateTime @default(now())
-  notes           String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-
-  user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
-  agentTransactions AgentTransaction[]
-
-  @@index([isActive])
-  @@index([city])
-  @@index([region])
-  @@index([userId])
-}
-
-model AgentTransaction {
-  id          String    @id @default(uuid())
-  agentId     String
-  userId      String
-  type        String // "DEPOSIT" or "WITHDRAWAL"
-  amount      Decimal   @db.Decimal(20, 8)
-  fee         Decimal   @default(0) @db.Decimal(20, 8)
-  commission  Decimal   @default(0) @db.Decimal(20, 8)
-  currency    Currency
-  status      String    @default("PENDING") // "PENDING", "CONFIRMED", "COMPLETED", "REJECTED", "CANCELLED"
-  reference   String    @unique
-  notes       String?
-  userNotes   String?
-  processedAt DateTime?
-  processedBy String?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-
-  agent Agent @relation(fields: [agentId], references: [id], onDelete: Cascade)
-  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([agentId])
-  @@index([userId])
-  @@index([status])
-  @@index([reference])
-  @@index([createdAt])
 }
 
 model Transfer {
@@ -572,10 +487,9 @@ model Transfer {
   reference  String   @unique
   note       String?
   createdAt  DateTime @default(now())
-
-  sender   User     @relation("TransferSender", fields: [senderId], references: [id], onDelete: Cascade)
-  receiver User     @relation("TransferReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
-  message  Message? @relation("MessageTransfer")
+  sender     User     @relation("TransferSender", fields: [senderId], references: [id], onDelete: Cascade)
+  receiver   User     @relation("TransferReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
+  message    Message? @relation("MessageTransfer")
 
   @@index([senderId])
   @@index([receiverId])
@@ -584,7 +498,6 @@ model Transfer {
 }
 
 // ── P2P Marketplace ─────────────────────────────────────────────────
-
 enum P2PListingStatus {
   ACTIVE
   PAUSED
@@ -630,9 +543,8 @@ model P2PListing {
   expiresAt      DateTime?
   createdAt      DateTime         @default(now())
   updatedAt      DateTime         @updatedAt
-
-  user   User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  trades P2PTrade[]
+  user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  trades         P2PTrade[]
 
   @@index([userId])
   @@index([currency, fiatCurrency, side, status])
@@ -663,11 +575,10 @@ model P2PTrade {
   expiresAt       DateTime? // auto-cancel if not funded
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
-
-  listing  P2PListing   @relation(fields: [listingId], references: [id])
-  buyer    User         @relation("P2PBuyer", fields: [buyerId], references: [id])
-  seller   User         @relation("P2PSeller", fields: [sellerId], references: [id])
-  disputes P2PDispute[]
+  listing         P2PListing     @relation(fields: [listingId], references: [id])
+  buyer           User           @relation("P2PBuyer", fields: [buyerId], references: [id])
+  seller          User           @relation("P2PSeller", fields: [sellerId], references: [id])
+  disputes        P2PDispute[]
 
   @@index([listingId])
   @@index([buyerId])
@@ -692,9 +603,8 @@ model P2PDispute {
   resolvedAt     DateTime?
   createdAt      DateTime         @default(now())
   updatedAt      DateTime         @updatedAt
-
-  trade    P2PTrade @relation(fields: [tradeId], references: [id])
-  raisedBy User     @relation(fields: [raisedById], references: [id])
+  trade          P2PTrade         @relation(fields: [tradeId], references: [id])
+  raisedBy       User             @relation(fields: [raisedById], references: [id])
 
   @@index([tradeId])
   @@index([raisedById])
@@ -702,37 +612,34 @@ model P2PDispute {
 }
 
 // ── In-App Messaging ─────────────────────────────────────────────────
-
 model Message {
-  id         String    @id @default(uuid())
-  senderId   String
-  receiverId String
-  content    String
+  id           String          @id @default(uuid())
+  senderId     String
+  receiverId   String
+  content      String
   /// TEXT, PAYMENT, SYSTEM, P2P_NOTE, ESCALATION
-  type       String    @default("TEXT")
+  type         String          @default("TEXT")
   /// Structured payload: for PAYMENT { amount, currency, txRef, status }
-  metadata   Json?
-  isRead     Boolean   @default(false)
-  readAt     DateTime?
-  editedAt   DateTime?
+  metadata     Json?
+  isRead       Boolean         @default(false)
+  readAt       DateTime?
+  editedAt     DateTime?
   /// Soft-delete: bubble shows "Message deleted" but preserves audit trail.
-  deletedAt  DateTime?
+  deletedAt    DateTime?
   /// Optional link back to a P2P trade so escalations + escrow chats join up.
-  tradeId    String?
-  createdAt  DateTime  @default(now())
-
-  sender   User      @relation("MessageSender", fields: [senderId], references: [id], onDelete: Cascade)
-  receiver User      @relation("MessageReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
-  reports  MessageReport[]
-
+  tradeId      String?
+  createdAt    DateTime        @default(now())
+  sender       User            @relation("MessageSender", fields: [senderId], references: [id], onDelete: Cascade)
+  receiver     User            @relation("MessageReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
+  reports      MessageReport[]
   // Financial linkage: PAYMENT messages can reference the underlying Transfer
   // and the Transaction records that moved the funds.
-  transfer     Transfer?    @relation("MessageTransfer", fields: [transferId], references: [id])
-  transferId   String?      @unique
-  senderTx     Transaction? @relation("MessageSenderTx", fields: [senderTxId], references: [id])
-  senderTxId   String?      @unique
-  receiverTx   Transaction? @relation("MessageReceiverTx", fields: [receiverTxId], references: [id])
-  receiverTxId String?      @unique
+  transfer     Transfer?       @relation("MessageTransfer", fields: [transferId], references: [id])
+  transferId   String?         @unique
+  senderTx     Transaction?    @relation("MessageSenderTx", fields: [senderTxId], references: [id])
+  senderTxId   String?         @unique
+  receiverTx   Transaction?    @relation("MessageReceiverTx", fields: [receiverTxId], references: [id])
+  receiverTxId String?         @unique
 
   @@index([senderId])
   @@index([receiverId])
@@ -750,9 +657,8 @@ model UserBlock {
   blockedId String
   reason    String?
   createdAt DateTime @default(now())
-
-  blocker User @relation("BlocksMade",    fields: [blockerId], references: [id], onDelete: Cascade)
-  blocked User @relation("BlocksAgainst", fields: [blockedId], references: [id], onDelete: Cascade)
+  blocker   User     @relation("BlocksMade", fields: [blockerId], references: [id], onDelete: Cascade)
+  blocked   User     @relation("BlocksAgainst", fields: [blockedId], references: [id], onDelete: Cascade)
 
   @@unique([blockerId, blockedId])
   @@index([blockerId])
@@ -769,21 +675,20 @@ enum ReportStatus {
 /// Reports against a specific message OR a user (messageId optional).
 /// Admin reviews these in the dashboard; status drives moderation queue.
 model MessageReport {
-  id              String       @id @default(uuid())
-  reporterId      String
-  reportedUserId  String
-  messageId       String?
-  reason          String
-  details         String?
-  status          ReportStatus @default(OPEN)
-  resolvedById    String?
-  resolvedAt      DateTime?
-  resolutionNote  String?
-  createdAt       DateTime     @default(now())
-
-  reporter     User     @relation("ReportsFiled",   fields: [reporterId],     references: [id], onDelete: Cascade)
-  reportedUser User     @relation("ReportsAgainst", fields: [reportedUserId], references: [id], onDelete: Cascade)
-  message      Message? @relation(                  fields: [messageId],      references: [id], onDelete: SetNull)
+  id             String       @id @default(uuid())
+  reporterId     String
+  reportedUserId String
+  messageId      String?
+  reason         String
+  details        String?
+  status         ReportStatus @default(OPEN)
+  resolvedById   String?
+  resolvedAt     DateTime?
+  resolutionNote String?
+  createdAt      DateTime     @default(now())
+  reporter       User         @relation("ReportsFiled", fields: [reporterId], references: [id], onDelete: Cascade)
+  reportedUser   User         @relation("ReportsAgainst", fields: [reportedUserId], references: [id], onDelete: Cascade)
+  message        Message?     @relation(fields: [messageId], references: [id], onDelete: SetNull)
 
   @@index([reporterId])
   @@index([reportedUserId])
@@ -816,9 +721,8 @@ model SupportEscalation {
   resolutionNote  String?
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
-
-  raisedBy       User  @relation("EscalationsRaised",   fields: [raisedById],      references: [id], onDelete: Cascade)
-  assignedAgent  User? @relation("EscalationsAssigned", fields: [assignedAgentId], references: [id], onDelete: SetNull)
+  raisedBy        User             @relation("EscalationsRaised", fields: [raisedById], references: [id], onDelete: Cascade)
+  assignedAgent   User?            @relation("EscalationsAssigned", fields: [assignedAgentId], references: [id], onDelete: SetNull)
 
   @@index([raisedById])
   @@index([counterpartyId])
@@ -828,88 +732,8 @@ model SupportEscalation {
 }
 
 // ── Memecoin Minting ─────────────────────────────────────────────────
-
-enum TokenStatus {
-  PENDING_PAYMENT
-  DEPLOYING
-  DEPLOYED
-  FAILED
-  REVOKED
-}
-
-model MemeToken {
-  id              String      @id @default(uuid())
-  userId          String
-  name            String // "DogeCash"
-  symbol          String // "DOGEC"
-  description     String?
-  totalSupply     Decimal     @db.Decimal(38, 0) // e.g. 1000000000
-  decimals        Int         @default(18)
-  chain           String      @default("BNB") // BNB, ETH, SOL, AVAX
-  contractAddress String? // deployed address
-  deployTxHash    String? // deployment tx
-  logoUrl         String?
-  website         String?
-  twitter         String?
-  telegram        String?
-  platformFee     Decimal     @db.Decimal(20, 8) // USDT fee charged
-  status          TokenStatus @default(PENDING_PAYMENT)
-  deployedAt      DateTime?
-  createdAt       DateTime    @default(now())
-  updatedAt       DateTime    @updatedAt
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([chain, symbol])
-  @@index([userId])
-  @@index([status])
-  @@index([chain])
-}
-
 // ── Smart Contract Templates ─────────────────────────────────────────
-
-enum ContractStatus {
-  DRAFT
-  PENDING_PAYMENT
-  DEPLOYING
-  DEPLOYED
-  FAILED
-}
-
-enum ContractType {
-  ESCROW
-  VESTING
-  MULTISIG
-  TOKEN_LOCK
-  PAYMENT_SPLITTER
-  CUSTOM
-}
-
-model SmartContract {
-  id              String         @id @default(uuid())
-  userId          String
-  type            ContractType
-  name            String
-  description     String?
-  chain           String         @default("BNB")
-  contractAddress String?
-  deployTxHash    String?
-  parameters      Json // type-specific config
-  platformFee     Decimal        @db.Decimal(20, 8)
-  status          ContractStatus @default(DRAFT)
-  deployedAt      DateTime?
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
-  @@index([status])
-  @@index([type])
-}
-
 // ── AML / Compliance ─────────────────────────────────────────────────
-
 enum AMLFlagStatus {
   OPEN
   REVIEWING
@@ -923,7 +747,6 @@ enum AMLFlagType {
   RAPID_TRANSACTIONS
   SUSPICIOUS_PATTERN
   SANCTIONED_ADDRESS
-  LARGE_WITHDRAWAL
   STRUCTURING
   MANUAL
 }
@@ -944,8 +767,7 @@ model AMLFlag {
   resolution     String?
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([status])
@@ -955,7 +777,6 @@ model AMLFlag {
 }
 
 // ── Referral Rewards ─────────────────────────────────────────────────
-
 model ReferralReward {
   id          String    @id @default(uuid())
   referrerId  String
@@ -976,7 +797,6 @@ model ReferralReward {
 }
 
 // ── API Keys ─────────────────────────────────────────────────────────
-
 model APIKey {
   id          String    @id @default(uuid())
   userId      String
@@ -989,15 +809,13 @@ model APIKey {
   expiresAt   DateTime?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([keyHash])
 }
 
 // ── Login History ────────────────────────────────────────────────────
-
 model LoginHistory {
   id        String   @id @default(uuid())
   userId    String
@@ -1007,8 +825,7 @@ model LoginHistory {
   location  String? // geo-ip location
   success   Boolean  @default(true)
   createdAt DateTime @default(now())
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([createdAt])
@@ -1024,8 +841,7 @@ model WhatsAppMessage {
   botResponse Json?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
-
-  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user        User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([phoneNumber])
   @@index([userId])
@@ -1034,43 +850,37 @@ model WhatsAppMessage {
 }
 
 // ── Virtual Visa cards ───────────────────────────────────────────────
-
 model Card {
-  id     String     @id @default(uuid())
-  userId String
-  tier   CardTier   @default(STARTER)
-  status CardStatus @default(PENDING)
-
+  id              String            @id @default(uuid())
+  userId          String
+  tier            CardTier          @default(STARTER)
+  status          CardStatus        @default(PENDING)
   // Card details (last4 shown to user, full pan encrypted externally)
-  nickname    String? // user-given label
-  last4       String // "1144"
-  expiryMonth Int // 1-12
-  expiryYear  Int // 4-digit
-  cardHolder  String // "RAYAN ZAHI"
-  currency    Currency @default(USDT)
-
+  nickname        String? // user-given label
+  last4           String // "1144"
+  expiryMonth     Int // 1-12
+  expiryYear      Int // 4-digit
+  cardHolder      String // "RAYAN ZAHI"
+  currency        Currency          @default(USDT)
   // Balances / spend
-  spentTotal      Decimal @default(0) @db.Decimal(20, 8)
-  spentMonth      Decimal @default(0) @db.Decimal(20, 8)
-  dailyLimit      Decimal @default(5000) @db.Decimal(20, 8)
-  monthlyLimit    Decimal @default(50000) @db.Decimal(20, 8)
-  cashbackRate    Decimal @default(0.01) @db.Decimal(6, 4) // 1% default
-  cashbackBalance Decimal @default(0) @db.Decimal(20, 8)
-
+  spentTotal      Decimal           @default(0) @db.Decimal(20, 8)
+  spentMonth      Decimal           @default(0) @db.Decimal(20, 8)
+  dailyLimit      Decimal           @default(5000) @db.Decimal(20, 8)
+  monthlyLimit    Decimal           @default(50000) @db.Decimal(20, 8)
+  cashbackRate    Decimal           @default(0.01) @db.Decimal(6, 4) // 1% default
+  cashbackBalance Decimal           @default(0) @db.Decimal(20, 8)
   // Controls
-  frozen        Boolean @default(false)
-  contactlessOn Boolean @default(true)
-  onlineOn      Boolean @default(true)
-  atmOn         Boolean @default(true)
-
-  issuedAt    DateTime?
-  activatedAt DateTime?
-  cancelledAt DateTime?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-
-  user         User              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  transactions CardTransaction[]
+  frozen          Boolean           @default(false)
+  contactlessOn   Boolean           @default(true)
+  onlineOn        Boolean           @default(true)
+  atmOn           Boolean           @default(true)
+  issuedAt        DateTime?
+  activatedAt     DateTime?
+  cancelledAt     DateTime?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  user            User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions    CardTransaction[]
 
   @@index([userId])
   @@index([status])
@@ -1094,9 +904,8 @@ model CardTransaction {
   reference      String     @unique
   metadata       Json?
   createdAt      DateTime   @default(now())
-
-  card Card @relation(fields: [cardId], references: [id], onDelete: Cascade)
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  card           Card       @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  user           User       @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([cardId])
   @@index([userId])
@@ -1117,8 +926,7 @@ model RefreshToken {
   revokedAt    DateTime? // null = active
   replacedById String? // rotated chain (which token replaced this one)
   createdAt    DateTime  @default(now())
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([expiresAt])
@@ -1185,36 +993,32 @@ enum RampPaymentMethod {
 }
 
 model OnRampTransaction {
-  id          String       @id @default(uuid())
-  userId      String
-  provider    RampProvider @default(MOCK)
-  providerRef String? // external transaction id (idempotent)
-  status      RampStatus   @default(QUOTED)
-
+  id             String            @id @default(uuid())
+  userId         String
+  provider       RampProvider      @default(MOCK)
+  providerRef    String? // external transaction id (idempotent)
+  status         RampStatus        @default(QUOTED)
   // Quote inputs
   fiatCurrency   Currency
-  fiatAmount     Decimal  @db.Decimal(20, 8) // user pays this
+  fiatAmount     Decimal           @db.Decimal(20, 8) // user pays this
   cryptoCurrency Currency
-  cryptoAmount   Decimal  @db.Decimal(20, 8) // user receives this
-  exchangeRate   Decimal  @db.Decimal(20, 8)
-  feeAmount      Decimal  @default(0) @db.Decimal(20, 8)
+  cryptoAmount   Decimal           @db.Decimal(20, 8) // user receives this
+  exchangeRate   Decimal           @db.Decimal(20, 8)
+  feeAmount      Decimal           @default(0) @db.Decimal(20, 8)
   feeCurrency    Currency
-
   // Payment routing
-  paymentMethod RampPaymentMethod
-  network       String? // for crypto delivery (TRC20, ERC20, BEP20...)
-
+  paymentMethod  RampPaymentMethod
+  network        String? // for crypto delivery (TRC20, ERC20, BEP20...)
   // Lifecycle
-  reference      String    @unique // internal idempotency key
+  reference      String            @unique // internal idempotency key
   webhookPayload Json? // last raw provider webhook
   failureReason  String?
   quotedAt       DateTime?
   completedAt    DateTime?
   expiresAt      DateTime? // quote expiry
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+  user           User              @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([status])
@@ -1225,37 +1029,33 @@ model OnRampTransaction {
 }
 
 model OffRampTransaction {
-  id          String       @id @default(uuid())
-  userId      String
-  provider    RampProvider @default(MOCK)
-  providerRef String?
-  status      RampStatus   @default(QUOTED)
-
+  id                  String            @id @default(uuid())
+  userId              String
+  provider            RampProvider      @default(MOCK)
+  providerRef         String?
+  status              RampStatus        @default(QUOTED)
   // Quote
-  cryptoCurrency Currency // user sends this
-  cryptoAmount   Decimal  @db.Decimal(20, 8)
-  fiatCurrency   Currency // user receives this
-  fiatAmount     Decimal  @db.Decimal(20, 8)
-  exchangeRate   Decimal  @db.Decimal(20, 8)
-  feeAmount      Decimal  @default(0) @db.Decimal(20, 8)
-  feeCurrency    Currency
-
+  cryptoCurrency      Currency // user sends this
+  cryptoAmount        Decimal           @db.Decimal(20, 8)
+  fiatCurrency        Currency // user receives this
+  fiatAmount          Decimal           @db.Decimal(20, 8)
+  exchangeRate        Decimal           @db.Decimal(20, 8)
+  feeAmount           Decimal           @default(0) @db.Decimal(20, 8)
+  feeCurrency         Currency
   // Payout routing
   payoutMethod        RampPaymentMethod
   payoutBankAccountId String? // optional FK to BankAccount (manual link, not enforced relation)
   payoutAddress       String? // for CRYPTO payouts (external wallet)
-
   // Lifecycle
-  reference      String    @unique
-  webhookPayload Json?
-  failureReason  String?
-  quotedAt       DateTime?
-  completedAt    DateTime?
-  expiresAt      DateTime?
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reference           String            @unique
+  webhookPayload      Json?
+  failureReason       String?
+  quotedAt            DateTime?
+  completedAt         DateTime?
+  expiresAt           DateTime?
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+  user                User              @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([status])
@@ -1263,4 +1063,113 @@ model OffRampTransaction {
   @@index([providerRef])
   @@index([reference])
   @@index([createdAt])
+}
+
+
+// ── Crypto Custody ───────────────────────────────────────────────────
+// One master BIP-39 seed (stored encrypted in MasterSeedStore) derives
+// all user wallets via BIP-44. Private keys are never persisted — they
+// are re-derived on-demand from the master seed using walletIndex.
+model UserWallet {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  walletIndex Int      @unique @default(autoincrement())
+
+  ethAddress  String   @unique
+  btcAddress  String   @unique
+  solAddress  String   @unique
+  tronAddress String   @unique
+
+  ethBalance     Decimal @default(0) @db.Decimal(36, 18)
+  btcBalance     Decimal @default(0) @db.Decimal(20, 8)
+  solBalance     Decimal @default(0) @db.Decimal(20, 9)
+  usdtErc20Bal   Decimal @default(0) @db.Decimal(20, 6)
+  usdtTrc20Bal   Decimal @default(0) @db.Decimal(20, 6)
+
+  selfCustodyExported Boolean   @default(false)
+  exportedAt          DateTime?
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// Encrypted master seed blob. MVP: AES-256-GCM with MASTER_SEED_ENC_KEY.
+// TODO: migrate to AWS KMS (MASTER_SEED_KMS_KEY_ID) before mainnet.
+model MasterSeedStore {
+  id          String   @id @default(cuid())
+  version     Int      @unique @default(1)
+  ciphertext  String
+  algorithm   String   @default("AES-256-GCM")
+  kmsKeyId    String?
+  createdAt   DateTime @default(now())
+}
+
+enum CryptoOrderType {
+  BUY
+  SELL
+}
+
+enum CryptoOrderStatus {
+  PENDING
+  EXECUTED
+  FAILED
+  REFUNDED
+}
+
+model CryptoOrder {
+  id              String            @id @default(cuid())
+  userId          String
+  type            CryptoOrderType
+  asset           String
+  network         String
+
+  quotedPrice     Decimal           @db.Decimal(20, 8)
+  quotedTotal     Decimal           @db.Decimal(20, 8)
+
+  marketPrice     Decimal           @db.Decimal(20, 8)
+  actualCost      Decimal           @db.Decimal(20, 8)
+
+  platformFee     Decimal           @db.Decimal(20, 8)
+  networkFee      Decimal           @db.Decimal(20, 8)
+  spreadCapture   Decimal           @db.Decimal(20, 8)
+
+  cryptoAmount    Decimal           @db.Decimal(36, 18)
+  status          CryptoOrderStatus @default(PENDING)
+  binanceOrderId  String?
+  idempotencyKey  String?           @unique
+
+  createdAt       DateTime          @default(now())
+  executedAt      DateTime?
+  user            User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([status])
+  @@index([asset, network])
+  @@index([createdAt])
+}
+
+model OnChainTransaction {
+  id            String    @id @default(cuid())
+  userId        String
+  type          String
+  asset         String
+  network       String
+  amount        Decimal   @db.Decimal(36, 18)
+  txHash        String?   @unique
+  fromAddress   String
+  toAddress     String
+  status        String
+  gasUsed       Decimal?  @db.Decimal(20, 8)
+  confirmations Int       @default(0)
+  createdAt     DateTime  @default(now())
+  confirmedAt   DateTime?
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([status])
+  @@index([asset, network])
+  @@index([txHash])
 }

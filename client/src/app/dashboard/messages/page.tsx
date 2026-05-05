@@ -101,7 +101,7 @@ export default function MessagesPage() {
       <PageHeader
         eyebrow="Community"
         title="Messages"
-        subtitle="Chat with counterparts, agents and P2P partners."
+        subtitle="Chat with counterparts and P2P partners."
       />
 
       <GlassCard p={0} overflow="hidden">

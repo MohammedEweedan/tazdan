@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   Box, Flex, Text, Button, VStack, HStack, Icon, Input, Switch, useToast,
   FormControl, FormLabel, Textarea, Avatar, Wrap, WrapItem, useClipboard, Select,
+  Tabs, TabList, Tab, TabPanels, TabPanel,
 } from "@chakra-ui/react";
 import {
   FiUser, FiCopy, FiCheckCircle, FiGlobe, FiShield, FiExternalLink, FiSave,
@@ -18,6 +19,42 @@ import {
 
 const ALL_CURRENCIES = ["USDT", "USD", "BTC", "ETH", "BNB", "SOL", "XRP", "ADA", "DOGE", "MATIC", "DOT", "AVAX"];
 const NETWORKS = [
+  { id: "ETH", name: "Ethereum", icon: "Ξ" },
+  { id: "BTC", name: "Bitcoin", icon: "₿" },
+  { id: "SOL", name: "Solana", icon: "◎" },
+  { id: "TRON", name: "TRON", icon: "◈" },
+];
+
+const emojiGroups = {
+  Cool: [
+    "🔥","⚡","💀","☠️","👑","😈","😎","🫡","💯","🚀","🎯","🥷",
+    "🦾","🔒","💸","🏴","⭐","✨","🌙","☄️","🪐","⚔️","🛡️","🏁"
+  ],
+  Animals: [
+    "🦁","🐺","🦅","🦊","🐆","🐅","🦈","🐊","🐍","🦂","🕷","🐉",
+    "🐎","🦌","🦍","🐘","🦏","🦓","🐪","🦜","🐬","🐳","👽","🦇"
+  ],
+  Faces: [
+    "😎","😈","🤠","🫡","🥶","🥷","😏","😤","🤝","🫶","🖤","❤️",
+    "💙","💚","💜","🤍","🩶","💛","🧠","👀","🫥","🫠","🤫","🧿"
+  ],
+  Symbols: [
+    "👑","💎","💸","💯","🔒","⚡","🔥","⭐","✨","☠️","💀","🚀",
+    "🎯","🏴","🏁","⚔️","🛡️","📿","🧿","🪬","🌍","☄️","🪐","🌊"
+  ],
+  Nature: [
+    "☀️","🌙","☁️","❄️","🌊","🌴","🌵","🌍","🌎","🌏","🪐","☄️",
+    "⭐","✨","🌊","🌴","🍂","🍁","🌸","🌹","🌺","🌻","🌼","🌿"
+  ],
+  Faith: [
+    "📿","☪️","🕋","🤲","🙏","🧿","🪬","🕊️","🤍","🌙","⭐","☀️"
+  ],
+  Flags: [
+    "🇱🇾","🇵🇸","🇸🇦","🇦🇪","🇪🇬","🇹🇳","🇩🇿","🇲🇦","🇹🇷","🇮🇹"
+  ],
+};
+
+const NETWORK_OPTIONS = [
   { v: "TRC20", label: "TRC20 (USDT)" },
   { v: "ERC20", label: "ERC20 (ETH)" },
   { v: "BEP20", label: "BEP20 (BNB)" },
@@ -40,6 +77,8 @@ export default function ProfilePage() {
 
   const [username, setUsername] = useState("");
   const [bio, setBio] = useState("");
+  const [avatarUrl, setAvatarUrl] = useState("");
+  const [baseCurrency, setBaseCurrency] = useState("USD");
   const [profilePublic, setProfilePublic] = useState(false);
   const [acceptedCurrencies, setAcceptedCurrencies] = useState<string[]>(["USDT", "USD", "BTC", "ETH"]);
 
@@ -66,6 +105,8 @@ export default function ProfilePage() {
         setProfile(p);
         setUsername(p.username || "");
         setBio(p.bio || "");
+        setAvatarUrl(p.avatarUrl || "");
+        setBaseCurrency(p.baseCurrency || "USD");
         setProfilePublic(p.profilePublic || false);
         setAcceptedCurrencies(p.acceptedCurrencies?.length > 0 ? p.acceptedCurrencies : ["USDT", "USD", "BTC", "ETH"]);
         setLinkedWallets(walletsRes.data.wallets || []);
@@ -81,8 +122,11 @@ export default function ProfilePage() {
     }
     setSaving(true);
     try {
-      const res = await profileAPI.updateProfile({ username, bio, profilePublic, acceptedCurrencies });
+      const res = await profileAPI.updateProfile({ username, bio, avatarUrl, baseCurrency, profilePublic, acceptedCurrencies });
       setProfile(res.data.profile);
+      // Refresh auth store user to reflect changes immediately
+      const { useAuthStore } = await import('@/stores/authStore');
+      useAuthStore.getState().setUser({ ...user, ...res.data.profile });
       toast({ title: "Profile saved", status: "success", duration: 3000 });
     } catch (e: any) {
       toast({ title: "Save failed", description: e?.response?.data?.error || "Try again", status: "error", duration: 4000 });
@@ -267,6 +311,89 @@ export default function ProfilePage() {
                 _focus={{ borderColor: tok.brand, boxShadow: `0 0 0 1px ${tok.brand}` }}
                 _placeholder={{ color: tok.textMuted }}
               />
+            </FormControl>
+
+            <FormControl>
+              <FormLabel fontSize="10.5px" color={tok.textMuted} letterSpacing=".12em" textTransform="uppercase" fontWeight="800" mb={1.5}>
+                Avatar
+              </FormLabel>
+              <Tabs variant="soft-rounded" colorScheme="gray" isFitted>
+                <TabList
+                  overflowX="auto"
+                  whiteSpace="nowrap"
+                  gap="6px"
+                  pb="6px"
+                  sx={{
+                    scrollbarWidth: "none",
+                    "&::-webkit-scrollbar": { display: "none" },
+                  }}
+                >
+                  {Object.keys(emojiGroups).map((group) => (
+                    <Tab
+                      key={group}
+                      fontSize="12px"
+                      fontWeight="700"
+                      borderRadius="999px"
+                      minW="fit-content"
+                      px="14px"
+                      py="8px"
+                    >
+                      {group}
+                    </Tab>
+                  ))}
+                </TabList>
+
+                <TabPanels mt="12px">
+                  {Object.entries(emojiGroups).map(([group, emojis]) => (
+                    <TabPanel key={group} p={0}>
+                      <Flex gap="8px" flexWrap="wrap">
+                        {emojis.map((emoji) => (
+                          <Box
+                            key={emoji}
+                            as="button"
+                            type="button"
+                            onClick={() => setAvatarUrl(emoji)}
+                            borderRadius="12px"
+                            p="8px"
+                            bg={avatarUrl === emoji ? tok.brand : tok.panelInner}
+                            border="1.5px solid"
+                            borderColor={avatarUrl === emoji ? tok.brand : tok.panelBorder}
+                            fontSize="22px"
+                            lineHeight="1"
+                            cursor="pointer"
+                            transition="all 0.15s"
+                            _hover={{ borderColor: tok.brand }}
+                          >
+                            {emoji}
+                          </Box>
+                        ))}
+                      </Flex>
+                    </TabPanel>
+                  ))}
+                </TabPanels>
+              </Tabs>
+            </FormControl>
+
+            <FormControl>
+              <FormLabel fontSize="10.5px" color={tok.textMuted} letterSpacing=".12em" textTransform="uppercase" fontWeight="800" mb={1.5}>
+                Base Currency
+              </FormLabel>
+              <Select
+                value={baseCurrency}
+                onChange={(e) => setBaseCurrency(e.target.value)}
+                bg={tok.panelInner}
+                border="1px solid"
+                borderColor={tok.panelBorder}
+                color={tok.textMain}
+                fontSize="13px"
+                h="40px"
+                _hover={{ borderColor: `${tok.brand}66` }}
+                _focus={{ borderColor: tok.brand, boxShadow: `0 0 0 1px ${tok.brand}` }}
+              >
+                {ALL_CURRENCIES.map((c) => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </Select>
             </FormControl>
 
             <FormControl
@@ -455,7 +582,7 @@ export default function ProfilePage() {
                 {...input}
                 iconColor={tok.textMuted}
               >
-                {NETWORKS.map((n) => (
+                {NETWORK_OPTIONS.map((n) => (
                   <option key={n.v} value={n.v} style={{ background: tok.dark ? "#0b1020" : "white", color: tok.textMain }}>
                     {n.label}
                   </option>

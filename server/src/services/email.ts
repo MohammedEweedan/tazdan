@@ -8,8 +8,8 @@ const SMTP_FROM = process.env.SMTP_FROM || process.env.MAIL_FROM || 'noreply@pro
 const CLIENT_URL = process.env.CLIENT_URL || process.env.FRONTEND_URL || 'https://promrkts.com';
 
 // Hosted logos — swap these URLs for your actual CDN paths
-const LOGO_WHITE = `${CLIENT_URL}/assets/logo-white.png`;
-const LOGO_BLACK = `${CLIENT_URL}/assets/logo-black.png`;
+const LOGO_WHITE = `${CLIENT_URL}/logo-white.png`;
+const LOGO_BLACK = `${CLIENT_URL}/logo-black.png`;
 
 const hasCredentials = !!(SMTP_HOST && SMTP_USER && SMTP_PASS);
 
@@ -177,23 +177,48 @@ export async function sendWelcomeEmail({
 }) {
   const html = baseTemplate(
     'Welcome to promrkts',
-    `<h1 class="text-main">Welcome, ${firstName}.</h1>
-    <p class="text-muted">Your account is verified and ready. Here's everything you can do from day one:</p>
+    `<h1 class="text-main">Welcome aboard, ${firstName}.</h1>
+    <p class="text-muted">Your email is verified and your promrkts account is live. Below is a short, deliberate first run so you can start trading with confidence — most of it takes under five minutes.</p>
 
-    <ul>
-      <li><span class="text-main">Deposit</span> — top up via bank transfer or crypto to your wallet.</li>
-      <li><span class="text-main">Trade</span> — buy & sell BTC, ETH, SOL and 400+ pairs at live rates.</li>
-      <li><span class="text-main">Send & Receive</span> — transfer to any promrkts user or external wallet.</li>
-      <li><span class="text-main">P2P Marketplace</span> — trade peer-to-peer in your local currency.</li>
-    </ul>
+    <div class="divider"></div>
 
-    <div class="btn-wrap">
-      <a href="${CLIENT_URL}/dashboard" class="btn">Open Dashboard</a>
+    <p class="text-main" style="font-weight:700; font-size:15px; margin-bottom:6px;">1 &nbsp;Secure your account</p>
+    <p class="text-muted" style="margin-top:0;">Enable two-factor authentication. We require it before any deposit, trade, withdrawal or wallet export.</p>
+    <div class="btn-wrap" style="margin:14px 0 0;">
+      <a href="${CLIENT_URL}/dashboard/security" class="btn">Enable 2FA</a>
     </div>
 
     <div class="divider"></div>
 
-    <p class="text-muted" style="font-size:13px; margin-bottom:8px;">Get the app</p>
+    <p class="text-main" style="font-weight:700; font-size:15px; margin-bottom:6px;">2 &nbsp;Verify your identity (KYC)</p>
+    <p class="text-muted" style="margin-top:0;">Tier 1 unlocks deposits and trading. Tier 2 raises your limits and enables card issuance + self-custody export. Reviews usually complete within a few hours.</p>
+    <div class="btn-wrap" style="margin:14px 0 0;">
+      <a href="${CLIENT_URL}/dashboard/kyc" class="btn">Start KYC</a>
+    </div>
+
+    <div class="divider"></div>
+
+    <p class="text-main" style="font-weight:700; font-size:15px; margin-bottom:6px;">3 &nbsp;Fund your wallet</p>
+    <p class="text-muted" style="margin-top:0;">Top up by bank transfer in your local currency, or send crypto to your custodial address — BTC, ETH, SOL, and USDT (ERC-20 / TRC-20) are supported out of the box.</p>
+    <div class="btn-wrap" style="margin:14px 0 0;">
+      <a href="${CLIENT_URL}/dashboard/wallet" class="btn">Open wallet</a>
+    </div>
+
+    <div class="divider"></div>
+
+    <p class="text-main" style="font-weight:700; font-size:15px; margin-bottom:6px;">What you can do here</p>
+    <ul>
+      <li><span class="text-main">Trade</span> — buy & sell BTC, ETH, SOL and 400+ pairs at live Binance prices.</li>
+      <li><span class="text-main">P2P</span> — match with local buyers/sellers in your fiat currency.</li>
+      <li><span class="text-main">Send &amp; receive</span> — pay any promrkts @handle instantly, or any external wallet.</li>
+      <li><span class="text-main">Self-custody</span> — export your private keys whenever you want full ownership.</li>
+    </ul>
+
+    <div class="notice">
+      <p class="text-muted" style="margin:0; font-size:13px;">Security reminder: promrkts will never ask for your password, 2FA code, or seed phrase. If anything looks wrong, email <a href="mailto:support@promrkts.com" style="color:inherit;">support@promrkts.com</a> immediately.</p>
+    </div>
+
+    <p class="text-muted" style="font-size:13px; margin:24px 0 8px;">Get the app</p>
     <table cellpadding="0" cellspacing="0" border="0">
       <tr>
         <td style="padding-right:8px;">
@@ -203,9 +228,13 @@ export async function sendWelcomeEmail({
           <a href="https://play.google.com" style="display:inline-block; padding:10px 18px; border-radius:100px; border:1px solid currentColor; color:inherit; text-decoration:none; font-size:13px; font-weight:600;">Android</a>
         </td>
       </tr>
-    </table>`
+    </table>`,
   );
-  await sendEmail({ to, subject: 'Welcome to promrkts', html });
+  await sendEmail({
+    to,
+    subject: `Welcome to promrkts, ${firstName} — let's get you set up`,
+    html,
+  });
 }
 
 /* ─────────────────────────────────────────────────────────────

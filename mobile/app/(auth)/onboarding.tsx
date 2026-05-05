@@ -56,79 +56,67 @@ export default function Onboarding() {
         style={{
           width: SCREEN_W,
           flex: 1,
-          paddingHorizontal: 24,
+          paddingHorizontal: 32,
           justifyContent: 'flex-end',
-          paddingBottom: 24,
+          paddingBottom: 40,
         }}
       >
-        <View
+        <Text
           style={{
-            backgroundColor: themeMode === 'dark'
-              ? 'rgba(0,0,0,0.55)'
-              : 'rgba(255,255,255,0.78)',
-            borderRadius: 24,
-            paddingVertical: 22,
-            paddingHorizontal: 22,
-            borderWidth: 1,
-            borderColor: themeMode === 'dark'
-              ? 'rgba(255,255,255,0.08)'
-              : 'rgba(0,0,0,0.06)',
+            color: p.fg,
+            fontSize: 40,
+            fontWeight: '800',
+            letterSpacing: -1.2,
+            lineHeight: 46,
+            textAlign: 'left',
+            opacity: active ? 1 : 0.4,
           }}
         >
-          <Text
-            style={{
-              color: p.fg,
-              fontSize: 32,
-              fontWeight: '800',
-              letterSpacing: -0.9,
-              lineHeight: 38,
-              textAlign: 'center',
-              opacity: active ? 1 : 0.4,
-            }}
-          >
-            {t(item.titleKey)}
-          </Text>
-          <Text
-            style={{
-              color: p.fgMuted,
-              fontSize: 15,
-              lineHeight: 22,
-              marginTop: 12,
-              fontWeight: '500',
-              textAlign: 'center',
-              opacity: active ? 1 : 0.4,
-            }}
-          >
-            {t(item.bodyKey)}
-          </Text>
-        </View>
+          {t(item.titleKey)}
+        </Text>
+        <Text
+          style={{
+            color: p.fgMuted,
+            fontSize: 17,
+            lineHeight: 24,
+            marginTop: 16,
+            fontWeight: '500',
+            textAlign: 'left',
+            opacity: active ? 1 : 0.4,
+          }}
+        >
+          {t(item.bodyKey)}
+        </Text>
       </View>
     );
   };
 
-  /* Theme-aware gradient stack so the video never washes out the slide copy.
-     Dark mode → black-vignette to keep white text legible.
-     Light mode → white-vignette + lower video opacity so black text reads. */
   const isDark = themeMode === 'dark';
-  const gradient: [string, string, string] = isDark
-    ? ['rgba(0,0,0,0.45)', 'rgba(0,0,0,0.25)', 'rgba(0,0,0,0.95)']
-    : ['rgba(255,255,255,0.55)', 'rgba(255,255,255,0.35)', 'rgba(255,255,255,0.95)'];
+  
+  // A premium fintech feel: let the video play in the top 60%, and 
+  // fade it out smoothly into the solid background color at the bottom
+  // where the clean typography and buttons live.
+  const gradient: [string, string, string, string] = isDark
+    ? ['rgba(15,17,23,0)', 'rgba(15,17,23,0.4)', 'rgba(15,17,23,0.95)', p.bg]
+    : ['rgba(245,245,247,0)', 'rgba(245,245,247,0.4)', 'rgba(245,245,247,0.95)', p.bg];
 
   return (
     <View style={{ flex: 1, backgroundColor: p.bg }}>
       <StatusBar style={isDark ? 'light' : 'dark'} />
 
-      {/* Ambient looping video. Opacity drops in light mode so dark text
-          on a bright surface still has enough contrast. */}
-      <LoopVideo
-        source={require('../../assets/WebHeader.mp4')}
-        style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
-        opacity={isDark ? 0.45 : 0.18}
-      />
-      <LinearGradient
-        colors={gradient}
-        style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
-      />
+      {/* Video pinned to the top half */}
+      <View style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '70%' }}>
+        <LoopVideo
+          source={require('../../assets/WebHeader.mp4')}
+          style={{ width: '100%', height: '100%' }}
+          opacity={isDark ? 0.6 : 0.8}
+        />
+        <LinearGradient
+          colors={gradient}
+          locations={[0, 0.4, 0.7, 1]}
+          style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
+        />
+      </View>
 
       <SafeAreaView style={{ flex: 1 }}>
         {/* ── Top bar ── */}
@@ -143,25 +131,23 @@ export default function Onboarding() {
           }}
         >
           <Image
-            source={require('../../assets/logo-color.png')}
-            style={{ width: 52, height: 52 }}
+            source={isDark ? require('../../assets/logo-white.png') : require('../../assets/logo-black.png')}
+            style={{ width: 120, height: 32 }}
             resizeMode="contain"
           />
-          <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+          <View style={{ flexDirection: 'row', gap: 12, alignItems: 'center' }}>
             {/* Lang switcher */}
             <Pressable
               onPress={() => { h.selection(); cycleLocale(); }}
               hitSlop={6}
               style={{
                 flexDirection: 'row', alignItems: 'center', gap: 6,
-                paddingHorizontal: 10, height: 34, borderRadius: 17,
-                backgroundColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.08)',
-                borderWidth: 1,
-                borderColor: isDark ? 'rgba(255,255,255,0.16)' : 'rgba(0,0,0,0.10)',
+                paddingHorizontal: 12, height: 36, borderRadius: 18,
+                backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)',
               }}
             >
               <Text style={{ fontSize: 14 }}>{LOCALE_META[locale].flag}</Text>
-              <Text style={{ color: p.fg, fontSize: 12, fontWeight: '700', letterSpacing: 0.4 }}>
+              <Text style={{ color: p.fg, fontSize: 13, fontWeight: '700', letterSpacing: 0.4 }}>
                 {locale.toUpperCase()}
               </Text>
             </Pressable>
@@ -171,34 +157,21 @@ export default function Onboarding() {
               onPress={() => { h.selection(); toggleTheme(); }}
               hitSlop={6}
               style={{
-                width: 34, height: 34, borderRadius: 17,
+                width: 36, height: 36, borderRadius: 18,
                 alignItems: 'center', justifyContent: 'center',
-                backgroundColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.08)',
-                borderWidth: 1,
-                borderColor: isDark ? 'rgba(255,255,255,0.16)' : 'rgba(0,0,0,0.10)',
+                backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)',
               }}
             >
               <Ionicons
-                name={isDark ? 'sunny-outline' : 'moon-outline'}
-                size={16}
+                name={isDark ? 'sunny' : 'moon'}
+                size={18}
                 color={p.fg}
               />
-            </Pressable>
-
-            {/* Skip */}
-            <Pressable
-              hitSlop={12}
-              onPress={() => { h.selection(); router.push('/login'); }}
-              style={{ paddingHorizontal: 8, height: 34, justifyContent: 'center' }}
-            >
-              <Text style={{ color: p.fgMuted, fontSize: 14, fontWeight: '500' }}>
-                {t('onboard.skip')}
-              </Text>
             </Pressable>
           </View>
         </View>
 
-        {/* ── Slides — flex:1 is the fix for the previous black-screen bug ── */}
+        {/* ── Slides ── */}
         <FlatList
           ref={flat}
           data={SLIDES}
@@ -212,25 +185,25 @@ export default function Onboarding() {
         />
 
         {/* ── Footer ── */}
-        <View style={{ paddingHorizontal: 24, paddingBottom: 12 }}>
+        <View style={{ paddingHorizontal: 32, paddingBottom: 24, paddingTop: 10 }}>
           {/* Dots */}
-          <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 6, marginBottom: 24 }}>
+          <View style={{ flexDirection: 'row', justifyContent: 'flex-start', gap: 6, marginBottom: 32 }}>
             {SLIDES.map((s, i) => (
               <View
                 key={s.id}
                 style={{
-                  height: 6,
-                  borderRadius: 3,
-                  width: i === page ? 26 : 6,
+                  height: 4,
+                  borderRadius: 2,
+                  width: i === page ? 24 : 8,
                   backgroundColor: i === page
                     ? p.fg
-                    : (isDark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.30)'),
+                    : (isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.15)'),
                 }}
               />
             ))}
           </View>
 
-          {/* Primary CTA — drop-shadow + chunkier so it pops over the video */}
+          {/* Primary CTA */}
           <Pressable
             onPress={() => {
               h.medium();
@@ -238,40 +211,38 @@ export default function Onboarding() {
               else flat.current?.scrollToIndex({ index: page + 1, animated: true });
             }}
             style={({ pressed }) => ({
-              height: 58,
-              borderRadius: 29,
-              backgroundColor: p.ctaBg,
-              opacity: pressed ? 0.85 : 1,
+              height: 56,
+              borderRadius: 28,
+              backgroundColor: p.fg,
+              opacity: pressed ? 0.8 : 1,
               alignItems: 'center',
               justifyContent: 'center',
-              shadowColor: '#000',
-              shadowOpacity: 0.25,
-              shadowOffset: { width: 0, height: 6 },
-              shadowRadius: 14,
-              elevation: 4,
+              shadowColor: p.fg,
+              shadowOpacity: 0.15,
+              shadowOffset: { width: 0, height: 4 },
+              shadowRadius: 12,
+              elevation: 3,
             })}
           >
-            <Text style={{ color: p.ctaFg, fontSize: 16, fontWeight: '800', letterSpacing: -0.2 }}>
+            <Text style={{ color: p.bg, fontSize: 17, fontWeight: '700', letterSpacing: -0.3 }}>
               {last ? t('onboard.create') : t('onboard.continue')}
             </Text>
           </Pressable>
 
-          {/* Secondary — bordered so it reads on bright frames too */}
+          {/* Secondary CTA */}
           <Pressable
             onPress={() => { h.selection(); router.push('/login'); }}
             style={({ pressed }) => ({
-              height: 52,
-              borderRadius: 26,
+              height: 56,
+              borderRadius: 28,
               alignItems: 'center', justifyContent: 'center',
-              marginTop: 10,
-              borderWidth: 1.5,
-              borderColor: isDark ? 'rgba(255,255,255,0.22)' : 'rgba(0,0,0,0.16)',
+              marginTop: 12,
               backgroundColor: pressed
-                ? (isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)')
+                ? (isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)')
                 : 'transparent',
             })}
           >
-            <Text style={{ color: p.fg, fontSize: 15, fontWeight: '700' }}>
+            <Text style={{ color: p.fg, fontSize: 16, fontWeight: '600' }}>
               {t('onboard.haveAccount')}
             </Text>
           </Pressable>

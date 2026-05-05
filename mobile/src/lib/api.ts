@@ -69,3 +69,12 @@ api.interceptors.response.use(
     return Promise.reject(error);
   },
 );
+
+// Profile API
+export const profileAPI = {
+  getMyProfile: () => api.get('/profile/me'),
+  updateProfile: (data: { username?: string; bio?: string; avatarUrl?: string; baseCurrency?: string; profilePublic?: boolean; acceptedCurrencies?: string[] }) =>
+    api.patch('/profile/me', data),
+  getPublicProfile: (username: string) => api.get(`/profile/public/${username}`),
+  searchProfiles: (q: string) => api.get(`/profile/search?q=${encodeURIComponent(q)}`),
+};

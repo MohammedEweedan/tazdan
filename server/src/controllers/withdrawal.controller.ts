@@ -7,9 +7,9 @@ import { generateReference } from '../utils/helpers';
 import { AuthRequest } from '../types';
 
 const withdrawalSchema = z.object({
-  currency: z.enum(['LYD', 'USD', 'USDT']),
+  currency: z.enum(['USD', 'USDT']),
   amount: z.number().positive(),
-  paymentMethod: z.enum(['SADAD', 'MASREFY', 'MOAMALAT', 'TADAWUL', 'BANK_TRANSFER', 'CASH_DEPOSIT']).optional(),
+  paymentMethod: z.enum(['BANK_TRANSFER']).optional(),
   walletAddress: z.string().optional(),
   network: z.enum(['TRC20', 'ERC20']).optional(),
   bankName: z.string().optional(),
@@ -45,7 +45,7 @@ export class WithdrawalController {
       const available = parseFloat(wallet.balance.toString()) - parseFloat(wallet.frozen.toString());
       if (data.amount > available) throw new AppError('Insufficient balance', 400);
 
-      const feeKey = data.currency === 'USDT' ? 'withdrawal_fee_usdt' : 'withdrawal_fee_lyd';
+      const feeKey = data.currency === 'USDT' ? 'withdrawal_fee_usdt' : 'withdrawal_fee_usd';
       const feeSetting = await prisma.platformSettings.findUnique({ where: { key: feeKey } });
       const fee = parseFloat(feeSetting?.value || '0');
       const netAmount = data.amount - fee;

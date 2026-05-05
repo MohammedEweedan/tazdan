@@ -16,6 +16,7 @@ import { motion } from "framer-motion";
 import { useAuthStore } from "@/stores/authStore";
 import { walletAPI, transferAPI, exchangeAPI } from "@/lib/api";
 import { useDashboardTokens, PageShell } from "@/components/dashboard/DashboardUI";
+import { WalletAddressCard } from "@/components/wallet/WalletAddressCard";
 
 /* ─── Types ─── */
 type TabKey = "ASSETS" | "WALLETS" | "ACTIVITY";
@@ -39,7 +40,6 @@ const ASSET_META: Record<string, { title: string; decimals: number }> = {
   AED: { title: "UAE Dirham", decimals: 2 },
   SAR: { title: "Saudi Riyal", decimals: 2 },
   EGP: { title: "Egyptian Pound", decimals: 2 },
-  LYD: { title: "Libyan Dinar", decimals: 3 },
   DEFAULT: { title: "Asset", decimals: 4 },
 };
 
@@ -61,7 +61,6 @@ const ICON_CFG: Record<string, { bg: string; fg: string; glyph: string }> = {
   AED: { bg: "#0f766e", fg: "#fff", glyph: "د" },
   SAR: { bg: "#15803d", fg: "#fff", glyph: "﷼" },
   EGP: { bg: "#dc2626", fg: "#fff", glyph: "£" },
-  LYD: { bg: "#16a34a", fg: "#fff", glyph: "د" },
   DEFAULT: { bg: "rgba(125,125,125,0.2)", fg: "#888", glyph: "?" },
 };
 
@@ -356,9 +355,7 @@ function AssetList({ wallets, priceMap, tok, mask }: { wallets: any[]; priceMap:
             _hover={{ bg: tok.hover }} transition="background 0.15s"
           >
             <HStack spacing={3}>
-              <Flex w="38px" h="38px" borderRadius="full" bg={cfg.bg} align="center" justify="center">
-                <Text fontSize="15px" fontWeight="700" color={cfg.fg}>{cfg.glyph}</Text>
-              </Flex>
+              <CurrencyIcon currency={w.currency} dark={tok.bg === "#0f1117"} />
               <Box>
                 <Text fontSize="14px" fontWeight="700" color={tok.textMain}>{meta.title}</Text>
                 <Text fontSize="12px" color={tok.textMuted}>
@@ -390,44 +387,19 @@ function WalletList({ wallets, tok, toast }: { wallets: any[]; tok: any; toast: 
     );
   }
   return (
-    <VStack align="stretch" spacing={0}>
+    <VStack align="stretch" spacing={4}>
       {wallets.map((w) => {
         const isCrypto = crypto.includes(w.currency);
-        const addr = isCrypto
-          ? deriveAddress(w.id, w.currency)
-          : `PRMK-${w.currency}-${w.id.slice(0, 8).toUpperCase()}`;
-        const chain = CHAIN_LABEL[w.currency] ?? w.currency;
-        const meta = ASSET_META[w.currency] ?? ASSET_META.DEFAULT;
+        if (!isCrypto) return null;
+        
+        const network = w.currency === 'USDT' ? 'ERC20' : w.currency;
         return (
-          <Box key={w.id} py={4} px={2} borderBottom="1px solid" borderColor={tok.panelBorder}>
-            <HStack spacing={3} mb={2}>
-              <CurrencyIcon currency={w.currency} />
-              <Box flex={1}>
-                <Text fontSize="14px" fontWeight="700" color={tok.textMain}>{meta.title}</Text>
-                <Text fontSize="11px" color={tok.textMuted}>{isCrypto ? `${chain} network` : "Bank reference"}</Text>
-              </Box>
-              <Text fontSize="13px" fontWeight="700" color={tok.textMuted} fontFamily="monospace">
-                {Number(w.balance).toLocaleString("en-US", { maximumFractionDigits: meta.decimals })} {w.currency}
-              </Text>
-            </HStack>
-            <Flex gap={2}>
-              <Flex
-                flex={1} align="center" gap={2} px={3} py={2} borderRadius="10px"
-                bg={tok.dark ? "rgba(255,255,255,0.04)" : "rgba(0,87,184,0.03)"}
-                border="1px solid" borderColor={tok.panelBorder}
-                cursor="pointer"
-                onClick={() => {
-                  navigator.clipboard.writeText(addr);
-                  toast({ title: "Copied", status: "success", duration: 1500 });
-                }}
-                _hover={{ borderColor: tok.brand }}
-              >
-                <Icon as={isCrypto ? FiCreditCard : FiCreditCard} boxSize={3} color={tok.textMuted} />
-                <Text flex={1} fontSize="12px" fontWeight="600" fontFamily="monospace" color={tok.textMain} noOfLines={1}>{addr}</Text>
-                <Icon as={FiCopy} boxSize={3} color={tok.textMuted} />
-              </Flex>
-            </Flex>
-          </Box>
+          <WalletAddressCard
+            key={w.id}
+            asset={w.currency as 'ETH' | 'BTC' | 'SOL' | 'USDT'}
+            network={network}
+            label={`${w.currency} · ${network}`}
+          />
         );
       })}
     </VStack>
@@ -452,9 +424,7 @@ function ActivityList({ items, tok }: { items: any[]; tok: any }) {
         const isIn = t.type === "DEPOSIT" || t.type === "RECEIVE" || t.type === "TRANSFER_IN" || t.type === "BUY";
         return (
           <Flex key={t.id} align="center" gap={3} py={3} px={2} borderBottom="1px solid" borderColor={tok.panelBorder} _hover={{ bg: tok.hover }} transition="background 0.15s">
-            <Flex w="38px" h="38px" borderRadius="12px" bg={`${cfg.color}15`} border={`1px solid ${cfg.color}28`} align="center" justify="center" flexShrink={0}>
-              <Icon as={cfg.icon} color={cfg.color} boxSize={4} />
-            </Flex>
+            <CurrencyIcon currency={t.currency || "USD"} dark={tok.bg === "#0f1117"} />
             <Box flex={1} minW={0}>
               <Text fontSize="13px" fontWeight="700" color={tok.textMain} noOfLines={1}>{cfg.label}</Text>
               <Text fontSize="11px" color={tok.textMuted}>{new Date(t.createdAt).toLocaleDateString()} · {t.type}</Text>
@@ -473,11 +443,14 @@ function ActivityList({ items, tok }: { items: any[]; tok: any }) {
 }
 
 /* ── Helpers ── */
-function CurrencyIcon({ currency }: { currency: string }) {
+function CurrencyIcon({ currency, dark }: { currency: string; dark: boolean }) {
   const cfg = ICON_CFG[currency] ?? ICON_CFG.DEFAULT;
+  const fs = (cfg as any).fontSize;
   return (
-    <Flex w="38px" h="38px" borderRadius="full" bg={cfg.bg} align="center" justify="center">
-      <Text fontSize="15px" fontWeight="700" color={cfg.fg}>{cfg.glyph}</Text>
+    <Flex w="38px" h="38px" borderRadius="full" bg="transparent" align="center" justify="center">
+      <Text fontSize={fs ? `${fs + 4}px` : "22px"} fontWeight="700" color={dark ? "#f1f0ee" : "#0f172a"}>
+        {cfg.glyph}
+      </Text>
     </Flex>
   );
 }

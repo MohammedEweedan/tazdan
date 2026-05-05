@@ -18,6 +18,11 @@ interface User {
   phoneVerified?: boolean;
   lastLoginAt?: string;
   createdAt?: string;
+  username?: string;
+  bio?: string;
+  avatarUrl?: string;
+  profilePublic?: boolean;
+  baseCurrency?: string;
 }
 
 interface AuthState {

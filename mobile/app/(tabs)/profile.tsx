@@ -2,7 +2,8 @@
  * Profile tab — theme-aware, every Pressable is real.
  */
 
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { Pressable, ScrollView, Text, View, Modal } from 'react-native';
+import { useState } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
@@ -13,6 +14,7 @@ import { useHaptics } from '@/hooks';
 import { useTheme, useThemedPalette } from '@/store/themeStore';
 import { useI18n, LOCALE_META } from '@/store/i18nStore';
 import { Panel, PanelRow } from '@/components/ui/ScreenShell';
+import { profileAPI } from '@/lib/api';
 
 interface Row {
   icon: keyof typeof Ionicons.glyphMap;
@@ -26,17 +28,84 @@ interface Row {
 export default function Profile() {
   const router = useRouter();
   const h = useHaptics();
-  const { user, logout } = useAuthStore();
+  const { user, logout, updateUser } = useAuthStore();
   const p = useThemedPalette();
   const themeMode = useTheme((s) => s.mode);
   const toggleTheme = useTheme((s) => s.toggle);
   const locale = useI18n((s) => s.locale);
   const cycleLocale = useI18n((s) => s.cycle);
 
+  const [avatarModalVisible, setAvatarModalVisible] = useState(false);
+  const [currencyModalVisible, setCurrencyModalVisible] = useState(false);
+  const [saving, setSaving] = useState(false);
+
   const initial = (user?.firstName?.[0] ?? user?.email?.[0] ?? 'P').toUpperCase();
   const fullName = `${user?.firstName ?? ''} ${user?.lastName ?? ''}`.trim() || 'Promrkts user';
   const handle = user?.username ?? user?.email?.split('@')[0] ?? 'me';
-  const userEmoji = user?.avatarUrl;
+  const userEmoji = (user as any)?.avatarUrl;
+  const baseCurrency = (user as any)?.baseCurrency || 'USD';
+
+  const handleAvatarChange = async (emoji: string) => {
+    setSaving(true);
+    try {
+      await profileAPI.updateProfile({ avatarUrl: emoji });
+      updateUser({ avatarUrl: emoji });
+      setAvatarModalVisible(false);
+      h.success();
+    } catch (error) {
+      h.error();
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleCurrencyChange = async (currency: string) => {
+    setSaving(true);
+    try {
+      await profileAPI.updateProfile({ baseCurrency: currency });
+      updateUser({ baseCurrency: currency } as any);
+      setCurrencyModalVisible(false);
+      h.success();
+    } catch (error) {
+      h.error();
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const emojis = ["", "😎", "🔥", "🚀", "💎", "👑", "⚡️", "💸", "💰", "🏦"];
+  const currencies = ['USD', 'EUR', 'GBP', 'AED', 'SAR', 'EGP', 'USDT', 'BTC', 'ETH', 'BNB', 'SOL'];
+
+  const emojiGroups = {
+    Cool: [
+      "🔥","⚡","💀","☠️","👑","😈","😎","🫡","💯","🚀","🎯","🥷",
+      "🦾","🔒","💸","🏴","⭐","✨","🌙","☄️","🪐","⚔️","🛡️","🏁"
+    ],
+    Animals: [
+      "🦁","🐺","🦅","🦊","🐆","🐅","🦈","🐊","🐍","🦂","🕷","🐉",
+      "🐎","🦌","🦍","🐘","🦏","🦓","🐪","🦜","🐬","🐳","👽","🦇"
+    ],
+    Faces: [
+      "😎","😈","🤠","🫡","🥶","🥷","😏","😤","🤝","🫶","🖤","❤️",
+      "💙","💚","💜","🤍","🩶","💛","🧠","👀","🫥","🫠","🤫","🧿"
+    ],
+    Symbols: [
+      "👑","💎","💸","💯","🔒","⚡","🔥","⭐","✨","☠️","💀","🚀",
+      "🎯","🏴","🏁","⚔️","🛡️","📿","🧿","🪬","🌍","☄️","🪐","🌊"
+    ],
+    Nature: [
+      "☀️","🌙","☁️","❄️","🌊","🌴","🌵","🌍","🌎","🌏","🪐","☄️",
+      "⭐","✨","🌊","🌴","🍂","🍁","🌸","🌹","🌺","🌻","🌼","🌿"
+    ],
+    Faith: [
+      "📿","☪️","🕋","🤲","🙏","🧿","🪬","🕊️","🤍","🌙","⭐","☀️"
+    ],
+    Flags: [
+      "🇱🇾","🇵🇸","🇸🇦","🇦🇪","🇪🇬","🇹🇳","🇩🇿","🇲🇦","🇹🇷","🇮🇹"
+    ],
+  };
+
+  const [selectedEmojiCategory, setSelectedEmojiCategory] = useState('Cool');
 
   const groups: { title: string; rows: Row[] }[] = [
     {
@@ -54,6 +123,15 @@ export default function Profile() {
           onPress: () => { h.selection(); cycleLocale(); },
           right: <Text style={{ fontSize: 16 }}>{LOCALE_META[locale].flag}</Text>,
         },
+        {
+          icon: 'cash-outline',
+          label: `Base Currency · ${baseCurrency}`,
+          onPress: () => {
+            h.selection();
+            setCurrencyModalVisible(true);
+          },
+          right: <Ionicons name="chevron-forward" size={16} color={p.fgFaint} />,
+        }
       ],
     },
     {
@@ -114,8 +192,13 @@ export default function Profile() {
           <View style={{ paddingHorizontal: 24, marginTop: 18 }}>
             <Panel>
               <View style={{ flexDirection: 'row', alignItems: 'center', padding: 18, gap: 14 }}>
-                <View style={{
-                  width: 56, height: 56, borderRadius: 28,
+                <Pressable
+                  onPress={() => {
+                    h.selection();
+                    setAvatarModalVisible(true);
+                  }}
+                  style={{
+                    width: 56, height: 56, borderRadius: 28,
                   backgroundColor: userEmoji ? (themeMode === 'dark' ? '#1a1d27' : '#f5f5f7') : (themeMode === 'dark' ? '#a78bfa' : '#7c3aed'),
                   alignItems: 'center', justifyContent: 'center',
                   borderWidth: userEmoji ? 1 : 0,
@@ -126,7 +209,19 @@ export default function Profile() {
                   ) : (
                     <Text style={{ color: '#fff', fontWeight: '800', fontSize: 22 }}>{initial}</Text>
                   )}
-                </View>
+                  {/* Small "edit" badge on the avatar to hint it's editable */}
+                  <View style={{
+                    position: 'absolute', bottom: -2, right: -2,
+                    backgroundColor: p.bg, borderRadius: 10, padding: 2,
+                  }}>
+                    <View style={{
+                      backgroundColor: p.ctaBg, width: 16, height: 16, borderRadius: 8,
+                      alignItems: 'center', justifyContent: 'center'
+                    }}>
+                      <Ionicons name="pencil" size={9} color={p.ctaFg} />
+                    </View>
+                  </View>
+                </Pressable>
                 <View style={{ flex: 1 }}>
                   <Text style={{ color: p.fg, fontSize: 16, fontWeight: '700' }}>{fullName}</Text>
                   <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '500', marginTop: 2 }}>
@@ -184,6 +279,113 @@ export default function Profile() {
           </Text>
         </ScrollView>
       </SafeAreaView>
+
+      {/* Avatar Picker Modal */}
+      <Modal
+        visible={avatarModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setAvatarModalVisible(false)}
+      >
+        <Pressable
+          style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' }}
+          onPress={() => setAvatarModalVisible(false)}
+        >
+          <Pressable
+            style={{ backgroundColor: p.bg, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20 }}
+            onPress={(e) => e.stopPropagation()}
+          >
+            
+            {/* Category tabs */}
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={{ marginBottom: 12 }}
+              contentContainerStyle={{ gap: 6 }}
+            >
+              {Object.keys(emojiGroups).map((category) => (
+                <Pressable
+                  key={category}
+                  onPress={() => { h.selection(); setSelectedEmojiCategory(category); }}
+                  style={{
+                    paddingHorizontal: 12,
+                    paddingVertical: 6,
+                    borderRadius: 16,
+                    backgroundColor: selectedEmojiCategory === category ? p.ctaBg : p.bgElev,
+                    borderWidth: 1,
+                    borderColor: selectedEmojiCategory === category ? p.ctaBg : 'transparent',
+                  }}
+                >
+                  <Text style={{
+                    color: selectedEmojiCategory === category ? p.ctaFg : p.fg,
+                    fontSize: 12,
+                    fontWeight: '700',
+                  }}>
+                    {category}
+                  </Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+
+            {/* Emojis for selected category */}
+            <ScrollView style={{ maxHeight: 300 }}>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
+                {emojiGroups[selectedEmojiCategory as keyof typeof emojiGroups]?.map((emoji) => (
+                  <Pressable
+                    key={emoji}
+                    onPress={() => handleAvatarChange(emoji)}
+                    style={{
+                      width: 52, height: 52, borderRadius: 26,
+                      backgroundColor: userEmoji === emoji ? p.ctaBg : p.bgElev,
+                      alignItems: 'center', justifyContent: 'center',
+                      borderWidth: 2, borderColor: userEmoji === emoji ? p.ctaBg : 'transparent',
+                    }}
+                  >
+                    <Text style={{ fontSize: 28 }}>{emoji}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            </ScrollView>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* Currency Picker Modal */}
+      <Modal
+        visible={currencyModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setCurrencyModalVisible(false)}
+      >
+        <Pressable
+          style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' }}
+          onPress={() => setCurrencyModalVisible(false)}
+        >
+          <Pressable
+            style={{ backgroundColor: p.bg, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, paddingBottom: 32 }}
+            onPress={(e) => e.stopPropagation()}
+          >
+            <Text style={{ color: p.fg, fontSize: 18, fontWeight: '700', marginBottom: 16 }}>Base Currency</Text>
+            <View style={{ gap: 8 }}>
+              {currencies.map((currency) => (
+                <Pressable
+                  key={currency}
+                  onPress={() => handleCurrencyChange(currency)}
+                  style={{
+                    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+                    padding: 14, borderRadius: 12,
+                    backgroundColor: baseCurrency === currency ? `${p.ctaBg}15` : p.bgElev,
+                    borderWidth: 1, borderColor: baseCurrency === currency ? p.ctaBg : 'transparent',
+                  }}
+                >
+                  <Text style={{ color: p.fg, fontSize: 16, fontWeight: '600' }}>{currency}</Text>
+                  {baseCurrency === currency && <Ionicons name="checkmark-circle" size={20} color={p.ctaBg} />}
+                </Pressable>
+              ))}
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }

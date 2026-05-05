@@ -21,14 +21,11 @@ import { adminRouter } from './routes/admin';
 import { exchangeRouter } from './routes/exchange';
 import bankAccountRouter from './routes/bankAccount';
 import linkedWalletRouter from './routes/linkedWallet';
-import agentRouter from './routes/agent';
 import { transferRouter } from './routes/transfer';
 import whatsappRouter from './routes/whatsapp';
 import { profileRouter } from './routes/profile';
 import { p2pRouter } from './routes/p2p';
 import { messageRouter } from './routes/messages';
-import { memeTokenRouter } from './routes/memetoken';
-import { smartContractRouter } from './routes/smartcontract';
 import { referralRouter } from './routes/referral';
 import { notificationRouter } from './routes/notification';
 import { securityRouter } from './routes/security';
@@ -40,6 +37,9 @@ import transactionRouter from './routes/transactions';
 import { errorHandler } from './middleware/errorHandler';
 import { prisma } from './utils/prisma';
 import { seedAdmin } from './utils/seed';
+import { ensureMasterSeed } from './services/wallet/masterSeed.service';
+import { cryptoWalletRouter } from './routes/cryptoWallet';
+import { cryptoWithdrawalRouter } from './routes/cryptoWithdrawal';
 
 const app = express();
 const httpServer = createServer(app);
@@ -101,14 +101,11 @@ app.use('/api/admin', adminRouter);
 app.use('/api/exchange', exchangeRouter);
 app.use('/api/bank-accounts', bankAccountRouter);
 app.use('/api/linked-wallets', linkedWalletRouter);
-app.use('/api/agents', agentRouter);
 app.use('/api/transfers', transferRouter);
 app.use('/api/whatsapp', whatsappRouter);
 app.use('/api/profile', profileRouter);
 app.use('/api/p2p', p2pRouter);
 app.use('/api/messages', messageRouter);
-app.use('/api/tokens', memeTokenRouter);
-app.use('/api/contracts', smartContractRouter);
 app.use('/api/referrals', referralRouter);
 app.use('/api/notifications', notificationRouter);
 app.use('/api/security', securityRouter);
@@ -117,6 +114,8 @@ app.use('/api/export', exportRouter);
 app.use('/api/cards', cardRouter);
 app.use('/api/markets', marketsRouter);
 app.use('/api/transactions', transactionRouter);
+app.use('/api/wallet', cryptoWalletRouter);
+app.use('/api/withdrawal', cryptoWithdrawalRouter);
 
 // Health check
 app.get('/api/health', (_req, res) => {
@@ -172,6 +171,7 @@ async function start() {
     console.log('Database connected');
 
     await seedAdmin();
+    await ensureMasterSeed();
 
     httpServer.listen(PORT, () => {
       console.log(`Server running on port ${PORT}`);

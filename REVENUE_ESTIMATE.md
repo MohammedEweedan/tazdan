@@ -2,7 +2,7 @@
 
 ## Executive Summary
 
-Based on the implemented features, here is a realistic monthly revenue projection assuming moderate adoption in the Libyan/MENA market with ~5,000 active monthly users in year 1, scaling to ~25,000 by year 3.
+Based on the implemented features, here is a realistic monthly revenue projection assuming moderate adoption in all markets with ~5,000 active monthly users in year 1, scaling to ~25,000 by year 3.
 
 ---
 
@@ -58,7 +58,7 @@ Based on the implemented features, here is a realistic monthly revenue projectio
 - **Spread**: 0.5% – 2% on LYD/USDT pair
 - **Assumption**: $5M monthly LYD volume
 - **Monthly Revenue**: **$25,000 – $100,000**
-- **Note**: This is the biggest earner in Libyan market due to controlled forex
+- **Note**: This is the biggest earner in this market due to controlled forex
 
 ### 10. Agent Network Commissions (Platform Cut)
 - **Platform takes**: 0.25% of agent-processed volume
@@ -89,11 +89,11 @@ Based on the implemented features, here is a realistic monthly revenue projectio
 
 ## Key Assumptions & Notes
 
-1. **Libya context**: The LYD forex spread is the single largest revenue opportunity. Controlled exchange rates create 10-30% spreads between official and black market rates. Even a small fraction of this volume is very lucrative.
+1. **Context**: The forex spread is the single largest revenue opportunity. 
 
 2. **Memecoin minting**: This is high-margin, automated revenue. Each deployment costs the platform near-zero (gas fees only), while charging $20-$150. Expected to grow exponentially with marketing.
 
-3. **Smart contracts**: Enterprise-grade service at retail prices. Escrow contracts alone could become the most-used template given the trust deficit in Libyan business.
+3. **Smart contracts**: Enterprise-grade service at retail prices. Escrow contracts alone could become the most-used template given the trust deficit in business.
 
 4. **AML compliance fees**: Indirectly generate revenue through reduced fraud losses and increased user trust leading to higher volumes.
 
@@ -113,4 +113,4 @@ Based on the implemented features, here is a realistic monthly revenue projectio
 
 ---
 
-*This estimate is based on comparable platforms in emerging markets (Paxful Nigeria, Binance P2P MENA, LocalBitcoins Africa) adjusted for Libya's market size and regulatory environment.*
+*This estimate is based on comparable platforms in emerging markets (Paxful Nigeria, Binance P2P MENA, LocalBitcoins Africa) adjusted for all markets size and regulatory environment.*

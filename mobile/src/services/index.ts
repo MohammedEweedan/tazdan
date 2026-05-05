@@ -47,7 +47,19 @@ export const authService = {
     const { data } = await api.post('/auth/login', { email, password });
     return data;
   },
-  async register(payload: { email: string; password: string; firstName: string; lastName: string; username?: string; avatarUrl?: string; phone?: string; referralCode?: string }): Promise<{ user: User; accessToken: string; refreshToken: string }> {
+  async register(payload: {
+    email: string;
+    password: string;
+    firstName: string;
+    lastName: string;
+    username: string;
+    country: string;
+    phoneCountryCode: string;
+    phone: string;
+    dateOfBirth: string;
+    avatarUrl?: string;
+    referralCode?: string;
+  }): Promise<{ user: User; accessToken: string; refreshToken: string }> {
     const { data } = await api.post('/auth/register', payload);
     return data;
   },
@@ -74,7 +86,49 @@ export const authService = {
 // ───────── Wallets ─────────
 export const walletService = {
   list: () => withFallback<Wallet[]>(
-    async () => (await api.get('/wallets')).data.wallets,
+    async () => {
+      const { data } = await api.get('/wallets');
+      const wallets = data.wallets || [];
+
+      // Also fetch crypto wallet balances from UserWallet
+      try {
+        const { data: cryptoData } = await api.get('/wallet/balances');
+        // Merge crypto balances into the wallets array
+        const cryptoMap: Record<string, number> = {
+          ETH: cryptoData.ETH ? parseFloat(cryptoData.ETH) : 0,
+          BTC: cryptoData.BTC ? parseFloat(cryptoData.BTC) : 0,
+          SOL: cryptoData.SOL ? parseFloat(cryptoData.SOL) : 0,
+          USDT_ERC20: cryptoData.USDT_ERC20 ? parseFloat(cryptoData.USDT_ERC20) : 0,
+          USDT_TRC20: cryptoData.USDT_TRC20 ? parseFloat(cryptoData.USDT_TRC20) : 0,
+        };
+
+        // Simple USD price map for fiat value calculation
+        const USD_PRICE: Record<string, number> = {
+          USDT: 1, USD: 1,
+          BTC: 65_240, ETH: 3_215, SOL: 150,
+        };
+
+        // Add or update crypto wallets
+        Object.entries(cryptoMap).forEach(([currency, balance]) => {
+          const existingIndex = wallets.findIndex((w: Wallet) => w.currency === currency);
+          if (existingIndex >= 0) {
+            wallets[existingIndex].balance = balance.toString();
+          } else if (balance > 0) {
+            wallets.push({
+              id: `crypto-${currency}`,
+              currency,
+              balance: balance.toString(),
+              frozen: '0',
+              fiatValueUsd: (balance * (USD_PRICE[currency] || 0)).toString(),
+            });
+          }
+        });
+      } catch (e) {
+        console.warn('Failed to fetch crypto balances:', e);
+      }
+
+      return wallets;
+    },
     MOCK_WALLETS,
   ),
 };

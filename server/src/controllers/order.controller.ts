@@ -7,7 +7,7 @@ import { AuthRequest } from '../types';
 
 const orderSchema = z.object({
   side: z.enum(['BUY', 'SELL']),
-  quoteCurrency: z.enum(['LYD', 'USD']),
+  quoteCurrency: z.enum(['USD']),
   amount: z.number().positive(),
 });
 

@@ -6,6 +6,7 @@ export const profileRouter = Router();
 
 // Authenticated routes
 profileRouter.get('/me', authenticate, ProfileController.getMyProfile);
+profileRouter.patch('/me', authenticate, ProfileController.updateProfile);
 profileRouter.put('/me', authenticate, ProfileController.updateProfile);
 
 // Public-profile search (must come BEFORE /:username so 'search' isn't

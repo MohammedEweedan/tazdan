@@ -74,13 +74,12 @@ export default function AssetDetail() {
   const positive = change >= 0;
 
   // Real OHLC for the chart. While loading we render a skeleton.
-  const { data: ohlc, isLoading: ohlcLoading } = useOHLC(coinId ?? 'bitcoin', range);
-  // For 1H we slice to the most-recent ~12 points of the 24h fetch.
-  const series = useMemo(() => {
-    if (!ohlc || ohlc.length === 0) return [];
-    if (range === '1H') return ohlc.slice(-12);
-    return ohlc;
-  }, [ohlc, range]);
+  // Pass `undefined` for fiat tickers — the hook short-circuits and we
+  // render a "no chart" panel below instead of showing BTC's chart for
+  // a USDT page.
+  const { data: ohlc, isLoading: ohlcLoading } = useOHLC(coinId, range);
+  const series = ohlc ?? [];
+  const hasChart = !!coinId;
 
   // Holdings — value fluctuates on every price tick because we recompute
   // here instead of trusting the stale `wallet.fiatValueUsd` field.
@@ -141,55 +140,73 @@ export default function AssetDetail() {
         </View>
       </View>
 
-      {/* Chart */}
-      <View style={{ marginTop: 22 }}>
-        {ohlcLoading ? (
+      {/* Chart — only crypto assets have a meaningful USD chart. */}
+      {hasChart ? (
+        <>
+          <View style={{ marginTop: 22 }}>
+            {ohlcLoading ? (
+              <View style={{
+                height: 160, borderRadius: 16,
+                backgroundColor: p.bgElev,
+                borderWidth: 1, borderColor: p.border,
+                alignItems: 'center', justifyContent: 'center',
+              }}>
+                <ActivityIndicator color={p.fgMuted} />
+              </View>
+            ) : (
+              <SparklineChart
+                values={series}
+                color={positive ? '#10b981' : '#ef4444'}
+                palette={p}
+              />
+            )}
+          </View>
+
+          {/* Timeframe selector */}
           <View style={{
-            height: 160, borderRadius: 16,
+            flexDirection: 'row', justifyContent: 'space-between',
+            marginTop: 14, padding: 4,
+            borderRadius: 14,
             backgroundColor: p.bgElev,
             borderWidth: 1, borderColor: p.border,
-            alignItems: 'center', justifyContent: 'center',
+            gap: 4,
           }}>
-            <ActivityIndicator color={p.fgMuted} />
+            {(['1H', '24H', '7D', '30D'] as Range[]).map((r) => (
+              <Pressable
+                key={r}
+                onPress={() => { h.selection(); setRange(r); }}
+                style={{ flex: 1 }}
+              >
+                <View style={{
+                  paddingVertical: 9, borderRadius: 10, alignItems: 'center',
+                  backgroundColor: range === r ? p.fg : 'transparent',
+                }}>
+                  <Text style={{
+                    color: range === r ? p.bg : p.fgMuted,
+                    fontWeight: '700', fontSize: 11, letterSpacing: 0.5,
+                  }}>
+                    {r}
+                  </Text>
+                </View>
+              </Pressable>
+            ))}
           </View>
-        ) : (
-          <SparklineChart
-            values={series}
-            color={positive ? '#10b981' : '#ef4444'}
-            palette={p}
-          />
-        )}
-      </View>
-
-      {/* Timeframe selector */}
-      <View style={{
-        flexDirection: 'row', justifyContent: 'space-between',
-        marginTop: 14, padding: 4,
-        borderRadius: 14,
-        backgroundColor: p.bgElev,
-        borderWidth: 1, borderColor: p.border,
-        gap: 4,
-      }}>
-        {(['1H', '24H', '7D', '30D'] as Range[]).map((r) => (
-          <Pressable
-            key={r}
-            onPress={() => { h.selection(); setRange(r); }}
-            style={{ flex: 1 }}
-          >
-            <View style={{
-              paddingVertical: 9, borderRadius: 10, alignItems: 'center',
-              backgroundColor: range === r ? p.fg : 'transparent',
-            }}>
-              <Text style={{
-                color: range === r ? p.bg : p.fgMuted,
-                fontWeight: '700', fontSize: 11, letterSpacing: 0.5,
-              }}>
-                {r}
-              </Text>
-            </View>
-          </Pressable>
-        ))}
-      </View>
+        </>
+      ) : (
+        // Fiat assets (USD/EUR/GBP/AED/SAR/EGP/USDT) — no volatile USD chart.
+        <View style={{
+          marginTop: 22, paddingVertical: 32, paddingHorizontal: 20, borderRadius: 16,
+          backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border,
+          alignItems: 'center',
+        }}>
+          <Ionicons name="cash-outline" size={28} color={p.fgFaint} />
+          <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '600', marginTop: 10, textAlign: 'center' }}>
+            {sym === 'USDT'
+              ? 'USDT is pegged 1:1 to the US dollar — no chart to show.'
+              : `${sym} is a fiat currency — no crypto chart to show.`}
+          </Text>
+        </View>
+      )}
 
       {/* Stat tiles */}
       <View style={{ flexDirection: 'row', gap: 10, marginTop: 18 }}>

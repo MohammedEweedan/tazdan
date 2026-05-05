@@ -14,6 +14,7 @@ import {
 } from "react-icons/fi";
 import { useAuthStore } from "@/stores/authStore";
 import { userAPI, authAPI } from "@/lib/api";
+import { COUNTRIES, COUNTRY_BY_ISO } from "@/lib/countries";
 import Logo from "@/components/ui/Logo";
 
 // ─── Palette (mirrors mobile themeStore tokens) ───────────────────
@@ -569,8 +570,13 @@ export default function RegisterPage() {
 
   const [step, setStep] = useState<Step>(1);
   const [form, setForm] = useState({
-    firstName: "", lastName: "", email: "", phone: "", password: "", referralCode: "", username: "", avatarUrl: "",
+    firstName: "", lastName: "", email: "",
+    country: "",      // ISO-2; default to platform's primary market
+    phone: "",          // national subscriber number (no dial code)
+    dateOfBirth: "",    // YYYY-MM-DD
+    password: "", referralCode: "", username: "", avatarUrl: "",
   });
+  const dialCode = COUNTRY_BY_ISO[form.country]?.dialCode ?? "";
   const [showPw, setShowPw] = useState(false);
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [showTerms, setShowTerms] = useState(false);
@@ -599,6 +605,31 @@ export default function RegisterPage() {
       setError("Password must be at least 8 characters.");
       return;
     }
+    if (!form.country || !COUNTRY_BY_ISO[form.country]) {
+      setError("Please select your country.");
+      return;
+    }
+    const phoneDigits = form.phone.replace(/\D/g, "");
+    if (phoneDigits.length < 4) {
+      setError("Please enter a valid phone number.");
+      return;
+    }
+    if (!form.username || form.username.length < 3) {
+      setError("Please choose a @handle (3+ characters).");
+      return;
+    }
+    if (!form.dateOfBirth) {
+      setError("Please enter your date of birth.");
+      return;
+    }
+    // 18+ check (mirrors server-side rule).
+    const dob = new Date(form.dateOfBirth);
+    const cutoff = new Date();
+    cutoff.setFullYear(cutoff.getFullYear() - 18);
+    if (Number.isNaN(dob.getTime()) || dob.getTime() > cutoff.getTime()) {
+      setError("You must be 18 or older to register.");
+      return;
+    }
     if (!termsAccepted) {
       setError("Please agree to the Terms of Service and Privacy Policy to continue.");
       return;
@@ -606,11 +637,17 @@ export default function RegisterPage() {
     setLoading(true);
     try {
       await register({
-        ...form,
-        phone: form.phone || undefined,
-        referralCode: form.referralCode || undefined,
-        username: form.username || undefined,
+        firstName: form.firstName,
+        lastName: form.lastName,
+        email: form.email,
+        password: form.password,
+        country: form.country,
+        phoneCountryCode: dialCode,
+        phone: phoneDigits,
+        dateOfBirth: form.dateOfBirth, // YYYY-MM-DD
+        username: form.username,
         avatarUrl: form.avatarUrl || undefined,
+        referralCode: form.referralCode || undefined,
       });
       setStep(2);
     } catch (err: any) {
@@ -806,14 +843,128 @@ export default function RegisterPage() {
 
               <Field label={t("auth_email")} value={form.email} onChange={upd("email")} type="email" p={p} autoComplete="email" />
 
-              <Field label={t("auth_phone")} value={form.phone} onChange={upd("phone")} type="tel" p={p} autoComplete="tel" />
+              {/* Country dropdown — drives phone dial code and KYC jurisdiction. */}
+              <Box w="100%">
+                <Box
+                  position="relative"
+                  h="60px"
+                  borderRadius="16px"
+                  border="1.5px solid"
+                  borderColor={p.border}
+                  bg={p.bgElev}
+                  overflow="hidden"
+                >
+                  <Text
+                    as="span"
+                    position="absolute"
+                    left="16px"
+                    top="10px"
+                    fontSize="11px"
+                    fontWeight="500"
+                    color={p.fgMuted}
+                    pointerEvents="none"
+                    zIndex={1}
+                  >
+                    Country
+                  </Text>
+                  <Box
+                    as="select"
+                    value={form.country}
+                    onChange={(e: any) => upd("country")(e.target.value)}
+                    position="absolute"
+                    bottom="0"
+                    left="0"
+                    right="0"
+                    h="38px"
+                    px="14px"
+                    bg="transparent"
+                    border="none"
+                    fontSize="16px"
+                    fontWeight="500"
+                    color={p.fg}
+                    outline="none"
+                    style={{ appearance: "none", WebkitAppearance: "none", MozAppearance: "none" }}
+                  >
+                    {COUNTRIES.map((c) => (
+                      <option key={c.code} value={c.code} style={{ color: "#0f172a" }}>
+                        {c.flag}  {c.name}  +{c.dialCode}
+                      </option>
+                    ))}
+                  </Box>
+                </Box>
+              </Box>
+
+              {/* Phone with country dial-code adornment. */}
+              <Box w="100%">
+                <Box
+                  position="relative"
+                  h="60px"
+                  borderRadius="16px"
+                  border="1.5px solid"
+                  borderColor={p.border}
+                  bg={p.bgElev}
+                  overflow="hidden"
+                >
+                  <Text
+                    as="span"
+                    position="absolute"
+                    left="16px"
+                    top="10px"
+                    fontSize="11px"
+                    fontWeight="500"
+                    color={p.fgMuted}
+                    pointerEvents="none"
+                    zIndex={1}
+                  >
+                    Phone number
+                  </Text>
+                  <Flex position="absolute" bottom="0" left="0" right="0" h="38px" align="center">
+                    <Text
+                      pl="16px"
+                      pr="8px"
+                      fontSize="16px"
+                      fontWeight="600"
+                      color={p.fgMuted}
+                      whiteSpace="nowrap"
+                    >
+                      +{dialCode}
+                    </Text>
+                    <Input
+                      type="tel"
+                      value={form.phone}
+                      onChange={(e) => upd("phone")(e.target.value.replace(/[^0-9]/g, ""))}
+                      autoComplete="tel-national"
+                      flex="1"
+                      h="38px"
+                      pr="16px"
+                      pl="0"
+                      border="none"
+                      bg="transparent"
+                      borderRadius="0"
+                      fontSize="16px"
+                      fontWeight="500"
+                      color={p.fg}
+                      _focus={{ boxShadow: "none", border: "none" }}
+                      placeholder=""
+                    />
+                  </Flex>
+                </Box>
+              </Box>
 
               <Field
-                label="@handle (optional)"
+                label="@handle"
                 value={form.username}
-                onChange={upd("username")}
+                onChange={(v) => upd("username")(v.toLowerCase().replace(/[^a-z0-9._]/g, ""))}
                 p={p}
                 autoComplete="username"
+              />
+
+              <Field
+                label="Date of birth"
+                value={form.dateOfBirth}
+                onChange={upd("dateOfBirth")}
+                type="date"
+                p={p}
               />
 
               {/* Emoji avatar picker */}

@@ -16,8 +16,21 @@ interface AuthState {
 
   hydrate: () => Promise<void>;
   login: (email: string, password: string) => Promise<void>;
-  register: (p: { email: string; password: string; firstName: string; lastName: string; username?: string; avatarUrl?: string; phone?: string; referralCode?: string }, opts?: { skipStateUpdate?: boolean }) => Promise<{ user: User; accessToken: string; refreshToken: string }>;
+  register: (p: {
+    email: string;
+    password: string;
+    firstName: string;
+    lastName: string;
+    username: string;
+    country: string;
+    phoneCountryCode: string;
+    phone: string;
+    dateOfBirth: string; // YYYY-MM-DD
+    avatarUrl?: string;
+    referralCode?: string;
+  }, opts?: { skipStateUpdate?: boolean }) => Promise<{ user: User; accessToken: string; refreshToken: string }>;
   setAuthenticated: (user: User) => void;
+  updateUser: (updates: Partial<User>) => void;
   logout: () => Promise<void>;
 }
 
@@ -56,6 +69,12 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   setAuthenticated: (user) => {
     set({ user, isAuthenticated: true });
+  },
+
+  updateUser: (updates) => {
+    set((state) => ({
+      user: state.user ? { ...state.user, ...updates } : null,
+    }));
   },
 
   logout: async () => {

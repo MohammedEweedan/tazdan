@@ -8,7 +8,7 @@ export type Currency =
   // crypto
   | 'BTC' | 'ETH' | 'USDT' | 'SOL' | 'BNB' | 'XRP' | 'ADA' | 'DOGE' | 'MATIC' | 'DOT' | 'AVAX'
   // fiat
-  | 'USD' | 'EUR' | 'GBP' | 'AED' | 'SAR' | 'EGP' | 'LYD';
+  | 'USD' | 'EUR' | 'GBP' | 'AED' | 'SAR' | 'EGP';
 
 export type CurrencyKind = 'crypto' | 'fiat';
 

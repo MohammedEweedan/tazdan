@@ -80,31 +80,11 @@ export class WhatsAppController {
         
         if (message.toLowerCase().includes('balance')) {
           const balances = user.wallets.map(w => `${w.currency}: ${w.balance}`).join(', ');
-          botResponse = `${greeting}\n\nYour current balances:\n${balances}\n\nNeed help? Reply "agents" to find nearby agents or "help" for more options.`;
-        } else if (message.toLowerCase().includes('agents')) {
-          const agents = await prisma.agent.findMany({
-            where: { isActive: true },
-            orderBy: { city: 'asc' },
-          });
-          
-          if (agents.length === 0) {
-            botResponse = `${greeting}\n\nNo agents are currently available. Please check back later.`;
-          } else {
-            const agentList = agents.map((agent: any) => {
-              let info = `📍 ${agent.name} - ${agent.city}\n`;
-              info += `📞 ${agent.phone}\n`;
-              if (agent.googleMapsLink) {
-                info += `🗺️ ${agent.googleMapsLink}\n`;
-              }
-              return info;
-            }).join('\n');
-
-            botResponse = `${greeting}\n\nHere are our active agents:\n\n${agentList}\n\nVisit any agent for deposit/withdrawal services.`;
-          }
+          botResponse = `${greeting}\n\nYour current balances:\n${balances}\n\nNeed help? Reply "help" for more options.`;
         } else if (message.toLowerCase().includes('help')) {
-        botResponse = `${greeting}\n\nAvailable commands:\n• "balance" - Check your account balances\n• "agents" - Find nearby agents\n• "help" - Show this help message\n\nNeed more assistance? Contact support at support@promrkts.com`;
+        botResponse = `${greeting}\n\nAvailable commands:\n• "balance" - Check your account balances\n• "help" - Show this help message\n\nNeed more assistance? Contact support at support@promrkts.com`;
         } else {
-          botResponse = `${greeting}\n\nI received your message. Try "balance" to check your funds, "agents" to find nearby locations, or "help" for more options.`;
+          botResponse = `${greeting}\n\nI received your message. Try "balance" to check your funds, or "help" for more options.`;
         }
       } else {
         // Response for unregistered users

@@ -23,7 +23,8 @@ import { useTheme, useThemedPalette, type Palette } from '@/store/themeStore';
 import { useI18n, useT, LOCALE_META } from '@/store/i18nStore';
 
 const schema = z.object({
-  email:    z.string().email('Enter a valid email'),
+  // Can be email or handle (username)
+  email:    z.string().min(1, 'Email or handle is required'),
   password: z.string().min(8, 'At least 8 characters'),
 });
 type FormValues = z.infer<typeof schema>;
@@ -154,9 +155,9 @@ export default function Login() {
                 name="email"
                 render={({ field: { onChange, onBlur, value } }) => (
                   <Field
-                    label={t('login.email')}
+                    label="Email or @handle"
                     value={value}
-                    onChangeText={onChange}
+                    onChangeText={(v) => onChange(v.replace(/\s/g, ''))}
                     onBlur={onBlur}
                     keyboardType="email-address"
                     autoCapitalize="none"
