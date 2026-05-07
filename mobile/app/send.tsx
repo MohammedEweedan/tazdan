@@ -21,7 +21,7 @@ import { useHaptics, useWallets, extractErrorMessage } from '@/hooks';
 import { profileService, messageService } from '@/services';
 import type { Currency } from '@/types';
 
-const FIATS:  Currency[] = ['USD', 'EUR', 'GBP', 'AED', 'SAR', 'EGP', 'LYD'];
+const FIATS:  Currency[] = ['USD', 'EUR', 'GBP', 'AED', 'SAR', 'EGP'];
 const CRYPTO: Currency[] = ['BTC', 'ETH', 'USDT', 'SOL'];
 
 type Mode = 'FIAT' | 'CRYPTO';
