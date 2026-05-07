@@ -52,8 +52,9 @@ const httpServer = createServer(app);
 const ALLOWED_ORIGINS = [process.env.CLIENT_URL ?? 'https://promrkts.com',
   'https://www.promrkts.com',
   'https://api.promrkts.com',
-  'http://localhost:3003',
-  'http://localhost:5000'];
+  'http://localhost:3000',
+  'http://localhost:8081',
+  'http://localhost:5001'];
 
 const corsOrigin: cors.CorsOptions['origin'] = (origin, cb) => {
   if (!origin) return cb(null, true);                              // native apps / curl
