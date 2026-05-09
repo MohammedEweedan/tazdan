@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const api = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5001/api',
+  baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api',
   headers: {
     'Content-Type': 'application/json',
   },
@@ -298,6 +298,12 @@ export const cryptoExchangeAPI = {
     api.post<{ order: any }>('/exchange/execute', data),
   orders: (page = 1, limit = 20) => api.get(`/exchange/orders?page=${page}&limit=${limit}`),
   order: (id: string) => api.get(`/exchange/orders/${id}`),
+  /** DEX crypto→crypto quote via 1inch aggregator (read-only, no funds move). */
+  dexQuote: (params: { fromToken: string; toToken: string; amount: string; chain?: 'ETH' | 'BNB' | 'POLYGON' | 'AVAX' }) =>
+    api.get<{ quote: {
+      fromToken: string; toToken: string; fromAmount: string;
+      toAmount: string; estimatedGas: number; protocols: string[]; chainId: number;
+    } }>('/exchange/dex/quote', { params }),
 };
 
 export const cryptoWithdrawalAPI = {
@@ -306,6 +312,15 @@ export const cryptoWithdrawalAPI = {
   estimateFee: (asset: string, network: string) =>
     api.get<{ asset: string; estimate: string }>(`/withdrawal/estimate-fee?asset=${asset}&network=${network}`),
   history: (page = 1, limit = 20) => api.get(`/withdrawal/history?page=${page}&limit=${limit}`),
+};
+
+// Markets (public — no auth)
+export const marketsAPI = {
+  tickers: () => api.get<{ tickers: Array<{
+    symbol: string; base: string; quote: string; displayName: string;
+    price: number; changePct24h: number; volume24h: number; sparkline: number[];
+  }> }>('/markets/ticker'),
+  listings: () => api.get('/markets/listings'),
 };
 
 // Export

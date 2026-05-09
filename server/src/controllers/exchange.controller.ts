@@ -10,6 +10,7 @@ import {
   type SupportedAsset,
 } from '../services/exchange/priceEngine.service';
 import { executeQuote } from '../services/exchange/orderExecution.service';
+import { getDexQuote, SUPPORTED_CHAINS, type ChainId } from '../services/dex/oneinch';
 
 const quoteSchema = z.object({
   asset: z.string().min(1).max(20).transform((s) => s.toUpperCase()),
@@ -156,6 +157,40 @@ export class ExchangeController {
       if (!order) throw new AppError('Order not found', 404);
       res.json({ order });
     } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * GET /api/exchange/dex/quote?fromToken=ETH&toToken=USDT&amount=1000000000000000000&chain=ETH
+   *
+   * Returns the best on-chain swap quote from the 1inch aggregator.
+   * `amount` must be in the source token's smallest unit (wei for ETH).
+   * `chain` must be one of: ETH, BNB, POLYGON, AVAX (defaults to ETH).
+   *
+   * This is a read-only price check — no funds move. Use the
+   * onchainSettlement service to execute the actual swap.
+   */
+  static async getDexQuote(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const fromToken = String(req.query.fromToken ?? '').toUpperCase();
+      const toToken   = String(req.query.toToken   ?? '').toUpperCase();
+      const amount    = String(req.query.amount ?? '');
+      const chain     = String(req.query.chain ?? 'ETH').toUpperCase();
+
+      if (!fromToken || !toToken) throw new AppError('fromToken and toToken are required', 400);
+      if (!amount || isNaN(Number(amount)) || Number(amount) <= 0) {
+        throw new AppError('amount must be a positive integer (token native units)', 400);
+      }
+
+      const chainId = (SUPPORTED_CHAINS[chain] ?? 1) as ChainId;
+      const quote = await getDexQuote({ fromToken, toToken, amount, chainId });
+
+      res.json({ quote });
+    } catch (error: any) {
+      if (error?.response?.status === 400) {
+        return next(new AppError(error.response.data?.description ?? 'DEX quote failed', 400));
+      }
       next(error);
     }
   }

@@ -117,7 +117,12 @@ export function BuyWidget() {
     (async () => {
       try {
         const res = await walletAPI.getAll();
-        setHoldings(res.data || []);
+        const nextHoldings = Array.isArray(res.data)
+          ? res.data
+          : Array.isArray(res.data?.wallets)
+            ? res.data.wallets
+            : [];
+        setHoldings(nextHoldings);
       } catch (e) {
         console.error('Failed to fetch holdings:', e);
       }

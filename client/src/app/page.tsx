@@ -35,7 +35,7 @@ import {
   FiBell, FiPlus, FiDownload, FiDollarSign, FiMessageCircle, FiUser,
   FiChevronLeft, FiChevronRight, FiMoreHorizontal, FiSmile, FiArrowUp,
 } from "react-icons/fi";
-import { FaApplePay, FaGooglePay, FaCcVisa, FaCcMastercard, FaPaypal } from "react-icons/fa";
+import { FaApple, FaGooglePlay, FaApplePay, FaGooglePay, FaCcVisa, FaCcMastercard, FaPaypal } from "react-icons/fa";
 import { SiRevolut } from "react-icons/si";
 import {
   motion, useScroll, useTransform, useMotionValue,
@@ -1768,10 +1768,11 @@ export default function LandingPage() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const { scrollYProgress: totalProgress } = useScroll({ target: scrollRef, offset: ["start start", "end end"] });
 
-  const titleOpacity = useTransform(totalProgress, [0, 0.18, 0.08], [1, 1, 0]);
-  const titleY       = useTransform(totalProgress, [0, 0.08], [0, -40]);
-  const phoneOpacity = useTransform(totalProgress, [0, 0.05], [1, 1]);
-  const phoneY       = useTransform(totalProgress, [0, 0.15], [0, 0]);
+  const titleOpacity   = useTransform(totalProgress, [0, 0.18, 0.08], [1, 1, 0]);
+  const titleY         = useTransform(totalProgress, [0, 0.08], [0, -40]);
+  const phoneOpacity   = useTransform(totalProgress, [0, 0.05], [1, 1]);
+  const phoneY         = useTransform(totalProgress, [0, 0.15], [0, 0]);
+  const heroCTAOpacity = useTransform(totalProgress, [0, 0.07], [1, 0]);
 
   const unlockProgress     = useMotionValue(0);
   const stageOverlayOpacity = useMotionValue(0);
@@ -1813,41 +1814,46 @@ export default function LandingPage() {
         <Box position="sticky" top={0} h="100vh" overflow="hidden">
 
           {/* Title */}
-          <motion.div style={{ opacity: titleOpacity, y: titleY, position: "absolute", top: -25, left: 0, right: 0, paddingTop: "140px", zIndex: 4, pointerEvents: "none" }}>
+          <motion.div style={{ opacity: titleOpacity, y: titleY, position: "absolute", top: -25, left: 0, right: 0, paddingTop: "140px", zIndex: 4 }}>
             <Container maxW="1200px" position="relative">
-              <Flex
-                justify="center"
-                align="baseline"
-                wrap="nowrap"
-                gap={{ base: "0.42em", md: "0.925em" }}
-                dir={isAr ? "rtl" : "ltr"}
-              >
-                {[t("hero_line1"), t("hero_line2")].map((line, idx) => (
-                  <Heading
-                    key={idx}
-                    as="h1"
-                    fontFamily="'DM Sans', sans-serif"
-                    fontWeight="900"
-                    fontSize={{ base: "38px", sm: "44px", md: "54px", xl: "62px" }}
-                    letterSpacing="-0.05em"
-                    whiteSpace="nowrap"
-                    sx={idx === 1 ? {
-                      background: dark
-                        ? "linear-gradient(90deg, #7ab3f0 0%, #4a8fe0 35%, #a8c8ff 65%, #7ab3f0 100%)"
-                        : "linear-gradient(90deg, #1a5fb4 0%, #4a8fe0 35%, #2563a8 65%, #1a5fb4 100%)",
-                      backgroundSize: "200% auto",
-                      WebkitBackgroundClip: "text",
-                      WebkitTextFillColor: "transparent",
-                      backgroundClip: "text",
-                      filter: dark
-                        ? "drop-shadow(0 0 28px rgba(74,143,224,0.5)) drop-shadow(0 0 8px rgba(74,143,224,0.25))"
-                        : "drop-shadow(0 0 16px rgba(74,143,224,0.3)) drop-shadow(0 0 4px rgba(74,143,224,0.15))",
-                    } : {}}
-                  >
-                    {line}
-                  </Heading>
-                ))}
-              </Flex>
+              <VStack spacing={{ base: 3, md: 4 }} align="center">
+
+                {/* Main headline */}
+                <Flex
+                  justify="center"
+                  align="baseline"
+                  wrap="nowrap"
+                  gap={{ base: "0.42em", md: "0.925em" }}
+                  dir={isAr ? "rtl" : "ltr"}
+                  style={{ pointerEvents: "none" }}
+                >
+                  {[t("hero_line1"), t("hero_line2")].map((line, idx) => (
+                    <Heading
+                      key={idx}
+                      as="h1"
+                      fontFamily="'DM Sans', sans-serif"
+                      fontWeight="900"
+                      fontSize={{ base: "38px", sm: "44px", md: "54px", xl: "62px" }}
+                      letterSpacing="-0.05em"
+                      whiteSpace="nowrap"
+                      sx={idx === 1 ? {
+                        background: dark
+                          ? "linear-gradient(90deg, #7ab3f0 0%, #4a8fe0 35%, #a8c8ff 65%, #7ab3f0 100%)"
+                          : "linear-gradient(90deg, #1a5fb4 0%, #4a8fe0 35%, #2563a8 65%, #1a5fb4 100%)",
+                        backgroundSize: "200% auto",
+                        WebkitBackgroundClip: "text",
+                        WebkitTextFillColor: "transparent",
+                        backgroundClip: "text",
+                        filter: dark
+                          ? "drop-shadow(0 0 28px rgba(74,143,224,0.5)) drop-shadow(0 0 8px rgba(74,143,224,0.25))"
+                          : "drop-shadow(0 0 16px rgba(74,143,224,0.3)) drop-shadow(0 0 4px rgba(74,143,224,0.15))",
+                      } : {}}
+                    >
+                      {line}
+                    </Heading>
+                  ))}
+                </Flex>
+              </VStack>
             </Container>
           </motion.div>
 
@@ -1862,21 +1868,103 @@ export default function LandingPage() {
           <motion.div style={{ opacity: stageOverlayOpacity, position: "absolute", inset: 0, zIndex: 3, pointerEvents: "none" }}>
             <StageOverlay stages={stages} />
           </motion.div>
+
+          {/* Apple-style bottom CTA strip — visible at rest, fades on scroll */}
+          <Box position="absolute" bottom={{ base: 7, md: 12 }} left={0} right={0} zIndex={5} style={{ pointerEvents: "none" }}>
+            <motion.div style={{ opacity: heroCTAOpacity }}>
+              <VStack spacing={{ base: 3, md: 4 }} align="center" style={{ pointerEvents: "auto" }}>
+                {/* Tagline */}
+                <Text
+                  fontSize={{ base: "13.5px", md: "15px" }}
+                  color={dark ? "rgba(255,255,255,0.5)" : "rgba(0,0,0,0.45)"}
+                  fontWeight="500" letterSpacing="-0.01em" textAlign="center"
+                >
+                  {t("hero_subtitle")}
+                </Text>
+
+                {/* Primary + secondary CTAs */}
+                <HStack spacing={{ base: 3, md: 5 }} justify="center" flexWrap="wrap">
+                  <Button
+                    as={NextLink} href="/register"
+                    h={{ base: "46px", md: "52px" }} px={{ base: 7, md: 9 }}
+                    bg={dark ? "#ffffff" : "#000000"}
+                    color={dark ? "#000000" : "#ffffff"}
+                    borderRadius="full" fontWeight="800"
+                    fontSize={{ base: "14px", md: "15px" }}
+                    rightIcon={<Icon as={FiArrowRight} boxSize={4} />}
+                    _hover={{ transform: "scale(1.03)", opacity: 0.92 }}
+                    transition="all 0.18s"
+                    boxShadow={dark
+                      ? "0 12px 32px rgba(255,255,255,0.15)"
+                      : "0 12px 32px rgba(0,0,0,0.20)"}
+                  >
+                    {t("hero_cta_primary")}
+                  </Button>
+                  <Button
+                    as={NextLink} href="#connect"
+                    h={{ base: "46px", md: "52px" }} px={{ base: 5, md: 6 }}
+                    variant="ghost" color={textMain} borderRadius="full"
+                    fontWeight="700" fontSize={{ base: "14px", md: "15px" }}
+                    opacity={0.7}
+                    _hover={{ opacity: 1 }}
+                    rightIcon={
+                      <Icon as={FiArrowRight} boxSize={4}
+                        style={{ transform: "rotate(90deg)", display: "inline-block" }}
+                      />
+                    }
+                  >
+                    {t("hero_cta_secondary")}
+                  </Button>
+                </HStack>
+
+                {/* App store badges */}
+                <HStack spacing={2.5} justify="center">
+                  {[
+                    { store: "App Store", icon: FaApple },
+                    { store: "Google Play", icon: FaGooglePlay },
+                  ].map((b) => (
+                    <HStack key={b.store}
+                      bg={dark ? "rgba(255,255,255,0.09)" : "rgba(0,0,0,0.06)"}
+                      border="1px solid"
+                      borderColor={dark ? "rgba(255,255,255,0.16)" : "rgba(0,0,0,0.10)"}
+                      borderRadius="12px" px={4} h="42px" spacing={2.5} cursor="pointer"
+                      _hover={{ bg: dark ? "rgba(255,255,255,0.14)" : "rgba(0,0,0,0.10)" }}
+                      transition="background 0.15s"
+                    >
+                      <Icon as={b.icon} boxSize="18px" color={textMain} flexShrink={0} />
+                      <VStack spacing={0} align="start">
+                        <Text fontSize="13px" color={textMain} fontWeight="800" letterSpacing="-0.01em">{b.store}</Text>
+                      </VStack>
+                    </HStack>
+                  ))}
+                </HStack>
+              </VStack>
+            </motion.div>
+          </Box>
         </Box>
       </Box>
 
       {/* ══ CONNECTED ══ */}
-      <Box className="snap-section" id="connect" py={{ base: 16, md: 24 }} position="relative" minH="100vh" display="flex" alignItems="center">
-        <Box position="absolute" inset={0} zIndex={0} pointerEvents="none"
-          style={{ maskImage: "radial-gradient(ellipse at center, black 1%, transparent 60%)", WebkitMaskImage: "radial-gradient(ellipse at center, black 15%, transparent 60%)" }}
-        >
-          {/* Desaturated video */}
-          <LazyBackgroundVideo src="/videos/WebHeader.mp4" 
-          />
+      <Box className="snap-section" id="connect" position="relative" minH="100vh" display="flex" alignItems="center" overflow="hidden">
+        {/* Full-bleed background video */}
+        <Box position="absolute" inset={0} zIndex={0} pointerEvents="none">
+          <LazyBackgroundVideo src="/videos/WebHeader.mp4" opacity={dark ? 0.32 : 0.14} />
         </Box>
-        <VStack position="relative" zIndex={20} spacing={8} maxW="720px" mx="auto" textAlign="center" px={6}>
-          <Box p={6} borderColor={cardBorder}>
-            <NextImage src={dark ? "/icon-black.png" : "/icon-black.png"} alt="Logo" width={60} height={60} />
+        {/* Radial gradient — keeps edges dark so text reads cleanly */}
+        <Box position="absolute" inset={0} zIndex={1} pointerEvents="none"
+          background={dark
+            ? "radial-gradient(ellipse 90% 90% at 50% 50%, rgba(0,0,0,0.10) 0%, rgba(0,0,0,0.82) 100%)"
+            : "radial-gradient(ellipse 90% 90% at 50% 50%, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.90) 100%)"}
+        />
+        <VStack position="relative" zIndex={20} spacing={8} maxW="760px" mx="auto" textAlign="center" px={6} py={{ base: 24, md: 32 }}>
+          <Box
+            w="72px" h="72px" borderRadius="20px"
+            bg={dark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.05)"}
+            border="1px solid" borderColor={cardBorder}
+            display="flex" alignItems="center" justifyContent="center"
+            boxShadow={dark ? "0 8px 32px rgba(0,0,0,0.4)" : "0 8px 24px rgba(0,0,0,0.06)"}
+          >
+            <NextImage src={dark ? "/icon-black.png" : "/icon-black.png"} alt="Logo" width={40} height={40} />
           </Box>
           <Heading fontSize={{ base: "36px", md: "64px" }} fontWeight="800" letterSpacing="-0.04em" fontFamily="'DM Sans', sans-serif" bgGradient={dark
                         ? "linear-gradient(90deg, #7ab3f0 0%, #4a8fe0 35%, #a8c8ff 65%, #7ab3f0 100%)"
@@ -1972,6 +2060,27 @@ export default function LandingPage() {
               >
                 {t("cta_btn")}
               </Button>
+              {/* App store download badges */}
+              <HStack spacing={3} justify="center" pt={2}>
+                {[
+                  { store: "App Store", icon: FaApple },
+                  { store: "Google Play", icon: FaGooglePlay },
+                ].map((b) => (
+                  <HStack key={b.store}
+                    bg={dark ? "rgba(0,0,0,0.10)" : "rgba(255,255,255,0.14)"}
+                    border="1px solid"
+                    borderColor={dark ? "rgba(0,0,0,0.18)" : "rgba(255,255,255,0.22)"}
+                    borderRadius="4px" px={4} h={8} spacing={2.5} cursor="pointer"
+                    _hover={{ bg: dark ? "rgba(0,0,0,0.18)" : "rgba(255,255,255,0.22)" }}
+                    transition="background 0.15s"
+                  >
+                    <Icon as={b.icon} color={dark ? "#000000" : "#ffffff"} flexShrink={0} />
+                    <VStack spacing={0} align="start">
+                      <Text color={dark ? "#000000" : "#ffffff"} fontWeight="800" letterSpacing="-0.01em">{b.store}</Text>
+                    </VStack>
+                  </HStack>
+                ))}
+              </HStack>
             </VStack>
           </Box>
         </Box>

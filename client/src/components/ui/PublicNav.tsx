@@ -21,7 +21,7 @@ import {
   useColorMode,
   useDisclosure,
 } from "@chakra-ui/react";
-import { FiMenu, FiArrowRight, FiChevronRight, FiLogOut } from "react-icons/fi";
+import { FiMenu, FiArrowRight, FiChevronRight, FiLogOut, FiSettings, FiCamera } from "react-icons/fi";
 import { useTranslate } from "@tolgee/react";
 import Logo from "@/components/ui/Logo";
 import ColorModeToggle from "@/components/ui/ColorModeToggle";
@@ -41,6 +41,9 @@ export default function PublicNav() {
   const { isOpen, onOpen, onClose } = useDisclosure();
   const [scrolled, setScrolled] = useState(false);
   const { user, isAuthenticated, logout } = useAuthStore();
+  const handle   = user?.username ?? user?.email?.split('@')[0] ?? 'me';
+  const initial  = (user?.firstName?.[0] ?? user?.email?.[0] ?? 'P').toUpperCase();
+  const userEmoji = (user as any)?.avatarUrl as string | undefined;
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 12);
@@ -165,9 +168,37 @@ export default function PublicNav() {
           <ColorModeToggle />
           {isAuthenticated ? (
             <>
-              <Text fontSize="13px" fontWeight="600" color={textMain}>
-                Hi, {user?.firstName || user?.email?.split('@')[0]}
-              </Text>
+              {/* Avatar + @handle */}
+              <Flex as={NextLink} href="/" align="center" gap={1.5} cursor="pointer"
+                _hover={{ opacity: 0.75 }} transition="opacity 0.15s">
+                <Flex
+                  w="28px" h="28px" borderRadius="full" flexShrink={0} overflow="hidden"
+                  bg={userEmoji ? (dark ? "#1a1a1a" : "#f5f5f7") : "#7c3aed"}
+                  border={userEmoji ? `1px solid ${pillBorder}` : "none"}
+                  align="center" justify="center"
+                >
+                  {userEmoji
+                    ? <Text fontSize="15px" lineHeight={1}>{userEmoji}</Text>
+                    : <Text color="#fff" fontWeight="800" fontSize="12px" lineHeight={1}>{initial}</Text>}
+                </Flex>
+                <Text fontSize="13px" fontWeight="700" color={textMain}>@{handle}</Text>
+              </Flex>
+              {/* Settings */}
+              <Flex as={NextLink} href="/dashboard/settings"
+                w="32px" h="32px" borderRadius="full"
+                bg={pillBg} border="1px solid" borderColor={pillBorder}
+                align="center" justify="center" cursor="pointer"
+                _hover={{ opacity: 0.75 }} transition="opacity 0.15s">
+                <Icon as={FiSettings} boxSize={3.5} color={textMain} />
+              </Flex>
+              {/* QR / Receive */}
+              <Flex as={NextLink} href="/"
+                w="32px" h="32px" borderRadius="full"
+                bg={pillBg} border="1px solid" borderColor={pillBorder}
+                align="center" justify="center" cursor="pointer"
+                _hover={{ opacity: 0.75 }} transition="opacity 0.15s">
+                <Icon as={FiCamera} boxSize={3.5} color={textMain} />
+              </Flex>
               <Button
                 size="sm"
                 variant="ghost"
@@ -216,11 +247,41 @@ export default function PublicNav() {
         </HStack>
 
         {/* Mobile right cluster */}
-        <HStack spacing={1} display={{ base: "flex", md: "none" }} ms="auto">
+        <HStack spacing={1.5} display={{ base: "flex", md: "none" }} ms="auto">
           {isAuthenticated ? (
-            <Text fontSize="12.5px" fontWeight="600" color={textMain}>
-              Hi, {user?.firstName || user?.email?.split('@')[0]}
-            </Text>
+            <>
+              {/* Avatar + @handle */}
+              <Flex as={NextLink} href="/" align="center" gap={1.5} cursor="pointer"
+                _hover={{ opacity: 0.75 }} transition="opacity 0.15s" mr={0.5}>
+                <Flex
+                  w="26px" h="26px" borderRadius="full" flexShrink={0} overflow="hidden"
+                  bg={userEmoji ? (dark ? "#1a1a1a" : "#f5f5f7") : "#7c3aed"}
+                  border={userEmoji ? `1px solid ${pillBorder}` : "none"}
+                  align="center" justify="center"
+                >
+                  {userEmoji
+                    ? <Text fontSize="13px" lineHeight={1}>{userEmoji}</Text>
+                    : <Text color="#fff" fontWeight="800" fontSize="10px" lineHeight={1}>{initial}</Text>}
+                </Flex>
+                <Text fontSize="12px" fontWeight="700" color={textMain} noOfLines={1} maxW="70px">@{handle}</Text>
+              </Flex>
+              {/* Settings */}
+              <Flex as={NextLink} href="/dashboard/settings"
+                w="30px" h="30px" borderRadius="full"
+                bg={pillBg} border="1px solid" borderColor={pillBorder}
+                align="center" justify="center" cursor="pointer"
+                _hover={{ opacity: 0.75 }} transition="opacity 0.15s">
+                <Icon as={FiSettings} boxSize={3.5} color={textMain} />
+              </Flex>
+              {/* QR / Receive */}
+              <Flex as={NextLink} href="/"
+                w="30px" h="30px" borderRadius="full"
+                bg={pillBg} border="1px solid" borderColor={pillBorder}
+                align="center" justify="center" cursor="pointer"
+                _hover={{ opacity: 0.75 }} transition="opacity 0.15s">
+                <Icon as={FiCamera} boxSize={3.5} color={textMain} />
+              </Flex>
+            </>
           ) : (
             <Button
               as={NextLink}

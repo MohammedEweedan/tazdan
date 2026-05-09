@@ -386,6 +386,10 @@ export const cardsService = {
     async () => (await api.get('/cards')).data.cards,
     MOCK_CARDS,
   ),
+  issue: async (payload: { tier: 'STARTER' | 'PRO' | 'MASTER'; colorway: CardEntity['colorway'] }): Promise<CardEntity> => {
+    const { data } = await api.post('/cards/issue', payload);
+    return data.card;
+  },
   freeze:   (id: string) => api.post(`/cards/${id}/freeze`),
   unfreeze: (id: string) => api.post(`/cards/${id}/unfreeze`),
   transactions: (id: string): Promise<CardTransaction[]> =>

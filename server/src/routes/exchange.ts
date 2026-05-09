@@ -31,8 +31,12 @@ const executeLimiter = rateLimit({
 exchangeRouter.get('/rates', ExchangeController.getRates);
 exchangeRouter.get('/rates/:base/:quote', ExchangeController.getRatePair);
 
-// Custody trading.
+// Custody trading (fiat ↔ crypto via Binance liquidity).
 exchangeRouter.post('/quote',       authenticate, quoteLimiter,   ExchangeController.createQuote);
 exchangeRouter.post('/execute',     authenticate, executeLimiter, ExchangeController.executeOrder);
 exchangeRouter.get ('/orders',      authenticate,                 ExchangeController.listOrders);
 exchangeRouter.get ('/orders/:id',  authenticate,                 ExchangeController.getOrder);
+
+// DEX aggregator (crypto ↔ crypto on-chain via 1inch — read-only quote).
+// Rate-limit: same quoteLimiter (5/min per user) is sufficient for a preview endpoint.
+exchangeRouter.get('/dex/quote', authenticate, quoteLimiter, ExchangeController.getDexQuote);

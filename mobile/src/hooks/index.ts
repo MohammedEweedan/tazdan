@@ -9,6 +9,7 @@ import {
   walletService, transactionService, marketsService, p2pService, cardsService,
   swapService, profileService, notificationService,
 } from '@/services';
+import { useBinanceLive } from './useLivePrice';
 
 export { useHaptics } from './useHaptics';
 export {
@@ -37,12 +38,28 @@ export const useTransactions = (page = 1) =>
     queryFn: () => transactionService.list(page),
   });
 
-export const useMarkets = () =>
-  useQuery({
+export const useMarkets = () => {
+  const live = useBinanceLive();
+  const query = useQuery({
     queryKey: QUERY_KEYS.markets,
     queryFn: marketsService.tickers,
-    refetchInterval: 8_000,    // 8s polling per spec
+    refetchInterval: 30_000,
   });
+
+  return {
+    ...query,
+    data: query.data?.map((ticker) => {
+      const lp = live[ticker.base];
+      if (!lp) return ticker;
+      return {
+        ...ticker,
+        price: lp.price,
+        changePct24h: lp.changePct24h,
+        volume24h: lp.volume24h,
+      };
+    }),
+  };
+};
 
 export const useP2POffers = (filter: 'BUY' | 'SELL' | 'ALL' = 'ALL') =>
   useQuery({

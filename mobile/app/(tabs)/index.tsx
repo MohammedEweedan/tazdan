@@ -19,8 +19,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 
 import { useAuthStore } from '@/store/authStore';
-import { useWallets, useHaptics, useTransactions, useUnreadCount } from '@/hooks';
-import { useMarkets as useGeckoMarkets, ID_TO_SYM } from '@/hooks/useMarkets';
+import { useWallets, useHaptics, useTransactions, useUnreadCount, useMarkets } from '@/hooks';
 import { useTheme, useThemedPalette, type Palette } from '@/store/themeStore';
 import { formatFiat } from '@/utils/format';
 import { Sparkline } from '@/components/ui/Sparkline';
@@ -48,14 +47,17 @@ export default function Home() {
   const [sendModalVisible, setSendModalVisible] = useState(false);
   const [receiveModalVisible, setReceiveModalVisible] = useState(false);
   const [depositModalVisible, setDepositModalVisible] = useState(false);
+  const [swapModalVisible, setSwapModalVisible] = useState(false);
+  const [withdrawModalVisible, setWithdrawModalVisible] = useState(false);
+  const [moreMenuVisible, setMoreMenuVisible] = useState(false);
 
   const list = wallets ?? [];
 
   // Live USD price map keyed by ticker (e.g. { BTC: 67_432.10, ETH: 3_240.50 }).
-  // Computed from CoinGecko + 60s REST poll. We re-derive `totalUsd` from
+  // Computed from Binance WebSocket + backend ticker overlay. We re-derive `totalUsd` from
   // these so the home balance fluctuates in real time exactly like the
   // asset detail screen.
-  const { data: gecko, refetch: refetchMarkets } = useGeckoMarkets();
+  const { data: tickers, refetch: refetchMarkets } = useMarkets();
 
   // Pull-to-refresh — refetches every live data source the home screen
   // depends on. Triggers a haptic tap on release for that polished feel.
@@ -71,44 +73,40 @@ export default function Home() {
   };
   const priceMap = useMemo(() => {
     const map: Partial<Record<Currency, number>> = {};
-    if (Array.isArray(gecko)) {
-      gecko.forEach((m) => {
-        const sym = ID_TO_SYM[m.id];
-        if (sym) map[sym] = m.current_price;
+    if (Array.isArray(tickers)) {
+      tickers.forEach((m) => {
+        map[m.base] = m.price;
       });
     }
     return map;
-  }, [gecko]);
+  }, [tickers]);
 
-  // Per-asset 7d sparkline (already-real CoinGecko data) so each asset row
-  // can render a mini chart between the name and the price — same data
-  // source as the asset-detail screen, just downsampled inline.
+  // Per-asset 7d sparkline (from backend ticker) so each asset row
+  // can render a mini chart between the name and the price.
   const sparklineMap = useMemo(() => {
     const map: Partial<Record<Currency, number[]>> = {};
-    if (Array.isArray(gecko)) {
-      gecko.forEach((m) => {
-        const sym = ID_TO_SYM[m.id];
-        const points = m.sparkline_in_7d?.price;
-        if (!sym || !Array.isArray(points) || points.length < 2) return;
+    if (Array.isArray(tickers)) {
+      tickers.forEach((m) => {
+        const points = m.sparkline;
+        if (!Array.isArray(points) || points.length < 2) return;
         // Keep ~32 points — enough for a smooth curve at row size.
         const stride = Math.max(1, Math.floor(points.length / 32));
-        map[sym] = points.filter((_, i) => i % stride === 0);
+        map[m.base] = points.filter((_, i) => i % stride === 0);
       });
     }
     return map;
-  }, [gecko]);
+  }, [tickers]);
 
   // 24h change map — colors the sparkline green/red per-asset.
   const changeMap = useMemo(() => {
     const map: Partial<Record<Currency, number>> = {};
-    if (Array.isArray(gecko)) {
-      gecko.forEach((m) => {
-        const sym = ID_TO_SYM[m.id];
-        if (sym) map[sym] = m.price_change_percentage_24h ?? 0;
+    if (Array.isArray(tickers)) {
+      tickers.forEach((m) => {
+        map[m.base] = m.changePct24h ?? 0;
       });
     }
     return map;
-  }, [gecko]);
+  }, [tickers]);
 
   // "Assets" tab only shows wallets the user actually holds. This turns
   // the implicit "you have 7 empty wallets" into the correct "no assets
@@ -154,16 +152,20 @@ export default function Home() {
   // Aggregate 24h change weighted by USD exposure so the green/red pill
   // truly reflects today's portfolio move.
   const deltaPct = useMemo(() => {
-    if (totalUsd <= 0 || !gecko) return 0;
+    if (totalUsd <= 0 || !tickers || tickers.length === 0) return 0;
     let weightedChange = 0;
+    let totalCryptoExposure = 0;
     list.forEach((w) => {
-      const m = (gecko ?? []).find((g) => ID_TO_SYM[g.id] === w.currency);
-      if (!m) return;
-      const exposure = Number(w.balance) * m.current_price;
-      weightedChange += (exposure / totalUsd) * (m.price_change_percentage_24h ?? 0);
+      const m = tickers.find((t) => t.base === w.currency);
+      if (!m || m.changePct24h === undefined || m.changePct24h === 0) return;
+      const exposure = Number(w.balance) * m.price;
+      weightedChange += exposure * m.changePct24h;
+      totalCryptoExposure += exposure;
     });
-    return weightedChange;
-  }, [list, gecko, totalUsd]);
+    // Use total crypto exposure as denominator, not totalUsd (which includes fiat)
+    if (totalCryptoExposure <= 0) return 0;
+    return weightedChange / totalCryptoExposure;
+  }, [list, tickers, totalUsd]);
   const deltaUsd = (totalUsd * deltaPct) / 100;
   const positive = deltaPct >= 0;
 
@@ -174,28 +176,36 @@ export default function Home() {
   const ACTIONS: ActionDef[] = [
     { key: 'buy',     icon: 'add',                   label: 'Buy',     onPress: () => setBuyModalVisible(true) },
     { key: 'sell',    icon: 'cash-outline',          label: 'Sell',    onPress: () => setSellModalVisible(true) },
-    { key: 'send',    icon: 'paper-plane-outline',   label: 'Send',    onPress: () => setSendModalVisible(true) },
     { key: 'receive', icon: 'qr-code-outline',       label: 'Receive', onPress: () => setReceiveModalVisible(true) },
-    { key: 'deposit', icon: 'arrow-down',            label: 'Deposit', onPress: () => setDepositModalVisible(true) },
+    { key: 'more',    icon: 'ellipsis-horizontal',   label: 'More',    onPress: () => setMoreMenuVisible(true) },
   ];
 
   return (
-    <View style={{ flex: 1, backgroundColor: p.bg }}>
-      <StatusBar style={themeMode === 'dark' ? 'light' : 'dark'} />
+    <View style={{ flex: 1, backgroundColor: '#4a8fe0' }}>
+      <StatusBar style="light" />
       <SafeAreaView style={{ flex: 1 }} edges={['top']}>
         <ScrollView
           showsVerticalScrollIndicator={false}
+          style={{ backgroundColor: p.bg }}
           contentContainerStyle={{ paddingBottom: 140 }}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
               onRefresh={onRefresh}
-              tintColor={p.fg}
-              colors={[p.fg]}
-              progressBackgroundColor={p.bgElev}
+              tintColor="#ffffff"
+              colors={['#ffffff']}
+              progressBackgroundColor="rgba(255,255,255,0.2)"
             />
           }
         >
+          {/* Blue hero card */}
+          <View style={{
+            backgroundColor: '#4a8fe0',
+            borderBottomLeftRadius: 32,
+            borderBottomRightRadius: 32,
+            overflow: 'hidden',
+          }}>
+           
           {/* Header */}
           <View style={{
             flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
@@ -208,10 +218,10 @@ export default function Home() {
             >
               <View style={{
                 width: 36, height: 36, borderRadius: 18,
-                backgroundColor: userEmoji ? (themeMode === 'dark' ? '#1a1d27' : '#f5f5f7') : (themeMode === 'dark' ? '#a78bfa' : '#7c3aed'),
+                backgroundColor: userEmoji ? 'rgba(255,255,255,0.18)' : '#7c3aed',
                 alignItems: 'center', justifyContent: 'center',
                 borderWidth: userEmoji ? 1 : 0,
-                borderColor: userEmoji ? (themeMode === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.09)') : 'transparent',
+                borderColor: 'rgba(255,255,255,0.30)',
               }}>
                 {userEmoji ? (
                   <Text style={{ fontSize: 20 }}>{userEmoji}</Text>
@@ -219,7 +229,7 @@ export default function Home() {
                   <Text style={{ color: '#fff', fontWeight: '800', fontSize: 16 }}>{initial}</Text>
                 )}
               </View>
-              <Text style={{ color: p.fg, fontSize: 17, fontWeight: '700', letterSpacing: -0.3 }}>
+              <Text style={{ color: '#ffffff', fontSize: 17, fontWeight: '700', letterSpacing: -0.3 }}>
                 @{handle}
               </Text>
             </Pressable>
@@ -229,11 +239,11 @@ export default function Home() {
                 hitSlop={6}
                 style={{
                   width: 36, height: 36, borderRadius: 18,
-                  backgroundColor: p.pillBg, borderWidth: 1, borderColor: p.border,
+                  backgroundColor: 'rgba(255,255,255,0.18)',
                   alignItems: 'center', justifyContent: 'center',
                 }}
               >
-                <Ionicons name="notifications-outline" size={17} color={p.fg} />
+                <Ionicons name="notifications-outline" size={17} color="#ffffff" />
                 {(unreadData ?? 0) > 0 && (
                   <View style={{
                     position: 'absolute',
@@ -254,11 +264,11 @@ export default function Home() {
                 hitSlop={6}
                 style={{
                   width: 36, height: 36, borderRadius: 18,
-                  backgroundColor: p.pillBg, borderWidth: 1, borderColor: p.border,
+                  backgroundColor: 'rgba(255,255,255,0.18)',
                   alignItems: 'center', justifyContent: 'center',
                 }}
               >
-                <Ionicons name="scan-outline" size={18} color={p.fg} />
+                <Ionicons name="scan-outline" size={18} color="#ffffff" />
               </Pressable>
             </View>
           </View>
@@ -271,7 +281,7 @@ export default function Home() {
             paddingHorizontal: 24, marginTop: 6,
           }}>
             <Text style={{
-              color: positive ? p.greenFg : p.redFg,
+              color: '#ffffff',
               fontSize: 14, fontWeight: '600', fontVariant: ['tabular-nums'],
             }}>
               {positive ? '+' : '-'}${formatFiat(Math.abs(deltaUsd))}
@@ -279,11 +289,11 @@ export default function Home() {
             <View style={{
               flexDirection: 'row', alignItems: 'center', gap: 4,
               paddingHorizontal: 8, paddingVertical: 3, borderRadius: 7,
-              backgroundColor: positive ? p.greenBg : 'rgba(239,68,68,0.16)',
+              backgroundColor: 'rgba(255,255,255,0.2)',
             }}>
-              <Ionicons name={positive ? 'caret-up' : 'caret-down'} size={9} color={positive ? p.greenFg : p.redFg} />
+              <Ionicons name={positive ? 'caret-up' : 'caret-down'} size={9} color="#ffffff" />
               <Text style={{
-                color: positive ? p.greenFg : p.redFg,
+                color: '#ffffff',
                 fontSize: 12, fontWeight: '700',
               }}>
                 {Math.abs(deltaPct).toFixed(2)}%
@@ -291,11 +301,12 @@ export default function Home() {
             </View>
           </View>
 
-          {/* ── 5 ACTION BUTTONS ── */}
+          {/* ── 4 ACTION BUTTONS ── */}
           <View style={{
             flexDirection: 'row',
             paddingHorizontal: 16, marginTop: 28,
-            gap: 4,
+            gap: 8,
+            paddingBottom: 32,
           }}>
             {ACTIONS.map((a) => (
               <ActionButton
@@ -308,11 +319,12 @@ export default function Home() {
               />
             ))}
           </View>
+          </View>{/* end blue hero card */}
 
           {/* Tabs - center-aligned */}
           <View style={{
             flexDirection: 'row', gap: 32,
-            paddingHorizontal: 24, marginTop: 32,
+            paddingHorizontal: 24, marginTop: 20,
             justifyContent: 'center',
           }}>
             <TabBtn label="Assets"   active={tab === 'ASSETS'}   palette={p} onPress={() => { h.selection(); setTab('ASSETS'); }} />
@@ -586,6 +598,96 @@ export default function Home() {
           </Pressable>
         </KeyboardAvoidingView>
       </Modal>
+
+      {/* More Menu Modal */}
+      <Modal
+        visible={moreMenuVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setMoreMenuVisible(false)}
+      >
+        <Pressable
+          style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', padding: 20 }}
+          onPress={() => setMoreMenuVisible(false)}
+        >
+          <Pressable
+            style={{ backgroundColor: p.bg, borderRadius: 24, paddingTop: 20, paddingBottom: 8, width: '100%', maxWidth: 360 }}
+            onPress={(e) => e.stopPropagation()}
+          >
+            <Text style={{ color: p.fg, fontSize: 18, fontWeight: '800', marginBottom: 4, letterSpacing: -0.3, paddingHorizontal: 20 }}>
+              More
+            </Text>
+
+            {/* Primary actions — matches web three-dot */}
+            <View style={{ flexDirection: 'row', paddingHorizontal: 16, paddingVertical: 16, gap: 10, borderBottomWidth: 1, borderBottomColor: p.border }}>
+              {[
+                { icon: 'swap-horizontal-outline' as const, label: 'Swap',     onPress: () => { setMoreMenuVisible(false); router.push('/transfer'); } },
+                { icon: 'arrow-down-circle-outline' as const, label: 'Deposit', onPress: () => { setMoreMenuVisible(false); setDepositModalVisible(true); } },
+                { icon: 'paper-plane-outline' as const, label: 'Withdraw', onPress: () => { setMoreMenuVisible(false); setSendModalVisible(true); } },
+              ].map((item) => (
+                <Pressable
+                  key={item.label}
+                  onPress={item.onPress}
+                  style={({ pressed }) => ({
+                    flex: 1, alignItems: 'center', gap: 8,
+                    paddingVertical: 14, borderRadius: 16,
+                    backgroundColor: pressed ? p.bgElev : p.pillBg,
+                    borderWidth: 1, borderColor: p.border,
+                  })}
+                >
+                  <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: p.bgElev, alignItems: 'center', justifyContent: 'center' }}>
+                    <Ionicons name={item.icon} size={20} color={p.fg} />
+                  </View>
+                  <Text style={{ color: p.fg, fontSize: 12, fontWeight: '700' }}>{item.label}</Text>
+                </Pressable>
+              ))}
+            </View>
+
+            {/* Secondary options */}
+            <View style={{ paddingVertical: 8 }}>
+              {[
+                { icon: 'card-outline' as const,       label: 'Cards',           onPress: () => { setMoreMenuVisible(false); router.push('/cards'); } },
+                { icon: 'time-outline' as const,        label: 'History',         onPress: () => { setMoreMenuVisible(false); router.push('/history'); } },
+                { icon: 'pie-chart-outline' as const,   label: 'Crypto Portfolio', onPress: () => { setMoreMenuVisible(false); router.push('/portfolio/crypto'); } },
+                { icon: 'wallet-outline' as const,      label: 'Fiat Portfolio',  onPress: () => { setMoreMenuVisible(false); router.push('/portfolio/fiat'); } },
+                { icon: 'people-outline' as const,      label: 'Referral',        onPress: () => { setMoreMenuVisible(false); router.push('/referral'); } },
+                { icon: 'settings-outline' as const,    label: 'Settings',        onPress: () => { setMoreMenuVisible(false); router.push('/settings'); } },
+              ].map((item) => (
+                <Pressable
+                  key={item.label}
+                  onPress={item.onPress}
+                  style={({ pressed }) => ({
+                    flexDirection: 'row', alignItems: 'center', gap: 14,
+                    paddingVertical: 14, paddingHorizontal: 20,
+                    backgroundColor: pressed ? p.bgElev : 'transparent',
+                  })}
+                >
+                  <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: p.pillBg, borderWidth: 1, borderColor: p.border, alignItems: 'center', justifyContent: 'center' }}>
+                    <Ionicons name={item.icon} size={18} color={p.fg} />
+                  </View>
+                  <Text style={{ color: p.fg, fontSize: 15, fontWeight: '600', flex: 1 }}>{item.label}</Text>
+                  <Ionicons name="chevron-forward" size={16} color={p.fgMuted} />
+                </Pressable>
+              ))}
+            </View>
+
+            {/* Close pill */}
+            <View style={{ paddingHorizontal: 20, paddingBottom: 16 }}>
+              <Pressable
+                onPress={() => setMoreMenuVisible(false)}
+                style={({ pressed }) => ({
+                  height: 46, borderRadius: 23,
+                  backgroundColor: pressed ? p.bgElev : p.pillBg,
+                  borderWidth: 1, borderColor: p.border,
+                  alignItems: 'center', justifyContent: 'center',
+                })}
+              >
+                <Text style={{ color: p.fg, fontSize: 15, fontWeight: '700' }}>Close</Text>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -692,9 +794,9 @@ function AnimatedTotal({ value, palette: p }: { value: number; palette: Palette 
   const fontSize = digitCount <= 7 ? 48 : digitCount <= 9 ? 40 : digitCount <= 11 ? 34 : 28;
 
   return (
-    <View style={{ alignItems: 'center', marginTop: 4, paddingHorizontal: 24 }}>
+    <View style={{ alignItems: 'center', marginTop: 4, paddingHorizontal: 24, paddingVertical: 28 }}>
       <Text style={{
-        color: flash ? flashColor : p.fg,
+        color: '#ffffff',
         fontSize, fontWeight: '800', letterSpacing: -1.6,
         textAlign: 'center',
         fontVariant: ['tabular-nums'],
@@ -710,15 +812,15 @@ function AnimatedTotal({ value, palette: p }: { value: number; palette: Palette 
             transform: [{ translateY: flashTranslateY }],
             flexDirection: 'row', alignItems: 'center', gap: 4,
             paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8,
-            backgroundColor: flash.dir === 'up' ? p.greenBg : 'rgba(239,68,68,0.16)',
+            backgroundColor: flash.dir === 'up' ? 'rgba(34,197,94,0.3)' : 'rgba(239,68,68,0.3)',
             borderWidth: 1,
-            borderColor: flash.dir === 'up' ? p.greenFg : p.redFg,
+            borderColor: flash.dir === 'up' ? '#22c55e' : '#ef4444',
           }}
         >
           <Ionicons
             name={flash.dir === 'up' ? 'arrow-up' : 'arrow-down'}
             size={10}
-            color={flash.dir === 'up' ? p.greenFg : p.redFg}
+            color={flash.dir === 'up' ? '#22c55e' : '#ef4444'}
           />
           {/* <Text style={{
             color: flash.dir === 'up' ? p.greenFg : p.redFg,
@@ -761,14 +863,16 @@ function ActionButton({
       style={({ pressed }) => ({
         flex: 1,
         alignItems: 'center',
-        opacity: pressed ? 0.7 : 1,
+        paddingVertical: 14,
+        borderRadius: 16,
         gap: 6,
+        opacity: pressed ? 0.75 : 1,
       })}
     >
-      <Ionicons name={icon} size={24} color={p.fg} />
+      <Ionicons name={icon} size={20} color="#ffffff" />
       <Text
         numberOfLines={1}
-        style={{ color: p.fgMuted, fontSize: 11, fontWeight: '600' }}
+        style={{ color: '#ffffff', fontSize: 11, fontWeight: '600' }}
       >
         {label}
       </Text>
