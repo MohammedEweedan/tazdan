@@ -1,14 +1,22 @@
 /**
- * SendWidget — Send money to other users. Theme-aware widget for modal use.
+ * SendWidget — clean internal transfer sheet.
+ * Recipient search · currency chips · large amount input · summary · CTA.
  */
-
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Keyboard, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Keyboard,
+  Pressable,
+  ScrollView,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useQuery } from '@tanstack/react-query';
-
-import { useThemedPalette, type Palette } from '@/store/themeStore';
+import { useThemedPalette } from '@/store/themeStore';
+import { useT } from '@/store/i18nStore';
 import { useHaptics, useWallets, extractErrorMessage } from '@/hooks';
 import { profileService, messageService } from '@/services';
 import type { Currency } from '@/types';
@@ -16,203 +24,153 @@ import type { Currency } from '@/types';
 const FIATS:  Currency[] = ['USD', 'EUR', 'GBP', 'AED', 'SAR', 'EGP'];
 const CRYPTO: Currency[] = ['BTC', 'ETH', 'USDT', 'SOL'];
 
-type Mode = 'FIAT' | 'CRYPTO';
-type Profile = { id: string; username: string; firstName: string; lastName: string; avatarUrl?: string; kycTier?: string };
-
-const ASSET_META: Record<string, { label: string; color: string; icon: string }> = {
-  BTC:  { label: 'Bitcoin',   color: '#fb923c', icon: '₿' },
-  ETH:  { label: 'Ethereum',  color: '#818cf8', icon: 'Ξ' },
-  SOL:  { label: 'Solana',    color: '#a78bfa', icon: '◎' },
-  USDT: { label: 'Tether',    color: '#4ade80', icon: '₮' },
-  USD:  { label: 'US Dollar', color: '#60a5fa', icon: '$' },
-  EUR:  { label: 'Euro',      color: '#60a5fa', icon: '€' },
-  GBP:  { label: 'British Pound', color: '#7c3aed', icon: '£' },
-  AED:  { label: 'UAE Dirham',    color: '#0f766e', icon: 'د' },
-  SAR:  { label: 'Saudi Riyal',   color: '#15803d', icon: '﷼' },
-  EGP:  { label: 'Egyptian Pound', color: '#dc2626', icon: '£' },
+const ASSET_META: Record<string, { label: string; color: string; bg: string; icon: string }> = {
+  BTC:  { label: 'Bitcoin',      color: '#fb923c', bg: 'rgba(251,146,60,0.14)',  icon: '₿' },
+  ETH:  { label: 'Ethereum',     color: '#818cf8', bg: 'rgba(129,140,248,0.14)', icon: 'Ξ' },
+  SOL:  { label: 'Solana',       color: '#a78bfa', bg: 'rgba(167,139,250,0.14)', icon: '◎' },
+  USDT: { label: 'Tether',       color: '#4ade80', bg: 'rgba(74,222,128,0.14)',  icon: '₮' },
+  USD:  { label: 'US Dollar',    color: '#60a5fa', bg: 'rgba(96,165,250,0.14)',  icon: '$' },
+  EUR:  { label: 'Euro',         color: '#60a5fa', bg: 'rgba(96,165,250,0.14)',  icon: '€' },
+  GBP:  { label: 'Pound',        color: '#7c3aed', bg: 'rgba(124,58,237,0.14)',  icon: '£' },
+  AED:  { label: 'UAE Dirham',   color: '#0f766e', bg: 'rgba(15,118,110,0.14)',  icon: 'د' },
+  SAR:  { label: 'Saudi Riyal',  color: '#15803d', bg: 'rgba(21,128,61,0.14)',   icon: '﷼' },
+  EGP:  { label: 'Egypt Pound',  color: '#dc2626', bg: 'rgba(220,38,38,0.14)',   icon: '£' },
 };
 
+type Mode    = 'FIAT' | 'CRYPTO';
+type Profile = { id: string; username: string; firstName: string; lastName: string; avatarUrl?: string; kycTier?: string };
+
 export function SendWidget() {
-  const p = useThemedPalette();
+  const p       = useThemedPalette();
+  const t       = useT();
   const haptics = useHaptics();
   const { data: wallets } = useWallets();
 
-  const [mode, setMode] = useState<Mode>('FIAT');
-  const [currency, setCurrency] = useState<Currency>('USD');
+  const [mode,      setMode]      = useState<Mode>('FIAT');
+  const [currency,  setCurrency]  = useState<Currency>('USD');
   const [recipient, setRecipient] = useState('');
-  const [picked, setPicked] = useState<Profile | null>(null);
-  const [amount, setAmount] = useState('');
-  const [note, setNote] = useState('');
-  const [ctaState, setCtaState] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
-  const [ctaError, setCtaError] = useState<string | null>(null);
+  const [picked,    setPicked]    = useState<Profile | null>(null);
+  const [amount,    setAmount]    = useState('');
+  const [note,      setNote]      = useState('');
+  const [ctaState,  setCta]       = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
+  const [ctaError,  setCtaErr]    = useState<string | null>(null);
 
-  useEffect(() => {
-    setCurrency(mode === 'FIAT' ? 'USD' : 'BTC');
-    setAmount('');
-  }, [mode]);
+  useEffect(() => { setCurrency(mode === 'FIAT' ? 'USD' : 'BTC'); setAmount(''); }, [mode]);
 
-  const wallet = wallets?.find((w) => w.currency === currency);
-  const balance = wallet ? Number(wallet.balance) : 0;
+  const wallet     = wallets?.find((w) => w.currency === currency);
+  const balance    = wallet ? Number(wallet.balance) : 0;
   const sendAmount = Number(amount || 0);
-  const overspend = sendAmount > balance;
+  const overspend  = sendAmount > balance;
 
   const [debounced, setDebounced] = useState('');
   useEffect(() => {
-    const trimmed = recipient.trim().replace(/^@/, '');
-    const t = setTimeout(() => setDebounced(trimmed), 200);
+    const t = setTimeout(() => setDebounced(recipient.trim().replace(/^@/, '')), 200);
     return () => clearTimeout(t);
   }, [recipient]);
 
   const { data: matches = [], isFetching: searching } = useQuery({
-    queryKey: ['profile-search', debounced],
-    queryFn:  () => profileService.search(debounced),
-    enabled:  debounced.length >= 1 && !picked,
+    queryKey:  ['profile-search', debounced],
+    queryFn:   () => profileService.search(debounced),
+    enabled:   debounced.length >= 1 && !picked,
     staleTime: 30_000,
   });
 
-  const validRecipient = !!picked || (recipient.trim().length >= 3 && /@?[a-z0-9._]+/i.test(recipient.trim()));
-  const valid = validRecipient && sendAmount > 0 && !overspend;
+  const valid = !!picked && sendAmount > 0 && !overspend;
 
   const onSend = async () => {
-    if (!valid) return;
-    setCtaState('loading');
-    setCtaError(null);
+    if (!valid || !picked) return;
+    setCta('loading'); setCtaErr(null);
     try {
-      const receiverId = picked?.id;
-      if (!receiverId) {
-        throw new Error('Please select a recipient');
-      }
-
-      await messageService.transfer({
-        receiverId,
-        currency,
-        amount: sendAmount,
-        note: note || undefined,
-      });
-
+      await messageService.transfer({ receiverId: picked.id, currency, amount: sendAmount, note: note || undefined });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      setCtaState('success');
-      setAmount('');
-      setNote('');
-      setRecipient('');
-      setPicked(null);
-      setTimeout(() => setCtaState('idle'), 1500);
+      setCta('success');
+      setAmount(''); setNote(''); setRecipient(''); setPicked(null);
+      setTimeout(() => setCta('idle'), 2000);
     } catch (e: any) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      setCtaError(extractErrorMessage(e, 'Send failed'));
-      setCtaState('error');
-      setTimeout(() => setCtaState('idle'), 1800);
+      setCtaErr(extractErrorMessage(e, t('send.failed')));
+      setCta('error');
+      setTimeout(() => setCta('idle'), 2000);
     }
   };
 
   const currencies = mode === 'FIAT' ? FIATS : CRYPTO;
+  const meta       = ASSET_META[currency] ?? ASSET_META.USD;
 
   return (
-    <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 550 }} keyboardShouldPersistTaps="handled">
-      {/* Mode toggle */}
-      <View style={{
-        flexDirection: 'row', padding: 4, marginBottom: 16,
-        borderRadius: 14, backgroundColor: p.pillBg, borderWidth: 1, borderColor: p.border, gap: 4,
-      }}>
+    <View style={{ paddingHorizontal: 20, paddingBottom: 8 }}>
+
+      {/* ── Fiat / Crypto toggle ── */}
+      <View style={{ flexDirection: 'row', backgroundColor: p.bgElev, borderRadius: 14, padding: 3, borderWidth: 1, borderColor: p.border, marginBottom: 20 }}>
         {(['FIAT', 'CRYPTO'] as Mode[]).map((m) => (
           <Pressable
             key={m}
             onPress={() => { haptics.selection(); setMode(m); }}
-            style={{ flex: 1 }}
+            style={{ flex: 1, paddingVertical: 10, borderRadius: 11, alignItems: 'center', backgroundColor: mode === m ? p.ctaBg : 'transparent' }}
           >
-            <View style={{
-              paddingVertical: 10, borderRadius: 10, alignItems: 'center',
-              backgroundColor: mode === m ? p.fg : 'transparent',
-            }}>
-              <Text style={{
-                color: mode === m ? p.bg : p.fgMuted,
-                fontSize: 12, fontWeight: '700', letterSpacing: 0.5,
-              }}>
-                {m === 'FIAT' ? 'SEND FIAT' : 'SEND CRYPTO'}
-              </Text>
-            </View>
+            <Text style={{ color: mode === m ? p.ctaFg : p.fgMuted, fontSize: 12, fontWeight: '800', letterSpacing: 0.4 }}>
+              {m === 'FIAT' ? 'FIAT' : 'CRYPTO'}
+            </Text>
           </Pressable>
         ))}
       </View>
 
-      {/* Recipient row */}
-      <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '700', letterSpacing: 0.6, marginTop: 4 }}>
-        TO
-      </Text>
+      {/* ── Recipient field ── */}
+      <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '700', letterSpacing: 0.5, marginBottom: 8 }}>{t('send.to').toUpperCase()}</Text>
       <View style={{
-        marginTop: 8, height: 56, borderRadius: 16,
-        backgroundColor: p.pillBg, borderWidth: 1, borderColor: p.border,
-        flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, gap: 10,
+        flexDirection: 'row', alignItems: 'center',
+        backgroundColor: p.bgElev, borderRadius: 18,
+        borderWidth: 1, borderColor: picked ? p.ctaBg : p.border,
+        paddingHorizontal: 14, marginBottom: 8,
       }}>
         <Ionicons name="search-outline" size={18} color={p.fgMuted} />
         <TextInput
           value={recipient}
           onChangeText={(t) => { setRecipient(t); setPicked(null); }}
-          placeholder="@handle, email, or phone"
+          placeholder={t('send.recipientPlaceholder')}
           placeholderTextColor={p.fgFaint}
           autoCapitalize="none"
           autoCorrect={false}
-          style={{ flex: 1, color: p.fg, fontSize: 16, fontWeight: '500' }}
+          style={{ flex: 1, color: p.fg, fontSize: 16, fontWeight: '500', paddingVertical: 16, marginLeft: 10 }}
         />
+        {picked && <Ionicons name="checkmark-circle" size={18} color={p.greenFg} />}
       </View>
 
-      {/* Type-ahead matches */}
+      {/* Type-ahead dropdown */}
       {recipient.trim().length >= 1 && !picked && (
-        <View style={{
-          marginTop: 8, backgroundColor: p.pillBg, borderRadius: 14, borderWidth: 1, borderColor: p.border,
-        }}>
+        <View style={{ backgroundColor: p.bgElev, borderRadius: 16, borderWidth: 1, borderColor: p.border, marginBottom: 12, overflow: 'hidden' }}>
           {searching ? (
             <View style={{ padding: 14, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
               <ActivityIndicator size="small" color={p.fgMuted} />
-              <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '600' }}>Searching…</Text>
+              <Text style={{ color: p.fgMuted, fontSize: 13 }}>{t('send.searching')}</Text>
             </View>
           ) : matches.length === 0 ? (
             <View style={{ padding: 14 }}>
-              <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '600' }}>
-                No public matches. You can still send to the literal handle above.
-              </Text>
+              <Text style={{ color: p.fgMuted, fontSize: 13 }}>{t('send.noMatches')}</Text>
             </View>
           ) : (
             matches.map((m: Profile, i: number) => (
               <Pressable
                 key={m.id}
-                onPress={() => {
-                  haptics.selection();
-                  setPicked(m);
-                  setRecipient(`@${m.username}`);
-                }}
+                onPress={() => { haptics.selection(); setPicked(m); setRecipient(`@${m.username}`); }}
                 style={({ pressed }) => ({
-                  flexDirection: 'row', alignItems: 'center', gap: 12,
-                  padding: 12,
+                  flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12,
                   backgroundColor: pressed ? p.border : 'transparent',
                   borderTopWidth: i === 0 ? 0 : 1, borderTopColor: p.border,
-                  borderRadius: i === 0 ? 14 : 0,
                 })}
               >
-                <View style={{
-                  width: 36, height: 36, borderRadius: 18,
-                  backgroundColor: '#7c3aed', alignItems: 'center', justifyContent: 'center',
-                }}>
-                  <Text style={{ color: '#fff', fontWeight: '800', fontSize: 14 }}>
+                <View style={{ width: 38, height: 38, borderRadius: 19, backgroundColor: '#7c3aed', alignItems: 'center', justifyContent: 'center' }}>
+                  <Text style={{ color: '#fff', fontWeight: '800', fontSize: 15 }}>
                     {m.firstName?.[0]?.toUpperCase() ?? m.username[0].toUpperCase()}
                   </Text>
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={{ color: p.fg, fontSize: 14, fontWeight: '700' }}>
-                    {m.firstName} {m.lastName}
-                  </Text>
-                  <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '500', marginTop: 1 }}>
-                    @{m.username}
-                  </Text>
+                  <Text style={{ color: p.fg, fontSize: 14, fontWeight: '700' }}>{m.firstName} {m.lastName}</Text>
+                  <Text style={{ color: p.fgMuted, fontSize: 12, marginTop: 1 }}>@{m.username}</Text>
                 </View>
                 {m.kycTier && m.kycTier !== 'TIER_0' && (
-                  <View style={{
-                    paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6,
-                    backgroundColor: p.greenBg,
-                  }}>
-                    <Text style={{ color: p.greenFg, fontSize: 9, fontWeight: '800' }}>
-                      {m.kycTier.replace('_', ' ')}
-                    </Text>
+                  <View style={{ paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, backgroundColor: p.greenBg }}>
+                    <Text style={{ color: p.greenFg, fontSize: 9, fontWeight: '800' }}>KYC</Text>
                   </View>
                 )}
               </Pressable>
@@ -221,195 +179,137 @@ export function SendWidget() {
         </View>
       )}
 
-      {/* Picked badge */}
-      {picked && (
-        <View style={{
-          flexDirection: 'row', alignItems: 'center', gap: 10,
-          marginTop: 10, padding: 12, borderRadius: 14, backgroundColor: p.greenBg,
-        }}>
-          <Ionicons name="checkmark-circle" size={16} color={p.greenFg} />
-          <Text style={{ color: p.greenFg, fontSize: 12, fontWeight: '700', flex: 1 }}>
-            Verified recipient · {picked.firstName} {picked.lastName}
-          </Text>
-          <Pressable onPress={() => { setPicked(null); setRecipient(''); }} hitSlop={8}>
-            <Ionicons name="close" size={14} color={p.greenFg} />
-          </Pressable>
-        </View>
-      )}
-
-      {/* Currency picker */}
-      <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '700', letterSpacing: 0.6, marginTop: 18 }}>
-        FROM
-      </Text>
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={{ gap: 8, paddingTop: 8, paddingBottom: 4 }}
-      >
-        {currencies.map((c) => (
-          <Pressable
-            key={c}
-            onPress={() => { haptics.selection(); setCurrency(c); setAmount(''); }}
-            style={({ pressed }) => ({
-              paddingVertical: 10, paddingHorizontal: 14, borderRadius: 14,
-              backgroundColor: currency === c ? p.fg : p.pillBg,
-              borderWidth: 1, borderColor: currency === c ? p.fg : p.border,
-              opacity: pressed ? 0.85 : 1,
-            })}
-          >
-            <Text style={{ color: currency === c ? p.bg : p.fg, fontWeight: '700', fontSize: 12 }}>
-              {c}
-            </Text>
-          </Pressable>
-        ))}
+      {/* ── Currency chips ── */}
+      <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '700', letterSpacing: 0.5, marginBottom: 8 }}>{t('send.currency').toUpperCase()}</Text>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, marginBottom: 20 }}>
+        {currencies.map((c) => {
+          const m = ASSET_META[c];
+          const active = currency === c;
+          return (
+            <Pressable
+              key={c}
+              onPress={() => { haptics.selection(); setCurrency(c); setAmount(''); }}
+              style={({ pressed }) => ({
+                flexDirection: 'row', alignItems: 'center', gap: 7,
+                paddingHorizontal: 14, paddingVertical: 9, borderRadius: 24,
+                backgroundColor: active ? p.fg : p.bgElev,
+                borderWidth: 1, borderColor: active ? p.fg : p.border,
+                opacity: pressed ? 0.8 : 1,
+              })}
+            >
+              <View style={{ width: 22, height: 22, borderRadius: 11, backgroundColor: active ? 'rgba(255,255,255,0.15)' : m.bg, alignItems: 'center', justifyContent: 'center' }}>
+                <Text style={{ color: active ? p.bg : m.color, fontSize: 11, fontWeight: '800' }}>{m.icon}</Text>
+              </View>
+              <Text style={{ color: active ? p.bg : p.fg, fontSize: 12, fontWeight: '800' }}>{c}</Text>
+            </Pressable>
+          );
+        })}
       </ScrollView>
-      <Text style={{ color: p.fgMuted, fontSize: 12, marginTop: 8, marginLeft: 4 }}>
-        Available: {balance.toLocaleString('en-US', { maximumFractionDigits: 8 })} {currency}
-      </Text>
 
-      {/* Amount field */}
-      <View style={{ marginTop: 20 }}>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-          <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '700', letterSpacing: 0.6 }}>
-            AMOUNT
-          </Text>
-          <Pressable hitSlop={6} onPress={() => { haptics.selection(); setAmount(String(balance)); }}>
-            <Text style={{ color: p.fg, fontSize: 12, fontWeight: '700' }}>USE MAX</Text>
-          </Pressable>
-        </View>
-        <View style={{
-          marginTop: 10, height: 64, borderRadius: 16,
-          backgroundColor: p.pillBg, borderWidth: 1.5, borderColor: overspend ? p.redFg : p.border,
-          flexDirection: 'row', alignItems: 'center', paddingHorizontal: 18,
-        }}>
-          <TextInput
-            value={amount}
-            onChangeText={(t) => {
-              // Only allow numbers and single decimal point
-              const filtered = t.replace(/[^0-9.]/g, '');
-              const parts = filtered.split('.');
-              const clean = parts.length > 2 ? parts[0] + '.' + parts.slice(1).join('') : filtered;
-              setAmount(clean);
-            }}
-            placeholder="0.00"
-            placeholderTextColor={p.fgFaint}
-            keyboardType="decimal-pad"
-            returnKeyType="done"
-            onSubmitEditing={() => Keyboard.dismiss()}
-            style={{
-              flex: 1, color: p.fg, fontSize: 28, fontWeight: '700', fontVariant: ['tabular-nums'],
-            }}
-          />
-          <Text style={{ color: p.fgMuted, fontSize: 14, fontWeight: '700' }}>{currency}</Text>
-        </View>
-        {overspend && (
-          <Text style={{ color: p.redFg, fontSize: 12, fontWeight: '600', marginTop: 8, marginLeft: 4 }}>
-            Exceeds balance
-          </Text>
-        )}
+      {/* ── Amount input ── */}
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+        <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '700', letterSpacing: 0.5 }}>{t('send.amount').toUpperCase()}</Text>
+        <Pressable onPress={() => { haptics.selection(); setAmount(String(balance)); }} hitSlop={8}>
+          <Text style={{ color: p.ctaBg, fontSize: 12, fontWeight: '800' }}>{t('common.useMax').toUpperCase()}</Text>
+        </Pressable>
       </View>
-
-      {/* Note */}
-      <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '700', letterSpacing: 0.6, marginTop: 18 }}>
-        NOTE (OPTIONAL)
-      </Text>
       <View style={{
-        marginTop: 8, minHeight: 56, borderRadius: 16,
-        backgroundColor: p.pillBg, borderWidth: 1, borderColor: p.border,
-        paddingHorizontal: 16, paddingVertical: 12,
+        flexDirection: 'row', alignItems: 'center',
+        backgroundColor: p.bgElev, borderRadius: 18,
+        borderWidth: 1.5, borderColor: overspend ? p.redFg : p.border,
+        paddingHorizontal: 18, marginBottom: 8,
       }}>
+        <Text style={{ color: p.fgMuted, fontSize: 22, fontWeight: '300', marginRight: 4 }}>{meta.icon}</Text>
         <TextInput
-          value={note}
-          onChangeText={setNote}
-          placeholder="What's it for?"
+          value={amount}
+          onChangeText={(v) => setAmount(v.replace(/[^0-9.]/g, '').replace(/(\..*)\./g, '$1'))}
+          placeholder="0.00"
           placeholderTextColor={p.fgFaint}
-          style={{ color: p.fg, fontSize: 15, fontWeight: '500' }}
+          keyboardType="decimal-pad"
+          returnKeyType="done"
+          onSubmitEditing={Keyboard.dismiss}
+          style={{ flex: 1, color: p.fg, fontSize: 34, fontWeight: '700', paddingVertical: 16, fontVariant: ['tabular-nums'] }}
+        />
+        <Text style={{ color: p.fgMuted, fontSize: 14, fontWeight: '700' }}>{currency}</Text>
+      </View>
+      <Text style={{ color: overspend ? p.redFg : p.fgMuted, fontSize: 13, fontWeight: '600', marginBottom: 20 }}>
+        {overspend ? t('send.exceedsBalance') : `${t('common.available')}: ${balance.toLocaleString(undefined, { maximumFractionDigits: 8 })} ${currency}`}
+      </Text>
+
+      {/* ── Note ── */}
+      <View style={{
+        flexDirection: 'row', alignItems: 'center',
+        backgroundColor: p.bgElev, borderRadius: 14,
+        borderWidth: 1, borderColor: p.border,
+        paddingHorizontal: 14, paddingVertical: 12, marginBottom: 20,
+      }}>
+        <Ionicons name="chatbubble-ellipses-outline" size={16} color={p.fgMuted} />
+        <TextInput
+          value={note} onChangeText={setNote}
+          placeholder={t('send.notePlaceholder')}
+          placeholderTextColor={p.fgFaint}
+          style={{ flex: 1, color: p.fg, fontSize: 14, marginLeft: 10 }}
         />
       </View>
 
-      {/* Summary */}
+      {/* Transfer summary */}
       {valid && (
-        <View style={{
-          marginTop: 22, backgroundColor: p.pillBg, borderRadius: 14, borderWidth: 1, borderColor: p.border,
-        }}>
-          <View style={{ padding: 14, gap: 8 }}>
-            <Row label="Recipient" value={picked ? `@${picked.username}` : recipient} palette={p} />
-            <Row label="Amount" value={`${sendAmount.toLocaleString('en-US', { maximumFractionDigits: 8 })} ${currency}`} palette={p} />
-            <Row label="Network" value={mode === 'CRYPTO' ? 'On-chain' : 'Internal · instant'} palette={p} />
-            <Row label="Fee" value="Free" accent={p.greenFg} palette={p} />
-          </View>
+        <View style={{ backgroundColor: p.bgElev, borderRadius: 16, borderWidth: 1, borderColor: p.border, padding: 14, marginBottom: 20, gap: 8 }}>
+          {[
+            { label: t('send.summaryTo'),      value: `@${picked!.username}` },
+            { label: t('send.summaryAmount'),  value: `${sendAmount.toLocaleString(undefined, { maximumFractionDigits: 8 })} ${currency}` },
+            { label: t('send.summaryNetwork'), value: mode === 'CRYPTO' ? t('send.onChain') : t('send.internalInstant') },
+            { label: t('send.summaryFee'),     value: t('common.free'), color: p.greenFg },
+          ].map(({ label, value, color }) => (
+            <View key={label} style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+              <Text style={{ color: p.fgMuted, fontSize: 13 }}>{label}</Text>
+              <Text style={{ color: color ?? p.fg, fontSize: 13, fontWeight: '700' }}>{value}</Text>
+            </View>
+          ))}
         </View>
       )}
 
-      {/* CTA */}
-      <View style={{ marginTop: 22 }}>
-        <Pressable
-          onPress={onSend}
-          disabled={!valid || ctaState === 'loading'}
-          style={({ pressed }) => ({
-            height: 52, borderRadius: 14,
-            backgroundColor: ctaState === 'success' ? p.greenFg : ctaState === 'error' ? p.redFg : p.ctaBg,
-            alignItems: 'center', justifyContent: 'center',
-            flexDirection: 'row', gap: 8,
-            opacity: pressed || (ctaState === 'loading') ? 0.85 : 1,
-          })}
-        >
-          {ctaState === 'loading' ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <>
-              <Ionicons 
-                name={ctaState === 'success' ? 'checkmark' : ctaState === 'error' ? 'alert-circle' : 'paper-plane'} 
-                size={18} 
-                color="#fff" 
-              />
-              <Text style={{ color: '#fff', fontSize: 14, fontWeight: '800' }}>
-                {ctaState === 'success'
-                  ? 'Sent!'
-                  : ctaState === 'error'
-                  ? (ctaError ?? 'Send failed')
-                  : `Send ${currency}`}
-              </Text>
-            </>
-          )}
-        </Pressable>
-      </View>
-
-      {/* Success/Error message */}
-      {(ctaState === 'success' || ctaState === 'error') && (
-        <View style={{
-          marginTop: 12, padding: 12, borderRadius: 12,
-          backgroundColor: ctaState === 'success' ? p.greenBg : 'rgba(239,68,68,0.12)',
-          flexDirection: 'row', alignItems: 'center', gap: 8,
-        }}>
-          <Ionicons 
-            name={ctaState === 'success' ? 'checkmark-circle' : 'alert-circle'} 
-            size={16} 
-            color={ctaState === 'success' ? p.greenFg : p.redFg} 
-          />
-          <Text style={{ 
-            color: ctaState === 'success' ? p.greenFg : p.redFg, 
-            fontSize: 13, fontWeight: '600', flex: 1 
-          }}>
-            {ctaState === 'success' 
-              ? `Successfully sent ${sendAmount > 0 ? sendAmount.toLocaleString('en-US', { maximumFractionDigits: 8 }) : ''} ${currency}`
-              : (ctaError ?? 'Send failed')}
-          </Text>
+      {/* Feedback */}
+      {ctaState === 'success' && (
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: p.greenBg, borderRadius: 12, padding: 12, marginBottom: 14 }}>
+          <Ionicons name="checkmark-circle" size={16} color={p.greenFg} />
+          <Text style={{ color: p.greenFg, fontSize: 13, fontWeight: '600', flex: 1 }}>{t('send.sent')}</Text>
         </View>
       )}
-    </ScrollView>
-  );
-}
+      {ctaState === 'error' && (
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: 'rgba(239,68,68,0.1)', borderRadius: 12, padding: 12, marginBottom: 14, borderWidth: 1, borderColor: 'rgba(239,68,68,0.2)' }}>
+          <Ionicons name="alert-circle-outline" size={16} color={p.redFg} />
+          <Text style={{ color: p.redFg, fontSize: 13, flex: 1 }}>{ctaError ?? t('send.failed')}</Text>
+        </View>
+      )}
 
-function Row({
-  label, value, accent, palette: p,
-}: { label: string; value: string; accent?: string; palette: Palette }) {
-  return (
-    <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-      <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '500' }}>{label}</Text>
-      <Text style={{ color: accent ?? p.fg, fontSize: 13, fontWeight: '700' }} numberOfLines={1}>
-        {value}
-      </Text>
+      {/* ── CTA ── */}
+      <Pressable
+        onPress={onSend}
+        disabled={!valid || ctaState === 'loading'}
+        style={({ pressed }) => ({
+          height: 56, borderRadius: 28,
+          backgroundColor: valid ? p.ctaBg : p.bgElev,
+          borderWidth: valid ? 0 : 1, borderColor: p.border,
+          alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8,
+          opacity: pressed || ctaState === 'loading' ? 0.85 : 1,
+          shadowColor: valid ? p.ctaBg : 'transparent',
+          shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.3, shadowRadius: 14, elevation: 6,
+        })}
+      >
+        {ctaState === 'loading' ? (
+          <ActivityIndicator color={p.ctaFg} />
+        ) : (
+          <>
+            <Ionicons name="paper-plane" size={17} color={valid ? p.ctaFg : p.fgMuted} />
+            <Text style={{ color: valid ? p.ctaFg : p.fgMuted, fontSize: 16, fontWeight: '800' }}>
+              {valid
+                ? t('send.ctaAmount', { amount: sendAmount.toLocaleString(undefined, { maximumFractionDigits: 8 }), currency })
+                : t('send.cta')}
+            </Text>
+          </>
+        )}
+      </Pressable>
     </View>
   );
 }

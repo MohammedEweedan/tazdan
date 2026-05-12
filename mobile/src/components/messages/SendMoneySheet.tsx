@@ -21,7 +21,7 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { type Palette } from '@/store/themeStore';
 import { useWallets } from '@/hooks';
-import { CURRENCY_META } from '@/constants';
+import { getCurrencyMeta } from '@/constants';
 import type { Currency, Wallet } from '@/types';
 
 const BRAND_BLUE = '#0057B8';
@@ -123,8 +123,9 @@ export function SendMoneySheet({
                   contentContainerStyle={{ gap: 8, paddingVertical: 2 }}
                 >
                   {funded.map((w) => {
-                    const meta = CURRENCY_META[w.currency];
+                    const meta = getCurrencyMeta(w.currency);
                     const active = currency === w.currency;
+                    const decimals = meta?.decimals ?? 2;
                     return (
                       <Pressable
                         key={w.currency}
@@ -141,7 +142,7 @@ export function SendMoneySheet({
                           color: active ? p.bg : p.fg,
                           fontSize: 13, fontWeight: '800', letterSpacing: 0.2,
                         }}>
-                          {meta.flagOrIcon} {w.currency}
+                          {meta?.flagOrIcon ?? w.currency.slice(0, 1)} {w.currency}
                         </Text>
                         <Text
                           numberOfLines={1}
@@ -152,7 +153,7 @@ export function SendMoneySheet({
                             opacity: active ? 0.8 : 1,
                           }}
                         >
-                          {formatBal(availableOf(w), meta.decimals)} avail.
+                          {formatBal(availableOf(w), decimals)} avail.
                         </Text>
                       </Pressable>
                     );

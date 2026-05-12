@@ -17,6 +17,7 @@ import * as Clipboard from 'expo-clipboard';
 
 import { ScreenShell, Panel } from '@/components/ui/ScreenShell';
 import { useThemedPalette, type Palette } from '@/store/themeStore';
+import { useT } from '@/store/i18nStore';
 import { useTransactions, useHaptics } from '@/hooks';
 
 type Tx = {
@@ -34,6 +35,7 @@ type Tx = {
 
 export default function History() {
   const h = useHaptics();
+  const t = useT();
   const p = useThemedPalette();
   const { data, isLoading, refetch, isFetching } = useTransactions(1);
   const items = (data?.items ?? []) as Tx[];
@@ -50,7 +52,7 @@ export default function History() {
   }, [items]);
 
   return (
-    <ScreenShell title="Activity" subtitle="Every transaction, every receipt">
+    <ScreenShell title={t('history.title')} subtitle={t('history.subtitle')}>
       {/* Refresh pill */}
       <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginTop: 6 }}>
         <Pressable
@@ -65,20 +67,20 @@ export default function History() {
         >
           <Ionicons name={isFetching ? 'sync' : 'refresh'} size={12} color={p.fgMuted} />
           <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '700', letterSpacing: 0.4 }}>
-            {isFetching ? 'REFRESHING' : 'REFRESH'}
+            {isFetching ? t('common.refreshing').toUpperCase() : t('common.refresh').toUpperCase()}
           </Text>
         </Pressable>
       </View>
 
       {isLoading ? (
         <View style={{ paddingVertical: 64, alignItems: 'center' }}>
-          <Text style={{ color: p.fgMuted }}>Loading transactions…</Text>
+          <Text style={{ color: p.fgMuted }}>{t('history.loading')}</Text>
         </View>
       ) : items.length === 0 ? (
         <View style={{ paddingVertical: 64, alignItems: 'center' }}>
           <Ionicons name="receipt-outline" size={36} color={p.fgFaint} />
           <Text style={{ color: p.fgMuted, fontSize: 14, fontWeight: '600', marginTop: 14 }}>
-            No transactions yet.
+            {t('history.empty')}
           </Text>
         </View>
       ) : (
@@ -101,7 +103,7 @@ export default function History() {
                     onCopyHash={(hash) => {
                       h.success();
                       Clipboard.setStringAsync(hash);
-                      Alert.alert('Hash copied', hash);
+                      Alert.alert(t('history.hashCopied'), hash);
                     }}
                   />
                 ))}

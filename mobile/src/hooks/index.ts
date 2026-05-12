@@ -6,10 +6,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { QUERY_KEYS } from '@/constants';
 import {
-  walletService, transactionService, marketsService, p2pService, cardsService,
+  walletService, transactionService, p2pService, cardsService,
   swapService, profileService, notificationService,
 } from '@/services';
-import { useBinanceLive } from './useLivePrice';
 
 export { useHaptics } from './useHaptics';
 export {
@@ -18,15 +17,14 @@ export {
   useBlockUser, useUnblockUser, useReportMessage, useEscalateP2P,
   useMessageRealtime,
 } from './useMessages';
+export { useForexRates } from './useForexRates';
+export { useDisplayCurrency, CURRENCY_SYMBOLS } from './useDisplayCurrency';
+export { useBackendTickers as useMarkets } from './useBackendTickers';
 
 export const useWallets = () =>
   useQuery({
     queryKey: QUERY_KEYS.wallets,
     queryFn: walletService.list,
-    // Auto-refresh every 5s so the home dashboard always reflects the
-    // latest balances even if a transaction lands while the user is
-    // looking at the screen. The query stays "fresh" between refetches
-    // so we don't double-fire on focus.
     refetchInterval: 5_000,
     refetchIntervalInBackground: false,
     staleTime: 4_000,
@@ -37,29 +35,6 @@ export const useTransactions = (page = 1) =>
     queryKey: QUERY_KEYS.transactions(page),
     queryFn: () => transactionService.list(page),
   });
-
-export const useMarkets = () => {
-  const live = useBinanceLive();
-  const query = useQuery({
-    queryKey: QUERY_KEYS.markets,
-    queryFn: marketsService.tickers,
-    refetchInterval: 30_000,
-  });
-
-  return {
-    ...query,
-    data: query.data?.map((ticker) => {
-      const lp = live[ticker.base];
-      if (!lp) return ticker;
-      return {
-        ...ticker,
-        price: lp.price,
-        changePct24h: lp.changePct24h,
-        volume24h: lp.volume24h,
-      };
-    }),
-  };
-};
 
 export const useP2POffers = (filter: 'BUY' | 'SELL' | 'ALL' = 'ALL') =>
   useQuery({
@@ -79,6 +54,14 @@ export const useMyP2PTrades = () =>
 
 export const useCards = () =>
   useQuery({ queryKey: QUERY_KEYS.cards, queryFn: cardsService.list });
+
+export const useCardTransactions = (cardId: string | null) =>
+  useQuery({
+    queryKey: ['card-transactions', cardId],
+    queryFn: () => cardsService.transactions(cardId!),
+    enabled: !!cardId,
+    staleTime: 30_000,
+  });
 
 export const usePublicProfile = (handle: string | undefined) =>
   useQuery({

@@ -2,18 +2,20 @@
  * Profile tab — theme-aware, every Pressable is real.
  */
 
-import { Pressable, ScrollView, Text, View, Modal } from 'react-native';
+import { Pressable, ScrollView, Switch, Text, View, Modal, Alert } from 'react-native';
 import { useState } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import * as LocalAuthentication from 'expo-local-authentication';
 
 import { useAuthStore } from '@/store/authStore';
 import { useHaptics } from '@/hooks';
 import { useTheme, useThemedPalette } from '@/store/themeStore';
-import { useI18n, LOCALE_META } from '@/store/i18nStore';
+import { useI18n, useT, LOCALE_META } from '@/store/i18nStore';
 import { Panel, PanelRow } from '@/components/ui/ScreenShell';
+import { LocalePickerModal } from '@/components/ui/LocalePickerModal';
 import { profileAPI } from '@/lib/api';
 
 interface Row {
@@ -28,16 +30,19 @@ interface Row {
 export default function Profile() {
   const router = useRouter();
   const h = useHaptics();
-  const { user, logout, updateUser } = useAuthStore();
+  const { user, logout, updateUser, biometricEnabled, enableBiometric, disableBiometric } = useAuthStore();
   const p = useThemedPalette();
   const themeMode = useTheme((s) => s.mode);
   const toggleTheme = useTheme((s) => s.toggle);
   const locale = useI18n((s) => s.locale);
-  const cycleLocale = useI18n((s) => s.cycle);
+
+  const t = useT();
 
   const [avatarModalVisible, setAvatarModalVisible] = useState(false);
   const [currencyModalVisible, setCurrencyModalVisible] = useState(false);
+  const [langPickerVisible, setLangPickerVisible] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [bioLoading, setBioLoading] = useState(false);
 
   const initial = (user?.firstName?.[0] ?? user?.email?.[0] ?? 'P').toUpperCase();
   const fullName = `${user?.firstName ?? ''} ${user?.lastName ?? ''}`.trim() || 'Promrkts user';
@@ -73,8 +78,31 @@ export default function Profile() {
     }
   };
 
-  const emojis = ["", "😎", "🔥", "🚀", "💎", "👑", "⚡️", "💸", "💰", "🏦"];
   const currencies = ['USD', 'EUR', 'GBP', 'AED', 'SAR', 'EGP', 'USDT', 'BTC', 'ETH', 'BNB', 'SOL'];
+
+  const handleBiometricToggle = async () => {
+    setBioLoading(true);
+    try {
+      if (biometricEnabled) {
+        await disableBiometric();
+        h.success();
+      } else {
+        const [hasHW, enrolled] = await Promise.all([
+          LocalAuthentication.hasHardwareAsync(),
+          LocalAuthentication.isEnrolledAsync(),
+        ]);
+        if (!hasHW || !enrolled) {
+          Alert.alert('Not available', 'Face ID / biometrics are not set up on this device.');
+          return;
+        }
+        const result = await LocalAuthentication.authenticateAsync({ promptMessage: 'Enable Face ID for Promrkts' });
+        if (result.success) { await enableBiometric(); h.success(); }
+        else h.error();
+      }
+    } finally {
+      setBioLoading(false);
+    }
+  };
 
   const emojiGroups = {
     Cool: [
@@ -109,62 +137,91 @@ export default function Profile() {
 
   const groups: { title: string; rows: Row[] }[] = [
     {
-      title: 'PREFERENCES',
+      title: t('profile.section.preferences'),
       rows: [
         {
           icon: themeMode === 'dark' ? 'moon-outline' : 'sunny-outline',
-          label: `Theme · ${themeMode === 'dark' ? 'Dark' : 'Light'}`,
+          label: `${t('profile.row.theme')} · ${themeMode === 'dark' ? t('settings.dark') : t('settings.light')}`,
           onPress: () => { h.selection(); toggleTheme(); },
           right: <Ionicons name="swap-horizontal" size={16} color={p.fgFaint} />,
         },
         {
           icon: 'language-outline',
-          label: `Language · ${LOCALE_META[locale].label}`,
-          onPress: () => { h.selection(); cycleLocale(); },
+          label: `${t('profile.row.language')} · ${LOCALE_META[locale].label}`,
+          onPress: () => { h.selection(); setLangPickerVisible(true); },
           right: <Text style={{ fontSize: 16 }}>{LOCALE_META[locale].flag}</Text>,
         },
         {
           icon: 'cash-outline',
-          label: `Base Currency · ${baseCurrency}`,
-          onPress: () => {
-            h.selection();
-            setCurrencyModalVisible(true);
-          },
+          label: `${t('profile.row.baseCurrency')} · ${baseCurrency}`,
+          onPress: () => { h.selection(); setCurrencyModalVisible(true); },
           right: <Ionicons name="chevron-forward" size={16} color={p.fgFaint} />,
-        }
+        },
       ],
     },
     {
-      title: 'ACCOUNT',
+      title: t('profile.section.security'),
       rows: [
-        { icon: 'person-outline',           label: 'Personal info',         href: '/settings' },
-        { icon: 'shield-checkmark-outline', label: 'Identity verification', href: '/kyc' },
-        { icon: 'card-outline',             label: 'Linked cards',          href: '/cards' },
+        {
+          icon: 'finger-print',
+          label: `${t('profile.row.faceId')} · ${biometricEnabled ? t('profile.on') : t('profile.off')}`,
+          onPress: handleBiometricToggle,
+          right: (
+            <Switch
+              value={biometricEnabled}
+              onValueChange={handleBiometricToggle}
+              disabled={bioLoading}
+              trackColor={{ false: p.border, true: p.ctaBg }}
+              thumbColor="#fff"
+              style={{ transform: [{ scaleX: 0.85 }, { scaleY: 0.85 }] }}
+            />
+          ),
+        },
+        {
+          icon: 'shield-outline',
+          label: `${t('profile.row.twoFactor')} · ${user?.twoFactorEnabled ? t('profile.on') : t('profile.off')}`,
+          onPress: () => { h.selection(); router.push('/settings/2fa' as never); },
+          right: user?.twoFactorEnabled
+            ? (
+              <View style={{ paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, backgroundColor: p.greenBg }}>
+                <Text style={{ color: p.greenFg, fontSize: 10, fontWeight: '800' }}>{t('profile.on').toUpperCase()}</Text>
+              </View>
+            )
+            : <Ionicons name="chevron-forward" size={16} color={p.fgFaint} />,
+        },
       ],
     },
     {
-      title: 'MONEY',
+      title: t('profile.section.account'),
       rows: [
-        { icon: 'receipt-outline',     label: 'Transaction history', href: '/history' },
-        { icon: 'add-circle-outline',  label: 'Top up balance',      href: '/topup' },
-        { icon: 'gift-outline',        label: 'Refer & earn',        href: '/referral' },
+        { icon: 'person-outline',           label: t('profile.row.editProfile'),     href: '/settings' },
+        { icon: 'shield-checkmark-outline', label: t('profile.row.kycVerification'), href: '/kyc' },
+        { icon: 'card-outline',             label: t('profile.row.linkedAccounts'),  href: '/cards' },
       ],
     },
     {
-      title: 'APP',
+      title: t('profile.section.money'),
       rows: [
-        { icon: 'notifications-outline', label: 'Notifications', href: '/notifications' },
-        { icon: 'settings-outline',      label: 'Settings',      href: '/settings' },
+        { icon: 'receipt-outline',     label: t('history.title'),       href: '/history' },
+        { icon: 'add-circle-outline',  label: t('profile.row.deposits'), href: '/topup' },
+        { icon: 'gift-outline',        label: t('home.referral'),        href: '/referral' },
       ],
     },
     {
-      title: 'SESSION',
+      title: t('profile.section.app'),
+      rows: [
+        { icon: 'notifications-outline', label: t('profile.row.notifications'), href: '/notifications' },
+        { icon: 'settings-outline',      label: t('settings.title'),            href: '/settings' },
+      ],
+    },
+    {
+      title: t('profile.section.session'),
       rows: [
         {
           icon: 'log-out-outline',
-          label: 'Log out',
+          label: t('profile.row.logout'),
           danger: true,
-          onPress: () => { h.warning(); logout(); },
+          onPress: async () => { h.warning(); await logout(); router.replace('/(auth)/login'); },
         },
       ],
     },
@@ -184,7 +241,7 @@ export default function Profile() {
             paddingHorizontal: 24, paddingTop: 18, paddingBottom: 8,
           }}>
             <Text style={{ color: p.fg, fontSize: 22, fontWeight: '700', letterSpacing: -0.4 }}>
-              Profile
+              {t('nav.profile')}
             </Text>
           </View>
 
@@ -350,6 +407,8 @@ export default function Profile() {
         </Pressable>
       </Modal>
 
+      <LocalePickerModal visible={langPickerVisible} onClose={() => setLangPickerVisible(false)} />
+
       {/* Currency Picker Modal */}
       <Modal
         visible={currencyModalVisible}
@@ -365,7 +424,7 @@ export default function Profile() {
             style={{ backgroundColor: p.bg, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, paddingBottom: 32 }}
             onPress={(e) => e.stopPropagation()}
           >
-            <Text style={{ color: p.fg, fontSize: 18, fontWeight: '700', marginBottom: 16 }}>Base Currency</Text>
+            <Text style={{ color: p.fg, fontSize: 18, fontWeight: '700', marginBottom: 16 }}>{t('profile.row.baseCurrency')}</Text>
             <View style={{ gap: 8 }}>
               {currencies.map((currency) => (
                 <Pressable

@@ -19,6 +19,9 @@ const createListingSchema = z.object({
   paymentMethods: z.array(z.string()).min(1),
   terms: z.string().max(1000).optional(),
   autoReply: z.string().max(500).optional(),
+  anonymous: z.boolean().optional(),
+  city: z.string().max(100).optional(),
+  timeframeMins: z.number().int().min(5).max(10080).optional(),
 });
 
 const initTradeSchema = z.object({
@@ -38,8 +41,13 @@ export class P2PController {
     try {
       const data = createListingSchema.parse(req.body);
 
+      // Limits are denominated in fiat; the listing's total fiat value is
+      // amount × price. Both min and max limits must be ≤ that total, and
+      // min must not exceed max.
+      const totalFiat = data.amount * data.price;
       if (data.minLimit > data.maxLimit) throw new AppError('Min limit must be <= max limit', 400);
-      if (data.minLimit > data.amount) throw new AppError('Min limit must be <= total amount', 400);
+      if (data.minLimit > totalFiat) throw new AppError(`Min limit must be <= total listing value (${totalFiat} ${data.fiatCurrency})`, 400);
+      if (data.maxLimit > totalFiat) throw new AppError(`Max limit must be <= total listing value (${totalFiat} ${data.fiatCurrency})`, 400);
 
       // For SELL listings, verify seller has enough balance
       if (data.side === 'SELL') {
@@ -64,6 +72,9 @@ export class P2PController {
           paymentMethods: data.paymentMethods,
           terms: data.terms,
           autoReply: data.autoReply,
+          anonymous: data.anonymous ?? false,
+          city: data.city,
+          timeframeMins: data.timeframeMins ?? 30,
         },
         include: {
           user: { select: { id: true, firstName: true, lastName: true, username: true, kycStatus: true } },
@@ -140,24 +151,38 @@ export class P2PController {
       const offers = listings.map((l: any) => {
         const orders = (l.user._count?.p2pTradesAsBuyer ?? 0)
                      + (l.user._count?.p2pTradesAsSeller ?? 0);
-        const handle = l.user.username
-          ? `@${l.user.username}`
-          : `@${(l.user.firstName ?? 'user').toLowerCase()}`;
         const remaining = Math.max(
           0,
           parseFloat(l.amount.toString()) - parseFloat(l.filled.toString()),
         );
+        // For anonymous listings we hide handle, full name, country and avatar.
+        // Stats (rating / orders / verified) remain visible because they're
+        // important for trust without revealing identity.
+        const trader = l.anonymous
+          ? {
+              handle: `@anon_${String(l.id).slice(0, 6)}`,
+              name: 'Anonymous trader',
+              rating: 4.7,
+              orders,
+              verified: l.user.kycStatus === 'APPROVED',
+              avatarUrl: undefined,
+              anonymous: true,
+            }
+          : {
+              handle: l.user.username
+                ? `@${l.user.username}`
+                : `@${(l.user.firstName ?? 'user').toLowerCase()}`,
+              name: `${l.user.firstName ?? ''} ${l.user.lastName ?? ''}`.trim() || 'Trader',
+              rating: 4.7,            // placeholder until reputation is wired
+              orders,
+              verified: l.user.kycStatus === 'APPROVED',
+              avatarUrl: l.user.avatarUrl ?? undefined,
+              anonymous: false,
+            };
         return {
           id: l.id,
           side: l.side,
-          trader: {
-            handle,
-            name: `${l.user.firstName ?? ''} ${l.user.lastName ?? ''}`.trim() || 'Trader',
-            rating: 4.7,            // placeholder until reputation is wired
-            orders,
-            verified: l.user.kycStatus === 'APPROVED',
-            avatarUrl: l.user.avatarUrl ?? undefined,
-          },
+          trader,
           base: l.currency,
           quote: l.fiatCurrency,
           price: l.price.toString(),
@@ -165,7 +190,9 @@ export class P2PController {
           minLimit: l.minLimit.toString(),
           maxLimit: l.maxLimit.toString(),
           paymentMethods: l.paymentMethods ?? [],
-          country: l.country ?? l.user.country ?? undefined,
+          country: l.anonymous ? undefined : (l.country ?? l.user.country ?? undefined),
+          city: l.anonymous ? undefined : (l.city ?? undefined),
+          timeframeMins: l.timeframeMins ?? 30,
         };
       });
 
@@ -225,13 +252,16 @@ export class P2PController {
       if (listing.status !== 'ACTIVE') throw new AppError('Listing is not active', 400);
       if (listing.userId === req.user!.id) throw new AppError('Cannot trade with yourself', 400);
 
-      // Check amount limits
-      const remaining = parseFloat(listing.amount.toString()) - parseFloat(listing.filled.toString());
-      if (data.amount > remaining) throw new AppError(`Only ${remaining} ${listing.currency} available`, 400);
-      if (data.amount < parseFloat(listing.minLimit.toString())) throw new AppError(`Minimum is ${listing.minLimit} ${listing.currency}`, 400);
-      if (data.amount > parseFloat(listing.maxLimit.toString())) throw new AppError(`Maximum is ${listing.maxLimit} ${listing.currency}`, 400);
-
-      const fiatAmount = data.amount * parseFloat(listing.price.toString());
+      // Check amount limits — data.amount is in crypto; minLimit/maxLimit are in fiat
+      const listingPrice = parseFloat(listing.price.toString());
+      const fiatAmount   = data.amount * listingPrice;
+      const remaining    = parseFloat(listing.amount.toString()) - parseFloat(listing.filled.toString());
+      if (data.amount > remaining)
+        throw new AppError(`Only ${remaining} ${listing.currency} available`, 400);
+      if (fiatAmount < parseFloat(listing.minLimit.toString()))
+        throw new AppError(`Minimum is ${listing.minLimit} ${listing.fiatCurrency}`, 400);
+      if (fiatAmount > parseFloat(listing.maxLimit.toString()))
+        throw new AppError(`Maximum is ${listing.maxLimit} ${listing.fiatCurrency}`, 400);
       const reference = generateReference('P2P');
 
       // Determine buyer/seller
@@ -268,7 +298,7 @@ export class P2PController {
           buyerNote: listing.side === 'SELL' ? data.note : undefined,
           sellerNote: listing.side === 'BUY' ? data.note : undefined,
           paymentMethod: data.paymentMethod || listing.paymentMethods[0],
-          expiresAt: new Date(Date.now() + 30 * 60 * 1000), // 30 min to pay
+          expiresAt: new Date(Date.now() + (listing.timeframeMins ?? 30) * 60 * 1000),
         },
       });
 
@@ -327,7 +357,11 @@ export class P2PController {
     }
   }
 
-  /** Confirm payment received and release crypto (seller action) */
+  /**
+   * Seller confirms they received fiat payment → releases crypto from escrow
+   * to buyer's wallet and moves trade to PAYMENT_CONFIRMED.
+   * Buyer must then call /buyer-confirm to fully complete the trade.
+   */
   static async confirmPayment(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const trade = await (prisma as any).p2PTrade.findFirst({
@@ -338,7 +372,6 @@ export class P2PController {
 
       // Release escrow: unfreeze from seller, transfer to buyer
       await prisma.$transaction(async (tx: any) => {
-        // Unfreeze and deduct from seller
         await tx.wallet.update({
           where: { userId_currency: { userId: trade.sellerId, currency: trade.currency } },
           data: {
@@ -346,34 +379,59 @@ export class P2PController {
             frozen: { decrement: trade.escrowAmount },
           },
         });
-
-        // Credit buyer
         await tx.wallet.upsert({
           where: { userId_currency: { userId: trade.buyerId, currency: trade.currency } },
           update: { balance: { increment: trade.cryptoAmount } },
           create: { userId: trade.buyerId, currency: trade.currency, balance: trade.cryptoAmount },
         });
-
-        // Update trade status
+        // Move to PAYMENT_CONFIRMED — buyer still needs to confirm receipt
         await (tx as any).p2PTrade.update({
           where: { id: trade.id },
-          data: { status: 'COMPLETED', completedAt: new Date() },
+          data: { status: 'PAYMENT_CONFIRMED' },
         });
+      });
 
-        // Create transaction records
+      await prisma.notification.create({
+        data: {
+          userId: trade.buyerId,
+          title: 'Crypto Released',
+          message: `${trade.cryptoAmount} ${trade.currency} has been sent to your wallet. Please confirm receipt. Ref: ${trade.reference}`,
+          type: 'p2p',
+        },
+      });
+
+      res.json({ message: 'Payment confirmed, crypto sent to buyer' });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /** Buyer confirms they received the crypto → trade COMPLETED */
+  static async buyerConfirm(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const trade = await (prisma as any).p2PTrade.findFirst({
+        where: { id: req.params.id, buyerId: req.user!.id },
+      });
+      if (!trade) throw new AppError('Trade not found', 404);
+      if (trade.status !== 'PAYMENT_CONFIRMED')
+        throw new AppError('Seller has not confirmed payment yet', 400);
+
+      await (prisma as any).p2PTrade.update({
+        where: { id: trade.id },
+        data: { status: 'COMPLETED', completedAt: new Date() },
+      });
+
+      await prisma.$transaction(async (tx: any) => {
         const sellerWallet = await tx.wallet.findUnique({
           where: { userId_currency: { userId: trade.sellerId, currency: trade.currency } },
         });
         const buyerWallet = await tx.wallet.findUnique({
           where: { userId_currency: { userId: trade.buyerId, currency: trade.currency } },
         });
-
         await tx.transaction.createMany({
           data: [
             {
-              userId: trade.sellerId,
-              type: 'SELL',
-              currency: trade.currency,
+              userId: trade.sellerId, type: 'SELL', currency: trade.currency,
               amount: new Decimal(-parseFloat(trade.cryptoAmount.toString())),
               balanceBefore: parseFloat(sellerWallet?.balance.toString() || '0') + parseFloat(trade.cryptoAmount.toString()),
               balanceAfter: parseFloat(sellerWallet?.balance.toString() || '0'),
@@ -381,9 +439,7 @@ export class P2PController {
               description: `P2P Sale: ${trade.cryptoAmount} ${trade.currency}`,
             },
             {
-              userId: trade.buyerId,
-              type: 'BUY',
-              currency: trade.currency,
+              userId: trade.buyerId, type: 'BUY', currency: trade.currency,
               amount: trade.cryptoAmount,
               balanceBefore: parseFloat(buyerWallet?.balance.toString() || '0') - parseFloat(trade.cryptoAmount.toString()),
               balanceAfter: parseFloat(buyerWallet?.balance.toString() || '0'),
@@ -394,17 +450,59 @@ export class P2PController {
         });
       });
 
-      // Notify buyer
       await prisma.notification.create({
         data: {
-          userId: trade.buyerId,
+          userId: trade.sellerId,
           title: 'Trade Completed',
-          message: `${trade.cryptoAmount} ${trade.currency} has been released to your wallet. Ref: ${trade.reference}`,
+          message: `Buyer confirmed receipt. Trade ${trade.reference} is fully complete.`,
           type: 'p2p',
         },
       });
 
-      res.json({ message: 'Payment confirmed, crypto released' });
+      res.json({ message: 'Trade completed' });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /** Either party denies/rejects → auto-dispute */
+  static async denyPayment(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const trade = await (prisma as any).p2PTrade.findFirst({
+        where: {
+          id: req.params.id,
+          OR: [{ buyerId: req.user!.id }, { sellerId: req.user!.id }],
+        },
+      });
+      if (!trade) throw new AppError('Trade not found', 404);
+      if (!['PAYMENT_SENT', 'PAYMENT_CONFIRMED'].includes(trade.status))
+        throw new AppError('Can only deny during payment verification', 400);
+
+      await (prisma as any).p2PTrade.update({
+        where: { id: trade.id },
+        data: { status: 'DISPUTED' },
+      });
+
+      const { reason } = req.body;
+      await (prisma as any).p2PDispute.create({
+        data: {
+          tradeId: trade.id,
+          raisedById: req.user!.id,
+          reason: reason || 'Payment denied by counterparty',
+        },
+      });
+
+      const otherId = req.user!.id === trade.buyerId ? trade.sellerId : trade.buyerId;
+      await prisma.notification.create({
+        data: {
+          userId: otherId,
+          title: 'Trade Disputed',
+          message: `The counterparty denied the payment on trade ${trade.reference}. Support has been notified.`,
+          type: 'p2p',
+        },
+      });
+
+      res.json({ message: 'Trade disputed' });
     } catch (error) {
       next(error);
     }

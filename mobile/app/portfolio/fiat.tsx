@@ -13,14 +13,14 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import Svg, { Circle } from 'react-native-svg';
+import Svg, { Circle, Text as SvgText } from 'react-native-svg';
 
 import { useWallets } from '@/hooks';
-import { CURRENCY_META } from '@/constants';
-import { useTheme, useThemedPalette, type Palette } from '@/store/themeStore';
-import type { Wallet, Currency } from '@/types';
+import { getCurrencyMeta } from '@/constants';
+import { useTheme, useThemedPalette } from '@/store/themeStore';
+import type { Wallet } from '@/types';
 
-type SortOption = 'value' | 'name';
+type SortOption = 'value' | 'name' | 'rate';
 
 export default function FiatPortfolio() {
   const router = useRouter();
@@ -30,16 +30,18 @@ export default function FiatPortfolio() {
   const [sort, setSort] = useState<SortOption>('value');
 
   const fiatWallets = useMemo(
-    () => (wallets ?? []).filter((w) => CURRENCY_META[w.currency]?.kind === 'fiat'),
+    () => (wallets ?? []).filter((w) => getCurrencyMeta(w.currency)?.kind === 'fiat'),
     [wallets],
   );
 
-  const valueOf = (w: Wallet) => {
-    return Number(w.balance);
+  const usdOf  = (w: Wallet) => Number(w.fiatValueUsd || 0);
+  const rateOf = (w: Wallet) => {
+    const bal = Number(w.balance);
+    return bal > 0 ? usdOf(w) / bal : 0;
   };
 
-  const totalFiat = useMemo(
-    () => fiatWallets.reduce((s, w) => s + valueOf(w), 0),
+  const totalUsd = useMemo(
+    () => fiatWallets.reduce((s, w) => s + usdOf(w), 0),
     [fiatWallets],
   );
 
@@ -47,38 +49,36 @@ export default function FiatPortfolio() {
   const sortedAssets = useMemo(() => {
     const assets = fiatWallets.map((w) => ({
       ...w,
-      value: valueOf(w),
+      usd:  usdOf(w),
+      rate: rateOf(w),
     }));
-
     switch (sort) {
-      case 'value':
-        return assets.sort((a, b) => b.value - a.value);
-      case 'name':
-        return assets.sort((a, b) => a.currency.localeCompare(b.currency));
-      default:
-        return assets;
+      case 'value':  return assets.sort((a, b) => b.usd - a.usd);
+      case 'rate':   return assets.sort((a, b) => b.rate - a.rate);
+      case 'name':   return assets.sort((a, b) => a.currency.localeCompare(b.currency));
+      default:       return assets;
     }
   }, [fiatWallets, sort]);
 
-  // Currency allocation for pie chart
+  // Currency allocation for donut chart
   const allocation = useMemo(() => {
-    const sorted = [...fiatWallets].sort((a, b) => valueOf(b) - valueOf(a));
-    const data = sorted.map((w) => ({
+    const sorted = [...fiatWallets].sort((a, b) => usdOf(b) - usdOf(a));
+    return sorted.map((w) => ({
       currency: w.currency,
-      value: valueOf(w),
-      percentage: totalFiat > 0 ? (valueOf(w) / totalFiat) * 100 : 0,
+      usd: usdOf(w),
+      percentage: totalUsd > 0 ? (usdOf(w) / totalUsd) * 100 : 0,
     }));
+  }, [fiatWallets, totalUsd]);
 
-    return data;
-  }, [fiatWallets, totalFiat]);
-
-  const formatFiat = (val: number, currency: Currency) => {
-    const meta = CURRENCY_META[currency];
-    const symbol = meta?.symbol || currency;
-    if (val >= 1e9) return `${symbol}${(val / 1e9).toFixed(2)}B`;
-    if (val >= 1e6) return `${symbol}${(val / 1e6).toFixed(2)}M`;
-    if (val >= 1e3) return `${symbol}${(val / 1e3).toFixed(2)}K`;
-    return `${symbol}${val.toFixed(2)}`;
+  const formatUsd = (val: number) => {
+    if (val >= 1e9) return `$${(val / 1e9).toFixed(2)}B`;
+    if (val >= 1e6) return `$${(val / 1e6).toFixed(2)}M`;
+    if (val >= 1e3) return `$${(val / 1e3).toFixed(2)}K`;
+    return `$${val.toFixed(2)}`;
+  };
+  const formatNative = (w: Wallet) => {
+    const meta = getCurrencyMeta(w.currency);
+    return `${meta?.symbol ?? ''}${Number(w.balance).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: meta?.decimals ?? 2 })}`;
   };
 
   const COLORS = ['#22c55e', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4'];
@@ -122,14 +122,14 @@ export default function FiatPortfolio() {
             backgroundColor: p.bgElev,
             borderWidth: 1, borderColor: p.border,
           }}>
-            <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '600', marginBottom: 8 }}>
-              Total Fiat Holdings
+            <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '700', letterSpacing: 0.5 }}>
+              TOTAL FIAT (USD EQUIVALENT)
             </Text>
-            <Text style={{ color: p.fg, fontSize: 32, fontWeight: '700', letterSpacing: -0.6 }}>
-              {fiatWallets.length > 0 ? formatFiat(totalFiat, fiatWallets[0].currency) : '$0.00'}
+            <Text style={{ color: p.fg, fontSize: 34, fontWeight: '800', letterSpacing: -0.8, marginTop: 6 }}>
+              {formatUsd(totalUsd)}
             </Text>
             <Text style={{ color: p.fgMuted, fontSize: 12, marginTop: 4 }}>
-              Across {fiatWallets.length} currency{fiatWallets.length !== 1 ? 'ies' : ''}
+              Across {fiatWallets.length} {fiatWallets.length === 1 ? 'currency' : 'currencies'}
             </Text>
           </View>
 
@@ -146,43 +146,44 @@ export default function FiatPortfolio() {
                 Currency Allocation
               </Text>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 20 }}>
-                {/* Simple Pie Chart */}
+                {/* Donut chart */}
                 <Svg width={120} height={120}>
+                  <Circle cx={60} cy={60} r={44} fill="transparent" stroke={p.border} strokeWidth={18} />
                   {allocation.map((item, index) => {
-                    const percentage = item.percentage / 100;
-                    const circumference = 2 * Math.PI * 50;
-                    const strokeDasharray = circumference * percentage;
-                    const previousPercentages = allocation.slice(0, index).reduce((s, i) => s + i.percentage, 0);
-                    const rotation = (previousPercentages / 100) * 360 - 90;
+                    const circumference = 2 * Math.PI * 44;
+                    const dash = circumference * (item.percentage / 100);
+                    const prevPct = allocation.slice(0, index).reduce((s, i) => s + i.percentage, 0);
                     return (
                       <Circle
                         key={item.currency}
-                        cx={60}
-                        cy={60}
-                        r={50}
+                        cx={60} cy={60} r={44}
                         fill="transparent"
                         stroke={COLORS[index % COLORS.length]}
-                        strokeWidth={20}
-                        strokeDasharray={[strokeDasharray, circumference]}
-                        rotation={rotation}
-                        originX={60}
-                        originY={60}
+                        strokeWidth={18}
+                        strokeDasharray={[dash, circumference]}
+                        rotation={(prevPct / 100) * 360 - 90}
+                        originX={60} originY={60}
                       />
                     );
                   })}
+                  <SvgText x={60} y={56} textAnchor="middle" fill={p.fg} fontSize="13" fontWeight="800">
+                    {fiatWallets.length}
+                  </SvgText>
+                  <SvgText x={60} y={70} textAnchor="middle" fill={p.fgMuted} fontSize="9" fontWeight="600">
+                    CURRENCIES
+                  </SvgText>
                 </Svg>
                 <View style={{ flex: 1 }}>
                   {allocation.map((item, index) => (
-                    <View key={item.currency} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+                    <View key={item.currency} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 7 }}>
                       <View style={{
-                        width: 12, height: 12, borderRadius: 6,
-                        backgroundColor: COLORS[index % COLORS.length],
-                        marginRight: 8,
+                        width: 10, height: 10, borderRadius: 5,
+                        backgroundColor: COLORS[index % COLORS.length], marginRight: 8,
                       }} />
-                      <Text style={{ color: p.fg, fontSize: 13, fontWeight: '600', flex: 1 }}>
+                      <Text style={{ color: p.fg, fontSize: 13, fontWeight: '700', flex: 1 }}>
                         {item.currency}
                       </Text>
-                      <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '500' }}>
+                      <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '600', fontVariant: ['tabular-nums'] }}>
                         {item.percentage.toFixed(1)}%
                       </Text>
                     </View>
@@ -201,7 +202,7 @@ export default function FiatPortfolio() {
               borderRadius: 12,
               backgroundColor: p.pillBg,
             }}>
-              {(['value', 'name'] as SortOption[]).map((option) => (
+              {(['value', 'rate', 'name'] as SortOption[]).map((option) => (
                 <Pressable
                   key={option}
                   onPress={() => setSort(option)}
@@ -245,7 +246,7 @@ export default function FiatPortfolio() {
               </View>
             ) : (
               sortedAssets.map((asset) => {
-                const meta = CURRENCY_META[asset.currency];
+                const meta = getCurrencyMeta(asset.currency);
                 if (!meta) return null;
                 return (
                   <Pressable
@@ -271,19 +272,20 @@ export default function FiatPortfolio() {
                       </Text>
                     </View>
                     <View style={{ flex: 1 }}>
-                      <Text style={{ color: p.fg, fontSize: 15, fontWeight: '700' }}>
-                        {meta.name}
-                      </Text>
+                      <Text style={{ color: p.fg, fontSize: 15, fontWeight: '700' }}>{meta.name}</Text>
                       <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '500', marginTop: 2 }}>
-                        {Number(asset.balance).toLocaleString('en-US', {
-                          maximumFractionDigits: meta.decimals,
-                        })} {asset.currency}
+                        {formatNative(asset)}
                       </Text>
                     </View>
                     <View style={{ alignItems: 'flex-end' }}>
                       <Text style={{ color: p.fg, fontSize: 15, fontWeight: '700', fontVariant: ['tabular-nums'] }}>
-                        {formatFiat(asset.value, asset.currency)}
+                        {formatUsd(asset.usd)}
                       </Text>
+                      {asset.currency !== 'USD' && asset.rate > 0 && (
+                        <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '600', marginTop: 1, fontVariant: ['tabular-nums'] }}>
+                          1 {asset.currency} = ${asset.rate.toFixed(4)}
+                        </Text>
+                      )}
                     </View>
                   </Pressable>
                 );

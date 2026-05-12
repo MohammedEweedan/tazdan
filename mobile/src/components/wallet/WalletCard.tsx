@@ -7,7 +7,7 @@
 import { Pressable, Text, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { gradients, shadows } from '@/theme';
-import { CURRENCY_META } from '@/constants';
+import { getCurrencyMeta } from '@/constants';
 import { formatAmount, formatPercent } from '@/utils/format';
 import { Sparkline } from '@/components/ui/Sparkline';
 import type { Wallet } from '@/types';
@@ -26,9 +26,12 @@ const colorwayFor = (i: number): keyof typeof gradients.cards => {
 };
 
 export function WalletCard({ wallet, width, height = 200, onPress, sparkline }: Props) {
-  const meta = CURRENCY_META[wallet.currency];
+  const meta = getCurrencyMeta(wallet.currency);
   const grad = gradients.cards[colorwayFor(wallet.currency.charCodeAt(0))];
   const positive = (wallet.changePct24h ?? 0) >= 0;
+  const icon = meta?.flagOrIcon ?? wallet.currency.slice(0, 1);
+  const code = meta?.code ?? wallet.currency;
+  const name = meta?.name ?? wallet.currency;
 
   return (
     <Pressable onPress={onPress} style={{ width, marginRight: 14 }}>
@@ -56,13 +59,13 @@ export function WalletCard({ wallet, width, height = 200, onPress, sparkline }: 
                   alignItems: 'center', justifyContent: 'center',
                 }}
               >
-                <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>{meta.flagOrIcon}</Text>
+                <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>{icon}</Text>
               </View>
               <Text style={{ color: 'rgba(255,255,255,0.78)', fontSize: 12, fontWeight: '600', letterSpacing: 0.4 }}>
-                {meta.code} · {meta.name.toUpperCase()}
+                {code} · {name.toUpperCase()}
               </Text>
             </View>
-            {meta.kind === 'crypto' && wallet.changePct24h != null && (
+            {meta?.kind === 'crypto' && wallet.changePct24h != null && (
               <View
                 style={{
                   paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8,

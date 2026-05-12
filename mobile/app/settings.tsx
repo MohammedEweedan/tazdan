@@ -7,19 +7,21 @@ import { Alert, Switch, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { ScreenShell, Panel, PanelRow } from '@/components/ui/ScreenShell';
 import { useTheme, useThemedPalette } from '@/store/themeStore';
-import { useI18n, LOCALE_META } from '@/store/i18nStore';
+import { useI18n, useT, LOCALE_META } from '@/store/i18nStore';
 import { useAuthStore } from '@/store/authStore';
 import { useHaptics, useUpdateMyProfile } from '@/hooks';
+import { LocalePickerModal } from '@/components/ui/LocalePickerModal';
 
 export default function Settings() {
   const h = useHaptics();
+  const t = useT();
   const p = useThemedPalette();
   const themeMode = useTheme((s) => s.mode);
   const toggleTheme = useTheme((s) => s.toggle);
   const setMode = useTheme((s) => s.setMode);
   const locale = useI18n((s) => s.locale);
-  const setLocale = useI18n((s) => s.setLocale);
   const user = useAuthStore((s) => s.user);
+  const [langPickerVisible, setLangPickerVisible] = useState(false);
   const updateProfile = useUpdateMyProfile();
   // Mirror the server flag locally so the switch flips instantly while the
   // mutation is in-flight; we revert if the request fails.
@@ -33,14 +35,14 @@ export default function Settings() {
   };
 
   return (
-    <ScreenShell title="Settings">
+    <ScreenShell title={t('settings.title')}>
       {/* Account info */}
       <Panel style={{ marginTop: 18, padding: 16 }}>
         <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '700', letterSpacing: 0.6 }}>
-          ACCOUNT
+          {t('settings.account').toUpperCase()}
         </Text>
         <Text style={{ color: p.fg, fontSize: 16, fontWeight: '700', marginTop: 6 }}>
-          {user ? `${user.firstName} ${user.lastName}` : 'Not signed in'}
+          {user ? `${user.firstName} ${user.lastName}` : t('settings.notSignedIn')}
         </Text>
         <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '500', marginTop: 2 }}>
           {user?.email ?? '—'}
@@ -49,7 +51,7 @@ export default function Settings() {
 
       {/* Privacy */}
       <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '700', letterSpacing: 1.2, marginTop: 22, marginLeft: 4 }}>
-        PRIVACY
+        {t('settings.privacy').toUpperCase()}
       </Text>
       <Panel style={{ marginTop: 8 }}>
         <View style={{
@@ -66,12 +68,12 @@ export default function Settings() {
           </View>
           <View style={{ flex: 1 }}>
             <Text style={{ color: p.fg, fontSize: 14, fontWeight: '700' }}>
-              Public profile
+              {t('settings.publicProfile')}
             </Text>
             <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '500', marginTop: 2 }}>
               {isPublic
-                ? `Visible at promrkts.app/u/${user?.username ?? 'me'}`
-                : 'Only you can see your @handle.'}
+                ? `${t('settings.visibleAt')} promrkts.app/u/${user?.username ?? 'me'}`
+                : t('settings.privateProfile')}
             </Text>
           </View>
           <Switch
@@ -82,27 +84,27 @@ export default function Settings() {
         </View>
         <PanelRow
           icon="at-outline"
-          label={user?.username ? `@${user.username}` : 'Set a handle'}
+          label={user?.username ? `@${user.username}` : t('settings.setHandle')}
           last
           right={<Ionicons name="chevron-forward" size={16} color={p.fgFaint} />}
-          onPress={() => Alert.alert('Change handle', 'Handle changes are coming soon. Each handle change resets your trade reputation.')}
+          onPress={() => Alert.alert(t('settings.changeHandle'), t('settings.handleSoon'))}
         />
       </Panel>
 
       {/* Theme */}
       <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '700', letterSpacing: 1.2, marginTop: 22, marginLeft: 4 }}>
-        APPEARANCE
+        {t('settings.appearance').toUpperCase()}
       </Text>
       <Panel style={{ marginTop: 8 }}>
         <PanelRow
           icon="contrast-outline"
-          label={`Theme · ${themeMode === 'dark' ? 'Dark' : 'Light'}`}
+          label={`${t('settings.theme')} · ${themeMode === 'dark' ? t('settings.dark') : t('settings.light')}`}
           onPress={() => { h.selection(); toggleTheme(); }}
           right={<Ionicons name="swap-horizontal" size={16} color={p.fgFaint} />}
         />
         <PanelRow
           icon="moon-outline"
-          label="Use dark"
+          label={t('settings.useDark')}
           last
           onPress={() => { h.selection(); setMode('dark'); }}
           right={themeMode === 'dark'
@@ -113,43 +115,39 @@ export default function Settings() {
 
       {/* Language */}
       <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '700', letterSpacing: 1.2, marginTop: 22, marginLeft: 4 }}>
-        LANGUAGE
+        {t('settings.language').toUpperCase()}
       </Text>
       <Panel style={{ marginTop: 8 }}>
-        {(Object.keys(LOCALE_META) as Array<keyof typeof LOCALE_META>).map((code, i, arr) => (
-          <PanelRow
-            key={code}
-            icon="language-outline"
-            label={`${LOCALE_META[code].flag}  ${LOCALE_META[code].label}`}
-            last={i === arr.length - 1}
-            onPress={() => { h.selection(); setLocale(code); }}
-            right={locale === code
-              ? <Ionicons name="checkmark-circle" size={18} color={p.greenFg} />
-              : null}
-          />
-        ))}
+        <PanelRow
+          icon="language-outline"
+          label={`${LOCALE_META[locale].flag}  ${LOCALE_META[locale].label}`}
+          last
+          onPress={() => { h.selection(); setLangPickerVisible(true); }}
+          right={<Ionicons name="chevron-forward" size={16} color={p.fgFaint} />}
+        />
       </Panel>
+      <LocalePickerModal visible={langPickerVisible} onClose={() => setLangPickerVisible(false)} />
 
       {/* Privacy / about */}
       <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '700', letterSpacing: 1.2, marginTop: 22, marginLeft: 4 }}>
-        ABOUT
+        {t('settings.about').toUpperCase()}
       </Text>
       <Panel style={{ marginTop: 8 }}>
         <PanelRow
           icon="document-text-outline"
-          label="Terms of service"
-          onPress={() => Alert.alert('Terms', 'Available at https://promrkts.app/terms')}
+          label={t('settings.terms')}
+          onPress={() => Alert.alert(t('settings.terms'), t('settings.termsAlert'))}
         />
         <PanelRow
           icon="lock-closed-outline"
-          label="Privacy policy"
-          onPress={() => Alert.alert('Privacy', 'Available at https://promrkts.app/privacy')}
+          label={t('settings.privacyPolicy')}
+          onPress={() => Alert.alert(t('settings.privacy'), t('settings.privacyAlert'))}
         />
         <PanelRow
           icon="help-circle-outline"
-          label="Help & support"
+          label={t('settings.support')}
           last
-          onPress={() => Alert.alert('Support', 'Email support@promrkts.app')}
+          onPress={() => Alert.alert(t('settings.support'), t('settings.supportAlert'))}
         />
       </Panel>
 

@@ -10,11 +10,11 @@
  */
 
 import { useState } from 'react';
-import { Alert, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { Alert, Modal, Platform, Pressable, ScrollView, Text, TextInput, View, KeyboardAvoidingView, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
-import { ScreenShell, CTAButton, Panel } from '@/components/ui/ScreenShell';
 import { useThemedPalette } from '@/store/themeStore';
 import { useCreateP2PListing, useHaptics } from '@/hooks';
 import type { Palette } from '@/store/themeStore';
@@ -27,6 +27,7 @@ export default function NewListing() {
   const router = useRouter();
   const h = useHaptics();
   const p = useThemedPalette();
+  const insets = useSafeAreaInsets();
   const create = useCreateP2PListing();
 
   const [side, setSide] = useState<'BUY' | 'SELL'>('SELL');
@@ -36,28 +37,56 @@ export default function NewListing() {
   const [amount, setAmount]     = useState('');
   const [minLimit, setMin]      = useState('');
   const [maxLimit, setMax]      = useState('');
+  const [minMode, setMinMode]   = useState<'fiat' | 'asset'>('fiat');
+  const [maxMode, setMaxMode]   = useState<'fiat' | 'asset'>('fiat');
   const [methods, setMethods]   = useState<string[]>(['Bank Transfer']);
   const [terms, setTerms]       = useState('');
 
   const priceN = Number(price), amountN = Number(amount), minN = Number(minLimit), maxN = Number(maxLimit);
+  const totalFiat = priceN > 0 && amountN > 0 ? priceN * amountN : 0;
+  
+  // Convert minimum to fiat for validation/submission if in asset mode
+  const minFiat = minMode === 'asset' && priceN > 0 && minN > 0 ? minN * priceN : minN;
+  const minFiatN = Number(minFiat);
+  
+  // Convert maximum to fiat for validation/submission if in asset mode
+  const maxFiat = maxMode === 'asset' && priceN > 0 && maxN > 0 ? maxN * priceN : maxN;
+  const maxFiatN = Number(maxFiat);
+
+  // Limit constraints: both min and max must be ≤ the total fiat value of the
+  // listing (price × amount). Otherwise a buyer could "spend" more fiat than
+  // there is crypto available.
+  const minOverTotal = minFiatN > 0 && totalFiat > 0 && minFiatN > totalFiat;
+  const maxOverTotal = maxFiatN > 0 && totalFiat > 0 && maxFiatN > totalFiat;
+  const minOverMax   = minFiatN > 0 && maxFiatN > 0 && minFiatN > maxFiatN;
+
   const valid =
     priceN  > 0 &&
     amountN > 0 &&
-    minN    > 0 &&
-    maxN    >= minN &&
+    minFiatN > 0 &&
+    maxFiatN >= minFiatN &&
+    !minOverTotal &&
+    !maxOverTotal &&
     methods.length > 0;
 
   const submit = async () => {
     if (!valid) {
       h.error();
-      Alert.alert('Check your inputs', 'Price, amount and limits must be positive numbers, max ≥ min, and at least one payment method.');
+      const reason = minOverTotal
+        ? `Min limit (${minFiatN.toLocaleString()} ${fiatCurrency}) must be ≤ the total listing value (${totalFiat.toLocaleString()} ${fiatCurrency}).`
+        : maxOverTotal
+          ? `Max limit (${maxFiatN.toLocaleString()} ${fiatCurrency}) must be ≤ the total listing value (${totalFiat.toLocaleString()} ${fiatCurrency}).`
+          : minOverMax
+            ? 'Min limit must be ≤ max limit.'
+            : 'Price, amount and limits must be positive numbers, max ≥ min, and at least one payment method.';
+      Alert.alert('Check your inputs', reason);
       return;
     }
     try {
       await create.mutateAsync({
         side, currency, fiatCurrency,
         price: priceN, amount: amountN,
-        minLimit: minN, maxLimit: maxN,
+        minLimit: minFiatN, maxLimit: maxFiatN,
         paymentMethods: methods,
         terms: terms || undefined,
       });
@@ -82,13 +111,41 @@ export default function NewListing() {
   };
 
   return (
-    <ScreenShell title="New P2P listing" scroll={false} contentStyle={{ paddingHorizontal: 0, paddingBottom: 0 }}>
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingHorizontal: 24, paddingBottom: 24 }}
-        style={{ flex: 1 }}
-        keyboardShouldPersistTaps="handled"
+    <Modal visible animationType="slide" transparent onRequestClose={() => router.back()}>
+      <Pressable
+        style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' }}
+        onPress={() => router.back()}
       >
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+          <Pressable
+            style={{
+              backgroundColor: p.bg,
+              borderTopLeftRadius: 28, borderTopRightRadius: 28,
+              maxHeight: '85%',
+            }}
+            onPress={(e) => e.stopPropagation()}
+          >
+            {/* Handle + header */}
+            <View style={{ alignItems: 'center', paddingTop: 10, paddingBottom: 2 }}>
+              <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: p.border }} />
+            </View>
+            <View style={{
+              flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+              paddingHorizontal: 24, paddingTop: 8, paddingBottom: 4,
+            }}>
+              <Text style={{ color: p.fg, fontSize: 20, fontWeight: '800', letterSpacing: -0.4 }}>
+                New P2P listing
+              </Text>
+              <Pressable onPress={() => router.back()} hitSlop={8} style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border, alignItems: 'center', justifyContent: 'center' }}>
+                <Ionicons name="close" size={16} color={p.fg} />
+              </Pressable>
+            </View>
+
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 80 }}
+            >
         {/* Side toggle */}
         <View style={{
           flexDirection: 'row',
@@ -163,26 +220,88 @@ export default function NewListing() {
 
         <View style={{ flexDirection: 'row', gap: 10 }}>
           <View style={{ flex: 1 }}>
-            <Section title={`MIN (${fiatCurrency})`} palette={p}>
+            <Section title={`MIN`} palette={p}>
+              <View style={{ flexDirection: 'row', gap: 6, marginBottom: 8 }}>
+                {(['fiat', 'asset'] as const).map((mode) => (
+                  <Pressable
+                    key={mode}
+                    onPress={() => { h.selection(); setMinMode(mode); }}
+                    style={{
+                      flex: 1, paddingVertical: 6, borderRadius: 8,
+                      backgroundColor: minMode === mode ? p.fg : p.pillBg,
+                      borderWidth: 1, borderColor: minMode === mode ? p.fg : p.border,
+                      alignItems: 'center',
+                    }}
+                  >
+                    <Text style={{
+                      color: minMode === mode ? p.bg : p.fgMuted,
+                      fontSize: 11, fontWeight: '800',
+                    }}>
+                      {mode === 'fiat' ? fiatCurrency : currency}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
               <Field
                 palette={p}
                 value={minLimit}
                 onChangeText={(t) => setMin(t.replace(/[^0-9.]/g, ''))}
-                placeholder="50"
+                placeholder={minMode === 'fiat' ? '50' : '10'}
+                error={minOverTotal || minOverMax}
+                suffix={minMode === 'fiat' ? fiatCurrency : currency}
               />
             </Section>
           </View>
           <View style={{ flex: 1 }}>
-            <Section title={`MAX (${fiatCurrency})`} palette={p}>
+            <Section title={`MAX`} palette={p}>
+              <View style={{ flexDirection: 'row', gap: 6, marginBottom: 8 }}>
+                {(['fiat', 'asset'] as const).map((mode) => (
+                  <Pressable
+                    key={mode}
+                    onPress={() => { h.selection(); setMaxMode(mode); }}
+                    style={{
+                      flex: 1, paddingVertical: 6, borderRadius: 8,
+                      backgroundColor: maxMode === mode ? p.fg : p.pillBg,
+                      borderWidth: 1, borderColor: maxMode === mode ? p.fg : p.border,
+                      alignItems: 'center',
+                    }}
+                  >
+                    <Text style={{
+                      color: maxMode === mode ? p.bg : p.fgMuted,
+                      fontSize: 11, fontWeight: '800',
+                    }}>
+                      {mode === 'fiat' ? fiatCurrency : currency}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
               <Field
                 palette={p}
                 value={maxLimit}
                 onChangeText={(t) => setMax(t.replace(/[^0-9.]/g, ''))}
-                placeholder="2000"
+                placeholder={maxMode === 'fiat' ? '2000' : '500'}
+                error={maxOverTotal}
+                suffix={maxMode === 'fiat' ? fiatCurrency : currency}
               />
             </Section>
           </View>
         </View>
+
+        {/* Limits hint / errors */}
+        {(totalFiat > 0 || minOverTotal || maxOverTotal || minOverMax) && (
+          <Text style={{
+            color: minOverTotal || maxOverTotal || minOverMax ? p.redFg : p.fgMuted,
+            fontSize: 12, fontWeight: '600', marginTop: 8, marginLeft: 4, lineHeight: 17,
+          }}>
+            {minOverTotal
+              ? `Min limit must be ≤ total listing value (${totalFiat.toLocaleString()} ${fiatCurrency}).`
+              : maxOverTotal
+                ? `Max limit must be ≤ total listing value (${totalFiat.toLocaleString()} ${fiatCurrency}).`
+                : minOverMax
+                  ? 'Min limit must be ≤ max limit.'
+                  : `Total listing value: ${totalFiat.toLocaleString()} ${fiatCurrency}`}
+          </Text>
+        )}
 
         {/* Payment methods */}
         <Section title="PAYMENT METHODS" palette={p}>
@@ -213,7 +332,10 @@ export default function NewListing() {
 
         {/* Optional terms */}
         <Section title="TERMS (OPTIONAL)" palette={p}>
-          <Panel>
+          <View style={{
+            borderRadius: 14, backgroundColor: p.bgElev,
+            borderWidth: 1, borderColor: p.border,
+          }}>
             <TextInput
               value={terms}
               onChangeText={setTerms}
@@ -226,20 +348,50 @@ export default function NewListing() {
                 textAlignVertical: 'top',
               }}
             />
-          </Panel>
+          </View>
         </Section>
-
-        <View style={{ marginTop: 24 }}>
-          <CTAButton
-            label={create.isPending ? 'Posting…' : `Post ${side} listing`}
-            icon="megaphone"
-            disabled={!valid || create.isPending}
-            loading={create.isPending}
-            onPress={submit}
-          />
-        </View>
       </ScrollView>
-    </ScreenShell>
+
+      {/* Sticky CTA footer */}
+      <View style={{
+        position: 'absolute', left: 0, right: 0, bottom: 0,
+        paddingHorizontal: 20,
+        paddingTop: 12,
+        paddingBottom: insets.bottom + 12,
+        backgroundColor: p.bg,
+        borderTopWidth: 1, borderTopColor: p.border,
+      }}>
+        <Pressable
+          onPress={submit}
+          disabled={!valid || create.isPending}
+          style={({ pressed }) => ({
+            height: 56, borderRadius: 28,
+            backgroundColor: valid ? p.ctaBg : p.bgElev,
+            borderWidth: valid ? 0 : 1, borderColor: p.border,
+            alignItems: 'center', justifyContent: 'center',
+            flexDirection: 'row', gap: 8,
+            opacity: (!valid || create.isPending) ? 0.6 : pressed ? 0.85 : 1,
+            shadowColor: valid ? p.ctaBg : 'transparent',
+            shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.3, shadowRadius: 14, elevation: 6,
+          })}
+        >
+          {create.isPending ? (
+            <ActivityIndicator size="small" color={p.ctaFg} />
+          ) : (
+            <Ionicons name="megaphone" size={16} color={valid ? p.ctaFg : p.fgMuted} />
+          )}
+          <Text style={{
+            color: valid ? p.ctaFg : p.fgMuted,
+            fontSize: 16, fontWeight: '800', letterSpacing: -0.2,
+          }}>
+            {create.isPending ? 'Posting…' : `Post ${side} listing`}
+          </Text>
+        </Pressable>
+      </View>
+    </Pressable>
+  </KeyboardAvoidingView>
+</Pressable>
+</Modal>
   );
 }
 
@@ -285,19 +437,20 @@ function ChipGroup({
 }
 
 function Field({
-  palette: p, value, onChangeText, placeholder, suffix,
+  palette: p, value, onChangeText, placeholder, suffix, error,
 }: {
   palette: Palette;
   value: string;
   onChangeText: (t: string) => void;
   placeholder: string;
   suffix?: string;
+  error?: boolean;
 }) {
   return (
     <View style={{
       height: 56, borderRadius: 14,
       backgroundColor: p.bgElev,
-      borderWidth: 1, borderColor: p.border,
+      borderWidth: error ? 1.5 : 1, borderColor: error ? p.redFg : p.border,
       flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16,
     }}>
       <TextInput

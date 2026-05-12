@@ -11,17 +11,18 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Animated, Dimensions, Image, KeyboardAvoidingView, Modal, Platform, Pressable, RefreshControl, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { ActivityIndicator, Animated, Dimensions, Image, KeyboardAvoidingView, Modal, PanResponder, Platform, Pressable, RefreshControl, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
+import BalanceSvg, { Path as SvgPath, Defs as SvgDefs, LinearGradient as SvgLinearGradient, Stop as SvgStop, Line as SvgLine, Circle as SvgCircle } from 'react-native-svg';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 
 import { useAuthStore } from '@/store/authStore';
-import { useWallets, useHaptics, useTransactions, useUnreadCount, useMarkets } from '@/hooks';
+import { useWallets, useHaptics, useTransactions, useUnreadCount, useMarkets, useDisplayCurrency } from '@/hooks';
 import { useTheme, useThemedPalette, type Palette } from '@/store/themeStore';
-import { formatFiat } from '@/utils/format';
+import { useT } from '@/store/i18nStore';
 import { Sparkline } from '@/components/ui/Sparkline';
 import { BuyWidget } from '@/components/exchange/BuyWidget';
 import { SellWidget } from '@/components/exchange/SellWidget';
@@ -35,11 +36,14 @@ type Tab = 'ASSETS' | 'WALLETS' | 'ACTIVITY';
 export default function Home() {
   const router = useRouter();
   const h = useHaptics();
+  const t = useT();
+  const insets = useSafeAreaInsets();
   const user = useAuthStore((s) => s.user);
   const { data: wallets, refetch: refetchWallets } = useWallets();
   const { data: txData, refetch: refetchTxs } = useTransactions(1);
   const { data: unreadData } = useUnreadCount();
   const p = useThemedPalette();
+  const dc = useDisplayCurrency();
   const themeMode = useTheme((s) => s.mode);
   const [tab, setTab] = useState<Tab>('ASSETS');
   const [buyModalVisible, setBuyModalVisible] = useState(false);
@@ -50,6 +54,7 @@ export default function Home() {
   const [swapModalVisible, setSwapModalVisible] = useState(false);
   const [withdrawModalVisible, setWithdrawModalVisible] = useState(false);
   const [moreMenuVisible, setMoreMenuVisible] = useState(false);
+  const [balanceChartVisible, setBalanceChartVisible] = useState(false);
 
   const list = wallets ?? [];
 
@@ -129,15 +134,6 @@ export default function Home() {
     [ownedAssets],
   );
 
-  const cryptoWallets = useMemo(
-    () => list.filter((w) => CRYPTO_CURRENCIES.includes(w.currency)),
-    [list],
-  );
-  const fiatWallets = useMemo(
-    () => list.filter((w) => FIAT_CURRENCIES.includes(w.currency)),
-    [list],
-  );
-
   const totalUsd = useMemo(() => {
     return list.reduce((sum, w) => {
       const live = priceMap[w.currency];
@@ -168,21 +164,23 @@ export default function Home() {
   }, [list, tickers, totalUsd]);
   const deltaUsd = (totalUsd * deltaPct) / 100;
   const positive = deltaPct >= 0;
+  const [showBalance, setShowBalance] = useState(true);
 
   const initial = (user?.firstName?.[0] ?? user?.email?.[0] ?? 'P').toUpperCase();
   const handle = user?.username ?? user?.email?.split('@')[0] ?? 'me';
   const userEmoji = user?.avatarUrl;
 
   const ACTIONS: ActionDef[] = [
-    { key: 'buy',     icon: 'add',                   label: 'Buy',     onPress: () => setBuyModalVisible(true) },
-    { key: 'sell',    icon: 'cash-outline',          label: 'Sell',    onPress: () => setSellModalVisible(true) },
-    { key: 'receive', icon: 'qr-code-outline',       label: 'Receive', onPress: () => setReceiveModalVisible(true) },
-    { key: 'more',    icon: 'ellipsis-horizontal',   label: 'More',    onPress: () => setMoreMenuVisible(true) },
+    { key: 'buy',     icon: 'add',                    label: t('action.buy'),     onPress: () => setBuyModalVisible(true) },
+    { key: 'sell',    icon: 'cash-outline',           label: t('action.sell'),    onPress: () => setSellModalVisible(true) },
+    { key: 'send',    icon: 'paper-plane-outline',    label: t('action.send'),    onPress: () => setSendModalVisible(true) },
+    { key: 'receive', icon: 'qr-code-outline',        label: t('action.receive'), onPress: () => setReceiveModalVisible(true) },
+    { key: 'more',    icon: 'ellipsis-horizontal',    label: '···',               onPress: () => setMoreMenuVisible(true) },
   ];
 
   return (
-    <View style={{ flex: 1, backgroundColor: '#4a8fe0' }}>
-      <StatusBar style="light" />
+    <View style={{ flex: 1, backgroundColor: p.bg }}>
+      <StatusBar style={themeMode === 'dark' ? 'light' : 'dark'} />
       <SafeAreaView style={{ flex: 1 }} edges={['top']}>
         <ScrollView
           showsVerticalScrollIndicator={false}
@@ -192,20 +190,12 @@ export default function Home() {
             <RefreshControl
               refreshing={refreshing}
               onRefresh={onRefresh}
-              tintColor="#ffffff"
-              colors={['#ffffff']}
-              progressBackgroundColor="rgba(255,255,255,0.2)"
+              tintColor={p.fg}
+              colors={[p.ctaBg]}
+              progressBackgroundColor={p.bgElev}
             />
           }
         >
-          {/* Blue hero card */}
-          <View style={{
-            backgroundColor: '#4a8fe0',
-            borderBottomLeftRadius: 32,
-            borderBottomRightRadius: 32,
-            overflow: 'hidden',
-          }}>
-           
           {/* Header */}
           <View style={{
             flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
@@ -218,10 +208,10 @@ export default function Home() {
             >
               <View style={{
                 width: 36, height: 36, borderRadius: 18,
-                backgroundColor: userEmoji ? 'rgba(255,255,255,0.18)' : '#7c3aed',
+                backgroundColor: userEmoji ? p.bgElev : '#7c3aed',
                 alignItems: 'center', justifyContent: 'center',
-                borderWidth: userEmoji ? 1 : 0,
-                borderColor: 'rgba(255,255,255,0.30)',
+                borderWidth: 1,
+                borderColor: p.border,
               }}>
                 {userEmoji ? (
                   <Text style={{ fontSize: 20 }}>{userEmoji}</Text>
@@ -229,7 +219,7 @@ export default function Home() {
                   <Text style={{ color: '#fff', fontWeight: '800', fontSize: 16 }}>{initial}</Text>
                 )}
               </View>
-              <Text style={{ color: '#ffffff', fontSize: 17, fontWeight: '700', letterSpacing: -0.3 }}>
+              <Text style={{ color: p.fg, fontSize: 17, fontWeight: '700', letterSpacing: -0.3 }}>
                 @{handle}
               </Text>
             </Pressable>
@@ -239,11 +229,12 @@ export default function Home() {
                 hitSlop={6}
                 style={{
                   width: 36, height: 36, borderRadius: 18,
-                  backgroundColor: 'rgba(255,255,255,0.18)',
+                  backgroundColor: p.bgElev,
+                  borderWidth: 1, borderColor: p.border,
                   alignItems: 'center', justifyContent: 'center',
                 }}
               >
-                <Ionicons name="notifications-outline" size={17} color="#ffffff" />
+                <Ionicons name="notifications-outline" size={17} color={p.fg} />
                 {(unreadData ?? 0) > 0 && (
                   <View style={{
                     position: 'absolute',
@@ -264,15 +255,23 @@ export default function Home() {
                 hitSlop={6}
                 style={{
                   width: 36, height: 36, borderRadius: 18,
-                  backgroundColor: 'rgba(255,255,255,0.18)',
+                  backgroundColor: p.bgElev,
+                  borderWidth: 1, borderColor: p.border,
                   alignItems: 'center', justifyContent: 'center',
                 }}
               >
-                <Ionicons name="scan-outline" size={18} color="#ffffff" />
+                <Ionicons name="scan-outline" size={18} color={p.fg} />
               </Pressable>
             </View>
           </View>
-          <AnimatedTotal value={totalUsd} palette={p} />
+          <AnimatedTotal
+            value={totalUsd}
+            palette={p}
+            dc={dc}
+            showBalance={showBalance}
+            onToggle={() => setShowBalance(v => !v)}
+            onPress={() => { h.selection(); setBalanceChartVisible(true); }}
+          />
 
           {/* 24h delta */}
           <View style={{
@@ -281,19 +280,21 @@ export default function Home() {
             paddingHorizontal: 24, marginTop: 6,
           }}>
             <Text style={{
-              color: '#ffffff',
+              color: p.fgMuted,
               fontSize: 14, fontWeight: '600', fontVariant: ['tabular-nums'],
             }}>
-              {positive ? '+' : '-'}${formatFiat(Math.abs(deltaUsd))}
+              {positive ? '+' : '-'}{dc.fmt(Math.abs(deltaUsd))}
             </Text>
             <View style={{
               flexDirection: 'row', alignItems: 'center', gap: 4,
               paddingHorizontal: 8, paddingVertical: 3, borderRadius: 7,
-              backgroundColor: 'rgba(255,255,255,0.2)',
+              backgroundColor: positive ? 'rgba(34,197,94,0.12)' : 'rgba(239,68,68,0.12)',
+              borderWidth: 1,
+              borderColor: positive ? 'rgba(34,197,94,0.25)' : 'rgba(239,68,68,0.25)',
             }}>
-              <Ionicons name={positive ? 'caret-up' : 'caret-down'} size={9} color="#ffffff" />
+              <Ionicons name={positive ? 'caret-up' : 'caret-down'} size={9} color={positive ? p.greenFg : p.redFg} />
               <Text style={{
-                color: '#ffffff',
+                color: positive ? p.greenFg : p.redFg,
                 fontSize: 12, fontWeight: '700',
               }}>
                 {Math.abs(deltaPct).toFixed(2)}%
@@ -301,12 +302,12 @@ export default function Home() {
             </View>
           </View>
 
-          {/* ── 4 ACTION BUTTONS ── */}
+          {/* ── 5 ACTION BUTTONS ── */}
           <View style={{
             flexDirection: 'row',
-            paddingHorizontal: 16, marginTop: 28,
+            paddingHorizontal: 16, marginTop: 24,
             gap: 8,
-            paddingBottom: 32,
+            paddingBottom: 8,
           }}>
             {ACTIONS.map((a) => (
               <ActionButton
@@ -319,7 +320,6 @@ export default function Home() {
               />
             ))}
           </View>
-          </View>{/* end blue hero card */}
 
           {/* Tabs - center-aligned */}
           <View style={{
@@ -327,69 +327,27 @@ export default function Home() {
             paddingHorizontal: 24, marginTop: 20,
             justifyContent: 'center',
           }}>
-            <TabBtn label="Assets"   active={tab === 'ASSETS'}   palette={p} onPress={() => { h.selection(); setTab('ASSETS'); }} />
-            <TabBtn label="Wallets"  active={tab === 'WALLETS'}  palette={p} onPress={() => { h.selection(); setTab('WALLETS'); }} />
-            <TabBtn label="Activity" active={tab === 'ACTIVITY'} palette={p} onPress={() => { h.selection(); setTab('ACTIVITY'); }} />
+            <TabBtn label={t('home.assets')}   active={tab === 'ASSETS'}   palette={p} onPress={() => { h.selection(); setTab('ASSETS'); }} />
+            <TabBtn label={t('home.wallets')}  active={tab === 'WALLETS'}  palette={p} onPress={() => { h.selection(); setTab('WALLETS'); }} />
+            <TabBtn label={t('home.activity')} active={tab === 'ACTIVITY'} palette={p} onPress={() => { h.selection(); setTab('ACTIVITY'); }} />
           </View>
 
           <View style={{ height: 1, backgroundColor: p.border, marginTop: 14 }} />
 
           {/* Rows */}
           {tab === 'ACTIVITY' ? (
-            <ActivityList palette={p} items={txData?.items ?? []} onSeeAll={() => { h.light(); router.push('/history'); }} />
+            <ActivityList palette={p} dc={dc} items={txData?.items ?? []} onSeeAll={() => { h.light(); router.push('/history'); }} />
           ) : tab === 'WALLETS' ? (
-            // Wallets tab - divided into crypto and fiat sections
-            <>
-              {/* Crypto Wallets Section */}
-              <View style={{ marginTop: 16, paddingHorizontal: 24 }}>
-                <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '700', letterSpacing: 0.6, marginBottom: 12 }}>
-                  CRYPTO WALLETS
-                </Text>
-                {cryptoWallets.length > 0 ? (
-                  cryptoWallets.map((w) => (
-                    <WalletRow
-                      key={w.id}
-                      wallet={w}
-                      palette={p}
-                      onPress={() => { h.selection(); router.push(`/asset/${w.currency}`); }}
-                    />
-                  ))
-                ) : (
-                  <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '500', paddingVertical: 12 }}>
-                    No crypto wallets
-                  </Text>
-                )}
-              </View>
-
-              {/* Fiat Wallets Section */}
-              <View style={{ marginTop: 24, paddingHorizontal: 24 }}>
-                <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '700', letterSpacing: 0.6, marginBottom: 12 }}>
-                  FIAT WALLETS
-                </Text>
-                {fiatWallets.length > 0 ? (
-                  fiatWallets.map((w) => (
-                    <WalletRow
-                      key={w.id}
-                      wallet={w}
-                      palette={p}
-                      onPress={() => { h.selection(); router.push(`/asset/${w.currency}`); }}
-                    />
-                  ))
-                ) : (
-                  <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '500', paddingVertical: 12 }}>
-                    No fiat wallets
-                  </Text>
-                )}
-              </View>
-            </>
+            // Wallets tab — QR addresses + bank references inline
+            <WalletAddressList palette={p} wallets={list} onCopy={() => h.selection()} />
           ) : ownedAssets.length > 0 ? (
             // Assets tab - divided into crypto and fiat sections
             <>
               {/* Crypto Assets Section */}
               {cryptoAssets.length > 0 && (
-                <View style={{ marginTop: 16, paddingHorizontal: 16 }}>
-                  <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '700', letterSpacing: 0.6, marginBottom: 12 }}>
-                    CRYPTO ASSETS
+                <View style={{ marginTop: 16, paddingHorizontal: 16, justifyContent: 'center', alignItems: 'center' }}>
+                  <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '700', letterSpacing: 0.6, marginBottom: 12, }}>
+                    {t('home.cryptoAssets').toUpperCase()}
                   </Text>
                   {cryptoAssets.map((w) => (
                     <AssetRow
@@ -409,9 +367,9 @@ export default function Home() {
 
               {/* Fiat Assets Section */}
               {fiatAssets.length > 0 && (
-                <View style={{ marginTop: 24, paddingHorizontal: 16 }}>
+                <View style={{ marginTop: 24, paddingHorizontal: 16, justifyContent: 'center', alignItems: 'center' }}>
                   <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '700', letterSpacing: 0.6, marginBottom: 12 }}>
-                    FIAT ASSETS
+                    {t('home.fiatAssets').toUpperCase()}
                   </Text>
                   {fiatAssets.map((w) => (
                     <AssetRow
@@ -439,10 +397,10 @@ export default function Home() {
                 <Ionicons name="wallet-outline" size={26} color={p.fgMuted} />
               </View>
               <Text style={{ color: p.fg, fontSize: 16, fontWeight: '800', marginTop: 14, letterSpacing: -0.2 }}>
-                No assets owned
+                {t('home.noAssetsOwned')}
               </Text>
               <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '500', marginTop: 4, textAlign: 'center' }}>
-                Buy or deposit crypto to get started.
+                {t('home.noAssetsBody')}
               </Text>
               <View style={{ flexDirection: 'row', gap: 10, marginTop: 18 }}>
                 <Pressable
@@ -454,7 +412,7 @@ export default function Home() {
                   })}
                 >
                   <Ionicons name="add" size={14} color={p.ctaFg} />
-                  <Text style={{ color: p.ctaFg, fontSize: 13, fontWeight: '800' }}>Buy crypto</Text>
+                  <Text style={{ color: p.ctaFg, fontSize: 13, fontWeight: '800' }}>{t('home.buyCrypto')}</Text>
                 </Pressable>
                 <Pressable
                   onPress={() => { h.medium(); setDepositModalVisible(true); }}
@@ -466,7 +424,7 @@ export default function Home() {
                   })}
                 >
                   <Ionicons name="arrow-down" size={14} color={p.fg} />
-                  <Text style={{ color: p.fg, fontSize: 13, fontWeight: '800' }}>Deposit</Text>
+                  <Text style={{ color: p.fg, fontSize: 13, fontWeight: '800' }}>{t('action.deposit')}</Text>
                 </Pressable>
               </View>
             </View>
@@ -475,100 +433,88 @@ export default function Home() {
       </SafeAreaView>
 
       {/* Buy Widget Modal */}
-      <Modal
-        visible={buyModalVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setBuyModalVisible(false)}
-      >
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={{ flex: 1 }}
-        >
-          <Pressable
-            style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', padding: 20 }}
-            onPress={() => setBuyModalVisible(false)}
-          >
-            <Pressable
-              style={{ backgroundColor: p.bg, borderRadius: 20, padding: 20, width: '100%', maxWidth: 400, maxHeight: '85%' }}
-              onPress={(e) => e.stopPropagation()}
-            >
-              <BuyWidget />
+      <Modal visible={buyModalVisible} transparent animationType="slide" onRequestClose={() => setBuyModalVisible(false)}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+          <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' }} onPress={() => setBuyModalVisible(false)}>
+            <Pressable style={{ backgroundColor: p.bg, borderTopLeftRadius: 28, borderTopRightRadius: 28, maxHeight: '85%' }} onPress={(e) => e.stopPropagation()}>
+              <View style={{ alignItems: 'center', paddingTop: 10, paddingBottom: 2 }}>
+                <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: p.border }} />
+              </View>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 24, paddingTop: 8, paddingBottom: 4 }}>
+                <Text style={{ color: p.fg, fontSize: 20, fontWeight: '800', letterSpacing: -0.4 }}>{t('home.buyCryptoTitle')}</Text>
+                <Pressable onPress={() => setBuyModalVisible(false)} hitSlop={8} style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border, alignItems: 'center', justifyContent: 'center' }}>
+                  <Ionicons name="close" size={16} color={p.fg} />
+                </Pressable>
+              </View>
+              <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: insets.bottom + 8 }}>
+                <BuyWidget />
+              </ScrollView>
             </Pressable>
           </Pressable>
         </KeyboardAvoidingView>
       </Modal>
 
       {/* Sell Widget Modal */}
-      <Modal
-        visible={sellModalVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setSellModalVisible(false)}
-      >
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={{ flex: 1 }}
-        >
-          <Pressable
-            style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', padding: 20 }}
-            onPress={() => setSellModalVisible(false)}
-          >
-            <Pressable
-              style={{ backgroundColor: p.bg, borderRadius: 20, padding: 20, width: '100%', maxWidth: 400, maxHeight: '85%' }}
-              onPress={(e) => e.stopPropagation()}
-            >
-              <SellWidget />
+      <Modal visible={sellModalVisible} transparent animationType="slide" onRequestClose={() => setSellModalVisible(false)}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+          <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' }} onPress={() => setSellModalVisible(false)}>
+            <Pressable style={{ backgroundColor: p.bg, borderTopLeftRadius: 28, borderTopRightRadius: 28, maxHeight: '85%' }} onPress={(e) => e.stopPropagation()}>
+              <View style={{ alignItems: 'center', paddingTop: 10, paddingBottom: 2 }}>
+                <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: p.border }} />
+              </View>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 24, paddingTop: 8, paddingBottom: 4 }}>
+                <Text style={{ color: p.fg, fontSize: 20, fontWeight: '800', letterSpacing: -0.4 }}>{t('home.sellCryptoTitle')}</Text>
+                <Pressable onPress={() => setSellModalVisible(false)} hitSlop={8} style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border, alignItems: 'center', justifyContent: 'center' }}>
+                  <Ionicons name="close" size={16} color={p.fg} />
+                </Pressable>
+              </View>
+              <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: insets.bottom + 8 }}>
+                <SellWidget />
+              </ScrollView>
             </Pressable>
           </Pressable>
         </KeyboardAvoidingView>
       </Modal>
 
       {/* Send Widget Modal */}
-      <Modal
-        visible={sendModalVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setSendModalVisible(false)}
-      >
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={{ flex: 1 }}
-        >
-          <Pressable
-            style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', padding: 20 }}
-            onPress={() => setSendModalVisible(false)}
-          >
-            <Pressable
-              style={{ backgroundColor: p.bg, borderRadius: 20, padding: 20, width: '100%', maxWidth: 400, maxHeight: '85%' }}
-              onPress={(e) => e.stopPropagation()}
-            >
-              <SendWidget />
+      <Modal visible={sendModalVisible} transparent animationType="slide" onRequestClose={() => setSendModalVisible(false)}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+          <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' }} onPress={() => setSendModalVisible(false)}>
+            <Pressable style={{ backgroundColor: p.bg, borderTopLeftRadius: 28, borderTopRightRadius: 28, maxHeight: '85%' }} onPress={(e) => e.stopPropagation()}>
+              <View style={{ alignItems: 'center', paddingTop: 10, paddingBottom: 2 }}>
+                <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: p.border }} />
+              </View>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 24, paddingTop: 8, paddingBottom: 4 }}>
+                <Text style={{ color: p.fg, fontSize: 20, fontWeight: '800', letterSpacing: -0.4 }}>{t('home.sendMoney')}</Text>
+                <Pressable onPress={() => setSendModalVisible(false)} hitSlop={8} style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border, alignItems: 'center', justifyContent: 'center' }}>
+                  <Ionicons name="close" size={16} color={p.fg} />
+                </Pressable>
+              </View>
+              <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: insets.bottom + 8 }}>
+                <SendWidget />
+              </ScrollView>
             </Pressable>
           </Pressable>
         </KeyboardAvoidingView>
       </Modal>
 
       {/* Receive Widget Modal */}
-      <Modal
-        visible={receiveModalVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setReceiveModalVisible(false)}
-      >
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={{ flex: 1 }}
-        >
-          <Pressable
-            style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', padding: 20 }}
-            onPress={() => setReceiveModalVisible(false)}
-          >
-            <Pressable
-              style={{ backgroundColor: p.bg, borderRadius: 20, padding: 20, width: '100%', maxWidth: 400, maxHeight: '85%' }}
-              onPress={(e) => e.stopPropagation()}
-            >
-              <ReceiveWidget />
+      <Modal visible={receiveModalVisible} transparent animationType="slide" onRequestClose={() => setReceiveModalVisible(false)}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+          <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' }} onPress={() => setReceiveModalVisible(false)}>
+            <Pressable style={{ backgroundColor: p.bg, borderTopLeftRadius: 28, borderTopRightRadius: 28, maxHeight: '85%' }} onPress={(e) => e.stopPropagation()}>
+              <View style={{ alignItems: 'center', paddingTop: 10, paddingBottom: 2 }}>
+                <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: p.border }} />
+              </View>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 24, paddingTop: 8, paddingBottom: 4 }}>
+                <Text style={{ color: p.fg, fontSize: 20, fontWeight: '800', letterSpacing: -0.4 }}>{t('action.receive')}</Text>
+                <Pressable onPress={() => setReceiveModalVisible(false)} hitSlop={8} style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border, alignItems: 'center', justifyContent: 'center' }}>
+                  <Ionicons name="close" size={16} color={p.fg} />
+                </Pressable>
+              </View>
+              <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: insets.bottom + 8 }}>
+                <ReceiveWidget />
+              </ScrollView>
             </Pressable>
           </Pressable>
         </KeyboardAvoidingView>
@@ -615,15 +561,15 @@ export default function Home() {
             onPress={(e) => e.stopPropagation()}
           >
             <Text style={{ color: p.fg, fontSize: 18, fontWeight: '800', marginBottom: 4, letterSpacing: -0.3, paddingHorizontal: 20 }}>
-              More
+              {t('home.more')}
             </Text>
 
             {/* Primary actions — matches web three-dot */}
             <View style={{ flexDirection: 'row', paddingHorizontal: 16, paddingVertical: 16, gap: 10, borderBottomWidth: 1, borderBottomColor: p.border }}>
               {[
-                { icon: 'swap-horizontal-outline' as const, label: 'Swap',     onPress: () => { setMoreMenuVisible(false); router.push('/transfer'); } },
-                { icon: 'arrow-down-circle-outline' as const, label: 'Deposit', onPress: () => { setMoreMenuVisible(false); setDepositModalVisible(true); } },
-                { icon: 'paper-plane-outline' as const, label: 'Withdraw', onPress: () => { setMoreMenuVisible(false); setSendModalVisible(true); } },
+                { icon: 'swap-horizontal-outline' as const, label: t('action.swap'),     onPress: () => { setMoreMenuVisible(false); router.push('/transfer'); } },
+                { icon: 'arrow-down-circle-outline' as const, label: t('action.deposit'), onPress: () => { setMoreMenuVisible(false); setDepositModalVisible(true); } },
+                { icon: 'paper-plane-outline' as const, label: t('action.withdraw'), onPress: () => { setMoreMenuVisible(false); setSendModalVisible(true); } },
               ].map((item) => (
                 <Pressable
                   key={item.label}
@@ -646,12 +592,12 @@ export default function Home() {
             {/* Secondary options */}
             <View style={{ paddingVertical: 8 }}>
               {[
-                { icon: 'card-outline' as const,       label: 'Cards',           onPress: () => { setMoreMenuVisible(false); router.push('/cards'); } },
-                { icon: 'time-outline' as const,        label: 'History',         onPress: () => { setMoreMenuVisible(false); router.push('/history'); } },
-                { icon: 'pie-chart-outline' as const,   label: 'Crypto Portfolio', onPress: () => { setMoreMenuVisible(false); router.push('/portfolio/crypto'); } },
-                { icon: 'wallet-outline' as const,      label: 'Fiat Portfolio',  onPress: () => { setMoreMenuVisible(false); router.push('/portfolio/fiat'); } },
-                { icon: 'people-outline' as const,      label: 'Referral',        onPress: () => { setMoreMenuVisible(false); router.push('/referral'); } },
-                { icon: 'settings-outline' as const,    label: 'Settings',        onPress: () => { setMoreMenuVisible(false); router.push('/settings'); } },
+                { icon: 'card-outline' as const,       label: t('home.cards'),           onPress: () => { setMoreMenuVisible(false); router.push('/cards'); } },
+                { icon: 'time-outline' as const,        label: t('home.history'),         onPress: () => { setMoreMenuVisible(false); router.push('/history'); } },
+                { icon: 'pie-chart-outline' as const,   label: t('home.cryptoPortfolio'), onPress: () => { setMoreMenuVisible(false); router.push('/portfolio/crypto'); } },
+                { icon: 'wallet-outline' as const,      label: t('home.fiatPortfolio'),  onPress: () => { setMoreMenuVisible(false); router.push('/portfolio/fiat'); } },
+                { icon: 'people-outline' as const,      label: t('home.referral'),        onPress: () => { setMoreMenuVisible(false); router.push('/referral'); } },
+                { icon: 'settings-outline' as const,    label: t('settings.title'),        onPress: () => { setMoreMenuVisible(false); router.push('/settings'); } },
               ].map((item) => (
                 <Pressable
                   key={item.label}
@@ -682,12 +628,22 @@ export default function Home() {
                   alignItems: 'center', justifyContent: 'center',
                 })}
               >
-                <Text style={{ color: p.fg, fontSize: 15, fontWeight: '700' }}>Close</Text>
+                <Text style={{ color: p.fg, fontSize: 15, fontWeight: '700' }}>{t('common.close')}</Text>
               </Pressable>
             </View>
           </Pressable>
         </Pressable>
       </Modal>
+
+      <BalanceHistoryModal
+        visible={balanceChartVisible}
+        onClose={() => setBalanceChartVisible(false)}
+        totalUsd={totalUsd}
+        txItems={txData?.items ?? []}
+        priceMap={priceMap}
+        dc={dc}
+        palette={p}
+      />
     </View>
   );
 }
@@ -709,50 +665,340 @@ export default function Home() {
  *  thread and can't easily mutate Text content). A 60Hz JS interval is
  *  fine for a single label.
  */
-function AnimatedTotal({ value, palette: p }: { value: number; palette: Palette }) {
+
+/* ── Balance History Chart ─── */
+type HistoryPt = { date: Date; balanceUsd: number };
+type ChartRange = '1W' | '1M' | '3M' | 'ALL';
+
+function buildBalanceHistory(
+  currentTotal: number,
+  txs: Array<{ amount: string | number; currency: string; createdAt: string | Date }>,
+  priceMap: Partial<Record<string, number>>,
+): HistoryPt[] {
+  const pts: HistoryPt[] = [];
+  let running = currentTotal;
+  pts.push({ date: new Date(), balanceUsd: running });
+  for (const tx of txs) {
+    const amt = Number(tx.amount);
+    if (isNaN(amt)) continue;
+    const price = priceMap[tx.currency] ?? 1;
+    running = Math.max(0, running - amt * price);
+    pts.push({ date: new Date(tx.createdAt), balanceUsd: running });
+  }
+  return pts.reverse();
+}
+
+function fmtDDMMYYYY(d: Date): string {
+  return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+}
+
+function smoothSvgPath(pts: Array<{ x: number; y: number }>): string {
+  if (pts.length < 2) return '';
+  let d = `M ${pts[0].x.toFixed(1)} ${pts[0].y.toFixed(1)}`;
+  for (let i = 1; i < pts.length; i++) {
+    const prev = pts[i - 1], curr = pts[i];
+    const mx = ((prev.x + curr.x) / 2).toFixed(1);
+    d += ` C ${mx} ${prev.y.toFixed(1)}, ${mx} ${curr.y.toFixed(1)}, ${curr.x.toFixed(1)} ${curr.y.toFixed(1)}`;
+  }
+  return d;
+}
+
+function BalanceHistoryModal({
+  visible, onClose, totalUsd, txItems, priceMap, dc, palette: p,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  totalUsd: number;
+  txItems: Array<{ amount: string | number; currency: string; createdAt: string | Date }>;
+  priceMap: Partial<Record<string, number>>;
+  dc: ReturnType<typeof useDisplayCurrency>;
+  palette: Palette;
+}) {
+  const insets = useSafeAreaInsets();
+  const W = Dimensions.get('window').width;
+  const CHART_H = 200;
+  const CHART_W = W - 48;
+  const PLOT_H = CHART_H - 24; // leave 24px for x-axis labels
+
+  const [range, setRange] = useState<ChartRange>('1M');
+  const [touchIdx, setTouchIdx] = useState<number | null>(null);
+
+  const allPoints = useMemo(
+    () => buildBalanceHistory(totalUsd, txItems, priceMap),
+    [totalUsd, txItems, priceMap],
+  );
+
+  const points = useMemo(() => {
+    const days: Record<ChartRange, number> = { '1W': 7, '1M': 30, '3M': 90, 'ALL': Infinity };
+    const d = days[range];
+    if (!isFinite(d)) return allPoints;
+    const cutoff = Date.now() - d * 86_400_000;
+    const filtered = allPoints.filter((pt) => pt.date.getTime() >= cutoff);
+    return filtered.length >= 2 ? filtered : allPoints.slice(-Math.max(2, allPoints.length));
+  }, [allPoints, range]);
+
+  const { svgPts } = useMemo(() => {
+    if (points.length < 2) return { svgPts: [] as Array<{ x: number; y: number }> };
+    const vals = points.map((pt) => pt.balanceUsd);
+    const mn = Math.min(...vals);
+    const mx = Math.max(...vals);
+    const spread = mx - mn || 1;
+    const svgPts = points.map((pt, i) => ({
+      x: (i / (points.length - 1)) * CHART_W,
+      y: PLOT_H - ((pt.balanceUsd - mn) / spread) * (PLOT_H - 10) - 5,
+    }));
+    return { svgPts };
+  }, [points, CHART_W, PLOT_H]);
+
+  const linePath = useMemo(() => smoothSvgPath(svgPts), [svgPts]);
+  const fillPath = linePath
+    ? `${linePath} L ${CHART_W.toFixed(1)} ${PLOT_H.toFixed(1)} L 0 ${PLOT_H.toFixed(1)} Z`
+    : '';
+
+  const trend = points.length > 1
+    ? points[points.length - 1].balanceUsd >= points[0].balanceUsd
+    : true;
+  const lineColor = trend ? '#22c55e' : '#ef4444';
+
+  const activeIdx = touchIdx !== null ? Math.max(0, Math.min(points.length - 1, touchIdx)) : points.length - 1;
+  const activePoint = points[activeIdx];
+  const activeSvg = svgPts[activeIdx];
+
+  const panResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => true,
+        onMoveShouldSetPanResponder: () => true,
+        onPanResponderGrant: (e) => {
+          const x = e.nativeEvent.locationX;
+          setTouchIdx(Math.round((x / CHART_W) * (points.length - 1)));
+        },
+        onPanResponderMove: (e) => {
+          const x = e.nativeEvent.locationX;
+          setTouchIdx(Math.round((x / CHART_W) * (points.length - 1)));
+        },
+        onPanResponderRelease: () => setTouchIdx(null),
+      }),
+    [CHART_W, points.length],
+  );
+
+  // 3 evenly-spaced x-axis date labels
+  const xLabels = useMemo(() => {
+    if (points.length < 2) return [];
+    return [0, Math.floor((points.length - 1) / 2), points.length - 1].map((idx) => ({
+      label: fmtDDMMYYYY(points[idx].date),
+    }));
+  }, [points]);
+
+  if (!visible) return null;
+
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <View style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.5)' }}>
+        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
+        <View style={{
+          backgroundColor: p.bg,
+          borderTopLeftRadius: 28, borderTopRightRadius: 28,
+          paddingBottom: insets.bottom + 24,
+        }}>
+          {/* Drag handle */}
+          <View style={{ alignItems: 'center', paddingTop: 12, paddingBottom: 4 }}>
+            <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: p.border }} />
+          </View>
+
+          {/* Title row */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 24, paddingVertical: 12 }}>
+            <Pressable onPress={onClose} hitSlop={8}>
+              <Ionicons name="close" size={22} color={p.fgMuted} />
+            </Pressable>
+          </View>
+
+          {/* Active balance */}
+          <View style={{ paddingHorizontal: 24, marginBottom: 16 }}>
+            <Text style={{
+              color: p.fg, fontSize: 34, fontWeight: '800',
+              letterSpacing: -1.2, fontVariant: ['tabular-nums'],
+            }}>
+              {activePoint ? dc.fmt(activePoint.balanceUsd) : dc.fmt(totalUsd)}
+            </Text>
+            <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '600', marginTop: 3 }}>
+              {activePoint ? fmtDDMMYYYY(activePoint.date) : fmtDDMMYYYY(new Date())}
+              {touchIdx === null ? ` · ${fmtDDMMYYYY(new Date())}` : ''}
+            </Text>
+          </View>
+
+          {/* Chart */}
+          {points.length < 2 ? (
+            <View style={{ height: CHART_H, alignItems: 'center', justifyContent: 'center', marginHorizontal: 24 }}>
+              <Ionicons name="analytics-outline" size={32} color={p.fgFaint} />
+              <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '500', marginTop: 10 }}>
+                Not enough data yet
+              </Text>
+            </View>
+          ) : (
+            <View style={{ marginHorizontal: 24 }}>
+              <View
+                style={{ height: CHART_H }}
+                {...panResponder.panHandlers}
+              >
+                <BalanceSvg width={CHART_W} height={CHART_H}>
+                  <SvgDefs>
+                    <SvgLinearGradient id="bhGrad" x1="0" y1="0" x2="0" y2="1">
+                      <SvgStop offset="0%" stopColor={lineColor} stopOpacity="0.3" />
+                      <SvgStop offset="100%" stopColor={lineColor} stopOpacity="0.02" />
+                    </SvgLinearGradient>
+                  </SvgDefs>
+
+                  {/* Gradient fill */}
+                  {fillPath ? <SvgPath d={fillPath} fill="url(#bhGrad)" /> : null}
+
+                  {/* Stroke */}
+                  {linePath ? (
+                    <SvgPath
+                      d={linePath}
+                      stroke={lineColor}
+                      strokeWidth={2.2}
+                      fill="none"
+                      strokeLinejoin="round"
+                      strokeLinecap="round"
+                    />
+                  ) : null}
+
+                  {/* Start point */}
+                  {svgPts[0] && (
+                    <SvgCircle cx={svgPts[0].x} cy={svgPts[0].y} r={4} fill={lineColor} />
+                  )}
+
+                  {/* Cursor */}
+                  {activeSvg && touchIdx !== null && (
+                    <>
+                      <SvgLine
+                        x1={activeSvg.x} y1={0}
+                        x2={activeSvg.x} y2={PLOT_H}
+                        stroke={p.fgFaint}
+                        strokeWidth={1}
+                        strokeDasharray="4,3"
+                      />
+                      <SvgCircle cx={activeSvg.x} cy={activeSvg.y} r={9} fill={lineColor} fillOpacity={0.2} />
+                      <SvgCircle cx={activeSvg.x} cy={activeSvg.y} r={5} fill={lineColor} />
+                    </>
+                  )}
+
+                  {/* End dot (when not touching) */}
+                  {svgPts.length > 0 && touchIdx === null && (
+                    <>
+                      <SvgCircle
+                        cx={svgPts[svgPts.length - 1].x}
+                        cy={svgPts[svgPts.length - 1].y}
+                        r={8}
+                        fill={lineColor}
+                        fillOpacity={0.2}
+                      />
+                      <SvgCircle
+                        cx={svgPts[svgPts.length - 1].x}
+                        cy={svgPts[svgPts.length - 1].y}
+                        r={4}
+                        fill={lineColor}
+                      />
+                    </>
+                  )}
+                </BalanceSvg>
+              </View>
+
+              {/* X-axis labels */}
+              {xLabels.length === 3 && (
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 }}>
+                  {xLabels.map((l, i) => (
+                    <Text key={i} style={{ color: p.fgFaint, fontSize: 9, fontWeight: '600' }}>
+                      {l.label}
+                    </Text>
+                  ))}
+                </View>
+              )}
+            </View>
+          )}
+
+          {/* Range pills */}
+          <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 8, marginTop: 20, paddingHorizontal: 24 }}>
+            {(['1W', '1M', '3M', 'ALL'] as ChartRange[]).map((r) => (
+              <Pressable
+                key={r}
+                onPress={() => { setTouchIdx(null); setRange(r); }}
+                style={{
+                  paddingHorizontal: 20, paddingVertical: 9, borderRadius: 20,
+                  backgroundColor: range === r ? p.ctaBg : p.pillBg,
+                  borderWidth: 1,
+                  borderColor: range === r ? p.ctaBg : p.border,
+                }}
+              >
+                <Text style={{
+                  color: range === r ? p.ctaFg : p.fgMuted,
+                  fontSize: 13, fontWeight: '700',
+                }}>
+                  {r}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+function AnimatedTotal({
+  value,
+  palette: p,
+  dc,
+  showBalance,
+  onToggle,
+  onPress,
+}: {
+  value: number;
+  palette: Palette;
+  dc: ReturnType<typeof useDisplayCurrency>;
+  showBalance: boolean;
+  onToggle: () => void;
+  onPress?: () => void;
+}) {
+  const t = useT();
+  const initializedRef = useRef(false);
   const [displayed, setDisplayed] = useState(0);
   const fromRef = useRef(0);
   const targetRef = useRef(value);
   const startTsRef = useRef<number | null>(null);
 
-  // Flash state: { dir: 'up' | 'down' | null, delta: number }
   const flashOpacity = useRef(new Animated.Value(0)).current;
   const flashTranslateY = useRef(new Animated.Value(6)).current;
   const [flash, setFlash] = useState<{ dir: 'up' | 'down'; delta: number } | null>(null);
   const prevValueRef = useRef<number | null>(null);
 
-  // Drive the count-up tween whenever the target changes.
-  // The first mount uses a 2.4s ramp - slow + deliberate, like a wealth
-  // app revealing your net worth. Subsequent retargets use 1.4s so live
-  // price ticks still feel responsive without ever snapping.
-  // Easing: a tuned ease-in-out-quart so the digits accelerate from
-  // rest, glide through the middle, and settle gently at the target.
   useEffect(() => {
+    // On first load with real data, snap directly — no count-up from zero.
+    if (!initializedRef.current && value > 0) {
+      initializedRef.current = true;
+      setDisplayed(value);
+      prevValueRef.current = value;
+      return;
+    }
+    // Subsequent value changes (live price ticks, new transactions) animate smoothly.
     fromRef.current = displayed;
     targetRef.current = value;
     startTsRef.current = Date.now();
-    const isFirstReveal = prevValueRef.current === null;
-    const dur = isFirstReveal ? 2400 : 1400;
+    const dur = 1400;
     let raf: any;
     let lastFrameTs = 0;
     const tick = () => {
       const now = Date.now();
-      // Throttle to ~30 fps for the long ramp - looks smooth, halves the
-      // re-renders compared to 60 fps and avoids jank on slower devices.
-      if (now - lastFrameTs < 33) {
-        raf = requestAnimationFrame(tick);
-        return;
-      }
+      if (now - lastFrameTs < 33) { raf = requestAnimationFrame(tick); return; }
       lastFrameTs = now;
       const elapsed = now - (startTsRef.current ?? now);
-      const t = Math.min(1, elapsed / dur);
-      // ease-in-out quart - slow start, glide, slow finish.
-      const eased = t < 0.5
-        ? 8 * t * t * t * t
-        : 1 - Math.pow(-2 * t + 2, 4) / 2;
-      const next = fromRef.current + (targetRef.current - fromRef.current) * eased;
-      setDisplayed(next);
-      if (t < 1) raf = requestAnimationFrame(tick);
+      const progress = Math.min(1, elapsed / dur);
+      const eased = progress < 0.5
+        ? 8 * progress * progress * progress * progress
+        : 1 - Math.pow(-2 * progress + 2, 4) / 2;
+      setDisplayed(fromRef.current + (targetRef.current - fromRef.current) * eased);
+      if (progress < 1) raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
@@ -789,20 +1035,29 @@ function AnimatedTotal({ value, palette: p }: { value: number; palette: Palette 
   // Tint the main text briefly while a flash is active.
   const flashColor = flash?.dir === 'up' ? p.greenFg : flash?.dir === 'down' ? p.redFg : p.fg;
 
-  const totalStr = displayed.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const converted = dc.convert(displayed);
+  const totalStr = converted.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: dc.isCrypto ? 6 : 2 });
   const digitCount = totalStr.replace(/[^0-9]/g, '').length;
   const fontSize = digitCount <= 7 ? 48 : digitCount <= 9 ? 40 : digitCount <= 11 ? 34 : 28;
 
   return (
-    <View style={{ alignItems: 'center', marginTop: 4, paddingHorizontal: 24, paddingVertical: 28 }}>
-      <Text style={{
-        color: '#ffffff',
-        fontSize, fontWeight: '800', letterSpacing: -1.6,
-        textAlign: 'center',
-        fontVariant: ['tabular-nums'],
+    <View style={{ alignItems: 'center', paddingHorizontal: 24, paddingVertical: 14 }}>
+      {/* <Text style={{
+        color: p.fgMuted, fontSize: 12, fontWeight: '600',
+        letterSpacing: 1.0, textTransform: 'uppercase', marginBottom: 8,
       }}>
-        ${totalStr}
-      </Text>
+        {t('home.totalBalance')}
+      </Text> */}
+      <Pressable onPress={onPress} hitSlop={12}>
+        <Text style={{
+          color: p.fg,
+          fontSize, fontWeight: '800', letterSpacing: -1.6,
+          textAlign: 'center',
+          fontVariant: ['tabular-nums'],
+        }}>
+          {dc.symbol}{totalStr}
+        </Text>
+      </Pressable>
 
       {flash && (
         <Animated.View
@@ -863,16 +1118,20 @@ function ActionButton({
       style={({ pressed }) => ({
         flex: 1,
         alignItems: 'center',
-        paddingVertical: 14,
-        borderRadius: 16,
-        gap: 6,
-        opacity: pressed ? 0.75 : 1,
+        justifyContent: 'center',
+        paddingVertical: 13,
+        height: 56,
+        borderRadius: 14,
+        gap: 5,
+        backgroundColor: pressed ? p.border : p.bgElev,
+        borderWidth: 1,
+        borderColor: p.border,
       })}
     >
-      <Ionicons name={icon} size={20} color="#ffffff" />
+      <Ionicons name={icon} size={19} color={p.fg} />
       <Text
         numberOfLines={1}
-        style={{ color: '#ffffff', fontSize: 11, fontWeight: '600' }}
+        style={{ color: p.fgMuted, fontSize: 11, fontWeight: '600' }}
       >
         {label}
       </Text>
@@ -905,79 +1164,464 @@ function TabBtn({ label, active, palette: p, onPress }: {
   );
 }
 
+type TxItem = {
+  id: string; type: string; amount: string | number; currency: string;
+  description?: string | null; createdAt: string | Date;
+  status?: string | null;
+  fee?: string | null;
+  reference?: string | null;
+  counterpartyHandle?: string | null;
+  counterpartyName?: string | null;
+  counterpartyAvatar?: string | null;
+  note?: string | null;
+  metadata?: { asset?: string; cryptoAmount?: number; priceUsd?: number; counterpartyName?: string; note?: string } | null;
+};
+
+/* ── Detail row ─── */
+function DetailRow({
+  label, value, palette: p, icon, borderTop,
+}: {
+  label: string; value: string; palette: Palette;
+  icon: keyof typeof Ionicons.glyphMap; borderTop?: boolean;
+}) {
+  return (
+    <View style={{
+      flexDirection: 'row', alignItems: 'center',
+      paddingHorizontal: 16, paddingVertical: 14, gap: 12,
+      borderTopWidth: borderTop ? StyleSheet.hairlineWidth : 0,
+      borderTopColor: p.border,
+    }}>
+      <View style={{
+        width: 32, height: 32, borderRadius: 16,
+        backgroundColor: p.bg, borderWidth: 1, borderColor: p.border,
+        alignItems: 'center', justifyContent: 'center',
+      }}>
+        <Ionicons name={icon} size={14} color={p.fgMuted} />
+      </View>
+      <Text style={{ flex: 1, color: p.fgMuted, fontSize: 13, fontWeight: '600' }}>{label}</Text>
+      <Text style={{ color: p.fg, fontSize: 13, fontWeight: '700', fontVariant: ['tabular-nums'] }} numberOfLines={1}>
+        {value}
+      </Text>
+    </View>
+  );
+}
+
+/* ── Transaction detail bottom sheet ─── */
+function TxDetailModal({
+  tx, palette: p, dc, onClose,
+}: {
+  tx: TxItem | null;
+  palette: Palette;
+  dc: ReturnType<typeof useDisplayCurrency>;
+  onClose: () => void;
+}) {
+  const insets = useSafeAreaInsets();
+  const [copied, setCopied] = useState(false);
+
+  if (!tx) return null;
+
+  const meta      = tx.metadata ?? {};
+  const amt       = Number(tx.amount);
+  const abs       = Math.abs(amt);
+  const isCredit  = amt >= 0;
+  const type      = tx.type;
+  const asset     = meta.asset ?? tx.currency;
+  const showDual  = (type === 'BUY' || type === 'SELL') && meta.cryptoAmount;
+  const fiatStr   = dc.fmt(abs);
+  const cryptoStr = meta.cryptoAmount
+    ? `${meta.cryptoAmount.toLocaleString('en-US', { maximumFractionDigits: 8 })} ${asset}`
+    : null;
+
+  const dt        = new Date(tx.createdAt);
+  const dateLabel = dt.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+  const timeLabel = dt.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+  const cpName    = tx.counterpartyName ?? meta.counterpartyName ?? null;
+  const cpHandle  = tx.counterpartyHandle ?? null;
+  const cpAvatar  = tx.counterpartyAvatar ?? null;
+  const note      = tx.note ?? meta.note ?? null;
+  const fee       = tx.fee && Number(tx.fee) > 0 ? Number(tx.fee) : null;
+  const reference = tx.reference ?? tx.id;
+  const status    = ((tx.status ?? 'COMPLETED') as string).toUpperCase();
+
+  let title = '';
+  if      (type === 'BUY')          title = `Bought ${asset}`;
+  else if (type === 'SELL')         title = `Sold ${asset}`;
+  else if (type === 'DEPOSIT')      title = 'Deposit';
+  else if (type === 'WITHDRAW' || type === 'WITHDRAWAL') title = 'Withdrawal';
+  else if (type === 'TRANSFER_IN')  title = 'Transfer In';
+  else if (type === 'TRANSFER_OUT') title = 'Transfer Out';
+  else if (type === 'SEND')         title = 'Sent';
+  else if (type === 'RECEIVE')      title = 'Received';
+  else if (type === 'SWAP')         title = 'Swap';
+  else if (type === 'P2P_BUY')      title = `P2P Buy · ${asset}`;
+  else if (type === 'P2P_SELL')     title = `P2P Sell · ${asset}`;
+  else if (type === 'CARD_SPEND')   title = 'Card Spend';
+  else if (type === 'CASHBACK')     title = 'Cashback';
+  else title = type.charAt(0) + type.slice(1).toLowerCase().replace(/_/g, ' ');
+
+  const isIncoming = type === 'BUY' || type === 'RECEIVE' || type === 'TRANSFER_IN'
+    || type === 'DEPOSIT' || type === 'CASHBACK' || type === 'P2P_BUY' || isCredit;
+  const accent   = isIncoming ? p.greenFg : p.redFg;
+  const accentBg = isIncoming ? p.greenBg : 'rgba(239,68,68,0.15)';
+
+  const iconName: keyof typeof Ionicons.glyphMap =
+    type === 'BUY'  || type === 'P2P_BUY'   ? 'bag-handle'        :
+    type === 'SELL' || type === 'P2P_SELL'  ? 'cash'              :
+    type === 'DEPOSIT'                      ? 'arrow-down-circle' :
+    type === 'WITHDRAW' || type === 'WITHDRAWAL' ? 'arrow-up-circle' :
+    type === 'SEND' || type === 'TRANSFER_OUT'   ? 'paper-plane'    :
+    type === 'RECEIVE' || type === 'TRANSFER_IN' ? 'arrow-down-circle' :
+    type === 'SWAP'                         ? 'swap-horizontal'   :
+    type === 'CARD_SPEND'                   ? 'card'              :
+    type === 'CASHBACK'                     ? 'gift'              : 'receipt';
+
+  const statusColors: Record<string, { bg: string; fg: string }> = {
+    COMPLETED:  { bg: p.greenBg,               fg: p.greenFg  },
+    PENDING:    { bg: 'rgba(245,158,11,0.15)',  fg: '#f59e0b'  },
+    PROCESSING: { bg: 'rgba(99,102,241,0.15)',  fg: '#818cf8'  },
+    FAILED:     { bg: 'rgba(239,68,68,0.15)',   fg: p.redFg    },
+    CANCELLED:  { bg: p.pillBg,                fg: p.fgMuted  },
+  };
+  const sc = statusColors[status] ?? statusColors.COMPLETED;
+
+  const cpDirection = (type === 'TRANSFER_IN' || type === 'RECEIVE') ? 'FROM' : 'TO';
+
+  async function copyRef() {
+    await Clipboard.setStringAsync(reference);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+
+  return (
+    <Modal visible transparent animationType="slide" onRequestClose={onClose}>
+      <Pressable
+        style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' }}
+        onPress={onClose}
+      >
+        <Pressable
+          style={{ backgroundColor: p.bg, borderTopLeftRadius: 32, borderTopRightRadius: 32, maxHeight: '92%' }}
+          onPress={(e) => e.stopPropagation()}
+        >
+          {/* Handle */}
+          <View style={{ alignItems: 'center', paddingTop: 12, paddingBottom: 4 }}>
+            <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: p.border }} />
+          </View>
+
+          {/* Close */}
+          <View style={{ flexDirection: 'row', justifyContent: 'flex-end', paddingHorizontal: 20, paddingBottom: 4 }}>
+            <Pressable
+              onPress={onClose} hitSlop={8}
+              style={({ pressed }) => ({
+                width: 32, height: 32, borderRadius: 16,
+                backgroundColor: pressed ? p.border : p.bgElev,
+                borderWidth: 1, borderColor: p.border,
+                alignItems: 'center', justifyContent: 'center',
+              })}
+            >
+              <Ionicons name="close" size={15} color={p.fg} />
+            </Pressable>
+          </View>
+
+          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: insets.bottom + 32 }}>
+
+            {/* ── Hero ── */}
+            <View style={{ alignItems: 'center', paddingHorizontal: 24, paddingTop: 4, paddingBottom: 32 }}>
+              <View style={{
+                width: 80, height: 80, borderRadius: 40,
+                backgroundColor: accentBg, alignItems: 'center', justifyContent: 'center',
+                marginBottom: 20,
+              }}>
+                <Ionicons name={iconName} size={36} color={accent} />
+              </View>
+
+              <Text style={{ color: p.fg, fontSize: 24, fontWeight: '800', letterSpacing: -0.5, textAlign: 'center' }}>
+                {title}
+              </Text>
+
+              <View style={{
+                marginTop: 10, paddingHorizontal: 14, paddingVertical: 5,
+                borderRadius: 20, backgroundColor: sc.bg,
+              }}>
+                <Text style={{ color: sc.fg, fontSize: 11, fontWeight: '800', letterSpacing: 0.8 }}>
+                  {status}
+                </Text>
+              </View>
+
+              <View style={{ marginTop: 28, alignItems: 'center' }}>
+                {showDual && cryptoStr ? (
+                  <>
+                    <Text style={{
+                      color: type === 'BUY' ? p.greenFg : p.redFg,
+                      fontSize: 36, fontWeight: '800', letterSpacing: -1.2, fontVariant: ['tabular-nums'],
+                    }}>
+                      {type === 'BUY' ? '+' : '−'}{cryptoStr}
+                    </Text>
+                    <Text style={{
+                      color: p.fgMuted, fontSize: 20, fontWeight: '600', marginTop: 6, fontVariant: ['tabular-nums'],
+                    }}>
+                      {type === 'BUY' ? '−' : '+'}{fiatStr}
+                    </Text>
+                  </>
+                ) : (
+                  <Text style={{
+                    color: accent, fontSize: 36, fontWeight: '800', letterSpacing: -1.2, fontVariant: ['tabular-nums'],
+                  }}>
+                    {isCredit ? '+' : '−'}{fiatStr}
+                  </Text>
+                )}
+              </View>
+            </View>
+
+            {/* ── Details ── */}
+            <View style={{
+              marginHorizontal: 20, marginBottom: 12,
+              backgroundColor: p.bgElev, borderRadius: 20,
+              borderWidth: 1, borderColor: p.border, overflow: 'hidden',
+            }}>
+              <DetailRow icon="calendar-outline" label="Date"     value={dateLabel} palette={p} />
+              <DetailRow icon="time-outline"     label="Time"     value={timeLabel} palette={p} borderTop />
+              {(type === 'BUY' || type === 'SELL') && meta.priceUsd != null && (
+                <DetailRow icon="pricetag-outline" label="Asset Price" value={dc.fmt(meta.priceUsd)} palette={p} borderTop />
+              )}
+              {(type === 'BUY' || type === 'SELL') && meta.cryptoAmount != null && (
+                <DetailRow
+                  icon="layers-outline" label="Quantity"
+                  value={`${meta.cryptoAmount.toLocaleString('en-US', { maximumFractionDigits: 8 })} ${asset}`}
+                  palette={p} borderTop
+                />
+              )}
+              {fee !== null && (
+                <DetailRow icon="flash-outline" label="Network Fee" value={dc.fmt(fee)} palette={p} borderTop />
+              )}
+              <DetailRow icon="wallet-outline" label="Currency" value={tx.currency} palette={p} borderTop />
+            </View>
+
+            {/* ── Counterparty ── */}
+            {(cpName || cpHandle) && (
+              <View style={{
+                marginHorizontal: 20, marginBottom: 12,
+                backgroundColor: p.bgElev, borderRadius: 20,
+                borderWidth: 1, borderColor: p.border,
+                padding: 16, flexDirection: 'row', alignItems: 'center', gap: 14,
+              }}>
+                <View style={{
+                  width: 52, height: 52, borderRadius: 26,
+                  backgroundColor: p.border,
+                  alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
+                }}>
+                  {cpAvatar
+                    ? <Image source={{ uri: cpAvatar }} style={{ width: 52, height: 52 }} />
+                    : <Text style={{ color: p.fg, fontSize: 20, fontWeight: '800' }}>
+                        {(cpName ?? cpHandle ?? '?')[0].toUpperCase()}
+                      </Text>
+                  }
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '700', letterSpacing: 0.6, marginBottom: 4 }}>
+                    {cpDirection}
+                  </Text>
+                  {cpName && (
+                    <Text style={{ color: p.fg, fontSize: 15, fontWeight: '700' }}>{cpName}</Text>
+                  )}
+                  {cpHandle && (
+                    <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '500', marginTop: 1 }}>
+                      @{cpHandle}
+                    </Text>
+                  )}
+                </View>
+              </View>
+            )}
+
+            {/* ── Note ── */}
+            {note && note !== cpName && (
+              <View style={{
+                marginHorizontal: 20, marginBottom: 12,
+                backgroundColor: p.bgElev, borderRadius: 20,
+                borderWidth: 1, borderColor: p.border, padding: 16,
+              }}>
+                <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '700', letterSpacing: 0.6, marginBottom: 8 }}>
+                  NOTE
+                </Text>
+                <Text style={{ color: p.fg, fontSize: 14, fontWeight: '500', lineHeight: 21 }}>{note}</Text>
+              </View>
+            )}
+
+            {/* ── Reference ── */}
+            <View style={{
+              marginHorizontal: 20,
+              backgroundColor: p.bgElev, borderRadius: 20,
+              borderWidth: 1, borderColor: p.border,
+              padding: 16, flexDirection: 'row', alignItems: 'center',
+            }}>
+              <View style={{ flex: 1, marginRight: 12 }}>
+                <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '700', letterSpacing: 0.6, marginBottom: 4 }}>
+                  REFERENCE
+                </Text>
+                <Text style={{ color: p.fg, fontSize: 12, fontWeight: '600', letterSpacing: 0.2 }} numberOfLines={1}>
+                  {reference}
+                </Text>
+              </View>
+              <Pressable
+                onPress={copyRef} hitSlop={8}
+                style={({ pressed }) => ({
+                  paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20,
+                  backgroundColor: copied ? p.greenBg : (pressed ? p.border : p.pillBg),
+                  borderWidth: 1, borderColor: copied ? p.greenFg : p.border,
+                  flexDirection: 'row', alignItems: 'center', gap: 5,
+                })}
+              >
+                <Ionicons
+                  name={copied ? 'checkmark' : 'copy-outline'}
+                  size={13}
+                  color={copied ? p.greenFg : p.fgMuted}
+                />
+                <Text style={{ color: copied ? p.greenFg : p.fgMuted, fontSize: 12, fontWeight: '700' }}>
+                  {copied ? 'Copied!' : 'Copy'}
+                </Text>
+              </Pressable>
+            </View>
+
+          </ScrollView>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
 /* ── Activity list — shows the most recent transactions inline on home ─── */
 function ActivityList({
-  palette: p, items, onSeeAll,
+  palette: p, dc, items, onSeeAll,
 }: {
   palette: Palette;
-  items: Array<{ id: string; type: string; amount: string | number; currency: string; description?: string | null; createdAt: string | Date }>;
+  dc: ReturnType<typeof useDisplayCurrency>;
+  items: TxItem[];
   onSeeAll: () => void;
 }) {
+  const t = useT();
+  const [selectedTx, setSelectedTx] = useState<TxItem | null>(null);
+
   if (items.length === 0) {
     return (
       <View style={{ paddingVertical: 48, alignItems: 'center' }}>
         <Ionicons name="receipt-outline" size={28} color={p.fgFaint} />
         <Text style={{ color: p.fgMuted, fontSize: 13, marginTop: 12, fontWeight: '500' }}>
-          No activity yet.
+          {t('home.noActivity')}
         </Text>
       </View>
     );
   }
-  const recent = items.slice(0, 8);
+
   return (
     <View>
-      {recent.map((t, i) => {
-        const amt = Number(t.amount);
-        const negative = amt < 0;
-        const abs = Math.abs(amt);
+      {items.slice(0, 8).map((tx) => {
+        const meta = tx.metadata ?? {};
+        const amt  = Number(tx.amount);
+        const abs  = Math.abs(amt);
+        const type = tx.type;
+
+        const cpName = meta.counterpartyName ?? tx.counterpartyName ?? tx.description;
+        let title = '';
+        if      (type === 'BUY')          title = `Bought ${meta.asset ?? tx.currency}`;
+        else if (type === 'SELL')         title = `Sold ${meta.asset ?? tx.currency}`;
+        else if (type === 'DEPOSIT')      title = `Deposit · ${tx.currency}`;
+        else if (type === 'WITHDRAW' || type === 'WITHDRAWAL') title = `Withdrawal · ${tx.currency}`;
+        else if (type === 'TRANSFER_IN')  title = cpName ? `From: ${cpName}` : 'Transfer in';
+        else if (type === 'TRANSFER_OUT') title = cpName ? `To: ${cpName}` : 'Transfer out';
+        else if (type === 'SEND')         title = cpName ? `Sent to: ${cpName}` : 'Sent';
+        else if (type === 'RECEIVE')      title = cpName ? `From: ${cpName}` : 'Received';
+        else if (type === 'SWAP')         title = `Swap · ${tx.currency}`;
+        else if (type === 'P2P_BUY')      title = `P2P Buy · ${meta.asset ?? tx.currency}`;
+        else if (type === 'P2P_SELL')     title = `P2P Sell · ${meta.asset ?? tx.currency}`;
+        else if (type === 'CARD_SPEND')   title = `Card Spend`;
+        else if (type === 'CASHBACK')     title = `Cashback`;
+        else title = tx.description ?? (type.charAt(0) + type.slice(1).toLowerCase().replace(/_/g, ' '));
+
+        const dateStr = new Date(tx.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+        let subtitle = dateStr;
+        if ((type === 'BUY' || type === 'SELL') && meta.cryptoAmount) {
+          subtitle = `${meta.cryptoAmount.toLocaleString('en-US', { maximumFractionDigits: 6 })} ${meta.asset ?? ''} · ${dateStr}`;
+        } else if ((type === 'TRANSFER_IN' || type === 'TRANSFER_OUT' || type === 'SEND' || type === 'RECEIVE') && (meta.note ?? tx.note ?? tx.description)) {
+          subtitle = (meta.note ?? tx.note ?? tx.description ?? '') + '  ·  ' + dateStr;
+        }
+
+        const showDual  = (type === 'BUY' || type === 'SELL') && meta.cryptoAmount;
+        const fiatStr   = dc.fmt(abs);
+        const cryptoStr = meta.cryptoAmount
+          ? `${meta.cryptoAmount.toLocaleString('en-US', { maximumFractionDigits: 6 })} ${meta.asset ?? tx.currency}`
+          : null;
+
+        const isInRow = amt >= 0 || type === 'BUY' || type === 'DEPOSIT' || type === 'RECEIVE' || type === 'TRANSFER_IN' || type === 'CASHBACK';
+        const iconName: keyof typeof Ionicons.glyphMap =
+          type === 'BUY'  || type === 'P2P_BUY'        ? 'bag-handle'     :
+          type === 'SELL' || type === 'P2P_SELL'       ? 'cash'           :
+          type === 'DEPOSIT'                           ? 'add-circle'     :
+          type === 'WITHDRAW' || type === 'WITHDRAWAL' ? 'remove-circle'  :
+          type === 'SEND' || type === 'TRANSFER_OUT'   ? 'arrow-up'       :
+          type === 'RECEIVE' || type === 'TRANSFER_IN' ? 'arrow-down'     :
+          type === 'CARD_SPEND'                        ? 'card'           :
+          type === 'CASHBACK'                          ? 'gift'           :
+          'swap-horizontal';
+
         return (
-          <View
-            key={t.id}
-            style={{
+          <Pressable
+            key={tx.id}
+            onPress={() => setSelectedTx(tx)}
+            style={({ pressed }) => ({
               flexDirection: 'row', alignItems: 'center',
               paddingHorizontal: 24, paddingVertical: 14,
               borderBottomWidth: 1, borderBottomColor: p.border,
               gap: 12,
-            }}
+              backgroundColor: pressed ? p.bgElev : 'transparent',
+            })}
           >
+            {/* Icon */}
             <View style={{
-              width: 38, height: 38, borderRadius: 19,
-              backgroundColor: p.pillBg, borderWidth: 1, borderColor: p.border,
-              alignItems: 'center', justifyContent: 'center',
+              width: 40, height: 40, borderRadius: 20,
+              backgroundColor: isInRow ? p.greenBg : 'rgba(239,68,68,0.12)',
+              borderWidth: 1, borderColor: p.border,
+              alignItems: 'center', justifyContent: 'center', flexShrink: 0,
             }}>
-              <Ionicons
-                name={
-                  t.type === 'BUY'          ? 'cart' :
-                  t.type === 'SELL'         ? 'cash' :
-                  t.type === 'DEPOSIT'      ? 'add-circle' :
-                  t.type === 'WITHDRAW'     ? 'remove-circle' :
-                  t.type === 'SEND'         ? 'arrow-up' :
-                  t.type === 'TRANSFER_OUT' ? 'arrow-up' :
-                  t.type === 'RECEIVE'      ? 'arrow-down' :
-                  t.type === 'TRANSFER_IN'  ? 'arrow-down' :
-                  'swap-horizontal'
-                }
-                size={16}
-                color={p.fg}
-              />
+              <Ionicons name={iconName} size={17} color={isInRow ? p.greenFg : p.redFg} />
             </View>
-            <View style={{ flex: 1 }}>
+
+            {/* Title + subtitle */}
+            <View style={{ flex: 1, minWidth: 0 }}>
               <Text style={{ color: p.fg, fontSize: 14, fontWeight: '700' }} numberOfLines={1}>
-                {t.description || prettyTxType(t.type)}
+                {title}
               </Text>
-              <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '500', marginTop: 2 }}>
-                {new Date(t.createdAt).toLocaleDateString()} · {t.type}
+              <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '500', marginTop: 2 }} numberOfLines={1}>
+                {subtitle}
               </Text>
             </View>
-            <Text style={{
-              color: negative ? p.fg : p.greenFg,
-              fontSize: 14, fontWeight: '700', fontVariant: ['tabular-nums'],
-            }}>
-              {negative ? '-' : '+'}{formatFiat(abs)} {t.currency}
-            </Text>
-          </View>
+
+            {/* Value(s) */}
+            <View style={{ alignItems: 'flex-end', flexShrink: 0 }}>
+              {showDual && cryptoStr ? (
+                <>
+                  <Text style={{ color: type === 'BUY' ? p.greenFg : p.redFg, fontSize: 13, fontWeight: '700', fontVariant: ['tabular-nums'] }}>
+                    {type === 'BUY' ? '+' : '−'}{cryptoStr}
+                  </Text>
+                  <Text style={{ color: type === 'BUY' ? p.redFg : p.greenFg, fontSize: 12, fontWeight: '600', marginTop: 2, fontVariant: ['tabular-nums'] }}>
+                    {type === 'BUY' ? '−' : '+'}{fiatStr}
+                  </Text>
+                </>
+              ) : (
+                <Text style={{
+                  color: amt >= 0 ? p.greenFg : p.redFg,
+                  fontSize: 14, fontWeight: '700', fontVariant: ['tabular-nums'],
+                }}>
+                  {amt >= 0 ? '+' : '−'}{fiatStr}
+                </Text>
+              )}
+            </View>
+
+            {/* Chevron hint */}
+            <Ionicons name="chevron-forward" size={13} color={p.fgFaint} />
+          </Pressable>
         );
       })}
+
       <Pressable
         onPress={onSeeAll}
         style={({ pressed }) => ({
@@ -989,15 +1633,13 @@ function ActivityList({
           borderWidth: 1, borderColor: p.border,
         })}
       >
-        <Text style={{ color: p.fg, fontSize: 13, fontWeight: '700' }}>See all transactions</Text>
+        <Text style={{ color: p.fg, fontSize: 13, fontWeight: '700' }}>{t('home.seeAllTx')}</Text>
         <Ionicons name="chevron-forward" size={14} color={p.fg} />
       </Pressable>
+
+      <TxDetailModal tx={selectedTx} palette={p} dc={dc} onClose={() => setSelectedTx(null)} />
     </View>
   );
-}
-
-function prettyTxType(t: string) {
-  return t.charAt(0) + t.slice(1).toLowerCase();
 }
 
 /* ── Wallet addresses list ──
@@ -1016,6 +1658,7 @@ function WalletAddressList({
   wallets: Wallet[];
   onCopy: () => void;
 }) {
+  const t = useT();
   // Whichever wallet's QR is currently being shown in the modal.
   const [qrFor, setQrFor] = useState<{ wallet: Wallet; address: string; chain: string } | null>(null);
 
@@ -1024,7 +1667,7 @@ function WalletAddressList({
       <View style={{ paddingVertical: 48, alignItems: 'center' }}>
         <Ionicons name="key-outline" size={28} color={p.fgFaint} />
         <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '500', marginTop: 12 }}>
-          No wallets yet.
+          {t('home.noWallets')}
         </Text>
       </View>
     );
@@ -1054,7 +1697,7 @@ function WalletAddressList({
                   {meta.title}
                 </Text>
                 <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '600', marginTop: 2 }}>
-                  {isCrypto ? `${chain} network` : 'Bank reference'}
+                  {isCrypto ? `${chain} ${t('home.network')}` : t('home.bankReference')}
                 </Text>
               </View>
               <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '700', fontVariant: ['tabular-nums'] }}>
@@ -1100,7 +1743,7 @@ function WalletAddressList({
               <Pressable
                 onPress={() => {
                   onCopy();
-                  setQrFor({ wallet: w, address: addr, chain: isCrypto ? chain : 'Bank reference' });
+                  setQrFor({ wallet: w, address: addr, chain: isCrypto ? chain : t('home.bankReference') });
                 }}
                 style={({ pressed }) => ({
                   width: 44, height: 44, borderRadius: 14,
@@ -1135,6 +1778,7 @@ function QrModal({
   palette: Palette;
   onClose: () => void;
 }) {
+  const t = useT();
   if (!info) return null;
   const { wallet, address, chain } = info;
   const meta = ASSET_META[wallet.currency] ?? ASSET_META.DEFAULT;
@@ -1164,7 +1808,7 @@ function QrModal({
             <CurrencyIcon currency={wallet.currency} palette={p} />
             <View style={{ flex: 1 }}>
               <Text style={{ color: p.fg, fontSize: 16, fontWeight: '800' }}>
-                Receive {meta.title}
+                {t('home.receiveAsset')} {meta.title}
               </Text>
               <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '600', marginTop: 1 }}>
                 {chain}
@@ -1198,7 +1842,7 @@ function QrModal({
             borderWidth: 1, borderColor: p.border,
           }}>
             <Text style={{ color: p.fgFaint, fontSize: 10, fontWeight: '700', letterSpacing: 0.6 }}>
-              ADDRESS
+              {t('home.address').toUpperCase()}
             </Text>
             <Text
               selectable
@@ -1225,7 +1869,7 @@ function QrModal({
               })}
             >
               <Ionicons name="copy-outline" size={14} color={p.fg} />
-              <Text style={{ color: p.fg, fontWeight: '800', fontSize: 14 }}>Copy</Text>
+              <Text style={{ color: p.fg, fontWeight: '800', fontSize: 14 }}>{t('common.copy')}</Text>
             </Pressable>
             <Pressable
               onPress={onClose}
@@ -1235,7 +1879,7 @@ function QrModal({
                 alignItems: 'center', justifyContent: 'center',
               })}
             >
-              <Text style={{ color: p.ctaFg, fontWeight: '800', fontSize: 14 }}>Done</Text>
+              <Text style={{ color: p.ctaFg, fontWeight: '800', fontSize: 14 }}>{t('common.done')}</Text>
             </Pressable>
           </View>
 
@@ -1243,7 +1887,7 @@ function QrModal({
             color: p.fgFaint, fontSize: 11, fontWeight: '600',
             textAlign: 'center', marginTop: 14,
           }}>
-            Send only {wallet.currency} on the {chain} network. Other assets will be lost.
+            {t('home.sendOnlyWarning', { currency: wallet.currency, chain })}
           </Text>
         </Pressable>
       </Pressable>
@@ -1279,13 +1923,12 @@ function AssetRow({ wallet, palette: p, onPress, liveUsd, sparkline, changePct }
   sparkline?: number[];
   changePct?: number;
 }) {
+  const dc = useDisplayCurrency();
   const meta = ASSET_META[wallet.currency] ?? ASSET_META.DEFAULT;
-  // Prefer the freshly-computed live value; fall back to the server's
-  // snapshot only when CoinGecko hasn't loaded yet.
   const usd = liveUsd ?? Number(wallet.fiatValueUsd);
   const positive = (changePct ?? 0) >= 0;
   const sparkColor = positive ? '#22c55e' : '#ef4444';
-  
+
   return (
     <Pressable
       onPress={onPress}
@@ -1296,12 +1939,9 @@ function AssetRow({ wallet, palette: p, onPress, liveUsd, sparkline, changePct }
         borderBottomWidth: 1, borderBottomColor: p.border,
       })}
     >
-      {/* Icon with minimal spacing */}
       <View style={{ width: 36, alignItems: 'center' }}>
         <CurrencyIcon currency={wallet.currency} palette={p} />
       </View>
-      
-      {/* Token name and holdings */}
       <View style={{ flex: 1, marginLeft: 10, minWidth: 0 }}>
         <Text style={{ color: p.fg, fontSize: 15, fontWeight: '700' }} numberOfLines={1}>
           {wallet.currency}
@@ -1313,20 +1953,14 @@ function AssetRow({ wallet, palette: p, onPress, liveUsd, sparkline, changePct }
           })} {wallet.currency}
         </Text>
       </View>
-
-      {/* Live sparkline — centered in row */}
       {sparkline && sparkline.length >= 2 && (
         <View style={{ marginHorizontal: 8, opacity: 0.9 }}>
           <Sparkline data={sparkline} width={60} height={28} color={sparkColor} strokeWidth={1.5} />
         </View>
       )}
-
-      {/* Value in USD/base currency */}
-      <View style={{ alignItems: 'flex-end', minWidth: 70 }}>
-        <Text style={{
-          color: p.fg, fontSize: 14, fontWeight: '700', fontVariant: ['tabular-nums'],
-        }}>
-          ${formatFiat(usd)}
+      <View style={{ alignItems: 'flex-end', minWidth: 72 }}>
+        <Text style={{ color: p.fg, fontSize: 14, fontWeight: '700', fontVariant: ['tabular-nums'] }}>
+          {dc.fmt(usd)}
         </Text>
         <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '500', marginTop: 1 }}>
           {meta.title}
@@ -1336,46 +1970,6 @@ function AssetRow({ wallet, palette: p, onPress, liveUsd, sparkline, changePct }
   );
 }
 
-/* ── Wallet row (for Wallets tab) ─── */
-function WalletRow({ wallet, palette: p, onPress }: {
-  wallet: Wallet;
-  palette: Palette;
-  onPress?: () => void;
-}) {
-  const meta = ASSET_META[wallet.currency] ?? ASSET_META.DEFAULT;
-  return (
-    <Pressable
-      onPress={onPress}
-      style={({ pressed }) => ({
-        flexDirection: 'row', alignItems: 'center',
-        paddingHorizontal: 16, paddingVertical: 14,
-        backgroundColor: pressed ? p.bgElev : 'transparent',
-        borderRadius: 12,
-        marginBottom: 4,
-      })}
-    >
-      <CurrencyIcon currency={wallet.currency} palette={p} />
-      <View style={{ flex: 1, marginLeft: 14, minWidth: 0 }}>
-        <Text style={{ color: p.fg, fontSize: 16, fontWeight: '700' }} numberOfLines={1}>
-          {meta.title}
-        </Text>
-        <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '500', marginTop: 2 }} numberOfLines={1}>
-          {Number(wallet.balance).toLocaleString('en-US', {
-            minimumFractionDigits: meta.subDecimals,
-            maximumFractionDigits: meta.subDecimals,
-          })} {wallet.currency}
-        </Text>
-      </View>
-      <View style={{ alignItems: 'flex-end' }}>
-        <Text style={{
-          color: p.fg, fontSize: 14, fontWeight: '600', fontVariant: ['tabular-nums'],
-        }}>
-          ${formatFiat(Number(wallet.fiatValueUsd))}
-        </Text>
-      </View>
-    </Pressable>
-  );
-}
 
 /* ── Currency icons ── */
 function CurrencyIcon({ currency, palette: p }: { currency: Currency; palette: Palette }) {

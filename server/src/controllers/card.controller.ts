@@ -286,6 +286,52 @@ export class CardController {
     }
   }
 
+  /* POST /api/cards/:id/topup — debit a user wallet and record a TOPUP CardTransaction. */
+  static async topup(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const { amount, currency } = z.object({
+        amount:   z.number().positive(),
+        currency: z.string().min(1).max(10),
+      }).parse(req.body);
+
+      const userId = req.user!.id;
+      const card = await prisma.card.findFirst({ where: { id: req.params.id, userId } });
+      if (!card)                              throw new AppError('Card not found', 404);
+      if (card.status === 'CANCELLED')        throw new AppError('Card is cancelled', 400);
+
+      const wallet = await prisma.wallet.findFirst({ where: { userId, currency: currency as any } });
+      if (!wallet) throw new AppError(`No ${currency} wallet`, 400);
+
+      const available = Number(wallet.balance) - Number(wallet.frozen ?? 0);
+      if (available < amount) throw new AppError('Insufficient balance', 400);
+
+      const tx = await prisma.$transaction(async (prismaTx) => {
+        await prismaTx.wallet.update({
+          where: { id: wallet.id },
+          data:  { balance: { decrement: amount } },
+        });
+        return prismaTx.cardTransaction.create({
+          data: {
+            cardId:    card.id,
+            userId,
+            type:      'TOPUP',
+            merchant:  'Wallet Top-Up',
+            amount,
+            currency:  currency as any,
+            cashback:  0,
+            declined:  false,
+            reference: genRef(),
+            metadata:  { fromCurrency: currency } as any,
+          },
+        });
+      });
+
+      res.status(201).json({ transaction: tx });
+    } catch (error) {
+      next(error);
+    }
+  }
+
   /* GET /api/cards/tiers — public tier catalogue (used on landing + dashboard) */
   static async tiers(_req: AuthRequest, res: Response, next: NextFunction) {
     try {

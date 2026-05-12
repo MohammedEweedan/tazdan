@@ -4,7 +4,7 @@
  * in BOTH dark and light themes — no white-on-white invisibility.
  */
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   ActivityIndicator, Alert, Image, KeyboardAvoidingView, Platform, Pressable,
   ScrollView, Text, TextInput, View,
@@ -16,6 +16,7 @@ import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Ionicons } from '@expo/vector-icons';
+import * as LocalAuthentication from 'expo-local-authentication';
 
 import { useAuthStore } from '@/store/authStore';
 import { useHaptics } from '@/hooks';
@@ -39,9 +40,20 @@ export default function Login() {
   const locale = useI18n((s) => s.locale);
   const cycleLocale = useI18n((s) => s.cycle);
   const login = useAuthStore((s) => s.login);
+  const biometricEnabled = useAuthStore((s) => s.biometricEnabled);
+  const triggerBiometricLogin = useAuthStore((s) => s.triggerBiometricLogin);
 
   const [showPw, setShowPw] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [bioAvailable, setBioAvailable] = useState(false);
+  const [bioLoading, setBioLoading] = useState(false);
+
+  useEffect(() => {
+    Promise.all([
+      LocalAuthentication.hasHardwareAsync(),
+      LocalAuthentication.isEnrolledAsync(),
+    ]).then(([hw, enrolled]) => setBioAvailable(hw && enrolled));
+  }, []);
 
   const { control, handleSubmit, formState: { errors }, setValue } = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -88,7 +100,11 @@ export default function Login() {
               paddingTop: 4, marginBottom: 24,
             }}>
               <Pressable
-                onPress={() => { h.selection(); router.back(); }}
+                onPress={() => {
+                  h.selection();
+                  if (router.canGoBack()) router.back();
+                  else router.replace('/(auth)/onboarding');
+                }}
                 hitSlop={12}
                 style={{
                   width: 40, height: 40, borderRadius: 20,
@@ -263,6 +279,42 @@ export default function Login() {
                 {t('login.apple')}
               </Text>
             </Pressable>
+
+            {/* Face ID — shown only when biometric is enrolled and was previously enabled */}
+            {bioAvailable && biometricEnabled && (
+              <Pressable
+                onPress={async () => {
+                  h.medium();
+                  setBioLoading(true);
+                  try {
+                    const ok = await triggerBiometricLogin();
+                    if (!ok) Alert.alert('Face ID failed', 'Could not authenticate. Try your password.');
+                  } finally {
+                    setBioLoading(false);
+                  }
+                }}
+                disabled={bioLoading}
+                style={({ pressed }) => ({
+                  marginTop: 12,
+                  height: 56,
+                  borderRadius: 28,
+                  backgroundColor: pressed ? p.bgElev : p.pillBg,
+                  borderWidth: 1,
+                  borderColor: p.border,
+                  alignItems: 'center', justifyContent: 'center',
+                  flexDirection: 'row', gap: 8,
+                  opacity: bioLoading ? 0.7 : 1,
+                })}
+              >
+                {bioLoading
+                  ? <ActivityIndicator size="small" color={p.fg} />
+                  : <Ionicons name="finger-print-outline" size={20} color={p.fg} />
+                }
+                <Text style={{ color: p.fg, fontSize: 15, fontWeight: '700' }}>
+                  {t('login.biometric')}
+                </Text>
+              </Pressable>
+            )}
 
             {/* Demo helper — one tap to fill credentials */}
             <Pressable

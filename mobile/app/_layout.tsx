@@ -26,32 +26,40 @@ import { queryClient } from '@/lib/queryClient';
 import { setUnauthorizedHandler } from '@/lib/api';
 import { useAuthStore } from '@/store/authStore';
 import { LoopVideo } from '@/components/ui/LoopVideo';
+import { secureStore } from '@/lib/secureStore';
+import { STORAGE_KEYS } from '@/constants';
 
 SystemUI.setBackgroundColorAsync('#000000').catch(() => {});
 
 function AuthGate() {
   const segments = useSegments();
   const router = useRouter();
-  const { isAuthenticated, isHydrating, hydrate, logout } = useAuthStore();
+  const { isAuthenticated, isHydrating, hydrate, logout, lastUser } = useAuthStore();
+  // null = still reading storage; true/false = resolved
+  const [hasOnboarded, setHasOnboarded] = useState<boolean | null>(null);
 
   useEffect(() => { hydrate(); }, [hydrate]);
 
   useEffect(() => { setUnauthorizedHandler(() => { logout(); }); }, [logout]);
 
   useEffect(() => {
-    if (isHydrating) return;
+    secureStore.get(STORAGE_KEYS.onboarded).then((v) => setHasOnboarded(!!v));
+  }, []);
+
+  useEffect(() => {
+    // Wait until both auth hydration and onboarding flag are resolved.
+    if (isHydrating || hasOnboarded === null) return;
     const inAuthGroup = segments[0] === '(auth)';
     if (!isAuthenticated && !inAuthGroup) {
-      // Logged out → bounce to onboarding.
-      router.replace('/onboarding');
+      router.replace(hasOnboarded ? (lastUser ? '/(auth)/welcome-back' : '/(auth)/login') : '/(auth)/onboarding');
     } else if (isAuthenticated && inAuthGroup) {
       // Logged in but still on login/register/onboarding → bounce home.
       // IMPORTANT: do NOT redirect for any other non-tab route, or modal
       // screens like /buy, /sell, /send, /receive, /topup, /cards, /p2p/[id]
       // get killed the instant they open.
-      router.replace('/');
+      router.replace('/(tabs)');
     }
-  }, [isAuthenticated, isHydrating, segments, router]);
+  }, [isAuthenticated, isHydrating, segments, router, hasOnboarded]);
 
   return null;
 }

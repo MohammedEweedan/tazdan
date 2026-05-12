@@ -81,6 +81,10 @@ export const authService = {
     const { data } = await api.get('/auth/me');
     return data.user;
   },
+  async refresh(refreshToken: string): Promise<{ accessToken: string; refreshToken: string }> {
+    const { data } = await api.post('/auth/refresh', { refreshToken });
+    return data;
+  },
 };
 
 // ───────── Wallets ─────────
@@ -158,12 +162,19 @@ export interface P2PTrade {
   amount: string;
   price: string;
   totalFiat: string;
-  status: 'PENDING' | 'PAYMENT_SENT' | 'COMPLETED' | 'CANCELLED' | 'DISPUTED';
+  status:
+    | 'PENDING' | 'ESCROW_FUNDED'                          // waiting for buyer payment
+    | 'PAYMENT_SENT' | 'PAYMENT_CONFIRMED'                 // buyer paid, awaiting seller confirm
+    | 'COMPLETED' | 'ESCROW_RELEASED'                      // done
+    | 'CANCELLED' | 'EXPIRED'                              // dead
+    | 'DISPUTED';                                           // support
   paymentMethod?: string;
   reference?: string;
   createdAt: string;
   listing?: { currency: string; fiatCurrency: string; side: 'BUY' | 'SELL' };
-  counterparty?: { username?: string; firstName?: string; lastName?: string };
+  counterparty?: { username?: string; handle?: string; name?: string; firstName?: string; lastName?: string };
+  buyer?: { id: string; firstName?: string; lastName?: string; username?: string | null };
+  seller?: { id: string; firstName?: string; lastName?: string; username?: string | null };
 }
 
 export interface P2PListing {
@@ -177,6 +188,7 @@ export interface P2PListing {
   minLimit: string;
   maxLimit: string;
   paymentMethods: string[];
+  anonymous?: boolean;
   status: 'ACTIVE' | 'PAUSED' | 'COMPLETED' | 'CANCELLED';
   createdAt: string;
 }
@@ -206,6 +218,9 @@ export const p2pService = {
     maxLimit: number;
     paymentMethods: string[];
     terms?: string;
+    anonymous?: boolean;
+    city?: string;
+    timeframeMins?: number;
   }): Promise<P2PListing> => {
     const { data } = await api.post('/p2p/listings', payload);
     return data.listing;
@@ -217,7 +232,10 @@ export const p2pService = {
   },
   markPaymentSent: (id: string) => api.put(`/p2p/trades/${id}/payment-sent`),
   confirmPayment:  (id: string) => api.put(`/p2p/trades/${id}/confirm`),
+  buyerConfirm:    (id: string) => api.put(`/p2p/trades/${id}/buyer-confirm`),
+  denyPayment:     (id: string, reason?: string) => api.put(`/p2p/trades/${id}/deny`, { reason }),
   cancelTrade:     (id: string) => api.put(`/p2p/trades/${id}/cancel`),
+  raiseDispute:    (id: string, reason: string) => api.post(`/p2p/trades/${id}/dispute`, { reason }),
 };
 
 // ───────── Wallet swap ─────────
@@ -383,18 +401,30 @@ export interface CardTransaction {
 }
 export const cardsService = {
   list: () => withFallback<CardEntity[]>(
-    async () => (await api.get('/cards')).data.cards,
+    async () => {
+      const cards: CardEntity[] = (await api.get('/cards')).data.cards ?? [];
+      // Server returning an empty array means no real cards yet — use demo data
+      return FALLBACK && cards.length === 0 ? MOCK_CARDS : cards;
+    },
     MOCK_CARDS,
   ),
   issue: async (payload: { tier: 'STARTER' | 'PRO' | 'MASTER'; colorway: CardEntity['colorway'] }): Promise<CardEntity> => {
-    const { data } = await api.post('/cards/issue', payload);
+    const { data } = await api.post('/cards', payload);
     return data.card;
   },
   freeze:   (id: string) => api.post(`/cards/${id}/freeze`),
   unfreeze: (id: string) => api.post(`/cards/${id}/unfreeze`),
+  topup: async (id: string, payload: { amount: number; currency: string }): Promise<CardTransaction> => {
+    const { data } = await api.post(`/cards/${id}/topup`, payload);
+    return data.transaction;
+  },
   transactions: (id: string): Promise<CardTransaction[]> =>
     withFallback<CardTransaction[]>(
       async () => (await api.get(`/cards/${id}/transactions`)).data.transactions,
       [],
     ),
+  simulatePurchase: async (id: string, payload: { amount: number; merchant: string; currency: string }): Promise<CardTransaction> => {
+    const { data } = await api.post(`/cards/${id}/transactions`, { ...payload, type: 'PURCHASE' });
+    return data.transaction;
+  },
 };

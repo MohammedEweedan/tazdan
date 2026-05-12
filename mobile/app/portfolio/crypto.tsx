@@ -14,10 +14,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import Svg, { Circle } from 'react-native-svg';
+import Svg, { Circle, Text as SvgText } from 'react-native-svg';
 
 import { useWallets, useMarkets } from '@/hooks';
-import { CURRENCY_META } from '@/constants';
+import { getCurrencyMeta, normalizeCurrencyCode } from '@/constants';
 import { useTheme, useThemedPalette, type Palette } from '@/store/themeStore';
 import type { Wallet, Currency } from '@/types';
 
@@ -32,7 +32,7 @@ export default function CryptoPortfolio() {
   const [sort, setSort] = useState<SortOption>('value');
 
   const cryptoWallets = useMemo(
-    () => (wallets ?? []).filter((w) => CURRENCY_META[w.currency]?.kind === 'crypto'),
+    () => (wallets ?? []).filter((w) => getCurrencyMeta(w.currency)?.kind === 'crypto'),
     [wallets],
   );
 
@@ -45,7 +45,8 @@ export default function CryptoPortfolio() {
   }, [tickers]);
 
   const valueOf = (w: Wallet) => {
-    const live = priceMap[w.currency];
+    const normalized = normalizeCurrencyCode(w.currency);
+    const live = normalized ? priceMap[normalized] : undefined;
     if (live !== undefined) return Number(w.balance) * live;
     return 0;
   };
@@ -61,7 +62,8 @@ export default function CryptoPortfolio() {
     let weightedChange = 0;
     let totalExposure = 0;
     cryptoWallets.forEach((w) => {
-      const m = tickers.find((t) => t.base === w.currency);
+      const normalized = normalizeCurrencyCode(w.currency);
+      const m = normalized ? tickers.find((t) => t.base === normalized) : undefined;
       if (!m || m.changePct24h === undefined || m.changePct24h === 0) return;
       const exposure = Number(w.balance) * m.price;
       weightedChange += exposure * m.changePct24h;
@@ -77,7 +79,8 @@ export default function CryptoPortfolio() {
   // Sort assets
   const sortedAssets = useMemo(() => {
     const assets = cryptoWallets.map((w) => {
-      const m = tickers?.find((t) => t.base === w.currency);
+      const normalized = normalizeCurrencyCode(w.currency);
+      const m = normalized ? tickers?.find((t) => t.base === normalized) : undefined;
       return {
         ...w,
         value: valueOf(w),
@@ -212,30 +215,32 @@ export default function CryptoPortfolio() {
               Asset Allocation
             </Text>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 20 }}>
-              {/* Simple Pie Chart */}
+              {/* Donut chart */}
               <Svg width={120} height={120}>
+                <Circle cx={60} cy={60} r={44} fill="transparent" stroke={p.border} strokeWidth={18} />
                 {allocation.map((item, index) => {
-                  const percentage = item.percentage / 100;
-                  const circumference = 2 * Math.PI * 50;
-                  const strokeDasharray = circumference * percentage;
-                  const previousPercentages = allocation.slice(0, index).reduce((s, i) => s + i.percentage, 0);
-                  const rotation = (previousPercentages / 100) * 360 - 90;
+                  const circumference = 2 * Math.PI * 44;
+                  const dash = circumference * (item.percentage / 100);
+                  const prevPct = allocation.slice(0, index).reduce((s, i) => s + i.percentage, 0);
                   return (
                     <Circle
                       key={item.currency}
-                      cx={60}
-                      cy={60}
-                      r={50}
+                      cx={60} cy={60} r={44}
                       fill="transparent"
                       stroke={COLORS[index % COLORS.length]}
-                      strokeWidth={20}
-                      strokeDasharray={[strokeDasharray, circumference]}
-                      rotation={rotation}
-                      originX={60}
-                      originY={60}
+                      strokeWidth={18}
+                      strokeDasharray={[dash, circumference]}
+                      rotation={(prevPct / 100) * 360 - 90}
+                      originX={60} originY={60}
                     />
                   );
                 })}
+                <SvgText x={60} y={56} textAnchor="middle" fill={p.fg} fontSize="13" fontWeight="800">
+                  {cryptoWallets.length}
+                </SvgText>
+                <SvgText x={60} y={70} textAnchor="middle" fill={p.fgMuted} fontSize="9" fontWeight="600">
+                  ASSETS
+                </SvgText>
               </Svg>
               <View style={{ flex: 1 }}>
                 {allocation.map((item, index) => (
@@ -291,7 +296,7 @@ export default function CryptoPortfolio() {
           {/* Asset List */}
           <View style={{ marginHorizontal: 24, marginTop: 16 }}>
             {sortedAssets.map((asset) => {
-              const meta = CURRENCY_META[asset.currency];
+              const meta = getCurrencyMeta(asset.currency);
               if (!meta) return null;
               const assetPositive = asset.changePct24h >= 0;
               return (

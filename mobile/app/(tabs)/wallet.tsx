@@ -21,7 +21,7 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { runOnJS } from 'react-native-reanimated';
 
 import { useWallets, useCards, useHaptics, useMarkets } from '@/hooks';
-import { CURRENCY_META } from '@/constants';
+import { getCurrencyMeta, normalizeCurrencyCode } from '@/constants';
 import { useTheme, useThemedPalette, type Palette } from '@/store/themeStore';
 import { useT } from '@/store/i18nStore';
 import { CardVisual } from '@/components/cards/CardVisual';
@@ -51,18 +51,19 @@ export default function WalletScreen() {
 
   /** Live USD value for a single wallet (balance × spot, with fiat fallback). */
   const valueOf = (w: Wallet) => {
-    const live = priceMap[w.currency];
+    const normalized = normalizeCurrencyCode(w.currency);
+    const live = normalized ? priceMap[normalized] : undefined;
     if (live !== undefined) return Number(w.balance) * live;
     return Number(w.fiatValueUsd ?? 0);
   };
 
   /** Buckets the user actually cares about. */
   const cryptoUsd = useMemo(
-    () => (wallets ?? []).filter((w) => CURRENCY_META[w.currency]?.kind === 'crypto').reduce((s, w) => s + valueOf(w), 0),
+    () => (wallets ?? []).filter((w) => getCurrencyMeta(w.currency)?.kind === 'crypto').reduce((s, w) => s + valueOf(w), 0),
     [wallets, priceMap],
   );
   const fiatUsd = useMemo(
-    () => (wallets ?? []).filter((w) => CURRENCY_META[w.currency]?.kind === 'fiat').reduce((s, w) => s + valueOf(w), 0),
+    () => (wallets ?? []).filter((w) => getCurrencyMeta(w.currency)?.kind === 'fiat').reduce((s, w) => s + valueOf(w), 0),
     [wallets, priceMap],
   );
   const cardsUsd = useMemo(
@@ -72,8 +73,8 @@ export default function WalletScreen() {
 
   const list = useMemo<Wallet[]>(() => {
     if (!wallets) return [];
-    if (filter === 'CRYPTO') return wallets.filter((w) => CURRENCY_META[w.currency]?.kind === 'crypto');
-    if (filter === 'FIAT')   return wallets.filter((w) => CURRENCY_META[w.currency]?.kind === 'fiat');
+    if (filter === 'CRYPTO') return wallets.filter((w) => getCurrencyMeta(w.currency)?.kind === 'crypto');
+    if (filter === 'FIAT')   return wallets.filter((w) => getCurrencyMeta(w.currency)?.kind === 'fiat');
     return wallets; // ALL
   }, [wallets, filter]);
 
@@ -85,8 +86,9 @@ export default function WalletScreen() {
     let weightedChange = 0;
     let totalCryptoExposure = 0;
     (wallets ?? []).forEach((w) => {
-      if (CURRENCY_META[w.currency]?.kind !== 'crypto') return;
-      const m = tickers.find((t) => t.base === w.currency);
+      const normalized = normalizeCurrencyCode(w.currency);
+      if (!normalized || getCurrencyMeta(w.currency)?.kind !== 'crypto') return;
+      const m = tickers.find((t) => t.base === normalized);
       if (!m || m.changePct24h === undefined || m.changePct24h === 0) return;
       const exposure = Number(w.balance) * m.price;
       weightedChange += exposure * m.changePct24h;
@@ -151,7 +153,7 @@ export default function WalletScreen() {
               style={{ paddingHorizontal: 24, paddingTop: 24, paddingBottom: 24 }}
             >
               <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '600', marginBottom: 8 }}>
-                Total Balance
+                {t('home.totalBalance')}
               </Text>
               <Text style={{ color: p.fg, fontSize: 42, fontWeight: '700', letterSpacing: -0.8 }}>
                 {formatFiat(totalUsd)}
@@ -178,7 +180,7 @@ export default function WalletScreen() {
                 </View>
               </View>
               <Text style={{ color: p.fgMuted, fontSize: 11, marginTop: 8 }}>
-                Swipe or tap for breakdown
+                {t('wallet.swipeBreakdown')}
               </Text>
             </Pressable>
           </GestureDetector>
@@ -206,7 +208,7 @@ export default function WalletScreen() {
                     color: filter === f ? p.bg : p.fgMuted,
                     fontWeight: '700', fontSize: 11, letterSpacing: 0.6,
                   }}>
-                    {f}
+                    {f === 'CARDS' ? t('home.cards') : t(`wallet.${f.toLowerCase()}`)}
                   </Text>
                 </View>
               </Pressable>
@@ -220,9 +222,9 @@ export default function WalletScreen() {
               gap: 10,
               marginTop: 18, marginHorizontal: 24,
             }}>
-              <BucketTile palette={p} icon="logo-bitcoin" label="Crypto" usd={cryptoUsd} count={(wallets ?? []).filter((w) => CURRENCY_META[w.currency]?.kind === 'crypto').length} accent="#f7931a" />
-              <BucketTile palette={p} icon="cash-outline" label="Fiat"   usd={fiatUsd}   count={(wallets ?? []).filter((w) => CURRENCY_META[w.currency]?.kind === 'fiat').length}   accent="#22c55e" />
-              <BucketTile palette={p} icon="card-outline" label="Cards"  usd={cardsUsd}  count={cards?.length ?? 0} accent="#7c3aed" />
+              <BucketTile palette={p} icon="logo-bitcoin" label={t('wallet.crypto')} usd={cryptoUsd} count={(wallets ?? []).filter((w) => getCurrencyMeta(w.currency)?.kind === 'crypto').length} accent="#f7931a" />
+              <BucketTile palette={p} icon="cash-outline" label={t('wallet.fiat')}   usd={fiatUsd}   count={(wallets ?? []).filter((w) => getCurrencyMeta(w.currency)?.kind === 'fiat').length}   accent="#22c55e" />
+              <BucketTile palette={p} icon="card-outline" label={t('home.cards')}  usd={cardsUsd}  count={cards?.length ?? 0} accent="#7c3aed" />
             </View>
           )}
 
@@ -233,13 +235,13 @@ export default function WalletScreen() {
                 <View style={{ paddingVertical: 48, alignItems: 'center' }}>
                   <Ionicons name="card-outline" size={36} color={p.fgFaint} />
                   <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '600', marginTop: 12 }}>
-                    No cards issued yet.
+                    {t('cards.noneIssued')}
                   </Text>
                   <Pressable
                     onPress={() => { h.medium(); router.push('/cards'); }}
                     style={{ marginTop: 14, paddingHorizontal: 18, paddingVertical: 10, borderRadius: 20, backgroundColor: p.ctaBg }}
                   >
-                    <Text style={{ color: p.ctaFg, fontSize: 13, fontWeight: '700' }}>Order a card</Text>
+                    <Text style={{ color: p.ctaFg, fontSize: 13, fontWeight: '700' }}>{t('cards.orderCard')}</Text>
                   </Pressable>
                 </View>
               ) : (
@@ -268,10 +270,10 @@ export default function WalletScreen() {
                             backgroundColor: c.status === 'ACTIVE' ? '#10b981' : c.status === 'FROZEN' ? '#60a5fa' : p.fgFaint,
                           }} />
                           <Text style={{ color: p.fg, fontSize: 13, fontWeight: '700' }}>
-                            {c.status === 'ACTIVE' ? 'Active' : c.status === 'FROZEN' ? 'Frozen' : c.status}
+                            {c.status === 'ACTIVE' ? t('cards.active') : c.status === 'FROZEN' ? t('cards.frozen') : c.status}
                           </Text>
                           <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '600' }}>
-                            · ${Number((c as any).spentMonth ?? 0).toLocaleString('en-US', { maximumFractionDigits: 2 })} this month
+                            · ${Number((c as any).spentMonth ?? 0).toLocaleString('en-US', { maximumFractionDigits: 2 })} {t('cards.thisMonth')}
                           </Text>
                         </View>
                         <Ionicons name="chevron-forward" size={16} color={p.fgFaint} />
@@ -289,7 +291,7 @@ export default function WalletScreen() {
                     })}
                   >
                     <Ionicons name="settings-outline" size={14} color={p.fg} />
-                    <Text style={{ color: p.fg, fontSize: 13, fontWeight: '700' }}>Manage cards</Text>
+                    <Text style={{ color: p.fg, fontSize: 13, fontWeight: '700' }}>{t('cards.manage')}</Text>
                   </Pressable>
                 </>
               )}
@@ -298,7 +300,7 @@ export default function WalletScreen() {
             <>
               <View style={{ height: 1, backgroundColor: p.border, marginTop: 18 }} />
               {list.map((w) => {
-                const meta = CURRENCY_META[w.currency];
+                const meta = getCurrencyMeta(w.currency);
                 if (!meta) return null;
                 return (
                   <Pressable
@@ -373,7 +375,7 @@ export default function WalletScreen() {
               marginBottom: 20,
             }} />
             <Text style={{ color: p.fg, fontSize: 20, fontWeight: '700', marginBottom: 16 }}>
-              Balance Breakdown
+              {t('wallet.balanceBreakdown')}
             </Text>
 
             {/* Crypto section */}
@@ -399,10 +401,10 @@ export default function WalletScreen() {
                 </View>
                 <View>
                   <Text style={{ color: p.fg, fontSize: 16, fontWeight: '700' }}>
-                    Crypto
+                    {t('wallet.crypto')}
                   </Text>
                   <Text style={{ color: p.fgMuted, fontSize: 13 }}>
-                    {(wallets ?? []).filter((w) => CURRENCY_META[w.currency]?.kind === 'crypto').length} assets
+                    {(wallets ?? []).filter((w) => getCurrencyMeta(w.currency)?.kind === 'crypto').length} {t('wallet.assetsCount')}
                   </Text>
                 </View>
               </View>
@@ -439,10 +441,10 @@ export default function WalletScreen() {
                 </View>
                 <View>
                   <Text style={{ color: p.fg, fontSize: 16, fontWeight: '700' }}>
-                    Fiat
+                    {t('wallet.fiat')}
                   </Text>
                   <Text style={{ color: p.fgMuted, fontSize: 13 }}>
-                    {(wallets ?? []).filter((w) => CURRENCY_META[w.currency]?.kind === 'fiat').length} currencies
+                    {(wallets ?? []).filter((w) => getCurrencyMeta(w.currency)?.kind === 'fiat').length} {t('wallet.currenciesCount')}
                   </Text>
                 </View>
               </View>
@@ -451,7 +453,7 @@ export default function WalletScreen() {
                   {formatFiat(fiatUsd)}
                 </Text>
                 <Text style={{ color: p.fgMuted, fontSize: 12 }}>
-                  No 24h change
+                  {t('wallet.no24hChange')}
                 </Text>
               </View>
             </Pressable>
@@ -471,10 +473,10 @@ export default function WalletScreen() {
                 </View>
                 <View>
                   <Text style={{ color: p.fg, fontSize: 16, fontWeight: '700' }}>
-                    Cards
+                    {t('home.cards')}
                   </Text>
                   <Text style={{ color: p.fgMuted, fontSize: 13 }}>
-                    {cards?.length || 0} cards
+                    {cards?.length || 0} {t('wallet.cardsCount')}
                   </Text>
                 </View>
               </View>
@@ -494,7 +496,7 @@ export default function WalletScreen() {
               }}
             >
               <Text style={{ color: p.fg, fontSize: 15, fontWeight: '600' }}>
-                Close
+                {t('common.close')}
               </Text>
             </Pressable>
           </View>
@@ -516,6 +518,7 @@ function BucketTile({
   count: number;
   accent: string;
 }) {
+  const t = useT();
   return (
     <View style={{
       flex: 1,
@@ -546,7 +549,7 @@ function BucketTile({
           ${usd.toLocaleString('en-US', { maximumFractionDigits: 0 })}
         </Text>
         <Text style={{ color: p.fgFaint, fontSize: 10, fontWeight: '600', marginTop: 2 }}>
-          {count} {count === 1 ? 'item' : 'items'}
+          {count} {count === 1 ? t('wallet.item') : t('wallet.items')}
         </Text>
       </View>
     </View>

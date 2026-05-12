@@ -161,6 +161,13 @@ io.on('connection', (socket) => {
   // Legacy explicit subscribe (kept for backward compat with older clients).
   socket.on('subscribe:orders', (userId: string) => socket.join(`user:${userId}`));
 
+  socket.on('typing:start', ({ toUserId }: { toUserId: string }) => {
+    if (user?.id) io.to(`user:${toUserId}`).emit('typing:start', { fromUserId: user.id });
+  });
+  socket.on('typing:stop', ({ toUserId }: { toUserId: string }) => {
+    if (user?.id) io.to(`user:${toUserId}`).emit('typing:stop', { fromUserId: user.id });
+  });
+
   socket.on('disconnect', () => { /* nothing to clean up */ });
 });
 

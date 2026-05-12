@@ -22,13 +22,24 @@ import Svg, { Circle, Defs, LinearGradient, Path, Stop, Line as SvgLine } from '
 
 import { ScreenShell, Panel } from '@/components/ui/ScreenShell';
 import { useThemedPalette, type Palette } from '@/store/themeStore';
-import { useHaptics, useWallets } from '@/hooks';
+import { useHaptics, useWallets, useTransactions } from '@/hooks';
 import { useMarkets, ID_TO_SYM, type CoinGeckoMarket } from '@/hooks/useMarkets';
 import { useLivePrice } from '@/hooks/useLivePrice';
 import { useOHLC } from '@/hooks/useOHLC';
-import type { Currency } from '@/types';
+import type { Currency, Wallet } from '@/types';
 
 type Range = '1H' | '24H' | '7D' | '30D';
+
+const FIAT_CURRENCIES = new Set(['USD', 'EUR', 'GBP', 'AED', 'SAR', 'EGP']);
+
+const FIAT_NAME: Record<string, string> = {
+  USD: 'US Dollar', EUR: 'Euro', GBP: 'British Pound',
+  AED: 'UAE Dirham', SAR: 'Saudi Riyal', EGP: 'Egyptian Pound',
+};
+
+const FIAT_SYMBOL: Record<string, string> = {
+  USD: '$', EUR: '€', GBP: '£', AED: 'د.إ', SAR: '﷼', EGP: '£',
+};
 
 /** Reverse of `ID_TO_SYM` so we can look up a CoinGecko id by ticker. */
 const SYM_TO_ID: Record<string, string> = Object.fromEntries(
@@ -89,6 +100,15 @@ export default function AssetDetail() {
   // Compute the holdings' P/L for the selected range using the same %
   // change so users see "your $1,200 of BTC moved +2.3% (+$28) in 24H".
   const holdingsDelta = (holdingsUsd * change) / (100 + change || 1);
+
+  const isFiat = FIAT_CURRENCIES.has(sym);
+  if (isFiat) {
+    return (
+      <ScreenShell title={FIAT_NAME[sym] ?? sym} subtitle={`${sym} Currency`}>
+        <FiatAssetView sym={sym} wallet={wallet} p={p} h={h} router={router} />
+      </ScreenShell>
+    );
+  }
 
   return (
     <ScreenShell title={market?.name ?? sym} subtitle={`${sym} / USD`}>
@@ -466,4 +486,135 @@ function fmtSupply(n: number, sym: string): string {
   if (n >= 1e6) return `${(n / 1e6).toFixed(2)}M ${sym}`;
   if (n >= 1e3) return `${(n / 1e3).toFixed(2)}K ${sym}`;
   return `${n.toLocaleString('en-US', { maximumFractionDigits: 0 })} ${sym}`;
+}
+
+/* ── Fiat asset detail — deposit / withdraw view (no chart) ─── */
+function FiatAssetView({ sym, wallet, p, h, router }: {
+  sym: Currency;
+  wallet: Wallet | undefined;
+  p: Palette;
+  h: { selection: () => void; medium: () => void; light: () => void };
+  router: { push: (href: any) => void };
+}) {
+  const { data: txData } = useTransactions(1);
+  const txs = (txData?.items ?? [])
+    .filter((t: any) => t.currency === sym)
+    .slice(0, 8);
+
+  const balance = wallet ? Number(wallet.balance) : 0;
+  const usdValue = wallet ? Number(wallet.fiatValueUsd) : 0;
+  const fxRate = balance > 0 ? usdValue / balance : 0;
+
+  return (
+    <View style={{ paddingHorizontal: 20, paddingBottom: 40 }}>
+      {/* Balance card */}
+      <View style={{
+        borderRadius: 20, padding: 20, marginBottom: 20,
+        backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border,
+      }}>
+        <Text style={{
+          color: p.fgMuted, fontSize: 11, fontWeight: '700',
+          letterSpacing: 1.0, textTransform: 'uppercase',
+        }}>
+          Available Balance
+        </Text>
+        <Text style={{
+          color: p.fg, fontSize: 38, fontWeight: '800',
+          letterSpacing: -1.4, marginTop: 6, fontVariant: ['tabular-nums'],
+        }}>
+          {FIAT_SYMBOL[sym] ?? ''}{balance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+        </Text>
+        {sym !== 'USD' && fxRate > 0 && (
+          <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '500', marginTop: 6 }}>
+            ≈ ${usdValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD
+            {' · '}1 {sym} = ${fxRate.toFixed(4)}
+          </Text>
+        )}
+      </View>
+
+      {/* Action buttons */}
+      <View style={{ flexDirection: 'row', gap: 12, marginBottom: 28 }}>
+        <Pressable
+          onPress={() => { h.medium(); router.push(`/topup?currency=${sym}` as any); }}
+          style={({ pressed }) => ({
+            flex: 1, height: 52, borderRadius: 26,
+            backgroundColor: pressed ? '#000' : p.ctaBg,
+            alignItems: 'center', justifyContent: 'center',
+            flexDirection: 'row', gap: 6,
+          })}
+        >
+          <Ionicons name="arrow-down-circle-outline" size={18} color={p.ctaFg} />
+          <Text style={{ color: p.ctaFg, fontSize: 15, fontWeight: '800' }}>Deposit</Text>
+        </Pressable>
+        <Pressable
+          onPress={() => { h.medium(); router.push(`/send?currency=${sym}` as any); }}
+          style={({ pressed }) => ({
+            flex: 1, height: 52, borderRadius: 26,
+            backgroundColor: pressed ? p.border : p.pillBg,
+            borderWidth: 1, borderColor: p.border,
+            alignItems: 'center', justifyContent: 'center',
+            flexDirection: 'row', gap: 6,
+          })}
+        >
+          <Ionicons name="paper-plane-outline" size={16} color={p.fg} />
+          <Text style={{ color: p.fg, fontSize: 15, fontWeight: '800' }}>Withdraw</Text>
+        </Pressable>
+      </View>
+
+      {/* Recent transactions */}
+      <Text style={{
+        color: p.fgFaint, fontSize: 11, fontWeight: '700',
+        letterSpacing: 0.6, marginBottom: 12,
+      }}>
+        RECENT ACTIVITY
+      </Text>
+      {txs.length > 0 ? (
+        txs.map((t: any) => {
+          const amt = Number(t.amount);
+          const positive = amt >= 0;
+          return (
+            <View key={t.id} style={{
+              flexDirection: 'row', alignItems: 'center',
+              paddingVertical: 14,
+              borderBottomWidth: 1, borderBottomColor: p.border,
+              gap: 12,
+            }}>
+              <View style={{
+                width: 38, height: 38, borderRadius: 19,
+                backgroundColor: p.pillBg, borderWidth: 1, borderColor: p.border,
+                alignItems: 'center', justifyContent: 'center',
+              }}>
+                <Ionicons
+                  name={positive ? 'arrow-down' : 'arrow-up'}
+                  size={16}
+                  color={positive ? p.greenFg : p.fg}
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: p.fg, fontSize: 14, fontWeight: '700' }} numberOfLines={1}>
+                  {t.description || t.type}
+                </Text>
+                <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '500', marginTop: 2 }}>
+                  {new Date(t.createdAt).toLocaleDateString()}
+                </Text>
+              </View>
+              <Text style={{
+                color: positive ? p.greenFg : p.fg,
+                fontSize: 14, fontWeight: '700', fontVariant: ['tabular-nums'],
+              }}>
+                {positive ? '+' : ''}{Math.abs(amt).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {sym}
+              </Text>
+            </View>
+          );
+        })
+      ) : (
+        <View style={{ paddingVertical: 32, alignItems: 'center' }}>
+          <Ionicons name="receipt-outline" size={24} color={p.fgFaint} />
+          <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '500', marginTop: 10 }}>
+            No transactions yet
+          </Text>
+        </View>
+      )}
+    </View>
+  );
 }

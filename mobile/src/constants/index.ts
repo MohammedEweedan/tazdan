@@ -10,7 +10,7 @@ import type { Currency, CurrencyMeta } from '@/types';
  *  3. On Android emulator, `10.0.2.2` reaches the host machine.
  *  4. Web + iOS Simulator can use `localhost` directly.
  */
-const API_PORT = 5001;
+const API_PORT = 5000;
 function resolveApiBase(): string {
   const fromEnv = process.env.EXPO_PUBLIC_API_BASE;
   if (fromEnv) return fromEnv;
@@ -36,6 +36,7 @@ export const STORAGE_KEYS = {
   accessToken:  'promrkts.accessToken',
   refreshToken: 'promrkts.refreshToken',
   onboarded:    'promrkts.onboarded',
+  lastUser:     'promrkts.lastUser',
 } as const;
 
 export const QUERY_KEYS = {
@@ -78,3 +79,14 @@ export const CURRENCY_META: Record<Currency, CurrencyMeta> = {
   SAR:   { code: 'SAR',   kind: 'fiat',   name: 'Saudi Riyal',       symbol: '﷼',  decimals: 2, flagOrIcon: '🇸🇦' },
   EGP:   { code: 'EGP',   kind: 'fiat',   name: 'Egyptian Pound',    symbol: '£',  decimals: 2, flagOrIcon: '🇪🇬' },
 };
+
+export function normalizeCurrencyCode(currency: string): Currency | null {
+  if (currency in CURRENCY_META) return currency as Currency;
+  if (currency.startsWith('USDT_')) return 'USDT';
+  return null;
+}
+
+export function getCurrencyMeta(currency: string): CurrencyMeta | null {
+  const normalized = normalizeCurrencyCode(currency);
+  return normalized ? CURRENCY_META[normalized] : null;
+}

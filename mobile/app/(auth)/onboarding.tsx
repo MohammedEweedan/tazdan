@@ -9,9 +9,9 @@
  * giving FlatList `flex: 1` and the renderItem View `flex: 1` too.
  */
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
-  Dimensions, FlatList, Image, Pressable, Text, View,
+  Alert, Dimensions, FlatList, Image, Pressable, Text, View,
   type ListRenderItemInfo,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -19,11 +19,15 @@ import { StatusBar } from 'expo-status-bar';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import * as LocalAuthentication from 'expo-local-authentication';
+import { Camera } from 'expo-camera';
 
 import { useHaptics } from '@/hooks';
 import { useTheme, useThemedPalette } from '@/store/themeStore';
 import { useI18n, useT, LOCALE_META } from '@/store/i18nStore';
 import { LoopVideo } from '@/components/ui/LoopVideo';
+import { secureStore } from '@/lib/secureStore';
+import { STORAGE_KEYS } from '@/constants';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 
@@ -31,7 +35,29 @@ interface Slide { id: string; titleKey: string; bodyKey: string }
 const SLIDES: Slide[] = [
   { id: 's1', titleKey: 'onboard.title.1', bodyKey: 'onboard.body.1' },
   { id: 's2', titleKey: 'onboard.title.2', bodyKey: 'onboard.body.2' },
+  { id: 's3', titleKey: 'onboard.permissions.title', bodyKey: 'onboard.permissions.body' },
 ];
+
+async function requestAllPermissions() {
+  try {
+    const Notifications = await import('expo-notifications');
+    await Notifications.requestPermissionsAsync();
+  } catch {}
+  try {
+    await Camera.requestCameraPermissionsAsync();
+  } catch {}
+  try {
+    const hasBio = await LocalAuthentication.hasHardwareAsync();
+    const enrolled = await LocalAuthentication.isEnrolledAsync();
+    if (hasBio && enrolled) {
+      await LocalAuthentication.authenticateAsync({
+        promptMessage: 'Enable Face ID / biometric sign-in',
+        cancelLabel: 'Skip',
+        disableDeviceFallback: true,
+      });
+    }
+  } catch {}
+}
 
 export default function Onboarding() {
   const router = useRouter();
@@ -46,6 +72,17 @@ export default function Onboarding() {
   const [page, setPage] = useState(0);
   const flat = useRef<FlatList<Slide>>(null);
   const last = page === SLIDES.length - 1;
+  const onPermissionsSlide = page === 2;
+
+  // Request permissions when the user reaches the permissions slide.
+  useEffect(() => {
+    if (onPermissionsSlide) requestAllPermissions();
+  }, [onPermissionsSlide]);
+
+  const markOnboardedAndNavigate = async (dest: '/register' | '/login') => {
+    await secureStore.set(STORAGE_KEYS.onboarded, 'true');
+    router.push(dest);
+  };
 
   // Slide copy lives on a translucent panel so the text always reads
   // clearly over the moving video, in BOTH light + dark themes.
@@ -207,7 +244,7 @@ export default function Onboarding() {
           <Pressable
             onPress={() => {
               h.medium();
-              if (last) router.push('/register');
+              if (last) markOnboardedAndNavigate('/register');
               else flat.current?.scrollToIndex({ index: page + 1, animated: true });
             }}
             style={({ pressed }) => ({
@@ -231,7 +268,7 @@ export default function Onboarding() {
 
           {/* Secondary CTA */}
           <Pressable
-            onPress={() => { h.selection(); router.push('/login'); }}
+            onPress={() => { h.selection(); markOnboardedAndNavigate('/login'); }}
             style={({ pressed }) => ({
               height: 56,
               borderRadius: 28,

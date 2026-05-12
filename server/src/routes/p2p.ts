@@ -19,5 +19,7 @@ p2pRouter.get('/trades', authenticate, P2PController.getMyTrades);
 p2pRouter.post('/trades', authenticate, P2PController.initiateTrade);
 p2pRouter.put('/trades/:id/payment-sent', authenticate, P2PController.markPaymentSent);
 p2pRouter.put('/trades/:id/confirm', authenticate, P2PController.confirmPayment);
+p2pRouter.put('/trades/:id/buyer-confirm', authenticate, P2PController.buyerConfirm);
+p2pRouter.put('/trades/:id/deny', authenticate, P2PController.denyPayment);
 p2pRouter.put('/trades/:id/cancel', authenticate, P2PController.cancelTrade);
 p2pRouter.post('/trades/:id/dispute', authenticate, P2PController.raiseDispute);

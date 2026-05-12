@@ -11,7 +11,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActionSheetIOS, Alert, KeyboardAvoidingView, Modal, Platform, Pressable,
+  ActionSheetIOS, Alert, Animated, KeyboardAvoidingView, Modal, Platform, Pressable,
   ScrollView, Text, TextInput, View,
 } from 'react-native';
 import { SendMoneySheet } from '@/components/messages/SendMoneySheet';
@@ -28,6 +28,7 @@ import {
   useThread, useSendMessage, useEditMessage, useDeleteMessage,
   useBlockUser, useReportMessage, useEscalateP2P, useHaptics,
 } from '@/hooks';
+import { getSocket } from '@/lib/socket';
 import { profileService, messageService } from '@/services';
 import { QUERY_KEYS } from '@/constants';
 import { PaymentReceiptBubble } from '@/components/messages/PaymentReceiptBubble';
@@ -75,6 +76,39 @@ const { data: messages = [], isLoading } = useThread(partnerId);  const sendMut 
     if (partnerId) messageService.markRead(partnerId).catch(() => {});
   }, [partnerId, messages?.length]);
 
+  // Typing indicator — subscribe to partner's typing events via socket.
+  useEffect(() => {
+    if (!partnerId) return;
+    let sockRef: Awaited<ReturnType<typeof getSocket>> | null = null;
+    let cancelled = false;
+
+    const onTypingStart = ({ fromUserId }: { fromUserId: string }) => {
+      if (fromUserId !== partnerId) return;
+      setIsPartnerTyping(true);
+      if (partnerTypingTimerRef.current) clearTimeout(partnerTypingTimerRef.current);
+      partnerTypingTimerRef.current = setTimeout(() => setIsPartnerTyping(false), 3_000);
+    };
+    const onTypingStop = ({ fromUserId }: { fromUserId: string }) => {
+      if (fromUserId !== partnerId) return;
+      setIsPartnerTyping(false);
+      if (partnerTypingTimerRef.current) clearTimeout(partnerTypingTimerRef.current);
+    };
+
+    (async () => {
+      sockRef = await getSocket();
+      if (cancelled) return;
+      sockRef.on('typing:start', onTypingStart);
+      sockRef.on('typing:stop', onTypingStop);
+    })();
+
+    return () => {
+      cancelled = true;
+      if (partnerTypingTimerRef.current) clearTimeout(partnerTypingTimerRef.current);
+      sockRef?.off('typing:start', onTypingStart);
+      sockRef?.off('typing:stop', onTypingStop);
+    };
+  }, [partnerId]);
+
   // Auto-scroll on new messages.
   useEffect(() => {
     requestAnimationFrame(() => scrollRef.current?.scrollToEnd({ animated: true }));
@@ -86,6 +120,10 @@ const { data: messages = [], isLoading } = useThread(partnerId);  const sendMut 
   const [paymentSheet, setPaymentSheet] = useState(false);
   const [reportTarget, setReportTarget] = useState<{ messageId?: string } | null>(null);
   const [showStickers, setShowStickers] = useState(false);
+  const [isPartnerTyping, setIsPartnerTyping] = useState(false);
+  const partnerTypingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const typingStopTimerRef    = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isEmittingTypingRef   = useRef(false);
 
   const STICKERS = useMemo(() => [
     '👍','❤️','😂','🔥','🎉','👏','😭','🤔','👀','🙏',
@@ -104,10 +142,19 @@ const { data: messages = [], isLoading } = useThread(partnerId);  const sendMut 
     }
   }, [openPay]);
 
+  const stopTypingEmit = () => {
+    if (typingStopTimerRef.current) clearTimeout(typingStopTimerRef.current);
+    if (isEmittingTypingRef.current) {
+      isEmittingTypingRef.current = false;
+      getSocket().then((sock) => sock.emit('typing:stop', { toUserId: partnerId }));
+    }
+  };
+
   const send = () => {
     const body = draft.trim();
     if (!body) return;
     h.light();
+    stopTypingEmit();
     if (editing) {
       editMut.mutate({ id: editing.id, content: body }, {
         onSuccess: () => { setEditing(null); setDraft(''); },
@@ -392,6 +439,22 @@ const { data: messages = [], isLoading } = useThread(partnerId);  const sendMut 
             )}
           </ScrollView>
 
+          {/* Typing indicator */}
+          {isPartnerTyping && (
+            <View style={{
+              paddingHorizontal: 16, paddingTop: 6, paddingBottom: 2,
+              flexDirection: 'row', alignItems: 'center',
+            }}>
+              <View style={{
+                paddingHorizontal: 12, paddingVertical: 8,
+                borderRadius: 16, backgroundColor: p.bgElev,
+                borderWidth: 1, borderColor: p.border,
+              }}>
+                <TypingDots palette={p} />
+              </View>
+            </View>
+          )}
+
           {/* Composer */}
           <View style={{
             paddingHorizontal: 12, paddingTop: 10,
@@ -448,7 +511,23 @@ const { data: messages = [], isLoading } = useThread(partnerId);  const sendMut 
               </Pressable>
               <TextInput
                 value={draft}
-                onChangeText={(t) => { setDraft(t); if (showStickers) setShowStickers(false); }}
+                onChangeText={(t) => {
+                  setDraft(t);
+                  if (showStickers) setShowStickers(false);
+                  if (t.trim()) {
+                    getSocket().then((sock) => {
+                      if (!isEmittingTypingRef.current) {
+                        isEmittingTypingRef.current = true;
+                        sock.emit('typing:start', { toUserId: partnerId });
+                      }
+                    });
+                  }
+                  if (typingStopTimerRef.current) clearTimeout(typingStopTimerRef.current);
+                  typingStopTimerRef.current = setTimeout(() => {
+                    isEmittingTypingRef.current = false;
+                    getSocket().then((sock) => sock.emit('typing:stop', { toUserId: partnerId }));
+                  }, 1_500);
+                }}
                 placeholder="Message"
                 placeholderTextColor={p.fgFaint}
                 multiline
@@ -774,6 +853,43 @@ function ReportSheet({
         </Pressable>
       </Pressable>
     </Modal>
+  );
+}
+
+/* ── Typing dots animation ─── */
+function TypingDots({ palette: p }: { palette: Palette }) {
+  const dot0 = useRef(new Animated.Value(0.3)).current;
+  const dot1 = useRef(new Animated.Value(0.3)).current;
+  const dot2 = useRef(new Animated.Value(0.3)).current;
+
+  useEffect(() => {
+    const pulse = (val: Animated.Value, delay: number) =>
+      Animated.loop(
+        Animated.sequence([
+          Animated.delay(delay),
+          Animated.timing(val, { toValue: 1,   duration: 280, useNativeDriver: true }),
+          Animated.timing(val, { toValue: 0.3, duration: 280, useNativeDriver: true }),
+          Animated.delay(280),
+        ]),
+      );
+    const anim = Animated.parallel([pulse(dot0, 0), pulse(dot1, 160), pulse(dot2, 320)]);
+    anim.start();
+    return () => anim.stop();
+  }, [dot0, dot1, dot2]);
+
+  return (
+    <View style={{ flexDirection: 'row', gap: 4, alignItems: 'center', height: 12 }}>
+      {([dot0, dot1, dot2] as Animated.Value[]).map((d, i) => (
+        <Animated.View
+          key={i}
+          style={{
+            width: 6, height: 6, borderRadius: 3,
+            backgroundColor: p.fgMuted,
+            opacity: d,
+          }}
+        />
+      ))}
+    </View>
   );
 }
 

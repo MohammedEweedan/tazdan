@@ -21,6 +21,7 @@ router.post('/:id/unfreeze', CardController.unfreeze);
 
 router.get('/:id/transactions', CardController.transactions);
 router.post('/:id/transactions', CardController.recordTransaction);
+router.post('/:id/topup', CardController.topup);
 
 export const cardRouter = router;
 export default router;

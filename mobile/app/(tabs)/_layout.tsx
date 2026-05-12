@@ -3,6 +3,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Platform, Pressable, View, ActionSheetIOS, Alert } from 'react-native';
 import { useThemedPalette } from '@/store/themeStore';
 import { useAuthStore } from '@/store/authStore';
+import { useT } from '@/store/i18nStore';
 import { useMessageRealtime } from '@/hooks';
 
 const ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
@@ -17,6 +18,7 @@ const FAB_SIZE = 56;
 
 export default function TabsLayout() {
   const p = useThemedPalette();
+  const t = useT();
   const userId = useAuthStore((s) => s.user?.id);
 
   useMessageRealtime(userId);
@@ -26,7 +28,7 @@ export default function TabsLayout() {
   const barHeight = Platform.OS === 'ios' ? 82 : 68;
 
   const handleQuickActions = () => {
-    const actions = ['Send Money', 'Add Card', 'View Wallet', 'Cancel'];
+    const actions = [t('home.sendMoney'), t('cards.orderCard'), t('nav.wallet'), t('common.cancel')];
 
     if (Platform.OS === 'ios') {
       ActionSheetIOS.showActionSheetWithOptions(
@@ -37,7 +39,7 @@ export default function TabsLayout() {
         () => {}
       );
     } else {
-      Alert.alert('Quick Actions', '• Send Money\n• Add Card\n• View Wallet');
+      Alert.alert(t('home.more'), `• ${t('home.sendMoney')}\n• ${t('cards.orderCard')}\n• ${t('nav.wallet')}`);
     }
   };
 
@@ -61,7 +63,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="messages"
         options={{
-          title: 'Messages',
+          title: t('nav.messages'),
           tabBarIcon: ({ color, focused }) => (
             <BarIcon name={ICONS.messages} focused={focused} color={color} />
           ),
@@ -71,7 +73,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="wallet"
         options={{
-          title: 'Wallet',
+          title: t('nav.wallet'),
           tabBarIcon: ({ color, focused }) => (
             <BarIcon name={ICONS.wallet} focused={focused} color={color} />
           ),
@@ -81,12 +83,12 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Home',
+          title: t('nav.home'),
           tabBarIcon: () => null,
           tabBarButton: (props) => (
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="Home"
+              accessibilityLabel={t('nav.home')}
               delayLongPress={3000}
               onLongPress={handleQuickActions}
               onPress={props.onPress as any}
@@ -129,7 +131,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="p2p"
         options={{
-          title: 'P2P',
+          title: t('nav.p2p'),
           tabBarIcon: ({ color, focused }) => (
             <BarIcon name={ICONS.p2p} focused={focused} color={color} />
           ),
@@ -139,7 +141,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="profile"
         options={{
-          title: 'Profile',
+          title: t('nav.profile'),
           tabBarIcon: ({ color, focused }) => (
             <BarIcon name={ICONS.profile} focused={focused} color={color} />
           ),

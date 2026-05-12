@@ -537,8 +537,11 @@ model P2PListing {
   filled         Decimal          @default(0) @db.Decimal(20, 8)
   paymentMethods String[]         @default(["BANK_TRANSFER"])
   country        String? // ISO 3166-1 alpha-2 — restrict to traders in this jurisdiction
+  city           String? // city shown only when cash payment is offered
+  timeframeMins  Int              @default(30) // buyer payment window in minutes
   terms          String? // seller's terms
   autoReply      String? // auto message to buyer
+  anonymous      Boolean          @default(false) // mask user identity on public marketplace
   status         P2PListingStatus @default(ACTIVE)
   expiresAt      DateTime?
   createdAt      DateTime         @default(now())

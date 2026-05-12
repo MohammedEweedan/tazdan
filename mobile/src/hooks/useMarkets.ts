@@ -34,7 +34,7 @@ async function fetchFromCoinGecko(): Promise<CoinGeckoMarket[]> {
   try {
     const res = await fetch(
       `${COINGECKO_BASE}/coins/markets?vs_currency=usd&ids=${COIN_IDS.join(',')}&sparkline=true&price_change_percentage=1h,24h,7d,30d`,
-      { signal: AbortSignal.timeout(10000) }, // 10s timeout
+      { signal: AbortSignal.timeout(10000) },
     );
     if (!res.ok) throw new Error('CoinGecko fetch failed');
     const data = await res.json();
@@ -62,7 +62,6 @@ async function fetchFromBinance(): Promise<FallbackMarket[]> {
     const data = await res.json();
     if (!Array.isArray(data)) throw new Error('Binance returned invalid data');
 
-    // Map Binance data to our structure
     return data.map((item: any) => {
       const sym = item.symbol.replace('USDT', '').toUpperCase();
       const id = Object.entries(ID_TO_SYM).find(([_, v]) => v === sym)?.[0];
@@ -70,7 +69,7 @@ async function fetchFromBinance(): Promise<FallbackMarket[]> {
         id: id || sym.toLowerCase(),
         current_price: Number(item.lastPrice),
         price_change_percentage_24h: Number(item.priceChangePercent),
-        sparkline_in_7d: null, // Binance doesn't provide sparkline
+        sparkline_in_7d: null,
       };
     });
   } catch (e) {
@@ -79,7 +78,6 @@ async function fetchFromBinance(): Promise<FallbackMarket[]> {
   }
 }
 
-// Enrich fallback data with sparkline (mock based on 24h change)
 function enrichWithSparkline(data: FallbackMarket[]): CoinGeckoMarket[] {
   return data.map(m => ({
     ...m,
@@ -94,7 +92,6 @@ function enrichWithSparkline(data: FallbackMarket[]): CoinGeckoMarket[] {
     ath: 0,
     sparkline_in_7d: m.sparkline_in_7d || {
       price: Array(168).fill(0).map((_, i) => {
-        // Generate a simple mock sparkline based on 24h change
         const change = m.price_change_percentage_24h / 100;
         const base = m.current_price;
         const trend = (i / 168) * change;
@@ -108,17 +105,14 @@ export function useMarkets() {
   return useQuery({
     queryKey: ['markets'],
     queryFn: async () => {
-      // Try CoinGecko first
       let data = await fetchFromCoinGecko();
       if (data && data.length > 0) return data;
 
-      // Fallback to Binance
       const fallback = await fetchFromBinance();
       if (fallback && fallback.length > 0) {
         return enrichWithSparkline(fallback);
       }
 
-      // Ultimate fallback: return empty array (app will show 0 prices)
       console.error('All price sources failed');
       return [];
     },

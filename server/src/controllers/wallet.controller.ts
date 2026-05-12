@@ -1,6 +1,7 @@
 import { Response, NextFunction } from 'express';
 import { Decimal } from '@prisma/client/runtime/library';
 import { z } from 'zod';
+import axios from 'axios';
 import { prisma } from '../utils/prisma';
 import { AppError } from '../middleware/errorHandler';
 import { AuthRequest } from '../types';
@@ -21,33 +22,65 @@ interface RateRecord {
   isActive: boolean;
 }
 
-/**
- * Hardcoded USD price map for fiat-value computation.
- * In production this should come from the live ticker / FX feed.
- */
-const USD_PRICE: Record<string, number> = {
-  USDT: 1,    USD:  1,
-  BTC:  65_240, ETH:  3_215, SOL: 150,   BNB: 602,
-  XRP:  0.55,   ADA:  0.45,  DOGE: 0.12, MATIC: 0.62,
-  DOT:  7.40,   AVAX: 34.20,
-  EUR:  1.08,   GBP:  1.25,
-  AED:  0.272,  SAR:  0.267, EGP: 0.0202, LYD: 0.206,
+// Hardcoded FX rates for fiat currencies (no Binance pair available).
+const FIAT_RATES: Record<string, number> = {
+  USD: 1, USDT: 1,
+  EUR: 1.08, GBP: 1.25,
+  AED: 0.272, SAR: 0.267, EGP: 0.0202, LYD: 0.206,
 };
 
-function fiatValueUsd(currency: string, balance: number): number {
-  const rate = USD_PRICE[currency] ?? 0;
+const CRYPTO_FALLBACK: Record<string, number> = {
+  BTC: 65_240, ETH: 3_215, SOL: 150, BNB: 602,
+  XRP: 0.55, ADA: 0.45, DOGE: 0.12, MATIC: 0.62,
+  DOT: 7.40, AVAX: 34.20,
+};
+
+const BINANCE_SYMBOLS = [
+  'BTCUSDT','ETHUSDT','SOLUSDT','BNBUSDT','XRPUSDT',
+  'ADAUSDT','DOGEUSDT','MATICUSDT','DOTUSDT','AVAXUSDT',
+];
+
+let livePriceCache: Record<string, number> = {};
+let livePriceCacheExpiry = 0;
+
+async function getLivePrices(): Promise<Record<string, number>> {
+  if (Date.now() < livePriceCacheExpiry) return livePriceCache;
+  try {
+    const symbols = encodeURIComponent(JSON.stringify(BINANCE_SYMBOLS));
+    const { data } = await axios.get(
+      `https://api.binance.com/api/v3/ticker/price?symbols=${symbols}`,
+      { timeout: 5_000 },
+    );
+    const fresh: Record<string, number> = { ...FIAT_RATES };
+    for (const row of data as { symbol: string; price: string }[]) {
+      const base = row.symbol.replace('USDT', '');
+      fresh[base] = parseFloat(row.price);
+    }
+    livePriceCache = fresh;
+    livePriceCacheExpiry = Date.now() + 30_000;
+    return fresh;
+  } catch {
+    return Object.keys(livePriceCache).length
+      ? livePriceCache
+      : { ...FIAT_RATES, ...CRYPTO_FALLBACK };
+  }
+}
+
+function fiatValueUsd(currency: string, balance: number, prices: Record<string, number>): number {
+  const rate = prices[currency] ?? 0;
   return +(balance * rate).toFixed(2);
 }
 
 export class WalletController {
   static async getAll(req: AuthRequest, res: Response, next: NextFunction) {
     try {
-      const rows = await prisma.wallet.findMany({
-        where: { userId: req.user!.id },
-        orderBy: { createdAt: 'asc' },
-      });
-      // Decorate every wallet with `fiatValueUsd` so the mobile dashboard can
-      // sum the portfolio without doing a separate FX call.
+      const [rows, prices] = await Promise.all([
+        prisma.wallet.findMany({
+          where: { userId: req.user!.id },
+          orderBy: { createdAt: 'asc' },
+        }),
+        getLivePrices(),
+      ]);
       const wallets = rows.map((w) => {
         const balance = parseFloat(w.balance.toString());
         return {
@@ -55,7 +88,7 @@ export class WalletController {
           currency: w.currency,
           balance: w.balance.toString(),
           frozen: w.frozen.toString(),
-          fiatValueUsd: fiatValueUsd(w.currency, balance).toString(),
+          fiatValueUsd: fiatValueUsd(w.currency, balance, prices).toString(),
         };
       });
       res.json({ wallets });
@@ -124,8 +157,9 @@ export class WalletController {
       const { from, to, amount } = schema.parse(req.body);
       if (from === to) throw new AppError('From and to currencies must differ', 400);
 
-      const fromPx = USD_PRICE[from];
-      const toPx   = USD_PRICE[to];
+      const prices = await getLivePrices();
+      const fromPx = prices[from];
+      const toPx   = prices[to];
       if (!fromPx || !toPx) {
         throw new AppError(`Unsupported currency pair ${from}->${to}`, 400);
       }

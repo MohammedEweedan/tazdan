@@ -8,11 +8,11 @@
  *  - Freeze, PIN reveal, spend tracker
  */
 
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator, Alert, Animated, Dimensions,
-  Linking, Modal, Platform, Pressable, ScrollView,
-  Text, View,
+  Modal, Platform, Pressable, ScrollView,
+  Text, TextInput, View,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Circle, Path, Rect } from 'react-native-svg';
@@ -22,9 +22,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
 
-import { useCards, useHaptics } from '@/hooks';
+import { useCards, useCardTransactions, useHaptics, useWallets } from '@/hooks';
 import { useAuthStore } from '@/store/authStore';
 import { useThemedPalette, useTheme, type Palette } from '@/store/themeStore';
+import { useT } from '@/store/i18nStore';
 import { cardsService } from '@/services';
 import { QUERY_KEYS } from '@/constants';
 import type { CardEntity } from '@/types';
@@ -324,7 +325,7 @@ function VisaCard({
 /* ─────────────────────────────────────────────────────────────────
    ADD TO WALLET BUTTON
    ───────────────────────────────────────────────────────────────── */
-function AddToWalletButton({ card, palette: p }: { card: CardEntity; palette: Palette }) {
+function AddToWalletButton(_props: { card: CardEntity; palette: Palette }) {
   const h = useHaptics();
   const [adding, setAdding]   = useState(false);
   const [added, setAdded]     = useState(false);
@@ -408,7 +409,24 @@ function SpendBar({ spent, limit, palette: p }: { spent: number; limit: number; 
 /* ─────────────────────────────────────────────────────────────────
    CARD TRANSACTION ROW
    ───────────────────────────────────────────────────────────────── */
-function TxRow({ tx, palette: p }: { tx: MockTx; palette: Palette }) {
+function txIcon(tx: import('@/services').CardTransaction): keyof typeof Ionicons.glyphMap {
+  if (tx.status === 'DECLINED') return 'close-circle-outline';
+  const m = (tx.merchant ?? '').toLowerCase();
+  if (m.includes('uber') || m.includes('lyft') || m.includes('taxi')) return 'car-outline';
+  if (m.includes('netflix') || m.includes('hulu') || m.includes('disney')) return 'film-outline';
+  if (m.includes('spotify') || m.includes('apple music')) return 'musical-notes-outline';
+  if (m.includes('amazon') || m.includes('shop')) return 'bag-handle-outline';
+  if (m.includes('coffee') || m.includes('starbucks') || m.includes('café')) return 'cafe-outline';
+  if (m.includes('food') || m.includes('deliveroo') || m.includes('doordash')) return 'fast-food-outline';
+  if (m.includes('flight') || m.includes('airline') || m.includes('emirate')) return 'airplane-outline';
+  if (m.includes('hotel') || m.includes('marriott') || m.includes('hilton')) return 'bed-outline';
+  if (m.includes('apple') || m.includes('samsung') || m.includes('tech')) return 'phone-portrait-outline';
+  if (m.includes('ikea') || m.includes('home')) return 'home-outline';
+  if (tx.category?.toLowerCase().includes('grocery') || m.includes('carrefour')) return 'cart-outline';
+  return 'receipt-outline';
+}
+
+function TxRow({ tx, palette: p }: { tx: import('@/services').CardTransaction; palette: Palette }) {
   const declined = tx.status === 'DECLINED';
   const pending  = tx.status === 'PENDING';
   const date     = new Date(tx.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
@@ -420,17 +438,14 @@ function TxRow({ tx, palette: p }: { tx: MockTx; palette: Palette }) {
         borderWidth: 1, borderColor: p.border,
         alignItems: 'center', justifyContent: 'center',
       }}>
-        <Ionicons
-          name={declined ? 'close-circle-outline' : tx.icon}
-          size={18}
-          color={declined ? '#ef4444' : p.fg}
-        />
+        <Ionicons name={txIcon(tx)} size={18} color={declined ? '#ef4444' : p.fg} />
       </View>
       <View style={{ flex: 1 }}>
-        <Text style={{ color: p.fg, fontSize: 14, fontWeight: '700' }} numberOfLines={1}>{tx.merchant}</Text>
+        <Text style={{ color: p.fg, fontSize: 14, fontWeight: '700' }} numberOfLines={1}>
+          {tx.merchant || 'Purchase'}
+        </Text>
         <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '500', marginTop: 2 }}>
-          {date} · {tx.category}
-          {pending ? '  ·  Pending' : ''}
+          {date}{tx.category ? ` · ${tx.category}` : ''}{pending ? '  ·  Pending' : ''}
         </Text>
       </View>
       <Text style={{
@@ -440,6 +455,310 @@ function TxRow({ tx, palette: p }: { tx: MockTx; palette: Palette }) {
         {declined ? '' : '-'}${Number(tx.amount).toLocaleString('en-US', { minimumFractionDigits: 2 })}
       </Text>
     </View>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   SIMULATE PURCHASE MODAL
+   ───────────────────────────────────────────────────────────────── */
+function SimulatePurchaseModal({
+  card, palette: p, t, onClose, onSuccess,
+}: {
+  card: CardEntity | null;
+  palette: Palette;
+  t: (k: string) => string;
+  onClose: () => void;
+  onSuccess: () => void;
+}) {
+  const h = useHaptics();
+  const [merchant, setMerchant] = useState('');
+  const [amount, setAmount]     = useState('');
+  const [loading, setLoading]   = useState(false);
+
+  const amt = Number(amount || 0);
+  const valid = amt > 0 && merchant.trim().length > 0;
+
+  const submit = async () => {
+    if (!card || !valid) return;
+    setLoading(true);
+    h.medium();
+    try {
+      await cardsService.simulatePurchase(card.id, {
+        merchant: merchant.trim(),
+        amount: amt,
+        currency: card.currency,
+      });
+      h.success();
+      onSuccess();
+    } catch (e: any) {
+      h.error();
+      Alert.alert('Failed', e?.response?.data?.error ?? e?.message ?? 'Try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Modal visible={!!card} transparent animationType="slide" onRequestClose={onClose}>
+      <Pressable onPress={onClose} style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)' }}>
+        <Pressable
+          onPress={(e) => e.stopPropagation()}
+          style={{
+            marginTop: 'auto',
+            backgroundColor: p.bg,
+            borderTopLeftRadius: 24, borderTopRightRadius: 24,
+            padding: 24, paddingBottom: 36, gap: 14,
+          }}
+        >
+          <View style={{ alignItems: 'center', marginBottom: 4 }}>
+            <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: p.border }} />
+          </View>
+          <Text style={{ color: p.fg, fontSize: 20, fontWeight: '800', letterSpacing: -0.4 }}>
+            {t('cards.simulatePurchase')}
+          </Text>
+          {card && (
+            <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '500', marginTop: -8 }}>
+              •••• {card.last4}
+            </Text>
+          )}
+
+          {/* Merchant */}
+          <View style={{
+            height: 56, borderRadius: 14, paddingHorizontal: 16,
+            backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border,
+            justifyContent: 'center',
+          }}>
+            <TextInput
+              value={merchant}
+              onChangeText={setMerchant}
+              placeholder={t('cards.merchant')}
+              placeholderTextColor={p.fgFaint}
+              style={{ color: p.fg, fontSize: 16, fontWeight: '600' }}
+            />
+          </View>
+
+          {/* Amount */}
+          <View style={{
+            height: 64, borderRadius: 16, paddingHorizontal: 18,
+            backgroundColor: p.bgElev, borderWidth: 1.5, borderColor: p.border,
+            flexDirection: 'row', alignItems: 'center',
+          }}>
+            <TextInput
+              value={amount}
+              onChangeText={(v) => setAmount(v.replace(/[^0-9.]/g, ''))}
+              placeholder="0.00"
+              placeholderTextColor={p.fgFaint}
+              keyboardType="decimal-pad"
+              style={{ flex: 1, color: p.fg, fontSize: 28, fontWeight: '700', fontVariant: ['tabular-nums'] }}
+            />
+            <Text style={{ color: p.fgMuted, fontSize: 14, fontWeight: '700' }}>
+              {card?.currency ?? 'USDT'}
+            </Text>
+          </View>
+
+          {/* Quick amounts */}
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            {[5, 20, 50, 100].map((v) => (
+              <Pressable
+                key={v}
+                onPress={() => setAmount(String(v))}
+                style={({ pressed }) => ({
+                  flex: 1, paddingVertical: 10, borderRadius: 12,
+                  backgroundColor: pressed ? p.border : p.pillBg,
+                  borderWidth: 1, borderColor: p.border, alignItems: 'center',
+                })}
+              >
+                <Text style={{ color: p.fg, fontSize: 12, fontWeight: '700' }}>{v}</Text>
+              </Pressable>
+            ))}
+          </View>
+
+          <Pressable
+            onPress={submit}
+            disabled={!valid || loading}
+            style={({ pressed }) => ({
+              height: 56, borderRadius: 28,
+              backgroundColor: valid ? p.ctaBg : p.border,
+              alignItems: 'center', justifyContent: 'center',
+              flexDirection: 'row', gap: 8,
+              opacity: pressed || loading ? 0.85 : 1,
+            })}
+          >
+            {loading && <ActivityIndicator size="small" color={p.ctaFg} />}
+            <Text style={{ color: valid ? p.ctaFg : p.fgMuted, fontSize: 16, fontWeight: '800' }}>
+              {loading ? 'Processing…' : t('cards.simulatePurchase')}
+            </Text>
+          </Pressable>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   TOP-UP MODAL
+   ───────────────────────────────────────────────────────────────── */
+function TopUpModal({
+  card, wallets, palette: p, onClose, onSuccess,
+}: {
+  card: CardEntity | null;
+  wallets: import('@/types').Wallet[];
+  palette: Palette;
+  onClose: () => void;
+  onSuccess: () => void;
+}) {
+  const [amount, setAmount]     = useState('');
+  const [currency, setCurrency] = useState('USDT');
+  const [loading, setLoading]   = useState(false);
+
+  const fundable = wallets.filter((w) =>
+    Number(w.balance) - Number(w.frozen ?? 0) > 0,
+  );
+  const selected = fundable.find((w) => w.currency === currency) ?? fundable[0] ?? null;
+  const available = selected ? Number(selected.balance) - Number(selected.frozen ?? 0) : 0;
+  const amt = Number(amount || 0);
+  const valid = amt > 0 && amt <= available && !!selected;
+
+  // Reset when opened
+  const prevCard = useRef<string | null>(null);
+  if (card?.id !== prevCard.current) {
+    prevCard.current = card?.id ?? null;
+    if (amount) setAmount('');
+    if (fundable[0] && currency !== fundable[0].currency) setCurrency(fundable[0].currency);
+  }
+
+  const submit = async () => {
+    if (!card || !valid) return;
+    setLoading(true);
+    try {
+      await cardsService.topup(card.id, { amount: amt, currency: selected!.currency });
+      onSuccess();
+    } catch (e: any) {
+      Alert.alert('Top-up failed', e?.response?.data?.error ?? e?.message ?? 'Try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Modal visible={!!card} transparent animationType="slide" onRequestClose={onClose}>
+      <Pressable onPress={onClose} style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)' }}>
+        <Pressable
+          onPress={(e) => e.stopPropagation()}
+          style={{
+            marginTop: 'auto',
+            backgroundColor: p.bg,
+            borderTopLeftRadius: 24, borderTopRightRadius: 24,
+            padding: 24, paddingBottom: 36, gap: 16,
+          }}
+        >
+          <View style={{ alignItems: 'center', marginBottom: 4 }}>
+            <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: p.border }} />
+          </View>
+
+          <Text style={{ color: p.fg, fontSize: 20, fontWeight: '800', letterSpacing: -0.4 }}>
+            Top Up Card
+          </Text>
+          {card && (
+            <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '500', marginTop: -10 }}>
+              •••• {card.last4} — {card.tier}
+            </Text>
+          )}
+
+          {/* Currency selector */}
+          {fundable.length > 1 && (
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+              {fundable.map((w) => (
+                <Pressable
+                  key={w.currency}
+                  onPress={() => setCurrency(w.currency)}
+                  style={{
+                    paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20,
+                    backgroundColor: currency === w.currency ? p.ctaBg : p.pillBg,
+                    borderWidth: 1, borderColor: currency === w.currency ? p.ctaBg : p.border,
+                  }}
+                >
+                  <Text style={{
+                    color: currency === w.currency ? p.ctaFg : p.fg,
+                    fontSize: 13, fontWeight: '700',
+                  }}>
+                    {w.currency}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          )}
+
+          {/* Available balance */}
+          {selected && (
+            <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '600' }}>
+              Available: {available.toLocaleString('en-US', { maximumFractionDigits: 4 })} {selected.currency}
+            </Text>
+          )}
+
+          {/* Amount input */}
+          <View style={{
+            height: 64, borderRadius: 16, paddingHorizontal: 18,
+            backgroundColor: p.bgElev, borderWidth: 1.5,
+            borderColor: amt > available && amt > 0 ? p.redFg : p.border,
+            flexDirection: 'row', alignItems: 'center',
+          }}>
+            <TextInput
+              value={amount}
+              onChangeText={(t) => setAmount(t.replace(/[^0-9.]/g, ''))}
+              placeholder="0.00"
+              placeholderTextColor={p.fgFaint}
+              keyboardType="decimal-pad"
+              style={{ flex: 1, color: p.fg, fontSize: 28, fontWeight: '700', fontVariant: ['tabular-nums'] }}
+            />
+            <Text style={{ color: p.fgMuted, fontSize: 14, fontWeight: '700' }}>
+              {selected?.currency ?? ''}
+            </Text>
+          </View>
+          {amt > available && amt > 0 && (
+            <Text style={{ color: p.redFg, fontSize: 12, fontWeight: '600', marginTop: -8 }}>
+              Exceeds available balance
+            </Text>
+          )}
+
+          {/* Quick amounts */}
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            {[10, 50, 100, 500].map((v) => (
+              <Pressable
+                key={v}
+                onPress={() => setAmount(String(v))}
+                style={({ pressed }) => ({
+                  flex: 1, paddingVertical: 10, borderRadius: 12,
+                  backgroundColor: pressed ? p.border : p.pillBg,
+                  borderWidth: 1, borderColor: p.border,
+                  alignItems: 'center',
+                })}
+              >
+                <Text style={{ color: p.fg, fontSize: 12, fontWeight: '700' }}>{v}</Text>
+              </Pressable>
+            ))}
+          </View>
+
+          {/* CTA */}
+          <Pressable
+            onPress={submit}
+            disabled={!valid || loading}
+            style={({ pressed }) => ({
+              height: 56, borderRadius: 28,
+              backgroundColor: valid ? p.ctaBg : p.border,
+              alignItems: 'center', justifyContent: 'center',
+              flexDirection: 'row', gap: 8,
+              opacity: pressed || loading ? 0.85 : 1,
+            })}
+          >
+            {loading && <ActivityIndicator size="small" color={p.ctaFg} />}
+            <Text style={{ color: valid ? p.ctaFg : p.fgMuted, fontSize: 16, fontWeight: '800' }}>
+              {loading ? 'Processing…' : `Top Up ${amt > 0 ? amt.toLocaleString() : ''}`}
+            </Text>
+          </Pressable>
+        </Pressable>
+      </Pressable>
+    </Modal>
   );
 }
 
@@ -584,7 +903,6 @@ function IssueCardModal({
   };
 
   const miniW = SCREEN_W - 120;
-  const miniH = Math.round(miniW * 0.628);
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={handleClose}>
@@ -818,30 +1136,32 @@ function IssueCardModal({
 export default function Cards() {
   const h      = useHaptics();
   const p      = useThemedPalette();
+  const t      = useT();
   const theme  = useTheme(s => s.mode);
   const router = useRouter();
   const qc     = useQueryClient();
 
   const { data: fetched, isLoading } = useCards();
+  const { data: wallets = [] }       = useWallets();
   const [localCards, setLocalCards]  = useState<CardEntity[]>([]);
   const allCards = useMemo(() => {
     const ids = new Set((fetched ?? []).map(c => c.id));
     return [...(fetched ?? []), ...localCards.filter(c => !ids.has(c.id))];
   }, [fetched, localCards]);
 
-  const [activeIdx, setActiveIdx]     = useState(0);
-  const [busyId, setBusyId]           = useState<string | null>(null);
-  const [pinCard, setPinCard]         = useState<CardEntity | null>(null);
-  const [issueOpen, setIssueOpen]     = useState(false);
-  const [showTxFor, setShowTxFor]     = useState<string | null>(null);
+  const [activeIdx, setActiveIdx]       = useState(0);
+  const [busyId, setBusyId]             = useState<string | null>(null);
+  const [pinCard, setPinCard]           = useState<CardEntity | null>(null);
+  const [issueOpen, setIssueOpen]       = useState(false);
+  const [showTxFor, setShowTxFor]       = useState<string | null>(null);
+  const [topupCard, setTopupCard]       = useState<CardEntity | null>(null);
+  const [simulateCard, setSimulateCard] = useState<CardEntity | null>(null);
 
-  const scrollRef = useRef<ScrollView>(null);
+  const scrollRef  = useRef<ScrollView>(null);
   const activeCard = allCards[activeIdx] ?? null;
 
-  const txs = useMemo(() =>
-    activeCard ? mockTxsForCard(activeCard.id) : [],
-    [activeCard]
-  );
+  const { data: realTxs = [], isLoading: txsLoading } = useCardTransactions(activeCard?.id ?? null);
+  const txs = realTxs.length > 0 ? realTxs : (activeCard ? mockTxsForCard(activeCard.id) : []);
 
   const toggleFreeze = async (c: CardEntity) => {
     const isFrozen = c.status === 'FROZEN';
@@ -870,7 +1190,7 @@ export default function Cards() {
           <Pressable onPress={() => router.back()} hitSlop={8}>
             <Ionicons name="chevron-back" size={24} color={p.fg} />
           </Pressable>
-          <Text style={{ color: p.fg, fontSize: 18, fontWeight: '800', letterSpacing: -0.4 }}>My Cards</Text>
+          <Text style={{ color: p.fg, fontSize: 18, fontWeight: '800', letterSpacing: -0.4 }}>{t('cards.title')}</Text>
           <Pressable
             onPress={() => { h.medium(); setIssueOpen(true); }}
             style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: p.pillBg, borderWidth: 1, borderColor: p.border, alignItems: 'center', justifyContent: 'center' }}
@@ -884,7 +1204,7 @@ export default function Cards() {
           {isLoading ? (
             <View style={{ paddingTop: 80, alignItems: 'center' }}>
               <ActivityIndicator size="large" color="#4a8fe0" />
-              <Text style={{ color: p.fgMuted, fontSize: 13, marginTop: 12 }}>Loading cards…</Text>
+              <Text style={{ color: p.fgMuted, fontSize: 13, marginTop: 12 }}>{t('cards.loading')}</Text>
             </View>
           ) : allCards.length === 0 ? (
             /* ── EMPTY STATE ── */
@@ -906,10 +1226,10 @@ export default function Cards() {
                 </LinearGradient>
               </View>
               <Text style={{ color: p.fg, fontSize: 22, fontWeight: '800', textAlign: 'center', letterSpacing: -0.5 }}>
-                Get your Promrkts Visa
+                {t('cards.emptyTitle')}
               </Text>
               <Text style={{ color: p.fgMuted, fontSize: 14, textAlign: 'center', marginTop: 8, lineHeight: 20 }}>
-                Spend your crypto anywhere Visa is accepted. Up to 2% cashback.
+                {t('cards.emptySubtitle')}
               </Text>
               <Pressable
                 onPress={() => { h.medium(); setIssueOpen(true); }}
@@ -921,7 +1241,7 @@ export default function Cards() {
                 })}
               >
                 <Ionicons name="add-circle-outline" size={20} color="#fff" />
-                <Text style={{ color: '#fff', fontSize: 16, fontWeight: '800' }}>Order a card</Text>
+                <Text style={{ color: '#fff', fontSize: 16, fontWeight: '800' }}>{t('cards.orderCard')}</Text>
               </Pressable>
             </View>
           ) : (
@@ -939,7 +1259,7 @@ export default function Cards() {
                   setActiveIdx(Math.max(0, Math.min(idx, allCards.length - 1)));
                 }}
               >
-                {allCards.map((c, i) => (
+                {allCards.map((c) => (
                   <VisaCard key={c.id} card={c} />
                 ))}
               </ScrollView>
@@ -967,13 +1287,13 @@ export default function Cards() {
                   <View style={{ marginHorizontal: 24, marginTop: 24, padding: 20, backgroundColor: p.bgElev, borderRadius: 20, borderWidth: 1, borderColor: p.border }}>
                     <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 16 }}>
                       <View>
-                        <Text style={{ color: p.fgFaint, fontSize: 10, fontWeight: '700', letterSpacing: 0.8, marginBottom: 4 }}>CASHBACK EARNED</Text>
+                        <Text style={{ color: p.fgFaint, fontSize: 10, fontWeight: '700', letterSpacing: 0.8, marginBottom: 4 }}>{t('cards.cashbackEarned').toUpperCase()}</Text>
                         <Text style={{ color: '#22c55e', fontSize: 20, fontWeight: '800' }}>
                           ${Number(activeCard.cashbackBalance).toFixed(2)}
                         </Text>
                       </View>
                       <View style={{ alignItems: 'flex-end' }}>
-                        <Text style={{ color: p.fgFaint, fontSize: 10, fontWeight: '700', letterSpacing: 0.8, marginBottom: 4 }}>STATUS</Text>
+                        <Text style={{ color: p.fgFaint, fontSize: 10, fontWeight: '700', letterSpacing: 0.8, marginBottom: 4 }}>{t('cards.cardStatus').toUpperCase()}</Text>
                         <View style={{
                           flexDirection: 'row', alignItems: 'center', gap: 5,
                           paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8,
@@ -1021,7 +1341,7 @@ export default function Cards() {
                         ? <ActivityIndicator size="small" color={p.fg} />
                         : <Ionicons name={activeCard.status === 'FROZEN' ? 'sunny-outline' : 'snow-outline'} size={20} color={activeCard.status === 'FROZEN' ? '#60a5fa' : p.fg} />}
                       <Text style={{ color: activeCard.status === 'FROZEN' ? '#60a5fa' : p.fg, fontSize: 10, fontWeight: '700' }}>
-                        {activeCard.status === 'FROZEN' ? 'Unfreeze' : 'Freeze'}
+                        {activeCard.status === 'FROZEN' ? t('cards.unfreeze') : t('cards.freeze')}
                       </Text>
                     </Pressable>
 
@@ -1036,7 +1356,7 @@ export default function Cards() {
                       })}
                     >
                       <Ionicons name="keypad-outline" size={20} color={p.fg} />
-                      <Text style={{ color: p.fg, fontSize: 10, fontWeight: '700' }}>View PIN</Text>
+                      <Text style={{ color: p.fg, fontSize: 10, fontWeight: '700' }}>{t('cards.viewPin')}</Text>
                     </Pressable>
 
                     {/* Details */}
@@ -1050,7 +1370,37 @@ export default function Cards() {
                       })}
                     >
                       <Ionicons name="receipt-outline" size={20} color={p.fg} />
-                      <Text style={{ color: p.fg, fontSize: 10, fontWeight: '700' }}>Activity</Text>
+                      <Text style={{ color: p.fg, fontSize: 10, fontWeight: '700' }}>{t('cards.activity')}</Text>
+                    </Pressable>
+
+                    {/* Top Up */}
+                    <Pressable
+                      onPress={() => { h.medium(); setTopupCard(activeCard); }}
+                      disabled={activeCard.status === 'CANCELLED'}
+                      style={({ pressed }) => ({
+                        flex: 1, height: 56, borderRadius: 16,
+                        backgroundColor: p.pillBg, borderWidth: 1, borderColor: p.border,
+                        alignItems: 'center', justifyContent: 'center', gap: 4,
+                        opacity: pressed || activeCard.status === 'CANCELLED' ? 0.5 : 1,
+                      })}
+                    >
+                      <Ionicons name="add-circle-outline" size={20} color={p.fg} />
+                      <Text style={{ color: p.fg, fontSize: 10, fontWeight: '700' }}>{t('cards.topup')}</Text>
+                    </Pressable>
+
+                    {/* Simulate Purchase */}
+                    <Pressable
+                      onPress={() => { h.selection(); setSimulateCard(activeCard); }}
+                      disabled={activeCard.status !== 'ACTIVE'}
+                      style={({ pressed }) => ({
+                        flex: 1, height: 56, borderRadius: 16,
+                        backgroundColor: p.pillBg, borderWidth: 1, borderColor: p.border,
+                        alignItems: 'center', justifyContent: 'center', gap: 4,
+                        opacity: pressed || activeCard.status !== 'ACTIVE' ? 0.5 : 1,
+                      })}
+                    >
+                      <Ionicons name="storefront-outline" size={20} color={p.fg} />
+                      <Text style={{ color: p.fg, fontSize: 10, fontWeight: '700' }}>Simulate</Text>
                     </Pressable>
                   </View>
 
@@ -1062,19 +1412,23 @@ export default function Cards() {
                   {/* ── TRANSACTIONS ── */}
                   <View style={{ marginHorizontal: 24, marginTop: 24 }}>
                     <Text style={{ color: p.fg, fontSize: 16, fontWeight: '800', letterSpacing: -0.3, marginBottom: 12 }}>
-                      Recent spending
+                      {t('cards.recentSpending')}
                     </Text>
                     <View style={{ backgroundColor: p.bgElev, borderRadius: 20, borderWidth: 1, borderColor: p.border, overflow: 'hidden' }}>
-                      {txs.length === 0 ? (
+                      {txsLoading ? (
+                        <View style={{ padding: 24, alignItems: 'center' }}>
+                          <ActivityIndicator color={p.fg} />
+                        </View>
+                      ) : txs.length === 0 ? (
                         <View style={{ padding: 24, alignItems: 'center' }}>
                           <Ionicons name="receipt-outline" size={24} color={p.fgFaint} />
-                          <Text style={{ color: p.fgMuted, fontSize: 13, marginTop: 10 }}>No transactions yet.</Text>
+                          <Text style={{ color: p.fgMuted, fontSize: 13, marginTop: 10 }}>{t('cards.noTxYet')}</Text>
                         </View>
                       ) : (
                         txs.map((tx, i) => (
                           <View key={tx.id}>
                             {i > 0 && <View style={{ height: 1, backgroundColor: p.border, marginHorizontal: 20 }} />}
-                            <TxRow tx={tx} palette={p} />
+                            <TxRow tx={tx as import('@/services').CardTransaction} palette={p} />
                           </View>
                         ))
                       )}
@@ -1094,7 +1448,7 @@ export default function Cards() {
                 })}
               >
                 <Ionicons name="add-circle-outline" size={18} color={p.fg} />
-                <Text style={{ color: p.fg, fontSize: 14, fontWeight: '700' }}>Issue another card</Text>
+                <Text style={{ color: p.fg, fontSize: 14, fontWeight: '700' }}>{t('cards.issueAnother')}</Text>
               </Pressable>
             </>
           )}
@@ -1103,11 +1457,37 @@ export default function Cards() {
 
       <PinModal card={pinCard} palette={p} onClose={() => setPinCard(null)} />
 
+      <TopUpModal
+        card={topupCard}
+        wallets={wallets}
+        palette={p}
+        onClose={() => setTopupCard(null)}
+        onSuccess={() => {
+          h.success();
+          setTopupCard(null);
+          qc.invalidateQueries({ queryKey: QUERY_KEYS.wallets });
+          qc.invalidateQueries({ queryKey: QUERY_KEYS.cards });
+        }}
+      />
+
       <IssueCardModal
         visible={issueOpen}
         palette={p}
         onClose={() => setIssueOpen(false)}
         onIssued={card => setLocalCards(prev => [...prev, card])}
+      />
+
+      <SimulatePurchaseModal
+        card={simulateCard}
+        palette={p}
+        t={t}
+        onClose={() => setSimulateCard(null)}
+        onSuccess={() => {
+          h.success();
+          setSimulateCard(null);
+          qc.invalidateQueries({ queryKey: ['card-transactions', simulateCard?.id] });
+          qc.invalidateQueries({ queryKey: QUERY_KEYS.cards });
+        }}
       />
     </View>
   );

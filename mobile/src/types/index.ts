@@ -95,6 +95,7 @@ export interface P2POffer {
     orders: number;
     verified: boolean;
     avatarUrl?: string;
+    anonymous: boolean;
   };
   base: Currency;
   quote: Currency;
@@ -104,6 +105,8 @@ export interface P2POffer {
   maxLimit: string;
   paymentMethods: string[];
   country?: string;
+  city?: string;
+  timeframeMins: number;
 }
 
 export interface CardEntity {

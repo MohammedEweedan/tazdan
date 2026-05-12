@@ -1,6 +1,13 @@
 import { CURRENCY_META } from '@/constants';
 import type { Currency } from '@/types';
 
+export const CURRENCY_SYMBOLS: Record<string, string> = {
+  USD: '$', EUR: '€', GBP: '£',
+  AED: 'د.إ', SAR: '﷼', EGP: 'E£',
+  CHF: 'Fr', JPY: '¥', CAD: 'CA$', AUD: 'A$',
+  USDT: '$', BTC: '₿', ETH: 'Ξ', BNB: 'B', SOL: '◎',
+};
+
 /**
  * Format a Decimal-string amount for display.
  * Uses the per-currency precision from CURRENCY_META so BTC shows 8 decimals
