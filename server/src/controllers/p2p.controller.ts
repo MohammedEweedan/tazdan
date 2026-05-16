@@ -553,8 +553,19 @@ export class P2PController {
   /** Raise a dispute */
   static async raiseDispute(req: AuthRequest, res: Response, next: NextFunction) {
     try {
-      const { reason } = req.body;
-      if (!reason) throw new AppError('Reason is required', 400);
+      // Strict validation: cap length, strip control chars. Reason is
+      // shown to admins via notifications and stored — unsanitised
+      // input becomes a stored-XSS vector.
+      const { reason: rawReason } = z
+        .object({ reason: z.string().trim().min(10).max(1000) })
+        .parse(req.body);
+
+      // Drop anything outside printable ASCII + common Unicode letters/digits.
+      // eslint-disable-next-line no-control-regex
+      const reason = rawReason.replace(/[ -]/g, '').slice(0, 1000);
+      if (reason.length < 10) {
+        throw new AppError('Reason must be 10–1000 characters', 400);
+      }
 
       const trade = await (prisma as any).p2PTrade.findFirst({
         where: {
@@ -567,7 +578,6 @@ export class P2PController {
         throw new AppError('Cannot dispute a completed/cancelled trade', 400);
       }
 
-      // Mark trade as disputed
       await (prisma as any).p2PTrade.update({
         where: { id: trade.id },
         data: { status: 'DISPUTED' },
@@ -581,18 +591,18 @@ export class P2PController {
         },
       });
 
-      // Notify admins
+      // Notify admins — do not embed user-supplied text in the title;
+      // truncate body. The admin UI must still render this as text not HTML.
+      const preview = reason.length > 140 ? `${reason.slice(0, 140)}…` : reason;
       const admins = await prisma.user.findMany({ where: { role: 'ADMIN' } });
-      for (const admin of admins) {
-        await prisma.notification.create({
-          data: {
-            userId: admin.id,
-            title: 'P2P Dispute Raised',
-            message: `Dispute on trade ${trade.reference}: ${reason}`,
-            type: 'p2p_dispute',
-          },
-        });
-      }
+      await prisma.notification.createMany({
+        data: admins.map((admin) => ({
+          userId: admin.id,
+          title: 'P2P Dispute Raised',
+          message: `Dispute on trade ${trade.reference}: ${preview}`,
+          type: 'p2p_dispute',
+        })),
+      });
 
       res.status(201).json({ dispute });
     } catch (error) {

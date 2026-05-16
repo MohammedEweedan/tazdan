@@ -67,13 +67,25 @@ export const cryptoExchangeAPI = {
     api.get(`/exchange/orders?page=${page}&limit=${limit}`),
 };
 
+/**
+ * Crypto withdrawal API.
+ *
+ * Server-side contract (kept in sync — break this and the call will 403/401):
+ *  - 2FA is REQUIRED. User must have 2FA enabled AND submit a TOTP code.
+ *  - Email must be verified.
+ *  - First-time destination address → server creates a 24h email-confirmed
+ *    whitelist entry and rejects the withdrawal until the user has
+ *    confirmed AND the cooldown has elapsed.
+ *  - Address is validated against chain rules (length/checksum). Typo →
+ *    400 "Invalid {CHAIN} address".
+ */
 export const cryptoWithdrawalAPI = {
   initiate: (data: {
     asset: string;
     network: string;
     amount: string;
     toAddress: string;
-    twoFactorCode?: string;
+    twoFactorCode: string;
   }) => api.post('/withdrawal/initiate', data),
   estimateFee: (asset: string, network: string) =>
     api.get<{ asset: string; estimate: string }>(
@@ -82,3 +94,33 @@ export const cryptoWithdrawalAPI = {
   history: (page = 1, limit = 20) =>
     api.get(`/withdrawal/history?page=${page}&limit=${limit}`),
 };
+
+/**
+ * Classify a withdrawal API error so the UI can show the right message
+ * without leaking server internals.
+ */
+export type WithdrawalErrorKind =
+  | 'needs-2fa-setup'
+  | 'needs-email-verified'
+  | 'invalid-2fa-code'
+  | 'invalid-address'
+  | 'new-address-confirm-email'
+  | 'address-cooldown'
+  | 'insufficient-balance'
+  | 'rate-limited'
+  | 'unknown';
+
+export function classifyWithdrawalError(e: unknown): { kind: WithdrawalErrorKind; message: string } {
+  const ax = e as { response?: { status?: number; data?: { error?: string } } };
+  const status = ax?.response?.status;
+  const msg = ax?.response?.data?.error ?? '';
+  if (status === 429) return { kind: 'rate-limited', message: msg || 'Slow down and try again later.' };
+  if (msg.startsWith('Enable 2FA'))          return { kind: 'needs-2fa-setup', message: msg };
+  if (msg.startsWith('Verify your email'))   return { kind: 'needs-email-verified', message: msg };
+  if (msg === 'Invalid 2FA code')            return { kind: 'invalid-2fa-code', message: msg };
+  if (msg.startsWith('Invalid '))            return { kind: 'invalid-address', message: msg };
+  if (msg.startsWith('New withdrawal address')) return { kind: 'new-address-confirm-email', message: msg };
+  if (msg.includes('24h cooldown'))          return { kind: 'address-cooldown', message: msg };
+  if (msg.startsWith('Insufficient '))       return { kind: 'insufficient-balance', message: msg };
+  return { kind: 'unknown', message: msg || 'Withdrawal failed.' };
+}

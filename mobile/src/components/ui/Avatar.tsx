@@ -1,6 +1,7 @@
-import { Image, Text, View } from 'react-native';
+import { Text } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { initialsOf } from '@/utils/format';
+import { AuthedImage } from './AuthedImage';
 
 interface Props {
   name: string;
@@ -10,9 +11,11 @@ interface Props {
 
 export function Avatar({ name, uri, size = 40 }: Props) {
   if (uri) {
+    // AuthedImage transparently attaches the JWT for /uploads/* URLs and
+    // behaves like a plain <Image> for everything else (CDN, CoinGecko).
     return (
-      <Image
-        source={{ uri }}
+      <AuthedImage
+        uri={uri}
         style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: '#1a2658' }}
       />
     );

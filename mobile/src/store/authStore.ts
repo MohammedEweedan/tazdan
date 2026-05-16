@@ -46,7 +46,14 @@ interface AuthState {
   biometricEnabled: boolean;
 
   hydrate: () => Promise<void>;
-  login: (email: string, password: string) => Promise<void>;
+  // Returns `{ requires2FA: true }` if the server needs a TOTP code; the
+  // caller should prompt for the code and call `login()` again with it.
+  // Otherwise returns void and the store is now authenticated.
+  login: (
+    email: string,
+    password: string,
+    twoFactorCode?: string,
+  ) => Promise<{ requires2FA: true } | void>;
   enableBiometric: () => Promise<void>;
   disableBiometric: () => Promise<void>;
   triggerBiometricLogin: () => Promise<boolean>;
@@ -93,8 +100,11 @@ export const useAuthStore = create<AuthState>((set) => ({
     }
   },
 
-  login: async (email, password) => {
-    const { user, accessToken, refreshToken } = await authService.login(email, password);
+  login: async (email, password, twoFactorCode) => {
+    const result = await authService.login(email, password, twoFactorCode);
+    if ('requires2FA' in result) return { requires2FA: true };
+
+    const { user, accessToken, refreshToken } = result;
     await secureStore.set(STORAGE_KEYS.accessToken, accessToken);
     await secureStore.set(STORAGE_KEYS.refreshToken, refreshToken);
     await cacheLastUser(user);

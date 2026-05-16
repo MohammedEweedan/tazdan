@@ -61,10 +61,30 @@ const registerSchema = z.object({
 
 const loginSchema = z.object({
   // Can be an email or a handle (username).
-  email: z.string().min(1, 'Email or handle is required'),
-  password: z.string(),
-  twoFactorCode: z.string().optional(),
+  email: z.string().min(1, 'Email or handle is required').max(254),
+  password: z.string().min(1).max(256),
+  twoFactorCode: z.string().min(6).max(8).optional(),
 });
+
+// Per-user brute-force protection. Lockout grows from 5 → 15 → 60 min
+// after each subsequent burst of 5 failed attempts. Combined with the
+// per-IP authLimiter this stops both credential-stuffing (many emails
+// from one IP) and password-spray (many IPs against one email).
+async function recordFailedLogin(userId: string) {
+  const u = await prisma.user.update({
+    where: { id: userId },
+    data: { failedLoginAttempts: { increment: 1 } },
+    select: { failedLoginAttempts: true },
+  });
+  if (u.failedLoginAttempts >= 5) {
+    const tier = Math.min(3, Math.floor(u.failedLoginAttempts / 5));
+    const minutes = [5, 15, 60][tier - 1] ?? 60;
+    await prisma.user.update({
+      where: { id: userId },
+      data: { lockoutUntil: new Date(Date.now() + minutes * 60 * 1000) },
+    });
+  }
+}
 
 export class AuthController {
   static async register(req: AuthRequest, res: Response, next: NextFunction) {
@@ -179,7 +199,7 @@ export class AuthController {
       const data = loginSchema.parse(req.body);
 
       // Support login by email OR handle (@username).
-      const loginIdentifier = data.email.toLowerCase().replace(/^@/, ''); // Strip @ if they typed it
+      const loginIdentifier = data.email.toLowerCase().replace(/^@/, '');
       const isEmail = loginIdentifier.includes('@');
 
       const user = await prisma.user.findFirst({
@@ -188,23 +208,52 @@ export class AuthController {
           : { username: loginIdentifier },
       });
 
-      if (!user) throw new AppError('Invalid credentials', 401);
-      if (user.status === 'BANNED' || user.status === 'SUSPENDED') throw new AppError('Account is suspended or banned', 403);
+      // Single, generic message for all credential failures to defeat
+      // enumeration. Bcrypt dummy compare keeps response time uniform
+      // whether the email exists or not.
+      const GENERIC = 'Invalid credentials';
+      const DUMMY_HASH = '$2a$12$abcdefghijklmnopqrstuv0123456789012345678901234567890123';
+
+      if (!user) {
+        await bcrypt.compare(data.password, DUMMY_HASH).catch(() => false);
+        throw new AppError(GENERIC, 401);
+      }
+
+      if (user.status === 'BANNED' || user.status === 'SUSPENDED') {
+        throw new AppError('Account is suspended or banned', 403);
+      }
+
+      // Per-account lockout window. Independent from the per-IP rate
+      // limiter (which catches credential stuffing across many emails).
+      if (user.lockoutUntil && user.lockoutUntil > new Date()) {
+        throw new AppError('Too many failed attempts. Try again later.', 429);
+      }
 
       const validPassword = await bcrypt.compare(data.password, user.passwordHash);
-      if (!validPassword) throw new AppError('Invalid email or password', 401);
+      if (!validPassword) {
+        await recordFailedLogin(user.id);
+        throw new AppError(GENERIC, 401);
+      }
 
       if (user.twoFactorEnabled) {
         if (!data.twoFactorCode) return res.status(200).json({ requires2FA: true });
         const verified = speakeasy.totp.verify({
-          secret: user.twoFactorSecret!, encoding: 'base32', token: data.twoFactorCode, window: 2,
+          secret: user.twoFactorSecret!, encoding: 'base32', token: data.twoFactorCode, window: 1,
         });
-        if (!verified) throw new AppError('Invalid 2FA code', 401);
+        if (!verified) {
+          await recordFailedLogin(user.id);
+          throw new AppError('Invalid 2FA code', 401);
+        }
       }
 
       await prisma.user.update({
         where: { id: user.id },
-        data: { lastLoginAt: new Date(), lastLoginIp: req.ip },
+        data: {
+          lastLoginAt: new Date(),
+          lastLoginIp: req.ip,
+          failedLoginAttempts: 0,
+          lockoutUntil: null,
+        },
       });
 
       const tokens = generateTokens({ id: user.id, email: user.email, role: user.role });

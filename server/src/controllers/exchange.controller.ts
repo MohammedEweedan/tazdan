@@ -50,6 +50,25 @@ export class ExchangeController {
     }
   }
 
+  /**
+   * GET /api/exchange/fx/:base/:quote
+   * Live FX rate with admin-override → API → stale fallback. Surfaced
+   * by the mobile UI for any pair that doesn't trade on Binance —
+   * primarily fiat/fiat pairs like USD/LYD.
+   */
+  static async getFxRate(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const { base, quote } = req.params;
+      const baseU  = base.toUpperCase();
+      const quoteU = quote.toUpperCase();
+      const { getRate } = await import('../services/exchange/fxRateProvider.service');
+      const rate = await getRate(baseU, quoteU);
+      res.json({ base: baseU, quote: quoteU, ...rate });
+    } catch (error) {
+      next(error);
+    }
+  }
+
   // POST /api/exchange/quote
   static async createQuote(req: AuthRequest, res: Response, next: NextFunction) {
     try {

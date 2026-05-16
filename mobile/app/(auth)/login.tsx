@@ -6,7 +6,7 @@
 
 import { useEffect, useState } from 'react';
 import {
-  ActivityIndicator, Alert, Image, KeyboardAvoidingView, Platform, Pressable,
+  ActivityIndicator, Alert, Image, KeyboardAvoidingView, Modal, Platform, Pressable,
   ScrollView, Text, TextInput, View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -47,6 +47,12 @@ export default function Login() {
   const [submitting, setSubmitting] = useState(false);
   const [bioAvailable, setBioAvailable] = useState(false);
   const [bioLoading, setBioLoading] = useState(false);
+  // 2FA flow — server returns { requires2FA: true } on the first POST when
+  // the account has TOTP enabled. We show a code modal and replay the
+  // login with the same credentials + code.
+  const [twoFAOpen, setTwoFAOpen] = useState(false);
+  const [twoFACode, setTwoFACode] = useState('');
+  const [pendingCreds, setPendingCreds] = useState<{ email: string; password: string } | null>(null);
 
   useEffect(() => {
     Promise.all([
@@ -68,11 +74,41 @@ export default function Login() {
   };
 
   const onSubmit = async (values: FormValues) => {
+    const email = values.email.trim().toLowerCase();
+    const password = values.password;
     try {
       setSubmitting(true);
-      await login(values.email.trim().toLowerCase(), values.password);
+      const result = await login(email, password);
+      if (result && 'requires2FA' in result) {
+        setPendingCreds({ email, password });
+        setTwoFACode('');
+        setTwoFAOpen(true);
+        h.light();
+        return;
+      }
       h.success();
       // AuthGate will redirect to "/" automatically
+    } catch (e: unknown) {
+      h.error();
+      Alert.alert(t('login.failed'), extractErrorMessage(e));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const submit2FA = async () => {
+    if (!pendingCreds || twoFACode.length < 6) return;
+    try {
+      setSubmitting(true);
+      const result = await login(pendingCreds.email, pendingCreds.password, twoFACode);
+      if (result && 'requires2FA' in result) {
+        h.error();
+        Alert.alert(t('login.failed'), 'Invalid code. Try again.');
+        return;
+      }
+      setTwoFAOpen(false);
+      setPendingCreds(null);
+      h.success();
     } catch (e: unknown) {
       h.error();
       Alert.alert(t('login.failed'), extractErrorMessage(e));
@@ -346,6 +382,75 @@ export default function Login() {
           </ScrollView>
         </SafeAreaView>
       </KeyboardAvoidingView>
+
+      {/* 2FA prompt — opens when the server signals requires2FA on /auth/login */}
+      <Modal
+        visible={twoFAOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => { if (!submitting) { setTwoFAOpen(false); setPendingCreds(null); } }}
+      >
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'center', paddingHorizontal: 28 }}>
+          <View style={{ backgroundColor: p.bg, borderRadius: 24, padding: 24, borderWidth: 1, borderColor: p.border }}>
+            <Text style={{ color: p.fg, fontSize: 20, fontWeight: '800', marginBottom: 8 }}>
+              Two-factor code
+            </Text>
+            <Text style={{ color: p.fgMuted, fontSize: 14, marginBottom: 16, lineHeight: 20 }}>
+              Open your authenticator app and enter the 6-digit code.
+            </Text>
+            <TextInput
+              value={twoFACode}
+              onChangeText={(v) => setTwoFACode(v.replace(/\D/g, '').slice(0, 8))}
+              keyboardType="number-pad"
+              autoFocus
+              maxLength={8}
+              placeholder="123456"
+              placeholderTextColor={p.fgFaint}
+              style={{
+                height: 56,
+                borderRadius: 14,
+                paddingHorizontal: 16,
+                backgroundColor: p.bgElev,
+                borderWidth: 1,
+                borderColor: p.border,
+                color: p.fg,
+                fontSize: 22,
+                fontWeight: '700',
+                letterSpacing: 4,
+                textAlign: 'center',
+                marginBottom: 18,
+                fontVariant: ['tabular-nums'],
+              }}
+            />
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+              <Pressable
+                onPress={() => { if (!submitting) { setTwoFAOpen(false); setPendingCreds(null); } }}
+                style={{
+                  flex: 1, height: 50, borderRadius: 25,
+                  borderWidth: 1, borderColor: p.border, backgroundColor: p.pillBg,
+                  alignItems: 'center', justifyContent: 'center',
+                }}
+              >
+                <Text style={{ color: p.fg, fontSize: 14, fontWeight: '700' }}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                onPress={submit2FA}
+                disabled={submitting || twoFACode.length < 6}
+                style={{
+                  flex: 1, height: 50, borderRadius: 25,
+                  backgroundColor: p.ctaBg,
+                  alignItems: 'center', justifyContent: 'center',
+                  flexDirection: 'row', gap: 8,
+                  opacity: submitting || twoFACode.length < 6 ? 0.6 : 1,
+                }}
+              >
+                {submitting && <ActivityIndicator size="small" color={p.ctaFg} />}
+                <Text style={{ color: p.ctaFg, fontSize: 14, fontWeight: '800' }}>Verify</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -420,8 +525,19 @@ function Field({
 
 function extractErrorMessage(e: unknown): string {
   if (typeof e === 'object' && e !== null) {
-    const ax = e as { response?: { data?: { error?: string; message?: string } }; message?: string; code?: string };
-    if (ax.code === 'ERR_NETWORK') return 'Cannot reach the server. Make sure the backend is running on port 5001 and your phone is on the same network.';
+    const ax = e as {
+      response?: { status?: number; data?: { error?: string; message?: string } };
+      message?: string;
+      code?: string;
+    };
+    if (ax.code === 'ERR_NETWORK') {
+      return 'Cannot reach the server. Check your connection.';
+    }
+    // The server returns 429 with a friendly message when an account is
+    // locked out after too many failed attempts. Pass it through verbatim.
+    if (ax.response?.status === 429) {
+      return ax.response.data?.error ?? 'Too many attempts. Try again later.';
+    }
     return ax.response?.data?.error ?? ax.response?.data?.message ?? ax.message ?? 'Please try again.';
   }
   return 'Please try again.';

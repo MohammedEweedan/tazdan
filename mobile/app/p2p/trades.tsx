@@ -611,10 +611,19 @@ function DisputeModal({ trade, currentUserId, palette: p, t, onClose, onSubmitte
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
   const role = iAmBuyer2 ? t('p2p.buyer') : t('p2p.seller');
-  const tooShort = reason.trim().length < 20;
+  // Server requires 10–1000 chars. We keep the client min in sync so the
+  // submit button disables instead of getting a 400 back.
+  const trimmedLen = reason.trim().length;
+  const tooShort = trimmedLen < 10;
+  const tooLong = trimmedLen > 1000;
+  const invalid = tooShort || tooLong;
 
   const submit = async () => {
-    if (tooShort || busy) { if (tooShort) Alert.alert(t('p2p.disputeTitle'), t('p2p.disputeShort')); return; }
+    if (invalid || busy) {
+      if (tooShort) Alert.alert(t('p2p.disputeTitle'), t('p2p.disputeShort'));
+      else if (tooLong) Alert.alert(t('p2p.disputeTitle'), 'Reason must be 1000 characters or fewer.');
+      return;
+    }
     setBusy(true); h.medium();
     try {
       await p2pService.raiseDispute(trade.id, reason.trim());
@@ -646,8 +655,8 @@ function DisputeModal({ trade, currentUserId, palette: p, t, onClose, onSubmitte
           </View>
           <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '700', letterSpacing: 0.5, marginTop: 18, marginBottom: 8 }}>{t('p2p.disputeReason').toUpperCase()}</Text>
           <TextInput value={reason} onChangeText={setReason} placeholder={t('p2p.disputeReasonPlaceholder')} placeholderTextColor={p.fgFaint} multiline textAlignVertical="top" style={{ minHeight: 140, padding: 14, backgroundColor: p.bgElev, borderRadius: 12, borderWidth: 1, borderColor: p.border, color: p.fg, fontSize: 14, lineHeight: 20 }} />
-          <Text style={{ color: tooShort ? p.fgFaint : p.greenFg, fontSize: 11, fontWeight: '600', marginTop: 6 }}>{reason.trim().length}/20</Text>
-          <Pressable onPress={submit} disabled={tooShort || busy} style={({ pressed }) => ({ marginTop: 20, height: 48, borderRadius: 24, backgroundColor: p.redFg, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: tooShort ? 0.4 : pressed || busy ? 0.85 : 1 })}>
+          <Text style={{ color: invalid ? p.fgFaint : p.greenFg, fontSize: 11, fontWeight: '600', marginTop: 6 }}>{trimmedLen}/1000 (min 10)</Text>
+          <Pressable onPress={submit} disabled={invalid || busy} style={({ pressed }) => ({ marginTop: 20, height: 48, borderRadius: 24, backgroundColor: p.redFg, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: invalid ? 0.4 : pressed || busy ? 0.85 : 1 })}>
             {busy ? <ActivityIndicator color="#fff" /> : <Ionicons name="shield-half-outline" size={16} color="#fff" />}
             <Text style={{ color: '#fff', fontSize: 13, fontWeight: '800', letterSpacing: 0.3 }}>{t('p2p.disputeSubmit').toUpperCase()}</Text>
           </Pressable>

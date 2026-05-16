@@ -94,6 +94,7 @@ enum Currency {
   AED // UAE Dirham
   SAR // Saudi Riyal
   EGP // Egyptian Pound
+  LYD // Libyan Dinar — controlled FX, primary spread opportunity
 }
 
 // ── KYC tier (gates daily/monthly limits, P2P verified badge,
@@ -132,35 +133,40 @@ enum CardTxType {
 }
 
 model User {
-  id                           String               @id @default(uuid())
-  email                        String               @unique
-  phone                        String?              @unique
+  id                           String                       @id @default(uuid())
+  email                        String                       @unique
+  phone                        String?                      @unique
   passwordHash                 String
   firstName                    String
   lastName                     String
-  role                         UserRole             @default(USER)
-  status                       UserStatus           @default(PENDING)
-  kycStatus                    KYCStatus            @default(NOT_SUBMITTED)
-  kycTier                      KYCTier              @default(TIER_0) // gates daily limits, card issuance, off-ramp
+  role                         UserRole                     @default(USER)
+  status                       UserStatus                   @default(PENDING)
+  kycStatus                    KYCStatus                    @default(NOT_SUBMITTED)
+  kycTier                      KYCTier                      @default(TIER_0) // gates daily limits, card issuance, off-ramp
   country                      String? // ISO 3166-1 alpha-2 (e.g. "AE", "SA", "LY") — drives P2P & compliance
   phoneCountryCode             String? // dial code WITHOUT '+' (e.g. "218", "971", "966")
   dateOfBirth                  DateTime? // 18+ enforced at registration; required for KYC and AML
   twoFactorSecret              String?
-  twoFactorEnabled             Boolean              @default(false)
-  emailVerified                Boolean              @default(false)
-  emailVerificationToken       String?              @unique
+  twoFactorEnabled             Boolean                      @default(false)
+  emailVerified                Boolean                      @default(false)
+  emailVerificationToken       String?                      @unique
   emailVerificationExpires     DateTime?
   emailVerificationCode        String?
   emailVerificationCodeExpires DateTime?
-  passwordResetToken           String?              @unique
+  passwordResetToken           String?                      @unique
   passwordResetExpires         DateTime?
-  phoneVerified                Boolean              @default(false)
-  referralCode                 String               @unique
+  phoneVerified                Boolean                      @default(false)
+  referralCode                 String                       @unique
   referredBy                   String?
   lastLoginAt                  DateTime?
   lastLoginIp                  String?
-  createdAt                    DateTime             @default(now())
-  updatedAt                    DateTime             @updatedAt
+  // Brute-force protection: counts consecutive failed login attempts.
+  // Reset to 0 on successful login. When >= threshold, the account is
+  // locked until `lockoutUntil`.
+  failedLoginAttempts          Int                          @default(0)
+  lockoutUntil                 DateTime?
+  createdAt                    DateTime                     @default(now())
+  updatedAt                    DateTime                     @updatedAt
   wallets                      Wallet[]
   deposits                     Deposit[]
   withdrawals                  Withdrawal[]
@@ -171,32 +177,32 @@ model User {
   sessions                     Session[]
   bankAccounts                 BankAccount[]
   linkedWallets                LinkedWallet[]
-  referrals                    User[]               @relation("Referrals")
-  referrer                     User?                @relation("Referrals", fields: [referredBy], references: [id])
+  referrals                    User[]                       @relation("Referrals")
+  referrer                     User?                        @relation("Referrals", fields: [referredBy], references: [id])
   whatsappMessages             WhatsAppMessage[]
-  sentTransfers                Transfer[]           @relation("TransferSender")
-  receivedTransfers            Transfer[]           @relation("TransferReceiver")
+  sentTransfers                Transfer[]                   @relation("TransferSender")
+  receivedTransfers            Transfer[]                   @relation("TransferReceiver")
   // Public profile
-  username                     String?              @unique
+  username                     String?                      @unique
   bio                          String?
   avatarUrl                    String?
-  baseCurrency                 Currency             @default(USD)
-  profilePublic                Boolean              @default(false)
-  acceptedCurrencies           String[]             @default(["USDT", "USD", "BTC", "ETH"])
+  baseCurrency                 Currency                     @default(USD)
+  profilePublic                Boolean                      @default(false)
+  acceptedCurrencies           String[]                     @default(["USDT", "USD", "BTC", "ETH"])
   // P2P relations
   p2pListings                  P2PListing[]
-  p2pTradesAsBuyer             P2PTrade[]           @relation("P2PBuyer")
-  p2pTradesAsSeller            P2PTrade[]           @relation("P2PSeller")
+  p2pTradesAsBuyer             P2PTrade[]                   @relation("P2PBuyer")
+  p2pTradesAsSeller            P2PTrade[]                   @relation("P2PSeller")
   p2pDisputes                  P2PDispute[]
   // Messages
-  sentMessages                 Message[]            @relation("MessageSender")
-  receivedMessages             Message[]            @relation("MessageReceiver")
-  blocksMade                   UserBlock[]          @relation("BlocksMade")
-  blocksAgainst                UserBlock[]          @relation("BlocksAgainst")
-  reportsFiled                 MessageReport[]      @relation("ReportsFiled")
-  reportsAgainst               MessageReport[]      @relation("ReportsAgainst")
-  escalationsRaised            SupportEscalation[]  @relation("EscalationsRaised")
-  escalationsAssigned          SupportEscalation[]  @relation("EscalationsAssigned")
+  sentMessages                 Message[]                    @relation("MessageSender")
+  receivedMessages             Message[]                    @relation("MessageReceiver")
+  blocksMade                   UserBlock[]                  @relation("BlocksMade")
+  blocksAgainst                UserBlock[]                  @relation("BlocksAgainst")
+  reportsFiled                 MessageReport[]              @relation("ReportsFiled")
+  reportsAgainst               MessageReport[]              @relation("ReportsAgainst")
+  escalationsRaised            SupportEscalation[]          @relation("EscalationsRaised")
+  escalationsAssigned          SupportEscalation[]          @relation("EscalationsAssigned")
   // Memecoins & Smart Contracts
   // AML
   amlFlags                     AMLFlag[]
@@ -215,6 +221,7 @@ model User {
   cryptoWallet                 UserWallet?
   cryptoOrders                 CryptoOrder[]
   onChainTxs                   OnChainTransaction[]
+  withdrawalAddressWhitelist   WithdrawalAddressWhitelist[]
 
   @@index([email])
   @@index([referralCode])
@@ -1068,33 +1075,32 @@ model OffRampTransaction {
   @@index([createdAt])
 }
 
-
 // ── Crypto Custody ───────────────────────────────────────────────────
 // One master BIP-39 seed (stored encrypted in MasterSeedStore) derives
 // all user wallets via BIP-44. Private keys are never persisted — they
 // are re-derived on-demand from the master seed using walletIndex.
 model UserWallet {
-  id          String   @id @default(cuid())
-  userId      String   @unique
-  walletIndex Int      @unique @default(autoincrement())
+  id          String @id @default(cuid())
+  userId      String @unique
+  walletIndex Int    @unique @default(autoincrement())
 
-  ethAddress  String   @unique
-  btcAddress  String   @unique
-  solAddress  String   @unique
-  tronAddress String   @unique
+  ethAddress  String @unique
+  btcAddress  String @unique
+  solAddress  String @unique
+  tronAddress String @unique
 
-  ethBalance     Decimal @default(0) @db.Decimal(36, 18)
-  btcBalance     Decimal @default(0) @db.Decimal(20, 8)
-  solBalance     Decimal @default(0) @db.Decimal(20, 9)
-  usdtErc20Bal   Decimal @default(0) @db.Decimal(20, 6)
-  usdtTrc20Bal   Decimal @default(0) @db.Decimal(20, 6)
+  ethBalance   Decimal @default(0) @db.Decimal(36, 18)
+  btcBalance   Decimal @default(0) @db.Decimal(20, 8)
+  solBalance   Decimal @default(0) @db.Decimal(20, 9)
+  usdtErc20Bal Decimal @default(0) @db.Decimal(20, 6)
+  usdtTrc20Bal Decimal @default(0) @db.Decimal(20, 6)
 
   selfCustodyExported Boolean   @default(false)
   exportedAt          DateTime?
 
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
 }
@@ -1102,12 +1108,12 @@ model UserWallet {
 // Encrypted master seed blob. MVP: AES-256-GCM with MASTER_SEED_ENC_KEY.
 // TODO: migrate to AWS KMS (MASTER_SEED_KMS_KEY_ID) before mainnet.
 model MasterSeedStore {
-  id          String   @id @default(cuid())
-  version     Int      @unique @default(1)
-  ciphertext  String
-  algorithm   String   @default("AES-256-GCM")
-  kmsKeyId    String?
-  createdAt   DateTime @default(now())
+  id         String   @id @default(cuid())
+  version    Int      @unique @default(1)
+  ciphertext String
+  algorithm  String   @default("AES-256-GCM")
+  kmsKeyId   String?
+  createdAt  DateTime @default(now())
 }
 
 enum CryptoOrderType {
@@ -1123,30 +1129,30 @@ enum CryptoOrderStatus {
 }
 
 model CryptoOrder {
-  id              String            @id @default(cuid())
-  userId          String
-  type            CryptoOrderType
-  asset           String
-  network         String
+  id      String          @id @default(cuid())
+  userId  String
+  type    CryptoOrderType
+  asset   String
+  network String
 
-  quotedPrice     Decimal           @db.Decimal(20, 8)
-  quotedTotal     Decimal           @db.Decimal(20, 8)
+  quotedPrice Decimal @db.Decimal(20, 8)
+  quotedTotal Decimal @db.Decimal(20, 8)
 
-  marketPrice     Decimal           @db.Decimal(20, 8)
-  actualCost      Decimal           @db.Decimal(20, 8)
+  marketPrice Decimal @db.Decimal(20, 8)
+  actualCost  Decimal @db.Decimal(20, 8)
 
-  platformFee     Decimal           @db.Decimal(20, 8)
-  networkFee      Decimal           @db.Decimal(20, 8)
-  spreadCapture   Decimal           @db.Decimal(20, 8)
+  platformFee   Decimal @db.Decimal(20, 8)
+  networkFee    Decimal @db.Decimal(20, 8)
+  spreadCapture Decimal @db.Decimal(20, 8)
 
-  cryptoAmount    Decimal           @db.Decimal(36, 18)
-  status          CryptoOrderStatus @default(PENDING)
-  binanceOrderId  String?
-  idempotencyKey  String?           @unique
+  cryptoAmount   Decimal           @db.Decimal(36, 18)
+  status         CryptoOrderStatus @default(PENDING)
+  binanceOrderId String?
+  idempotencyKey String?           @unique
 
-  createdAt       DateTime          @default(now())
-  executedAt      DateTime?
-  user            User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt  DateTime  @default(now())
+  executedAt DateTime?
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([status])
@@ -1175,4 +1181,27 @@ model OnChainTransaction {
   @@index([status])
   @@index([asset, network])
   @@index([txHash])
+}
+
+/// Per-user whitelist of destination withdrawal addresses. A new entry
+/// is created in PENDING state (confirmedAt = null) on the first
+/// withdrawal attempt; the user is emailed a confirmation token. After
+/// confirmation, a 24-hour cooldown elapses before withdrawals to that
+/// address are permitted. Limits damage from a compromised account.
+model WithdrawalAddressWhitelist {
+  id           String    @id @default(uuid())
+  userId       String
+  key          String // canonicalised `${chain}:${address.toLowerCase()}` for uniqueness
+  asset        String
+  network      String
+  toAddress    String
+  label        String?
+  confirmToken String?
+  confirmedAt  DateTime?
+  activeAt     DateTime? // cooldown end — withdrawals before this are rejected
+  createdAt    DateTime  @default(now())
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, key])
+  @@index([userId])
 }

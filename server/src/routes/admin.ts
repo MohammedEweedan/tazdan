@@ -8,6 +8,8 @@ adminRouter.use(authenticate, requireAdmin);
 
 adminRouter.get('/dashboard', AdminController.getDashboard);
 adminRouter.put('/rates/:base/:quote', AdminController.updateRates);
+adminRouter.delete('/rates/:base/:quote/override', AdminController.clearRateOverride);
+adminRouter.post('/rates/:base/:quote/refresh', AdminController.refreshRateFromApi);
 adminRouter.get('/deposits', AdminController.getDeposits);
 adminRouter.put('/deposits/:id/confirm', AdminController.confirmDeposit);
 adminRouter.put('/deposits/:id/reject', AdminController.rejectDeposit);

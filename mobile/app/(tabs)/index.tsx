@@ -28,8 +28,10 @@ import { BuyWidget } from '@/components/exchange/BuyWidget';
 import { SellWidget } from '@/components/exchange/SellWidget';
 import { SendWidget } from '@/components/exchange/SendWidget';
 import { ReceiveWidget } from '@/components/exchange/ReceiveWidget';
-import { DepositWidget } from '@/components/exchange/DepositWidget';
+import { TopupSheet } from '@/components/topup/TopupSheet';
+import { PressableScale } from '@/components/ui/Motion';
 import type { Wallet, Currency } from '@/types';
+import DepositWidget from '@/components/exchange/DepositWidget';
 
 type Tab = 'ASSETS' | 'WALLETS' | 'ACTIVITY';
 
@@ -170,12 +172,14 @@ export default function Home() {
   const handle = user?.username ?? user?.email?.split('@')[0] ?? 'me';
   const userEmoji = user?.avatarUrl;
 
+  // Primary actions sit directly under the balance. Four buttons —
+  // money in (Buy / Deposit), money out (Sell / Withdraw). Receive
+  // and Scan moved to the header; secondary actions live in More.
   const ACTIONS: ActionDef[] = [
-    { key: 'buy',     icon: 'add',                    label: t('action.buy'),     onPress: () => setBuyModalVisible(true) },
-    { key: 'sell',    icon: 'cash-outline',           label: t('action.sell'),    onPress: () => setSellModalVisible(true) },
-    { key: 'send',    icon: 'paper-plane-outline',    label: t('action.send'),    onPress: () => setSendModalVisible(true) },
-    { key: 'receive', icon: 'qr-code-outline',        label: t('action.receive'), onPress: () => setReceiveModalVisible(true) },
-    { key: 'more',    icon: 'ellipsis-horizontal',    label: '···',               onPress: () => setMoreMenuVisible(true) },
+    { key: 'buy',      icon: 'arrow-up-outline',       label: t('action.buy'),      onPress: () => setBuyModalVisible(true) },
+    { key: 'sell',     icon: 'arrow-down-outline',     label: t('action.sell'),     onPress: () => setSellModalVisible(true) },
+    { key: 'deposit',  icon: 'arrow-down-circle-outline', label: t('action.deposit'), onPress: () => setDepositModalVisible(true) },
+    { key: 'withdraw', icon: 'paper-plane-outline',    label: t('action.withdraw'), onPress: () => setSendModalVisible(true) },
   ];
 
   return (
@@ -223,45 +227,32 @@ export default function Home() {
                 @{handle}
               </Text>
             </Pressable>
-            <View style={{ flexDirection: 'row', gap: 8 }}>
-              <Pressable
+            <View style={{ flexDirection: 'row', gap: 7 }}>
+              <HeaderIconButton
+                icon="qr-code-outline"
+                onPress={() => { h.selection(); setReceiveModalVisible(true); }}
+                palette={p}
+                a11y={t('action.receive')}
+              />
+              <HeaderIconButton
+                icon="notifications-outline"
                 onPress={() => { h.selection(); router.push('/notifications'); }}
-                hitSlop={6}
-                style={{
-                  width: 36, height: 36, borderRadius: 18,
-                  backgroundColor: p.bgElev,
-                  borderWidth: 1, borderColor: p.border,
-                  alignItems: 'center', justifyContent: 'center',
-                }}
-              >
-                <Ionicons name="notifications-outline" size={17} color={p.fg} />
-                {(unreadData ?? 0) > 0 && (
-                  <View style={{
-                    position: 'absolute',
-                    top: -2, right: -2,
-                    minWidth: 16, height: 16, borderRadius: 8,
-                    backgroundColor: '#ef4444',
-                    alignItems: 'center', justifyContent: 'center',
-                    paddingHorizontal: 3,
-                  }}>
-                    <Text style={{ color: '#fff', fontSize: 10, fontWeight: '800' }}>
-                      {unreadData && unreadData > 9 ? '9+' : unreadData}
-                    </Text>
-                  </View>
-                )}
-              </Pressable>
-              <Pressable
+                palette={p}
+                a11y="Notifications"
+                badge={unreadData ?? 0}
+              />
+              <HeaderIconButton
+                icon="scan-outline"
                 onPress={() => { h.selection(); router.push('/scanner'); }}
-                hitSlop={6}
-                style={{
-                  width: 36, height: 36, borderRadius: 18,
-                  backgroundColor: p.bgElev,
-                  borderWidth: 1, borderColor: p.border,
-                  alignItems: 'center', justifyContent: 'center',
-                }}
-              >
-                <Ionicons name="scan-outline" size={18} color={p.fg} />
-              </Pressable>
+                palette={p}
+                a11y="Scan QR"
+              />
+              <HeaderIconButton
+                icon="ellipsis-horizontal"
+                onPress={() => { h.selection(); setMoreMenuVisible(true); }}
+                palette={p}
+                a11y={t('home.more')}
+              />
             </View>
           </View>
           <AnimatedTotal
@@ -302,13 +293,15 @@ export default function Home() {
             </View>
           </View>
 
-          {/* ── 5 ACTION BUTTONS ── */}
-          <View style={{
-            flexDirection: 'row',
-            paddingHorizontal: 16, marginTop: 24,
-            gap: 8,
-            paddingBottom: 8,
-          }}>
+          {/* ── 4 PRIMARY ACTIONS — Buy / Sell / Deposit / Withdraw ── */}
+          <View
+            style={{
+              flexDirection: 'row',
+              paddingHorizontal: 20, marginTop: 26,
+              gap: 6,
+              paddingBottom: 6,
+            }}
+          >
             {ACTIONS.map((a) => (
               <ActionButton
                 key={a.key}
@@ -520,30 +513,12 @@ export default function Home() {
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* Deposit Widget Modal */}
-      <Modal
+      {/* Deposit → country-aware top-up sheet. Uses the same flow the
+          /topup route renders, so behaviour is identical end-to-end. */}
+      <TopupSheet
         visible={depositModalVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setDepositModalVisible(false)}
-      >
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={{ flex: 1 }}
-        >
-          <Pressable
-            style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', padding: 20 }}
-            onPress={() => setDepositModalVisible(false)}
-          >
-            <Pressable
-              style={{ backgroundColor: p.bg, borderRadius: 20, padding: 20, width: '100%', maxWidth: 400, maxHeight: '85%' }}
-              onPress={(e) => e.stopPropagation()}
-            >
-              <DepositWidget />
-            </Pressable>
-          </Pressable>
-        </KeyboardAvoidingView>
-      </Modal>
+        onClose={() => setDepositModalVisible(false)}
+      />
 
       {/* More Menu Modal */}
       <Modal
@@ -592,12 +567,13 @@ export default function Home() {
             {/* Secondary options */}
             <View style={{ paddingVertical: 8 }}>
               {[
-                { icon: 'card-outline' as const,       label: t('home.cards'),           onPress: () => { setMoreMenuVisible(false); router.push('/cards'); } },
-                { icon: 'time-outline' as const,        label: t('home.history'),         onPress: () => { setMoreMenuVisible(false); router.push('/history'); } },
-                { icon: 'pie-chart-outline' as const,   label: t('home.cryptoPortfolio'), onPress: () => { setMoreMenuVisible(false); router.push('/portfolio/crypto'); } },
-                { icon: 'wallet-outline' as const,      label: t('home.fiatPortfolio'),  onPress: () => { setMoreMenuVisible(false); router.push('/portfolio/fiat'); } },
-                { icon: 'people-outline' as const,      label: t('home.referral'),        onPress: () => { setMoreMenuVisible(false); router.push('/referral'); } },
-                { icon: 'settings-outline' as const,    label: t('settings.title'),        onPress: () => { setMoreMenuVisible(false); router.push('/settings'); } },
+                { icon: 'card-outline' as const,         label: t('home.cards'),           onPress: () => { setMoreMenuVisible(false); router.push('/cards'); } },
+                { icon: 'time-outline' as const,         label: t('home.history'),         onPress: () => { setMoreMenuVisible(false); router.push('/history'); } },
+                { icon: 'document-text-outline' as const, label: 'Statements',              onPress: () => { setMoreMenuVisible(false); router.push('/statements'); } },
+                { icon: 'pie-chart-outline' as const,    label: t('home.cryptoPortfolio'), onPress: () => { setMoreMenuVisible(false); router.push('/portfolio/crypto'); } },
+                { icon: 'wallet-outline' as const,       label: t('home.fiatPortfolio'),   onPress: () => { setMoreMenuVisible(false); router.push('/portfolio/fiat'); } },
+                { icon: 'people-outline' as const,       label: t('home.referral'),        onPress: () => { setMoreMenuVisible(false); router.push('/referral'); } },
+                { icon: 'settings-outline' as const,     label: t('settings.title'),       onPress: () => { setMoreMenuVisible(false); router.push('/settings'); } },
               ].map((item) => (
                 <Pressable
                   key={item.label}
@@ -1092,6 +1068,12 @@ function AnimatedTotal({
 /* ── Action button — icon only + label below (no circles) ─── */
 interface ActionDef { key: string; icon: keyof typeof Ionicons.glyphMap; label: string; to?: string; onPress?: () => void }
 
+/**
+ * Action button — round icon tile stacked above a bold label. The
+ * tile is its own filled circle (proper visual weight) so the icon
+ * no longer reads as "pushed to the top of an empty rectangle".
+ * PressableScale gives tap feedback consistent with the rest of the app.
+ */
 function ActionButton({
   icon, label, onPress, to, palette: p,
 }: {
@@ -1102,39 +1084,94 @@ function ActionButton({
   palette: Palette;
 }) {
   const router = useRouter();
-  
+
   const handlePress = () => {
-    if (onPress) {
-      onPress();
-    } else if (to) {
-      router.push(to);
-    }
+    if (onPress) onPress();
+    else if (to) router.push(to as any);
   };
-  
+
   return (
-    <Pressable
+    <PressableScale
       onPress={handlePress}
-      hitSlop={4}
-      style={({ pressed }) => ({
+      style={{
         flex: 1,
         alignItems: 'center',
         justifyContent: 'center',
-        paddingVertical: 13,
-        height: 56,
-        borderRadius: 14,
-        gap: 5,
-        backgroundColor: pressed ? p.border : p.bgElev,
-        borderWidth: 1,
-        borderColor: p.border,
-      })}
+        paddingVertical: 6,
+        gap: 8,
+      }}
     >
-      <Ionicons name={icon} size={19} color={p.fg} />
+      <View
+        style={{
+          width: 54, height: 54, borderRadius: 27,
+          backgroundColor: p.bgElev,
+          borderWidth: 1, borderColor: p.border,
+          alignItems: 'center', justifyContent: 'center',
+          shadowColor: p.shadow,
+          shadowOpacity: 1,
+          shadowRadius: 8,
+          shadowOffset: { width: 0, height: 3 },
+          elevation: 2,
+        }}
+      >
+        <Ionicons name={icon} size={22} color={p.fg} />
+      </View>
       <Text
         numberOfLines={1}
-        style={{ color: p.fgMuted, fontSize: 11, fontWeight: '600' }}
+        style={{
+          color: p.fg, fontSize: 12, fontWeight: '700',
+          letterSpacing: -0.1,
+        }}
       >
         {label}
       </Text>
+    </PressableScale>
+  );
+}
+
+/**
+ * Small circular icon used in the home header. Optional badge dot.
+ */
+function HeaderIconButton({
+  icon, onPress, palette: p, a11y, badge,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  onPress: () => void;
+  palette: Palette;
+  a11y: string;
+  badge?: number;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      hitSlop={6}
+      accessibilityRole="button"
+      accessibilityLabel={a11y}
+      style={({ pressed }) => ({
+        width: 38, height: 38, borderRadius: 19,
+        backgroundColor: pressed ? p.border : p.bgElev,
+        borderWidth: 1, borderColor: p.border,
+        alignItems: 'center', justifyContent: 'center',
+      })}
+    >
+      <Ionicons name={icon} size={17} color={p.fg} />
+      {badge !== undefined && badge > 0 && (
+        <View
+          style={{
+            position: 'absolute',
+            top: -3, right: -3,
+            minWidth: 17, height: 17, borderRadius: 9,
+            backgroundColor: p.redFg,
+            borderWidth: 2, borderColor: p.bg,
+            alignItems: 'center', justifyContent: 'center',
+            paddingHorizontal: 3,
+          }}
+        >
+          <Text style={{ color: '#fff', fontSize: 9.5, fontWeight: '800' }}>
+            {badge > 9 ? '9+' : badge}
+          </Text>
+        </View>
+      )}
     </Pressable>
   );
 }

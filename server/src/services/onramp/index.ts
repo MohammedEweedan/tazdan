@@ -111,12 +111,9 @@ class MoonPayOnRampProvider implements OnRampProvider {
   async parseWebhook(): Promise<OnRampWebhookEvent> { throw new Error('MoonPay not configured.'); }
 }
 
-class StripeOnRampProvider implements OnRampProvider {
-  readonly name = 'STRIPE' as const;
-  async quote(_: OnRampQuoteRequest): Promise<OnRampQuote> { throw new Error('Stripe on-ramp not configured.'); }
-  async confirm(_: OnRampConfirmRequest): Promise<OnRampConfirmResult> { throw new Error('Stripe on-ramp not configured.'); }
-  async parseWebhook(): Promise<OnRampWebhookEvent> { throw new Error('Stripe on-ramp not configured.'); }
-}
+// Real Stripe implementation lives in ./stripe.provider.ts. Imported
+// lazily inside the factory so MOCK deployments don't need
+// STRIPE_SECRET_KEY at startup.
 
 // ─── Factory ──────────────────────────────────────────────────────────
 let cached: OnRampProvider | null = null;
@@ -126,7 +123,13 @@ export function getOnRampProvider(): OnRampProvider {
   const name = (process.env.ONRAMP_PROVIDER || 'MOCK').toUpperCase();
   switch (name) {
     case 'MOONPAY': cached = new MoonPayOnRampProvider(); break;
-    case 'STRIPE':  cached = new StripeOnRampProvider();  break;
+    case 'STRIPE': {
+      // Lazy require so MOCK builds don't need stripe env vars.
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { StripeOnRamp } = require('./stripe.provider') as typeof import('./stripe.provider');
+      cached = new StripeOnRamp();
+      break;
+    }
     case 'MOCK':
     default:        cached = new MockOnRampProvider();    break;
   }

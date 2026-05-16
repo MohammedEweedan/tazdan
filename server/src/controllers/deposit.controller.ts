@@ -1,9 +1,11 @@
-import { Response, NextFunction } from 'express';
+import { Response, NextFunction, Request } from 'express';
 import { z } from 'zod';
 import { prisma } from '../utils/prisma';
 import { AppError } from '../middleware/errorHandler';
 import { generateReference } from '../utils/helpers';
 import { AuthRequest } from '../types';
+import { getOnRampProvider } from '../services/onramp';
+import type { RampPaymentMethod, RampProvider, Currency } from '@prisma/client';
 
 const depositSchema = z.object({
   currency: z.enum(['USD', 'USDT']),
@@ -166,12 +168,197 @@ export class DepositController {
 
   static async getPaymentMethods(_req: AuthRequest, res: Response, next: NextFunction) {
     try {
+      const provider = (process.env.ONRAMP_PROVIDER || 'MOCK').toUpperCase();
       const paymentMethods = [
-        { id: 'BANK_TRANSFER', name: 'Bank Transfer', description: 'Direct bank wire transfer', currencies: ['USD', 'USDT'], instant: false, processingTime: '1-3 business days' },
+        {
+          id: 'BANK_TRANSFER',
+          name: 'Bank Transfer',
+          description: 'Direct bank wire transfer',
+          currencies: ['USD', 'USDT', 'EUR', 'GBP', 'AED', 'SAR', 'EGP', 'LYD'],
+          instant: false,
+          processingTime: '1-3 business days',
+          provider: 'MANUAL',
+        },
+        {
+          id: 'CARD',
+          name: 'Debit / Credit Card',
+          description: 'Pay with Visa, Mastercard, Apple Pay, Google Pay',
+          currencies: ['USD', 'EUR', 'GBP', 'AED'],
+          instant: true,
+          processingTime: 'Instant',
+          provider,
+          enabled: provider !== 'MOCK' || process.env.NODE_ENV !== 'production',
+        },
       ];
       res.json({ paymentMethods });
     } catch (error) {
       next(error);
     }
+  }
+
+  // ── Gateway-driven (card / Apple Pay / Google Pay via Stripe) ──────
+  //
+  // Flow:
+  //   1. POST /api/deposits/gateway/quote  → returns a quote.
+  //   2. POST /api/deposits/gateway/confirm → creates a PaymentIntent
+  //      at the provider, returns client_secret for the mobile SDK.
+  //   3. POST /api/deposits/webhook/:provider → provider POSTs final
+  //      status. We verify signature and credit the wallet.
+  //
+  // Funds are NEVER credited from the confirm step — only from the
+  // signed webhook. A user who hits "back" mid-payment cannot trick
+  // us into crediting them.
+
+  static async gatewayQuote(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const body = z.object({
+        fiatCurrency: z.string().min(3).max(4),
+        fiatAmount: z.number().positive(),
+        cryptoCurrency: z.string().min(3).max(8).default('USDT'),
+        paymentMethod: z.string().default('CARD'),
+      }).parse(req.body);
+
+      const provider = getOnRampProvider();
+      const quote = await provider.quote({
+        fiatCurrency: body.fiatCurrency.toUpperCase() as Currency,
+        fiatAmount: body.fiatAmount,
+        cryptoCurrency: body.cryptoCurrency.toUpperCase() as Currency,
+        paymentMethod: body.paymentMethod.toUpperCase() as RampPaymentMethod,
+        userId: req.user!.id,
+        userIp: req.ip,
+      });
+      res.json({ quote, providerName: provider.name });
+    } catch (e) { next(e); }
+  }
+
+  static async gatewayConfirm(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const body = z.object({
+        providerRef: z.string().min(1),
+        fiatCurrency: z.string().min(3).max(4),
+        fiatAmount: z.number().positive(),
+        cryptoCurrency: z.string().min(3).max(8),
+        idempotencyKey: z.string().min(8).max(128).optional(),
+      }).parse(req.body);
+
+      const provider = getOnRampProvider();
+      const reference = generateReference('ONR');
+
+      // Persist the intent BEFORE calling the provider so we can
+      // correlate the webhook even if the response is lost in flight.
+      const txn = await prisma.onRampTransaction.create({
+        data: {
+          userId: req.user!.id,
+          provider: provider.name as RampProvider,
+          providerRef: body.providerRef,
+          reference,
+          fiatCurrency: body.fiatCurrency.toUpperCase() as Currency,
+          fiatAmount: body.fiatAmount,
+          cryptoCurrency: body.cryptoCurrency.toUpperCase() as Currency,
+          cryptoAmount: 0,                 // updated by webhook
+          exchangeRate: 0,                 // updated when quote refreshed
+          feeCurrency: body.fiatCurrency.toUpperCase() as Currency,
+          paymentMethod: 'CARD',
+          status: 'PENDING',
+        },
+      });
+
+      const result = await provider.confirm({
+        providerRef: body.providerRef,
+        // For Stripe we tunnel the amount + currency here.
+        paymentToken: JSON.stringify({
+          amountCents: Math.round(body.fiatAmount * 100),
+          currency: body.fiatCurrency,
+          idempotencyKey: body.idempotencyKey,
+        }),
+      });
+
+      await prisma.onRampTransaction.update({
+        where: { id: txn.id },
+        data: { providerRef: result.providerRef, status: result.status },
+      });
+
+      res.json({
+        transactionId: txn.id,
+        provider: provider.name,
+        status: result.status,
+        redirectUrl: result.redirectUrl,
+      });
+    } catch (e) { next(e); }
+  }
+
+  /**
+   * Webhook entry point. Mounted with express.raw() so we have the
+   * exact bytes Stripe signed.
+   */
+  static async webhookStripe(req: Request, res: Response, next: NextFunction) {
+    try {
+      const provider = getOnRampProvider();
+      if (provider.name !== 'STRIPE') {
+        // Always 200 unknown providers — Stripe will mark the endpoint
+        // as failing otherwise and disable it.
+        return res.status(200).json({ ok: false, reason: 'provider-not-active' });
+      }
+      const rawBody = (req.body as Buffer).toString('utf8');
+      const headers: Record<string, string> = {};
+      for (const [k, v] of Object.entries(req.headers)) {
+        if (typeof v === 'string') headers[k.toLowerCase()] = v;
+      }
+      const event = await provider.parseWebhook(headers, rawBody);
+
+      // Idempotent: update the on-ramp transaction, and on COMPLETED
+      // credit the user wallet exactly once.
+      const txn = await prisma.onRampTransaction.findFirst({
+        where: { providerRef: event.providerRef },
+      });
+      if (!txn) {
+        // Stripe will retry — return 200 anyway, the txn may not be
+        // created yet if confirm() raced the webhook.
+        return res.status(200).json({ ok: true, reason: 'unknown-ref' });
+      }
+      if (txn.status === 'COMPLETED' && event.status === 'COMPLETED') {
+        return res.json({ ok: true, idempotent: true });
+      }
+
+      await prisma.$transaction(async (tx) => {
+        await tx.onRampTransaction.update({
+          where: { id: txn.id },
+          data: { status: event.status },
+        });
+        if (event.status === 'COMPLETED' && txn.status !== 'COMPLETED') {
+          // Credit the fiat wallet.
+          await tx.wallet.upsert({
+            where: { userId_currency: { userId: txn.userId, currency: txn.fiatCurrency } },
+            create: { userId: txn.userId, currency: txn.fiatCurrency, balance: txn.fiatAmount },
+            update: { balance: { increment: txn.fiatAmount } },
+          });
+          const balance = await tx.wallet.findUnique({
+            where: { userId_currency: { userId: txn.userId, currency: txn.fiatCurrency } },
+          });
+          await tx.transaction.create({
+            data: {
+              userId: txn.userId,
+              type: 'DEPOSIT',
+              currency: txn.fiatCurrency,
+              amount: txn.fiatAmount,
+              balanceBefore: balance ? new (require('decimal.js'))(balance.balance.toString()).sub(txn.fiatAmount).toString() : '0',
+              balanceAfter:  balance ? balance.balance.toString() : '0',
+              reference: txn.providerRef,
+              description: `Card deposit via ${provider.name}`,
+            },
+          });
+          await tx.notification.create({
+            data: {
+              userId: txn.userId,
+              title: 'Deposit confirmed',
+              message: `${txn.fiatAmount} ${txn.fiatCurrency} credited via card.`,
+              type: 'deposit',
+            },
+          });
+        }
+      });
+
+      res.json({ ok: true });
+    } catch (e) { next(e); }
   }
 }

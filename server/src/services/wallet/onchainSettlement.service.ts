@@ -150,33 +150,47 @@ export async function initiateWithdrawal(opts: {
   // TODO(compliance): Chainalysis / address screening before debit.
   // For MVP we skip and rely on the AML flag system.
 
-  const { onChainTx, walletIndex, fromAddress } = await prisma.$transaction(async (tx) => {
-    const w = await tx.userWallet.findUnique({ where: { userId: opts.userId } });
-    if (!w) throw new AppError('User wallet not provisioned', 400);
+  const { onChainTx, walletIndex } = await prisma.$transaction(
+    async (tx) => {
+      // Pessimistic row lock — prevents two concurrent withdrawal calls
+      // from racing past the balance check and double-spending. Without
+      // FOR UPDATE both reads can see the same balance and both pass.
+      const locked = await tx.$queryRaw<Array<{ id: string; walletIndex: number } & Record<string, any>>>`
+        SELECT * FROM "UserWallet"
+        WHERE "userId" = ${opts.userId}
+        FOR UPDATE
+      `;
+      const w = locked?.[0];
+      if (!w) throw new AppError('User wallet not provisioned', 400);
 
-    const current = new Decimal((w as any)[field].toString());
-    if (current.lt(amount)) throw new AppError(`Insufficient ${asset} balance`, 400);
+      const current = new Decimal((w as any)[field].toString());
+      if (current.lt(amount)) throw new AppError(`Insufficient ${asset} balance`, 400);
 
-    await tx.userWallet.update({
-      where: { id: w.id },
-      data: { [field]: { decrement: new Prisma.Decimal(amount.toFixed(18)) } },
-    });
+      await tx.userWallet.update({
+        where: { id: w.id },
+        data: { [field]: { decrement: new Prisma.Decimal(amount.toFixed(18)) } },
+      });
 
-    const onChainTx = await tx.onChainTransaction.create({
-      data: {
-        userId: opts.userId,
-        type: 'WITHDRAWAL',
-        asset,
-        network,
-        amount: new Prisma.Decimal(amount.toFixed(18)),
-        fromAddress: (w as any)[fromField] as string,
-        toAddress: opts.toAddress,
-        status: 'PENDING',
-      },
-    });
+      const onChainTx = await tx.onChainTransaction.create({
+        data: {
+          userId: opts.userId,
+          type: 'WITHDRAWAL',
+          asset,
+          network,
+          amount: new Prisma.Decimal(amount.toFixed(18)),
+          fromAddress: (w as any)[fromField] as string,
+          toAddress: opts.toAddress,
+          status: 'PENDING',
+        },
+      });
 
-    return { onChainTx, walletIndex: w.walletIndex, fromAddress: (w as any)[fromField] as string };
-  });
+      return {
+        onChainTx,
+        walletIndex: w.walletIndex as number,
+      };
+    },
+    { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }
+  );
 
   // Derive signer on demand (never persisted).
   let txHash = '';

@@ -10,7 +10,7 @@ import type { Currency, CurrencyMeta } from '@/types';
  *  3. On Android emulator, `10.0.2.2` reaches the host machine.
  *  4. Web + iOS Simulator can use `localhost` directly.
  */
-const API_PORT = 5000;
+const API_PORT = 5001;
 function resolveApiBase(): string {
   const fromEnv = process.env.EXPO_PUBLIC_API_BASE;
   if (fromEnv) return fromEnv;
@@ -78,6 +78,9 @@ export const CURRENCY_META: Record<Currency, CurrencyMeta> = {
   AED:   { code: 'AED',   kind: 'fiat',   name: 'UAE Dirham',        symbol: 'د.إ',decimals: 2, flagOrIcon: '🇦🇪' },
   SAR:   { code: 'SAR',   kind: 'fiat',   name: 'Saudi Riyal',       symbol: '﷼',  decimals: 2, flagOrIcon: '🇸🇦' },
   EGP:   { code: 'EGP',   kind: 'fiat',   name: 'Egyptian Pound',    symbol: '£',  decimals: 2, flagOrIcon: '🇪🇬' },
+  // Libyan Dinar — local convention is 3 decimals (millimes). Symbol
+  // is "ل.د" (lām-dāl); printed as "LD" in Latin contexts.
+  LYD:   { code: 'LYD',   kind: 'fiat',   name: 'Libyan Dinar',      symbol: 'ل.د', decimals: 3, flagOrIcon: '🇱🇾' },
 };
 
 export function normalizeCurrencyCode(currency: string): Currency | null {

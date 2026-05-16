@@ -27,19 +27,17 @@ import { useMarkets, ID_TO_SYM, type CoinGeckoMarket } from '@/hooks/useMarkets'
 import { useLivePrice } from '@/hooks/useLivePrice';
 import { useOHLC } from '@/hooks/useOHLC';
 import type { Currency, Wallet } from '@/types';
+import { CURRENCY_META } from '@/constants';
+import { formatMoney } from '@/utils/format';
+import { CurrencyBadge } from '@/components/ui/CurrencyBadge';
 
 type Range = '1H' | '24H' | '7D' | '30D';
 
-const FIAT_CURRENCIES = new Set(['USD', 'EUR', 'GBP', 'AED', 'SAR', 'EGP']);
-
-const FIAT_NAME: Record<string, string> = {
-  USD: 'US Dollar', EUR: 'Euro', GBP: 'British Pound',
-  AED: 'UAE Dirham', SAR: 'Saudi Riyal', EGP: 'Egyptian Pound',
-};
-
-const FIAT_SYMBOL: Record<string, string> = {
-  USD: '$', EUR: '€', GBP: '£', AED: 'د.إ', SAR: '﷼', EGP: '£',
-};
+/** Set of fiat ISO codes the app supports. Derived from CURRENCY_META so
+ *  adding LYD/SAR/etc. lights up automatically across this screen. */
+const FIAT_CURRENCIES = new Set(
+  Object.values(CURRENCY_META).filter((m) => m.kind === 'fiat').map((m) => m.code),
+);
 
 /** Reverse of `ID_TO_SYM` so we can look up a CoinGecko id by ticker. */
 const SYM_TO_ID: Record<string, string> = Object.fromEntries(
@@ -104,7 +102,7 @@ export default function AssetDetail() {
   const isFiat = FIAT_CURRENCIES.has(sym);
   if (isFiat) {
     return (
-      <ScreenShell title={FIAT_NAME[sym] ?? sym} subtitle={`${sym} Currency`}>
+      <ScreenShell title={CURRENCY_META[sym]?.name ?? sym} subtitle={`${sym} Currency`}>
         <FiatAssetView sym={sym} wallet={wallet} p={p} h={h} router={router} />
       </ScreenShell>
     );
@@ -508,37 +506,50 @@ function FiatAssetView({ sym, wallet, p, h, router }: {
   return (
     <View style={{ paddingHorizontal: 20, paddingBottom: 40 }}>
       {/* Balance card */}
-      <View style={{
-        borderRadius: 20, padding: 20, marginBottom: 20,
-        backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border,
-      }}>
-        <Text style={{
-          color: p.fgMuted, fontSize: 11, fontWeight: '700',
-          letterSpacing: 1.0, textTransform: 'uppercase',
-        }}>
-          Available Balance
-        </Text>
-        <Text style={{
-          color: p.fg, fontSize: 38, fontWeight: '800',
-          letterSpacing: -1.4, marginTop: 6, fontVariant: ['tabular-nums'],
-        }}>
-          {FIAT_SYMBOL[sym] ?? ''}{balance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+      <View
+        style={{
+          borderRadius: 20, padding: 20, marginBottom: 20,
+          backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border,
+        }}
+      >
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Text
+            style={{
+              color: p.fgMuted, fontSize: 11, fontWeight: '700',
+              letterSpacing: 1.0, textTransform: 'uppercase',
+            }}
+          >
+            Available Balance
+          </Text>
+          <CurrencyBadge code={sym} size="sm" variant="chip" />
+        </View>
+        <Text
+          style={{
+            color: p.fg, fontSize: 38, fontWeight: '800',
+            letterSpacing: -1.4, marginTop: 8, fontVariant: ['tabular-nums'],
+          }}
+        >
+          {formatMoney(balance, sym as Currency, { showSymbol: true })}
         </Text>
         {sym !== 'USD' && fxRate > 0 && (
           <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '500', marginTop: 6 }}>
-            ≈ ${usdValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD
-            {' · '}1 {sym} = ${fxRate.toFixed(4)}
+            ≈ {formatMoney(usdValue, 'USD', { showSymbol: true })}
+            {' · '}1 {sym} = {formatMoney(fxRate, 'USD', { showSymbol: true, maxDecimals: 4 })}
           </Text>
         )}
       </View>
 
-      {/* Action buttons */}
+      {/* Action buttons — use palette-driven press states so dark and
+          light modes both render correctly. The previous design used a
+          hardcoded '#000' pressed background which was invisible on the
+          new charcoal theme. */}
       <View style={{ flexDirection: 'row', gap: 12, marginBottom: 28 }}>
         <Pressable
           onPress={() => { h.medium(); router.push(`/topup?currency=${sym}` as any); }}
           style={({ pressed }) => ({
             flex: 1, height: 52, borderRadius: 26,
-            backgroundColor: pressed ? '#000' : p.ctaBg,
+            backgroundColor: p.ctaBg,
+            opacity: pressed ? 0.85 : 1,
             alignItems: 'center', justifyContent: 'center',
             flexDirection: 'row', gap: 6,
           })}

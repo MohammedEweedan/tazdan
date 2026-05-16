@@ -101,17 +101,32 @@ export class AdminController {
   }
 
   // ── Exchange Rates ─────────────────────────────────────────────
+  //
+  // Conventions used by the platform:
+  //   buyPrice  = how much QUOTE the user pays for 1 unit of BASE when BUYING base
+  //   sellPrice = how much QUOTE the user RECEIVES for 1 unit of BASE when SELLING base
+  // So buyPrice > sellPrice — the gap is the platform spread.
   static async updateRates(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const { base, quote } = req.params;
       const data = rateSchema.parse(req.body);
-      if (data.sellPrice >= data.buyPrice) throw new AppError('Sell price must be lower than buy price', 400);
+      if (data.buyPrice <= data.sellPrice) {
+        throw new AppError('Buy price must be greater than sell price (spread is positive)', 400);
+      }
+      if (data.buyPrice <= 0 || data.sellPrice <= 0) {
+        throw new AppError('Prices must be positive', 400);
+      }
 
+      const baseU  = base.toUpperCase()  as any;
+      const quoteU = quote.toUpperCase() as any;
       const rate = await prisma.exchangeRate.upsert({
-        where: { baseCurrency_quoteCurrency: { baseCurrency: base.toUpperCase() as any, quoteCurrency: quote.toUpperCase() as any } },
-        update: { buyPrice: data.buyPrice, sellPrice: data.sellPrice, setBy: req.user!.id },
-        create: { baseCurrency: base.toUpperCase() as any, quoteCurrency: quote.toUpperCase() as any, buyPrice: data.buyPrice, sellPrice: data.sellPrice, setBy: req.user!.id },
+        where:  { baseCurrency_quoteCurrency: { baseCurrency: baseU, quoteCurrency: quoteU } },
+        update: { buyPrice: data.buyPrice, sellPrice: data.sellPrice, setBy: req.user!.id, isActive: true },
+        create: { baseCurrency: baseU, quoteCurrency: quoteU, buyPrice: data.buyPrice, sellPrice: data.sellPrice, setBy: req.user!.id, isActive: true },
       });
+
+      const { invalidateRate } = await import('../services/exchange/fxRateProvider.service');
+      invalidateRate(rate.baseCurrency as string, rate.quoteCurrency as string);
 
       const io = req.app.get('io');
       if (io) io.to('prices').emit('price:update', { baseCurrency: rate.baseCurrency, quoteCurrency: rate.quoteCurrency, buyPrice: rate.buyPrice, sellPrice: rate.sellPrice });
@@ -120,6 +135,45 @@ export class AdminController {
         data: { userId: req.user!.id, action: 'UPDATE_RATE', entity: 'ExchangeRate', entityId: rate.id, newValues: { buyPrice: data.buyPrice, sellPrice: data.sellPrice } },
       });
       res.json({ rate });
+    } catch (error) { next(error); }
+  }
+
+  /** Clear the admin override and fall back to the live FX provider. */
+  static async clearRateOverride(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const { base, quote } = req.params;
+      const baseU  = base.toUpperCase()  as any;
+      const quoteU = quote.toUpperCase() as any;
+      const rate = await prisma.exchangeRate.update({
+        where: { baseCurrency_quoteCurrency: { baseCurrency: baseU, quoteCurrency: quoteU } },
+        data:  { isActive: false, setBy: null },
+      }).catch(() => null);
+
+      if (!rate) throw new AppError('Pair not found', 404);
+
+      const { invalidateRate } = await import('../services/exchange/fxRateProvider.service');
+      invalidateRate(rate.baseCurrency as string, rate.quoteCurrency as string);
+
+      await prisma.auditLog.create({
+        data: { userId: req.user!.id, action: 'CLEAR_RATE_OVERRIDE', entity: 'ExchangeRate', entityId: rate.id },
+      });
+      res.json({ rate });
+    } catch (error) { next(error); }
+  }
+
+  /** Force a refresh from the FX provider, returning the new rate. */
+  static async refreshRateFromApi(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const { base, quote } = req.params;
+      const baseU  = base.toUpperCase();
+      const quoteU = quote.toUpperCase();
+      const { getRate, invalidateRate } = await import('../services/exchange/fxRateProvider.service');
+      invalidateRate(baseU, quoteU);
+      const fresh = await getRate(baseU, quoteU);
+      await prisma.auditLog.create({
+        data: { userId: req.user!.id, action: 'REFRESH_RATE_FROM_API', entity: 'ExchangeRate', entityId: `${baseU}/${quoteU}`, newValues: { source: fresh.source } },
+      });
+      res.json({ rate: fresh });
     } catch (error) { next(error); }
   }
 

@@ -42,9 +42,16 @@ async function withFallback<T>(req: () => Promise<T>, fallback: T): Promise<T> {
 }
 
 // ───────── Auth (REAL — never mocked) ─────────
+// Login can return one of two shapes:
+//   1. { requires2FA: true }       — second call must include twoFactorCode
+//   2. { user, accessToken, refreshToken }
+export type LoginResponse =
+  | { requires2FA: true }
+  | { user: User; accessToken: string; refreshToken: string };
+
 export const authService = {
-  async login(email: string, password: string): Promise<{ user: User; accessToken: string; refreshToken: string }> {
-    const { data } = await api.post('/auth/login', { email, password });
+  async login(email: string, password: string, twoFactorCode?: string): Promise<LoginResponse> {
+    const { data } = await api.post('/auth/login', { email, password, twoFactorCode });
     return data;
   },
   async register(payload: {
@@ -83,6 +90,80 @@ export const authService = {
   },
   async refresh(refreshToken: string): Promise<{ accessToken: string; refreshToken: string }> {
     const { data } = await api.post('/auth/refresh', { refreshToken });
+    return data;
+  },
+};
+
+// ───────── Deposits / on-ramp ─────────
+export interface DepositMethod {
+  id: string;
+  name: string;
+  description: string;
+  currencies: string[];
+  instant: boolean;
+  processingTime: string;
+  provider?: string;
+  enabled?: boolean;
+}
+
+export interface GatewayQuote {
+  providerRef: string;
+  exchangeRate: number;
+  cryptoAmount: number;
+  feeAmount: number;
+  feeCurrency: string;
+  expiresAt: string;
+}
+
+export const depositService = {
+  async methods(country?: string): Promise<DepositMethod[]> {
+    const { data } = await api.get('/deposits/info/payment-methods', { params: { country } });
+    return data.paymentMethods ?? [];
+  },
+  async gatewayQuote(input: {
+    fiatCurrency: string;
+    fiatAmount: number;
+    cryptoCurrency?: string;
+    paymentMethod?: string;
+  }): Promise<{ quote: GatewayQuote; providerName: string }> {
+    const { data } = await api.post('/deposits/gateway/quote', {
+      cryptoCurrency: 'USDT',
+      paymentMethod: 'CARD',
+      ...input,
+    });
+    return data;
+  },
+  async gatewayConfirm(input: {
+    providerRef: string;
+    fiatCurrency: string;
+    fiatAmount: number;
+    cryptoCurrency: string;
+    idempotencyKey?: string;
+  }): Promise<{ transactionId: string; provider: string; status: string; redirectUrl?: string }> {
+    const { data } = await api.post('/deposits/gateway/confirm', input);
+    return data;
+  },
+  async createBankDeposit(input: {
+    currency: string;
+    amount: number;
+    bankName?: string;
+    accountNumber?: string;
+    senderName?: string;
+    notes?: string;
+  }): Promise<{ deposit: any }> {
+    const { data } = await api.post('/deposits', { ...input, paymentMethod: 'BANK_TRANSFER' });
+    return data;
+  },
+  async list(page = 1, limit = 20): Promise<{ deposits: any[]; total: number }> {
+    const { data } = await api.get('/deposits', { params: { page, limit } });
+    return data;
+  },
+};
+
+// ───────── Exchange / FX ─────────
+export const exchangeService = {
+  async fxRate(base: string, quote: string): Promise<{ buyPrice: string; sellPrice: string; source: string; fetchedAt: string }> {
+    const { data } = await api.get(`/exchange/fx/${base}/${quote}`);
     return data;
   },
 };

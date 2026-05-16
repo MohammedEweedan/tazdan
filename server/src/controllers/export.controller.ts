@@ -52,7 +52,7 @@ export class ExportController {
   static async exportJSON(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const userId = req.user!.id;
-      const { from, to, type } = req.query;
+      const { from, to, type, currency } = req.query;
 
       const where: any = { userId };
       if (from || to) {
@@ -61,6 +61,7 @@ export class ExportController {
         if (to) where.createdAt.lte = new Date(to as string);
       }
       if (type) where.type = type;
+      if (currency) where.currency = String(currency).toUpperCase();
 
       const user = await prisma.user.findUnique({
         where: { id: userId },

@@ -6,8 +6,22 @@ import { prisma } from '../utils/prisma';
 import { AppError } from './errorHandler';
 
 // Token lifetimes — kept here so they're discoverable from one place.
-const ACCESS_TOKEN_TTL  = '24h';
+// Access tokens are short-lived; clients refresh silently via the refresh
+// token. 15min limits damage from a stolen access token.
+const ACCESS_TOKEN_TTL  = '15m';
 const REFRESH_TOKEN_TTL_DAYS = 7;
+
+function jwtSecret(): string {
+  const s = process.env.JWT_SECRET;
+  if (!s) throw new Error('JWT_SECRET is not set');
+  return s;
+}
+
+function jwtRefreshSecret(): string {
+  const s = process.env.JWT_REFRESH_SECRET;
+  if (!s) throw new Error('JWT_REFRESH_SECRET is not set');
+  return s;
+}
 
 export function authenticate(req: AuthRequest, res: Response, next: NextFunction) {
   const authHeader = req.headers.authorization;
@@ -18,7 +32,7 @@ export function authenticate(req: AuthRequest, res: Response, next: NextFunction
   }
 
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secret') as {
+    const decoded = jwt.verify(token, jwtSecret(), { algorithms: ['HS256'] }) as {
       id: string;
       email: string;
       role: string;
@@ -63,14 +77,14 @@ export function requireKYC(req: AuthRequest, _res: Response, next: NextFunction)
 export function generateTokens(user: { id: string; email: string; role: string }) {
   const accessToken = jwt.sign(
     { id: user.id, email: user.email, role: user.role },
-    process.env.JWT_SECRET || 'secret',
-    { expiresIn: ACCESS_TOKEN_TTL }
+    jwtSecret(),
+    { expiresIn: ACCESS_TOKEN_TTL, algorithm: 'HS256' }
   );
 
   const refreshToken = jwt.sign(
     { id: user.id, jti: crypto.randomUUID() },
-    process.env.JWT_REFRESH_SECRET || 'refresh-secret',
-    { expiresIn: `${REFRESH_TOKEN_TTL_DAYS}d` }
+    jwtRefreshSecret(),
+    { expiresIn: `${REFRESH_TOKEN_TTL_DAYS}d`, algorithm: 'HS256' }
   );
 
   return { accessToken, refreshToken };
@@ -126,7 +140,8 @@ export async function verifyAndConsumeRefreshToken(rawToken: string) {
   try {
     payload = jwt.verify(
       rawToken,
-      process.env.JWT_REFRESH_SECRET || 'refresh-secret',
+      jwtRefreshSecret(),
+      { algorithms: ['HS256'] },
     ) as { id: string; jti?: string };
   } catch {
     throw new AppError('Invalid or expired refresh token', 401);

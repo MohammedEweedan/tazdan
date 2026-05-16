@@ -5,6 +5,8 @@
  */
 import { Response, NextFunction } from 'express';
 import { z } from 'zod';
+import crypto from 'crypto';
+import speakeasy from 'speakeasy';
 import type { Server as IOServer } from 'socket.io';
 import { prisma } from '../utils/prisma';
 import { AuthRequest } from '../types';
@@ -14,6 +16,7 @@ import {
   processDeposit,
   estimateFee,
 } from '../services/wallet/onchainSettlement.service';
+import { detectChain, validateAddress } from '../utils/addressValidation';
 
 const initiateSchema = z.object({
   asset: z.enum(['ETH', 'BTC', 'SOL', 'USDT']),
@@ -46,24 +49,76 @@ export class CryptoWithdrawalController {
     try {
       const body = initiateSchema.parse(req.body);
 
-      // Enforce 2FA when the user has it enabled (spec: non-negotiable
-      // for withdrawals). If 2FA isn't set up we still allow the action
-      // but flag it — production SHOULD require 2FA unconditionally.
-      const user = await prisma.user.findUnique({ where: { id: req.user!.id } });
-      if (user?.twoFactorEnabled) {
-        if (!body.twoFactorCode) throw new AppError('2FA code required', 401);
-        // eslint-disable-next-line @typescript-eslint/no-var-requires
-        const speakeasy = require('speakeasy');
-        const ok = speakeasy.totp.verify({
-          secret: user.twoFactorSecret!,
-          encoding: 'base32',
-          token: body.twoFactorCode,
-          window: 2,
-        });
-        if (!ok) throw new AppError('Invalid 2FA code', 401);
+      // Validate destination address against chain-specific rules BEFORE
+      // we touch the ledger. Typos = irrecoverable loss.
+      const chain = detectChain(body.asset, body.network);
+      validateAddress(chain, body.toAddress);
+
+      // 2FA on withdrawals is REQUIRED. If a user hasn't enabled 2FA,
+      // they must do so before they can withdraw. Compromised passwords
+      // are the most common loss vector — this is non-negotiable.
+      const user = await prisma.user.findUnique({
+        where: { id: req.user!.id },
+        select: { twoFactorEnabled: true, twoFactorSecret: true, emailVerified: true },
+      });
+      if (!user) throw new AppError('User not found', 404);
+      if (!user.emailVerified) {
+        throw new AppError('Verify your email before withdrawing', 403);
+      }
+      if (!user.twoFactorEnabled || !user.twoFactorSecret) {
+        throw new AppError('Enable 2FA before withdrawing', 403);
+      }
+      if (!body.twoFactorCode) throw new AppError('2FA code required', 401);
+
+      const ok = speakeasy.totp.verify({
+        secret: user.twoFactorSecret,
+        encoding: 'base32',
+        token: body.twoFactorCode,
+        window: 1,
+      });
+      if (!ok) throw new AppError('Invalid 2FA code', 401);
+
+      // First-time withdrawal-address whitelist (24h delay). Stops a
+      // compromised account from immediately draining funds to an
+      // attacker-controlled address. Existing whitelisted addresses
+      // pass through; new ones queue a confirmation email and reject
+      // until confirmed AND >24h old.
+      const whitelistKey = `${chain}:${body.toAddress.toLowerCase()}`;
+      const wlEntry = await prisma.withdrawalAddressWhitelist
+        .findUnique({ where: { userId_key: { userId: req.user!.id, key: whitelistKey } } })
+        .catch(() => null as any);
+      const now = Date.now();
+      if (!wlEntry) {
+        // Create pending entry; reject the withdrawal.
+        await (prisma as any).withdrawalAddressWhitelist
+          .create({
+            data: {
+              userId: req.user!.id,
+              key: whitelistKey,
+              asset: body.asset,
+              network: body.network,
+              toAddress: body.toAddress,
+              confirmToken: crypto.randomBytes(24).toString('hex'),
+              confirmedAt: null,
+              activeAt: new Date(now + 24 * 60 * 60 * 1000),
+            },
+          })
+          .catch(() => null);
+        throw new AppError(
+          'New withdrawal address — confirm via email and try again in 24h.',
+          403
+        );
+      }
+      if (!wlEntry.confirmedAt) {
+        throw new AppError('Withdrawal address not yet confirmed via email.', 403);
+      }
+      if (wlEntry.activeAt && wlEntry.activeAt.getTime() > now) {
+        throw new AppError(
+          'Withdrawal address still in 24h cooldown. Try again later.',
+          403
+        );
       }
 
-      // TODO: whitelist first-time addresses (24hr email-confirm delay).
       const tx = await initiateWithdrawal({
         userId: req.user!.id,
         asset: body.asset,

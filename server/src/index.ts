@@ -1,11 +1,13 @@
 import dotenv from 'dotenv';
 dotenv.config();
 
+import { validateEnv, isProduction } from './utils/env';
+validateEnv();
+
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
-import rateLimit from 'express-rate-limit';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import jwt from 'jsonwebtoken';
@@ -40,28 +42,40 @@ import { seedAdmin } from './utils/seed';
 import { ensureMasterSeed } from './services/wallet/masterSeed.service';
 import { cryptoWalletRouter } from './routes/cryptoWallet';
 import { cryptoWithdrawalRouter } from './routes/cryptoWithdrawal';
+import { globalLimiter, authLimiter, registerLimiter, withdrawalLimiter, webhookLimiter } from './middleware/rateLimiters';
+import { protectedUploadsRouter } from './middleware/protectedUploads';
 
 const app = express();
 const httpServer = createServer(app);
 
 /**
- * CORS — accepts a comma-separated list in CLIENT_URL, plus any
- * Expo dev origin (localhost on any port + LAN IPs). Native (no
- * `Origin` header) is always allowed.
+ * CORS — production accepts only the configured origins. Development
+ * additionally accepts localhost/LAN for Expo. Native apps (no Origin
+ * header) are always allowed.
+ *
+ * CLIENT_URL may be a comma-separated list (e.g.
+ * "https://promrkts.com,https://app.promrkts.com").
  */
-const ALLOWED_ORIGINS = [process.env.CLIENT_URL ?? 'https://promrkts.com',
-  'https://www.promrkts.com',
-  'https://api.promrkts.com',
+const PROD_ORIGINS = (process.env.CLIENT_URL ?? 'https://promrkts.com')
+  .split(',')
+  .map((o) => o.trim())
+  .filter(Boolean);
+
+const DEV_EXTRA_ORIGINS = [
   'http://localhost:3000',
   'http://localhost:8081',
-  'http://localhost:5001'];
+  'http://localhost:5001',
+];
+
+const DEV_LAN_REGEX =
+  /^https?:\/\/(localhost|127\.0\.0\.1|10\.0\.2\.2|192\.168\.[0-9]+\.[0-9]+|10\.[0-9]+\.[0-9]+\.[0-9]+):\d+$/;
 
 const corsOrigin: cors.CorsOptions['origin'] = (origin, cb) => {
   if (!origin) return cb(null, true);                              // native apps / curl
-  if (ALLOWED_ORIGINS.includes(origin)) return cb(null, true);
-  // Expo dev: any localhost or 127.0.0.1 or LAN IP on any port
-  if (/^https?:\/\/(localhost|127\.0\.0\.1|10\.0\.2\.2|192\.168\.[0-9]+\.[0-9]+|10\.[0-9]+\.[0-9]+\.[0-9]+):\d+$/.test(origin)) {
-    return cb(null, true);
+  if (PROD_ORIGINS.includes(origin)) return cb(null, true);
+  if (!isProduction()) {
+    if (DEV_EXTRA_ORIGINS.includes(origin)) return cb(null, true);
+    if (DEV_LAN_REGEX.test(origin)) return cb(null, true);
   }
   return cb(new Error(`CORS: origin ${origin} not allowed`));
 };
@@ -70,23 +84,44 @@ const io = new Server(httpServer, {
   cors: { origin: corsOrigin, methods: ['GET', 'POST'], credentials: true },
 });
 
+// Trust the first proxy hop (load balancer / ingress) so req.ip is the
+// real client IP — required for rate limiting to work behind a proxy.
+app.set('trust proxy', 1);
+
 // Global middleware
 app.use(helmet());
 app.use(cors({ origin: corsOrigin, credentials: true }));
 app.use(cookieParser());
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true }));
 
-// Rate limiting
-const limiter = rateLimit({
-  windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS || '90000000'),
-  max: parseInt(process.env.RATE_LIMIT_MAX || '10000'),
-  message: { error: 'Too many requests, please try again later.' },
+// IMPORTANT — webhook endpoints that verify HMAC over the raw request
+// body must be mounted with express.raw() BEFORE the global JSON
+// parser, otherwise the body becomes a re-serialised object and the
+// signature check fails. We handle the actual route registration
+// inside the deposit router using its own raw() middleware; here we
+// just exempt it from JSON parsing.
+app.use((req, res, next) => {
+  if (req.path === '/api/deposits/webhook/stripe') return next();
+  return express.json({ limit: '1mb' })(req, res, next);
 });
-app.use('/api/', limiter);
+app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 
-// Static files for uploads
-app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+// Global rate limit on /api/.
+app.use('/api/', globalLimiter);
+
+// Tighter limits on credential / money endpoints.
+app.use('/api/auth/login', authLimiter);
+app.use('/api/auth/forgot-password', authLimiter);
+app.use('/api/auth/reset-password', authLimiter);
+app.use('/api/auth/verify-email-code', authLimiter);
+app.use('/api/auth/refresh', authLimiter);
+app.use('/api/auth/register', registerLimiter);
+app.use('/api/withdrawals', withdrawalLimiter);
+app.use('/api/withdrawal', withdrawalLimiter);
+app.use('/api/withdrawal/webhook', webhookLimiter);
+
+// Auth-gated downloads for /uploads (KYC docs, avatars, evidence).
+// IMPORTANT: never serve this directory as raw static.
+app.use('/uploads', protectedUploadsRouter);
 
 // Make io accessible to routes
 app.set('io', io);
@@ -135,14 +170,15 @@ app.use(errorHandler);
  * client having to subscribe explicitly.
  */
 io.use((socket, next) => {
-  const raw =
-    (socket.handshake.auth as any)?.token ??
-    (socket.handshake.query?.token as string | undefined);
+  // Only accept tokens via the handshake `auth` object — never via the
+  // query string. URL-borne tokens leak through proxy logs, browser
+  // history, and Referer headers.
+  const raw = (socket.handshake.auth as any)?.token as string | undefined;
   if (!raw) return next();   // allow unauthenticated for public events
   try {
-    const decoded = jwt.verify(raw, process.env.JWT_SECRET || 'secret') as {
-      id: string; email: string; role: string;
-    };
+    const decoded = jwt.verify(raw, process.env.JWT_SECRET as string, {
+      algorithms: ['HS256'],
+    }) as { id: string; email: string; role: string };
     (socket.data as any).user = decoded;
     next();
   } catch {

@@ -11,6 +11,8 @@ import {
 } from '@/services';
 
 export { useHaptics } from './useHaptics';
+export { useStepUpAuth, StepUpDeniedError, STEP_UP_USD } from './useStepUpAuth';
+export { useFxRate, useLydRate, type FxRate } from './useFxRate';
 export {
   useConversations, useThread, useBlocks,
   useSendMessage, useEditMessage, useDeleteMessage,

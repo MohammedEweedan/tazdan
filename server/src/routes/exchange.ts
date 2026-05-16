@@ -31,6 +31,10 @@ const executeLimiter = rateLimit({
 exchangeRouter.get('/rates', ExchangeController.getRates);
 exchangeRouter.get('/rates/:base/:quote', ExchangeController.getRatePair);
 
+// Fiat FX rate for pairs not on Binance (USD/LYD etc.). Admin override
+// → external API → stale fallback inside the service layer.
+exchangeRouter.get('/fx/:base/:quote', ExchangeController.getFxRate);
+
 // Custody trading (fiat ↔ crypto via Binance liquidity).
 exchangeRouter.post('/quote',       authenticate, quoteLimiter,   ExchangeController.createQuote);
 exchangeRouter.post('/execute',     authenticate, executeLimiter, ExchangeController.executeOrder);

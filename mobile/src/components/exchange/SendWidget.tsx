@@ -17,8 +17,10 @@ import * as Haptics from 'expo-haptics';
 import { useQuery } from '@tanstack/react-query';
 import { useThemedPalette } from '@/store/themeStore';
 import { useT } from '@/store/i18nStore';
-import { useHaptics, useWallets, extractErrorMessage } from '@/hooks';
+import { useHaptics, useWallets, extractErrorMessage, useStepUpAuth, StepUpDeniedError } from '@/hooks';
+import { useForexRates } from '@/hooks/useForexRates';
 import { profileService, messageService } from '@/services';
+import { formatMoney } from '@/utils/format';
 import type { Currency } from '@/types';
 
 const FIATS:  Currency[] = ['USD', 'EUR', 'GBP', 'AED', 'SAR', 'EGP'];
@@ -45,6 +47,8 @@ export function SendWidget() {
   const t       = useT();
   const haptics = useHaptics();
   const { data: wallets } = useWallets();
+  const { data: fxRates } = useForexRates();
+  const stepUp = useStepUpAuth();
 
   const [mode,      setMode]      = useState<Mode>('FIAT');
   const [currency,  setCurrency]  = useState<Currency>('USD');
@@ -81,12 +85,27 @@ export function SendWidget() {
     if (!valid || !picked) return;
     setCta('loading'); setCtaErr(null);
     try {
+      // Step-up biometric for transfers worth ≥ $1000 USD-equivalent.
+      const usdRate = fxRates?.[currency] ?? 1;
+      const usdValue = sendAmount * usdRate;
+      await stepUp.guard({
+        usdValue,
+        reason: `Send ${formatMoney(sendAmount, currency, { showSymbol: true })} to @${picked.username}`,
+      });
+
       await messageService.transfer({ receiverId: picked.id, currency, amount: sendAmount, note: note || undefined });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setCta('success');
       setAmount(''); setNote(''); setRecipient(''); setPicked(null);
       setTimeout(() => setCta('idle'), 2000);
     } catch (e: any) {
+      if (e instanceof StepUpDeniedError) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+        setCtaErr(e.message);
+        setCta('error');
+        setTimeout(() => setCta('idle'), 2000);
+        return;
+      }
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       setCtaErr(extractErrorMessage(e, t('send.failed')));
       setCta('error');
@@ -233,7 +252,9 @@ export function SendWidget() {
         <Text style={{ color: p.fgMuted, fontSize: 14, fontWeight: '700' }}>{currency}</Text>
       </View>
       <Text style={{ color: overspend ? p.redFg : p.fgMuted, fontSize: 13, fontWeight: '600', marginBottom: 20 }}>
-        {overspend ? t('send.exceedsBalance') : `${t('common.available')}: ${balance.toLocaleString(undefined, { maximumFractionDigits: 8 })} ${currency}`}
+        {overspend
+          ? t('send.exceedsBalance')
+          : `${t('common.available')}: ${formatMoney(balance, currency, { showSymbol: true })}`}
       </Text>
 
       {/* ── Note ── */}
@@ -257,7 +278,7 @@ export function SendWidget() {
         <View style={{ backgroundColor: p.bgElev, borderRadius: 16, borderWidth: 1, borderColor: p.border, padding: 14, marginBottom: 20, gap: 8 }}>
           {[
             { label: t('send.summaryTo'),      value: `@${picked!.username}` },
-            { label: t('send.summaryAmount'),  value: `${sendAmount.toLocaleString(undefined, { maximumFractionDigits: 8 })} ${currency}` },
+            { label: t('send.summaryAmount'),  value: formatMoney(sendAmount, currency, { showSymbol: true }) },
             { label: t('send.summaryNetwork'), value: mode === 'CRYPTO' ? t('send.onChain') : t('send.internalInstant') },
             { label: t('send.summaryFee'),     value: t('common.free'), color: p.greenFg },
           ].map(({ label, value, color }) => (
@@ -304,7 +325,10 @@ export function SendWidget() {
             <Ionicons name="paper-plane" size={17} color={valid ? p.ctaFg : p.fgMuted} />
             <Text style={{ color: valid ? p.ctaFg : p.fgMuted, fontSize: 16, fontWeight: '800' }}>
               {valid
-                ? t('send.ctaAmount', { amount: sendAmount.toLocaleString(undefined, { maximumFractionDigits: 8 }), currency })
+                ? t('send.ctaAmount', {
+                    amount: formatMoney(sendAmount, currency),
+                    currency,
+                  })
                 : t('send.cta')}
             </Text>
           </>
