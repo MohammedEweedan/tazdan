@@ -4,7 +4,7 @@
  * no page navigation required.
  */
 
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator, Alert, Modal,
   Pressable, ScrollView, Text, TextInput, View,
@@ -15,18 +15,19 @@ import { router, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
 import {
-  useP2POffers, useHaptics, useCreateP2PListing, useInitiateP2PTrade,
+  useP2POffers, useHaptics, useCreateP2PListing, useInitiateP2PTrade, useWallets, useMarkets,
 } from '@/hooks';
 import { CURRENCY_META } from '@/constants';
 import { useTheme, useThemedPalette, type Palette } from '@/store/themeStore';
 import { useT } from '@/store/i18nStore';
-import type { Currency, P2POffer } from '@/types';
+import type { Currency, MarketTicker, P2POffer } from '@/types';
 
 type Side = 'BUY' | 'SELL';
 const FIATS: Currency[]   = ['USD', 'AED', 'SAR', 'EUR', 'EGP'];
-const CRYPTOS             = ['USDT', 'BTC', 'ETH', 'SOL'] as const;
+// CRYPTOS is now dynamic — built from user holdings + market tickers in CreateListingSheet
 const FIAT_OPTIONS        = ['USD', 'EUR', 'GBP', 'AED', 'SAR', 'EGP', 'LYD'] as const;
 const METHODS             = ['Bank Transfer', 'Wise', 'Revolut', 'Cash', 'PayPal', 'Internal Wallet'] as const;
+const FIAT_SET            = new Set<string>(['USD','EUR','GBP','AED','SAR','EGP','LYD','CAD','AUD','CHF','JPY','CNY']);
 
 function Section({ title, palette: p, children }: { title: string; palette: Palette; children: React.ReactNode }) {
   return (
@@ -51,11 +52,14 @@ export default function P2P() {
 
   const [selectedOffer, setSelectedOffer] = useState<P2POffer | null>(null);
   const [showCreate, setShowCreate]       = useState(false);
+  const [cryptoSearch, setCryptoSearch]   = useState('');
 
   const filtered = useMemo(() => {
     const list = offers ?? [];
-    return fiat === 'ALL' ? list : list.filter((o) => o.quote === fiat);
-  }, [offers, fiat]);
+    const byFiat = fiat === 'ALL' ? list : list.filter((o) => o.quote === fiat);
+    const q = cryptoSearch.trim().toLowerCase();
+    return q ? byFiat.filter((o) => o.base.toLowerCase().includes(q)) : byFiat;
+  }, [offers, fiat, cryptoSearch]);
 
   return (
     <View style={{ flex: 1, backgroundColor: p.bg }}>
@@ -146,6 +150,32 @@ export default function P2P() {
             />
           ))}
         </ScrollView>
+
+        {/* Crypto search — BUY side only */}
+        {side === 'BUY' && (
+          <View style={{
+            marginHorizontal: 20, marginTop: 10,
+            flexDirection: 'row', alignItems: 'center', gap: 10,
+            height: 44, borderRadius: 12,
+            backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border,
+            paddingHorizontal: 12,
+          }}>
+            <Ionicons name="search-outline" size={16} color={p.fgFaint} />
+            <TextInput
+              value={cryptoSearch}
+              onChangeText={setCryptoSearch}
+              placeholder="Search by asset (BTC, ETH, SOL…)"
+              placeholderTextColor={p.fgFaint}
+              autoCapitalize="characters"
+              style={{ flex: 1, color: p.fg, fontSize: 14, fontWeight: '600' }}
+            />
+            {cryptoSearch.length > 0 && (
+              <Pressable onPress={() => setCryptoSearch('')} hitSlop={8}>
+                <Ionicons name="close-circle" size={16} color={p.fgFaint} />
+              </Pressable>
+            )}
+          </View>
+        )}
 
         {/* Offers list */}
         <ScrollView
@@ -587,9 +617,33 @@ function CreateListingSheet({ palette: p, t, onClose, onCreated }: {
   const h = useHaptics();
   const insets = useSafeAreaInsets();
   const create = useCreateP2PListing();
+  const { data: wallets } = useWallets();
+  const { data: tickers } = useMarkets();
+
+  // Held crypto wallets for the SELL dropdown (with balances)
+  const heldCryptos = useMemo(() => {
+    return (wallets ?? [])
+      .filter((w) => !FIAT_SET.has(w.currency) && Number(w.balance) > 0)
+      .sort((a, b) => Number(b.balance) - Number(a.balance));
+  }, [wallets]);
+
+  // All crypto the user holds PLUS any coin in the tickers feed (so they can list coins they plan to acquire).
+  // User holdings come first; remaining tickers sorted by volume.
+  const availableCryptos = useMemo((): string[] => {
+    const held: string[] = heldCryptos.map((w) => w.currency as string);
+    const fromTickers = (tickers ?? [])
+      .filter((tk: MarketTicker) => !FIAT_SET.has(tk.base) && !held.includes(tk.base))
+      .sort((a: MarketTicker, b: MarketTicker) => b.volume24h - a.volume24h)
+      .slice(0, 50)
+      .map((tk: MarketTicker) => tk.base);
+    const all = [...new Set([...held, ...fromTickers])];
+    return all.length > 0 ? all : ['USDT', 'BTC', 'ETH', 'SOL', 'BNB'];
+  }, [heldCryptos, tickers]);
 
   const [side, setSide]             = useState<'BUY' | 'SELL'>('SELL');
-  const [currency, setCurrency]     = useState<typeof CRYPTOS[number]>('USDT');
+  const [currency, setCurrency]     = useState<string>('USDT');
+  const [showAssetPicker, setShowAssetPicker] = useState(false);
+  const [assetSearch, setAssetSearch] = useState('');
   const [fiatCurrency, setFiat]     = useState<typeof FIAT_OPTIONS[number]>('USD');
   const [price, setPrice]           = useState('');
   const [amount, setAmount]         = useState('');
@@ -765,7 +819,294 @@ function CreateListingSheet({ palette: p, t, onClose, onCreated }: {
 
               {/* Asset */}
               <SheetSection title={t('p2p.asset').toUpperCase()} palette={p}>
-                <ChipRow palette={p} options={[...CRYPTOS]} value={currency} onPick={(c) => setCurrency(c as typeof CRYPTOS[number])} />
+                {side === 'SELL' ? (
+                  /* Dropdown — shows holdings with balance */
+                  <>
+                    <Pressable
+                      onPress={() => { h.selection(); setShowAssetPicker(true); }}
+                      style={{
+                        height: 56, borderRadius: 14, backgroundColor: p.bgElev,
+                        borderWidth: 1, borderColor: p.border,
+                        flexDirection: 'row', alignItems: 'center',
+                        paddingHorizontal: 16, gap: 10,
+                      }}
+                    >
+                      <View style={{
+                        width: 32, height: 32, borderRadius: 16,
+                        backgroundColor: p.pillBg, alignItems: 'center', justifyContent: 'center',
+                      }}>
+                        <Text style={{ fontSize: 13, fontWeight: '800', color: p.fg }}>
+                          {currency.slice(0, 2)}
+                        </Text>
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ color: p.fg, fontSize: 16, fontWeight: '700' }}>{currency}</Text>
+                        {(() => {
+                          const w = heldCryptos.find((x) => x.currency === currency);
+                          return w ? (
+                            <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '600', marginTop: 1 }}>
+                              Balance: {Number(w.balance).toLocaleString('en-US', { maximumFractionDigits: 8 })}
+                            </Text>
+                          ) : (
+                            <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '600', marginTop: 1 }}>
+                              Not in holdings
+                            </Text>
+                          );
+                        })()}
+                      </View>
+                      <Ionicons name="chevron-down" size={16} color={p.fgMuted} />
+                    </Pressable>
+
+                    {/* Asset picker modal */}
+                    <Modal visible={showAssetPicker} animationType="slide" transparent onRequestClose={() => setShowAssetPicker(false)}>
+                      <Pressable
+                        style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' }}
+                        onPress={() => setShowAssetPicker(false)}
+                      >
+                        <Pressable
+                          style={{ backgroundColor: p.bg, borderTopLeftRadius: 28, borderTopRightRadius: 28, maxHeight: '72%' }}
+                          onPress={(e) => e.stopPropagation()}
+                        >
+                          <View style={{ alignItems: 'center', paddingTop: 12, paddingBottom: 8 }}>
+                            <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: p.border }} />
+                          </View>
+                          <Text style={{ color: p.fg, fontSize: 17, fontWeight: '800', paddingHorizontal: 20, paddingBottom: 12 }}>
+                            Select Asset
+                          </Text>
+                          {/* Search */}
+                          <View style={{
+                            marginHorizontal: 20, marginBottom: 10,
+                            flexDirection: 'row', alignItems: 'center', gap: 8,
+                            height: 42, borderRadius: 11,
+                            backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border,
+                            paddingHorizontal: 12,
+                          }}>
+                            <Ionicons name="search-outline" size={15} color={p.fgFaint} />
+                            <TextInput
+                              value={assetSearch}
+                              onChangeText={setAssetSearch}
+                              placeholder="Search…"
+                              placeholderTextColor={p.fgFaint}
+                              autoCapitalize="characters"
+                              style={{ flex: 1, color: p.fg, fontSize: 14, fontWeight: '600' }}
+                            />
+                            {assetSearch.length > 0 && (
+                              <Pressable onPress={() => setAssetSearch('')} hitSlop={8}>
+                                <Ionicons name="close-circle" size={15} color={p.fgFaint} />
+                              </Pressable>
+                            )}
+                          </View>
+                          <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+                            {/* Holdings section */}
+                            {heldCryptos.filter((w) => !assetSearch || w.currency.toLowerCase().includes(assetSearch.toLowerCase())).length > 0 && (
+                              <>
+                                <Text style={{ color: p.fgFaint, fontSize: 10, fontWeight: '700', letterSpacing: 0.6, paddingHorizontal: 20, paddingTop: 4, paddingBottom: 6 }}>
+                                  MY HOLDINGS
+                                </Text>
+                                {heldCryptos
+                                  .filter((w) => !assetSearch || w.currency.toLowerCase().includes(assetSearch.toLowerCase()))
+                                  .map((w) => {
+                                    const selected = currency === w.currency;
+                                    return (
+                                      <Pressable
+                                        key={w.currency}
+                                        onPress={() => {
+                                          h.selection();
+                                          setCurrency(w.currency);
+                                          setAmount(Number(w.balance).toFixed(8).replace(/\.?0+$/, ''));
+                                          setAssetSearch('');
+                                          setShowAssetPicker(false);
+                                        }}
+                                        style={({ pressed }) => ({
+                                          flexDirection: 'row', alignItems: 'center', gap: 12,
+                                          paddingHorizontal: 20, paddingVertical: 13,
+                                          backgroundColor: selected ? p.bgElev : pressed ? p.bgElev : 'transparent',
+                                        })}
+                                      >
+                                        <View style={{
+                                          width: 38, height: 38, borderRadius: 19,
+                                          backgroundColor: p.pillBg, alignItems: 'center', justifyContent: 'center',
+                                        }}>
+                                          <Text style={{ fontSize: 13, fontWeight: '800', color: p.fg }}>
+                                            {w.currency.slice(0, 2)}
+                                          </Text>
+                                        </View>
+                                        <View style={{ flex: 1 }}>
+                                          <Text style={{ color: p.fg, fontSize: 15, fontWeight: '700' }}>{w.currency}</Text>
+                                          <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '600', marginTop: 1 }}>
+                                            {Number(w.balance).toLocaleString('en-US', { maximumFractionDigits: 8 })} available
+                                          </Text>
+                                        </View>
+                                        {selected && <Ionicons name="checkmark-circle" size={20} color={p.fg} />}
+                                      </Pressable>
+                                    );
+                                  })}
+                              </>
+                            )}
+                            {/* Other crypto from tickers */}
+                            {availableCryptos
+                              .filter((c) => !heldCryptos.find((w) => w.currency === c))
+                              .filter((c) => !assetSearch || c.toLowerCase().includes(assetSearch.toLowerCase()))
+                              .length > 0 && (
+                              <>
+                                <Text style={{ color: p.fgFaint, fontSize: 10, fontWeight: '700', letterSpacing: 0.6, paddingHorizontal: 20, paddingTop: 10, paddingBottom: 6 }}>
+                                  OTHER ASSETS
+                                </Text>
+                                {availableCryptos
+                                  .filter((c) => !heldCryptos.find((w) => w.currency === c))
+                                  .filter((c) => !assetSearch || c.toLowerCase().includes(assetSearch.toLowerCase()))
+                                  .map((c) => {
+                                    const selected = currency === c;
+                                    return (
+                                      <Pressable
+                                        key={c}
+                                        onPress={() => {
+                                          h.selection();
+                                          setCurrency(c);
+                                          setAssetSearch('');
+                                          setShowAssetPicker(false);
+                                        }}
+                                        style={({ pressed }) => ({
+                                          flexDirection: 'row', alignItems: 'center', gap: 12,
+                                          paddingHorizontal: 20, paddingVertical: 13,
+                                          backgroundColor: selected ? p.bgElev : pressed ? p.bgElev : 'transparent',
+                                        })}
+                                      >
+                                        <View style={{
+                                          width: 38, height: 38, borderRadius: 19,
+                                          backgroundColor: p.pillBg, alignItems: 'center', justifyContent: 'center',
+                                        }}>
+                                          <Text style={{ fontSize: 13, fontWeight: '800', color: p.fgMuted }}>
+                                            {c.slice(0, 2)}
+                                          </Text>
+                                        </View>
+                                        <Text style={{ color: p.fg, fontSize: 15, fontWeight: '700', flex: 1 }}>{c}</Text>
+                                        {selected && <Ionicons name="checkmark-circle" size={20} color={p.fg} />}
+                                      </Pressable>
+                                    );
+                                  })}
+                              </>
+                            )}
+                            <View style={{ height: 32 }} />
+                          </ScrollView>
+                        </Pressable>
+                      </Pressable>
+                    </Modal>
+                  </>
+                ) : (
+                  /* BUY side: same dropdown as SELL */
+                  <>
+                    <Pressable
+                      onPress={() => { h.selection(); setShowAssetPicker(true); }}
+                      style={{
+                        height: 56, borderRadius: 14, backgroundColor: p.bgElev,
+                        borderWidth: 1, borderColor: p.border,
+                        flexDirection: 'row', alignItems: 'center',
+                        paddingHorizontal: 16, gap: 10,
+                      }}
+                    >
+                      <View style={{
+                        width: 32, height: 32, borderRadius: 16,
+                        backgroundColor: p.pillBg, alignItems: 'center', justifyContent: 'center',
+                      }}>
+                        <Text style={{ fontSize: 13, fontWeight: '800', color: p.fg }}>
+                          {currency.slice(0, 2)}
+                        </Text>
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ color: p.fg, fontSize: 16, fontWeight: '700' }}>{currency}</Text>
+                        <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '600', marginTop: 1 }}>
+                          Tap to search any asset
+                        </Text>
+                      </View>
+                      <Ionicons name="chevron-down" size={16} color={p.fgMuted} />
+                    </Pressable>
+
+                    <Modal visible={showAssetPicker} animationType="slide" transparent onRequestClose={() => setShowAssetPicker(false)}>
+                      <Pressable
+                        style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' }}
+                        onPress={() => setShowAssetPicker(false)}
+                      >
+                        <Pressable
+                          style={{ backgroundColor: p.bg, borderTopLeftRadius: 28, borderTopRightRadius: 28, maxHeight: '72%' }}
+                          onPress={(e) => e.stopPropagation()}
+                        >
+                          <View style={{ alignItems: 'center', paddingTop: 12, paddingBottom: 8 }}>
+                            <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: p.border }} />
+                          </View>
+                          <Text style={{ color: p.fg, fontSize: 17, fontWeight: '800', paddingHorizontal: 20, paddingBottom: 12 }}>
+                            Select Asset to Buy
+                          </Text>
+                          <View style={{
+                            marginHorizontal: 20, marginBottom: 10,
+                            flexDirection: 'row', alignItems: 'center', gap: 8,
+                            height: 42, borderRadius: 11,
+                            backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border,
+                            paddingHorizontal: 12,
+                          }}>
+                            <Ionicons name="search-outline" size={15} color={p.fgFaint} />
+                            <TextInput
+                              value={assetSearch}
+                              onChangeText={setAssetSearch}
+                              placeholder="Search…"
+                              placeholderTextColor={p.fgFaint}
+                              autoCapitalize="characters"
+                              style={{ flex: 1, color: p.fg, fontSize: 14, fontWeight: '600' }}
+                            />
+                            {assetSearch.length > 0 && (
+                              <Pressable onPress={() => setAssetSearch('')} hitSlop={8}>
+                                <Ionicons name="close-circle" size={15} color={p.fgFaint} />
+                              </Pressable>
+                            )}
+                          </View>
+                          <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+                            {availableCryptos
+                              .filter((c) => !assetSearch || c.toLowerCase().includes(assetSearch.toLowerCase()))
+                              .map((c) => {
+                                const selected = currency === c;
+                                const heldWallet = heldCryptos.find((w) => w.currency === c);
+                                return (
+                                  <Pressable
+                                    key={c}
+                                    onPress={() => {
+                                      h.selection();
+                                      setCurrency(c);
+                                      setAssetSearch('');
+                                      setShowAssetPicker(false);
+                                    }}
+                                    style={({ pressed }) => ({
+                                      flexDirection: 'row', alignItems: 'center', gap: 12,
+                                      paddingHorizontal: 20, paddingVertical: 13,
+                                      backgroundColor: selected ? p.bgElev : pressed ? p.bgElev : 'transparent',
+                                    })}
+                                  >
+                                    <View style={{
+                                      width: 38, height: 38, borderRadius: 19,
+                                      backgroundColor: p.pillBg, alignItems: 'center', justifyContent: 'center',
+                                    }}>
+                                      <Text style={{ fontSize: 13, fontWeight: '800', color: selected ? p.fg : p.fgMuted }}>
+                                        {c.slice(0, 2)}
+                                      </Text>
+                                    </View>
+                                    <View style={{ flex: 1 }}>
+                                      <Text style={{ color: p.fg, fontSize: 15, fontWeight: '700' }}>{c}</Text>
+                                      {heldWallet && (
+                                        <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '600', marginTop: 1 }}>
+                                          You hold: {Number(heldWallet.balance).toLocaleString('en-US', { maximumFractionDigits: 8 })}
+                                        </Text>
+                                      )}
+                                    </View>
+                                    {selected && <Ionicons name="checkmark-circle" size={20} color={p.fg} />}
+                                  </Pressable>
+                                );
+                              })}
+                            <View style={{ height: 32 }} />
+                          </ScrollView>
+                        </Pressable>
+                      </Pressable>
+                    </Modal>
+                  </>
+                )}
               </SheetSection>
 
               {/* Fiat */}

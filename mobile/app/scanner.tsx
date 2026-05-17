@@ -179,7 +179,7 @@ export default function ScannerPage() {
         alignItems: 'center',
       }}>
         <Text style={{ color: 'rgba(255,255,255,0.65)', fontSize: 13, fontWeight: '600' }}>
-          Point camera at a Promrkts QR code
+          Point camera at a promrkts QR code
         </Text>
       </View>
 

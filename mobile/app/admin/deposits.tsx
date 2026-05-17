@@ -1,0 +1,187 @@
+/**
+ * Admin Deposits queue — review pending fiat / crypto deposits and
+ * confirm or reject them. Confirmations credit the user's wallet
+ * server-side; rejections capture a reason that's emailed back.
+ */
+
+import { useState } from 'react';
+import {
+  Alert, Modal, Pressable, RefreshControl, ScrollView, Text, TextInput, View,
+} from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useRouter } from 'expo-router';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { StatusBar } from 'expo-status-bar';
+import { formatRelativeTime } from '@/utils/format';
+
+import { useThemedPalette, useTheme } from '@/store/themeStore';
+import { useAuthStore } from '@/store/authStore';
+import { adminService } from '@/services';
+import { LoadingPulse } from '@/components/ui/LoadingPulse';
+
+export default function AdminDeposits() {
+  const p = useThemedPalette();
+  const themeMode = useTheme((s) => s.mode);
+  const router = useRouter();
+  const qc = useQueryClient();
+  const user = useAuthStore((s) => s.user);
+  const isAdmin = user?.role === 'ADMIN';
+
+  const [filter, setFilter] = useState<'PENDING' | 'CONFIRMED' | 'REJECTED'>('PENDING');
+  const [rejecting, setRejecting] = useState<any | null>(null);
+  const [reason, setReason] = useState('');
+
+  const q = useQuery({
+    queryKey: ['admin-deposits', filter],
+    queryFn: () => adminService.deposits({ status: filter }),
+    enabled: isAdmin,
+    refetchInterval: 15_000,
+  });
+
+  const confirmMut = useMutation({
+    mutationFn: adminService.confirmDeposit,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-deposits'] }),
+    onError: (e: any) => Alert.alert('Confirm failed', e?.response?.data?.error ?? 'Try again'),
+  });
+
+  const rejectMut = useMutation({
+    mutationFn: ({ id, reason }: { id: string; reason: string }) =>
+      adminService.rejectDeposit(id, reason),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin-deposits'] });
+      setRejecting(null);
+      setReason('');
+    },
+  });
+
+  const deposits = q.data?.deposits ?? [];
+
+  if (!isAdmin) {
+    return <DeniedView p={p} themeMode={themeMode} onBack={() => router.back()} />;
+  }
+
+  return (
+    <View style={{ flex: 1, backgroundColor: p.bg }}>
+      <StatusBar style={themeMode === 'dark' ? 'light' : 'dark'} />
+      <SafeAreaView style={{ flex: 1 }} edges={['top']}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingTop: 8, paddingBottom: 8 }}>
+          <Pressable onPress={() => router.back()} hitSlop={8}>
+            <Ionicons name="chevron-back" size={26} color={p.fg} />
+          </Pressable>
+          <Text style={{ flex: 1, color: p.fg, fontSize: 18, fontWeight: '800', letterSpacing: -0.3 }}>Deposit Queue</Text>
+          <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '700' }}>{deposits.length}</Text>
+        </View>
+
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, gap: 8 }}>
+          {(['PENDING', 'CONFIRMED', 'REJECTED'] as const).map((s) => {
+            const on = filter === s;
+            return (
+              <Pressable key={s} onPress={() => setFilter(s)} style={{ paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10, backgroundColor: on ? p.fg : p.pillBg, borderWidth: 1, borderColor: on ? p.fg : p.border }}>
+                <Text style={{ color: on ? p.bg : p.fg, fontSize: 12, fontWeight: '800' }}>{s}</Text>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+
+        <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 80 }} refreshControl={<RefreshControl refreshing={q.isFetching} onRefresh={q.refetch} tintColor={p.fg} />}>
+          {q.isLoading ? (
+            <View style={{ paddingTop: 80, alignItems: 'center' }}>
+              <LoadingPulse size={56} icon="arrow-down-circle-outline" label="Loading deposits…" />
+            </View>
+          ) : deposits.length === 0 ? (
+            <View style={{ paddingVertical: 60, alignItems: 'center' }}>
+              <Ionicons name="file-tray-outline" size={42} color={p.fgFaint} />
+              <Text style={{ color: p.fgMuted, marginTop: 10, fontSize: 13 }}>No {filter.toLowerCase()} deposits</Text>
+            </View>
+          ) : (
+            deposits.map((d: any) => (
+              <View key={d.id} style={{ backgroundColor: p.bgElev, borderRadius: 14, borderWidth: 1, borderColor: p.border, padding: 14, marginBottom: 10 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <View style={{ paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, backgroundColor: p.pillBg }}>
+                    <Text style={{ color: p.fgMuted, fontSize: 10, fontWeight: '800' }}>{d.paymentMethod ?? d.currency}</Text>
+                  </View>
+                  <Text style={{ color: p.fgFaint, fontSize: 11 }}>{formatRelativeTime(d.createdAt)}</Text>
+                  <Text style={{ color: p.fg, fontSize: 18, fontWeight: '800', marginLeft: 'auto', fontVariant: ['tabular-nums'] }}>
+                    {Number(d.amount).toLocaleString('en-US', { maximumFractionDigits: 8 })} {d.currency}
+                  </Text>
+                </View>
+                <Text style={{ color: p.fg, fontSize: 14, fontWeight: '700', marginTop: 8 }}>
+                  {d.user?.firstName} {d.user?.lastName}
+                </Text>
+                <Text style={{ color: p.fgMuted, fontSize: 12 }}>{d.user?.email}</Text>
+                {d.reference && (
+                  <Text style={{ color: p.fgFaint, fontSize: 11, marginTop: 4 }}>Ref: {d.reference}</Text>
+                )}
+                {filter === 'PENDING' && (
+                  <View style={{ flexDirection: 'row', gap: 8, marginTop: 12 }}>
+                    <Pressable
+                      onPress={() => Alert.alert('Confirm deposit?', `Credit ${d.user?.email}'s wallet with ${d.amount} ${d.currency}?`, [
+                        { text: 'Cancel', style: 'cancel' },
+                        { text: 'Confirm', onPress: () => confirmMut.mutate(d.id) },
+                      ])}
+                      style={{ flex: 1, paddingVertical: 11, borderRadius: 10, backgroundColor: '#22c55e', alignItems: 'center' }}
+                    >
+                      <Text style={{ color: '#fff', fontWeight: '800', fontSize: 13 }}>Confirm</Text>
+                    </Pressable>
+                    <Pressable
+                      onPress={() => { setRejecting(d); setReason(''); }}
+                      style={{ flex: 1, paddingVertical: 11, borderRadius: 10, backgroundColor: 'rgba(239,68,68,0.15)', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(239,68,68,0.30)' }}
+                    >
+                      <Text style={{ color: '#ef4444', fontWeight: '800', fontSize: 13 }}>Reject</Text>
+                    </Pressable>
+                  </View>
+                )}
+              </View>
+            ))
+          )}
+        </ScrollView>
+
+        <Modal visible={!!rejecting} transparent animationType="slide" onRequestClose={() => setRejecting(null)}>
+          <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' }}>
+            <View style={{ backgroundColor: p.bg, borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 20, paddingBottom: 36 }}>
+              <View style={{ alignSelf: 'center', width: 36, height: 4, borderRadius: 2, backgroundColor: p.border, marginBottom: 14 }} />
+              <Text style={{ color: p.fg, fontSize: 18, fontWeight: '800', marginBottom: 14 }}>Reject Deposit</Text>
+              <View style={{ backgroundColor: p.bgElev, borderRadius: 12, borderWidth: 1, borderColor: p.border, padding: 12, marginBottom: 18 }}>
+                <TextInput
+                  value={reason}
+                  onChangeText={setReason}
+                  placeholder="Reason (visible to user)"
+                  placeholderTextColor={p.fgFaint}
+                  multiline
+                  numberOfLines={3}
+                  style={{ color: p.fg, fontSize: 14, minHeight: 60, textAlignVertical: 'top' }}
+                />
+              </View>
+              <View style={{ flexDirection: 'row', gap: 10 }}>
+                <Pressable onPress={() => setRejecting(null)} style={{ flex: 1, height: 50, borderRadius: 12, backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border, alignItems: 'center', justifyContent: 'center' }}>
+                  <Text style={{ color: p.fg, fontWeight: '700' }}>Cancel</Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => rejecting && reason.trim() && rejectMut.mutate({ id: rejecting.id, reason: reason.trim() })}
+                  disabled={!reason.trim() || rejectMut.isPending}
+                  style={{ flex: 1, height: 50, borderRadius: 12, backgroundColor: reason.trim() ? '#ef4444' : p.bgElev, alignItems: 'center', justifyContent: 'center', opacity: reason.trim() ? 1 : 0.6 }}
+                >
+                  <Text style={{ color: '#fff', fontWeight: '800' }}>{rejectMut.isPending ? 'Rejecting…' : 'Reject'}</Text>
+                </Pressable>
+              </View>
+            </View>
+          </View>
+        </Modal>
+      </SafeAreaView>
+    </View>
+  );
+}
+
+function DeniedView({ p, themeMode, onBack }: any) {
+  return (
+    <View style={{ flex: 1, backgroundColor: p.bg, alignItems: 'center', justifyContent: 'center', padding: 40 }}>
+      <StatusBar style={themeMode === 'dark' ? 'light' : 'dark'} />
+      <Ionicons name="lock-closed-outline" size={48} color={p.fgFaint} />
+      <Text style={{ color: p.fg, fontSize: 18, fontWeight: '800', marginTop: 14 }}>Admin only</Text>
+      <Pressable onPress={onBack} style={{ marginTop: 24, paddingHorizontal: 18, paddingVertical: 11, borderRadius: 12, backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border }}>
+        <Text style={{ color: p.fg, fontWeight: '700' }}>Back</Text>
+      </Pressable>
+    </View>
+  );
+}

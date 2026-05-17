@@ -12,7 +12,7 @@ import type { MarketTicker } from '@/types';
 interface Props { ticker: MarketTicker; onPress?: () => void }
 
 export function MarketRow({ ticker, onPress }: Props) {
-  const meta = CURRENCY_META[ticker.base];
+  const meta = (CURRENCY_META as Record<string, typeof CURRENCY_META[keyof typeof CURRENCY_META] | undefined>)[ticker.base];
   const positive = ticker.changePct24h >= 0;
   return (
     <Pressable
@@ -33,7 +33,7 @@ export function MarketRow({ ticker, onPress }: Props) {
           borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)',
         }}
       >
-        <Text style={{ color: '#fff', fontSize: 16, fontWeight: '700' }}>{meta.flagOrIcon}</Text>
+        <Text style={{ color: '#fff', fontSize: 16, fontWeight: '700' }}>{meta?.flagOrIcon ?? ticker.base.slice(0, 3)}</Text>
       </View>
 
       <View style={{ flex: 1 }}>

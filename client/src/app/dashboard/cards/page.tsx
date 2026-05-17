@@ -127,7 +127,7 @@ export default function CardsPage() {
       <PageShell>
         <PageHeader
           eyebrow="Spend anywhere"
-          title="Promrkts Card"
+          title="promrkts Card"
           subtitle="Spend any coin anywhere Visa is accepted. Instant conversion, zero FX markup."
         />
 

@@ -6,6 +6,7 @@ const router = Router();
 
 router.use(authenticate);
 
+router.get('/banks/:country', BankAccountController.getBanksByCountry);
 router.get('/', BankAccountController.getAll);
 router.post('/', BankAccountController.create);
 router.put('/:id', BankAccountController.update);

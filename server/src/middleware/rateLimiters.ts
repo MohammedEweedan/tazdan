@@ -1,54 +1,72 @@
 /**
- * Layered rate limiters. The global limiter is for everything; the
- * sensitive limiters are mounted on the highest-blast-radius endpoints
- * (auth + money movement). All keyed by req.ip — behind a reverse proxy
- * make sure `app.set('trust proxy', 1)` is configured.
+ * Layered rate limiters with optional simulator bypass.
+ * - Production: fully enforced
+ * - Dev / simulation: bypass allowed via x-simulator header
  */
+
 import rateLimit from 'express-rate-limit';
 
 const minutes = (n: number) => n * 60 * 1000;
 
+const isSimulatorRequest = (req: any) =>
+  req.headers['x-simulator'] === 'true';
+
+const skipRateLimit = (req: any) =>
+  process.env.NODE_ENV !== 'production' && isSimulatorRequest(req);
+
+/**
+ * Global limiter (baseline protection)
+ */
 export const globalLimiter = rateLimit({
   windowMs: minutes(1),
-  max: 300,                          // ~5 rps avg per IP
+  max: 300,
   standardHeaders: true,
   legacyHeaders: false,
+  skip: skipRateLimit,
   message: { error: 'Too many requests, please slow down.' },
 });
 
-// Login / password reset / 2FA. Stops credential stuffing & brute force.
+/**
+ * Auth limiter (login / password reset / 2FA)
+ */
 export const authLimiter = rateLimit({
   windowMs: minutes(15),
   max: 10,
   standardHeaders: true,
   legacyHeaders: false,
-  skipSuccessfulRequests: true,      // only count failed attempts
+  skipSuccessfulRequests: true,
+  skip: skipRateLimit,
   message: { error: 'Too many auth attempts. Try again in 15 minutes.' },
 });
 
-// Registration: cap accounts/hour/IP to deter mass-signup abuse.
+/**
+ * Registration limiter (most important for your issue)
+ */
 export const registerLimiter = rateLimit({
-  windowMs: minutes(60),
-  max: 5,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { error: 'Too many accounts from this IP. Try again later.' },
+  windowMs: 60 * 60 * 1000,
+  max: process.env.NODE_ENV === 'development' ? 10_000 : 5,
 });
 
-// Withdrawal endpoints — cap aggressive automation.
+/**
+ * Withdrawal limiter (money movement protection)
+ */
 export const withdrawalLimiter = rateLimit({
   windowMs: minutes(10),
   max: 10,
   standardHeaders: true,
   legacyHeaders: false,
+  skip: skipRateLimit,
   message: { error: 'Withdrawal rate limit hit. Slow down.' },
 });
 
-// Deposit webhook — protects against replay floods.
+/**
+ * Webhook limiter (protects against spam/replay floods)
+ */
 export const webhookLimiter = rateLimit({
   windowMs: minutes(1),
   max: 120,
   standardHeaders: true,
   legacyHeaders: false,
+  skip: skipRateLimit,
   message: { error: 'Webhook rate limit exceeded.' },
 });

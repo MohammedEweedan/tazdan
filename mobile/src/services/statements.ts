@@ -140,11 +140,11 @@ export function renderStatementHtml(data: StatementJson, filter: StatementFilter
 
   return `<!doctype html>
 <html><head><meta charset="utf-8" />
-<title>Promrkts Statement</title>
+<title>promrkts Statement</title>
 <style>${css}</style>
 </head>
 <body>
-  <h1><span class="brand">Promrkts</span> Account Statement</h1>
+  <h1><span class="brand">promrkts</span> Account Statement</h1>
   <div class="meta">${escapeHtml(fullName)} · ${escapeHtml(data.user.email)}</div>
   <div class="meta">Period: ${escapeHtml(statementTitle(filter))} · Generated ${escapeHtml(generated)}</div>
 
@@ -177,7 +177,7 @@ export function renderStatementHtml(data: StatementJson, filter: StatementFilter
       </table>`}
 
   <div class="footer">
-    This statement was generated from Promrkts records on the date shown above. All amounts
+    This statement was generated from promrkts records on the date shown above. All amounts
     are settled in the corresponding wallet currency. For audit support, contact
     support@promrkts.app referencing your account email.
   </div>

@@ -5,13 +5,18 @@ import { prisma } from '../utils/prisma';
 import { AppError } from '../middleware/errorHandler';
 import { generateReference } from '../utils/helpers';
 import { AuthRequest } from '../types';
+import { collectFee } from '../services/fee/feeCollector.service';
+import { emitActivity } from '../utils/realtime';
+
+const FIAT_CURRENCIES = new Set(['USD', 'EUR', 'GBP', 'AED', 'SAR', 'EGP', 'LYD']);
 
 const withdrawalSchema = z.object({
-  currency: z.enum(['USD', 'USDT']),
+  currency: z.string().min(1),
   amount: z.number().positive(),
   paymentMethod: z.enum(['BANK_TRANSFER']).optional(),
   walletAddress: z.string().optional(),
   network: z.enum(['TRC20', 'ERC20']).optional(),
+  bankAccountId: z.string().uuid().optional(),
   bankName: z.string().optional(),
   accountNumber: z.string().optional(),
   accountName: z.string().optional(),
@@ -20,32 +25,69 @@ const withdrawalSchema = z.object({
 export class WithdrawalController {
   /**
    * Create a withdrawal request.
-   * USDT withdrawals require a wallet address + network (TRC20/ERC20).
-   * The system will queue an on-chain USDT send when the admin processes it.
+   * Fiat withdrawals require KYC APPROVED + a saved bank account.
+   * Crypto withdrawals require a wallet address + network.
+   * Funds are frozen atomically with the Withdrawal record creation.
    */
   static async create(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const data = withdrawalSchema.parse(req.body);
+      const currency = data.currency.toUpperCase();
+      const isFiat = FIAT_CURRENCIES.has(currency);
+      const isCryptoEnum = ['USDT','BTC','ETH','BNB','SOL','XRP','ADA','DOGE','MATIC','DOT','AVAX'].includes(currency);
 
-      if (data.currency === 'USDT') {
-        if (!data.walletAddress) throw new AppError('Wallet address is required for USDT withdrawals', 400);
-        if (!data.network) throw new AppError('Network (TRC20/ERC20) is required for USDT withdrawals', 400);
+      // KYC gate for fiat withdrawals
+      if (isFiat) {
+        const user = await prisma.user.findUnique({ where: { id: req.user!.id }, select: { kycStatus: true } });
+        if (user?.kycStatus !== 'APPROVED') {
+          res.status(403).json({ error: 'KYC verification required for fiat withdrawals' });
+          return;
+        }
+      }
+
+      // Crypto validation
+      if (!isFiat) {
+        if (!data.walletAddress) throw new AppError('Wallet address is required for crypto withdrawals', 400);
+        if (!data.network) throw new AppError('Network (TRC20/ERC20) is required for crypto withdrawals', 400);
         if (data.network === 'TRC20' && !data.walletAddress.startsWith('T')) throw new AppError('Invalid TRC20 address', 400);
         if (data.network === 'ERC20' && !data.walletAddress.startsWith('0x')) throw new AppError('Invalid ERC20 address', 400);
       }
-      if (data.currency !== 'USDT' && !data.paymentMethod) {
-        throw new AppError('Payment method is required for fiat withdrawals', 400);
+
+      // Fiat requires a bank account
+      let bankAccountDetails: { bankName?: string; accountNumber?: string; accountName?: string } = {};
+      if (isFiat) {
+        if (!data.bankAccountId && !data.bankName) throw new AppError('Bank account required for fiat withdrawals', 400);
+        if (data.bankAccountId) {
+          const bankAccount = await prisma.bankAccount.findFirst({
+            where: { id: data.bankAccountId, userId: req.user!.id },
+          });
+          if (!bankAccount) throw new AppError('Bank account not found', 404);
+          bankAccountDetails = {
+            bankName: bankAccount.bankName,
+            accountNumber: bankAccount.accountNumber ?? undefined,
+            accountName: bankAccount.accountName,
+          };
+        } else {
+          bankAccountDetails = { bankName: data.bankName, accountNumber: data.accountNumber, accountName: data.accountName };
+        }
       }
 
-      const wallet = await prisma.wallet.findUnique({
-        where: { userId_currency: { userId: req.user!.id, currency: data.currency } },
-      });
-      if (!wallet) throw new AppError('Wallet not found', 404);
+      // Balance check — enum currencies use Wallet, altcoins use altBalances
+      let available = 0;
+      if (isCryptoEnum || isFiat) {
+        const wallet = await prisma.wallet.findUnique({
+          where: { userId_currency: { userId: req.user!.id, currency: currency as any } },
+        });
+        if (!wallet) throw new AppError(`${currency} wallet not found`, 404);
+        available = parseFloat(wallet.balance.toString()) - parseFloat(wallet.frozen.toString());
+      } else {
+        const uw = await prisma.userWallet.findUnique({ where: { userId: req.user!.id } });
+        const alts = (uw?.altBalances && typeof uw.altBalances === 'object' ? uw.altBalances : {}) as Record<string, string>;
+        available = parseFloat(alts[currency] ?? '0');
+      }
+      if (data.amount > available) throw new AppError(`Insufficient balance. Available: ${available} ${currency}`, 400);
 
-      const available = parseFloat(wallet.balance.toString()) - parseFloat(wallet.frozen.toString());
-      if (data.amount > available) throw new AppError('Insufficient balance', 400);
-
-      const feeKey = data.currency === 'USDT' ? 'withdrawal_fee_usdt' : 'withdrawal_fee_usd';
+      const feeKey = isFiat ? 'withdrawal_fee_usd' : 'withdrawal_fee_usdt';
       const feeSetting = await prisma.platformSettings.findUnique({ where: { key: feeKey } });
       const fee = parseFloat(feeSetting?.value || '0');
       const netAmount = data.amount - fee;
@@ -53,42 +95,81 @@ export class WithdrawalController {
 
       const reference = generateReference('WDR');
 
-      // Freeze the amount
-      await prisma.wallet.update({
-        where: { userId_currency: { userId: req.user!.id, currency: data.currency } },
-        data: { frozen: { increment: new Decimal(data.amount) } },
-      });
+      // Atomically freeze + create withdrawal record + log activity + collect fee
+      const withdrawal = await prisma.$transaction(async (tx) => {
+        if (isCryptoEnum || isFiat) {
+          await tx.wallet.update({
+            where: { userId_currency: { userId: req.user!.id, currency: currency as any } },
+            data: { frozen: { increment: new Decimal(data.amount) } },
+          });
+        }
+        const w = await tx.withdrawal.create({
+          data: {
+            userId: req.user!.id,
+            currency: (isCryptoEnum || isFiat) ? (currency as any) : 'USDT',
+            amount: data.amount,
+            fee,
+            netAmount,
+            paymentMethod: isFiat ? 'BANK_TRANSFER' : (data.paymentMethod as any ?? undefined),
+            walletAddress: data.walletAddress,
+            network: data.network,
+            bankName: bankAccountDetails.bankName ?? data.bankName,
+            accountNumber: bankAccountDetails.accountNumber ?? data.accountNumber,
+            accountName: bankAccountDetails.accountName ?? data.accountName,
+            reference,
+          },
+        });
 
-      const withdrawal = await prisma.withdrawal.create({
-        data: {
-          userId: req.user!.id,
-          currency: data.currency,
-          amount: data.amount,
-          fee,
-          netAmount,
-          paymentMethod: data.paymentMethod as any,
-          walletAddress: data.walletAddress,
-          network: data.network,
-          bankName: data.bankName,
-          accountNumber: data.accountNumber,
-          accountName: data.accountName,
-          reference,
-        },
+        // Log the activity so it shows up in the user's transaction history.
+        // We capture amount as negative because it's leaving the wallet.
+        if (isCryptoEnum || isFiat) {
+          await tx.transaction.create({
+            data: {
+              userId: req.user!.id,
+              type: 'WITHDRAWAL',
+              currency: currency as any,
+              amount: new Decimal(-data.amount),
+              fee: new Decimal(fee),
+              balanceBefore: new Decimal(available),
+              balanceAfter:  new Decimal(available - data.amount),
+              reference,
+              description: isFiat
+                ? `Withdrawal to ${bankAccountDetails.bankName ?? data.bankName ?? 'bank'}`
+                : `Withdrawal ${data.network} → ${data.walletAddress?.slice(0, 8)}…`,
+              metadata: { withdrawalId: w.id, network: data.network ?? null } as any,
+            },
+          });
+        }
+
+        // Fee → platform wallet (deposits + transfers are excluded; this is a withdrawal)
+        if (fee > 0) {
+          await collectFee({
+            tx,
+            source:   'withdrawal',
+            sourceId: w.id,
+            payerId:  req.user!.id,
+            amount:   new Decimal(fee),
+            currency,
+            description: `Withdrawal fee · ${currency}`,
+            metadata: { isFiat, network: data.network ?? null },
+          });
+        }
+
+        return w;
       });
 
       // Notify admins
       const admins = await prisma.user.findMany({ where: { role: 'ADMIN' } });
-      for (const admin of admins) {
-        await prisma.notification.create({
-          data: {
-            userId: admin.id,
-            title: 'New Withdrawal Request',
-            message: `Withdrawal of ${data.amount} ${data.currency}${data.currency === 'USDT' ? ` to ${data.walletAddress} (${data.network})` : ''}. Ref: ${reference}`,
-            type: 'withdrawal',
-          },
-        });
-      }
+      await prisma.notification.createMany({
+        data: admins.map((admin) => ({
+          userId: admin.id,
+          title: 'New Withdrawal Request',
+          message: `Withdrawal of ${data.amount} ${currency}${!isFiat ? ` to ${data.walletAddress} (${data.network})` : ` via bank`}. Ref: ${reference}`,
+          type: 'withdrawal',
+        })),
+      });
 
+      emitActivity(req, [req.user!.id], { kind: 'withdrawal' });
       res.status(201).json({ withdrawal });
     } catch (error) {
       next(error);

@@ -198,13 +198,13 @@ export function TopupBody({
       await depositService.createBankDeposit({
         currency,
         amount: numeric,
-        notes: method.id === 'LYD_AGENT' ? 'Cash via Promrkts agent' : undefined,
+        notes: method.id === 'LYD_AGENT' ? 'Cash via promrkts agent' : undefined,
       });
       h.success();
       Alert.alert(
         'Deposit submitted',
         method.id === 'LYD_AGENT'
-          ? 'Visit your nearest Promrkts agent within 24h with this reference. Funds will appear once the agent confirms cash receipt.'
+          ? 'Visit your nearest promrkts agent within 24h with this reference. Funds will appear once the agent confirms cash receipt.'
           : 'Your bank transfer has been logged. Funds appear once the deposit is matched.',
         [{ text: 'OK', onPress: onComplete }],
       );

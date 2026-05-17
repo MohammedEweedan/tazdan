@@ -2,7 +2,7 @@
  * SendWidget — clean internal transfer sheet.
  * Recipient search · currency chips · large amount input · summary · CTA.
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Keyboard,
@@ -20,24 +20,52 @@ import { useT } from '@/store/i18nStore';
 import { useHaptics, useWallets, extractErrorMessage, useStepUpAuth, StepUpDeniedError } from '@/hooks';
 import { useForexRates } from '@/hooks/useForexRates';
 import { profileService, messageService } from '@/services';
-import { formatMoney } from '@/utils/format';
 import type { Currency } from '@/types';
 
-const FIATS:  Currency[] = ['USD', 'EUR', 'GBP', 'AED', 'SAR', 'EGP'];
-const CRYPTO: Currency[] = ['BTC', 'ETH', 'USDT', 'SOL'];
+const FIATS: Currency[] = ['USD', 'EUR', 'GBP', 'AED', 'SAR', 'EGP'];
 
-const ASSET_META: Record<string, { label: string; color: string; bg: string; icon: string }> = {
-  BTC:  { label: 'Bitcoin',      color: '#fb923c', bg: 'rgba(251,146,60,0.14)',  icon: '₿' },
-  ETH:  { label: 'Ethereum',     color: '#818cf8', bg: 'rgba(129,140,248,0.14)', icon: 'Ξ' },
-  SOL:  { label: 'Solana',       color: '#a78bfa', bg: 'rgba(167,139,250,0.14)', icon: '◎' },
-  USDT: { label: 'Tether',       color: '#4ade80', bg: 'rgba(74,222,128,0.14)',  icon: '₮' },
-  USD:  { label: 'US Dollar',    color: '#60a5fa', bg: 'rgba(96,165,250,0.14)',  icon: '$' },
-  EUR:  { label: 'Euro',         color: '#60a5fa', bg: 'rgba(96,165,250,0.14)',  icon: '€' },
-  GBP:  { label: 'Pound',        color: '#7c3aed', bg: 'rgba(124,58,237,0.14)',  icon: '£' },
-  AED:  { label: 'UAE Dirham',   color: '#0f766e', bg: 'rgba(15,118,110,0.14)',  icon: 'د' },
-  SAR:  { label: 'Saudi Riyal',  color: '#15803d', bg: 'rgba(21,128,61,0.14)',   icon: '﷼' },
-  EGP:  { label: 'Egypt Pound',  color: '#dc2626', bg: 'rgba(220,38,38,0.14)',   icon: '£' },
+const FIAT_SET = new Set<string>(FIATS);
+
+// Static meta for known assets; unknown alts get a generated fallback below.
+const KNOWN_META: Record<string, { label: string; color: string; bg: string; icon: string }> = {
+  BTC:  { label: 'Bitcoin',     color: '#fb923c', bg: 'rgba(251,146,60,0.14)',  icon: '₿' },
+  ETH:  { label: 'Ethereum',    color: '#818cf8', bg: 'rgba(129,140,248,0.14)', icon: 'Ξ' },
+  SOL:  { label: 'Solana',      color: '#a78bfa', bg: 'rgba(167,139,250,0.14)', icon: '◎' },
+  BNB:  { label: 'BNB',         color: '#f0b90b', bg: 'rgba(240,185,11,0.14)',  icon: '⬡' },
+  XRP:  { label: 'XRP',         color: '#346aa9', bg: 'rgba(52,106,169,0.14)',  icon: '✕' },
+  ADA:  { label: 'Cardano',     color: '#0033ad', bg: 'rgba(0,51,173,0.14)',    icon: '₳' },
+  DOGE: { label: 'Dogecoin',    color: '#c2a633', bg: 'rgba(194,166,51,0.14)',  icon: 'Ð' },
+  MATIC:{ label: 'Polygon',     color: '#8247e5', bg: 'rgba(130,71,229,0.14)',  icon: '◆' },
+  DOT:  { label: 'Polkadot',    color: '#e6007a', bg: 'rgba(230,0,122,0.14)',   icon: '●' },
+  AVAX: { label: 'Avalanche',   color: '#e84142', bg: 'rgba(232,65,66,0.14)',   icon: '▲' },
+  USDT: { label: 'Tether',      color: '#4ade80', bg: 'rgba(74,222,128,0.14)',  icon: '₮' },
+  USDT_ERC20: { label: 'USDT ERC-20', color: '#4ade80', bg: 'rgba(74,222,128,0.14)', icon: '₮' },
+  USDT_TRC20: { label: 'USDT TRC-20', color: '#ef4444', bg: 'rgba(239,68,68,0.14)',  icon: '₮' },
+  LTC:  { label: 'Litecoin',    color: '#bfbbbb', bg: 'rgba(191,187,187,0.14)', icon: 'Ł' },
+  LINK: { label: 'Chainlink',   color: '#2a5ada', bg: 'rgba(42,90,218,0.14)',   icon: '⬡' },
+  UNI:  { label: 'Uniswap',     color: '#ff007a', bg: 'rgba(255,0,122,0.14)',   icon: '🦄' },
+  SHIB: { label: 'Shiba Inu',   color: '#e35014', bg: 'rgba(227,80,20,0.14)',   icon: '🐕' },
+  PEPE: { label: 'Pepe',        color: '#4bae19', bg: 'rgba(75,174,25,0.14)',   icon: '🐸' },
+  ARB:  { label: 'Arbitrum',    color: '#28a0f0', bg: 'rgba(40,160,240,0.14)',  icon: '◈' },
+  OP:   { label: 'Optimism',    color: '#ff0420', bg: 'rgba(255,4,32,0.14)',    icon: '○' },
+  SUI:  { label: 'Sui',         color: '#6fbcf0', bg: 'rgba(111,188,240,0.14)', icon: '◎' },
+  TON:  { label: 'TON',         color: '#0098ea', bg: 'rgba(0,152,234,0.14)',   icon: '◈' },
+  USD:  { label: 'US Dollar',   color: '#60a5fa', bg: 'rgba(96,165,250,0.14)',  icon: '$' },
+  EUR:  { label: 'Euro',        color: '#60a5fa', bg: 'rgba(96,165,250,0.14)',  icon: '€' },
+  GBP:  { label: 'Pound',       color: '#7c3aed', bg: 'rgba(124,58,237,0.14)',  icon: '£' },
+  AED:  { label: 'UAE Dirham',  color: '#0f766e', bg: 'rgba(15,118,110,0.14)',  icon: 'د' },
+  SAR:  { label: 'Saudi Riyal', color: '#15803d', bg: 'rgba(21,128,61,0.14)',   icon: '﷼' },
+  EGP:  { label: 'Egypt Pound', color: '#dc2626', bg: 'rgba(220,38,38,0.14)',   icon: '£' },
 };
+
+function assetMeta(currency: string) {
+  return KNOWN_META[currency] ?? {
+    label: currency,
+    color: `hsl(${[...currency].reduce((h, c) => (h * 31 + c.charCodeAt(0)) & 0xffff, 0) % 360},70%,55%)`,
+    bg: 'rgba(128,128,128,0.14)',
+    icon: currency.slice(0, 2),
+  };
+}
 
 type Mode    = 'FIAT' | 'CRYPTO';
 type Profile = { id: string; username: string; firstName: string; lastName: string; avatarUrl?: string; kycTier?: string };
@@ -51,7 +79,7 @@ export function SendWidget() {
   const stepUp = useStepUpAuth();
 
   const [mode,      setMode]      = useState<Mode>('FIAT');
-  const [currency,  setCurrency]  = useState<Currency>('USD');
+  const [currency,  setCurrency]  = useState<string>('USD');
   const [recipient, setRecipient] = useState('');
   const [picked,    setPicked]    = useState<Profile | null>(null);
   const [amount,    setAmount]    = useState('');
@@ -59,7 +87,19 @@ export function SendWidget() {
   const [ctaState,  setCta]       = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [ctaError,  setCtaErr]    = useState<string | null>(null);
 
-  useEffect(() => { setCurrency(mode === 'FIAT' ? 'USD' : 'BTC'); setAmount(''); }, [mode]);
+  // Build crypto list from actual held balances > 0
+  const cryptoCurrencies = useMemo(
+    () => (wallets ?? [])
+      .filter((w) => !FIAT_SET.has(w.currency) && Number(w.balance) > 0)
+      .map((w) => w.currency),
+    [wallets],
+  );
+
+  useEffect(() => {
+    if (mode === 'FIAT') { setCurrency('USD'); }
+    else { setCurrency(cryptoCurrencies[0] ?? 'BTC'); }
+    setAmount('');
+  }, [mode, cryptoCurrencies.join(',')]);
 
   const wallet     = wallets?.find((w) => w.currency === currency);
   const balance    = wallet ? Number(wallet.balance) : 0;
@@ -68,8 +108,8 @@ export function SendWidget() {
 
   const [debounced, setDebounced] = useState('');
   useEffect(() => {
-    const t = setTimeout(() => setDebounced(recipient.trim().replace(/^@/, '')), 200);
-    return () => clearTimeout(t);
+    const timer = setTimeout(() => setDebounced(recipient.trim().replace(/^@/, '')), 200);
+    return () => clearTimeout(timer);
   }, [recipient]);
 
   const { data: matches = [], isFetching: searching } = useQuery({
@@ -85,15 +125,14 @@ export function SendWidget() {
     if (!valid || !picked) return;
     setCta('loading'); setCtaErr(null);
     try {
-      // Step-up biometric for transfers worth ≥ $1000 USD-equivalent.
-      const usdRate = fxRates?.[currency] ?? 1;
+      const usdRate = fxRates?.[currency as Currency] ?? 1;
       const usdValue = sendAmount * usdRate;
       await stepUp.guard({
         usdValue,
-        reason: `Send ${formatMoney(sendAmount, currency, { showSymbol: true })} to @${picked.username}`,
+        reason: `Send ${sendAmount} ${currency} to @${picked.username}`,
       });
 
-      await messageService.transfer({ receiverId: picked.id, currency, amount: sendAmount, note: note || undefined });
+      await messageService.transfer({ receiverId: picked.id, currency: currency as Currency, amount: sendAmount, note: note || undefined });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setCta('success');
       setAmount(''); setNote(''); setRecipient(''); setPicked(null);
@@ -113,8 +152,8 @@ export function SendWidget() {
     }
   };
 
-  const currencies = mode === 'FIAT' ? FIATS : CRYPTO;
-  const meta       = ASSET_META[currency] ?? ASSET_META.USD;
+  const currencies = mode === 'FIAT' ? FIATS : cryptoCurrencies;
+  const meta       = assetMeta(currency);
 
   return (
     <View style={{ paddingHorizontal: 20, paddingBottom: 8 }}>
@@ -202,7 +241,7 @@ export function SendWidget() {
       <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '700', letterSpacing: 0.5, marginBottom: 8 }}>{t('send.currency').toUpperCase()}</Text>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, marginBottom: 20 }}>
         {currencies.map((c) => {
-          const m = ASSET_META[c];
+          const m = assetMeta(c);
           const active = currency === c;
           return (
             <Pressable
@@ -254,7 +293,7 @@ export function SendWidget() {
       <Text style={{ color: overspend ? p.redFg : p.fgMuted, fontSize: 13, fontWeight: '600', marginBottom: 20 }}>
         {overspend
           ? t('send.exceedsBalance')
-          : `${t('common.available')}: ${formatMoney(balance, currency, { showSymbol: true })}`}
+          : `${t('common.available')}: ${balance.toLocaleString('en-US', { maximumFractionDigits: 8 })} ${currency}`}
       </Text>
 
       {/* ── Note ── */}
@@ -278,7 +317,7 @@ export function SendWidget() {
         <View style={{ backgroundColor: p.bgElev, borderRadius: 16, borderWidth: 1, borderColor: p.border, padding: 14, marginBottom: 20, gap: 8 }}>
           {[
             { label: t('send.summaryTo'),      value: `@${picked!.username}` },
-            { label: t('send.summaryAmount'),  value: formatMoney(sendAmount, currency, { showSymbol: true }) },
+            { label: t('send.summaryAmount'),  value: `${sendAmount.toLocaleString('en-US', { maximumFractionDigits: 8 })} ${currency}` },
             { label: t('send.summaryNetwork'), value: mode === 'CRYPTO' ? t('send.onChain') : t('send.internalInstant') },
             { label: t('send.summaryFee'),     value: t('common.free'), color: p.greenFg },
           ].map(({ label, value, color }) => (
@@ -325,10 +364,7 @@ export function SendWidget() {
             <Ionicons name="paper-plane" size={17} color={valid ? p.ctaFg : p.fgMuted} />
             <Text style={{ color: valid ? p.ctaFg : p.fgMuted, fontSize: 16, fontWeight: '800' }}>
               {valid
-                ? t('send.ctaAmount', {
-                    amount: formatMoney(sendAmount, currency),
-                    currency,
-                  })
+                ? `Send ${sendAmount.toLocaleString('en-US', { maximumFractionDigits: 8 })} ${currency}`
                 : t('send.cta')}
             </Text>
           </>

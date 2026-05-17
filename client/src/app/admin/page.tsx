@@ -44,8 +44,22 @@ export default function AdminDashboardPage() {
   const amberC = '#f59e0b';
   const purpleC = '#8b5cf6';
 
+  // Live `/admin/metrics` — refreshed every 15s so txs/min and fees/min
+  // numbers reflect what's actually happening right now.
+  const [metrics, setMetrics] = useState<any>(null);
+
   useEffect(() => {
     adminAPI.getDashboard().then((r: any) => setStats(r.data)).catch(() => {}).finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const fetchMetrics = () => {
+      adminAPI.getMetrics().then((r: any) => { if (!cancelled) setMetrics(r.data); }).catch(() => {});
+    };
+    fetchMetrics();
+    const id = setInterval(fetchMetrics, 15_000);
+    return () => { cancelled = true; clearInterval(id); };
   }, []);
 
   if (loading) {
@@ -60,6 +74,10 @@ export default function AdminDashboardPage() {
 
   const s = stats || {};
 
+  const m = metrics || {};
+  const txPerMin   = Number(m.txPerMin   ?? 0);
+  const feesPerMin = Number(m.feesPerMin ?? 0);
+
   const metricCards = [
     { label: t('admin_total_users'), value: s.totalUsers || 0, sub: `${s.activeUsers || 0} active`, icon: FiUsers, color: brand, trend: `+${s.newUsersToday || 0} today` },
     { label: t('admin_pending_deposits'), value: s.pendingDeposits || 0, sub: 'Awaiting confirmation', icon: FiArrowDownCircle, color: amberC, alert: (s.pendingDeposits || 0) > 0 },
@@ -67,8 +85,28 @@ export default function AdminDashboardPage() {
     { label: t('admin_pending_kyc'), value: s.pendingKYC || 0, sub: 'Identity reviews', icon: FiShield, color: purpleC, alert: (s.pendingKYC || 0) > 0 },
     { label: t('admin_today_orders'), value: s.todayOrders || 0, sub: `${fmt(s.totalOrdersMonth || 0)} this month`, icon: FiList, color: greenC },
     { label: t('admin_total_revenue'), value: '$' + fmtD(s.totalFees), sub: `$${fmtD(s.todayFees)} today`, icon: FiDollarSign, color: '#0070e0' },
+    // Live tick-per-minute counters from /admin/metrics
+    { label: 'Txs / min',  value: txPerMin.toLocaleString(undefined, { maximumFractionDigits: 2 }),  sub: 'avg over last 5 min', icon: FiActivity, color: brand },
+    { label: 'Fees / min', value: '$' + feesPerMin.toLocaleString(undefined, { maximumFractionDigits: 2 }), sub: 'avg over last 5 min', icon: FiDollarSign, color: greenC },
     { label: t('admin_today_volume'), value: '$' + fmtD(s.todayOrderVolume), sub: `$${fmtD(s.monthOrderVolume)} 30d`, icon: FiTrendingUp, color: brand },
   ];
+
+  // Fees by source — from /admin/dashboard (groupBy on PlatformFee).
+  const SOURCE_COLORS: Record<string, string> = {
+    order:              brand,
+    crypto_order:       purpleC,
+    withdrawal:         redC,
+    p2p_trade:          greenC,
+    card_spend:         amberC,
+    crypto_withdrawal:  '#0ea5e9',
+    swap:               '#14b8a6',
+    manual:             textSub,
+  };
+  const feesBySource = (s.feesBySource || metrics?.feesBySource || []).map((row: any) => ({
+    name:  row.source,
+    value: Number(row.totalUsd || 0),
+    color: SOURCE_COLORS[row.source] ?? '#94a3b8',
+  })).filter((r: any) => r.value > 0);
 
   const userGrowth = (s.userGrowth || []).map((d: any) => ({
     ...d,
@@ -207,6 +245,78 @@ export default function AdminDashboardPage() {
               </BarChart>
             </ResponsiveContainer>
           </Box>
+        </Box>
+      </SimpleGrid>
+
+      {/* ── Fees by source — where revenue comes from ── */}
+      <SimpleGrid columns={{ base: 1, md: 2 }} spacing={5} mb={6}>
+        <Box p={5} bg={cardBg} border="1px solid" borderColor={cardBorder} borderRadius="14px">
+          <Flex justify="space-between" align="center" mb={3}>
+            <Text fontSize="13px" fontWeight="800" color={textMain}>Fees by source (lifetime, USD)</Text>
+            <Badge colorScheme="green" variant="subtle" px={2} py={0.5} borderRadius="6px" fontSize="10px">
+              Total ${fmtD(s.totalFees)}
+            </Badge>
+          </Flex>
+          {feesBySource.length === 0 ? (
+            <Text fontSize="12px" color={textMuted} textAlign="center" py={6}>No fees collected yet</Text>
+          ) : (
+            <Flex direction={{ base: 'column', md: 'row' }} align="center" gap={4}>
+              <Box h="180px" w={{ base: '100%', md: '50%' }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie data={feesBySource} dataKey="value" cx="50%" cy="50%" innerRadius={48} outerRadius={72} paddingAngle={2}>
+                      {feesBySource.map((entry: any, idx: number) => <Cell key={idx} fill={entry.color} />)}
+                    </Pie>
+                    <ReTooltip
+                      formatter={(v: any) => '$' + Number(v).toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                      contentStyle={{ background: dk ? '#1e293b' : 'white', border: 'none', borderRadius: '8px', fontSize: '12px' }}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+              </Box>
+              <VStack align="stretch" flex={1} spacing={1.5}>
+                {feesBySource.map((d: any) => (
+                  <Flex key={d.name} justify="space-between" align="center">
+                    <HStack spacing={2}>
+                      <Box w="10px" h="10px" borderRadius="2px" bg={d.color} />
+                      <Text fontSize="12px" fontWeight="700" color={textMain}>{d.name}</Text>
+                    </HStack>
+                    <Text fontSize="12px" fontWeight="700" color={textMain}>${fmtD(d.value)}</Text>
+                  </Flex>
+                ))}
+              </VStack>
+            </Flex>
+          )}
+        </Box>
+
+        <Box p={5} bg={cardBg} border="1px solid" borderColor={cardBorder} borderRadius="14px">
+          <Text fontSize="13px" fontWeight="800" color={textMain} mb={3}>Live activity (last 5 min)</Text>
+          <SimpleGrid columns={3} spacing={3}>
+            <VStack align="start" p={3} bg={dk ? 'rgba(255,255,255,0.02)' : 'rgba(0,87,184,0.04)'} borderRadius="10px">
+              <Text fontSize="10px" color={textSub} fontWeight="700" letterSpacing=".06em">ORDERS</Text>
+              <Text fontSize="20px" fontWeight="900" color={textMain}>{m.recentOrders5m ?? 0}</Text>
+            </VStack>
+            <VStack align="start" p={3} bg={dk ? 'rgba(255,255,255,0.02)' : 'rgba(0,87,184,0.04)'} borderRadius="10px">
+              <Text fontSize="10px" color={textSub} fontWeight="700" letterSpacing=".06em">WITHDRAWALS</Text>
+              <Text fontSize="20px" fontWeight="900" color={textMain}>{m.recentWithdrawals5m ?? 0}</Text>
+            </VStack>
+            <VStack align="start" p={3} bg={dk ? 'rgba(255,255,255,0.02)' : 'rgba(0,87,184,0.04)'} borderRadius="10px">
+              <Text fontSize="10px" color={textSub} fontWeight="700" letterSpacing=".06em">P2P TRADES</Text>
+              <Text fontSize="20px" fontWeight="900" color={textMain}>{m.recentP2P5m ?? 0}</Text>
+            </VStack>
+            <VStack align="start" p={3} bg={dk ? 'rgba(255,255,255,0.02)' : 'rgba(0,87,184,0.04)'} borderRadius="10px">
+              <Text fontSize="10px" color={textSub} fontWeight="700" letterSpacing=".06em">CARD TXS</Text>
+              <Text fontSize="20px" fontWeight="900" color={textMain}>{m.recentCardTx5m ?? 0}</Text>
+            </VStack>
+            <VStack align="start" p={3} bg={dk ? 'rgba(255,255,255,0.02)' : 'rgba(0,87,184,0.04)'} borderRadius="10px">
+              <Text fontSize="10px" color={textSub} fontWeight="700" letterSpacing=".06em">TRANSFERS</Text>
+              <Text fontSize="20px" fontWeight="900" color={textMain}>{m.recentTransfers5m ?? 0}</Text>
+            </VStack>
+            <VStack align="start" p={3} bg={dk ? 'rgba(255,255,255,0.02)' : 'rgba(0,87,184,0.04)'} borderRadius="10px">
+              <Text fontSize="10px" color={textSub} fontWeight="700" letterSpacing=".06em">SOCKETS</Text>
+              <Text fontSize="20px" fontWeight="900" color={textMain}>{m.onlineSockets ?? 0}</Text>
+            </VStack>
+          </SimpleGrid>
         </Box>
       </SimpleGrid>
 

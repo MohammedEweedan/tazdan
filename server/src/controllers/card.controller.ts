@@ -1,9 +1,12 @@
 import { Response, NextFunction } from 'express';
 import { z } from 'zod';
 import crypto from 'crypto';
+import { Decimal } from '@prisma/client/runtime/library';
 import { prisma } from '../utils/prisma';
 import { AppError } from '../middleware/errorHandler';
 import { AuthRequest } from '../types';
+import { collectFee } from '../services/fee/feeCollector.service';
+import { emitActivity } from '../utils/realtime';
 
 /* ── Tier config ─────────────────────────────────────────────
    Centralised so limits / cashback are in one place and can be
@@ -270,6 +273,13 @@ export class CardController {
       });
 
       if (!declined && data.type === 'PURCHASE') {
+        // Look up the configured card-spend fee percent.
+        const feeSetting = await prisma.platformSettings.findUnique({
+          where: { key: 'card_fee_percent' },
+        });
+        const feePercent = parseFloat(feeSetting?.value ?? '1.0');
+        const cardFee = +(data.amount * feePercent / 100).toFixed(2);
+
         await prisma.card.update({
           where: { id: card.id },
           data: {
@@ -278,8 +288,40 @@ export class CardController {
             cashbackBalance: { increment: cashback },
           },
         });
+
+        // Mirror the card spend into the unified Transaction ledger
+        // so it shows up in the user's activity list alongside trades,
+        // deposits, withdrawals, and P2P.
+        await prisma.transaction.create({
+          data: {
+            userId: req.user!.id,
+            type:   'CARD_SPEND' as any,
+            currency: card.currency as any,
+            amount:   new Decimal(-data.amount),
+            fee:      new Decimal(cardFee),
+            balanceBefore: 0,
+            balanceAfter:  0,
+            description:   `Card purchase · ${data.merchant ?? data.category ?? 'POS'}`,
+            reference:     tx.reference,
+            metadata: { cardId: card.id, merchant: data.merchant, country: data.country, cashback, cardFee } as any,
+          },
+        }).catch(() => null); // non-fatal — card record is the source of truth
+
+        // Pour the card-spend platform fee into the platform wallet.
+        if (cardFee > 0) {
+          await collectFee({
+            source:   'card_spend',
+            sourceId: tx.id,
+            payerId:  req.user!.id,
+            amount:   new Decimal(cardFee),
+            currency: card.currency as string,
+            description: `Card spend fee · ${data.merchant ?? 'POS'}`,
+            metadata: { cardId: card.id, merchant: data.merchant, country: data.country, cashback },
+          }).catch((e) => console.warn('[card] collectFee failed', e));
+        }
       }
 
+      emitActivity(req, [req.user!.id], { kind: 'card', txId: tx.id });
       res.status(201).json({ transaction: tx, declined });
     } catch (error) {
       next(error);

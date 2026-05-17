@@ -4,6 +4,7 @@ import type { Server as IOServer } from 'socket.io';
 import { prisma } from '../utils/prisma';
 import { AuthRequest } from '../types';
 import { AppError } from '../middleware/errorHandler';
+import axios from 'axios';
 import {
   buildQuote,
   getQuote,
@@ -175,6 +176,38 @@ export class ExchangeController {
       });
       if (!order) throw new AppError('Order not found', 404);
       res.json({ order });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * GET /api/exchange/search?q=doge
+   * Returns matching Binance USDT pairs with live price.
+   * Used by the mobile asset picker to support any tradeable token.
+   */
+  static async searchAssets(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const q = String(req.query.q ?? '').toUpperCase().trim();
+      const BINANCE_REST = process.env.BINANCE_REST_URL || 'https://api.binance.com';
+
+      // Fetch all USDT pairs from Binance 24hr ticker (lightweight)
+      const { data } = await axios.get(`${BINANCE_REST}/api/v3/ticker/24hr`, { timeout: 8000 });
+      const usdt: Array<{ symbol: string; lastPrice: string; priceChangePercent: string; volume: string }> = data;
+
+      const results = usdt
+        .filter((t) => t.symbol.endsWith('USDT'))
+        .map((t) => ({
+          symbol: t.symbol.replace('USDT', ''),
+          price: parseFloat(t.lastPrice),
+          change24h: parseFloat(t.priceChangePercent),
+          volume24h: parseFloat(t.volume),
+        }))
+        .filter((t) => !q || t.symbol.includes(q))
+        .sort((a, b) => b.volume24h - a.volume24h)  // most liquid first
+        .slice(0, 50);
+
+      res.json({ results });
     } catch (error) {
       next(error);
     }

@@ -5,7 +5,8 @@
  */
 
 import { useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, ScrollView, Text, View } from 'react-native';
+import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
+import { LoadingPulse } from '@/components/ui/LoadingPulse';
 import { Ionicons } from '@expo/vector-icons';
 
 import { ScreenShell, CTAButton } from '@/components/ui/ScreenShell';
@@ -234,7 +235,7 @@ export default function Statements() {
         </View>
         {busy && (
           <View style={{ alignItems: 'center', marginTop: 8 }}>
-            <ActivityIndicator color={p.fgMuted} />
+            <LoadingPulse size={48} icon="document-text-outline" />
           </View>
         )}
       </FadeIn>

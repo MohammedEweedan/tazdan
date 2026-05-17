@@ -1,20 +1,14 @@
 /**
- * Order execution.
+ * Order execution — supports every tradeable asset.
  *
- * Custodial model: users never hold keys until they withdraw. A BUY
- * debits their USDT fiat wallet and credits the internal crypto ledger
- * on UserWallet. A SELL does the reverse. The real trade against Binance
- * happens in parallel — on success we record the binanceOrderId, on
- * failure we mark the CryptoOrder FAILED and refund the user atomically.
+ * Native assets (ETH, BTC, SOL, USDT) use dedicated Decimal columns.
+ * Every other asset uses the `altBalances` JSON column on UserWallet,
+ * stored as { "BNB": "1.2345678", "XRP": "500.000000", ... }.
  *
  * Safety:
- *   - Pessimistic concurrency: all balance mutations happen inside
- *     prisma.$transaction with serializable isolation.
- *   - Idempotency: callers may supply an idempotency key; the unique
- *     constraint on CryptoOrder.idempotencyKey prevents double-execution
- *     on retry.
- *   - Quote validity: quotes are consumed (single-use) and rejected
- *     after 30s.
+ *   - Pessimistic concurrency: all balance mutations inside prisma.$transaction.
+ *   - Idempotency: unique constraint on CryptoOrder.idempotencyKey.
+ *   - Quote validity: quotes are single-use, rejected after 30s.
  */
 import axios from 'axios';
 import crypto from 'crypto';
@@ -24,13 +18,12 @@ import { prisma } from '../../utils/prisma';
 import { AppError } from '../../middleware/errorHandler';
 import { createUserWallets } from '../wallet/walletDerivation.service';
 import { consumeQuote, type Quote, type SupportedAsset } from './priceEngine.service';
+import { collectFee } from '../fee/feeCollector.service';
 
 Decimal.set({ precision: 40 });
 
 const BINANCE_REST = process.env.BINANCE_REST_URL || 'https://api.binance.com';
 
-// Per-asset precision on Binance (lot size). Real impl should call
-// GET /api/v3/exchangeInfo and cache; these are safe defaults.
 const ASSET_PRECISION: Record<string, number> = {
   ETH: 4, BTC: 6, SOL: 3, USDT: 2,
   BNB: 4, XRP: 2, ADA: 2, DOGE: 2,
@@ -46,12 +39,6 @@ function sign(query: string, secret: string): string {
   return crypto.createHmac('sha256', secret).update(query).digest('hex');
 }
 
-/**
- * Place a MARKET order on Binance spot. Returns the Binance order id
- * on success. If credentials aren't configured we fall through to
- * "simulated" mode — the internal ledger still moves so the system is
- * end-to-end testable in dev.
- */
 async function placeBinanceMarket(opts: {
   symbol: string;
   side: 'BUY' | 'SELL';
@@ -93,28 +80,33 @@ function roundQty(asset: string, amount: Decimal): string {
   return amount.toFixed(precision, Decimal.ROUND_DOWN);
 }
 
-type BalanceField = 'ethBalance' | 'btcBalance' | 'solBalance' | 'usdtErc20Bal' | 'usdtTrc20Bal' | null;
+// Native-column assets have a dedicated Decimal field on UserWallet.
+type NativeField = 'ethBalance' | 'btcBalance' | 'solBalance' | 'usdtErc20Bal' | 'usdtTrc20Bal';
 
-function assetBalanceField(asset: string, network: string): BalanceField {
-  const assetUpper = asset.toUpperCase();
-  const networkUpper = network.toUpperCase();
-  
-  if (assetUpper === 'ETH') return 'ethBalance';
-  if (assetUpper === 'BTC') return 'btcBalance';
-  if (assetUpper === 'SOL') return 'solBalance';
-  if (assetUpper === 'USDT') {
-    return networkUpper === 'TRC20' ? 'usdtTrc20Bal' : 'usdtErc20Bal';
-  }
-  
-  // Return null for unsupported assets - these will need a different storage mechanism
+function nativeField(asset: string, network: string): NativeField | null {
+  const a = asset.toUpperCase();
+  const n = network.toUpperCase();
+  if (a === 'ETH')  return 'ethBalance';
+  if (a === 'BTC')  return 'btcBalance';
+  if (a === 'SOL')  return 'solBalance';
+  if (a === 'USDT') return n === 'TRC20' ? 'usdtTrc20Bal' : 'usdtErc20Bal';
   return null;
 }
 
-/**
- * Execute a quote the user has previously received from /exchange/quote.
- * Consumes the quote (single-use), moves balances, places the Binance
- * order, and persists a CryptoOrder row.
- */
+function getAltBalance(altBalances: unknown, asset: string): Decimal {
+  if (!altBalances || typeof altBalances !== 'object') return new Decimal(0);
+  const raw = (altBalances as Record<string, string>)[asset.toUpperCase()];
+  return raw ? new Decimal(raw) : new Decimal(0);
+}
+
+function setAltBalance(altBalances: unknown, asset: string, value: Decimal): Record<string, string> {
+  const obj: Record<string, string> = (altBalances && typeof altBalances === 'object')
+    ? { ...(altBalances as Record<string, string>) }
+    : {};
+  obj[asset.toUpperCase()] = value.toFixed(18);
+  return obj;
+}
+
 export async function executeQuote(opts: {
   userId: string;
   quoteId: string;
@@ -122,7 +114,6 @@ export async function executeQuote(opts: {
 }) {
   const { userId, quoteId, idempotencyKey } = opts;
 
-  // Idempotency shortcut: if this key already produced an order, return it.
   if (idempotencyKey) {
     const prior = await prisma.cryptoOrder.findUnique({ where: { idempotencyKey } });
     if (prior) return prior;
@@ -131,34 +122,25 @@ export async function executeQuote(opts: {
   const quote = consumeQuote(quoteId);
   if (!quote) throw new AppError('Quote expired or not found. Request a new quote.', 400);
 
-  const fiat = new Decimal(quote.fiatAmount);
+  const fiat    = new Decimal(quote.fiatAmount);
   const crypto_ = new Decimal(quote.cryptoAmount);
+  const assetUpper = quote.asset.toUpperCase();
 
-  // Ensure user wallet exists before starting the transaction
   let userWallet = await prisma.userWallet.findUnique({ where: { userId } });
-  if (!userWallet) {
-    userWallet = await createUserWallets(userId);
-  }
+  if (!userWallet) userWallet = await createUserWallets(userId);
 
-  // Step 1: atomic balance move + order row.
+  const native = nativeField(quote.asset, quote.network);
+
   const order = await prisma.$transaction(async (tx) => {
-    userWallet = await tx.userWallet.findUnique({ where: { userId } });
-    if (!userWallet) throw new AppError('User wallet not provisioned', 400);
+    const uw = await tx.userWallet.findUnique({ where: { userId } });
+    if (!uw) throw new AppError('User wallet not provisioned', 400);
 
     const usdt = await tx.wallet.findUnique({
       where: { userId_currency: { userId, currency: 'USDT' } },
     });
     if (!usdt) throw new AppError('USDT wallet missing', 400);
 
-    const balField = assetBalanceField(quote.asset, quote.network);
-    
-    // Check if asset is supported for custody
-    if (!balField) {
-      throw new AppError(`Asset ${quote.asset} is available for quotes but not yet supported for custody trading. Supported assets: ETH, BTC, SOL, USDT.`, 400);
-    }
-
     if (quote.side === 'BUY') {
-      // Debit USDT, credit crypto.
       if (new Decimal(usdt.balance.toString()).lt(fiat)) {
         throw new AppError('Insufficient USDT balance', 400);
       }
@@ -166,20 +148,32 @@ export async function executeQuote(opts: {
         where: { id: usdt.id },
         data: { balance: { decrement: new Prisma.Decimal(fiat.toFixed(8)) } },
       });
-      await tx.userWallet.update({
-        where: { id: userWallet.id },
-        data: { [balField]: { increment: new Prisma.Decimal(crypto_.toFixed(18)) } },
-      });
-    } else {
-      // Debit crypto, credit USDT.
-      const current = new Decimal((userWallet as any)[balField].toString());
-      if (current.lt(crypto_)) {
-        throw new AppError(`Insufficient ${quote.asset} balance`, 400);
+
+      if (native) {
+        await tx.userWallet.update({
+          where: { id: uw.id },
+          data: { [native]: { increment: new Prisma.Decimal(crypto_.toFixed(18)) } },
+        });
+      } else {
+        const current = getAltBalance(uw.altBalances, assetUpper);
+        const next    = setAltBalance(uw.altBalances, assetUpper, current.plus(crypto_));
+        await tx.userWallet.update({ where: { id: uw.id }, data: { altBalances: next } });
       }
-      await tx.userWallet.update({
-        where: { id: userWallet.id },
-        data: { [balField]: { decrement: new Prisma.Decimal(crypto_.toFixed(18)) } },
-      });
+    } else {
+      // SELL
+      if (native) {
+        const current = new Decimal((uw as any)[native].toString());
+        if (current.lt(crypto_)) throw new AppError(`Insufficient ${quote.asset} balance`, 400);
+        await tx.userWallet.update({
+          where: { id: uw.id },
+          data: { [native]: { decrement: new Prisma.Decimal(crypto_.toFixed(18)) } },
+        });
+      } else {
+        const current = getAltBalance(uw.altBalances, assetUpper);
+        if (current.lt(crypto_)) throw new AppError(`Insufficient ${quote.asset} balance`, 400);
+        const next = setAltBalance(uw.altBalances, assetUpper, current.minus(crypto_));
+        await tx.userWallet.update({ where: { id: uw.id }, data: { altBalances: next } });
+      }
       await tx.wallet.update({
         where: { id: usdt.id },
         data: { balance: { increment: new Prisma.Decimal(fiat.toFixed(8)) } },
@@ -192,34 +186,36 @@ export async function executeQuote(opts: {
         type: quote.side,
         asset: quote.asset,
         network: quote.network,
-        quotedPrice: new Prisma.Decimal(quote.quotedPrice),
-        quotedTotal: new Prisma.Decimal(fiat.toFixed(8)),
-        marketPrice: new Prisma.Decimal(quote.marketPrice),
-        actualCost: new Prisma.Decimal(fiat.toFixed(8)),
-        platformFee: new Prisma.Decimal(quote.platformFee),
-        networkFee: new Prisma.Decimal(quote.networkFee),
+        quotedPrice:   new Prisma.Decimal(quote.quotedPrice),
+        quotedTotal:   new Prisma.Decimal(fiat.toFixed(8)),
+        marketPrice:   new Prisma.Decimal(quote.marketPrice),
+        actualCost:    new Prisma.Decimal(fiat.toFixed(8)),
+        platformFee:   new Prisma.Decimal(quote.platformFee),
+        networkFee:    new Prisma.Decimal(quote.networkFee),
         spreadCapture: new Prisma.Decimal(quote.spreadCapture),
-        cryptoAmount: new Prisma.Decimal(crypto_.toFixed(18)),
+        cryptoAmount:  new Prisma.Decimal(crypto_.toFixed(18)),
         status: 'PENDING',
         idempotencyKey: idempotencyKey ?? null,
       },
     });
   });
 
-  // Create transaction record for activity feed
-  const txDescription = quote.side === 'BUY'
-    ? `Bought ${crypto_.toFixed(8)} ${quote.asset} with ${fiat.toFixed(2)} USDT`
-    : `Sold ${crypto_.toFixed(8)} ${quote.asset} for ${fiat.toFixed(2)} USDT`;
-
+  // Transaction.currency must be a valid Currency enum value.
+  // All crypto trades settle via the user's USDT wallet, so record USDT
+  // as the currency and store the actual asset ticker in metadata.
   await prisma.transaction.create({
     data: {
       userId,
       type: quote.side === 'BUY' ? 'BUY' : 'SELL',
-      currency: quote.asset as any,
-      amount: quote.side === 'BUY' ? new Prisma.Decimal(crypto_.toFixed(18)) : new Prisma.Decimal(-crypto_.toFixed(18)),
-      balanceBefore: new Prisma.Decimal(0), // Will be updated by wallet refresh
-      balanceAfter: new Prisma.Decimal(0), // Will be updated by wallet refresh
-      description: txDescription,
+      currency: 'USDT',
+      amount: quote.side === 'BUY'
+        ? new Prisma.Decimal(-fiat.toFixed(8))   // USDT out
+        : new Prisma.Decimal(fiat.toFixed(8)),    // USDT in
+      balanceBefore: new Prisma.Decimal(0),
+      balanceAfter:  new Prisma.Decimal(0),
+      description: quote.side === 'BUY'
+        ? `Bought ${crypto_.toFixed(8)} ${quote.asset} with ${fiat.toFixed(2)} USDT`
+        : `Sold ${crypto_.toFixed(8)} ${quote.asset} for ${fiat.toFixed(2)} USDT`,
       reference: `CRPT-${order.id.slice(0, 8).toUpperCase()}`,
       metadata: {
         kind: 'crypto_order',
@@ -232,68 +228,62 @@ export async function executeQuote(opts: {
     },
   });
 
-  // Step 2: execute on Binance (outside the DB txn). On failure, refund.
-  const symbol =
-    quote.asset === 'USDT' ? null : `${quote.asset}USDT`;
+  // Pour platform fee + spread capture into the platform wallet
+  const totalFee = new Decimal(quote.platformFee || 0).add(quote.spreadCapture || 0);
+  if (totalFee.gt(0)) {
+    await collectFee({
+      source:   'crypto_order',
+      sourceId: order.id,
+      payerId:  userId,
+      amount:   totalFee.toString(),
+      currency: 'USDT',
+      description: `${quote.side} ${quote.asset} fee + spread`,
+      metadata: { asset: quote.asset, network: quote.network, platformFee: quote.platformFee, spreadCapture: quote.spreadCapture },
+    });
+  }
+
+  const symbol = quote.asset.toUpperCase() === 'USDT' ? null : `${quote.asset.toUpperCase()}USDT`;
   try {
     let binanceOrderId: string | null = null;
     if (symbol) {
       const result = await placeBinanceMarket({
         symbol,
         side: quote.side,
-        quantity: roundQty(quote.asset as SupportedAsset, crypto_),
+        quantity: roundQty(quote.asset, crypto_),
       });
       binanceOrderId = result.orderId;
     }
     return prisma.cryptoOrder.update({
       where: { id: order.id },
-      data: {
-        status: 'EXECUTED',
-        binanceOrderId: binanceOrderId ?? undefined,
-        executedAt: new Date(),
-      },
+      data: { status: 'EXECUTED', binanceOrderId: binanceOrderId ?? undefined, executedAt: new Date() },
     });
   } catch (err: any) {
     console.error('[binance] order failed — refunding', order.id, err?.response?.data ?? err?.message);
-    // Refund: reverse the balance move and mark order FAILED.
     await prisma.$transaction(async (tx) => {
-      const userWallet = await tx.userWallet.findUnique({ where: { userId } });
-      const usdt = await tx.wallet.findUnique({
-        where: { userId_currency: { userId, currency: 'USDT' } },
-      });
-      if (!userWallet || !usdt) return;
-      const balField = assetBalanceField(quote.asset, quote.network);
-      // Only refund if we have a valid balance field (asset is supported)
-      if (!balField) {
-        await tx.cryptoOrder.update({
-          where: { id: order.id },
-          data: { status: 'FAILED' },
-        });
-        return;
-      }
+      const uw   = await tx.userWallet.findUnique({ where: { userId } });
+      const usdt = await tx.wallet.findUnique({ where: { userId_currency: { userId, currency: 'USDT' } } });
+      if (!uw || !usdt) return;
+
       if (quote.side === 'BUY') {
-        await tx.wallet.update({
-          where: { id: usdt.id },
-          data: { balance: { increment: new Prisma.Decimal(fiat.toFixed(8)) } },
-        });
-        await tx.userWallet.update({
-          where: { id: userWallet.id },
-          data: { [balField]: { decrement: new Prisma.Decimal(crypto_.toFixed(18)) } },
-        });
+        await tx.wallet.update({ where: { id: usdt.id }, data: { balance: { increment: new Prisma.Decimal(fiat.toFixed(8)) } } });
+        if (native) {
+          await tx.userWallet.update({ where: { id: uw.id }, data: { [native]: { decrement: new Prisma.Decimal(crypto_.toFixed(18)) } } });
+        } else {
+          const current = getAltBalance(uw.altBalances, assetUpper);
+          const next    = setAltBalance(uw.altBalances, assetUpper, Decimal.max(0, current.minus(crypto_)));
+          await tx.userWallet.update({ where: { id: uw.id }, data: { altBalances: next } });
+        }
       } else {
-        await tx.userWallet.update({
-          where: { id: userWallet.id },
-          data: { [balField]: { increment: new Prisma.Decimal(crypto_.toFixed(18)) } },
-        });
-        await tx.wallet.update({
-          where: { id: usdt.id },
-          data: { balance: { decrement: new Prisma.Decimal(fiat.toFixed(8)) } },
-        });
+        if (native) {
+          await tx.userWallet.update({ where: { id: uw.id }, data: { [native]: { increment: new Prisma.Decimal(crypto_.toFixed(18)) } } });
+        } else {
+          const current = getAltBalance(uw.altBalances, assetUpper);
+          const next    = setAltBalance(uw.altBalances, assetUpper, current.plus(crypto_));
+          await tx.userWallet.update({ where: { id: uw.id }, data: { altBalances: next } });
+        }
+        await tx.wallet.update({ where: { id: usdt.id }, data: { balance: { decrement: new Prisma.Decimal(fiat.toFixed(8)) } } });
       }
-      await tx.cryptoOrder.update({
-        where: { id: order.id },
-        data: { status: 'FAILED' },
-      });
+      await tx.cryptoOrder.update({ where: { id: order.id }, data: { status: 'FAILED' } });
     });
     throw new AppError('Order execution failed — balance refunded', 502);
   }

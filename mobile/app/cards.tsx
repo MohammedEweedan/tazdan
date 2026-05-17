@@ -28,6 +28,7 @@ import { useThemedPalette, useTheme, type Palette } from '@/store/themeStore';
 import { useT } from '@/store/i18nStore';
 import { cardsService } from '@/services';
 import { QUERY_KEYS } from '@/constants';
+import { LoadingPulse } from '@/components/ui/LoadingPulse';
 import type { CardEntity } from '@/types';
 
 const { width: SCREEN_W } = Dimensions.get('window');
@@ -1203,8 +1204,7 @@ export default function Cards() {
 
           {isLoading ? (
             <View style={{ paddingTop: 80, alignItems: 'center' }}>
-              <ActivityIndicator size="large" color="#4a8fe0" />
-              <Text style={{ color: p.fgMuted, fontSize: 13, marginTop: 12 }}>{t('cards.loading')}</Text>
+              <LoadingPulse size={64} icon="card-outline" label={t('cards.loading')} />
             </View>
           ) : allCards.length === 0 ? (
             /* ── EMPTY STATE ── */

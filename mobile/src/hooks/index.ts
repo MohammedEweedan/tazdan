@@ -6,7 +6,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { QUERY_KEYS } from '@/constants';
 import {
-  walletService, transactionService, p2pService, cardsService,
+  walletService, transactionService, activityService, p2pService, cardsService,
   swapService, profileService, notificationService,
 } from '@/services';
 
@@ -22,6 +22,8 @@ export {
 export { useForexRates } from './useForexRates';
 export { useDisplayCurrency, CURRENCY_SYMBOLS } from './useDisplayCurrency';
 export { useBackendTickers as useMarkets } from './useBackendTickers';
+export { useActivityRealtime } from './useActivityRealtime';
+export { useCountries, useBanksByCountry, usePaymentMethods, usePlatformBanks } from './useGeo';
 
 export const useWallets = () =>
   useQuery({
@@ -36,6 +38,19 @@ export const useTransactions = (page = 1) =>
   useQuery({
     queryKey: QUERY_KEYS.transactions(page),
     queryFn: () => transactionService.list(page),
+  });
+
+/**
+ * Unified activity feed — joins every transaction-like model the user
+ * has touched (trades, p2p, deposits, withdrawals, card spend, etc.)
+ * into one time-ordered list. Powers the home `Activity` tab.
+ */
+export const useActivities = (page = 1, type: string = 'ALL', limit = 20) =>
+  useQuery({
+    queryKey: QUERY_KEYS.activities(page, type),
+    queryFn: () => activityService.list(page, limit, type),
+    refetchInterval: 15_000,
+    staleTime: 10_000,
   });
 
 export const useP2POffers = (filter: 'BUY' | 'SELL' | 'ALL' = 'ALL') =>

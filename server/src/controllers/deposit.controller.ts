@@ -5,10 +5,11 @@ import { AppError } from '../middleware/errorHandler';
 import { generateReference } from '../utils/helpers';
 import { AuthRequest } from '../types';
 import { getOnRampProvider } from '../services/onramp';
-import type { RampPaymentMethod, RampProvider, Currency } from '@prisma/client';
+import { Currency } from '@prisma/client';
+import type { RampPaymentMethod, RampProvider } from '@prisma/client';
 
 const depositSchema = z.object({
-  currency: z.enum(['USD', 'USDT']),
+  currency: z.enum(['USD', 'EUR', 'GBP', 'AED', 'SAR', 'EGP', 'USDT', 'LYD', 'BTC', 'ETH', 'BNB', 'SOL', 'XRP', 'ADA', 'DOGE', 'MATIC', 'DOT', 'AVAX']),
   amount: z.number().positive(),
   paymentMethod: z.enum(['BANK_TRANSFER']),
   bankName: z.string().optional(),
@@ -17,7 +18,7 @@ const depositSchema = z.object({
   notes: z.string().optional(),
 });
 
-const INSTANT_METHODS: string[] = [];
+const FIAT_CURRENCIES = new Set(['USD', 'EUR', 'GBP', 'AED', 'SAR', 'EGP', 'LYD']);
 
 export class DepositController {
   /**
@@ -30,6 +31,15 @@ export class DepositController {
       const body = { ...req.body, amount: parseFloat(req.body.amount) };
       const data = depositSchema.parse(body);
 
+      // KYC gate: fiat deposits require APPROVED KYC status
+      if (FIAT_CURRENCIES.has(data.currency)) {
+        const user = await prisma.user.findUnique({ where: { id: req.user!.id }, select: { kycStatus: true } });
+        if (user?.kycStatus !== 'APPROVED') {
+          res.status(403).json({ error: 'KYC verification required for fiat deposits' });
+          return;
+        }
+      }
+
       const settings = await prisma.platformSettings.findUnique({
         where: { key: data.currency === 'USDT' ? 'min_deposit_usdt' : 'min_deposit_usd' },
       });
@@ -39,13 +49,11 @@ export class DepositController {
       const reference = generateReference('DEP');
       const file = req.file as Express.Multer.File | undefined;
 
-      // No instant confirmation for USD/USDT
-      const isInstant = false;
-
+      // Create deposit with WAITING_CONFIRMATION status for manual confirmation
       const deposit = await prisma.deposit.create({
         data: {
           userId: req.user!.id,
-          currency: data.currency,
+          currency: data.currency as Currency,
           amount: data.amount,
           paymentMethod: data.paymentMethod,
           reference,
@@ -54,60 +62,70 @@ export class DepositController {
           accountNumber: data.accountNumber,
           senderName: data.senderName,
           notes: data.notes,
-          status: isInstant ? 'CONFIRMED' : 'PENDING',
-          confirmedAt: isInstant ? new Date() : undefined,
+          status: 'WAITING_CONFIRMATION' as any,
         },
       });
 
-      if (isInstant) {
-        // Instantly credit the user's wallet
-        const wallet = await prisma.wallet.findUnique({
-          where: { userId_currency: { userId: req.user!.id, currency: data.currency } },
+      res.status(201).json({ deposit });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async confirm(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const { id } = req.params;
+      const deposit = await prisma.deposit.findFirst({
+        where: { id, userId: req.user!.id },
+      });
+
+      if (!deposit) throw new AppError('Deposit not found', 404);
+      if (deposit.status !== 'WAITING_CONFIRMATION') throw new AppError('Deposit is not waiting for confirmation', 400);
+
+      await prisma.$transaction(async (tx) => {
+        // Update deposit status to CONFIRMED
+        await tx.deposit.update({
+          where: { id: deposit.id },
+          data: { status: 'CONFIRMED', confirmedAt: new Date() },
+        });
+
+        // Credit the user's wallet
+        const wallet = await tx.wallet.findUnique({
+          where: { userId_currency: { userId: req.user!.id, currency: deposit.currency } },
         });
         const balanceBefore = parseFloat(wallet?.balance.toString() || '0');
 
-        await prisma.wallet.update({
-          where: { userId_currency: { userId: req.user!.id, currency: data.currency } },
-          data: { balance: { increment: data.amount } },
+        await tx.wallet.update({
+          where: { userId_currency: { userId: req.user!.id, currency: deposit.currency } },
+          data: { balance: { increment: deposit.amount } },
         });
 
-        await prisma.transaction.create({
+        // Create transaction record
+        await tx.transaction.create({
           data: {
             userId: req.user!.id,
             type: 'DEPOSIT',
-            currency: data.currency,
-            amount: data.amount,
+            currency: deposit.currency,
+            amount: deposit.amount,
             balanceBefore,
-            balanceAfter: balanceBefore + data.amount,
-            reference,
-            description: `Instant deposit via ${data.paymentMethod}`,
+            balanceAfter: new (require('decimal.js'))(balanceBefore.toString()).add(deposit.amount).toString(),
+            reference: deposit.reference,
+            description: `Bank transfer deposit confirmed`,
           },
         });
 
-        await prisma.notification.create({
+        // Send notification
+        await tx.notification.create({
           data: {
             userId: req.user!.id,
             title: 'Deposit Confirmed',
-            message: `Your deposit of ${data.amount} ${data.currency} via ${data.paymentMethod} has been instantly confirmed.`,
+            message: `Your deposit of ${deposit.amount} ${deposit.currency} has been confirmed and credited to your account.`,
             type: 'deposit',
           },
         });
-      } else {
-        // Notify admins for manual review
-        const admins = await prisma.user.findMany({ where: { role: 'ADMIN' } });
-        for (const admin of admins) {
-          await prisma.notification.create({
-            data: {
-              userId: admin.id,
-              title: 'New Deposit Request',
-              message: `New ${data.currency} deposit of ${data.amount} via ${data.paymentMethod}. Ref: ${reference}`,
-              type: 'deposit',
-            },
-          });
-        }
-      }
+      });
 
-      res.status(201).json({ deposit, instant: isInstant });
+      res.json({ message: 'Deposit confirmed and credited' });
     } catch (error) {
       next(error);
     }

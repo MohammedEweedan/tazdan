@@ -79,7 +79,7 @@ export const palettes: Record<ThemeMode, Palette> = {
     redBg:     'rgba(248,113,113,0.16)',
     amberFg:   '#fbbf24',
     amberBg:   'rgba(251,191,36,0.16)',
-    // Accent — Promrkts brand blue, lifted for dark use
+    // Accent — promrkts brand blue, lifted for dark use
     accent:    '#4A8FE0',
     accentFg:  '#ffffff',
     // Shadow — deep cold black; on warm chrome it reads as "lifted"

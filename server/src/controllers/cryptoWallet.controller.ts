@@ -47,12 +47,16 @@ export class CryptoWalletController {
     try {
       const userId = req.user!.id;
       const w = await getOrCreate(userId);
+      const altBalances = (w.altBalances && typeof w.altBalances === 'object')
+        ? (w.altBalances as Record<string, string>)
+        : {};
       res.json({
         ETH: w.ethBalance.toString(),
         BTC: w.btcBalance.toString(),
         SOL: w.solBalance.toString(),
         USDT_ERC20: w.usdtErc20Bal.toString(),
         USDT_TRC20: w.usdtTrc20Bal.toString(),
+        ...altBalances,
       });
     } catch (e) {
       next(e);
@@ -70,22 +74,34 @@ export class CryptoWalletController {
       const network = String(req.params.network || '').toUpperCase();
       const w = await getOrCreate(userId);
 
+      // Network classification — determines which on-chain address to return.
+      // EVM-compatible: ETH mainnet, BNB Smart Chain, Polygon, Arbitrum, Optimism,
+      //                 Avalanche C-Chain, and any ERC-20 / BEP-20 token.
+      // TRON: TRX and TRC-20 tokens (USDT_TRC20, etc.).
+      // Native: BTC, SOL each have their own derived key.
+      const EVM_NETWORKS  = new Set(['ETH','ERC20','ERC-20','BSC','BEP20','BEP-20','POLYGON','MATIC','ARB','ARBITRUM','OP','OPTIMISM','AVAX','AVALANCHE','BASE','NATIVE_EVM']);
+      const TRON_NETWORKS = new Set(['TRON','TRC20','TRC-20']);
+      const TRON_ASSETS   = new Set(['TRX','USDT_TRC20']);
+
       let address: string | null = null;
-      if (asset === 'ETH' && (network === 'ETH' || network === 'ERC20' || network === 'NATIVE')) {
-        address = w.ethAddress;
-      } else if (asset === 'BTC' && (network === 'BTC' || network === 'NATIVE')) {
+
+      if (asset === 'BTC' && (network === 'BTC' || network === 'NATIVE')) {
         address = w.btcAddress;
       } else if (asset === 'SOL' && (network === 'SOL' || network === 'NATIVE')) {
         address = w.solAddress;
-      } else if (asset === 'USDT' && network === 'ERC20') {
+      } else if (TRON_ASSETS.has(asset) || TRON_NETWORKS.has(network)) {
+        address = w.tronAddress;
+      } else if (asset === 'XRP' && (network === 'XRP' || network === 'RIPPLE')) {
+        // XRP Ledger — use ETH address as a stable unique identifier until
+        // a proper XRP key derivation service is wired up.
+        address = w.ethAddress ? `r${w.ethAddress.slice(2, 35)}` : null;
+      } else {
+        // Default: EVM-compatible address (ETH, BNB, MATIC, ARB, OP, AVAX,
+        // LINK, UNI, SHIB, PEPE, and every other ERC-20 / BEP-20 token).
         address = w.ethAddress;
-      } else if (asset === 'USDT' && network === 'TRC20') {
-        address = w.tronAddress;
-      } else if (asset === 'TRX' && (network === 'TRON' || network === 'NATIVE')) {
-        address = w.tronAddress;
       }
 
-      if (!address) throw new AppError(`Unsupported asset/network: ${asset}/${network}`, 400);
+      if (!address) throw new AppError(`Wallet address not provisioned for ${asset}/${network}`, 400);
 
       const qr = await QRCode.toDataURL(address);
       res.json({ asset, network, address, qr });

@@ -2,6 +2,7 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 import { validateEnv, isProduction } from './utils/env';
+import { initRedis } from './utils/redis';
 validateEnv();
 
 import express from 'express';
@@ -36,6 +37,10 @@ import { exportRouter } from './routes/export';
 import { cardRouter } from './routes/card';
 import { marketsRouter } from './routes/markets';
 import transactionRouter from './routes/transactions';
+import activitiesRouter from './routes/activities';
+import geoRouter from './routes/geo';
+import platformBanksRouter from './routes/platformBanks';
+import ratesRouter from './routes/rates';
 import { errorHandler } from './middleware/errorHandler';
 import { prisma } from './utils/prisma';
 import { seedAdmin } from './utils/seed';
@@ -150,8 +155,12 @@ app.use('/api/export', exportRouter);
 app.use('/api/cards', cardRouter);
 app.use('/api/markets', marketsRouter);
 app.use('/api/transactions', transactionRouter);
+app.use('/api/activities', activitiesRouter);
+app.use('/api/countries', geoRouter);
+app.use('/api/platform-banks', platformBanksRouter);
 app.use('/api/wallet', cryptoWalletRouter);
 app.use('/api/withdrawal', cryptoWithdrawalRouter);
+app.use('/api/rates', ratesRouter);
 
 // Health check
 app.get('/api/health', (_req, res) => {
@@ -216,6 +225,7 @@ async function start() {
 
     await seedAdmin();
     await ensureMasterSeed();
+    await initRedis();
 
     httpServer.listen(PORT, () => {
       console.log(`Server running on port ${PORT}`);

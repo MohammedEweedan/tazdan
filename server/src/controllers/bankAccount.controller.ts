@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { prisma } from '../utils/prisma';
 import { AppError } from '../middleware/errorHandler';
 import { AuthRequest } from '../types';
+import { getBankFetchService } from '../services/banking';
 
 const bankAccountSchema = z.object({
   bankName: z.string().min(1, 'Bank name is required'),
@@ -13,6 +14,29 @@ const bankAccountSchema = z.object({
 });
 
 export class BankAccountController {
+  static async getBanksByCountry(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const { country } = req.params;
+      
+      // Use the new BankFetchService with provider fallback chain
+      const bankService = getBankFetchService({
+        ibanComApiKey: process.env.IBAN_COM_API_KEY,
+        useIbanCom: process.env.USE_IBAN_COM === 'true',
+        useOpenIban: process.env.USE_OPENIBAN !== 'false',
+        useLocalFallback: process.env.ENABLE_LOCAL_BANK_CACHE !== 'false',
+      });
+      
+      const banks = await bankService.getBanks(country);
+      
+      // Transform Bank objects to simple string array for backward compatibility
+      const bankNames = banks.map(bank => bank.name);
+      
+      res.json({ banks: bankNames });
+    } catch (error) {
+      next(error);
+    }
+  }
+
   static async getAll(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const bankAccounts = await prisma.bankAccount.findMany({

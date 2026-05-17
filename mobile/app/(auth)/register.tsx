@@ -216,6 +216,7 @@ export default function Register() {
   const skipKyc = () => setStep(4);
   const finishKyc = () => setStep(4);
   const goToDashboard = () => router.replace('/');
+  const goVerifyPhone = () => router.push('/(auth)/verify-phone' as any);
 
   return (
     <View style={{ flex: 1, backgroundColor: p.bg }}>
@@ -755,9 +756,17 @@ export default function Register() {
                 <PrimaryCTA
                   palette={p}
                   themeMode={themeMode}
-                  label="Go to dashboard"
-                  onPress={goToDashboard}
+                  label="Verify phone number"
+                  onPress={goVerifyPhone}
                 />
+                <Pressable
+                  onPress={goToDashboard}
+                  style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1, paddingVertical: 4 })}
+                >
+                  <Text style={{ color: p.fgMuted, fontSize: 14, fontWeight: '500' }}>
+                    Skip for now
+                  </Text>
+                </Pressable>
               </View>
             )}
 

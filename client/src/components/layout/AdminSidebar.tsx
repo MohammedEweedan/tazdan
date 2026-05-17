@@ -9,6 +9,7 @@ import { useTranslate } from '@tolgee/react';
 import {
   FiGrid, FiArrowDownCircle, FiArrowUpCircle, FiUsers,
   FiShield, FiDollarSign, FiSettings, FiLogOut, FiTrendingUp, FiList,
+  FiDatabase, FiAlertTriangle,
 } from 'react-icons/fi';
 import { useAuthStore } from '@/stores/authStore';
 import LanguageSwitcher from '@/components/ui/LanguageSwitcher';
@@ -32,6 +33,9 @@ export default function AdminSidebar() {
     { href: '/admin/rates', labelKey: 'admin_exchange_rates', icon: FiDollarSign },
     { href: '/admin/users', labelKey: 'admin_manage_users', icon: FiUsers },
     { href: '/admin/kyc', labelKey: 'admin_manage_kyc', icon: FiShield },
+    { href: '/admin/aml', labelKey: 'admin_aml_flags', icon: FiAlertTriangle },
+    // Universal data browser — every Prisma model.
+    { href: '/admin/data', labelKey: 'admin_data_browser', icon: FiDatabase },
     { href: '/admin/settings', labelKey: 'admin_settings', icon: FiSettings },
   ];
 

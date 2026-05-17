@@ -168,7 +168,7 @@ export default function Onboarding() {
           }}
         >
           <Image
-            source={isDark ? require('../../assets/logo-white.png') : require('../../assets/logo-black.png')}
+            source={isDark ? require('../../assets/icon-color.png') : require('../../assets/icon-color.png')}
             style={{ width: 120, height: 32 }}
             resizeMode="contain"
           />

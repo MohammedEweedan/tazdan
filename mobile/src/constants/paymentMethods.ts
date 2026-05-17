@@ -20,7 +20,7 @@ export type PaymentMethodId =
   | 'CARD'              // Stripe card, Apple Pay, Google Pay
   | 'APPLE_PAY'         // Apple Pay direct (when Stripe isn't the rail)
   | 'BANK_TRANSFER'     // SWIFT / IBAN / FPS / ACH — admin-reviewed
-  | 'LYD_AGENT'         // Cash deposit via Promrkts agent network (Libya)
+  | 'LYD_AGENT'         // Cash deposit via promrkts agent network (Libya)
   | 'MOONPAY'           // MoonPay redirect (fiat-on-ramp aggregator)
   | 'P2P';              // Peer-to-peer escrow on the platform
 
@@ -75,7 +75,7 @@ export const METHOD_CATALOGUE: Record<PaymentMethodId, PaymentMethod> = {
   BANK_TRANSFER: {
     id: 'BANK_TRANSFER',
     name: 'Bank Transfer',
-    description: 'Send from your bank to Promrkts. No card fees.',
+    description: 'Send from your bank to promrkts. No card fees.',
     icon: 'business-outline',
     currencies: ['USD', 'EUR', 'GBP', 'AED', 'SAR', 'EGP', 'LYD'],
     speed: '1-3 days',
@@ -86,7 +86,7 @@ export const METHOD_CATALOGUE: Record<PaymentMethodId, PaymentMethod> = {
   },
   LYD_AGENT: {
     id: 'LYD_AGENT',
-    name: 'Cash via Promrkts Agent',
+    name: 'Cash via promrkts Agent',
     description: 'Pay cash at a local agent and have LYD credited.',
     icon: 'people-outline',
     currencies: ['LYD'],
@@ -111,7 +111,7 @@ export const METHOD_CATALOGUE: Record<PaymentMethodId, PaymentMethod> = {
   P2P: {
     id: 'P2P',
     name: 'Peer-to-peer (P2P)',
-    description: 'Buy USDT/LYD from another verified Promrkts user.',
+    description: 'Buy USDT/LYD from another verified promrkts user.',
     icon: 'swap-horizontal-outline',
     currencies: ['USD', 'AED', 'SAR', 'EGP', 'LYD'],
     speed: 'Same day',

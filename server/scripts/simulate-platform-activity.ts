@@ -27,7 +27,7 @@ import { randomInt, randomUUID } from 'crypto';
 declare const process: NodeJS.Process;
 declare const console: Console;
 
-const BASE_URL = process.env.API_URL || 'http://localhost:3001';
+const BASE_URL = process.env.API_URL || 'http://localhost:5000';
 const VERBOSE = process.argv.includes('--verbose');
 
 // Parse arguments
@@ -68,18 +68,8 @@ const stats = {
   withdrawals: 0,
   orders: { buy: 0, sell: 0 },
   transfers: 0,
-  agentRequests: 0,
-  agentsCreated: 0,
   errors: 0,
 };
-
-// Fake data generators
-const agentNames = ['Ahmed Cash Point', 'Mohamed Exchange', 'Libya Gold Shop', 'Tripoli Transfer', 'Benghazi Payments', 'Cash Plus Libya', 'Swift Exchange', 'Al-Farsi Money', 'Desert Pay Center', 'Mediterranean Cash'];
-const agentCities = ['Tripoli', 'Benghazi', 'Misrata', 'Sabha', 'Zawiya', 'Sirte', 'Bayda', 'Zliten', 'Ajdabiya', 'Tobruk'];
-const agentRegions = ['Al-Sha\'ab', 'Al-Mahari', 'Al-Fuwayhat', 'Al-Kuwayfia', 'Al-Majouri', 'Al-Sabri', 'Sidi Khalifa', 'Al-Andalus', 'Ghot Al-Shaal'];
-
-// Global agent list for transfers
-let globalAgents: any[] = [];
 
 // Simulated User Class
 class SimulatedUser {
@@ -111,13 +101,27 @@ class SimulatedUser {
     try {
       const firstName = randomChoice(['Ahmed', 'Mohamed', 'Ali', 'Fatima', 'Aisha', 'Omar', 'Hassan', 'Sara']);
       const lastName = randomChoice(['Al-Farsi', 'Benali', 'Khalil', 'Mansour', 'Saleh', 'Hussein']);
-      
+      const randomDOB = () => {
+      const start = new Date(1985, 0, 1).getTime();
+      const end = new Date(2003, 11, 31).getTime();
+      const date = new Date(randomInt(start, end));
+        return date.toISOString();
+      };
+        
       const response = await this.api.post('/auth/register', {
         email: this.email,
         password: this.password,
         firstName,
         lastName,
-        phone: `+218${randomInt(900000000, 999999999)}`,
+
+        username: `user_${randomUUID().slice(0, 8)}`,
+
+        country: 'LY',
+
+        phoneCountryCode: '218',
+        phone: `9${randomInt(10000000, 99999999)}`,
+
+        dateOfBirth: randomDOB(),
       });
       
       if (VERBOSE) log(`  ✓ Registered: ${this.email}`, 'green');
@@ -127,7 +131,10 @@ class SimulatedUser {
       stats.registrations++;
       return true;
     } catch (error: any) {
-      const errorMsg = error.response?.data?.message || error.response?.data?.error || error.message;
+      const errorMsg =
+        JSON.stringify(error.response?.data) ||
+        error.response?.data?.message ||
+        error.message;
       if (VERBOSE) log(`  ✗ Registration failed: ${errorMsg}`, 'red');
       stats.errors++;
       return false;
@@ -344,47 +351,6 @@ class SimulatedUser {
     }
   }
 
-  async findAgents(): Promise<void> {
-    try {
-      const cities = ['Tripoli', 'Benghazi', 'Misrata', 'Sabha', 'Zawiya'];
-      const response = await this.api.get('/agents/nearby', {
-        params: { city: randomChoice(cities) },
-      });
-      if (VERBOSE) log(`  ✓ Found ${response.data.agents?.length || 0} agents`, 'cyan');
-    } catch (error: any) {
-      if (VERBOSE) log(`  ✗ Find agents failed: ${error.response?.data?.message || error.message}`, 'red');
-    }
-  }
-
-  async requestAgentDeposit(): Promise<boolean> {
-    try {
-      const response = await this.api.get('/agents/nearby');
-      const agents = response.data.agents || [];
-      
-      if (agents.length === 0) {
-        if (VERBOSE) log(`  ⚠ No agents available for deposit request`, 'yellow');
-        return false;
-      }
-      
-      const agent: any = randomChoice(agents);
-      const amount = randomAmount(100, 1000);
-      
-      await this.api.post('/agents/deposit', {
-        agentId: agent.id,
-        amount,
-        currency: 'USDT',
-        note: 'Test agent deposit',
-      });
-      
-      if (VERBOSE) log(`  ✓ Agent deposit requested: ${amount} USDT via ${agent.name}`, 'green');
-      stats.agentRequests++;
-      return true;
-    } catch (error: any) {
-      if (VERBOSE) log(`  ✗ Agent deposit failed: ${error.response?.data?.message || error.message}`, 'red');
-      return false;
-    }
-  }
-
   // Inject fake balance directly via backend API (simulates confirmed deposits)
   async injectFakeBalance(): Promise<boolean> {
     try {
@@ -463,7 +429,6 @@ class SimulatedUser {
     } else if (persona === 'sender') {
       // Sender persona: P2P transfers, agent deposits
       if (VERBOSE) log(`  💸 Sender persona`, 'blue');
-      await this.findAgents();
       await randomSleep(500, 1000);
       
       // Try transfers
@@ -474,7 +439,6 @@ class SimulatedUser {
       }
       
       await this.fetchTransferHistory();
-      await this.requestAgentDeposit();
       
     } else if (persona === 'depositor') {
       // Depositor persona: Creates deposits, checks history
@@ -522,8 +486,6 @@ class SimulatedUser {
       { fn: () => this.createWithdrawal(), weight: 3 },
       { fn: () => this.createOrder(), weight: 4 },
       { fn: () => this.createTransfer(), weight: 3 },
-      { fn: () => this.findAgents(), weight: 4 },
-      { fn: () => this.requestAgentDeposit(), weight: 2 },
     ];
     
     const numActivities = randomInt(2, 6);
@@ -568,8 +530,8 @@ class AdminSimulator {
     try {
       // Try default admin credentials or create if needed
       const response = await this.api.post('/auth/login', {
-        email: 'admin@promrkts.com',
-        password: 'admin123',
+        email: 'moeawidan99@gmail.com',
+        password: '11223344',
       });
       
       this.token = response.data.accessToken;
@@ -691,63 +653,6 @@ class AdminSimulator {
     
     log(`  ✓ Admin session completed`, 'green');
   }
-
-  async seedAgents(count: number = 10): Promise<void> {
-    log(`\n🤖 Seeding ${count} fake agents...`, 'bright');
-    
-    const loggedIn = await this.login();
-    if (!loggedIn) {
-      log(`  ✗ Cannot seed agents without admin login`, 'red');
-      return;
-    }
-    
-    let created = 0;
-    for (let i = 0; i < count; i++) {
-      try {
-        const agentName = agentNames[i % agentNames.length] + ` #${i + 1}`;
-        const city = randomChoice(agentCities);
-        const region = randomChoice(agentRegions);
-        const phone = `+218${randomInt(900000000, 999999999)}`;
-        const email = `agent${i}_${Date.now()}@promrkts.com`;
-        
-        // Step 1: Create agent as a regular user first
-        const userResponse = await this.api.post('/auth/register', {
-          email,
-          password: 'AgentPass123!',
-          firstName: agentName.split(' ')[0],
-          lastName: agentName.split(' ')[1] || 'Agent',
-          phone,
-        });
-        
-        const userId = userResponse.data.user.id;
-        
-        // Step 2: Create agent profile for this user
-        const response = await this.api.post('/agents', {
-          userId,
-          name: agentName,
-          phone,
-          city,
-          region,
-          address: `${region}, ${city}, Libya`,
-          googleMapsLink: `https://maps.google.com/?q=${city},Libya`,
-          commissionRate: 0.01,
-          maxDailyLimit: 10000,
-        });
-        
-        if (response.data.agent) {
-          globalAgents.push(response.data.agent);
-          created++;
-          if (VERBOSE) log(`  ✓ Created agent: ${agentName} in ${city}`, 'green');
-        }
-      } catch (error: any) {
-        // Agent might already exist or endpoint might not exist
-        if (VERBOSE) log(`  ⚠ Agent creation skipped: ${error.response?.data?.message || error.message}`, 'yellow');
-      }
-    }
-    
-    stats.agentsCreated = created;
-    log(`  ✓ Seeded ${created} agents`, 'green');
-  }
 }
 
 // Main simulation function
@@ -764,13 +669,7 @@ async function runSimulation() {
   log(`  Admin simulation: ${INCLUDE_ADMIN ? 'Yes' : 'No'}`, 'dim');
   log(`${'='.repeat(60)}\n`, 'bright');
   
-  // Seed agents first if admin simulation is enabled
-  if (INCLUDE_ADMIN) {
-    const admin = new AdminSimulator();
-    await admin.seedAgents(8);
-    await randomSleep(1000, 2000);
-  }
-  
+ 
   const users: SimulatedUser[] = [];
   
   // Create users
@@ -827,8 +726,6 @@ async function runSimulation() {
   log(`  Buy Orders: ${stats.orders.buy}`, 'green');
   log(`  Sell Orders: ${stats.orders.sell}`, 'green');
   log(`  Transfers: ${stats.transfers}`, 'green');
-  log(`  Agents Created: ${stats.agentsCreated}`, 'green');
-  log(`  Agent Requests: ${stats.agentRequests}`, 'green');
   log(`  Errors: ${stats.errors}`, stats.errors > 0 ? 'red' : 'green');
   log(`${'='.repeat(60)}\n`, 'bright');
 }

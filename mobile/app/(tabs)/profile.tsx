@@ -30,7 +30,7 @@ interface Row {
 export default function Profile() {
   const router = useRouter();
   const h = useHaptics();
-  const { user, logout, updateUser, biometricEnabled, enableBiometric, disableBiometric } = useAuthStore();
+  const { user, logout, updateUser, biometricEnabled, enableBiometric, disableBiometric, clearViewSelection } = useAuthStore();
   const p = useThemedPalette();
   const themeMode = useTheme((s) => s.mode);
   const toggleTheme = useTheme((s) => s.toggle);
@@ -45,7 +45,7 @@ export default function Profile() {
   const [bioLoading, setBioLoading] = useState(false);
 
   const initial = (user?.firstName?.[0] ?? user?.email?.[0] ?? 'P').toUpperCase();
-  const fullName = `${user?.firstName ?? ''} ${user?.lastName ?? ''}`.trim() || 'Promrkts user';
+  const fullName = `${user?.firstName ?? ''} ${user?.lastName ?? ''}`.trim() || 'promrkts user';
   const handle = user?.username ?? user?.email?.split('@')[0] ?? 'me';
   const userEmoji = (user as any)?.avatarUrl;
   const baseCurrency = (user as any)?.baseCurrency || 'USD';
@@ -95,7 +95,7 @@ export default function Profile() {
           Alert.alert('Not available', 'Face ID / biometrics are not set up on this device.');
           return;
         }
-        const result = await LocalAuthentication.authenticateAsync({ promptMessage: 'Enable Face ID for Promrkts' });
+        const result = await LocalAuthentication.authenticateAsync({ promptMessage: 'Enable Face ID for promrkts' });
         if (result.success) { await enableBiometric(); h.success(); }
         else h.error();
       }
@@ -196,7 +196,7 @@ export default function Profile() {
       rows: [
         { icon: 'person-outline',           label: t('profile.row.editProfile'),     href: '/settings' },
         { icon: 'shield-checkmark-outline', label: t('profile.row.kycVerification'), href: '/kyc' },
-        { icon: 'card-outline',             label: t('profile.row.linkedAccounts'),  href: '/cards' },
+        { icon: 'card-outline',             label: t('profile.row.linkedAccounts'),  href: '/linked-accounts' },
       ],
     },
     {
@@ -217,6 +217,11 @@ export default function Profile() {
     {
       title: t('profile.section.session'),
       rows: [
+        ...(user?.role === 'ADMIN' ? [{
+          icon: 'shield-checkmark-outline' as const,
+          label: 'Switch view (Admin / User)',
+          onPress: () => { h.selection(); clearViewSelection(); router.replace('/role-select' as any); },
+        }] : []),
         {
           icon: 'log-out-outline',
           label: t('profile.row.logout'),
@@ -332,7 +337,7 @@ export default function Profile() {
             color: p.fgFaint, fontSize: 11, fontWeight: '500',
             textAlign: 'center', marginTop: 28,
           }}>
-            Promrkts · v0.1.0
+            promrkts · v0.1.0
           </Text>
         </ScrollView>
       </SafeAreaView>

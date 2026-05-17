@@ -17,3 +17,5 @@ authRouter.post('/reset-password', AuthController.resetPassword);
 authRouter.post('/2fa/enable', authenticate, AuthController.enable2FA);
 authRouter.post('/2fa/verify', authenticate, AuthController.verify2FA);
 authRouter.post('/2fa/disable', authenticate, AuthController.disable2FA);
+authRouter.post('/phone/start', authenticate, AuthController.startPhoneVerification);
+authRouter.post('/phone/verify', authenticate, AuthController.verifyPhone);

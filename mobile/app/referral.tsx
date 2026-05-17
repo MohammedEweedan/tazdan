@@ -109,7 +109,7 @@ export default function Referral() {
           icon="share-outline"
           onPress={() => {
             h.medium();
-            Share.share({ message: `Join me on Promrkts — sign up with code ${code} and we both get $10. https://promrkts.app/r/${code}` });
+            Share.share({ message: `Join me on promrkts — sign up with code ${code} and we both get $10. https://promrkts.app/r/${code}` });
           }}
         />
       </View>

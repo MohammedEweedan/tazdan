@@ -121,6 +121,9 @@ const { data: messages = [], isLoading } = useThread(partnerId);  const sendMut 
   const [reportTarget, setReportTarget] = useState<{ messageId?: string } | null>(null);
   const [showStickers, setShowStickers] = useState(false);
   const [isPartnerTyping, setIsPartnerTyping] = useState(false);
+  // Admin "reply as @support" toggle — only available to admins
+  const isAdmin = me?.role === 'ADMIN';
+  const [replyAsSupport, setReplyAsSupport] = useState(false);
   const partnerTypingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const typingStopTimerRef    = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isEmittingTypingRef   = useRef(false);
@@ -150,7 +153,7 @@ const { data: messages = [], isLoading } = useThread(partnerId);  const sendMut 
     }
   };
 
-  const send = () => {
+  const send = async () => {
     const body = draft.trim();
     if (!body) return;
     h.light();
@@ -159,10 +162,25 @@ const { data: messages = [], isLoading } = useThread(partnerId);  const sendMut 
       editMut.mutate({ id: editing.id, content: body }, {
         onSuccess: () => { setEditing(null); setDraft(''); },
       });
-    } else {
-      sendMut.mutate({ receiverId: partnerId, content: body });
-      setDraft('');
+      return;
     }
+    if (isAdmin && replyAsSupport) {
+      // Reply as the @support user — the target user sees the message
+      // from support, not from the admin's personal handle.
+      try {
+        const { adminService } = await import('@/services');
+        await adminService.replyAsSupport({ userId: partnerId, content: body });
+        setDraft('');
+        // Refresh thread so the new message appears
+        qc.invalidateQueries({ queryKey: ['thread', partnerId] });
+        qc.invalidateQueries({ queryKey: QUERY_KEYS.conversations });
+      } catch (e: any) {
+        Alert.alert('Reply failed', e?.response?.data?.error ?? e?.message ?? 'Try again');
+      }
+      return;
+    }
+    sendMut.mutate({ receiverId: partnerId, content: body });
+    setDraft('');
   };
 
   const sendPayment = (amount: number, currency: string, note?: string) => {
@@ -243,7 +261,7 @@ const { data: messages = [], isLoading } = useThread(partnerId);  const sendMut 
   const confirmEscalate = () => {
     Alert.alert(
       'Escalate to support?',
-      'A Promrkts agent will join the conversation and review the trade. Both participants will be notified.',
+      'A promrkts agent will join the conversation and review the trade. Both participants will be notified.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -376,7 +394,7 @@ const { data: messages = [], isLoading } = useThread(partnerId);  const sendMut 
               )}
             </View>
             <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '600', marginTop: 1 }}>
-              {isSupport ? 'Promrkts agent · usually replies in minutes'
+              {isSupport ? 'promrkts agent · usually replies in minutes'
                : partner?.username ? `@${partner.username}` : ' '}
             </Text>
           </View>
@@ -462,6 +480,31 @@ const { data: messages = [], isLoading } = useThread(partnerId);  const sendMut 
             borderTopWidth: 1, borderTopColor: p.border,
             backgroundColor: p.bg,
           }}>
+            {/* Admin "reply as support" toggle */}
+            {isAdmin && (
+              <Pressable
+                onPress={() => { h.selection(); setReplyAsSupport((v) => !v); }}
+                style={{
+                  flexDirection: 'row', alignItems: 'center', gap: 8,
+                  paddingHorizontal: 10, paddingVertical: 7, marginBottom: 8,
+                  borderRadius: 10,
+                  backgroundColor: replyAsSupport ? 'rgba(74,143,224,0.15)' : p.pillBg,
+                  borderWidth: 1, borderColor: replyAsSupport ? 'rgba(74,143,224,0.40)' : p.border,
+                }}
+              >
+                <Ionicons name={replyAsSupport ? 'shield-checkmark' : 'shield-outline'} size={14} color={replyAsSupport ? '#4a8fe0' : p.fgMuted} />
+                <Text style={{ color: replyAsSupport ? '#4a8fe0' : p.fgMuted, fontSize: 12, fontWeight: '700', flex: 1 }}>
+                  {replyAsSupport ? 'Replying as @support' : 'Reply as @support (admin)'}
+                </Text>
+                <View style={{
+                  width: 32, height: 18, borderRadius: 9,
+                  backgroundColor: replyAsSupport ? '#4a8fe0' : p.border,
+                  padding: 2, alignItems: replyAsSupport ? 'flex-end' : 'flex-start', justifyContent: 'center',
+                }}>
+                  <View style={{ width: 14, height: 14, borderRadius: 7, backgroundColor: '#fff' }} />
+                </View>
+              </Pressable>
+            )}
             {editing && (
               <View style={{
                 flexDirection: 'row', alignItems: 'center',
@@ -798,7 +841,7 @@ function ReportSheet({
             Report
           </Text>
           <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '500' }}>
-            Reports are reviewed by Promrkts trust &amp; safety. False reports may affect your account standing.
+            Reports are reviewed by promrkts trust &amp; safety. False reports may affect your account standing.
           </Text>
 
           <View style={{ gap: 6 }}>

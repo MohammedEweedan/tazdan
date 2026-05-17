@@ -10,7 +10,10 @@ import { STORAGE_KEYS } from '@/constants';
 import { authService } from '@/services';
 import type { User } from '@/types';
 
-const BIOMETRIC_KEY = 'promrkts.biometricEnabled';
+const BIOMETRIC_KEY  = 'promrkts.biometricEnabled';
+const VIEW_MODE_KEY  = 'promrkts.viewMode';
+
+export type ViewMode = 'admin' | 'user';
 
 type LastUser = Pick<User, 'email' | 'firstName' | 'lastName'> & {
   username?: string;
@@ -44,6 +47,9 @@ interface AuthState {
   isAuthenticated: boolean;
   isHydrating: boolean;
   biometricEnabled: boolean;
+  /** For admins: choose to use the app in 'admin' or 'user' mode. null = chooser not answered yet. */
+  viewMode: ViewMode | null;
+  needsViewSelection: boolean;
 
   hydrate: () => Promise<void>;
   // Returns `{ requires2FA: true }` if the server needs a TOTP code; the
@@ -73,28 +79,43 @@ interface AuthState {
   setAuthenticated: (user: User) => void;
   updateUser: (updates: Partial<User>) => void;
   logout: () => Promise<void>;
+  setViewMode: (mode: ViewMode) => Promise<void>;
+  clearViewSelection: () => void;
 }
 
-export const useAuthStore = create<AuthState>((set) => ({
+export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
   lastUser: null,
   isAuthenticated: false,
   isHydrating: true,
   biometricEnabled: false,
+  viewMode: null,
+  needsViewSelection: false,
 
   hydrate: async () => {
     try {
-      const [at, bioEnabled, lastUserRaw] = await Promise.all([
+      const [at, bioEnabled, lastUserRaw, viewModeRaw] = await Promise.all([
         secureStore.get(STORAGE_KEYS.accessToken),
         secureStore.get(BIOMETRIC_KEY),
         secureStore.get(STORAGE_KEYS.lastUser),
+        secureStore.get(VIEW_MODE_KEY),
       ]);
       const lastUser = parseLastUser(lastUserRaw);
-      set({ biometricEnabled: bioEnabled === 'true', lastUser });
+      const viewMode = (viewModeRaw === 'admin' || viewModeRaw === 'user') ? viewModeRaw : null;
+      set({ biometricEnabled: bioEnabled === 'true', lastUser, viewMode });
       if (!at) return set({ user: null, isAuthenticated: false, isHydrating: false, lastUser });
       const user = await authService.me().catch(() => null);
       if (user) await cacheLastUser(user);
-      set({ user, lastUser: user ? toLastUser(user) : lastUser, isAuthenticated: !!user, isHydrating: false });
+      // If user is admin and hasn't chosen, force the selector.
+      const needsViewSelection = !!user && user.role === 'ADMIN' && viewMode === null;
+      set({
+        user,
+        lastUser: user ? toLastUser(user) : lastUser,
+        isAuthenticated: !!user,
+        isHydrating: false,
+        needsViewSelection,
+        viewMode,
+      });
     } catch {
       set({ user: null, isAuthenticated: false, isHydrating: false });
     }
@@ -108,8 +129,23 @@ export const useAuthStore = create<AuthState>((set) => ({
     await secureStore.set(STORAGE_KEYS.accessToken, accessToken);
     await secureStore.set(STORAGE_KEYS.refreshToken, refreshToken);
     await cacheLastUser(user);
-    set({ user, lastUser: toLastUser(user), isAuthenticated: true });
+    // Fresh login always re-prompts admins for which view to enter.
+    await secureStore.remove(VIEW_MODE_KEY).catch(() => {});
+    set({
+      user,
+      lastUser: toLastUser(user),
+      isAuthenticated: true,
+      viewMode: null,
+      needsViewSelection: user.role === 'ADMIN',
+    });
   },
+
+  setViewMode: async (mode) => {
+    await secureStore.set(VIEW_MODE_KEY, mode);
+    set({ viewMode: mode, needsViewSelection: false });
+  },
+
+  clearViewSelection: () => set({ needsViewSelection: true, viewMode: null }),
 
   enableBiometric: async () => {
     await secureStore.set(BIOMETRIC_KEY, 'true');
@@ -133,7 +169,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       ]);
       if (!hasHardware || !isEnrolled) return false;
       const result = await LocalAuthentication.authenticateAsync({
-        promptMessage: 'Sign in to Promrkts',
+        promptMessage: 'Sign in to promrkts',
         cancelLabel: 'Cancel',
         disableDeviceFallback: false,
       });
@@ -180,6 +216,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     // into a dead user room and a fresh JWT is picked up on next login.
     const { disconnectSocket } = await import('@/lib/socket');
     disconnectSocket();
-    set({ user: null, isAuthenticated: false });
+    await secureStore.remove(VIEW_MODE_KEY).catch(() => {});
+    set({ user: null, isAuthenticated: false, viewMode: null, needsViewSelection: false });
   },
 }));

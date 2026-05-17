@@ -1,4 +1,4 @@
-# Promrkts — Mobile (Expo)
+# promrkts — Mobile (Expo)
 
 Premium fintech mobile client. Crypto + fiat wallets, P2P, send/receive,
 on/off-ramp, virtual cards.

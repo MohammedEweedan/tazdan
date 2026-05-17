@@ -15,6 +15,7 @@ import { prisma } from '../utils/prisma';
 import { AppError } from '../middleware/errorHandler';
 import { AuthRequest } from '../types';
 import { v4 as uuidv4 } from 'uuid';
+import { emitActivity } from '../utils/realtime';
 
 export class TransactionController {
   /**
@@ -46,54 +47,90 @@ export class TransactionController {
       throw new AppError('Cannot transfer to yourself', 400);
     }
 
+    // Currencies that exist in the Prisma Currency enum
+    const ENUM_CURRENCIES = new Set([
+      'USDT','BTC','ETH','BNB','SOL','XRP','ADA','DOGE','MATIC','DOT','AVAX',
+      'USD','EUR','GBP','AED','SAR','EGP','LYD',
+    ]);
+    const isEnumCurrency = ENUM_CURRENCIES.has(currency);
+
     try {
       const result = await prisma.$transaction(async (tx) => {
-        // Fetch sender and receiver wallets, create if missing
-        const [senderWallet, receiverWallet] = await Promise.all([
-          tx.wallet.upsert({
-            where: { userId_currency: { userId: senderId, currency } },
-            create: { userId: senderId, currency, balance: 0, frozen: 0 },
-            update: {},
-          }),
-          tx.wallet.upsert({
-            where: { userId_currency: { userId: receiverId, currency } },
-            create: { userId: receiverId, currency, balance: 0, frozen: 0 },
-            update: {},
-          }),
-        ]);
-
-        const senderBalance = Number(senderWallet.balance);
-        const senderFrozen = Number(senderWallet.frozen ?? 0);
-        const available = senderBalance - senderFrozen;
-
-        if (available < totalDeduction) {
-          throw new AppError(`Insufficient ${currency} balance. Available: ${available}`, 400);
-        }
-
-        // Generate reference
         const reference = `TRF-${uuidv4().slice(0, 8).toUpperCase()}`;
 
-        // Update balances
-        const senderNewBalance = senderBalance - totalDeduction;
-        const receiverNewBalance = Number(receiverWallet.balance) + amountNum;
+        let senderBalBefore = 0;
+        let senderBalAfter  = 0;
+        let receiverBalBefore = 0;
+        let receiverBalAfter  = 0;
 
-        await Promise.all([
-          tx.wallet.update({
-            where: { id: senderWallet.id },
-            data: { balance: senderNewBalance },
-          }),
-          tx.wallet.update({
-            where: { id: receiverWallet.id },
-            data: { balance: receiverNewBalance },
-          }),
-        ]);
+        if (isEnumCurrency) {
+          // ── Enum path: standard Wallet table ───────────────────────
+          const [senderWallet, receiverWallet] = await Promise.all([
+            tx.wallet.upsert({
+              where: { userId_currency: { userId: senderId, currency: currency as any } },
+              create: { userId: senderId, currency: currency as any, balance: 0, frozen: 0 },
+              update: {},
+            }),
+            tx.wallet.upsert({
+              where: { userId_currency: { userId: receiverId, currency: currency as any } },
+              create: { userId: receiverId, currency: currency as any, balance: 0, frozen: 0 },
+              update: {},
+            }),
+          ]);
 
-        // Create Transfer record
+          senderBalBefore   = Number(senderWallet.balance);
+          receiverBalBefore = Number(receiverWallet.balance);
+          const available   = senderBalBefore - Number(senderWallet.frozen ?? 0);
+
+          if (available < totalDeduction) {
+            throw new AppError(`Insufficient ${currency} balance. Available: ${available}`, 400);
+          }
+
+          senderBalAfter   = senderBalBefore - totalDeduction;
+          receiverBalAfter = receiverBalBefore + amountNum;
+
+          await Promise.all([
+            tx.wallet.update({ where: { id: senderWallet.id },   data: { balance: senderBalAfter } }),
+            tx.wallet.update({ where: { id: receiverWallet.id }, data: { balance: receiverBalAfter } }),
+          ]);
+        } else {
+          // ── Altcoin path: UserWallet.altBalances JSON ───────────────
+          const [senderUW, receiverUW] = await Promise.all([
+            tx.userWallet.findUnique({ where: { userId: senderId } }),
+            tx.userWallet.findUnique({ where: { userId: receiverId } }),
+          ]);
+
+          const senderAlts   = (senderUW?.altBalances   && typeof senderUW.altBalances   === 'object' ? senderUW.altBalances   : {}) as Record<string, string>;
+          const receiverAlts = (receiverUW?.altBalances && typeof receiverUW.altBalances === 'object' ? receiverUW.altBalances : {}) as Record<string, string>;
+
+          senderBalBefore   = parseFloat(senderAlts[currency]   ?? '0');
+          receiverBalBefore = parseFloat(receiverAlts[currency] ?? '0');
+
+          if (senderBalBefore < totalDeduction) {
+            throw new AppError(`Insufficient ${currency} balance. Available: ${senderBalBefore}`, 400);
+          }
+
+          senderBalAfter   = senderBalBefore - totalDeduction;
+          receiverBalAfter = receiverBalBefore + amountNum;
+
+          const newSenderAlts   = { ...senderAlts,   [currency]: senderBalAfter.toFixed(8) };
+          const newReceiverAlts = { ...receiverAlts, [currency]: receiverBalAfter.toFixed(8) };
+
+          if (!senderUW)   throw new AppError(`Sender crypto wallet not provisioned`, 404);
+          if (!receiverUW) throw new AppError(`Receiver crypto wallet not provisioned`, 404);
+
+          await Promise.all([
+            tx.userWallet.update({ where: { userId: senderId },   data: { altBalances: newSenderAlts } }),
+            tx.userWallet.update({ where: { userId: receiverId }, data: { altBalances: newReceiverAlts } }),
+          ]);
+        }
+
+        // Transfer record — altcoins stored with USDT as ledger currency; asset in metadata
         const transfer = await tx.transfer.create({
           data: {
             senderId,
             receiverId,
-            currency: currency as any,
+            currency: isEnumCurrency ? (currency as any) : 'USDT',
             amount: amountNum,
             fee: feeNum,
             reference,
@@ -101,40 +138,40 @@ export class TransactionController {
           },
         });
 
-        // Create sender Transaction (TRANSFER_OUT)
         const senderTx = await tx.transaction.create({
           data: {
             userId: senderId,
             type: 'TRANSFER_OUT',
-            currency: currency as any,
+            currency: isEnumCurrency ? (currency as any) : 'USDT',
             amount: amountNum,
             fee: feeNum,
-            balanceBefore: senderBalance,
-            balanceAfter: senderNewBalance,
+            balanceBefore: senderBalBefore,
+            balanceAfter:  senderBalAfter,
             reference,
             description: note ? `Transfer to @${note}` : `Transfer to ${receiverId}`,
-            metadata: { transferId: transfer.id, receiverId, note },
+            metadata: { transferId: transfer.id, receiverId, note, asset: currency },
           },
         });
 
-        // Create receiver Transaction (TRANSFER_IN)
         const receiverTx = await tx.transaction.create({
           data: {
             userId: receiverId,
             type: 'TRANSFER_IN',
-            currency: currency as any,
+            currency: isEnumCurrency ? (currency as any) : 'USDT',
             amount: amountNum,
             fee: 0,
-            balanceBefore: Number(receiverWallet.balance),
-            balanceAfter: receiverNewBalance,
+            balanceBefore: receiverBalBefore,
+            balanceAfter:  receiverBalAfter,
             reference,
             description: note ? `Transfer from @${note}` : `Transfer from ${senderId}`,
-            metadata: { transferId: transfer.id, senderId, note },
+            metadata: { transferId: transfer.id, senderId, note, asset: currency },
           },
         });
 
         return { transfer, senderTx, receiverTx };
       });
+
+      emitActivity(req, [senderId, receiverId], { kind: 'transaction', type: 'TRANSFER' });
 
       // If res is provided (HTTP request), send JSON response
       if (res) {

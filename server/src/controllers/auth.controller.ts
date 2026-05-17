@@ -20,6 +20,7 @@ import {
   sendPasswordResetEmail,
 } from '../services/email';
 import { createUserWallets } from '../services/wallet/walletDerivation.service';
+import { startVerification, checkVerification } from '../services/whatsapp/twilio.service';
 
 const refreshSchema = z.object({
   refreshToken: z.string().min(10),
@@ -569,13 +570,69 @@ export class AuthController {
         },
       });
 
-      // Revoke all refresh tokens for this user as a security measure
       await prisma.refreshToken.updateMany({
         where: { userId: user.id },
         data: { revokedAt: new Date() },
       });
 
       res.json({ message: 'Password reset successfully. Please log in again.' });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /* ─── Phone / WhatsApp OTP ─── */
+
+  static async startPhoneVerification(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const user = req.user;
+      if (!user) throw new AppError('Authentication required', 401);
+
+      const { channel } = z.object({
+        channel: z.enum(['whatsapp', 'sms']).default('whatsapp'),
+      }).parse(req.body);
+
+      const dbUser = await prisma.user.findUnique({
+        where: { id: user.id },
+        select: { phone: true, phoneCountryCode: true, phoneVerified: true },
+      });
+      if (!dbUser) throw new AppError('User not found', 404);
+      if (dbUser.phoneVerified) throw new AppError('Phone already verified', 400);
+
+      const phone = `+${dbUser.phoneCountryCode}${dbUser.phone}`;
+      const result = await startVerification({ phone, channel });
+      if (!result.ok) throw new AppError(result.reason ?? 'Failed to send code', 502);
+
+      res.json({ message: 'Verification code sent', status: result.status, simulated: result.reason === 'simulated' });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async verifyPhone(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const user = req.user;
+      if (!user) throw new AppError('Authentication required', 401);
+
+      const { code } = z.object({ code: z.string().min(4).max(8) }).parse(req.body);
+
+      const dbUser = await prisma.user.findUnique({
+        where: { id: user.id },
+        select: { phone: true, phoneCountryCode: true, phoneVerified: true },
+      });
+      if (!dbUser) throw new AppError('User not found', 404);
+      if (dbUser.phoneVerified) throw new AppError('Phone already verified', 400);
+
+      const phone = `+${dbUser.phoneCountryCode}${dbUser.phone}`;
+      const result = await checkVerification({ phone, code });
+      if (!result.valid) throw new AppError('Invalid or expired code', 400);
+
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { phoneVerified: true },
+      });
+
+      res.json({ message: 'Phone verified successfully' });
     } catch (error) {
       next(error);
     }

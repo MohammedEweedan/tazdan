@@ -1,24 +1,16 @@
 /**
- * Asset detail screen — opens when the user taps a held crypto on Home or
- * a coin from the Buy picker.
- *
- * Real-time data sources:
- *   - `useMarkets()`   — CoinGecko `/coins/markets` (price, % change per
- *                        range, market cap, volume, ATH, sparkline).
- *   - `useLivePrice()` — Binance WebSocket miniTicker for second-by-second
- *                        price updates that override the REST snapshot.
- *   - `useOHLC()`      — CoinGecko `/market_chart` for the selected range,
- *                        already down-sampled to ~60 points.
- *
- * Holdings USD value re-renders on every WebSocket tick because it's
- * derived from `livePrice * wallet.balance` inside the component.
+ * Asset detail screen — works for every tradeable token, not just the
+ * hardcoded CoinGecko list. Falls back to Binance REST for price + chart
+ * when the coin isn't in the backend ticker feed.
  */
 
-import { useMemo, useState } from 'react';
-import { ActivityIndicator, Pressable, Text, View } from 'react-native';
+import { useEffect, useMemo, useState } from 'react';
+import { Pressable, Text, View } from 'react-native';
+import { LoadingPulse } from '@/components/ui/LoadingPulse';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import Svg, { Circle, Defs, LinearGradient, Path, Stop, Line as SvgLine } from 'react-native-svg';
+import { useQuery } from '@tanstack/react-query';
 
 import { ScreenShell, Panel } from '@/components/ui/ScreenShell';
 import { useThemedPalette, type Palette } from '@/store/themeStore';
@@ -26,6 +18,7 @@ import { useHaptics, useWallets, useTransactions } from '@/hooks';
 import { useMarkets, ID_TO_SYM, type CoinGeckoMarket } from '@/hooks/useMarkets';
 import { useLivePrice } from '@/hooks/useLivePrice';
 import { useOHLC } from '@/hooks/useOHLC';
+import { cryptoExchangeAPI } from '@/lib/cryptoApi';
 import type { Currency, Wallet } from '@/types';
 import { CURRENCY_META } from '@/constants';
 import { formatMoney } from '@/utils/format';
@@ -33,83 +26,149 @@ import { CurrencyBadge } from '@/components/ui/CurrencyBadge';
 
 type Range = '1H' | '24H' | '7D' | '30D';
 
-/** Set of fiat ISO codes the app supports. Derived from CURRENCY_META so
- *  adding LYD/SAR/etc. lights up automatically across this screen. */
-const FIAT_CURRENCIES = new Set(
-  Object.values(CURRENCY_META).filter((m) => m.kind === 'fiat').map((m) => m.code),
-);
+const FIAT_CODES = new Set(['USD','EUR','GBP','AED','SAR','EGP','LYD','CAD','AUD','CHF','JPY','CNY']);
 
-/** Reverse of `ID_TO_SYM` so we can look up a CoinGecko id by ticker. */
 const SYM_TO_ID: Record<string, string> = Object.fromEntries(
   Object.entries(ID_TO_SYM).map(([id, sym]) => [sym, id]),
 );
 
+// Known metadata for display name + brand color
+const KNOWN_META: Record<string, { name: string; color: string }> = {
+  BTC:'Bitcoin',ETH:'Ethereum',SOL:'Solana',USDT:'Tether',USDC:'USD Coin',
+  BNB:'BNB',XRP:'XRP',ADA:'Cardano',DOGE:'Dogecoin',MATIC:'Polygon',
+  DOT:'Polkadot',AVAX:'Avalanche',LTC:'Litecoin',LINK:'Chainlink',
+  UNI:'Uniswap',AAVE:'Aave',ATOM:'Cosmos',ALGO:'Algorand',NEAR:'NEAR',
+  FTM:'Fantom',VET:'VeChain',TRX:'TRON',XLM:'Stellar',FIL:'Filecoin',
+  SHIB:'Shiba Inu',PEPE:'Pepe',WIF:'dogwifhat',ARB:'Arbitrum',
+  OP:'Optimism',SUI:'Sui',APT:'Aptos',INJ:'Injective',SEI:'Sei',TON:'Toncoin',
+} as any;
+
+function friendlyName(sym: string): string {
+  return (KNOWN_META as any)[sym.toUpperCase()] ?? sym.toUpperCase();
+}
+
+// Binance klines → close prices for chart
+const BINANCE_INTERVALS: Record<Range, string> = {
+  '1H':  '1m',
+  '24H': '15m',
+  '7D':  '4h',
+  '30D': '1d',
+};
+const BINANCE_LIMITS: Record<Range, number> = {
+  '1H': 60, '24H': 96, '7D': 42, '30D': 30,
+};
+
+function useBinanceChart(sym: string, range: Range, enabled: boolean) {
+  return useQuery({
+    queryKey: ['binance-chart', sym, range],
+    enabled: enabled && sym !== 'USDT' && sym !== 'USDT_ERC20' && sym !== 'USDT_TRC20',
+    queryFn: async () => {
+      const base = sym.replace(/_ERC20|_TRC20/, '');
+      const interval = BINANCE_INTERVALS[range];
+      const limit = BINANCE_LIMITS[range];
+      const res = await fetch(
+        `https://api.binance.com/api/v3/klines?symbol=${base}USDT&interval=${interval}&limit=${limit}`,
+        { signal: AbortSignal.timeout(8000) },
+      );
+      if (!res.ok) throw new Error(`klines ${res.status}`);
+      const data: any[] = await res.json();
+      return data.map((k) => parseFloat(k[4])); // close price
+    },
+    staleTime: range === '1H' ? 30_000 : 5 * 60_000,
+    retry: 1,
+  });
+}
+
+function useBinancePrice(sym: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ['binance-price', sym],
+    enabled,
+    queryFn: async () => {
+      const base = sym.replace(/_ERC20|_TRC20/, '');
+      if (base === 'USDT') return { price: 1, change24h: 0, volume24h: 0, marketCap: 0 };
+      const res = await cryptoExchangeAPI.search(base);
+      const hit = res.data.results.find((r) => r.symbol === base);
+      return hit ? { price: hit.price, change24h: hit.change24h, volume24h: hit.volume24h, marketCap: 0 } : null;
+    },
+    staleTime: 30_000,
+    retry: 1,
+  });
+}
+
 export default function AssetDetail() {
   const { currency } = useLocalSearchParams<{ currency: string }>();
-  const sym = (currency ?? 'BTC').toUpperCase() as Currency;
+  const sym = (currency ?? 'BTC').toUpperCase();
   const router = useRouter();
   const h = useHaptics();
   const p = useThemedPalette();
 
-  const { data: markets, isLoading: marketsLoading } = useMarkets();
+  const { data: markets } = useMarkets();
   const { data: wallets } = useWallets();
   const [range, setRange] = useState<Range>('24H');
 
-  // CoinGecko market record for this currency (may be undefined for fiat).
+  const isFiat = FIAT_CODES.has(sym);
+  const coinId = SYM_TO_ID[sym];
+  // Whether this coin has a CoinGecko market record
   const market: CoinGeckoMarket | undefined = useMemo(
     () => markets?.find((m) => ID_TO_SYM[m.id] === sym),
     [markets, sym],
   );
-  const coinId = SYM_TO_ID[sym];
 
-  // Real-time price from Binance WS. USDT is a stablecoin and isn't
-  // tradeable as USDT/USDT so the hook silently fails and we fall back
-  // to the REST snapshot (~$1.00).
-  const wsPrice = useLivePrice(sym);
-  const price = wsPrice ?? market?.current_price ?? 0;
-  const isLive = wsPrice !== null && sym !== 'USDT';
+  // For coins not in our backend ticker feed, pull from Binance directly
+  const needsBinance = !market && !isFiat;
+  const { data: binanceData } = useBinancePrice(sym, needsBinance);
 
-  // Pick the right pre-computed % change for the selected timeframe so
-  // the pill stays consistent with the chart shape below it.
+  // Live WebSocket price (works for top coins)
+  const wsPrice = useLivePrice(sym as Currency);
+
+  // Resolved price — WS > CoinGecko > Binance search > 1 (stablecoin fallback)
+  const price = wsPrice
+    ?? market?.current_price
+    ?? binanceData?.price
+    ?? (sym === 'USDT' || sym === 'USDT_ERC20' || sym === 'USDT_TRC20' ? 1 : 0);
+
+  const isLive = wsPrice !== null && !isFiat && sym !== 'USDT';
+
+  // % change for selected range — CoinGecko has per-range; Binance only 24H
   const change = useMemo(() => {
-    if (!market) return 0;
-    switch (range) {
-      case '1H':  return market.price_change_percentage_1h_in_currency  ?? 0;
-      case '24H': return market.price_change_percentage_24h             ?? 0;
-      case '7D':  return market.price_change_percentage_7d_in_currency  ?? 0;
-      case '30D': return market.price_change_percentage_30d_in_currency ?? 0;
+    if (market) {
+      switch (range) {
+        case '1H':  return market.price_change_percentage_1h_in_currency  ?? 0;
+        case '24H': return market.price_change_percentage_24h             ?? 0;
+        case '7D':  return market.price_change_percentage_7d_in_currency  ?? 0;
+        case '30D': return market.price_change_percentage_30d_in_currency ?? 0;
+      }
     }
-  }, [market, range]);
+    return binanceData?.change24h ?? 0;
+  }, [market, binanceData, range]);
   const positive = change >= 0;
 
-  // Real OHLC for the chart. While loading we render a skeleton.
-  // Pass `undefined` for fiat tickers — the hook short-circuits and we
-  // render a "no chart" panel below instead of showing BTC's chart for
-  // a USDT page.
-  const { data: ohlc, isLoading: ohlcLoading } = useOHLC(coinId, range);
-  const series = ohlc ?? [];
-  const hasChart = !!coinId;
+  // Chart: CoinGecko OHLC for known coins, Binance klines for the rest
+  const { data: cgOhlc, isLoading: cgLoading } = useOHLC(coinId, range);
+  const { data: binanceChart, isLoading: binanceChartLoading } = useBinanceChart(sym, range, needsBinance);
 
-  // Holdings — value fluctuates on every price tick because we recompute
-  // here instead of trusting the stale `wallet.fiatValueUsd` field.
+  const chartValues = cgOhlc ?? binanceChart ?? [];
+  const chartLoading = cgLoading || binanceChartLoading;
+  const hasChart = !isFiat && (sym !== 'USDT' && sym !== 'USDT_ERC20' && sym !== 'USDT_TRC20');
+
+  // Holdings
   const wallet = wallets?.find((w) => w.currency === sym);
   const balance = wallet ? Number(wallet.balance) : 0;
   const holdingsUsd = balance * price;
-  // Compute the holdings' P/L for the selected range using the same %
-  // change so users see "your $1,200 of BTC moved +2.3% (+$28) in 24H".
-  const holdingsDelta = (holdingsUsd * change) / (100 + change || 1);
+  const holdingsDelta = change !== 0 ? (holdingsUsd * change) / (100 + Math.abs(change)) : 0;
 
-  const isFiat = FIAT_CURRENCIES.has(sym);
+  const displayName = market?.name ?? friendlyName(sym);
+
   if (isFiat) {
     return (
-      <ScreenShell title={CURRENCY_META[sym]?.name ?? sym} subtitle={`${sym} Currency`}>
-        <FiatAssetView sym={sym} wallet={wallet} p={p} h={h} router={router} />
+      <ScreenShell title={CURRENCY_META[sym as Currency]?.name ?? sym} subtitle={`${sym} Currency`}>
+        <FiatAssetView sym={sym as Currency} wallet={wallet} p={p} h={h} router={router} />
       </ScreenShell>
     );
   }
 
   return (
-    <ScreenShell title={market?.name ?? sym} subtitle={`${sym} / USD`}>
+    <ScreenShell title={displayName} subtitle={`${sym} / USD`}>
       {/* Hero price */}
       <View style={{ alignItems: 'center', marginTop: 6 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
@@ -119,7 +178,6 @@ export default function AssetDetail() {
           }}>
             ${formatPrice(price)}
           </Text>
-          {/* Live badge — green dot when WebSocket is feeding ticks */}
           <View style={{
             flexDirection: 'row', alignItems: 'center', gap: 4,
             paddingHorizontal: 6, paddingVertical: 3, borderRadius: 6,
@@ -158,29 +216,28 @@ export default function AssetDetail() {
         </View>
       </View>
 
-      {/* Chart — only crypto assets have a meaningful USD chart. */}
+      {/* Chart */}
       {hasChart ? (
         <>
           <View style={{ marginTop: 22 }}>
-            {ohlcLoading ? (
+            {chartLoading ? (
               <View style={{
                 height: 160, borderRadius: 16,
                 backgroundColor: p.bgElev,
                 borderWidth: 1, borderColor: p.border,
                 alignItems: 'center', justifyContent: 'center',
               }}>
-                <ActivityIndicator color={p.fgMuted} />
+                <LoadingPulse size={48} icon="trending-up-outline" />
               </View>
             ) : (
               <SparklineChart
-                values={series}
+                values={chartValues}
                 color={positive ? '#10b981' : '#ef4444'}
                 palette={p}
               />
             )}
           </View>
 
-          {/* Timeframe selector */}
           <View style={{
             flexDirection: 'row', justifyContent: 'space-between',
             marginTop: 14, padding: 4,
@@ -211,17 +268,14 @@ export default function AssetDetail() {
           </View>
         </>
       ) : (
-        // Fiat assets (USD/EUR/GBP/AED/SAR/EGP/USDT) — no volatile USD chart.
         <View style={{
-          marginTop: 22, paddingVertical: 32, paddingHorizontal: 20, borderRadius: 16,
+          marginTop: 22, paddingVertical: 24, paddingHorizontal: 20, borderRadius: 16,
           backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border,
           alignItems: 'center',
         }}>
           <Ionicons name="cash-outline" size={28} color={p.fgFaint} />
           <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '600', marginTop: 10, textAlign: 'center' }}>
-            {sym === 'USDT'
-              ? 'USDT is pegged 1:1 to the US dollar — no chart to show.'
-              : `${sym} is a fiat currency — no crypto chart to show.`}
+            USDT is pegged 1:1 to the US dollar — no chart to show.
           </Text>
         </View>
       )}
@@ -230,7 +284,11 @@ export default function AssetDetail() {
       <View style={{ flexDirection: 'row', gap: 10, marginTop: 18 }}>
         <StatTile
           label="24H VOLUME"
-          value={market ? fmtUsdCompact(market.total_volume) : '—'}
+          value={market
+            ? fmtUsdCompact(market.total_volume)
+            : binanceData?.volume24h
+              ? fmtUsdCompact(binanceData.volume24h)
+              : '—'}
           icon="pulse-outline"
           palette={p}
         />
@@ -256,14 +314,14 @@ export default function AssetDetail() {
         />
       </View>
 
-      {/* Holdings panel — recomputed every render → fluctuates with WS ticks */}
+      {/* Holdings */}
       <Panel style={{ marginTop: 18 }}>
         <View style={{ padding: 16 }}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
             <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '700', letterSpacing: 0.6 }}>
               YOUR HOLDINGS
             </Text>
-            {wallet && balance > 0 && (
+            {wallet && balance > 0 && change !== 0 && (
               <View style={{
                 flexDirection: 'row', alignItems: 'center', gap: 3,
                 paddingHorizontal: 7, paddingVertical: 3, borderRadius: 7,
@@ -294,10 +352,14 @@ export default function AssetDetail() {
               </Text>
               <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '600', marginTop: 2 }}>
                 {balance.toLocaleString('en-US', { maximumFractionDigits: 8 })} {sym}
-                {' · '}
-                <Text style={{ color: positive ? p.greenFg : p.redFg }}>
-                  {positive ? '+' : ''}{change.toFixed(2)}% over {range}
-                </Text>
+                {change !== 0 && (
+                  <>
+                    {' · '}
+                    <Text style={{ color: positive ? p.greenFg : p.redFg }}>
+                      {positive ? '+' : ''}{change.toFixed(2)}% over {range}
+                    </Text>
+                  </>
+                )}
               </Text>
             </>
           ) : (
@@ -338,23 +400,13 @@ export default function AssetDetail() {
           <Text style={{ color: p.fg, fontSize: 15, fontWeight: '800' }}>Sell</Text>
         </Pressable>
       </View>
-
-      {marketsLoading && !market && (
-        <Text style={{ color: p.fgMuted, fontSize: 12, textAlign: 'center', marginBottom: 12 }}>
-          Loading market data…
-        </Text>
-      )}
     </ScreenShell>
   );
 }
 
-/* ── Sparkline (SVG path) ─── */
-function SparklineChart({
-  values, color, palette: p,
-}: {
-  values: number[];
-  color: string;
-  palette: Palette;
+/* ── Sparkline chart ─── */
+function SparklineChart({ values, color, palette: p }: {
+  values: number[]; color: string; palette: Palette;
 }) {
   const W = 320;
   const H = 160;
@@ -368,41 +420,30 @@ function SparklineChart({
         borderWidth: 1, borderColor: p.border,
         alignItems: 'center', justifyContent: 'center',
       }}>
-        <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '500' }}>
-          No chart data
-        </Text>
+        <LoadingPulse size={48} icon="trending-up-outline" />
       </View>
     );
   }
 
   const min = Math.min(...values);
   const max = Math.max(...values);
-  const range = max - min || 1;
+  const spread = max - min || 1;
   const step = (W - PAD * 2) / (values.length - 1);
 
-  const pts = values.map((v, i) => {
-    const x = PAD + i * step;
-    const y = PAD + (H - PAD * 2) * (1 - (v - min) / range);
-    return { x, y };
-  });
+  const pts = values.map((v, i) => ({
+    x: PAD + i * step,
+    y: PAD + (H - PAD * 2) * (1 - (v - min) / spread),
+  }));
 
   const last = pts[pts.length - 1];
-
-  const linePath = pts
-    .map((pt, i) => (i === 0 ? `M ${pt.x} ${pt.y}` : `L ${pt.x} ${pt.y}`))
-    .join(' ');
-
+  const linePath = pts.map((pt, i) => (i === 0 ? `M ${pt.x} ${pt.y}` : `L ${pt.x} ${pt.y}`)).join(' ');
   const areaPath = `${linePath} L ${pts[pts.length - 1].x} ${H - PAD} L ${pts[0].x} ${H - PAD} Z`;
-
-  // 4 horizontal grid lines.
   const grid = [0.25, 0.5, 0.75].map((f) => PAD + (H - PAD * 2) * f);
 
   return (
     <View style={{
-      borderRadius: 16,
-      backgroundColor: p.bgElev,
-      borderWidth: 1, borderColor: p.border,
-      padding: 8,
+      borderRadius: 16, backgroundColor: p.bgElev,
+      borderWidth: 1, borderColor: p.border, padding: 8,
     }}>
       <Svg width="100%" height={H} viewBox={`0 0 ${W} ${H}`}>
         <Defs>
@@ -412,11 +453,8 @@ function SparklineChart({
           </LinearGradient>
         </Defs>
         {grid.map((y, i) => (
-          <SvgLine
-            key={i}
-            x1={PAD} x2={W - PAD} y1={y} y2={y}
-            stroke={p.border} strokeWidth={1} strokeDasharray="3,4"
-          />
+          <SvgLine key={i} x1={PAD} x2={W - PAD} y1={y} y2={y}
+            stroke={p.border} strokeWidth={1} strokeDasharray="3,4" />
         ))}
         <Path d={areaPath} fill="url(#grad)" />
         <Path d={linePath} stroke={color} strokeWidth={2.2} fill="none" strokeLinejoin="round" strokeLinecap="round" />
@@ -427,48 +465,33 @@ function SparklineChart({
   );
 }
 
-function StatTile({
-  label, value, icon, palette: p,
-}: {
-  label: string;
-  value: string;
-  icon: keyof typeof Ionicons.glyphMap;
-  palette: Palette;
+function StatTile({ label, value, icon, palette: p }: {
+  label: string; value: string; icon: keyof typeof Ionicons.glyphMap; palette: Palette;
 }) {
   return (
     <View style={{
-      flex: 1,
-      borderRadius: 16,
-      backgroundColor: p.bgElev,
-      borderWidth: 1, borderColor: p.border,
-      padding: 14,
-      gap: 6,
+      flex: 1, borderRadius: 16,
+      backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border,
+      padding: 14, gap: 6,
     }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
         <Ionicons name={icon} size={12} color={p.fgMuted} />
-        <Text style={{ color: p.fgMuted, fontSize: 10, fontWeight: '700', letterSpacing: 0.6 }}>
-          {label}
-        </Text>
+        <Text style={{ color: p.fgMuted, fontSize: 10, fontWeight: '700', letterSpacing: 0.6 }}>{label}</Text>
       </View>
-      <Text
-        numberOfLines={1}
-        style={{ color: p.fg, fontSize: 16, fontWeight: '800', fontVariant: ['tabular-nums'] }}
-      >
+      <Text numberOfLines={1} style={{ color: p.fg, fontSize: 16, fontWeight: '800', fontVariant: ['tabular-nums'] }}>
         {value}
       </Text>
     </View>
   );
 }
 
-/* ── Helpers ─── */
-
-/** Smart price formatter — more decimals for cheap coins (DOGE, ADA, …). */
 function formatPrice(n: number): string {
   if (n === 0)    return '0.00';
   if (n >= 1000)  return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   if (n >= 1)     return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 });
   if (n >= 0.01)  return n.toLocaleString('en-US', { minimumFractionDigits: 4, maximumFractionDigits: 4 });
-  return n.toLocaleString('en-US', { minimumFractionDigits: 6, maximumFractionDigits: 8 });
+  if (n >= 0.0001) return n.toFixed(6);
+  return n.toFixed(10);
 }
 
 function fmtUsdCompact(n: number): string {
@@ -486,7 +509,7 @@ function fmtSupply(n: number, sym: string): string {
   return `${n.toLocaleString('en-US', { maximumFractionDigits: 0 })} ${sym}`;
 }
 
-/* ── Fiat asset detail — deposit / withdraw view (no chart) ─── */
+/* ── Fiat asset detail ─── */
 function FiatAssetView({ sym, wallet, p, h, router }: {
   sym: Currency;
   wallet: Wallet | undefined;
@@ -495,40 +518,27 @@ function FiatAssetView({ sym, wallet, p, h, router }: {
   router: { push: (href: any) => void };
 }) {
   const { data: txData } = useTransactions(1);
-  const txs = (txData?.items ?? [])
-    .filter((t: any) => t.currency === sym)
-    .slice(0, 8);
-
+  const txs = (txData?.items ?? []).filter((t: any) => t.currency === sym).slice(0, 8);
   const balance = wallet ? Number(wallet.balance) : 0;
   const usdValue = wallet ? Number(wallet.fiatValueUsd) : 0;
   const fxRate = balance > 0 ? usdValue / balance : 0;
 
   return (
     <View style={{ paddingHorizontal: 20, paddingBottom: 40 }}>
-      {/* Balance card */}
-      <View
-        style={{
-          borderRadius: 20, padding: 20, marginBottom: 20,
-          backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border,
-        }}
-      >
+      <View style={{
+        borderRadius: 20, padding: 20, marginBottom: 20,
+        backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border,
+      }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-          <Text
-            style={{
-              color: p.fgMuted, fontSize: 11, fontWeight: '700',
-              letterSpacing: 1.0, textTransform: 'uppercase',
-            }}
-          >
+          <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '700', letterSpacing: 1.0, textTransform: 'uppercase' }}>
             Available Balance
           </Text>
           <CurrencyBadge code={sym} size="sm" variant="chip" />
         </View>
-        <Text
-          style={{
-            color: p.fg, fontSize: 38, fontWeight: '800',
-            letterSpacing: -1.4, marginTop: 8, fontVariant: ['tabular-nums'],
-          }}
-        >
+        <Text style={{
+          color: p.fg, fontSize: 38, fontWeight: '800',
+          letterSpacing: -1.4, marginTop: 8, fontVariant: ['tabular-nums'],
+        }}>
           {formatMoney(balance, sym as Currency, { showSymbol: true })}
         </Text>
         {sym !== 'USD' && fxRate > 0 && (
@@ -539,18 +549,12 @@ function FiatAssetView({ sym, wallet, p, h, router }: {
         )}
       </View>
 
-      {/* Action buttons — use palette-driven press states so dark and
-          light modes both render correctly. The previous design used a
-          hardcoded '#000' pressed background which was invisible on the
-          new charcoal theme. */}
       <View style={{ flexDirection: 'row', gap: 12, marginBottom: 28 }}>
         <Pressable
           onPress={() => { h.medium(); router.push(`/topup?currency=${sym}` as any); }}
           style={({ pressed }) => ({
-            flex: 1, height: 52, borderRadius: 26,
-            backgroundColor: p.ctaBg,
-            opacity: pressed ? 0.85 : 1,
-            alignItems: 'center', justifyContent: 'center',
+            flex: 1, height: 52, borderRadius: 26, backgroundColor: p.ctaBg,
+            opacity: pressed ? 0.85 : 1, alignItems: 'center', justifyContent: 'center',
             flexDirection: 'row', gap: 6,
           })}
         >
@@ -563,8 +567,7 @@ function FiatAssetView({ sym, wallet, p, h, router }: {
             flex: 1, height: 52, borderRadius: 26,
             backgroundColor: pressed ? p.border : p.pillBg,
             borderWidth: 1, borderColor: p.border,
-            alignItems: 'center', justifyContent: 'center',
-            flexDirection: 'row', gap: 6,
+            alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 6,
           })}
         >
           <Ionicons name="paper-plane-outline" size={16} color={p.fg} />
@@ -572,58 +575,41 @@ function FiatAssetView({ sym, wallet, p, h, router }: {
         </Pressable>
       </View>
 
-      {/* Recent transactions */}
-      <Text style={{
-        color: p.fgFaint, fontSize: 11, fontWeight: '700',
-        letterSpacing: 0.6, marginBottom: 12,
-      }}>
+      <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '700', letterSpacing: 0.6, marginBottom: 12 }}>
         RECENT ACTIVITY
       </Text>
-      {txs.length > 0 ? (
-        txs.map((t: any) => {
-          const amt = Number(t.amount);
-          const positive = amt >= 0;
-          return (
-            <View key={t.id} style={{
-              flexDirection: 'row', alignItems: 'center',
-              paddingVertical: 14,
-              borderBottomWidth: 1, borderBottomColor: p.border,
-              gap: 12,
+      {txs.length > 0 ? txs.map((t: any) => {
+        const amt = Number(t.amount);
+        const pos = amt >= 0;
+        return (
+          <View key={t.id} style={{
+            flexDirection: 'row', alignItems: 'center',
+            paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: p.border, gap: 12,
+          }}>
+            <View style={{
+              width: 38, height: 38, borderRadius: 19,
+              backgroundColor: p.pillBg, borderWidth: 1, borderColor: p.border,
+              alignItems: 'center', justifyContent: 'center',
             }}>
-              <View style={{
-                width: 38, height: 38, borderRadius: 19,
-                backgroundColor: p.pillBg, borderWidth: 1, borderColor: p.border,
-                alignItems: 'center', justifyContent: 'center',
-              }}>
-                <Ionicons
-                  name={positive ? 'arrow-down' : 'arrow-up'}
-                  size={16}
-                  color={positive ? p.greenFg : p.fg}
-                />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={{ color: p.fg, fontSize: 14, fontWeight: '700' }} numberOfLines={1}>
-                  {t.description || t.type}
-                </Text>
-                <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '500', marginTop: 2 }}>
-                  {new Date(t.createdAt).toLocaleDateString()}
-                </Text>
-              </View>
-              <Text style={{
-                color: positive ? p.greenFg : p.fg,
-                fontSize: 14, fontWeight: '700', fontVariant: ['tabular-nums'],
-              }}>
-                {positive ? '+' : ''}{Math.abs(amt).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {sym}
+              <Ionicons name={pos ? 'arrow-down' : 'arrow-up'} size={16} color={pos ? p.greenFg : p.fg} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: p.fg, fontSize: 14, fontWeight: '700' }} numberOfLines={1}>
+                {t.description || t.type}
+              </Text>
+              <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '500', marginTop: 2 }}>
+                {new Date(t.createdAt).toLocaleDateString()}
               </Text>
             </View>
-          );
-        })
-      ) : (
+            <Text style={{ color: pos ? p.greenFg : p.fg, fontSize: 14, fontWeight: '700', fontVariant: ['tabular-nums'] }}>
+              {pos ? '+' : ''}{Math.abs(amt).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {sym}
+            </Text>
+          </View>
+        );
+      }) : (
         <View style={{ paddingVertical: 32, alignItems: 'center' }}>
           <Ionicons name="receipt-outline" size={24} color={p.fgFaint} />
-          <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '500', marginTop: 10 }}>
-            No transactions yet
-          </Text>
+          <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '500', marginTop: 10 }}>No transactions yet</Text>
         </View>
       )}
     </View>

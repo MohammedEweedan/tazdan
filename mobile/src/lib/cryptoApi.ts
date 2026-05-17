@@ -53,6 +53,13 @@ export const cryptoWalletAPI = {
     }>('/wallet/export', data),
 };
 
+export interface AssetSearchResult {
+  symbol: string;
+  price: number;
+  change24h: number;
+  volume24h: number;
+}
+
 export const cryptoExchangeAPI = {
   quote: (data: {
     asset: string;
@@ -65,6 +72,8 @@ export const cryptoExchangeAPI = {
     api.post<{ order: any }>('/exchange/execute', data),
   orders: (page = 1, limit = 20) =>
     api.get(`/exchange/orders?page=${page}&limit=${limit}`),
+  search: (q: string) =>
+    api.get<{ results: AssetSearchResult[] }>(`/exchange/search?q=${encodeURIComponent(q)}`),
 };
 
 /**

@@ -23,7 +23,7 @@ export default function Receive() {
   const [tab, setTab] = useState<Tab>('HANDLE');
   const handle = user?.username ?? user?.email?.split('@')[0] ?? 'me';
   // Universal link a counterparty's app deep-links into when they scan
-  // the QR code — resolves to /u/[handle] in the Promrkts app.
+  // the QR code — resolves to /u/[handle] in the promrkts app.
   const profileLink = `https://promrkts.com/u/${handle}`;
   // Real QR code via qrserver.com — white bg + black foreground for reliable scanning.
   const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&margin=12&data=${encodeURIComponent(profileLink)}&bgcolor=ffffff&color=000000`;
@@ -129,7 +129,7 @@ export default function Receive() {
               onPress={() => {
                 h.light();
                 Share.share({
-                  message: `Pay me on Promrkts → @${handle}\n${profileLink}`,
+                  message: `Pay me on promrkts → @${handle}\n${profileLink}`,
                 });
               }}
               style={({ pressed }) => ({
@@ -149,7 +149,7 @@ export default function Receive() {
         <View style={{ marginTop: 22 }}>
           <Panel>
             <View style={{ padding: 16, gap: 14 }}>
-              <BankRow label="Account holder" value={user ? `${user.firstName} ${user.lastName}` : 'Promrkts user'} palette={p} />
+              <BankRow label="Account holder" value={user ? `${user.firstName} ${user.lastName}` : 'promrkts user'} palette={p} />
               <BankRow label="IBAN"            value="DE89 3704 0044 0532 0130 00" palette={p} />
               <BankRow label="BIC / SWIFT"     value="COBADEFFXXX" palette={p} />
               <BankRow label="Reference"       value={`PRMK-${handle.toUpperCase()}`} palette={p} />

@@ -104,7 +104,7 @@ export default function TabsLayout() {
                   width: FAB_SIZE,
                   height: FAB_SIZE,
                   borderRadius: FAB_SIZE / 2,
-                  backgroundColor: isDark ? '#ffffff' : '#000000',
+                  backgroundColor: isDark ? '#000000' : '#ffffff',
                   alignItems: 'center',
                   justifyContent: 'center',
                   shadowColor: BRAND_BLUE,
@@ -120,7 +120,7 @@ export default function TabsLayout() {
                 <Ionicons
                   name="home"
                   size={24}
-                  color={isDark ? '#000000' : '#ffffff'}
+                  color={isDark ? '#ffffff' : '#000000'}
                 />
               </View>
             </Pressable>

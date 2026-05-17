@@ -41,6 +41,8 @@ exchangeRouter.post('/execute',     authenticate, executeLimiter, ExchangeContro
 exchangeRouter.get ('/orders',      authenticate,                 ExchangeController.listOrders);
 exchangeRouter.get ('/orders/:id',  authenticate,                 ExchangeController.getOrder);
 
+// Asset search — queries Binance 24hr ticker, returns any tradeable USDT pair.
+exchangeRouter.get('/search', authenticate, ExchangeController.searchAssets);
+
 // DEX aggregator (crypto ↔ crypto on-chain via 1inch — read-only quote).
-// Rate-limit: same quoteLimiter (5/min per user) is sufficient for a preview endpoint.
 exchangeRouter.get('/dex/quote', authenticate, quoteLimiter, ExchangeController.getDexQuote);

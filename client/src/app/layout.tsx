@@ -26,7 +26,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <link rel="preload" href="/iphone-frame.png" as="image" type="image/png" />
         <link rel="preload" href="/icon-black.png" as="image" type="image/png" />
         <link rel="preload" href="/visa.png" as="image" type="image/png" />
-        <link rel="preload" href="/logo-white.png" as="image" type="image/png" />
+        <link rel="preload" href="/icon-color.png" as="image" type="image/png" />
         <link rel="preload" href="/icon.gif" as="image" type="image/gif" />
         {/* Background video — preload metadata only, full decode happens when visible via IntersectionObserver */}
         <link rel="preload" href="/videos/WebHeader.mp4" as="video" type="video/mp4" />

@@ -27,6 +27,7 @@ enum KYCStatus {
 }
 
 enum DepositStatus {
+  WAITING_CONFIRMATION
   PENDING
   CONFIRMED
   REJECTED
@@ -377,12 +378,19 @@ model BankAccount {
   accountNumber String
   accountName   String
   branch        String?
+  country       String?  // ISO 3166-1 alpha-2 (e.g. "GB", "US", "AE")
+  currency      String?  // ISO 4217 currency code (e.g. "GBP", "USD", "EUR")
+  sortCode      String?  // UK sort code (6 digits)
+  routingNumber String?  // US/CA/AU routing number (9 digits)
+  iban          String?  // International Bank Account Number
+  swift         String?  // SWIFT/BIC code
   isDefault     Boolean  @default(false)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
   user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+  @@index([country])
 }
 
 model ExchangeRate {
@@ -408,6 +416,31 @@ model PlatformSettings {
   updatedBy   String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+}
+
+/// Unified fee ledger — every commission or transaction fee the
+/// platform takes is recorded here AND credited to the platform
+/// wallet (the user with username='platform'). Fees from deposits
+/// and internal transfers are intentionally excluded.
+model PlatformFee {
+  id            String   @id @default(uuid())
+  /// Where the fee originated: order, withdrawal, p2p, swap, crypto_order, p2p_trade
+  source        String
+  sourceId      String?
+  /// The user who paid the fee
+  payerId       String?
+  amount        Decimal  @db.Decimal(20, 8)
+  currency      Currency
+  /// USD equivalent at time of capture, for dashboard aggregation
+  amountUsd     Decimal  @default(0) @db.Decimal(20, 8)
+  description   String?
+  metadata      Json?
+  createdAt     DateTime @default(now())
+
+  @@index([source])
+  @@index([payerId])
+  @@index([currency])
+  @@index([createdAt])
 }
 
 model Notification {
@@ -535,7 +568,9 @@ model P2PListing {
   id             String           @id @default(uuid())
   userId         String
   currency       Currency         @default(USDT)
+  baseAsset      String?          // free-text ticker for any altcoin (e.g. PEPE, SHIB); overrides currency when set
   fiatCurrency   Currency         @default(USD)
+  fiatAsset      String?          // free-text fiat ticker when fiatCurrency overflows the enum
   side           OrderSide // BUY or SELL
   price          Decimal          @db.Decimal(20, 8) // price per unit in fiat
   amount         Decimal          @db.Decimal(20, 8) // total crypto amount
@@ -558,6 +593,7 @@ model P2PListing {
 
   @@index([userId])
   @@index([currency, fiatCurrency, side, status])
+  @@index([baseAsset, side, status])
   @@index([country])
   @@index([status])
   @@index([createdAt])
@@ -569,7 +605,9 @@ model P2PTrade {
   buyerId         String
   sellerId        String
   currency        Currency
+  baseAsset       String?        // free-text ticker when currency overflows the enum
   fiatCurrency    Currency
+  fiatAsset       String?        // free-text fiat ticker when fiatCurrency overflows the enum
   cryptoAmount    Decimal        @db.Decimal(20, 8)
   fiatAmount      Decimal        @db.Decimal(20, 8)
   price           Decimal        @db.Decimal(20, 8)
@@ -1095,6 +1133,10 @@ model UserWallet {
   usdtErc20Bal Decimal @default(0) @db.Decimal(20, 6)
   usdtTrc20Bal Decimal @default(0) @db.Decimal(20, 6)
 
+  // Generic ledger for any other asset (BNB, XRP, DOGE, MATIC, etc.)
+  // Stored as { "BNB": "1.234", "XRP": "500.000000", ... }
+  altBalances  Json    @default("{}")
+
   selfCustodyExported Boolean   @default(false)
   exportedAt          DateTime?
 
@@ -1204,4 +1246,30 @@ model WithdrawalAddressWhitelist {
 
   @@unique([userId, key])
   @@index([userId])
+}
+
+/// Platform-owned bank accounts users send fiat deposits to. Admin-
+/// managed via /api/admin/platform-banks. Mobile reads the active rows
+/// to show the correct beneficiary for the user's deposit currency,
+/// replacing the previously-hardcoded constant.
+model PlatformBankAccount {
+  id            String   @id @default(uuid())
+  currency      String   // ISO 4217 (USD, EUR, GBP, AED, SAR, EGP, LYD, ...)
+  country       String   // ISO 3166-1 alpha-2
+  bankName      String
+  accountName   String
+  accountNumber String?
+  iban          String?
+  swift         String?
+  sortCode      String?
+  routingNumber String?
+  branch        String?
+  memo          String?  // free text shown to the user (reference instructions etc.)
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([currency])
+  @@index([country])
+  @@index([isActive])
 }

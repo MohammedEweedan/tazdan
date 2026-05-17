@@ -7,7 +7,7 @@
  * thread will be empty until the first message is sent, which creates
  * the conversation server-side.
  *
- * Includes a quick-action "Message Promrkts Support" tile at the top
+ * Includes a quick-action "Message promrkts Support" tile at the top
  * so users can always reach support without searching.
  */
 
@@ -191,7 +191,7 @@ export default function NewChat() {
               color: p.fgFaint, fontSize: 12, fontWeight: '500',
               textAlign: 'center', marginTop: 24, paddingHorizontal: 32, lineHeight: 18,
             }}>
-              Type a Promrkts handle (e.g. @aisha) to start a conversation.
+              Type a promrkts handle (e.g. @aisha) to start a conversation.
               Anyone with a public profile can be messaged.
             </Text>
           )}
@@ -223,7 +223,7 @@ function SupportTile({ palette: p, onPress }: { palette: Palette; onPress: () =>
       <View style={{ flex: 1 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
           <Text style={{ color: p.fg, fontSize: 14, fontWeight: '800', letterSpacing: -0.2 }}>
-            Promrkts Support
+            promrkts Support
           </Text>
           <View style={{
             paddingHorizontal: 5, paddingVertical: 1, borderRadius: 5,

@@ -14,88 +14,233 @@ export class AdminController {
   // ── Dashboard ──────────────────────────────────────────────────
   static async getDashboard(_req: AuthRequest, res: Response, next: NextFunction) {
     try {
-      const todayStart = new Date(new Date().setHours(0, 0, 0, 0));
-      const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+      const now = new Date();
+      const todayStart  = new Date(new Date().setHours(0, 0, 0, 0));
+      const yesterdayStart = new Date(todayStart.getTime() - 24 * 60 * 60 * 1000);
+      const weekStart   = new Date(todayStart.getTime() - 7  * 24 * 60 * 60 * 1000);
+      const prevWeekStart = new Date(todayStart.getTime() - 14 * 24 * 60 * 60 * 1000);
+      const monthStart  = new Date(todayStart.getTime() - 30 * 24 * 60 * 60 * 1000);
+      const prevMonthStart = new Date(todayStart.getTime() - 60 * 24 * 60 * 60 * 1000);
+      const yearStart   = new Date(todayStart.getTime() - 365 * 24 * 60 * 60 * 1000);
+      const prevYearStart = new Date(todayStart.getTime() - 730 * 24 * 60 * 60 * 1000);
+
+      const FILLED: any = { in: ['FILLED', 'PARTIALLY_FILLED'] };
+
+      // ── Helpers ────────────────────────────────────────────────
+      // Total volume of FILLED orders in the window
+      const orderVolInRange = (gte: Date, lt?: Date) =>
+        prisma.order.aggregate({
+          where: { status: FILLED, createdAt: lt ? { gte, lt } : { gte } },
+          _sum: { total: true },
+        });
+
+      // Fees collected in the window — sourced from the PlatformFee
+      // ledger so we capture every kind of fee (orders, withdrawals,
+      // P2P trades, crypto orders), not just trading fees on orders.
+      const feeInRange = async (gte: Date, lt?: Date) => {
+        const [feeAgg, volAgg] = await Promise.all([
+          (prisma as any).platformFee.aggregate({
+            where: { createdAt: lt ? { gte, lt } : { gte } },
+            _sum:  { amountUsd: true },
+          }),
+          orderVolInRange(gte, lt),
+        ]);
+        return {
+          _sum: {
+            fee:   feeAgg?._sum?.amountUsd ?? 0,
+            total: volAgg?._sum?.total     ?? 0,
+          },
+        };
+      };
+
+      const txCountInRange = (gte: Date, lt?: Date) => Promise.all([
+        prisma.order.count({       where: { createdAt: lt ? { gte, lt } : { gte } } }),
+        prisma.deposit.count({     where: { createdAt: lt ? { gte, lt } : { gte } } }),
+        prisma.withdrawal.count({  where: { createdAt: lt ? { gte, lt } : { gte } } }),
+        prisma.transfer.count({    where: { createdAt: lt ? { gte, lt } : { gte } } }),
+        (prisma as any).p2PTrade.count({        where: { createdAt: lt ? { gte, lt } : { gte } } }).catch(() => 0),
+        (prisma as any).cardTransaction.count({ where: { createdAt: lt ? { gte, lt } : { gte } } }).catch(() => 0),
+      ]).then(([o, d, w, t, p, c]) => ({
+        orders: o, deposits: d, withdrawals: w, transfers: t, p2pTrades: p, cardTransactions: c,
+        total: o + d + w + t + p + c,
+      }));
 
       const [
-        totalUsers, activeUsers, newUsersToday, newUsersWeek,
+        totalUsers, activeUsers, suspendedUsers,
+        newUsersToday, newUsersWeek, newUsersMonth,
         pendingDeposits, pendingWithdrawals, pendingKYC,
-        todayOrders, totalOrders, totalOrdersMonth,
+        totalOrders, frozenUsers,
+
+        // Fees & volume by window
+        todayAgg,     yesterdayAgg,
+        weekAgg,      prevWeekAgg,
+        monthAgg,     prevMonthAgg,
+        yearAgg,      prevYearAgg,
+        totalAgg,
+
+        // Transaction counts by window
+        todayTx, yesterdayTx, weekTx, prevWeekTx, monthTx, prevMonthTx, yearTx, totalTx,
+
+        // Lifetime sums by currency
         totalDepositsUSD, totalDepositsUSDT,
         totalWithdrawalsUSD, totalWithdrawalsUSDT,
-        todayOrderVolume, monthOrderVolume,
-        totalFees, todayFees,
-        totalTransfers,
-        recentOrders, recentDeposits,
+
+        // Recent activity
+        recentOrders, recentDeposits, recentWithdrawals,
+
         buyOrders, sellOrders,
         ordersByPairRaw,
         userGrowthRaw,
       ] = await Promise.all([
         prisma.user.count({ where: { role: 'USER' } }),
         prisma.user.count({ where: { role: 'USER', status: 'ACTIVE' } }),
+        prisma.user.count({ where: { role: 'USER', status: 'SUSPENDED' } }),
         prisma.user.count({ where: { role: 'USER', createdAt: { gte: todayStart } } }),
-        prisma.user.count({ where: { role: 'USER', createdAt: { gte: sevenDaysAgo } } }),
-        prisma.deposit.count({ where: { status: 'PENDING' } }),
+        prisma.user.count({ where: { role: 'USER', createdAt: { gte: weekStart } } }),
+        prisma.user.count({ where: { role: 'USER', createdAt: { gte: monthStart } } }),
+        prisma.deposit.count({    where: { status: 'PENDING' } }),
         prisma.withdrawal.count({ where: { status: 'PENDING' } }),
-        prisma.user.count({ where: { kycStatus: 'PENDING' } }),
-        prisma.order.count({ where: { createdAt: { gte: todayStart } } }),
+        prisma.user.count({       where: { kycStatus: 'PENDING' } }),
         prisma.order.count(),
-        prisma.order.count({ where: { createdAt: { gte: thirtyDaysAgo } } }),
-        prisma.deposit.aggregate({ where: { status: 'CONFIRMED', currency: 'USD' }, _sum: { amount: true } }),
-        prisma.deposit.aggregate({ where: { status: 'CONFIRMED', currency: 'USDT' }, _sum: { amount: true } }),
-        prisma.withdrawal.aggregate({ where: { status: 'COMPLETED', currency: 'USD' }, _sum: { amount: true } }),
+        prisma.user.count({ where: { role: 'USER', status: 'SUSPENDED' } }),
+
+        // FEE/VOLUME aggregates
+        feeInRange(todayStart),
+        feeInRange(yesterdayStart, todayStart),
+        feeInRange(weekStart),
+        feeInRange(prevWeekStart, weekStart),
+        feeInRange(monthStart),
+        feeInRange(prevMonthStart, monthStart),
+        feeInRange(yearStart),
+        feeInRange(prevYearStart, yearStart),
+        (async () => {
+          const [feeAgg, volAgg] = await Promise.all([
+            (prisma as any).platformFee.aggregate({ _sum: { amountUsd: true } }),
+            prisma.order.aggregate({ where: { status: FILLED }, _sum: { total: true } }),
+          ]);
+          return { _sum: { fee: feeAgg?._sum?.amountUsd ?? 0, total: volAgg?._sum?.total ?? 0 } };
+        })(),
+
+        // TRANSACTION COUNTS
+        txCountInRange(todayStart),
+        txCountInRange(yesterdayStart, todayStart),
+        txCountInRange(weekStart),
+        txCountInRange(prevWeekStart, weekStart),
+        txCountInRange(monthStart),
+        txCountInRange(prevMonthStart, monthStart),
+        txCountInRange(yearStart),
+        txCountInRange(new Date(0)),
+
+        // Lifetime sums
+        prisma.deposit.aggregate({    where: { status: 'CONFIRMED', currency: 'USD' },  _sum: { amount: true } }),
+        prisma.deposit.aggregate({    where: { status: 'CONFIRMED', currency: 'USDT' }, _sum: { amount: true } }),
+        prisma.withdrawal.aggregate({ where: { status: 'COMPLETED', currency: 'USD' },  _sum: { amount: true } }),
         prisma.withdrawal.aggregate({ where: { status: 'COMPLETED', currency: 'USDT' }, _sum: { amount: true } }),
-        prisma.order.aggregate({ where: { createdAt: { gte: todayStart }, status: { in: ['FILLED', 'PARTIALLY_FILLED'] } }, _sum: { total: true } }),
-        prisma.order.aggregate({ where: { createdAt: { gte: thirtyDaysAgo }, status: { in: ['FILLED', 'PARTIALLY_FILLED'] } }, _sum: { total: true } }),
-        prisma.order.aggregate({ where: { status: { in: ['FILLED', 'PARTIALLY_FILLED'] } }, _sum: { fee: true } }),
-        prisma.order.aggregate({ where: { createdAt: { gte: todayStart }, status: { in: ['FILLED', 'PARTIALLY_FILLED'] } }, _sum: { fee: true } }),
-        prisma.transfer.count(),
-        prisma.order.findMany({ orderBy: { createdAt: 'desc' }, take: 10, include: { user: { select: { email: true, firstName: true, lastName: true } } } }),
-        prisma.deposit.findMany({ where: { status: 'PENDING' }, orderBy: { createdAt: 'desc' }, take: 5, include: { user: { select: { email: true, firstName: true } } } }),
-        prisma.order.count({ where: { side: 'BUY' } }),
+
+        // Recent activity
+        prisma.order.findMany({       orderBy: { createdAt: 'desc' }, take: 15, include: { user: { select: { email: true, firstName: true, lastName: true } } } }),
+        prisma.deposit.findMany({     where: { status: 'PENDING' },   orderBy: { createdAt: 'desc' }, take: 10, include: { user: { select: { email: true, firstName: true } } } }),
+        prisma.withdrawal.findMany({  where: { status: 'PENDING' },   orderBy: { createdAt: 'desc' }, take: 10, include: { user: { select: { email: true, firstName: true } } } }),
+
+        prisma.order.count({ where: { side: 'BUY'  } }),
         prisma.order.count({ where: { side: 'SELL' } }),
         prisma.order.groupBy({ by: ['baseCurrency', 'quoteCurrency'], _count: { id: true }, _sum: { total: true }, orderBy: { _count: { id: 'desc' } } }),
-        prisma.user.groupBy({ by: ['createdAt'], where: { createdAt: { gte: sevenDaysAgo } }, _count: { id: true }, orderBy: { createdAt: 'asc' } }),
+        prisma.user.groupBy({ by: ['createdAt'], where: { createdAt: { gte: weekStart } }, _count: { id: true }, orderBy: { createdAt: 'asc' } }),
       ]);
 
-      // Format orders by pair
-      const ordersByPair = ordersByPairRaw.map((p: any) => ({
-        pair: `${p.baseCurrency}/${p.quoteCurrency}`,
-        count: p._count.id,
-        volume: p._sum.total || 0,
+      // Fees by source — for the "where revenue comes from" donut.
+      const feesBySourceRaw = await (prisma as any).platformFee.groupBy({
+        by: ['source'],
+        _sum:   { amountUsd: true },
+        _count: { id: true },
+      });
+      const feesBySource = (feesBySourceRaw as any[]).map((r) => ({
+        source: r.source,
+        totalUsd: Number(r._sum?.amountUsd ?? 0),
+        count:    Number(r._count?.id     ?? 0),
       }));
 
-      // Aggregate user growth by date
+      const num = (v: any): number => {
+        if (v === null || v === undefined) return 0;
+        const n = Number(v);
+        return Number.isFinite(n) ? n : 0;
+      };
+      const sumOf = (agg: any, key: 'fee' | 'total'): number => num(agg?._sum?.[key]);
+      const pctDelta = (current: number, prev: number) => {
+        if (prev === 0) return current > 0 ? 100 : 0;
+        return ((current - prev) / prev) * 100;
+      };
+      const periodStats = (curr: any, prev: any, currTx: any, prevTx: any) => ({
+        fees:        sumOf(curr, 'fee'),
+        prevFees:    sumOf(prev, 'fee'),
+        feesDelta:   pctDelta(sumOf(curr, 'fee'),   sumOf(prev, 'fee')),
+        volume:      sumOf(curr, 'total'),
+        prevVolume:  sumOf(prev, 'total'),
+        volumeDelta: pctDelta(sumOf(curr, 'total'), sumOf(prev, 'total')),
+        txCount:     currTx.total,
+        prevTxCount: prevTx.total,
+        txDelta:     pctDelta(currTx.total,         prevTx.total),
+      });
+
+      // Format orders by pair
+      const ordersByPair = (ordersByPairRaw as any[]).map((p) => ({
+        pair: `${p.baseCurrency}/${p.quoteCurrency}`,
+        count: p._count.id,
+        volume: num(p._sum.total),
+      }));
+
+      // Aggregate user growth by date (last 7 days)
       const growthMap: Record<string, number> = {};
       for (let i = 6; i >= 0; i--) {
         const d = new Date(Date.now() - i * 24 * 60 * 60 * 1000);
         growthMap[d.toISOString().slice(0, 10)] = 0;
       }
-      userGrowthRaw.forEach((r: any) => {
+      (userGrowthRaw as any[]).forEach((r) => {
         const key = new Date(r.createdAt).toISOString().slice(0, 10);
         if (growthMap[key] !== undefined) growthMap[key] += r._count.id;
       });
       const userGrowth = Object.entries(growthMap).map(([date, count]) => ({ date, count }));
 
       res.json({
-        totalUsers, activeUsers, newUsersToday, newUsersWeek,
+        // ── Top-line counts ────────────────────────────────────
+        totalUsers, activeUsers, suspendedUsers, frozenUsers,
+        newUsersToday, newUsersWeek, newUsersMonth,
         pendingDeposits, pendingWithdrawals, pendingKYC,
-        todayOrders, totalOrders, totalOrdersMonth,
-        totalDepositsUSD: totalDepositsUSD._sum.amount || 0,
-        totalDepositsUSDT: totalDepositsUSDT._sum.amount || 0,
-        totalWithdrawalsUSD: totalWithdrawalsUSD._sum.amount || 0,
-        totalWithdrawalsUSDT: totalWithdrawalsUSDT._sum.amount || 0,
-        todayOrderVolume: todayOrderVolume._sum.total || 0,
-        monthOrderVolume: monthOrderVolume._sum.total || 0,
-        totalFees: totalFees._sum.fee || 0,
-        todayFees: todayFees._sum.fee || 0,
-        totalTransfers,
-        buyOrders, sellOrders,
+        totalOrders, buyOrders, sellOrders,
+
+        // ── Period comparison ──────────────────────────────────
+        today:     periodStats(todayAgg,     yesterdayAgg, todayTx,     yesterdayTx),
+        week:      periodStats(weekAgg,      prevWeekAgg,  weekTx,      prevWeekTx),
+        month:     periodStats(monthAgg,     prevMonthAgg, monthTx,     prevMonthTx),
+        year:      periodStats(yearAgg,      prevYearAgg,  yearTx,      prevWeekTx /* placeholder */),
+
+        // ── Lifetime ───────────────────────────────────────────
+        totalFees:        sumOf(totalAgg, 'fee'),
+        totalVolume:      sumOf(totalAgg, 'total'),
+        totalTransactions: totalTx.total,
+        totalOrdersCount: totalTx.orders,
+        totalDepositsCount: totalTx.deposits,
+        totalWithdrawalsCount: totalTx.withdrawals,
+
+        totalDepositsUSD:     num(totalDepositsUSD._sum.amount),
+        totalDepositsUSDT:    num(totalDepositsUSDT._sum.amount),
+        totalWithdrawalsUSD:  num(totalWithdrawalsUSD._sum.amount),
+        totalWithdrawalsUSDT: num(totalWithdrawalsUSDT._sum.amount),
+
+        // ── Charts & lists ─────────────────────────────────────
         ordersByPair,
         userGrowth,
+        feesBySource,
         recentOrders,
         recentDeposits,
+        recentWithdrawals,
+
+        // ── Legacy aliases (so old admin index keeps working) ──
+        todayFees:        sumOf(todayAgg, 'fee'),
+        todayOrderVolume: sumOf(todayAgg, 'total'),
+        monthOrderVolume: sumOf(monthAgg, 'total'),
+        todayOrders:      todayTx.orders,
+        totalOrdersMonth: monthTx.orders,
       });
     } catch (error) { next(error); }
   }
@@ -491,6 +636,411 @@ export class AdminController {
       }
 
       res.json({ message: `AML flag ${status.toLowerCase()}` });
+    } catch (error) { next(error); }
+  }
+
+  // ── Support Escalations ─────────────────────────────────────────
+  /**
+   * List all support escalations for the admin queue, with the
+   * raising user, counterparty user, and trade summary attached.
+   */
+  static async getEscalations(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const status = (req.query.status as string | undefined)?.toUpperCase();
+      const valid = status && ['OPEN', 'ASSIGNED', 'RESOLVED', 'CLOSED'].includes(status);
+      const where: any = valid ? { status } : {};
+
+      const escalations = await (prisma as any).supportEscalation.findMany({
+        where,
+        orderBy: [{ status: 'asc' }, { createdAt: 'desc' }],
+        take: 200,
+        include: {
+          raisedBy:      { select: { id: true, email: true, firstName: true, lastName: true, username: true } },
+          assignedAgent: { select: { id: true, email: true, firstName: true, lastName: true } },
+        },
+      });
+
+      // Counterparty (no direct relation), and optional trade summary
+      const counterIds = Array.from(new Set(escalations.map((e: any) => e.counterpartyId).filter(Boolean)));
+      const tradeIds   = Array.from(new Set(escalations.map((e: any) => e.tradeId).filter(Boolean)));
+      const [counterparties, trades] = await Promise.all([
+        counterIds.length ? prisma.user.findMany({
+          where: { id: { in: counterIds as string[] } },
+          select: { id: true, email: true, firstName: true, lastName: true, username: true },
+        }) : Promise.resolve([]),
+        tradeIds.length ? (prisma as any).p2PTrade.findMany({
+          where: { id: { in: tradeIds as string[] } },
+          select: { id: true, status: true, amount: true, currency: true, fiatAmount: true, fiatCurrency: true, baseAsset: true, fiatAsset: true },
+        }) : Promise.resolve([]),
+      ]);
+      const counterMap = new Map(counterparties.map((u: any) => [u.id, u]));
+      const tradeMap   = new Map(trades.map((t: any) => [t.id, t]));
+
+      const enriched = escalations.map((e: any) => ({
+        ...e,
+        counterparty: counterMap.get(e.counterpartyId) ?? null,
+        trade: e.tradeId ? tradeMap.get(e.tradeId) ?? null : null,
+      }));
+
+      const summary = await Promise.all([
+        (prisma as any).supportEscalation.count({ where: { status: 'OPEN' } }),
+        (prisma as any).supportEscalation.count({ where: { status: 'ASSIGNED' } }),
+        (prisma as any).supportEscalation.count({ where: { status: 'RESOLVED' } }),
+      ]);
+
+      res.json({
+        escalations: enriched,
+        summary: { open: summary[0], assigned: summary[1], resolved: summary[2] },
+      });
+    } catch (error) { next(error); }
+  }
+
+  /** Assign self as the agent on an escalation. */
+  static async assignEscalation(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const { id } = req.params;
+      const updated = await (prisma as any).supportEscalation.update({
+        where: { id },
+        data: { status: 'ASSIGNED', assignedAgentId: req.user!.id },
+      });
+      res.json({ escalation: updated });
+    } catch (error) { next(error); }
+  }
+
+  /** Resolve an escalation with an optional resolution note. */
+  static async resolveEscalation(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const { id } = req.params;
+      const note = typeof req.body?.resolutionNote === 'string' ? req.body.resolutionNote : null;
+      const updated = await (prisma as any).supportEscalation.update({
+        where: { id },
+        data: { status: 'RESOLVED', resolutionNote: note, resolvedAt: new Date(), assignedAgentId: req.user!.id },
+      });
+
+      // Drop a SYSTEM notice into both participants' threads
+      const support = await prisma.user.findFirst({ where: { username: 'support' }, select: { id: true } });
+      if (support && updated) {
+        const content = note
+          ? `Escalation #${updated.id.slice(0, 8)} resolved by support: ${note}`
+          : `Escalation #${updated.id.slice(0, 8)} marked as resolved by support.`;
+        await prisma.message.createMany({
+          data: [
+            { senderId: support.id, receiverId: updated.raisedById,     content, type: 'SYSTEM', metadata: { escalationId: updated.id } as any, tradeId: updated.tradeId },
+            { senderId: support.id, receiverId: updated.counterpartyId, content, type: 'SYSTEM', metadata: { escalationId: updated.id } as any, tradeId: updated.tradeId },
+          ],
+        });
+      }
+
+      res.json({ escalation: updated });
+    } catch (error) { next(error); }
+  }
+
+  /** GET /api/admin/rates — list every exchange rate (active + overridden). */
+  static async getRates(_req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const rates = await prisma.exchangeRate.findMany({
+        orderBy: [{ baseCurrency: 'asc' }, { quoteCurrency: 'asc' }],
+      });
+      // Decorate with who set it (display name)
+      const setterIds = Array.from(new Set(rates.map((r) => r.setBy).filter(Boolean))) as string[];
+      const setters = setterIds.length
+        ? await prisma.user.findMany({
+            where: { id: { in: setterIds } },
+            select: { id: true, email: true, firstName: true, lastName: true },
+          })
+        : [];
+      const setterMap = new Map(setters.map((u) => [u.id, u]));
+      res.json({
+        rates: rates.map((r) => ({
+          ...r,
+          buyPrice:  Number(r.buyPrice),
+          sellPrice: Number(r.sellPrice),
+          setByUser: r.setBy ? setterMap.get(r.setBy) ?? null : null,
+        })),
+      });
+    } catch (error) { next(error); }
+  }
+
+  /** POST /api/admin/rates — create a new rate pair. */
+  static async createRate(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const schema = z.object({
+        baseCurrency:  z.string().min(2),
+        quoteCurrency: z.string().min(2),
+        buyPrice:  z.number().positive(),
+        sellPrice: z.number().positive(),
+      });
+      const data = schema.parse(req.body);
+      if (data.buyPrice <= data.sellPrice) {
+        throw new AppError('Buy price must be greater than sell price', 400);
+      }
+      const baseU  = data.baseCurrency.toUpperCase()  as any;
+      const quoteU = data.quoteCurrency.toUpperCase() as any;
+      const rate = await prisma.exchangeRate.upsert({
+        where:  { baseCurrency_quoteCurrency: { baseCurrency: baseU, quoteCurrency: quoteU } },
+        update: { buyPrice: data.buyPrice, sellPrice: data.sellPrice, isActive: true, setBy: req.user!.id },
+        create: { baseCurrency: baseU, quoteCurrency: quoteU, buyPrice: data.buyPrice, sellPrice: data.sellPrice, isActive: true, setBy: req.user!.id },
+      });
+      res.status(201).json({ rate });
+    } catch (error) { next(error); }
+  }
+
+  /** Freeze a user — server-side this maps to SUSPENDED status. */
+  static async freezeUser(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const { id } = req.params;
+      const reason = (req.body?.reason as string | undefined)?.trim();
+      const user = await prisma.user.findUnique({ where: { id }, select: { id: true, email: true, role: true } });
+      if (!user) throw new AppError('User not found', 404);
+      if (user.role === 'ADMIN') {
+        throw new AppError('Cannot freeze admin accounts', 403);
+      }
+
+      await prisma.user.update({ where: { id }, data: { status: 'SUSPENDED' } });
+
+      // Freeze every wallet's full balance so they can't withdraw or trade
+      const wallets = await prisma.wallet.findMany({ where: { userId: id } });
+      for (const w of wallets) {
+        await prisma.wallet.update({
+          where: { id: w.id },
+          data:  { frozen: w.balance },
+        });
+      }
+
+      await prisma.auditLog.create({
+        data: {
+          userId: req.user!.id,
+          action: 'FREEZE_USER',
+          entity: 'User',
+          entityId: id,
+          newValues: { status: 'SUSPENDED', reason: reason ?? null },
+        },
+      });
+
+      // Notify the affected user
+      await prisma.notification.create({
+        data: {
+          userId: id,
+          title:   'Account Frozen',
+          message: reason ? `Your account has been frozen by support: ${reason}` : 'Your account has been frozen pending review. Contact support.',
+          type:    'security',
+        },
+      });
+
+      res.json({ message: 'User frozen', userId: id });
+    } catch (error) { next(error); }
+  }
+
+  /** Unfreeze: restore ACTIVE status and zero out frozen balances. */
+  static async unfreezeUser(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const { id } = req.params;
+      const user = await prisma.user.findUnique({ where: { id }, select: { id: true } });
+      if (!user) throw new AppError('User not found', 404);
+
+      await prisma.user.update({ where: { id }, data: { status: 'ACTIVE' } });
+      const wallets = await prisma.wallet.findMany({ where: { userId: id } });
+      for (const w of wallets) {
+        await prisma.wallet.update({ where: { id: w.id }, data: { frozen: 0 } });
+      }
+
+      await prisma.auditLog.create({
+        data: { userId: req.user!.id, action: 'UNFREEZE_USER', entity: 'User', entityId: id, newValues: { status: 'ACTIVE' } },
+      });
+
+      await prisma.notification.create({
+        data: {
+          userId: id,
+          title:   'Account Unfrozen',
+          message: 'Your account is active again. You can now trade and withdraw normally.',
+          type:    'security',
+        },
+      });
+
+      res.json({ message: 'User unfrozen', userId: id });
+    } catch (error) { next(error); }
+  }
+
+  /**
+   * Freeze an individual order/withdrawal/deposit — sets its status
+   * to FROZEN-equivalent (CANCELLED + audit note for traceability).
+   */
+  static async freezeTransaction(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const { kind, id } = req.params;
+      const reason = (req.body?.reason as string | undefined)?.trim() ?? 'Frozen by admin';
+
+      switch (kind) {
+        case 'order': {
+          const updated = await prisma.order.update({ where: { id }, data: { status: 'CANCELLED' } });
+          await prisma.auditLog.create({ data: { userId: req.user!.id, action: 'FREEZE_ORDER',      entity: 'Order',      entityId: id, newValues: { reason } } });
+          res.json({ transaction: updated });
+          return;
+        }
+        case 'withdrawal': {
+          const updated = await prisma.withdrawal.update({ where: { id }, data: { status: 'CANCELLED', adminNotes: reason } });
+          await prisma.auditLog.create({ data: { userId: req.user!.id, action: 'FREEZE_WITHDRAWAL', entity: 'Withdrawal', entityId: id, newValues: { reason } } });
+          res.json({ transaction: updated });
+          return;
+        }
+        case 'deposit': {
+          const updated = await prisma.deposit.update({ where: { id }, data: { status: 'REJECTED', adminNotes: reason } });
+          await prisma.auditLog.create({ data: { userId: req.user!.id, action: 'FREEZE_DEPOSIT',     entity: 'Deposit',    entityId: id, newValues: { reason } } });
+          res.json({ transaction: updated });
+          return;
+        }
+        default:
+          throw new AppError('Unsupported transaction kind. Use order|withdrawal|deposit', 400);
+      }
+    } catch (error) { next(error); }
+  }
+
+  /**
+   * Send a message AS the support user to a target user. Admins use
+   * this to reply in support threads — the message appears to the
+   * user as coming from @support, not from the admin's personal handle.
+   */
+  static async sendAsSupport(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const schema = z.object({
+        userId:  z.string().uuid(),
+        content: z.string().min(1).max(4000),
+        escalationId: z.string().uuid().optional(),
+        tradeId:      z.string().uuid().optional(),
+      });
+      const data = schema.parse(req.body);
+
+      const support = await prisma.user.findFirst({ where: { username: 'support' }, select: { id: true } });
+      if (!support) throw new AppError('Support user not provisioned', 500);
+
+      const message = await prisma.message.create({
+        data: {
+          senderId:   support.id,
+          receiverId: data.userId,
+          content:    data.content,
+          type:       'TEXT',
+          metadata:   {
+            sentByAdmin:   req.user!.id,
+            escalationId:  data.escalationId ?? null,
+            tradeId:       data.tradeId      ?? null,
+          } as any,
+          tradeId:    data.tradeId,
+        },
+      });
+
+      const io = req.app.get('io');
+      if (io) {
+        io.to(`user:${data.userId}`).emit('message:new', {
+          id: message.id, senderId: support.id, receiverId: data.userId,
+          content: message.content, type: message.type, isRead: false,
+          createdAt: message.createdAt, metadata: message.metadata,
+        });
+      }
+
+      // If the last inbound message from this user came via WhatsApp, mirror the reply there.
+      try {
+        const lastWa = await (prisma as any).whatsAppMessage.findFirst({
+          where: { userId: data.userId, direction: 'IN' },
+          orderBy: { createdAt: 'desc' },
+          select: { phoneNumber: true },
+        });
+        if (lastWa?.phoneNumber) {
+          const { sendWhatsAppText } = await import('../services/whatsapp/twilio.service');
+          await sendWhatsAppText({ to: `+${lastWa.phoneNumber}`, body: data.content, userId: data.userId });
+        }
+      } catch (waErr) {
+        console.warn('[admin:sendAsSupport] WA mirror failed', (waErr as Error).message);
+      }
+
+      res.status(201).json({ message });
+    } catch (error) { next(error); }
+  }
+
+  /**
+   * Real-time platform metrics: connected sockets, recent volume,
+   * commission totals, latency probes. Used by the admin dashboard.
+   */
+  static async getMetrics(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const fiveMinAgo  = new Date(Date.now() - 5 * 60 * 1000);
+      const oneHourAgo  = new Date(Date.now() - 60 * 60 * 1000);
+      const oneDayAgo   = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+      const io = req.app.get('io');
+      const onlineSockets = io?.engine?.clientsCount ?? 0;
+
+      const [
+        onlineUsers,
+        recentOrders5m,
+        recentDeposits5m,
+        recentWithdrawals5m,
+        recentTransfers5m,
+        recentP2P5m,
+        recentCardTx5m,
+        totalCommissions,
+        commissions24h,
+        commissions5m,
+        feesBySource,
+      ] = await Promise.all([
+        prisma.user.count({ where: { lastLoginAt: { gte: oneHourAgo } } }).catch(() => 0),
+        prisma.order.count({         where: { createdAt: { gte: fiveMinAgo } } }),
+        prisma.deposit.count({       where: { createdAt: { gte: fiveMinAgo } } }),
+        prisma.withdrawal.count({    where: { createdAt: { gte: fiveMinAgo } } }),
+        prisma.transfer.count({      where: { createdAt: { gte: fiveMinAgo } } }),
+        (prisma as any).p2PTrade.count({       where: { createdAt: { gte: fiveMinAgo } } }).catch(() => 0),
+        (prisma as any).cardTransaction.count({ where: { createdAt: { gte: fiveMinAgo } } }).catch(() => 0),
+        (prisma as any).platformFee.aggregate({ _sum: { amountUsd: true } }),
+        (prisma as any).platformFee.aggregate({
+          where: { createdAt: { gte: oneDayAgo } },
+          _sum:  { amountUsd: true },
+        }),
+        (prisma as any).platformFee.aggregate({
+          where: { createdAt: { gte: fiveMinAgo } },
+          _sum:  { amountUsd: true },
+        }),
+        (prisma as any).platformFee.groupBy({
+          by: ['source'],
+          _sum: { amountUsd: true },
+          _count: { id: true },
+        }),
+      ]);
+
+      const txCount5m =
+        recentOrders5m + recentDeposits5m + recentWithdrawals5m +
+        recentTransfers5m + recentP2P5m + recentCardTx5m;
+      const fees5m   = Number(commissions5m?._sum?.amountUsd ?? 0);
+      const txPerMin   = txCount5m / 5;
+      const feesPerMin = fees5m    / 5;
+
+      res.json({
+        onlineSockets,
+        onlineUsers,
+        // ── Per-minute rates (averaged over the last 5 minutes) ───────
+        txPerMin,
+        feesPerMin,
+        // ── 5-minute window breakdown ─────────────────────────────────
+        recentTransactions5m: txCount5m,
+        recentOrders5m,
+        recentDeposits5m,
+        recentWithdrawals5m,
+        recentTransfers5m,
+        recentP2P5m,
+        recentCardTx5m,
+        // ── Fee totals ────────────────────────────────────────────────
+        commissions5mUSD:    fees5m,
+        commissions24hUSD:   Number(commissions24h?._sum?.amountUsd  ?? 0),
+        totalCommissionsUSD: Number(totalCommissions?._sum?.amountUsd ?? 0),
+        // ── Fees grouped by source ────────────────────────────────────
+        feesBySource: (feesBySource as any[]).map((r) => ({
+          source: r.source,
+          totalUsd: Number(r._sum?.amountUsd ?? 0),
+          count:    Number(r._count?.id      ?? 0),
+        })),
+        uptimeSeconds: Math.floor(process.uptime()),
+        nodeVersion:   process.version,
+        memoryMb:      Math.round(process.memoryUsage().rss / 1024 / 1024),
+        timestamp:     new Date().toISOString(),
+      });
     } catch (error) { next(error); }
   }
 }

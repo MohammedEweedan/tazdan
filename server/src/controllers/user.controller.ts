@@ -137,9 +137,30 @@ export class UserController {
 
   static async addBankAccount(req: AuthRequest, res: Response, next: NextFunction) {
     try {
-      const { bankName, accountNumber, accountName, branch } = req.body;
+      const { bankName, accountNumber, accountName, branch, country, currency, sortCode, routingNumber, iban, swift } = req.body;
+      
+      // Validate required fields
+      if (!bankName || !accountNumber || !accountName) {
+        throw new AppError('Bank name, account number, and account name are required', 400);
+      }
+      if (!country || !currency) {
+        throw new AppError('Country and currency are required', 400);
+      }
+
       const bankAccount = await prisma.bankAccount.create({
-        data: { userId: req.user!.id, bankName, accountNumber, accountName, branch },
+        data: {
+          userId: req.user!.id,
+          bankName,
+          accountNumber,
+          accountName,
+          branch: branch || null,
+          country,
+          currency,
+          sortCode: sortCode || null,
+          routingNumber: routingNumber || null,
+          iban: iban || null,
+          swift: swift || null,
+        } as any,
       });
       res.status(201).json({ bankAccount });
     } catch (error) {

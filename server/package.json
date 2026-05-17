@@ -16,7 +16,9 @@
     "setup:sim": "npm run seed:rates && npm run seed:admin",
     "simulate": "ts-node --transpile-only scripts/simulate-platform-activity.ts",
     "simulate:verbose": "ts-node --transpile-only scripts/simulate-platform-activity.ts --verbose",
-    "simulate:admin": "ts-node --transpile-only scripts/simulate-platform-activity.ts --admin"
+    "simulate:admin": "ts-node --transpile-only scripts/simulate-platform-activity.ts --admin",
+    "backfill:fees-usd": "ts-node --transpile-only scripts/backfill-platform-fee-usd.ts",
+    "backfill:fees-history": "ts-node --transpile-only scripts/seed-fees-from-history.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
@@ -40,10 +42,12 @@
     "multer": "^1.4.5-lts.1",
     "nodemailer": "^6.9.13",
     "qrcode": "^1.5.3",
+    "redis": "^5.12.1",
     "socket.io": "^4.7.4",
     "speakeasy": "^2.0.0",
     "tiny-secp256k1": "^2.2.4",
     "tronweb": "^6.3.0",
+    "twilio": "^6.0.2",
     "uuid": "^9.0.1",
     "zod": "^3.22.4"
   },
@@ -52,6 +56,7 @@
     "@types/cookie-parser": "^1.4.7",
     "@types/cors": "^2.8.17",
     "@types/express": "^4.17.21",
+    "@types/jest": "^30.0.0",
     "@types/jsonwebtoken": "^9.0.6",
     "@types/multer": "^1.4.11",
     "@types/node": "^20.11.19",

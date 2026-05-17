@@ -21,6 +21,8 @@ export interface CurrencyMeta {
   flagOrIcon: string;   // emoji fallback or icon key
 }
 
+export type UserRole = 'USER' | 'ADMIN';
+
 export interface User {
   id: string;
   email: string;
@@ -30,6 +32,7 @@ export interface User {
   avatarUrl?: string;
   country?: string;
   status?: string;
+  role?: UserRole;
   kycStatus: 'NOT_SUBMITTED' | 'PENDING' | 'APPROVED' | 'REJECTED';
   kycTier:   'TIER_0' | 'TIER_1' | 'TIER_2' | 'TIER_3';
   twoFactorEnabled: boolean;
@@ -75,8 +78,8 @@ export interface Transaction {
 
 export interface MarketTicker {
   symbol: string;           // "BTCUSDT"
-  base: Currency;
-  quote: Currency;
+  base: string;             // any Binance base asset (BTC, ETH, PEPE, SHIB, …)
+  quote: string;
   displayName: string;
   price: number;
   changePct24h: number;
@@ -121,9 +124,33 @@ export interface CardEntity {
   spentMonth: string;
   dailyLimit: string;
   monthlyLimit: string;
+  spentTotal: string;
+  cashbackRate: string;
   cashbackBalance: string;
+  nickname?: string;
+  colorway: 'midnight' | 'ocean' | 'sunset' | 'forest';
   frozen: boolean;
-  colorway: 'sapphire' | 'obsidian' | 'rose' | 'emerald' | 'platinum';
+  contactlessOn: boolean;
+  onlineOn: boolean;
+  atmOn: boolean;
+  issuedAt?: string;
+  activatedAt?: string;
+}
+
+export interface BankAccount {
+  id: string;
+  bankName: string;
+  accountNumber: string;
+  accountName: string;
+  branch?: string;
+  country?: string;
+  currency?: string;
+  sortCode?: string;
+  routingNumber?: string;
+  iban?: string;
+  swift?: string;
+  isDefault: boolean;
+  createdAt: string;
 }
 
 export interface ApiResponse<T> {

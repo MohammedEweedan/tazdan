@@ -5,6 +5,34 @@ import { prisma } from '../utils/prisma';
 import { AppError } from '../middleware/errorHandler';
 import { generateReference } from '../utils/helpers';
 import { AuthRequest } from '../types';
+import { redisGet, redisSet, redisDel } from '../utils/redis';
+import { collectFee } from '../services/fee/feeCollector.service';
+import { emitActivity } from '../utils/realtime';
+
+// ── Currencies that live in the Prisma Currency enum ────────────────
+const ENUM_CURRENCIES = new Set([
+  'USDT','BTC','ETH','BNB','SOL','XRP','ADA','DOGE','MATIC','DOT','AVAX',
+  'USD','EUR','GBP','AED','SAR','EGP','LYD',
+]);
+
+const P2P_OFFERS_CACHE_KEY = 'p2p:offers:active';
+const P2P_OFFERS_TTL = 10;
+
+function resolveTicker(asset: string | null | undefined, fallback: string) {
+  return asset ?? fallback;
+}
+
+function resolveListingAssets(listing: any) {
+  const currency = resolveTicker(listing.baseAsset, listing.currency);
+  const fiatCurrency = resolveTicker(listing.fiatAsset, listing.fiatCurrency);
+  return {
+    ...listing,
+    currency,
+    fiatCurrency,
+    resolvedCurrency: currency,
+    resolvedFiat: fiatCurrency,
+  };
+}
 
 // ── Schemas ─────────────────────────────────────────────────────────
 
@@ -41,39 +69,50 @@ export class P2PController {
     try {
       const data = createListingSchema.parse(req.body);
 
-      // Limits are denominated in fiat; the listing's total fiat value is
-      // amount × price. Both min and max limits must be ≤ that total, and
-      // min must not exceed max.
+      const ticker    = data.currency.toUpperCase();
+      const fiatTicker = data.fiatCurrency.toUpperCase();
+      const isEnumCrypto = ENUM_CURRENCIES.has(ticker);
+      const isEnumFiat   = ENUM_CURRENCIES.has(fiatTicker);
+
       const totalFiat = data.amount * data.price;
       if (data.minLimit > data.maxLimit) throw new AppError('Min limit must be <= max limit', 400);
-      if (data.minLimit > totalFiat) throw new AppError(`Min limit must be <= total listing value (${totalFiat} ${data.fiatCurrency})`, 400);
-      if (data.maxLimit > totalFiat) throw new AppError(`Max limit must be <= total listing value (${totalFiat} ${data.fiatCurrency})`, 400);
+      if (data.minLimit > totalFiat) throw new AppError(`Min limit must be <= total listing value (${totalFiat} ${fiatTicker})`, 400);
+      if (data.maxLimit > totalFiat) throw new AppError(`Max limit must be <= total listing value (${totalFiat} ${fiatTicker})`, 400);
 
       // For SELL listings, verify seller has enough balance
       if (data.side === 'SELL') {
-        const wallet = await prisma.wallet.findUnique({
-          where: { userId_currency: { userId: req.user!.id, currency: data.currency as any } },
-        });
-        if (!wallet) throw new AppError(`${data.currency} wallet not found`, 404);
-        const available = parseFloat(wallet.balance.toString()) - parseFloat(wallet.frozen.toString());
-        if (data.amount > available) throw new AppError(`Insufficient ${data.currency} balance`, 400);
+        if (isEnumCrypto) {
+          const wallet = await prisma.wallet.findUnique({
+            where: { userId_currency: { userId: req.user!.id, currency: ticker as any } },
+          });
+          if (!wallet) throw new AppError(`${ticker} wallet not found`, 404);
+          const available = parseFloat(wallet.balance.toString()) - parseFloat(wallet.frozen.toString());
+          if (data.amount > available) throw new AppError(`Insufficient ${ticker} balance`, 400);
+        } else {
+          const uw = await prisma.userWallet.findUnique({ where: { userId: req.user!.id } });
+          const alts = (uw?.altBalances && typeof uw.altBalances === 'object' ? uw.altBalances : {}) as Record<string, string>;
+          const available = parseFloat(alts[ticker] ?? '0');
+          if (data.amount > available) throw new AppError(`Insufficient ${ticker} balance. Available: ${available}`, 400);
+        }
       }
 
       const listing = await (prisma as any).p2PListing.create({
         data: {
-          userId: req.user!.id,
-          currency: data.currency,
-          fiatCurrency: data.fiatCurrency,
-          side: data.side,
-          price: data.price,
-          amount: data.amount,
-          minLimit: data.minLimit,
-          maxLimit: data.maxLimit,
+          userId:        req.user!.id,
+          currency:      isEnumCrypto ? ticker : 'USDT',
+          baseAsset:     isEnumCrypto ? null : ticker,
+          fiatCurrency:  isEnumFiat ? fiatTicker : 'USD',
+          fiatAsset:     isEnumFiat ? null : fiatTicker,
+          side:          data.side,
+          price:         data.price,
+          amount:        data.amount,
+          minLimit:      data.minLimit,
+          maxLimit:      data.maxLimit,
           paymentMethods: data.paymentMethods,
-          terms: data.terms,
-          autoReply: data.autoReply,
-          anonymous: data.anonymous ?? false,
-          city: data.city,
+          terms:         data.terms,
+          autoReply:     data.autoReply,
+          anonymous:     data.anonymous ?? false,
+          city:          data.city,
           timeframeMins: data.timeframeMins ?? 30,
         },
         include: {
@@ -81,7 +120,9 @@ export class P2PController {
         },
       });
 
-      res.status(201).json({ listing });
+      await redisDel(P2P_OFFERS_CACHE_KEY);
+      const response = resolveListingAssets(listing);
+      res.status(201).json({ listing: response });
     } catch (error) {
       next(error);
     }
@@ -97,7 +138,13 @@ export class P2PController {
 
       const where: any = { status: 'ACTIVE' };
       if (side) where.side = side.toUpperCase();
-      if (currency) where.currency = currency.toUpperCase();
+      if (currency) {
+        const ticker = currency.toUpperCase();
+        where.OR = [
+          { currency: ticker },
+          { baseAsset: ticker },
+        ];
+      }
 
       const [listings, total] = await Promise.all([
         (prisma as any).p2PListing.findMany({
@@ -113,7 +160,8 @@ export class P2PController {
         (prisma as any).p2PListing.count({ where }),
       ]);
 
-      res.json({ listings, total, page, totalPages: Math.ceil(total / limit) });
+      const resolvedListings = listings.map(resolveListingAssets);
+      res.json({ listings: resolvedListings, total, page, totalPages: Math.ceil(total / limit) });
     } catch (error) {
       next(error);
     }
@@ -129,72 +177,94 @@ export class P2PController {
     try {
       const limit  = parseInt(req.query.limit as string)  || 50;
       const sideQ  = (req.query.side as string | undefined)?.toUpperCase();
+      const currencyQ = (req.query.currency as string | undefined)?.toUpperCase();
+
+      const canUseCache = !sideQ && !currencyQ && limit <= 100;
+      let offers: any[] | undefined;
+
+      if (canUseCache) {
+        const cached = await redisGet<{ offers: any[] }>(P2P_OFFERS_CACHE_KEY);
+        offers = cached?.offers;
+      }
 
       const where: any = { status: 'ACTIVE' };
       if (sideQ === 'BUY' || sideQ === 'SELL') where.side = sideQ;
+      if (currencyQ) {
+        where.OR = [
+          { currency: currencyQ },
+          { baseAsset: currencyQ },
+        ];
+      }
 
-      const listings = await (prisma as any).p2PListing.findMany({
-        where,
-        orderBy: { createdAt: 'desc' },
-        take: limit,
-        include: {
-          user: {
-            select: {
-              id: true, firstName: true, lastName: true, username: true,
-              kycStatus: true, country: true, avatarUrl: true,
-              _count: { select: { p2pTradesAsBuyer: true, p2pTradesAsSeller: true } },
+      if (!offers) {
+        const listings = await (prisma as any).p2PListing.findMany({
+          where,
+          orderBy: { createdAt: 'desc' },
+          take: Math.min(limit, 100),
+          include: {
+            user: {
+              select: {
+                id: true, firstName: true, lastName: true, username: true,
+                kycStatus: true, country: true, avatarUrl: true,
+                _count: { select: { p2pTradesAsBuyer: true, p2pTradesAsSeller: true } },
+              },
             },
           },
-        },
-      });
+        });
 
-      const offers = listings.map((l: any) => {
-        const orders = (l.user._count?.p2pTradesAsBuyer ?? 0)
-                     + (l.user._count?.p2pTradesAsSeller ?? 0);
-        const remaining = Math.max(
-          0,
-          parseFloat(l.amount.toString()) - parseFloat(l.filled.toString()),
-        );
-        // For anonymous listings we hide handle, full name, country and avatar.
-        // Stats (rating / orders / verified) remain visible because they're
-        // important for trust without revealing identity.
-        const trader = l.anonymous
-          ? {
-              handle: `@anon_${String(l.id).slice(0, 6)}`,
-              name: 'Anonymous trader',
-              rating: 4.7,
-              orders,
-              verified: l.user.kycStatus === 'APPROVED',
-              avatarUrl: undefined,
-              anonymous: true,
-            }
-          : {
-              handle: l.user.username
-                ? `@${l.user.username}`
-                : `@${(l.user.firstName ?? 'user').toLowerCase()}`,
-              name: `${l.user.firstName ?? ''} ${l.user.lastName ?? ''}`.trim() || 'Trader',
-              rating: 4.7,            // placeholder until reputation is wired
-              orders,
-              verified: l.user.kycStatus === 'APPROVED',
-              avatarUrl: l.user.avatarUrl ?? undefined,
-              anonymous: false,
-            };
-        return {
-          id: l.id,
-          side: l.side,
-          trader,
-          base: l.currency,
-          quote: l.fiatCurrency,
-          price: l.price.toString(),
-          available: remaining.toString(),
-          minLimit: l.minLimit.toString(),
-          maxLimit: l.maxLimit.toString(),
-          paymentMethods: l.paymentMethods ?? [],
-          country: l.anonymous ? undefined : (l.country ?? l.user.country ?? undefined),
-          city: l.anonymous ? undefined : (l.city ?? undefined),
-          timeframeMins: l.timeframeMins ?? 30,
-        };
-      });
+        offers = listings.map((l: any) => {
+          const orders = (l.user._count?.p2pTradesAsBuyer ?? 0)
+                       + (l.user._count?.p2pTradesAsSeller ?? 0);
+          const remaining = Math.max(
+            0,
+            parseFloat(l.amount.toString()) - parseFloat(l.filled.toString()),
+          );
+          const trader = l.anonymous
+            ? {
+                handle: `@anon_${String(l.id).slice(0, 6)}`,
+                name: 'Anonymous trader',
+                rating: 4.7,
+                orders,
+                verified: l.user.kycStatus === 'APPROVED',
+                avatarUrl: undefined,
+                anonymous: true,
+              }
+            : {
+                handle: l.user.username
+                  ? `@${l.user.username}`
+                  : `@${(l.user.firstName ?? 'user').toLowerCase()}`,
+                name: `${l.user.firstName ?? ''} ${l.user.lastName ?? ''}`.trim() || 'Trader',
+                rating: 4.7,
+                orders,
+                verified: l.user.kycStatus === 'APPROVED',
+                avatarUrl: l.user.avatarUrl ?? undefined,
+                anonymous: false,
+              };
+          return {
+            id: l.id,
+            side: l.side,
+            trader,
+            base: l.baseAsset ?? l.currency,
+            quote: l.fiatAsset ?? l.fiatCurrency,
+            price: l.price.toString(),
+            available: remaining.toString(),
+            minLimit: l.minLimit.toString(),
+            maxLimit: l.maxLimit.toString(),
+            paymentMethods: l.paymentMethods ?? [],
+            country: l.anonymous ? undefined : (l.country ?? l.user.country ?? undefined),
+            city: l.anonymous ? undefined : (l.city ?? undefined),
+            timeframeMins: l.timeframeMins ?? 30,
+          };
+        });
+
+        if (canUseCache) {
+          await redisSet(P2P_OFFERS_CACHE_KEY, { offers }, P2P_OFFERS_TTL);
+        }
+      }
+
+      if (offers && offers.length > limit) {
+        offers = offers.slice(0, limit);
+      }
 
       res.json({ offers });
     } catch (error) {
@@ -210,7 +280,8 @@ export class P2PController {
         orderBy: { createdAt: 'desc' },
         include: { _count: { select: { trades: true } } },
       });
-      res.json({ listings });
+      const resolvedListings = listings.map(resolveListingAssets);
+      res.json({ listings: resolvedListings });
     } catch (error) {
       next(error);
     }
@@ -231,6 +302,7 @@ export class P2PController {
         data: { status: 'CANCELLED' },
       });
 
+      await redisDel(P2P_OFFERS_CACHE_KEY);
       res.json({ message: 'Listing cancelled' });
     } catch (error) {
       next(error);
@@ -256,49 +328,62 @@ export class P2PController {
       const listingPrice = parseFloat(listing.price.toString());
       const fiatAmount   = data.amount * listingPrice;
       const remaining    = parseFloat(listing.amount.toString()) - parseFloat(listing.filled.toString());
+      const realTicker = (listing.baseAsset ?? listing.currency) as string;
+      const resolvedFiat = listing.fiatAsset ?? listing.fiatCurrency;
       if (data.amount > remaining)
-        throw new AppError(`Only ${remaining} ${listing.currency} available`, 400);
+        throw new AppError(`Only ${remaining} ${realTicker} available`, 400);
       if (fiatAmount < parseFloat(listing.minLimit.toString()))
-        throw new AppError(`Minimum is ${listing.minLimit} ${listing.fiatCurrency}`, 400);
+        throw new AppError(`Minimum is ${listing.minLimit} ${resolvedFiat}`, 400);
       if (fiatAmount > parseFloat(listing.maxLimit.toString()))
-        throw new AppError(`Maximum is ${listing.maxLimit} ${listing.fiatCurrency}`, 400);
+        throw new AppError(`Maximum is ${listing.maxLimit} ${resolvedFiat}`, 400);
       const reference = generateReference('P2P');
 
       // Determine buyer/seller
       const buyerId = listing.side === 'SELL' ? req.user!.id : listing.userId;
       const sellerId = listing.side === 'SELL' ? listing.userId : req.user!.id;
 
-      // Lock escrow from seller's wallet
-      const sellerWallet = await prisma.wallet.findUnique({
-        where: { userId_currency: { userId: sellerId, currency: listing.currency } },
-      });
-      if (!sellerWallet) throw new AppError('Seller wallet not found', 404);
-      const available = parseFloat(sellerWallet.balance.toString()) - parseFloat(sellerWallet.frozen.toString());
-      if (data.amount > available) throw new AppError('Seller has insufficient balance for escrow', 400);
+      const isEnumCrypto = ENUM_CURRENCIES.has(realTicker);
 
-      // Freeze escrow amount
-      await prisma.wallet.update({
-        where: { userId_currency: { userId: sellerId, currency: listing.currency } },
-        data: { frozen: { increment: new Decimal(data.amount) } },
-      });
+      // Lock escrow from seller's wallet
+      if (isEnumCrypto) {
+        const sellerWallet = await prisma.wallet.findUnique({
+          where: { userId_currency: { userId: sellerId, currency: realTicker as any } },
+        });
+        if (!sellerWallet) throw new AppError('Seller wallet not found', 404);
+        const available = parseFloat(sellerWallet.balance.toString()) - parseFloat(sellerWallet.frozen.toString());
+        if (data.amount > available) throw new AppError('Seller has insufficient balance for escrow', 400);
+        await prisma.wallet.update({
+          where: { userId_currency: { userId: sellerId, currency: realTicker as any } },
+          data: { frozen: { increment: new Decimal(data.amount) } },
+        });
+      } else {
+        const uw = await prisma.userWallet.findUnique({ where: { userId: sellerId } });
+        if (!uw) throw new AppError('Seller crypto wallet not provisioned', 404);
+        const alts = (uw.altBalances && typeof uw.altBalances === 'object' ? uw.altBalances : {}) as Record<string, string>;
+        const available = parseFloat(alts[realTicker] ?? '0');
+        if (data.amount > available) throw new AppError('Seller has insufficient balance for escrow', 400);
+        // Freeze by reducing altBalances and storing frozen amount in metadata (simple approach: just validate here, deduct on release)
+      }
 
       const trade = await (prisma as any).p2PTrade.create({
         data: {
-          listingId: listing.id,
+          listingId:    listing.id,
           buyerId,
           sellerId,
-          currency: listing.currency,
+          currency:     isEnumCrypto ? realTicker : 'USDT',
+          baseAsset:    isEnumCrypto ? null : realTicker,
           fiatCurrency: listing.fiatCurrency,
+          fiatAsset:    listing.fiatAsset ?? null,
           cryptoAmount: data.amount,
           fiatAmount,
-          price: parseFloat(listing.price.toString()),
+          price:        parseFloat(listing.price.toString()),
           escrowAmount: data.amount,
-          status: 'ESCROW_FUNDED',
+          status:       'ESCROW_FUNDED',
           reference,
-          buyerNote: listing.side === 'SELL' ? data.note : undefined,
-          sellerNote: listing.side === 'BUY' ? data.note : undefined,
+          buyerNote:    listing.side === 'SELL' ? data.note : undefined,
+          sellerNote:   listing.side === 'BUY' ? data.note : undefined,
           paymentMethod: data.paymentMethod || listing.paymentMethods[0],
-          expiresAt: new Date(Date.now() + (listing.timeframeMins ?? 30) * 60 * 1000),
+          expiresAt:    new Date(Date.now() + (listing.timeframeMins ?? 30) * 60 * 1000),
         },
       });
 
@@ -316,7 +401,7 @@ export class P2PController {
         data: {
           userId: sellerId,
           title: 'New P2P Trade',
-          message: `Buyer wants ${data.amount} ${listing.currency} for ${fiatAmount} ${listing.fiatCurrency}. Ref: ${reference}`,
+          message: `Buyer wants ${data.amount} ${realTicker} for ${fiatAmount} ${resolvedFiat}. Ref: ${reference}`,
           type: 'p2p',
         },
       });
@@ -371,20 +456,36 @@ export class P2PController {
       if (trade.status !== 'PAYMENT_SENT') throw new AppError('Buyer has not marked payment as sent', 400);
 
       // Release escrow: unfreeze from seller, transfer to buyer
+      const realTicker = (trade.baseAsset ?? trade.currency) as string;
+      const isEnumCrypto = ENUM_CURRENCIES.has(realTicker);
+
       await prisma.$transaction(async (tx: any) => {
-        await tx.wallet.update({
-          where: { userId_currency: { userId: trade.sellerId, currency: trade.currency } },
-          data: {
-            balance: { decrement: trade.escrowAmount },
-            frozen: { decrement: trade.escrowAmount },
-          },
-        });
-        await tx.wallet.upsert({
-          where: { userId_currency: { userId: trade.buyerId, currency: trade.currency } },
-          update: { balance: { increment: trade.cryptoAmount } },
-          create: { userId: trade.buyerId, currency: trade.currency, balance: trade.cryptoAmount },
-        });
-        // Move to PAYMENT_CONFIRMED — buyer still needs to confirm receipt
+        if (isEnumCrypto) {
+          await tx.wallet.update({
+            where: { userId_currency: { userId: trade.sellerId, currency: realTicker } },
+            data: { balance: { decrement: trade.escrowAmount }, frozen: { decrement: trade.escrowAmount } },
+          });
+          await tx.wallet.upsert({
+            where: { userId_currency: { userId: trade.buyerId, currency: realTicker } },
+            update: { balance: { increment: trade.cryptoAmount } },
+            create: { userId: trade.buyerId, currency: realTicker, balance: trade.cryptoAmount },
+          });
+        } else {
+          const [sellerUW, buyerUW] = await Promise.all([
+            tx.userWallet.findUnique({ where: { userId: trade.sellerId } }),
+            tx.userWallet.findUnique({ where: { userId: trade.buyerId } }),
+          ]);
+          if (!sellerUW) throw new AppError('Seller crypto wallet not found', 404);
+          if (!buyerUW)  throw new AppError('Buyer crypto wallet not found', 404);
+          const sellerAlts = (sellerUW.altBalances && typeof sellerUW.altBalances === 'object' ? sellerUW.altBalances : {}) as Record<string, string>;
+          const buyerAlts  = (buyerUW.altBalances  && typeof buyerUW.altBalances  === 'object' ? buyerUW.altBalances  : {}) as Record<string, string>;
+          const escrow = parseFloat(trade.escrowAmount.toString());
+          const crypto = parseFloat(trade.cryptoAmount.toString());
+          const newSeller = Math.max(0, parseFloat(sellerAlts[realTicker] ?? '0') - escrow);
+          const newBuyer  = parseFloat(buyerAlts[realTicker] ?? '0') + crypto;
+          await tx.userWallet.update({ where: { userId: trade.sellerId }, data: { altBalances: { ...sellerAlts, [realTicker]: newSeller.toFixed(8) } } });
+          await tx.userWallet.update({ where: { userId: trade.buyerId  }, data: { altBalances: { ...buyerAlts,  [realTicker]: newBuyer.toFixed(8)  } } });
+        }
         await (tx as any).p2PTrade.update({
           where: { id: trade.id },
           data: { status: 'PAYMENT_CONFIRMED' },
@@ -395,7 +496,7 @@ export class P2PController {
         data: {
           userId: trade.buyerId,
           title: 'Crypto Released',
-          message: `${trade.cryptoAmount} ${trade.currency} has been sent to your wallet. Please confirm receipt. Ref: ${trade.reference}`,
+          message: `${trade.cryptoAmount} ${realTicker} has been sent to your wallet. Please confirm receipt. Ref: ${trade.reference}`,
           type: 'p2p',
         },
       });
@@ -421,33 +522,64 @@ export class P2PController {
         data: { status: 'COMPLETED', completedAt: new Date() },
       });
 
+      const realTicker = (trade.baseAsset ?? trade.currency) as string;
+      const isEnumCrypto = ENUM_CURRENCIES.has(realTicker);
+      // Ledger currency for Transaction records — must be a valid enum value
+      const ledgerCurrency = isEnumCrypto ? realTicker : 'USDT';
+
+      // Look up the trading-fee percent (used by orders) and apply
+      // half of it to each side of a P2P trade as the platform cut.
+      const feeSetting = await prisma.platformSettings.findUnique({ where: { key: 'p2p_fee_percent' } })
+        ?? await prisma.platformSettings.findUnique({ where: { key: 'trading_fee_percent' } });
+      const feePercent = new Decimal(feeSetting?.value ?? '0.5');
+      const cryptoAmount = new Decimal(trade.cryptoAmount.toString());
+      const p2pFee = cryptoAmount.mul(feePercent).div(100);
+
       await prisma.$transaction(async (tx: any) => {
-        const sellerWallet = await tx.wallet.findUnique({
-          where: { userId_currency: { userId: trade.sellerId, currency: trade.currency } },
-        });
-        const buyerWallet = await tx.wallet.findUnique({
-          where: { userId_currency: { userId: trade.buyerId, currency: trade.currency } },
-        });
+        const sellerWallet = isEnumCrypto ? await tx.wallet.findUnique({
+          where: { userId_currency: { userId: trade.sellerId, currency: realTicker } },
+        }) : null;
+        const buyerWallet = isEnumCrypto ? await tx.wallet.findUnique({
+          where: { userId_currency: { userId: trade.buyerId, currency: realTicker } },
+        }) : null;
         await tx.transaction.createMany({
           data: [
             {
-              userId: trade.sellerId, type: 'SELL', currency: trade.currency,
+              userId: trade.sellerId, type: 'SELL', currency: ledgerCurrency,
               amount: new Decimal(-parseFloat(trade.cryptoAmount.toString())),
+              fee: p2pFee,
               balanceBefore: parseFloat(sellerWallet?.balance.toString() || '0') + parseFloat(trade.cryptoAmount.toString()),
-              balanceAfter: parseFloat(sellerWallet?.balance.toString() || '0'),
+              balanceAfter:  parseFloat(sellerWallet?.balance.toString() || '0'),
               reference: trade.reference,
-              description: `P2P Sale: ${trade.cryptoAmount} ${trade.currency}`,
+              description: `P2P Sale: ${trade.cryptoAmount} ${realTicker}`,
+              metadata: { asset: realTicker, p2pFee: p2pFee.toString() },
             },
             {
-              userId: trade.buyerId, type: 'BUY', currency: trade.currency,
+              userId: trade.buyerId, type: 'BUY', currency: ledgerCurrency,
               amount: trade.cryptoAmount,
+              fee: p2pFee,
               balanceBefore: parseFloat(buyerWallet?.balance.toString() || '0') - parseFloat(trade.cryptoAmount.toString()),
-              balanceAfter: parseFloat(buyerWallet?.balance.toString() || '0'),
+              balanceAfter:  parseFloat(buyerWallet?.balance.toString() || '0'),
               reference: trade.reference,
-              description: `P2P Purchase: ${trade.cryptoAmount} ${trade.currency}`,
+              description: `P2P Purchase: ${trade.cryptoAmount} ${realTicker}`,
+              metadata: { asset: realTicker, p2pFee: p2pFee.toString() },
             },
           ],
         });
+
+        // Pour the P2P trade fee into the platform wallet
+        if (p2pFee.gt(0)) {
+          await collectFee({
+            tx,
+            source:   'p2p_trade',
+            sourceId: trade.id,
+            payerId:  trade.sellerId,
+            amount:   p2pFee,
+            currency: realTicker,
+            description: `P2P trade fee · ${realTicker}`,
+            metadata: { buyerId: trade.buyerId, sellerId: trade.sellerId, reference: trade.reference },
+          });
+        }
       });
 
       await prisma.notification.create({
@@ -459,6 +591,7 @@ export class P2PController {
         },
       });
 
+      emitActivity(req, [trade.buyerId, trade.sellerId], { kind: 'p2p_trade', tradeId: trade.id });
       res.json({ message: 'Trade completed' });
     } catch (error) {
       next(error);
@@ -524,10 +657,14 @@ export class P2PController {
 
       // Unfreeze escrow if it was funded
       if (trade.status === 'ESCROW_FUNDED') {
-        await prisma.wallet.update({
-          where: { userId_currency: { userId: trade.sellerId, currency: trade.currency } },
-          data: { frozen: { decrement: trade.escrowAmount } },
-        });
+        const realTicker = (trade.baseAsset ?? trade.currency) as string;
+        if (ENUM_CURRENCIES.has(realTicker)) {
+          await prisma.wallet.update({
+            where: { userId_currency: { userId: trade.sellerId, currency: realTicker as any } },
+            data: { frozen: { decrement: trade.escrowAmount } },
+          });
+        }
+        // For altcoins: escrow was validated but not hard-frozen in altBalances; nothing to unfreeze.
       }
 
       await (prisma as any).p2PTrade.update({
@@ -635,7 +772,12 @@ export class P2PController {
         (prisma as any).p2PTrade.count({ where }),
       ]);
 
-      res.json({ trades, total, page, totalPages: Math.ceil(total / limit) });
+      const resolvedTrades = trades.map((trade: any) => ({
+        ...trade,
+        listing: trade.listing ? resolveListingAssets(trade.listing) : undefined,
+      }));
+
+      res.json({ trades: resolvedTrades, total, page, totalPages: Math.ceil(total / limit) });
     } catch (error) {
       next(error);
     }

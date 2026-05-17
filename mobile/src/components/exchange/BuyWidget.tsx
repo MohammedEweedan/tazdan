@@ -1,13 +1,12 @@
 /**
- * BuyWidget — MoonPay-style buy/send sheet.
- * Single tappable asset row · large centered amount · live quote · full-width CTA.
+ * BuyWidget — search and buy any token on Binance.
+ * Phantom × Binance × MoonPay energy.
  */
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Keyboard,
   Modal,
-  Platform,
   Pressable,
   ScrollView,
   Text,
@@ -19,75 +18,122 @@ import * as Haptics from 'expo-haptics';
 import { useAuthStore } from '@/store/authStore';
 import { useThemedPalette } from '@/store/themeStore';
 import { useWallets, useCards, useMarkets } from '@/hooks';
-import { cryptoExchangeAPI, type CryptoQuote } from '@/lib/cryptoApi';
+import { cryptoExchangeAPI, type CryptoQuote, type AssetSearchResult } from '@/lib/cryptoApi';
 
-// ── Asset / network metadata ──────────────────────────────────────────────────
-const ASSET_META: Record<string, { label: string; color: string; bg: string; icon: string }> = {
-  BTC:  { label: 'Bitcoin',   color: '#fb923c', bg: 'rgba(251,146,60,0.14)',  icon: '₿' },
-  ETH:  { label: 'Ethereum',  color: '#818cf8', bg: 'rgba(129,140,248,0.14)', icon: 'Ξ' },
-  SOL:  { label: 'Solana',    color: '#a78bfa', bg: 'rgba(167,139,250,0.14)', icon: '◎' },
-  USDT: { label: 'Tether',    color: '#4ade80', bg: 'rgba(74,222,128,0.14)',  icon: '₮' },
-  USD:  { label: 'US Dollar', color: '#60a5fa', bg: 'rgba(96,165,250,0.14)',  icon: '$' },
-  EUR:  { label: 'Euro',      color: '#60a5fa', bg: 'rgba(96,165,250,0.14)',  icon: '€' },
-  BNB:  { label: 'BNB',       color: '#f3ba2f', bg: 'rgba(243,186,47,0.14)',  icon: 'B' },
-  XRP:  { label: 'XRP',       color: '#7eb8f7', bg: 'rgba(126,184,247,0.14)', icon: '✕' },
-  ADA:  { label: 'Cardano',   color: '#3b82f6', bg: 'rgba(59,130,246,0.14)',  icon: '₳' },
-  DOGE: { label: 'Dogecoin',  color: '#c3a634', bg: 'rgba(195,166,52,0.14)',  icon: 'Ð' },
-  MATIC:{ label: 'Polygon',   color: '#8247e5', bg: 'rgba(130,71,229,0.14)',  icon: '◆' },
-  DOT:  { label: 'Polkadot',  color: '#e6007a', bg: 'rgba(230,0,122,0.14)',   icon: '●' },
-  AVAX: { label: 'Avalanche', color: '#e84142', bg: 'rgba(232,65,66,0.14)',   icon: '▲' },
-  LTC:  { label: 'Litecoin',  color: '#bfbbbb', bg: 'rgba(191,187,187,0.14)', icon: 'Ł' },
-  LINK: { label: 'Chainlink', color: '#2a5ada', bg: 'rgba(42,90,218,0.14)',   icon: '⬡' },
-  DEFAULT: { label: 'Crypto', color: '#888888', bg: 'rgba(136,136,136,0.14)', icon: '◈' },
+// ── Static metadata for well-known coins ─────────────────────────────────────
+// Everything else gets a generated colour from its ticker symbol.
+const KNOWN: Record<string, { label: string; color: string; icon: string }> = {
+  BTC:        { label: 'Bitcoin',       color: '#f7931a', icon: '₿'  },
+  ETH:        { label: 'Ethereum',      color: '#627eea', icon: 'Ξ'  },
+  SOL:        { label: 'Solana',        color: '#9945ff', icon: '◎'  },
+  USDT:       { label: 'Tether (ERC20)',color: '#26a17b', icon: '₮'  },
+  USDT_ERC20: { label: 'Tether (ERC20)',color: '#26a17b', icon: '₮'  },
+  USDT_TRC20: { label: 'Tether (TRC20)',color: '#26a17b', icon: '₮'  },
+  USDC:       { label: 'USD Coin',      color: '#2775ca', icon: '◎'  },
+  BNB:        { label: 'BNB',           color: '#f3ba2f', icon: '⬡'  },
+  XRP:        { label: 'XRP',           color: '#346aa9', icon: '✕'  },
+  ADA:        { label: 'Cardano',       color: '#0033ad', icon: '₳'  },
+  DOGE:       { label: 'Dogecoin',      color: '#c3a634', icon: 'Ð'  },
+  MATIC:      { label: 'Polygon',       color: '#8247e5', icon: '◆'  },
+  DOT:        { label: 'Polkadot',      color: '#e6007a', icon: '●'  },
+  AVAX:       { label: 'Avalanche',     color: '#e84142', icon: '▲'  },
+  LTC:        { label: 'Litecoin',      color: '#bfbbbb', icon: 'Ł'  },
+  LINK:       { label: 'Chainlink',     color: '#2a5ada', icon: '⬡'  },
+  UNI:        { label: 'Uniswap',       color: '#ff007a', icon: '🦄' },
+  AAVE:       { label: 'Aave',          color: '#b6509e', icon: '👻' },
+  ATOM:       { label: 'Cosmos',        color: '#6f7590', icon: '⚛'  },
+  ALGO:       { label: 'Algorand',      color: '#6cc3a8', icon: 'Ⓐ'  },
+  NEAR:       { label: 'NEAR',          color: '#00c08b', icon: '𝗡'  },
+  FTM:        { label: 'Fantom',        color: '#1969ff', icon: 'F'  },
+  VET:        { label: 'VeChain',       color: '#15bdff', icon: 'V'  },
+  TRX:        { label: 'TRON',          color: '#ef0027', icon: 'T'  },
+  XLM:        { label: 'Stellar',       color: '#7d00ff', icon: '*'  },
+  FIL:        { label: 'Filecoin',      color: '#0090ff', icon: '⨎'  },
+  SHIB:       { label: 'Shiba Inu',     color: '#e44d26', icon: '🐕' },
+  PEPE:       { label: 'Pepe',          color: '#00a550', icon: '🐸' },
+  WIF:        { label: 'dogwifhat',     color: '#9b4dca', icon: '🐶' },
+  ARB:        { label: 'Arbitrum',      color: '#12aaff', icon: 'A'  },
+  OP:         { label: 'Optimism',      color: '#ff0420', icon: 'O'  },
+  SUI:        { label: 'Sui',           color: '#4da2ff', icon: 'S'  },
+  APT:        { label: 'Aptos',         color: '#00d4aa', icon: 'Ⓐ'  },
+  INJ:        { label: 'Injective',     color: '#00b0ff', icon: 'I'  },
+  SEI:        { label: 'Sei',           color: '#9d4edd', icon: 'S'  },
+  TON:        { label: 'Toncoin',       color: '#0098ea', icon: '💎' },
 };
 
-const NETWORKS: Record<string, string[]> = {
-  BTC: ['BTC'], ETH: ['ERC-20'], SOL: ['SOL'], USDT: ['ERC-20', 'TRC-20'],
-  BNB: ['BEP-20'], XRP: ['XRP'], ADA: ['Cardano'], DOGE: ['DOGE'],
-  MATIC: ['ERC-20'], DOT: ['DOT'], AVAX: ['C-Chain'], LTC: ['LTC'],
-  LINK: ['ERC-20'],
+// Default network for each asset (server expects this in the quote call)
+const DEFAULT_NETWORK: Record<string, string> = {
+  BTC: 'BTC', ETH: 'ERC20', SOL: 'SOL',
+  USDT: 'ERC20', USDT_ERC20: 'ERC20', USDT_TRC20: 'TRC20',
+  USDC: 'ERC20', BNB: 'BEP20', XRP: 'XRP',
+  ADA: 'Cardano', DOGE: 'DOGE', TRX: 'TRON', LTC: 'LTC', MATIC: 'ERC20',
 };
+// For USDT_ERC20 / USDT_TRC20 the asset sent to server must be "USDT"
+const ASSET_SYMBOL: Record<string, string> = {
+  USDT_ERC20: 'USDT',
+  USDT_TRC20: 'USDT',
+};
+function defaultNetwork(symbol: string) {
+  return DEFAULT_NETWORK[symbol.toUpperCase()] ?? symbol.toUpperCase();
+}
+function serverAsset(symbol: string) {
+  return ASSET_SYMBOL[symbol.toUpperCase()] ?? symbol.toUpperCase();
+}
 
-const CURRENCY_SYMBOLS: Record<string, string> = {
-  USD: '$', EUR: '€', GBP: '£', AED: 'د.إ', SAR: '﷼',
-};
-function sym(c: string) { return CURRENCY_SYMBOLS[c] ?? c; }
+// Deterministic accent colour from ticker symbol for unknowns
+function symbolColor(sym: string): string {
+  let h = 0;
+  for (let i = 0; i < sym.length; i++) h = sym.charCodeAt(i) + ((h << 5) - h);
+  return `hsl(${Math.abs(h) % 360}, 65%, 55%)`;
+}
+
+function assetMeta(symbol: string): { label: string; color: string; icon: string } {
+  return KNOWN[symbol.toUpperCase()] ?? {
+    label: symbol.toUpperCase(),
+    color: symbolColor(symbol),
+    icon: symbol[0]?.toUpperCase() ?? '?',
+  };
+}
+
+// Top coins to show before the user searches (top 10 + USDT variants + popular alts)
+const FEATURED = [
+  'BTC','ETH','USDT_ERC20','USDT_TRC20',
+  'BNB','XRP','SOL','DOGE','ADA','AVAX',
+  'LTC','DOT','MATIC','LINK','UNI',
+  'SHIB','PEPE','ARB','OP','TON',
+];
+
+const CURRENCY_SYMBOLS: Record<string, string> = { USD: '$', EUR: '€', GBP: '£', AED: 'د.إ', SAR: '﷼' };
+function sym(c: string) { return CURRENCY_SYMBOLS[c] ?? c + ' '; }
 function fmt(n: string | number, d = 6) {
   const x = Number(n);
   if (!Number.isFinite(x)) return '—';
   return x.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: d });
 }
+function fmtPrice(p: number): string {
+  if (p >= 1000) return p.toLocaleString(undefined, { maximumFractionDigits: 2 });
+  if (p >= 1)    return p.toLocaleString(undefined, { maximumFractionDigits: 4 });
+  if (p >= 0.01) return p.toFixed(5);
+  return p.toFixed(8);
+}
 
 type PayMethod =
   | { type: 'card';   last4: string; brand: string }
   | { type: 'fiat';   currency: string; balance: number }
-  | { type: 'crypto'; asset: string; balance: number; balanceUsd: number };
+  | { type: 'crypto'; asset: string; balance: number };
 
 function methodId(m: PayMethod) {
   if (m.type === 'card')   return `card_${m.last4}`;
   if (m.type === 'fiat')   return `fiat_${m.currency}`;
   return `crypto_${m.asset}`;
 }
-
 function methodLabel(m: PayMethod) {
   if (m.type === 'card')   return `${m.brand} ···· ${m.last4}`;
   if (m.type === 'fiat')   return `${m.currency}  ·  ${sym(m.currency)}${fmt(m.balance, 2)}`;
   return `${m.asset}  ·  ${fmt(m.balance, 6)} ${m.asset}`;
 }
 
-function methodIconBg(m: PayMethod) {
-  if (m.type === 'card')   return 'rgba(96,165,250,0.14)';
-  const key = m.type === 'fiat' ? m.currency : m.asset;
-  return ASSET_META[key]?.bg ?? ASSET_META.DEFAULT.bg;
-}
-
-function methodIconText(m: PayMethod): string {
-  if (m.type === 'card')   return '💳';
-  const key = m.type === 'fiat' ? m.currency : m.asset;
-  return ASSET_META[key]?.icon ?? key[0];
-}
-
-// ── Main component ────────────────────────────────────────────────────────────
+// ── Component ─────────────────────────────────────────────────────────────────
 export function BuyWidget() {
   const { user } = useAuthStore();
   const p = useThemedPalette();
@@ -96,64 +142,81 @@ export function BuyWidget() {
   const { data: tickers } = useMarkets();
   const baseCurrency = (user as any)?.baseCurrency ?? 'USD';
 
-  // Available assets from market tickers
-  const availableAssets = useMemo(() => {
-    const priority = ['BTC', 'ETH', 'USDT', 'SOL', 'BNB', 'XRP', 'ADA', 'DOGE', 'MATIC', 'DOT', 'AVAX', 'LTC', 'LINK'];
-    if (!tickers?.length) return priority.slice(0, 6);
-    const fromTickers = Array.from(new Set(tickers.map((t) => t.base?.toUpperCase()).filter(Boolean)));
-    return fromTickers.sort((a, b) => {
-      const pa = priority.indexOf(a), pb = priority.indexOf(b);
-      if (pa >= 0 && pb >= 0) return pa - pb;
-      if (pa >= 0) return -1; if (pb >= 0) return 1;
-      return a.localeCompare(b);
-    });
-  }, [tickers]);
+  // ── Asset picker state ────────────────────────────────────────────
+  const [asset,          setAsset]          = useState('BTC');
+  const [network,        setNetwork]        = useState('BTC');
+  const [assetSheetOpen, setAssetSheetOpen] = useState(false);
+  const [searchQuery,    setSearchQuery]    = useState('');
+  const [searchResults,  setSearchResults]  = useState<AssetSearchResult[]>([]);
+  const [searchLoading,  setSearchLoading]  = useState(false);
+  const searchRef = useRef<TextInput>(null);
 
-  // Payment methods
+  // ── Trade state ───────────────────────────────────────────────────
+  const [fiat,     setFiat]     = useState('');
+  const [quote,    setQuote]    = useState<CryptoQuote | null>(null);
+  const [loading,  setLoading]  = useState(false);
+  const [exec,     setExec]     = useState(false);
+  const [error,    setError]    = useState<string | null>(null);
+  const [success,  setSuccess]  = useState<string | null>(null);
+  const [seconds,  setSeconds]  = useState(0);
+  const [showFees, setShowFees] = useState(false);
+  const [intent,   setIntent]   = useState<'buy' | 'send'>('buy');
+  const [sendAddr, setSendAddr] = useState('');
+  const [paySheetOpen, setPaySheetOpen] = useState(false);
+  const [payMethod, setPayMethod] = useState<PayMethod | null>(null);
+  const idemRef = useRef(`ord_${Date.now()}`);
+
+  // ── Payment methods ───────────────────────────────────────────────
   const payMethods = useMemo<PayMethod[]>(() => {
     const out: PayMethod[] = [];
     wallets?.forEach((w) => {
-      if (['BTC', 'ETH', 'USDT', 'SOL', 'BNB'].includes(w.currency)) {
-        const ticker = tickers?.find((t) => t.base === w.currency);
-        out.push({ type: 'crypto', asset: w.currency, balance: Number(w.balance), balanceUsd: ticker ? Number(w.balance) * Number(ticker.price) : 0 });
+      if (['BTC','ETH','USDT','SOL','BNB'].includes(w.currency)) {
+        out.push({ type: 'crypto', asset: w.currency, balance: Number(w.balance) });
       } else {
         out.push({ type: 'fiat', currency: w.currency, balance: Number(w.balance) });
       }
     });
     cards?.forEach((c) => { if (c.last4) out.push({ type: 'card', last4: c.last4, brand: c.tier ?? 'Card' }); });
     return out;
-  }, [wallets, cards, tickers]);
+  }, [wallets, cards]);
 
-  const [asset,          setAsset]          = useState('BTC');
-  const [network,        setNetwork]        = useState('BTC');
-  const [payMethod,      setPayMethod]      = useState<PayMethod | null>(null);
-  const [fiat,           setFiat]           = useState('');
-  const [sendAddr,       setSendAddr]       = useState('');
-  const [intent,         setIntent]         = useState<'buy' | 'send'>('buy');
-  const [assetSearch,    setAssetSearch]    = useState('');
-  const [assetSheetOpen, setAssetSheetOpen] = useState(false);
-  const [paySheetOpen,   setPaySheetOpen]   = useState(false);
-  const [showFees,       setShowFees]       = useState(false);
-  const [quote,          setQuote]          = useState<CryptoQuote | null>(null);
-  const [loading,        setLoading]        = useState(false);
-  const [exec,           setExec]           = useState(false);
-  const [error,          setError]          = useState<string | null>(null);
-  const [seconds,        setSeconds]        = useState(0);
-  const [success,        setSuccess]        = useState<string | null>(null);
-  const idemRef = useRef(`ord_${Date.now()}`);
-
-  // Auto-select first pay method
   useEffect(() => { if (payMethods.length && !payMethod) setPayMethod(payMethods[0]); }, [payMethods, payMethod]);
-  useEffect(() => { setNetwork(NETWORKS[asset]?.[0] ?? asset); }, [asset]);
+  useEffect(() => { setNetwork(defaultNetwork(asset)); }, [asset]);
 
-  // Fetch quote with 500ms debounce
+  // ── Live search via server → Binance ─────────────────────────────
+  useEffect(() => {
+    const q = searchQuery.trim();
+    if (!assetSheetOpen) return;
+    const id = setTimeout(async () => {
+      setSearchLoading(true);
+      try {
+        const res = await cryptoExchangeAPI.search(q);
+        setSearchResults(res.data.results);
+      } catch {
+        setSearchResults([]);
+      } finally {
+        setSearchLoading(false);
+      }
+    }, 300);
+    return () => clearTimeout(id);
+  }, [searchQuery, assetSheetOpen]);
+
+  // Populate search when sheet opens
+  useEffect(() => {
+    if (assetSheetOpen) {
+      setSearchQuery('');
+      setSearchResults([]);
+    }
+  }, [assetSheetOpen]);
+
+  // ── Quote fetching ────────────────────────────────────────────────
   useEffect(() => {
     const amt = parseFloat(fiat);
     if (!amt || amt <= 0) { setQuote(null); return; }
     const id = setTimeout(async () => {
       setLoading(true); setError(null);
       try {
-        const res = await cryptoExchangeAPI.quote({ asset, network, side: 'BUY', fiatAmount: String(amt) });
+        const res = await cryptoExchangeAPI.quote({ asset: serverAsset(asset), network, side: 'BUY', fiatAmount: String(amt) });
         setQuote(res.data.quote);
         idemRef.current = `ord_${Date.now()}`;
       } catch (e: any) {
@@ -162,9 +225,9 @@ export function BuyWidget() {
       } finally { setLoading(false); }
     }, 500);
     return () => clearTimeout(id);
-  }, [asset, network, fiat, payMethod]);
+  }, [asset, network, fiat]);
 
-  // Quote countdown
+  // ── Quote countdown ───────────────────────────────────────────────
   useEffect(() => {
     if (!quote) return;
     const tick = () => {
@@ -177,28 +240,18 @@ export function BuyWidget() {
     return () => clearInterval(iv);
   }, [quote]);
 
-  const assetMeta = ASSET_META[asset] ?? ASSET_META.DEFAULT;
-  const currentPrice = tickers?.find((t) => t.base === asset)?.price ?? 0;
-
-  const filteredAssets = useMemo(() => {
-    if (!assetSearch.trim()) return availableAssets;
-    const q = assetSearch.toUpperCase();
-    return availableAssets.filter((a) => a.includes(q) || ASSET_META[a]?.label?.toUpperCase().includes(q));
-  }, [availableAssets, assetSearch]);
-
+  // ── Confirm ───────────────────────────────────────────────────────
   async function onConfirm() {
-    if (!quote || !payMethod) return;
+    if (!quote) return;
     if (intent === 'send' && !sendAddr.trim()) { setError('Enter a recipient address'); return; }
     setExec(true); setError(null);
     try {
       await cryptoExchangeAPI.execute({
         quoteId: quote.id, confirmedByUser: true, idempotencyKey: idemRef.current,
         ...(intent === 'send' ? { recipientAddress: sendAddr.trim() } : {}),
-      });
+      } as any);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      setSuccess(intent === 'send'
-        ? `${fmt(quote.cryptoAmount, 8)} ${asset} sent`
-        : `${fmt(quote.cryptoAmount, 8)} ${asset} purchased`);
+      setSuccess(`${fmt(quote.cryptoAmount, 8)} ${asset} ${intent === 'send' ? 'sent' : 'purchased'} ✓`);
       setQuote(null); setFiat(''); setSendAddr('');
     } catch (e: any) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
@@ -206,56 +259,62 @@ export function BuyWidget() {
     } finally { setExec(false); }
   }
 
+  const meta = assetMeta(asset);
+  // USDT_ERC20/TRC20 map to the USDT ticker (price = $1, pegged)
+  const tickerBase = serverAsset(asset);
+  const livePrice = tickerBase === 'USDT' ? 1 : (tickers?.find((t) => t.base === tickerBase)?.price ?? searchResults.find((r) => r.symbol === tickerBase)?.price ?? 0);
+  const change24h = searchResults.find((r) => r.symbol === tickerBase)?.change24h;
   const timerCritical = seconds > 0 && seconds < 8;
   const canConfirm = !!quote && !exec && seconds > 0;
+
+  // Displayed list in picker: search results if query, else featured
+  const displayList: AssetSearchResult[] = searchResults.length > 0
+    ? searchResults
+    : FEATURED.map((s) => {
+        const base = serverAsset(s);
+        const price = base === 'USDT' ? 1 : Number(tickers?.find((t) => t.base === base)?.price ?? 0);
+        return { symbol: s, price, change24h: 0, volume24h: 0 };
+      });
 
   return (
     <View style={{ paddingHorizontal: 20, paddingBottom: 8 }}>
 
-      {/* ── Asset selector row ── */}
+      {/* ── Asset selector ── */}
       <Pressable
         onPress={() => { Haptics.selectionAsync(); setAssetSheetOpen(true); }}
         style={({ pressed }) => ({
           flexDirection: 'row', alignItems: 'center',
           backgroundColor: p.bgElev, borderRadius: 18,
           borderWidth: 1, borderColor: p.border,
-          padding: 14, marginBottom: 16,
-          opacity: pressed ? 0.8 : 1,
+          padding: 14, marginBottom: 16, opacity: pressed ? 0.8 : 1,
         })}
       >
-        <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: assetMeta.bg, alignItems: 'center', justifyContent: 'center' }}>
-          <Text style={{ fontSize: 20, fontWeight: '700', color: assetMeta.color }}>{assetMeta.icon}</Text>
+        <View style={{ width: 46, height: 46, borderRadius: 23, backgroundColor: `${meta.color}22`, alignItems: 'center', justifyContent: 'center' }}>
+          <Text style={{ fontSize: 22, color: meta.color, fontWeight: '800' }}>{meta.icon}</Text>
         </View>
         <View style={{ flex: 1, marginLeft: 14 }}>
-          <Text style={{ color: p.fg, fontSize: 16, fontWeight: '800' }}>{assetMeta.label}</Text>
-          <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '500', marginTop: 1 }}>
-            {asset}{currentPrice > 0 ? `  ·  ${sym(baseCurrency)}${Number(currentPrice).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : ''}
-          </Text>
+          <Text style={{ color: p.fg, fontSize: 17, fontWeight: '800', letterSpacing: -0.3 }}>{meta.label}</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 2 }}>
+            <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '500' }}>
+              {asset}{livePrice > 0 ? `  ·  ${sym(baseCurrency)}${fmtPrice(Number(livePrice))}` : ''}
+            </Text>
+            {change24h !== undefined && (
+              <View style={{ paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, backgroundColor: change24h >= 0 ? p.greenBg : p.redBg }}>
+                <Text style={{ color: change24h >= 0 ? p.greenFg : p.redFg, fontSize: 10, fontWeight: '800' }}>
+                  {change24h >= 0 ? '+' : ''}{change24h.toFixed(2)}%
+                </Text>
+              </View>
+            )}
+          </View>
         </View>
-        <Ionicons name="chevron-down" size={18} color={p.fgMuted} />
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '600' }}>Change</Text>
+          <Ionicons name="chevron-down" size={18} color={p.fgMuted} />
+        </View>
       </Pressable>
 
-      {/* Network pills — only shown when multiple options */}
-      {(NETWORKS[asset]?.length ?? 0) > 1 && (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, marginBottom: 16 }}>
-          {NETWORKS[asset].map((n) => (
-            <Pressable
-              key={n}
-              onPress={() => { Haptics.selectionAsync(); setNetwork(n); }}
-              style={{
-                paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20,
-                backgroundColor: network === n ? p.ctaBg : p.bgElev,
-                borderWidth: 1, borderColor: network === n ? p.ctaBg : p.border,
-              }}
-            >
-              <Text style={{ color: network === n ? p.ctaFg : p.fgMuted, fontSize: 12, fontWeight: '700' }}>{n}</Text>
-            </Pressable>
-          ))}
-        </ScrollView>
-      )}
-
       {/* ── Amount input ── */}
-      <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '700', letterSpacing: 0.5, marginBottom: 8 }}>YOU PAY</Text>
+      <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '700', letterSpacing: 0.8, marginBottom: 8 }}>YOU PAY</Text>
       <View style={{
         flexDirection: 'row', alignItems: 'center',
         backgroundColor: p.bgElev, borderRadius: 18,
@@ -299,16 +358,15 @@ export function BuyWidget() {
         ))}
       </ScrollView>
 
-      {/* ── You receive / quote panel ── */}
+      {/* ── Quote panel ── */}
       <View style={{
         backgroundColor: p.bgElev, borderRadius: 18,
         borderWidth: 1, borderColor: p.border,
-        padding: 16, marginBottom: 14,
-        minHeight: 72, justifyContent: 'center',
+        padding: 16, marginBottom: 14, minHeight: 72, justifyContent: 'center',
       }}>
         {loading ? (
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-            <ActivityIndicator size="small" color={p.fg} />
+            <ActivityIndicator size="small" color={meta.color} />
             <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '600' }}>Getting best price…</Text>
           </View>
         ) : quote ? (
@@ -318,12 +376,11 @@ export function BuyWidget() {
                 <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '700', letterSpacing: 0.5, marginBottom: 4 }}>
                   {intent === 'send' ? 'RECIPIENT RECEIVES' : 'YOU RECEIVE'}
                 </Text>
-                <Text style={{ color: p.fg, fontSize: 24, fontWeight: '800', letterSpacing: -0.5 }}>
+                <Text style={{ color: p.fg, fontSize: 26, fontWeight: '800', letterSpacing: -0.5 }}>
                   {fmt(quote.cryptoAmount, 8)}{' '}
-                  <Text style={{ color: assetMeta.color, fontSize: 18 }}>{asset}</Text>
+                  <Text style={{ color: meta.color, fontSize: 18 }}>{asset}</Text>
                 </Text>
               </View>
-              {/* Timer pill */}
               <View style={{
                 flexDirection: 'row', alignItems: 'center', gap: 4,
                 paddingHorizontal: 10, paddingVertical: 5, borderRadius: 12,
@@ -334,7 +391,6 @@ export function BuyWidget() {
                 <Text style={{ color: timerCritical ? p.redFg : p.fgMuted, fontSize: 12, fontWeight: '800' }}>{seconds}s</Text>
               </View>
             </View>
-            {/* Fee row */}
             <Pressable
               onPress={() => setShowFees(!showFees)}
               style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 12, paddingTop: 10, borderTopWidth: 1, borderTopColor: p.border }}
@@ -349,7 +405,7 @@ export function BuyWidget() {
                 {[
                   { label: 'Platform fee (0.5%)', value: fmt(quote.platformFee, 2) },
                   { label: 'Network fee',          value: fmt(quote.networkFee, 2) },
-                  { label: 'Exchange rate',        value: `1 ${asset} = ${sym(baseCurrency)}${fmt(quote.quotedPrice, 2)}` },
+                  { label: 'Exchange rate',        value: `1 ${asset} = ${sym(baseCurrency)}${fmtPrice(Number(quote.quotedPrice))}` },
                   { label: 'Total you pay',        value: fmt(quote.totalUserPays, 2), bold: true },
                 ].map(({ label, value, bold }) => (
                   <View key={label} style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
@@ -364,37 +420,29 @@ export function BuyWidget() {
           </>
         ) : (
           <Text style={{ color: p.fgFaint, fontSize: 13, fontWeight: '500', textAlign: 'center' }}>
-            {Number(fiat) > 0 ? (error ? '' : '…') : 'Enter an amount to see a live quote'}
+            {Number(fiat) > 0 ? '…' : 'Enter an amount to see a live quote'}
           </Text>
         )}
       </View>
 
-      {/* ── Pay with row ── */}
+      {/* ── Pay with ── */}
       <Pressable
         onPress={() => { Haptics.selectionAsync(); setPaySheetOpen(true); }}
         style={({ pressed }) => ({
           flexDirection: 'row', alignItems: 'center',
           backgroundColor: p.bgElev, borderRadius: 18,
           borderWidth: 1, borderColor: p.border,
-          padding: 14, marginBottom: 14,
-          opacity: pressed ? 0.8 : 1,
+          padding: 14, marginBottom: 14, opacity: pressed ? 0.8 : 1,
         })}
       >
         <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '600', flex: 1 }}>Pay with</Text>
-        {payMethod ? (
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <View style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: methodIconBg(payMethod), alignItems: 'center', justifyContent: 'center' }}>
-              <Text style={{ fontSize: 13 }}>{methodIconText(payMethod)}</Text>
-            </View>
-            <Text style={{ color: p.fg, fontSize: 13, fontWeight: '700' }} numberOfLines={1}>{methodLabel(payMethod)}</Text>
-          </View>
-        ) : (
-          <Text style={{ color: p.fgMuted, fontSize: 13 }}>Select</Text>
+        {payMethod && (
+          <Text style={{ color: p.fg, fontSize: 13, fontWeight: '700' }} numberOfLines={1}>{methodLabel(payMethod)}</Text>
         )}
         <Ionicons name="chevron-forward" size={15} color={p.fgFaint} style={{ marginLeft: 6 }} />
       </Pressable>
 
-      {/* ── Intent toggle ── */}
+      {/* Intent toggle */}
       <View style={{ flexDirection: 'row', backgroundColor: p.bgElev, borderRadius: 14, padding: 3, borderWidth: 1, borderColor: p.border, marginBottom: 14 }}>
         {(['buy', 'send'] as const).map((v) => (
           <Pressable
@@ -411,17 +459,11 @@ export function BuyWidget() {
 
       {/* Send address */}
       {intent === 'send' && (
-        <View style={{
-          flexDirection: 'row', alignItems: 'center',
-          backgroundColor: p.bgElev, borderRadius: 14,
-          borderWidth: 1, borderColor: p.border,
-          paddingHorizontal: 14, paddingVertical: 12, marginBottom: 14,
-        }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: p.bgElev, borderRadius: 14, borderWidth: 1, borderColor: p.border, paddingHorizontal: 14, paddingVertical: 12, marginBottom: 14 }}>
           <Ionicons name="wallet-outline" size={16} color={p.fgMuted} />
           <TextInput
             value={sendAddr} onChangeText={setSendAddr}
-            placeholder={`${asset} address`}
-            placeholderTextColor={p.fgFaint}
+            placeholder={`${asset} address`} placeholderTextColor={p.fgFaint}
             style={{ flex: 1, color: p.fg, fontSize: 13, marginLeft: 10 }}
             autoCapitalize="none" autoCorrect={false}
           />
@@ -447,120 +489,177 @@ export function BuyWidget() {
         onPress={onConfirm}
         disabled={!canConfirm}
         style={({ pressed }) => ({
-          height: 56, borderRadius: 28,
-          backgroundColor: canConfirm ? p.ctaBg : p.bgElev,
+          height: 58, borderRadius: 29,
+          backgroundColor: canConfirm ? meta.color : p.bgElev,
           borderWidth: canConfirm ? 0 : 1, borderColor: p.border,
-          alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8,
+          alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 10,
           opacity: pressed || exec ? 0.85 : 1,
-          shadowColor: canConfirm ? p.ctaBg : 'transparent',
-          shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.3, shadowRadius: 14, elevation: 6,
+          shadowColor: canConfirm ? meta.color : 'transparent',
+          shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.4, shadowRadius: 16, elevation: 8,
         })}
       >
         {exec ? (
-          <ActivityIndicator color={p.ctaFg} />
+          <ActivityIndicator color="#fff" />
         ) : (
-          <Text style={{ color: canConfirm ? p.ctaFg : p.fgMuted, fontSize: 16, fontWeight: '800', letterSpacing: -0.2 }}>
-            {quote
-              ? `Buy ${asset} · ${sym(baseCurrency)}${fmt(quote.totalUserPays, 2)}`
-              : `Buy ${asset}`}
+          <Text style={{ color: canConfirm ? '#fff' : p.fgMuted, fontSize: 16, fontWeight: '800', letterSpacing: -0.2 }}>
+            {quote ? `Buy ${asset}  ·  ${sym(baseCurrency)}${fmt(quote.totalUserPays, 2)}` : `Buy ${asset}`}
           </Text>
         )}
       </Pressable>
 
-      {/* ── Asset picker sheet ── */}
+      {/* ══════════════════════════════════════════════════════════════
+          ASSET PICKER — full Binance search
+      ══════════════════════════════════════════════════════════════ */}
       <Modal visible={assetSheetOpen} transparent animationType="slide" onRequestClose={() => setAssetSheetOpen(false)}>
-        <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }} onPress={() => setAssetSheetOpen(false)}>
-          <Pressable style={{ backgroundColor: p.bg, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingTop: 10 }} onPress={(e) => e.stopPropagation()}>
-            <View style={{ alignItems: 'center', marginBottom: 8 }}>
+        <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' }} onPress={() => setAssetSheetOpen(false)}>
+          <Pressable
+            style={{ backgroundColor: p.bg, borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingTop: 10, maxHeight: '90%' }}
+            onPress={(e) => e.stopPropagation()}
+          >
+            {/* Handle */}
+            <View style={{ alignItems: 'center', marginBottom: 12 }}>
               <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: p.border }} />
             </View>
-            <Text style={{ color: p.fg, fontSize: 18, fontWeight: '800', paddingHorizontal: 24, marginBottom: 14 }}>Select Asset</Text>
-            <View style={{ flexDirection: 'row', alignItems: 'center', marginHorizontal: 20, marginBottom: 12, backgroundColor: p.bgElev, borderRadius: 14, paddingHorizontal: 12, paddingVertical: 10, borderWidth: 1, borderColor: p.border }}>
-              <Ionicons name="search" size={16} color={p.fgMuted} />
+
+            <Text style={{ color: p.fg, fontSize: 20, fontWeight: '800', letterSpacing: -0.4, paddingHorizontal: 20, marginBottom: 16 }}>
+              Search any token
+            </Text>
+
+            {/* Search bar */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginHorizontal: 20, marginBottom: 4, backgroundColor: p.bgElev, borderRadius: 16, paddingHorizontal: 14, paddingVertical: 12, borderWidth: 1, borderColor: p.border, gap: 10 }}>
+              <Ionicons name="search" size={18} color={p.fgMuted} />
               <TextInput
-                value={assetSearch} onChangeText={setAssetSearch}
-                placeholder="Search assets…" placeholderTextColor={p.fgFaint}
-                style={{ flex: 1, color: p.fg, marginLeft: 8, fontSize: 14 }}
-                autoCapitalize="characters"
+                ref={searchRef}
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                placeholder="Bitcoin, ETH, SHIB, PEPE…"
+                placeholderTextColor={p.fgFaint}
+                style={{ flex: 1, color: p.fg, fontSize: 16, fontWeight: '600' }}
+                autoCapitalize="none"
+                autoCorrect={false}
+                autoFocus
+                returnKeyType="search"
               />
-              {assetSearch.length > 0 && (
-                <Pressable onPress={() => setAssetSearch('')}>
-                  <Ionicons name="close-circle" size={16} color={p.fgMuted} />
+              {searchQuery.length > 0 && (
+                <Pressable onPress={() => setSearchQuery('')} hitSlop={8}>
+                  <Ionicons name="close-circle" size={18} color={p.fgMuted} />
                 </Pressable>
               )}
+              {searchLoading && <ActivityIndicator size="small" color={p.fgMuted} />}
             </View>
-            <ScrollView style={{ maxHeight: 380 }} contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 48 }}>
-              {filteredAssets.map((a) => {
-                const m = ASSET_META[a] ?? ASSET_META.DEFAULT;
-                const price = tickers?.find((t) => t.base === a)?.price ?? 0;
+
+            {!searchQuery && (
+              <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '600', letterSpacing: 0.6, paddingHorizontal: 20, marginTop: 12, marginBottom: 6 }}>
+                FEATURED
+              </Text>
+            )}
+
+            <ScrollView
+              keyboardShouldPersistTaps="handled"
+              contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 56 }}
+            >
+              {displayList.map((item) => {
+                const m = assetMeta(item.symbol);
+                const isSelected = asset === item.symbol;
                 return (
                   <Pressable
-                    key={a}
-                    onPress={() => { Haptics.selectionAsync(); setAsset(a); setQuote(null); setError(null); setAssetSheetOpen(false); }}
+                    key={item.symbol}
+                    onPress={() => {
+                      Haptics.selectionAsync();
+                      setAsset(item.symbol);
+                      setQuote(null); setError(null);
+                      setAssetSheetOpen(false);
+                    }}
                     style={({ pressed }) => ({
                       flexDirection: 'row', alignItems: 'center', gap: 14,
-                      paddingVertical: 13, borderBottomWidth: 1, borderBottomColor: p.border,
+                      paddingVertical: 14,
+                      borderBottomWidth: 1, borderBottomColor: p.border,
                       opacity: pressed ? 0.7 : 1,
+                      backgroundColor: isSelected ? `${m.color}11` : 'transparent',
+                      borderRadius: isSelected ? 14 : 0,
+                      paddingHorizontal: isSelected ? 10 : 0,
+                      marginHorizontal: isSelected ? -10 : 0,
                     })}
                   >
-                    <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: m.bg, alignItems: 'center', justifyContent: 'center' }}>
-                      <Text style={{ color: m.color, fontSize: 20, fontWeight: '700' }}>{m.icon}</Text>
+                    {/* Icon */}
+                    <View style={{ width: 46, height: 46, borderRadius: 23, backgroundColor: `${m.color}22`, alignItems: 'center', justifyContent: 'center' }}>
+                      <Text style={{ fontSize: 20, color: m.color, fontWeight: '800' }}>{m.icon}</Text>
                     </View>
+
+                    {/* Name + ticker */}
                     <View style={{ flex: 1 }}>
                       <Text style={{ color: p.fg, fontSize: 15, fontWeight: '700' }}>{m.label}</Text>
-                      <Text style={{ color: p.fgMuted, fontSize: 12, marginTop: 1 }}>{a}</Text>
+                      <Text style={{ color: p.fgMuted, fontSize: 12, marginTop: 1 }}>{item.symbol}</Text>
                     </View>
-                    <View style={{ alignItems: 'flex-end' }}>
-                      {price > 0 && (
-                        <Text style={{ color: p.fg, fontSize: 13, fontWeight: '700' }}>
-                          {sym(baseCurrency)}{Number(price).toLocaleString(undefined, { maximumFractionDigits: 2 })}
+
+                    {/* Price + 24h change */}
+                    <View style={{ alignItems: 'flex-end', gap: 4 }}>
+                      {item.price > 0 && (
+                        <Text style={{ color: p.fg, fontSize: 14, fontWeight: '700', fontVariant: ['tabular-nums'] }}>
+                          {sym(baseCurrency)}{fmtPrice(item.price)}
                         </Text>
                       )}
-                      {asset === a && <Ionicons name="checkmark-circle" size={16} color={p.ctaBg} style={{ marginTop: 2 }} />}
+                      {item.change24h !== 0 && (
+                        <View style={{ paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, backgroundColor: item.change24h >= 0 ? p.greenBg : p.redBg }}>
+                          <Text style={{ color: item.change24h >= 0 ? p.greenFg : p.redFg, fontSize: 10, fontWeight: '800' }}>
+                            {item.change24h >= 0 ? '+' : ''}{item.change24h.toFixed(2)}%
+                          </Text>
+                        </View>
+                      )}
+                      {isSelected && <Ionicons name="checkmark-circle" size={18} color={m.color} />}
                     </View>
                   </Pressable>
                 );
               })}
+
+              {searchQuery.length > 0 && displayList.length === 0 && !searchLoading && (
+                <View style={{ alignItems: 'center', paddingVertical: 48 }}>
+                  <Text style={{ color: p.fgMuted, fontSize: 15, fontWeight: '600' }}>No results for "{searchQuery}"</Text>
+                  <Text style={{ color: p.fgFaint, fontSize: 13, marginTop: 6 }}>Try BTC, ETH, DOGE…</Text>
+                </View>
+              )}
             </ScrollView>
           </Pressable>
         </Pressable>
       </Modal>
 
-      {/* ── Pay method sheet ── */}
+      {/* ══════════════════════════════════════════════════════════════
+          PAY METHOD PICKER
+      ══════════════════════════════════════════════════════════════ */}
       <Modal visible={paySheetOpen} transparent animationType="slide" onRequestClose={() => setPaySheetOpen(false)}>
-        <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }} onPress={() => setPaySheetOpen(false)}>
-          <Pressable style={{ backgroundColor: p.bg, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingTop: 10, paddingBottom: 36 }} onPress={(e) => e.stopPropagation()}>
-            <View style={{ alignItems: 'center', marginBottom: 8 }}>
+        <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' }} onPress={() => setPaySheetOpen(false)}>
+          <Pressable style={{ backgroundColor: p.bg, borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingTop: 10, paddingBottom: 48 }} onPress={(e) => e.stopPropagation()}>
+            <View style={{ alignItems: 'center', marginBottom: 12 }}>
               <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: p.border }} />
             </View>
-            <Text style={{ color: p.fg, fontSize: 18, fontWeight: '800', paddingHorizontal: 24, marginBottom: 16 }}>Pay with</Text>
-            <ScrollView style={{ maxHeight: 360 }} contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 8 }}>
+            <Text style={{ color: p.fg, fontSize: 20, fontWeight: '800', paddingHorizontal: 20, marginBottom: 16 }}>Pay with</Text>
+            <ScrollView style={{ maxHeight: 400 }} contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 8 }}>
               {payMethods.map((m) => {
                 const selected = payMethod ? methodId(m) === methodId(payMethod) : false;
+                const key = m.type === 'crypto' ? m.asset : m.type === 'fiat' ? m.currency : m.last4;
+                const mc = m.type === 'crypto' ? assetMeta(m.asset).color : m.type === 'fiat' ? '#60a5fa' : '#818cf8';
                 return (
                   <Pressable
                     key={methodId(m)}
                     onPress={() => { Haptics.selectionAsync(); setPayMethod(m); setPaySheetOpen(false); setQuote(null); }}
                     style={({ pressed }) => ({
-                      flexDirection: 'row', alignItems: 'center', gap: 12,
-                      padding: 12, borderRadius: 14, marginBottom: 8,
-                      backgroundColor: selected ? p.bgElev : p.bgElev,
-                      borderWidth: 1, borderColor: selected ? p.ctaBg : p.border,
+                      flexDirection: 'row', alignItems: 'center', gap: 14,
+                      padding: 14, borderRadius: 16, marginBottom: 8,
+                      borderWidth: 1.5, borderColor: selected ? mc : p.border,
+                      backgroundColor: selected ? `${mc}11` : p.bgElev,
                       opacity: pressed ? 0.8 : 1,
                     })}
                   >
-                    <View style={{ width: 38, height: 38, borderRadius: 19, backgroundColor: methodIconBg(m), alignItems: 'center', justifyContent: 'center' }}>
-                      <Text style={{ fontSize: 16 }}>{methodIconText(m)}</Text>
+                    <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: `${mc}22`, alignItems: 'center', justifyContent: 'center' }}>
+                      <Text style={{ fontSize: 18 }}>{m.type === 'card' ? '💳' : m.type === 'fiat' ? '💵' : assetMeta(m.type === 'crypto' ? m.asset : '').icon}</Text>
                     </View>
                     <View style={{ flex: 1 }}>
                       <Text style={{ color: p.fg, fontSize: 14, fontWeight: '700' }}>{methodLabel(m)}</Text>
-                      <Text style={{ color: p.fgMuted, fontSize: 11, marginTop: 1 }}>
-                        {m.type === 'card' ? 'Debit / credit card' : m.type === 'fiat' ? 'Fiat wallet' : 'Crypto balance'}
+                      <Text style={{ color: p.fgMuted, fontSize: 11, marginTop: 2 }}>
+                        {m.type === 'card' ? 'Debit / Credit card' : m.type === 'fiat' ? 'Fiat wallet' : 'Crypto balance'}
                       </Text>
                     </View>
-                    <View style={{ width: 20, height: 20, borderRadius: 10, borderWidth: 2, borderColor: selected ? p.ctaBg : p.border, alignItems: 'center', justifyContent: 'center' }}>
-                      {selected && <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: p.ctaBg }} />}
-                    </View>
+                    {selected && <Ionicons name="checkmark-circle" size={22} color={mc} />}
                   </Pressable>
                 );
               })}
@@ -571,5 +670,3 @@ export function BuyWidget() {
     </View>
   );
 }
-
-export default BuyWidget;

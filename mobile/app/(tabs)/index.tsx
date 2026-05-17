@@ -11,6 +11,9 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { cryptoWalletAPI } from '@/lib/cryptoApi';
+import { LinearGradient } from 'expo-linear-gradient';
 import { ActivityIndicator, Animated, Dimensions, Image, KeyboardAvoidingView, Modal, PanResponder, Platform, Pressable, RefreshControl, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
 import BalanceSvg, { Path as SvgPath, Defs as SvgDefs, LinearGradient as SvgLinearGradient, Stop as SvgStop, Line as SvgLine, Circle as SvgCircle } from 'react-native-svg';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -20,7 +23,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 
 import { useAuthStore } from '@/store/authStore';
-import { useWallets, useHaptics, useTransactions, useUnreadCount, useMarkets, useDisplayCurrency } from '@/hooks';
+import { useWallets, useHaptics, useTransactions, useActivities, useActivityRealtime, useUnreadCount, useMarkets, useDisplayCurrency } from '@/hooks';
 import { useTheme, useThemedPalette, type Palette } from '@/store/themeStore';
 import { useT } from '@/store/i18nStore';
 import { Sparkline } from '@/components/ui/Sparkline';
@@ -28,10 +31,10 @@ import { BuyWidget } from '@/components/exchange/BuyWidget';
 import { SellWidget } from '@/components/exchange/SellWidget';
 import { SendWidget } from '@/components/exchange/SendWidget';
 import { ReceiveWidget } from '@/components/exchange/ReceiveWidget';
-import { TopupSheet } from '@/components/topup/TopupSheet';
+import { WithdrawWidget } from '@/components/exchange/WithdrawWidget';
+import { DepositWidget } from '@/components/exchange/DepositWidget';
 import { PressableScale } from '@/components/ui/Motion';
-import type { Wallet, Currency } from '@/types';
-import DepositWidget from '@/components/exchange/DepositWidget';
+import type { Wallet } from '@/types';
 
 type Tab = 'ASSETS' | 'WALLETS' | 'ACTIVITY';
 
@@ -42,7 +45,34 @@ export default function Home() {
   const insets = useSafeAreaInsets();
   const user = useAuthStore((s) => s.user);
   const { data: wallets, refetch: refetchWallets } = useWallets();
+  // `useTransactions` still feeds screens that need the raw Transaction
+  // ledger. The home Activity tab uses the unified `useActivities` feed
+  // so P2P trades, card spend, deposits, withdrawals, ramps, and crypto
+  // orders all show up alongside trades.
   const { data: txData, refetch: refetchTxs } = useTransactions(1);
+  const { data: activityData, refetch: refetchActivity } = useActivities(1, 'ALL', 25);
+  useActivityRealtime(user?.id);
+
+  // Adapt the unified Activity shape to TxItem so the existing
+  // ActivityList renderer (which handles every type string we set on
+  // the server) can render it without changes.
+  const activityItems = useMemo(() => {
+    const list = activityData?.items ?? [];
+    return list.map((a) => ({
+      id: a.id,
+      type: a.type,
+      amount: a.amount,
+      currency: a.currency,
+      description: a.description ?? null,
+      createdAt: a.createdAt,
+      status: a.status ?? null,
+      fee: a.fee ?? null,
+      reference: a.reference ?? null,
+      counterpartyHandle: a.counterparty?.username ?? null,
+      counterpartyName:   a.counterparty?.name ?? a.counterparty?.username ?? null,
+      metadata: (a.metadata ?? null) as any,
+    }));
+  }, [activityData?.items]);
   const { data: unreadData } = useUnreadCount();
   const p = useThemedPalette();
   const dc = useDisplayCurrency();
@@ -73,17 +103,15 @@ export default function Home() {
     setRefreshing(true);
     h.light();
     try {
-      await Promise.all([refetchWallets(), refetchTxs(), refetchMarkets()]);
+      await Promise.all([refetchWallets(), refetchTxs(), refetchActivity(), refetchMarkets()]);
     } finally {
       setRefreshing(false);
     }
   };
   const priceMap = useMemo(() => {
-    const map: Partial<Record<Currency, number>> = {};
+    const map: Record<string, number> = {};
     if (Array.isArray(tickers)) {
-      tickers.forEach((m) => {
-        map[m.base] = m.price;
-      });
+      tickers.forEach((m) => { map[m.base] = m.price; });
     }
     return map;
   }, [tickers]);
@@ -91,12 +119,11 @@ export default function Home() {
   // Per-asset 7d sparkline (from backend ticker) so each asset row
   // can render a mini chart between the name and the price.
   const sparklineMap = useMemo(() => {
-    const map: Partial<Record<Currency, number[]>> = {};
+    const map: Record<string, number[]> = {};
     if (Array.isArray(tickers)) {
       tickers.forEach((m) => {
         const points = m.sparkline;
         if (!Array.isArray(points) || points.length < 2) return;
-        // Keep ~32 points — enough for a smooth curve at row size.
         const stride = Math.max(1, Math.floor(points.length / 32));
         map[m.base] = points.filter((_, i) => i % stride === 0);
       });
@@ -106,11 +133,9 @@ export default function Home() {
 
   // 24h change map — colors the sparkline green/red per-asset.
   const changeMap = useMemo(() => {
-    const map: Partial<Record<Currency, number>> = {};
+    const map: Record<string, number> = {};
     if (Array.isArray(tickers)) {
-      tickers.forEach((m) => {
-        map[m.base] = m.changePct24h ?? 0;
-      });
+      tickers.forEach((m) => { map[m.base] = m.changePct24h ?? 0; });
     }
     return map;
   }, [tickers]);
@@ -123,44 +148,46 @@ export default function Home() {
     [list],
   );
 
-  // Crypto and fiat categorization
-  const CRYPTO_CURRENCIES: Currency[] = ['BTC', 'ETH', 'SOL', 'USDT'];
-  const FIAT_CURRENCIES: Currency[] = ['USD', 'EUR', 'GBP', 'AED', 'SAR', 'EGP'];
+  // Fiat currencies — everything else is treated as crypto
+  const FIAT_CURRENCIES = new Set(['USD', 'EUR', 'GBP', 'AED', 'SAR', 'EGP', 'LYD', 'CAD', 'AUD', 'CHF', 'JPY', 'CNY']);
 
   const cryptoAssets = useMemo(
-    () => ownedAssets.filter((w) => CRYPTO_CURRENCIES.includes(w.currency)),
+    () => ownedAssets.filter((w) => !FIAT_CURRENCIES.has(w.currency)),
     [ownedAssets],
   );
   const fiatAssets = useMemo(
-    () => ownedAssets.filter((w) => FIAT_CURRENCIES.includes(w.currency)),
+    () => ownedAssets.filter((w) => FIAT_CURRENCIES.has(w.currency)),
     [ownedAssets],
   );
 
+  // Normalize a wallet currency to its Binance ticker base.
+  // USDT_ERC20 / USDT_TRC20 both track as USDT (pegged $1).
+  function tickerKey(currency: string): string {
+    if (currency === 'USDT_ERC20' || currency === 'USDT_TRC20') return 'USDT';
+    return currency;
+  }
+
   const totalUsd = useMemo(() => {
     return list.reduce((sum, w) => {
-      const live = priceMap[w.currency];
-      // For crypto wallets we recompute USD from the live spot. For fiat
-      // wallets we trust the server-side `fiatValueUsd` (which already has
-      // FX baked in).
+      const key = tickerKey(w.currency);
+      const live = priceMap[key] ?? (key === 'USDT' ? 1 : undefined);
       if (live !== undefined) return sum + Number(w.balance) * live;
       return sum + Number(w.fiatValueUsd);
     }, 0);
   }, [list, priceMap]);
 
-  // Aggregate 24h change weighted by USD exposure so the green/red pill
-  // truly reflects today's portfolio move.
+  // Aggregate 24h change weighted by USD exposure.
   const deltaPct = useMemo(() => {
     if (totalUsd <= 0 || !tickers || tickers.length === 0) return 0;
     let weightedChange = 0;
     let totalCryptoExposure = 0;
     list.forEach((w) => {
-      const m = tickers.find((t) => t.base === w.currency);
+      const m = tickers.find((t) => t.base === tickerKey(w.currency));
       if (!m || m.changePct24h === undefined || m.changePct24h === 0) return;
       const exposure = Number(w.balance) * m.price;
       weightedChange += exposure * m.changePct24h;
       totalCryptoExposure += exposure;
     });
-    // Use total crypto exposure as denominator, not totalUsd (which includes fiat)
     if (totalCryptoExposure <= 0) return 0;
     return weightedChange / totalCryptoExposure;
   }, [list, tickers, totalUsd]);
@@ -179,16 +206,34 @@ export default function Home() {
     { key: 'buy',      icon: 'arrow-up-outline',       label: t('action.buy'),      onPress: () => setBuyModalVisible(true) },
     { key: 'sell',     icon: 'arrow-down-outline',     label: t('action.sell'),     onPress: () => setSellModalVisible(true) },
     { key: 'deposit',  icon: 'arrow-down-circle-outline', label: t('action.deposit'), onPress: () => setDepositModalVisible(true) },
-    { key: 'withdraw', icon: 'paper-plane-outline',    label: t('action.withdraw'), onPress: () => setSendModalVisible(true) },
+    { key: 'withdraw', icon: 'arrow-up-circle-outline', label: t('action.withdraw'), onPress: () => setWithdrawModalVisible(true) },
   ];
 
   return (
     <View style={{ flex: 1, backgroundColor: p.bg }}>
       <StatusBar style={themeMode === 'dark' ? 'light' : 'dark'} />
-      <SafeAreaView style={{ flex: 1 }} edges={['top']}>
+      {/* Top gradient — grey at the very top, fading to solid bg by the
+          middle of the action buttons row (~440px from the very top of
+          the screen, including the safe area inset). */}
+      <LinearGradient
+        colors={themeMode === 'dark'
+          ? ['rgba(180,180,190,0.22)', 'rgba(140,140,150,0.12)', 'rgba(20,21,24,0)']
+          : ['rgba(120,120,130,0.20)', 'rgba(120,120,130,0.10)', 'rgba(245,245,247,0)']}
+        locations={[0, 0.55, 1]}
+        start={{ x: 0.5, y: 0 }}
+        end={{ x: 0.5, y: 1 }}
+        style={{
+          position: 'absolute',
+          top: 0, left: 0, right: 0,
+          height: 440 + insets.top,
+          zIndex: 0,
+        }}
+        pointerEvents="none"
+      />
+      <SafeAreaView style={{ flex: 1, backgroundColor: 'transparent' }} edges={['top']}>
         <ScrollView
           showsVerticalScrollIndicator={false}
-          style={{ backgroundColor: p.bg }}
+          style={{ backgroundColor: 'transparent' }}
           contentContainerStyle={{ paddingBottom: 140 }}
           refreshControl={
             <RefreshControl
@@ -204,30 +249,67 @@ export default function Home() {
           <View style={{
             flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
             paddingHorizontal: 24, paddingTop: 18, paddingBottom: 8,
+            gap: 10,
           }}>
-            <Pressable
-              onPress={() => { h.selection(); router.push('/profile'); }}
-              hitSlop={6}
-              style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}
-            >
-              <View style={{
-                width: 36, height: 36, borderRadius: 18,
-                backgroundColor: userEmoji ? p.bgElev : '#7c3aed',
-                alignItems: 'center', justifyContent: 'center',
-                borderWidth: 1,
-                borderColor: p.border,
-              }}>
-                {userEmoji ? (
-                  <Text style={{ fontSize: 20 }}>{userEmoji}</Text>
-                ) : (
-                  <Text style={{ color: '#fff', fontWeight: '800', fontSize: 16 }}>{initial}</Text>
-                )}
-              </View>
-              <Text style={{ color: p.fg, fontSize: 17, fontWeight: '700', letterSpacing: -0.3 }}>
-                @{handle}
-              </Text>
-            </Pressable>
-            <View style={{ flexDirection: 'row', gap: 7 }}>
+            <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10, minWidth: 0 }}>
+              <Pressable
+                onPress={() => { h.selection(); router.push('/profile'); }}
+                hitSlop={6}
+                style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flexShrink: 1, minWidth: 0 }}
+              >
+                <View style={{
+                  width: 36, height: 36, borderRadius: 18,
+                  backgroundColor: userEmoji ? p.bgElev : '#7c3aed',
+                  alignItems: 'center', justifyContent: 'center',
+                  borderWidth: 1,
+                  borderColor: p.border,
+                  flexShrink: 0,
+                }}>
+                  {userEmoji ? (
+                    <Text style={{ fontSize: 20 }}>{userEmoji}</Text>
+                  ) : (
+                    <Text style={{ color: '#fff', fontWeight: '800', fontSize: 16 }}>{initial}</Text>
+                  )}
+                </View>
+                <Text
+                  style={{
+                    color: p.fg,
+                    fontSize: handle.length <= 8 ? 17 : handle.length <= 14 ? 15 : handle.length <= 20 ? 13 : 11,
+                    fontWeight: '700',
+                    letterSpacing: -0.3,
+                    flexShrink: 1,
+                    minWidth: 0,
+                  }}
+                  numberOfLines={1}
+                  ellipsizeMode="tail"
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.7}
+                >
+                  @{handle}
+                </Text>
+              </Pressable>
+              {(user?.role === 'ADMIN') && (
+                <Pressable
+                  onPress={() => { h.selection(); router.push('/admin' as any); }}
+                  hitSlop={6}
+                  style={({ pressed }) => ({
+                    flexDirection: 'row', alignItems: 'center', gap: 4,
+                    paddingHorizontal: 8, paddingVertical: 4,
+                    borderRadius: 7,
+                    backgroundColor: 'rgba(74,143,224,0.18)',
+                    borderWidth: 1, borderColor: 'rgba(74,143,224,0.35)',
+                    opacity: pressed ? 0.7 : 1,
+                    flexShrink: 0,
+                  })}
+                >
+                  <Ionicons name="shield-checkmark" size={11} color="#4a8fe0" />
+                  <Text style={{ color: '#4a8fe0', fontSize: 10, fontWeight: '800', letterSpacing: 0.6 }}>
+                    ADMIN
+                  </Text>
+                </Pressable>
+              )}
+            </View>
+            <View style={{ flexDirection: 'row', gap: 7, flexShrink: 0 }}>
               <HeaderIconButton
                 icon="qr-code-outline"
                 onPress={() => { h.selection(); setReceiveModalVisible(true); }}
@@ -267,7 +349,7 @@ export default function Home() {
           {/* 24h delta */}
           <View style={{
             flexDirection: 'row', alignItems: 'center', gap: 10,
-            justifyContent: 'center',
+            justifyContent: 'flex-start',
             paddingHorizontal: 24, marginTop: 6,
           }}>
             <Text style={{
@@ -294,23 +376,9 @@ export default function Home() {
           </View>
 
           {/* ── 4 PRIMARY ACTIONS — Buy / Sell / Deposit / Withdraw ── */}
-          <View
-            style={{
-              flexDirection: 'row',
-              paddingHorizontal: 20, marginTop: 26,
-              gap: 6,
-              paddingBottom: 6,
-            }}
-          >
+          <View style={{ flexDirection: 'row', justifyContent: 'space-around', paddingHorizontal: 8, marginTop: 32 }}>
             {ACTIONS.map((a) => (
-              <ActionButton
-                key={a.key}
-                icon={a.icon}
-                label={a.label}
-                to={a.to}
-                onPress={a.onPress}
-                palette={p}
-              />
+              <ActionButton key={a.key} icon={a.icon} label={a.label} to={a.to} onPress={a.onPress} palette={p} />
             ))}
           </View>
 
@@ -329,7 +397,7 @@ export default function Home() {
 
           {/* Rows */}
           {tab === 'ACTIVITY' ? (
-            <ActivityList palette={p} dc={dc} items={txData?.items ?? []} onSeeAll={() => { h.light(); router.push('/history'); }} />
+            <ActivityList palette={p} dc={dc} items={activityItems} onSeeAll={() => { h.light(); router.push('/history'); }} />
           ) : tab === 'WALLETS' ? (
             // Wallets tab — QR addresses + bank references inline
             <WalletAddressList palette={p} wallets={list} onCopy={() => h.selection()} />
@@ -338,30 +406,32 @@ export default function Home() {
             <>
               {/* Crypto Assets Section */}
               {cryptoAssets.length > 0 && (
-                <View style={{ marginTop: 16, paddingHorizontal: 16, justifyContent: 'center', alignItems: 'center' }}>
-                  <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '700', letterSpacing: 0.6, marginBottom: 12, }}>
+                <View style={{ marginTop: 16 }}>
+                  <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '700', letterSpacing: 0.6, marginBottom: 12, paddingHorizontal: 20 }}>
                     {t('home.cryptoAssets').toUpperCase()}
                   </Text>
-                  {cryptoAssets.map((w) => (
-                    <AssetRow
-                      key={w.id}
-                      wallet={w}
-                      palette={p}
-                      sparkline={sparklineMap[w.currency]}
-                      changePct={changeMap[w.currency]}
-                      liveUsd={priceMap[w.currency] !== undefined
-                        ? Number(w.balance) * (priceMap[w.currency] as number)
-                        : undefined}
-                      onPress={() => { h.selection(); router.push(`/asset/${w.currency}`); }}
-                    />
-                  ))}
+                  {cryptoAssets.map((w) => {
+                    const tk = tickerKey(w.currency);
+                    const price = priceMap[tk] ?? (tk === 'USDT' ? 1 : undefined);
+                    return (
+                      <AssetRow
+                        key={w.id}
+                        wallet={w}
+                        palette={p}
+                        sparkline={sparklineMap[tk]}
+                        changePct={changeMap[tk]}
+                        liveUsd={price !== undefined ? Number(w.balance) * price : undefined}
+                        onPress={() => { h.selection(); router.push(`/asset/${w.currency}`); }}
+                      />
+                    );
+                  })}
                 </View>
               )}
 
               {/* Fiat Assets Section */}
               {fiatAssets.length > 0 && (
-                <View style={{ marginTop: 24, paddingHorizontal: 16, justifyContent: 'center', alignItems: 'center' }}>
-                  <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '700', letterSpacing: 0.6, marginBottom: 12 }}>
+                <View style={{ marginTop: 24 }}>
+                  <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '700', letterSpacing: 0.6, marginBottom: 12, paddingHorizontal: 20 }}>
                     {t('home.fiatAssets').toUpperCase()}
                   </Text>
                   {fiatAssets.map((w) => (
@@ -369,11 +439,9 @@ export default function Home() {
                       key={w.id}
                       wallet={w}
                       palette={p}
-                      sparkline={sparklineMap[w.currency]}
-                      changePct={changeMap[w.currency]}
-                      liveUsd={priceMap[w.currency] !== undefined
-                        ? Number(w.balance) * (priceMap[w.currency] as number)
-                        : undefined}
+                      sparkline={undefined}
+                      changePct={undefined}
+                      liveUsd={undefined}
                       onPress={() => { h.selection(); router.push(`/asset/${w.currency}`); }}
                     />
                   ))}
@@ -491,6 +559,28 @@ export default function Home() {
         </KeyboardAvoidingView>
       </Modal>
 
+      {/* Withdraw Widget Modal */}
+      <Modal visible={withdrawModalVisible} transparent animationType="slide" onRequestClose={() => setWithdrawModalVisible(false)}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+          <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' }} onPress={() => setWithdrawModalVisible(false)}>
+            <Pressable style={{ backgroundColor: p.bg, borderTopLeftRadius: 28, borderTopRightRadius: 28, maxHeight: '85%' }} onPress={(e) => e.stopPropagation()}>
+              <View style={{ alignItems: 'center', paddingTop: 10, paddingBottom: 2 }}>
+                <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: p.border }} />
+              </View>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 24, paddingTop: 8, paddingBottom: 4 }}>
+                <Text style={{ color: p.fg, fontSize: 20, fontWeight: '800', letterSpacing: -0.4 }}>{t('action.withdraw')}</Text>
+                <Pressable onPress={() => setWithdrawModalVisible(false)} hitSlop={8} style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border, alignItems: 'center', justifyContent: 'center' }}>
+                  <Ionicons name="close" size={16} color={p.fg} />
+                </Pressable>
+              </View>
+              <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: insets.bottom + 8 }}>
+                <WithdrawWidget />
+              </ScrollView>
+            </Pressable>
+          </Pressable>
+        </KeyboardAvoidingView>
+      </Modal>
+
       {/* Receive Widget Modal */}
       <Modal visible={receiveModalVisible} transparent animationType="slide" onRequestClose={() => setReceiveModalVisible(false)}>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
@@ -513,12 +603,27 @@ export default function Home() {
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* Deposit → country-aware top-up sheet. Uses the same flow the
-          /topup route renders, so behaviour is identical end-to-end. */}
-      <TopupSheet
-        visible={depositModalVisible}
-        onClose={() => setDepositModalVisible(false)}
-      />
+      {/* Deposit Widget Modal */}
+      <Modal visible={depositModalVisible} transparent animationType="slide" onRequestClose={() => setDepositModalVisible(false)}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+          <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' }} onPress={() => setDepositModalVisible(false)}>
+            <Pressable style={{ backgroundColor: p.bg, borderTopLeftRadius: 28, borderTopRightRadius: 28, maxHeight: '85%' }} onPress={(e) => e.stopPropagation()}>
+              <View style={{ alignItems: 'center', paddingTop: 10, paddingBottom: 2 }}>
+                <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: p.border }} />
+              </View>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 24, paddingTop: 8, paddingBottom: 4 }}>
+                <Text style={{ color: p.fg, fontSize: 20, fontWeight: '800', letterSpacing: -0.4 }}>{t('action.deposit')}</Text>
+                <Pressable onPress={() => setDepositModalVisible(false)} hitSlop={8} style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border, alignItems: 'center', justifyContent: 'center' }}>
+                  <Ionicons name="close" size={16} color={p.fg} />
+                </Pressable>
+              </View>
+              <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: insets.bottom + 8 }}>
+                <DepositWidget />
+              </ScrollView>
+            </Pressable>
+          </Pressable>
+        </KeyboardAvoidingView>
+      </Modal>
 
       {/* More Menu Modal */}
       <Modal
@@ -544,7 +649,7 @@ export default function Home() {
               {[
                 { icon: 'swap-horizontal-outline' as const, label: t('action.swap'),     onPress: () => { setMoreMenuVisible(false); router.push('/transfer'); } },
                 { icon: 'arrow-down-circle-outline' as const, label: t('action.deposit'), onPress: () => { setMoreMenuVisible(false); setDepositModalVisible(true); } },
-                { icon: 'paper-plane-outline' as const, label: t('action.withdraw'), onPress: () => { setMoreMenuVisible(false); setSendModalVisible(true); } },
+                { icon: 'arrow-up-circle-outline' as const, label: t('action.withdraw'), onPress: () => { setMoreMenuVisible(false); setWithdrawModalVisible(true); } },
               ].map((item) => (
                 <Pressable
                   key={item.label}
@@ -1017,18 +1122,12 @@ function AnimatedTotal({
   const fontSize = digitCount <= 7 ? 48 : digitCount <= 9 ? 40 : digitCount <= 11 ? 34 : 28;
 
   return (
-    <View style={{ alignItems: 'center', paddingHorizontal: 24, paddingVertical: 14 }}>
-      {/* <Text style={{
-        color: p.fgMuted, fontSize: 12, fontWeight: '600',
-        letterSpacing: 1.0, textTransform: 'uppercase', marginBottom: 8,
-      }}>
-        {t('home.totalBalance')}
-      </Text> */}
+    <View style={{ alignItems: 'flex-start', paddingHorizontal: 24, paddingVertical: 14 }}>
       <Pressable onPress={onPress} hitSlop={12}>
         <Text style={{
           color: p.fg,
           fontSize, fontWeight: '800', letterSpacing: -1.6,
-          textAlign: 'center',
+          textAlign: 'left',
           fontVariant: ['tabular-nums'],
         }}>
           {dc.symbol}{totalStr}
@@ -1065,15 +1164,9 @@ function AnimatedTotal({
   );
 }
 
-/* ── Action button — icon only + label below (no circles) ─── */
+/* ── Action button — slightly rectangular pill with soft round edges ─── */
 interface ActionDef { key: string; icon: keyof typeof Ionicons.glyphMap; label: string; to?: string; onPress?: () => void }
 
-/**
- * Action button — round icon tile stacked above a bold label. The
- * tile is its own filled circle (proper visual weight) so the icon
- * no longer reads as "pushed to the top of an empty rectangle".
- * PressableScale gives tap feedback consistent with the rest of the app.
- */
 function ActionButton({
   icon, label, onPress, to, palette: p,
 }: {
@@ -1084,45 +1177,32 @@ function ActionButton({
   palette: Palette;
 }) {
   const router = useRouter();
+  const themeMode = useTheme((s) => s.mode);
 
   const handlePress = () => {
     if (onPress) onPress();
     else if (to) router.push(to as any);
   };
 
+  // White tile in dark mode, black tile in light mode
+  const tileBg  = themeMode === 'dark' ? '#ffffff' : '#000000';
+  const iconClr = themeMode === 'dark' ? '#000000' : '#ffffff';
+
   return (
-    <PressableScale
-      onPress={handlePress}
-      style={{
-        flex: 1,
-        alignItems: 'center',
-        justifyContent: 'center',
-        paddingVertical: 6,
-        gap: 8,
-      }}
-    >
-      <View
-        style={{
-          width: 54, height: 54, borderRadius: 27,
-          backgroundColor: p.bgElev,
-          borderWidth: 1, borderColor: p.border,
-          alignItems: 'center', justifyContent: 'center',
-          shadowColor: p.shadow,
-          shadowOpacity: 1,
-          shadowRadius: 8,
-          shadowOffset: { width: 0, height: 3 },
-          elevation: 2,
-        }}
-      >
-        <Ionicons name={icon} size={22} color={p.fg} />
+    <PressableScale onPress={handlePress} style={{ flex: 1, alignItems: 'center', gap: 8 }}>
+      <View style={{
+        width: 72, height: 44, borderRadius: 14,
+        backgroundColor: tileBg,
+        alignItems: 'center', justifyContent: 'center',
+        shadowColor: tileBg,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: themeMode === 'dark' ? 0.18 : 0.22,
+        shadowRadius: 6,
+        elevation: 3,
+      }}>
+        <Ionicons name={icon} size={22} color={iconClr} />
       </View>
-      <Text
-        numberOfLines={1}
-        style={{
-          color: p.fg, fontSize: 12, fontWeight: '700',
-          letterSpacing: -0.1,
-        }}
-      >
+      <Text numberOfLines={1} style={{ color: p.fgMuted, fontSize: 12, fontWeight: '600', letterSpacing: 0.1 }}>
         {label}
       </Text>
     </PressableScale>
@@ -1431,7 +1511,7 @@ function TxDetailModal({
               {fee !== null && (
                 <DetailRow icon="flash-outline" label="Network Fee" value={dc.fmt(fee)} palette={p} borderTop />
               )}
-              <DetailRow icon="wallet-outline" label="Currency" value={tx.currency} palette={p} borderTop />
+              <DetailRow icon="wallet-outline" label="Currency" value={meta.asset ?? tx.currency} palette={p} borderTop />
             </View>
 
             {/* ── Counterparty ── */}
@@ -1709,95 +1789,102 @@ function WalletAddressList({
       </View>
     );
   }
+  const FIAT_SET = new Set(['USD','EUR','GBP','AED','SAR','EGP','LYD','CAD','AUD','CHF','JPY','CNY']);
   return (
     <View>
-      {wallets.map((w) => {
-        const meta = ASSET_META[w.currency] ?? ASSET_META.DEFAULT;
-        const isCrypto = ['BTC','ETH','USDT','SOL','BNB','XRP','ADA','DOGE','MATIC','DOT','AVAX'].includes(w.currency);
-        const addr = isCrypto
-          ? deriveAddress(w.id, w.currency)
-          : `PRMK-${w.currency}-${w.id.slice(0, 8).toUpperCase()}`;
-        const chain = CHAIN_LABEL[w.currency] ?? w.currency;
-        return (
-          <View
-            key={w.id}
-            style={{
-              paddingHorizontal: 24, paddingVertical: 16,
-              borderBottomWidth: 1, borderBottomColor: p.border,
-              gap: 10,
-            }}
-          >
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-              <CurrencyIcon currency={w.currency} palette={p} />
-              <View style={{ flex: 1 }}>
-                <Text style={{ color: p.fg, fontSize: 15, fontWeight: '700' }}>
-                  {meta.title}
-                </Text>
-                <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '600', marginTop: 2 }}>
-                  {isCrypto ? `${chain} ${t('home.network')}` : t('home.bankReference')}
-                </Text>
-              </View>
-              <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '700', fontVariant: ['tabular-nums'] }}>
-                {Number(w.balance).toLocaleString('en-US', { maximumFractionDigits: meta.subDecimals })} {w.currency}
-              </Text>
-            </View>
-
-            {/*
-             * Two pressables side-by-side:
-             *  - the long address pill copies on tap
-             *  - the QR icon on the right opens the QR modal
-             * Both are needed so a tap anywhere on the address is a copy
-             * (the most common action) without accidentally losing the QR.
-             */}
-            <View style={{ flexDirection: 'row', gap: 8 }}>
-              <Pressable
-                onPress={async () => {
-                  onCopy();
-                  await Clipboard.setStringAsync(addr);
-                }}
-                style={({ pressed }) => ({
-                  flex: 1,
-                  flexDirection: 'row', alignItems: 'center', gap: 8,
-                  paddingHorizontal: 12, paddingVertical: 10, borderRadius: 14,
-                  backgroundColor: pressed ? p.border : p.bgElev,
-                  borderWidth: 1, borderColor: p.border,
-                })}
-              >
-                <Ionicons name={isCrypto ? 'wallet-outline' : 'card-outline'} size={14} color={p.fgMuted} />
-                <Text
-                  numberOfLines={1}
-                  style={{
-                    flex: 1,
-                    color: p.fg, fontSize: 12, fontWeight: '600',
-                    fontFamily: 'Menlo' as any,
-                  }}
-                >
-                  {addr}
-                </Text>
-                <Ionicons name="copy-outline" size={14} color={p.fgMuted} />
-              </Pressable>
-
-              <Pressable
-                onPress={() => {
-                  onCopy();
-                  setQrFor({ wallet: w, address: addr, chain: isCrypto ? chain : t('home.bankReference') });
-                }}
-                style={({ pressed }) => ({
-                  width: 44, height: 44, borderRadius: 14,
-                  backgroundColor: pressed ? p.border : p.bgElev,
-                  borderWidth: 1, borderColor: p.border,
-                  alignItems: 'center', justifyContent: 'center',
-                })}
-                accessibilityLabel={`Show QR code for ${meta.title} address`}
-              >
-                <Ionicons name="qr-code-outline" size={18} color={p.fg} />
-              </Pressable>
-            </View>
-          </View>
-        );
-      })}
-
+      {wallets.map((w) => (
+        <WalletRow
+          key={w.id}
+          wallet={w}
+          palette={p}
+          isCrypto={!FIAT_SET.has(w.currency)}
+          onCopy={onCopy}
+          onShowQr={(address, chain) => setQrFor({ wallet: w, address, chain })}
+        />
+      ))}
       <QrModal palette={p} info={qrFor} onClose={() => setQrFor(null)} />
+    </View>
+  );
+}
+
+function WalletRow({ wallet: w, palette: p, isCrypto, onCopy, onShowQr }: {
+  wallet: Wallet;
+  palette: Palette;
+  isCrypto: boolean;
+  onCopy: () => void;
+  onShowQr: (address: string, chain: string) => void;
+}) {
+  const t = useT();
+  const meta  = ASSET_META[w.currency] ?? { title: w.currency, subDecimals: 6 };
+  const chain = CHAIN_LABEL[w.currency] ?? w.currency;
+
+  // Fetch real custodial address from the server for crypto wallets.
+  const { data: serverAddr, isLoading: addrLoading } = useDepositAddress(w.currency, isCrypto);
+  const fiatRef = `PRMK-${w.currency}-${w.id.slice(0, 8).toUpperCase()}`;
+  const addr = isCrypto ? (serverAddr ?? '') : fiatRef;
+  const addrReady = isCrypto ? !!serverAddr : true;
+
+  return (
+    <View style={{
+      paddingHorizontal: 24, paddingVertical: 16,
+      borderBottomWidth: 1, borderBottomColor: p.border,
+      gap: 10,
+    }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+        <CurrencyIcon currency={w.currency} />
+        <View style={{ flex: 1 }}>
+          <Text style={{ color: p.fg, fontSize: 15, fontWeight: '700' }}>{meta.title}</Text>
+          <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '600', marginTop: 2 }}>
+            {isCrypto ? `${chain} ${t('home.network')}` : t('home.bankReference')}
+          </Text>
+        </View>
+        <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '700', fontVariant: ['tabular-nums'] }}>
+          {Number(w.balance).toLocaleString('en-US', { maximumFractionDigits: Math.min(meta.subDecimals, 8) })} {w.currency}
+        </Text>
+      </View>
+
+      <View style={{ flexDirection: 'row', gap: 8 }}>
+        <Pressable
+          onPress={async () => {
+            if (!addrReady) return;
+            onCopy();
+            await Clipboard.setStringAsync(addr);
+          }}
+          style={({ pressed }) => ({
+            flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8,
+            paddingHorizontal: 12, paddingVertical: 10, borderRadius: 14,
+            backgroundColor: pressed ? p.border : p.bgElev,
+            borderWidth: 1, borderColor: p.border,
+          })}
+        >
+          <Ionicons name={isCrypto ? 'wallet-outline' : 'card-outline'} size={14} color={p.fgMuted} />
+          {addrLoading ? (
+            <ActivityIndicator size="small" color={p.fgMuted} style={{ flex: 1 }} />
+          ) : (
+            <Text numberOfLines={1} style={{ flex: 1, color: p.fg, fontSize: 12, fontWeight: '600', fontFamily: 'Menlo' as any }}>
+              {addr}
+            </Text>
+          )}
+          <Ionicons name="copy-outline" size={14} color={p.fgMuted} />
+        </Pressable>
+
+        <Pressable
+          onPress={() => {
+            if (!addrReady) return;
+            onCopy();
+            onShowQr(addr, isCrypto ? chain : t('home.bankReference'));
+          }}
+          style={({ pressed }) => ({
+            width: 44, height: 44, borderRadius: 14,
+            backgroundColor: pressed ? p.border : p.bgElev,
+            borderWidth: 1, borderColor: p.border,
+            alignItems: 'center', justifyContent: 'center',
+          })}
+          accessibilityLabel={`Show QR code for ${meta.title} address`}
+        >
+          <Ionicons name="qr-code-outline" size={18} color={p.fg} />
+        </Pressable>
+      </View>
     </View>
   );
 }
@@ -1842,7 +1929,7 @@ function QrModal({
         >
           {/* Header */}
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-            <CurrencyIcon currency={wallet.currency} palette={p} />
+            <CurrencyIcon currency={wallet.currency} />
             <View style={{ flex: 1 }}>
               <Text style={{ color: p.fg, fontSize: 16, fontWeight: '800' }}>
                 {t('home.receiveAsset')} {meta.title}
@@ -1933,22 +2020,63 @@ function QrModal({
 }
 
 const CHAIN_LABEL: Record<string, string> = {
-  BTC: 'Bitcoin', ETH: 'Ethereum (ERC-20)', USDT: 'Tron (TRC-20)',
-  SOL: 'Solana', BNB: 'BNB Smart Chain', XRP: 'XRP Ledger',
-  ADA: 'Cardano', DOGE: 'Dogecoin', MATIC: 'Polygon',
-  DOT: 'Polkadot', AVAX: 'Avalanche C-Chain',
+  BTC:        'Bitcoin',
+  ETH:        'Ethereum (ERC-20)',
+  USDT:       'Ethereum (ERC-20)',
+  USDT_ERC20: 'Ethereum (ERC-20)',
+  USDT_TRC20: 'Tron (TRC-20)',
+  USDC:       'Ethereum (ERC-20)',
+  SOL:        'Solana',
+  BNB:        'BNB Smart Chain',
+  XRP:        'XRP Ledger',
+  ADA:        'Cardano',
+  DOGE:       'Dogecoin',
+  MATIC:      'Polygon',
+  DOT:        'Polkadot',
+  AVAX:       'Avalanche C-Chain',
+  LTC:        'Litecoin',
+  LINK:       'Ethereum (ERC-20)',
+  UNI:        'Ethereum (ERC-20)',
+  AAVE:       'Ethereum (ERC-20)',
+  ATOM:       'Cosmos Hub',
+  TRX:        'Tron',
+  XLM:        'Stellar',
+  ARB:        'Arbitrum One',
+  OP:         'Optimism',
+  TON:        'TON',
+  SUI:        'Sui',
+  APT:        'Aptos',
+  INJ:        'Injective',
 };
 
-/** Stable demo address derived from the wallet id so every render shows
- *  the same string. Replace with chain RPC integration when ready. */
-function deriveAddress(walletId: string, currency: string): string {
-  const seed = walletId.replace(/-/g, '');
-  if (currency === 'BTC')                       return `bc1q${seed.slice(0, 38)}`;
-  if (currency === 'SOL')                       return seed.slice(0, 44);
-  if (currency === 'XRP')                       return `r${seed.slice(0, 33)}`;
-  if (currency === 'ADA')                       return `addr1${seed.slice(0, 56)}`;
-  // EVM-style fallback for ETH / USDT / BNB / MATIC / AVAX / DOT / DOGE.
-  return `0x${seed.slice(0, 40)}`;
+// Map each currency to the asset + network the deposit-address endpoint expects.
+const DEPOSIT_ROUTE: Record<string, { asset: string; network: string }> = {
+  BTC:        { asset: 'BTC',  network: 'BTC'   },
+  SOL:        { asset: 'SOL',  network: 'SOL'   },
+  ETH:        { asset: 'ETH',  network: 'ERC20' },
+  USDT:       { asset: 'USDT', network: 'ERC20' },
+  USDT_ERC20: { asset: 'USDT', network: 'ERC20' },
+  USDT_TRC20: { asset: 'USDT', network: 'TRC20' },
+  TRX:        { asset: 'TRX',  network: 'TRON'  },
+  XRP:        { asset: 'XRP',  network: 'XRP'   },
+};
+// Everything not listed above is an EVM token (ERC-20 / BEP-20)
+function depositRoute(currency: string): { asset: string; network: string } {
+  return DEPOSIT_ROUTE[currency.toUpperCase()] ?? { asset: currency.toUpperCase(), network: 'ERC20' };
+}
+
+function useDepositAddress(currency: string, enabled: boolean) {
+  const { asset, network } = depositRoute(currency);
+  return useQuery({
+    queryKey: ['deposit-address', asset, network],
+    enabled,
+    queryFn: async () => {
+      const res = await cryptoWalletAPI.depositAddress(asset, network);
+      return res.data.address;
+    },
+    staleTime: Infinity, // addresses don't change
+    retry: 1,
+  });
 }
 
 /* ── Asset row ─── */
@@ -1961,33 +2089,29 @@ function AssetRow({ wallet, palette: p, onPress, liveUsd, sparkline, changePct }
   changePct?: number;
 }) {
   const dc = useDisplayCurrency();
-  const meta = ASSET_META[wallet.currency] ?? ASSET_META.DEFAULT;
+  const meta = ASSET_META[wallet.currency] ?? { title: wallet.currency, subDecimals: 6 };
   const usd = liveUsd ?? Number(wallet.fiatValueUsd);
   const positive = (changePct ?? 0) >= 0;
   const sparkColor = positive ? '#22c55e' : '#ef4444';
+  const maxDec = Math.min(meta.subDecimals, 8);
 
   return (
     <Pressable
       onPress={onPress}
       style={({ pressed }) => ({
         flexDirection: 'row', alignItems: 'center',
-        paddingHorizontal: 16, paddingVertical: 12,
+        paddingHorizontal: 20, paddingVertical: 12,
         backgroundColor: pressed ? p.bgElev : 'transparent',
         borderBottomWidth: 1, borderBottomColor: p.border,
       })}
     >
-      <View style={{ width: 36, alignItems: 'center' }}>
-        <CurrencyIcon currency={wallet.currency} palette={p} />
-      </View>
-      <View style={{ flex: 1, marginLeft: 10, minWidth: 0 }}>
+      <CurrencyIcon currency={wallet.currency} />
+      <View style={{ flex: 1, marginLeft: 12, minWidth: 0 }}>
         <Text style={{ color: p.fg, fontSize: 15, fontWeight: '700' }} numberOfLines={1}>
-          {wallet.currency}
+          {meta.title}
         </Text>
         <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '500', marginTop: 1 }} numberOfLines={1}>
-          {Number(wallet.balance).toLocaleString('en-US', {
-            minimumFractionDigits: meta.subDecimals,
-            maximumFractionDigits: meta.subDecimals,
-          })} {wallet.currency}
+          {Number(wallet.balance).toLocaleString('en-US', { maximumFractionDigits: maxDec })} {wallet.currency}
         </Text>
       </View>
       {sparkline && sparkline.length >= 2 && (
@@ -1995,13 +2119,15 @@ function AssetRow({ wallet, palette: p, onPress, liveUsd, sparkline, changePct }
           <Sparkline data={sparkline} width={60} height={28} color={sparkColor} strokeWidth={1.5} />
         </View>
       )}
-      <View style={{ alignItems: 'flex-end', minWidth: 72 }}>
+      <View style={{ alignItems: 'flex-end' }}>
         <Text style={{ color: p.fg, fontSize: 14, fontWeight: '700', fontVariant: ['tabular-nums'] }}>
           {dc.fmt(usd)}
         </Text>
-        <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '500', marginTop: 1 }}>
-          {meta.title}
-        </Text>
+        {changePct !== undefined && (
+          <Text style={{ color: positive ? '#22c55e' : '#ef4444', fontSize: 11, fontWeight: '600', marginTop: 1 }}>
+            {positive ? '+' : ''}{changePct.toFixed(2)}%
+          </Text>
+        )}
       </View>
     </Pressable>
   );
@@ -2009,15 +2135,21 @@ function AssetRow({ wallet, palette: p, onPress, liveUsd, sparkline, changePct }
 
 
 /* ── Currency icons ── */
-function CurrencyIcon({ currency, palette: p }: { currency: Currency; palette: Palette }) {
-  const cfg = ICON_CFG[currency] ?? ICON_CFG.DEFAULT;
+function symbolColor(sym: string): string {
+  let h = 0;
+  for (let i = 0; i < sym.length; i++) h = sym.charCodeAt(i) + ((h << 5) - h);
+  return `hsl(${Math.abs(h) % 360}, 60%, 55%)`;
+}
+
+function CurrencyIcon({ currency }: { currency: string }) {
+  const cfg = ICON_CFG[currency] ?? {
+    color: symbolColor(currency),
+    glyph: currency.slice(0, 3),
+    fontSize: currency.length > 3 ? 11 : 14,
+  };
   return (
-    <View style={{
-      width: 44, height: 44, borderRadius: 22,
-      backgroundColor: 'transparent',
-      alignItems: 'center', justifyContent: 'center',
-    }}>
-      <Text style={{ color: p.fg, fontWeight: '700', fontSize: cfg.fontSize ? cfg.fontSize + 4 : 22 }}>
+    <View style={{ width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }}>
+      <Text style={{ color: cfg.color, fontWeight: '800', fontSize: cfg.fontSize ?? 22, lineHeight: (cfg.fontSize ?? 22) + 6 }}>
         {cfg.glyph}
       </Text>
     </View>
@@ -2026,44 +2158,99 @@ function CurrencyIcon({ currency, palette: p }: { currency: Currency; palette: P
 
 interface AssetMeta { title: string; subDecimals: number }
 const ASSET_META: Record<string, AssetMeta> = {
-  BTC:   { title: 'Bitcoin',     subDecimals: 8 },
-  ETH:   { title: 'Ethereum',    subDecimals: 6 },
-  USDT:  { title: 'Tether',      subDecimals: 2 },
-  SOL:   { title: 'Solana',      subDecimals: 4 },
-  BNB:   { title: 'BNB',         subDecimals: 4 },
-  XRP:   { title: 'XRP',         subDecimals: 4 },
-  ADA:   { title: 'Cardano',     subDecimals: 4 },
-  DOGE:  { title: 'Dogecoin',    subDecimals: 4 },
-  MATIC: { title: 'Polygon',     subDecimals: 4 },
-  DOT:   { title: 'Polkadot',    subDecimals: 4 },
-  AVAX:  { title: 'Avalanche',   subDecimals: 4 },
-  USD:   { title: 'US Dollar',         subDecimals: 2 },
-  EUR:   { title: 'Euro',              subDecimals: 2 },
-  GBP:   { title: 'British Pound',     subDecimals: 2 },
-  AED:   { title: 'UAE Dirham',        subDecimals: 2 },
-  SAR:   { title: 'Saudi Riyal',       subDecimals: 2 },
-  EGP:   { title: 'Egyptian Pound',    subDecimals: 2 },
-  DEFAULT: { title: 'Asset', subDecimals: 4 },
+  // ── Crypto ──
+  BTC:        { title: 'Bitcoin',       subDecimals: 8 },
+  ETH:        { title: 'Ethereum',      subDecimals: 6 },
+  USDT:       { title: 'Tether',        subDecimals: 2 },
+  USDT_ERC20: { title: 'Tether ERC20',  subDecimals: 2 },
+  USDT_TRC20: { title: 'Tether TRC20',  subDecimals: 2 },
+  USDC:       { title: 'USD Coin',      subDecimals: 2 },
+  SOL:        { title: 'Solana',        subDecimals: 4 },
+  BNB:        { title: 'BNB',           subDecimals: 4 },
+  XRP:        { title: 'XRP',           subDecimals: 4 },
+  ADA:        { title: 'Cardano',       subDecimals: 4 },
+  DOGE:       { title: 'Dogecoin',      subDecimals: 4 },
+  MATIC:      { title: 'Polygon',       subDecimals: 4 },
+  DOT:        { title: 'Polkadot',      subDecimals: 4 },
+  AVAX:       { title: 'Avalanche',     subDecimals: 4 },
+  LTC:        { title: 'Litecoin',      subDecimals: 6 },
+  LINK:       { title: 'Chainlink',     subDecimals: 4 },
+  UNI:        { title: 'Uniswap',       subDecimals: 4 },
+  AAVE:       { title: 'Aave',          subDecimals: 4 },
+  ATOM:       { title: 'Cosmos',        subDecimals: 4 },
+  ALGO:       { title: 'Algorand',      subDecimals: 4 },
+  NEAR:       { title: 'NEAR',          subDecimals: 4 },
+  FTM:        { title: 'Fantom',        subDecimals: 4 },
+  VET:        { title: 'VeChain',       subDecimals: 2 },
+  TRX:        { title: 'TRON',          subDecimals: 2 },
+  XLM:        { title: 'Stellar',       subDecimals: 4 },
+  FIL:        { title: 'Filecoin',      subDecimals: 4 },
+  SHIB:       { title: 'Shiba Inu',     subDecimals: 0 },
+  PEPE:       { title: 'Pepe',          subDecimals: 0 },
+  WIF:        { title: 'dogwifhat',     subDecimals: 4 },
+  ARB:        { title: 'Arbitrum',      subDecimals: 4 },
+  OP:         { title: 'Optimism',      subDecimals: 4 },
+  SUI:        { title: 'Sui',           subDecimals: 4 },
+  APT:        { title: 'Aptos',         subDecimals: 4 },
+  INJ:        { title: 'Injective',     subDecimals: 4 },
+  SEI:        { title: 'Sei',           subDecimals: 4 },
+  TON:        { title: 'Toncoin',       subDecimals: 4 },
+  // ── Fiat ──
+  USD:        { title: 'US Dollar',       subDecimals: 2 },
+  EUR:        { title: 'Euro',            subDecimals: 2 },
+  GBP:        { title: 'British Pound',   subDecimals: 2 },
+  AED:        { title: 'UAE Dirham',      subDecimals: 2 },
+  SAR:        { title: 'Saudi Riyal',     subDecimals: 2 },
+  EGP:        { title: 'Egyptian Pound',  subDecimals: 2 },
+  LYD:        { title: 'Libyan Dinar',    subDecimals: 3 },
+  DEFAULT:    { title: 'Asset',           subDecimals: 4 },
 };
 
-interface IconCfg { bg: string; fg: string; glyph: string; fontSize?: number }
+interface IconCfg { color: string; glyph: string; fontSize?: number }
 const ICON_CFG: Record<string, IconCfg> = {
-  BTC:   { bg: '#f7931a', fg: '#fff', glyph: '₿', fontSize: 17 },
-  ETH:   { bg: '#627eea', fg: '#fff', glyph: 'Ξ', fontSize: 16 },
-  USDT:  { bg: '#26a17b', fg: '#fff', glyph: '₮', fontSize: 16 },
-  SOL:   { bg: '#9945ff', fg: '#fff', glyph: '◎', fontSize: 16 },
-  BNB:   { bg: '#f3ba2f', fg: '#000', glyph: '⬡', fontSize: 16 },
-  XRP:   { bg: '#23292f', fg: '#fff', glyph: '✕', fontSize: 14 },
-  ADA:   { bg: '#0033ad', fg: '#fff', glyph: '₳', fontSize: 16 },
-  DOGE:  { bg: '#c3a634', fg: '#fff', glyph: 'Ð', fontSize: 16 },
-  MATIC: { bg: '#8247e5', fg: '#fff', glyph: '◆', fontSize: 14 },
-  DOT:   { bg: '#e6007a', fg: '#fff', glyph: '●', fontSize: 14 },
-  AVAX:  { bg: '#e84142', fg: '#fff', glyph: '▲', fontSize: 13 },
-  USD:   { bg: '#2775ca', fg: '#fff', glyph: '$', fontSize: 16 },
-  EUR:   { bg: '#1a73e8', fg: '#fff', glyph: '€', fontSize: 16 },
-  GBP:   { bg: '#7c3aed', fg: '#fff', glyph: '£', fontSize: 16 },
-  AED:   { bg: '#0f766e', fg: '#fff', glyph: 'د', fontSize: 13 },
-  SAR:   { bg: '#15803d', fg: '#fff', glyph: '﷼', fontSize: 14 },
-  EGP:   { bg: '#dc2626', fg: '#fff', glyph: '£', fontSize: 16 },
-  DEFAULT: { bg: 'rgba(125,125,125,0.2)', fg: '#888', glyph: '?', fontSize: 14 },
+  // ── Crypto — brand colour on the symbol ─────────────────────────
+  BTC:        { color: '#f7931a', glyph: '₿',  fontSize: 24 },
+  ETH:        { color: '#627eea', glyph: 'Ξ',  fontSize: 22 },
+  USDT:       { color: '#26a17b', glyph: '₮',  fontSize: 22 },
+  USDT_ERC20: { color: '#26a17b', glyph: '₮',  fontSize: 22 },
+  USDT_TRC20: { color: '#26a17b', glyph: '₮',  fontSize: 22 },
+  USDC:       { color: '#2775ca', glyph: '◎',  fontSize: 22 },
+  SOL:        { color: '#9945ff', glyph: '◎',  fontSize: 22 },
+  BNB:        { color: '#f3ba2f', glyph: '⬡',  fontSize: 22 },
+  XRP:        { color: '#346aa9', glyph: '✕',  fontSize: 20 },
+  ADA:        { color: '#0033ad', glyph: '₳',  fontSize: 22 },
+  DOGE:       { color: '#c3a634', glyph: 'Ð',  fontSize: 22 },
+  MATIC:      { color: '#8247e5', glyph: '◆',  fontSize: 18 },
+  DOT:        { color: '#e6007a', glyph: '●',  fontSize: 20 },
+  AVAX:       { color: '#e84142', glyph: '▲',  fontSize: 18 },
+  LTC:        { color: '#bfbbbb', glyph: 'Ł',  fontSize: 22 },
+  LINK:       { color: '#2a5ada', glyph: '⬡',  fontSize: 20 },
+  UNI:        { color: '#ff007a', glyph: '🦄', fontSize: 22 },
+  AAVE:       { color: '#b6509e', glyph: '👻', fontSize: 22 },
+  ATOM:       { color: '#6f7590', glyph: '⚛',  fontSize: 20 },
+  ALGO:       { color: '#6cc3a8', glyph: 'Ⓐ',  fontSize: 20 },
+  NEAR:       { color: '#00c08b', glyph: 'N',   fontSize: 20 },
+  FTM:        { color: '#1969ff', glyph: 'F',   fontSize: 20 },
+  VET:        { color: '#15bdff', glyph: 'V',   fontSize: 20 },
+  TRX:        { color: '#ef0027', glyph: 'T',   fontSize: 20 },
+  XLM:        { color: '#7d00ff', glyph: '*',   fontSize: 24 },
+  FIL:        { color: '#0090ff', glyph: '⨎',  fontSize: 20 },
+  SHIB:       { color: '#e44d26', glyph: '🐕', fontSize: 22 },
+  PEPE:       { color: '#00a550', glyph: '🐸', fontSize: 22 },
+  WIF:        { color: '#9b4dca', glyph: '🐶', fontSize: 22 },
+  ARB:        { color: '#12aaff', glyph: 'A',   fontSize: 20 },
+  OP:         { color: '#ff0420', glyph: 'O',   fontSize: 20 },
+  SUI:        { color: '#4da2ff', glyph: 'S',   fontSize: 20 },
+  APT:        { color: '#00d4aa', glyph: 'Ⓐ',  fontSize: 20 },
+  INJ:        { color: '#00b0ff', glyph: 'I',   fontSize: 20 },
+  SEI:        { color: '#9d4edd', glyph: 'S',   fontSize: 20 },
+  TON:        { color: '#0098ea', glyph: '💎', fontSize: 22 },
+  // ── Fiat — flag emoji ────────────────────────────────────────────
+  USD:        { color: '#ffffff', glyph: '🇺🇸', fontSize: 28 },
+  EUR:        { color: '#ffffff', glyph: '🇪🇺', fontSize: 28 },
+  GBP:        { color: '#ffffff', glyph: '🇬🇧', fontSize: 28 },
+  AED:        { color: '#ffffff', glyph: '🇦🇪', fontSize: 28 },
+  SAR:        { color: '#ffffff', glyph: '🇸🇦', fontSize: 28 },
+  EGP:        { color: '#ffffff', glyph: '🇪🇬', fontSize: 28 },
+  LYD:        { color: '#ffffff', glyph: '🇱🇾', fontSize: 28 },
 };

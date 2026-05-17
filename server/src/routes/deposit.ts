@@ -26,3 +26,4 @@ depositRouter.post('/', authenticate, upload.single('proof'), DepositController.
 depositRouter.get('/', authenticate, DepositController.getAll);
 depositRouter.get('/:id', authenticate, DepositController.getById);
 depositRouter.put('/:id/cancel', authenticate, DepositController.cancel);
+depositRouter.put('/:id/confirm', authenticate, DepositController.confirm);

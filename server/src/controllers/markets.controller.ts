@@ -1,21 +1,25 @@
 import { Request, Response, NextFunction } from 'express';
 import axios from 'axios';
 import { prisma } from '../utils/prisma';
+import { redisGet, redisSet } from '../utils/redis';
 
 interface Ticker {
-  symbol: string;
-  base: string;
-  quote: string;
-  displayName: string;
-  price: number;
+  symbol:       string;
+  base:         string;   // any Binance base asset, not limited to Currency enum
+  quote:        string;
+  displayName:  string;
+  price:        number;
   changePct24h: number;
-  volume24h: number;
-  sparkline: number[];
+  volume24h:    number;
+  sparkline:    number[];
 }
 
-/* ── Binance public ticker cache (no API key needed) ──────────────────
-   Uses the free Binance REST endpoint — 1 200 requests/min per IP.
-   We cache for 30 s so a busy landing page won't exhaust the limit.
+/* ── Binance dynamic ticker cache (no API key needed) ─────────────────
+   Step 1: periodically fetch the full list of active USDT pairs from
+   Binance exchangeInfo. Cached for 1 hour — the symbol list rarely changes.
+   Step 2: fetch 24h stats for ALL those pairs at once. Cached 30s.
+   This way any token Binance lists against USDT is automatically available,
+   with no hardcoded symbol list to maintain.
    ─────────────────────────────────────────────────────────────────── */
 
 interface BinanceRow {
@@ -27,12 +31,36 @@ interface BinanceRow {
 let binanceCache: Record<string, BinanceRow> = {};
 let binanceCacheExpiry = 0;
 
-const BINANCE_SYMBOLS = [
-  'BTCUSDT','ETHUSDT','SOLUSDT','BNBUSDT','XRPUSDT',
-  'ADAUSDT','DOGEUSDT','MATICUSDT','DOTUSDT','AVAXUSDT','USDTUSDT',
-];
+/* Dynamic symbol discovery — refreshed every hour */
+let discoveredSymbols: string[] = [];
+let symbolsExpiry = 0;
 
-/* Fallback prices used only when Binance is unreachable */
+async function getActiveUsdtSymbols(): Promise<string[]> {
+  if (Date.now() < symbolsExpiry && discoveredSymbols.length > 0) {
+    return discoveredSymbols;
+  }
+  try {
+    const { data } = await axios.get(
+      'https://api.binance.com/api/v3/exchangeInfo',
+      { timeout: 10_000 },
+    );
+    const symbols: string[] = (data.symbols as any[])
+      .filter((s) => s.quoteAsset === 'USDT' && s.status === 'TRADING')
+      .map((s) => s.symbol as string);
+    discoveredSymbols = symbols;
+    symbolsExpiry = Date.now() + 3_600_000; // 1 hour
+    return symbols;
+  } catch {
+    return discoveredSymbols.length > 0 ? discoveredSymbols : [
+      'BTCUSDT','ETHUSDT','SOLUSDT','BNBUSDT','XRPUSDT',
+      'ADAUSDT','DOGEUSDT','MATICUSDT','DOTUSDT','AVAXUSDT',
+      'LTCUSDT','LINKUSDT','UNIUSDT','AAVEUSDT','ATOMUSDT',
+      'SHIBUSDT','PEPEUSDT','WIFUSDT','ARBUSDT','OPUSDT','SUIUSDT',
+    ];
+  }
+}
+
+/* Fallback prices used only when Binance is completely unreachable */
 const FALLBACK: Record<string, BinanceRow> = {
   BTC:   { price: 65_240,  changePct24h: 0, volume24h: 32_400_000_000 },
   ETH:   { price:  3_215,  changePct24h: 0, volume24h: 14_200_000_000 },
@@ -48,35 +76,50 @@ const FALLBACK: Record<string, BinanceRow> = {
 };
 
 async function getLivePrices(): Promise<Record<string, BinanceRow>> {
-  if (Date.now() < binanceCacheExpiry) return binanceCache;
+  if (Date.now() < binanceCacheExpiry && Object.keys(binanceCache).length > 0) {
+    return binanceCache;
+  }
 
   try {
-    const symbols = encodeURIComponent(JSON.stringify(BINANCE_SYMBOLS));
-    const { data } = await axios.get(
-      `https://api.binance.com/api/v3/ticker/24hr?symbols=${symbols}`,
-      { timeout: 5_000 },
-    );
-
+    const allSymbols = await getActiveUsdtSymbols();
+    // Binance allows up to ~1000 symbols per request; chunk if needed
+    const CHUNK = 800;
     const fresh: Record<string, BinanceRow> = {};
-    for (const row of data as any[]) {
-      const base = (row.symbol as string).replace('USDT', '');
-      fresh[base] = {
-        price: parseFloat(row.lastPrice),
-        changePct24h: parseFloat(row.priceChangePercent),
-        volume24h: parseFloat(row.quoteVolume),
-      };
+
+    for (let i = 0; i < allSymbols.length; i += CHUNK) {
+      const chunk = allSymbols.slice(i, i + CHUNK);
+      const symbols = encodeURIComponent(JSON.stringify(chunk));
+      const { data } = await axios.get(
+        `https://api.binance.com/api/v3/ticker/24hr?symbols=${symbols}`,
+        { timeout: 10_000 },
+      );
+      for (const row of data as any[]) {
+        const base = (row.symbol as string).replace(/USDT$/, '');
+        fresh[base] = {
+          price: parseFloat(row.lastPrice),
+          changePct24h: parseFloat(row.priceChangePercent),
+          volume24h: parseFloat(row.quoteVolume),
+        };
+      }
     }
+
+    /* USDT is always $1 — Binance doesn't list USDT/USDT */
+    fresh['USDT'] = { price: 1, changePct24h: 0, volume24h: 50_000_000_000 };
 
     binanceCache = fresh;
     binanceCacheExpiry = Date.now() + 30_000;
     return fresh;
   } catch {
-    /* Return stale cache if available, otherwise fallback constants */
     return Object.keys(binanceCache).length ? binanceCache : FALLBACK;
   }
 }
 
 /* Build a sparkline that traces the 24-hour shape around the live price */
+const MARKETS_TICKERS_CACHE_KEY = 'markets:tickers';
+const MARKETS_LISTINGS_CACHE_KEY = 'markets:listings';
+const MARKETS_TICKERS_TTL = 20; // seconds
+const MARKETS_LISTINGS_TTL = 300; // seconds
+
 function buildSparkline(price: number, changePct: number, n = 24): number[] {
   const start = price / (1 + changePct / 100);
   const out: number[] = [];
@@ -90,29 +133,57 @@ function buildSparkline(price: number, changePct: number, n = 24): number[] {
 }
 
 export class MarketsController {
-  /** GET /api/markets/ticker — public, no auth */
+  /** GET /api/markets/ticker — public, no auth
+   *
+   *  Returns a ticker for EVERY coin Binance lists against USDT, merging
+   *  in display metadata from the MarketListing DB table when available.
+   *  This means any coin a user buys (PEPE, SHIB, WIF, …) will always
+   *  have a real price/sparkline without any manual DB seeding.
+   */
   static async tickers(_req: Request, res: Response, next: NextFunction) {
     try {
+      const cached = await redisGet<{ tickers: Ticker[] }>(MARKETS_TICKERS_CACHE_KEY);
+      if (cached) {
+        return res.json(cached);
+      }
+
       const [listings, prices] = await Promise.all([
         prisma.marketListing.findMany({ where: { isActive: true }, orderBy: { rank: 'asc' } }),
         getLivePrices(),
       ]);
 
-      const tickers: Ticker[] = listings.map((l) => {
-        const live = prices[l.baseAsset] ?? FALLBACK[l.baseAsset];
+      // Index DB metadata by baseAsset for O(1) lookups
+      // Cast key to string so the map accepts arbitrary Binance tickers (not just Currency enum).
+      const listingMap = new Map<string, typeof listings[0]>(listings.map((l) => [l.baseAsset as string, l]));
+
+      // Build a ticker for every coin we have a live price for
+      const tickers: Ticker[] = Object.entries(prices).map(([base, live]) => {
+        const l = listingMap.get(base);
         return {
-          symbol: l.symbol,
-          base: l.baseAsset,
-          quote: l.quoteAsset,
-          displayName: l.displayName ?? l.baseAsset,
-          price: live?.price ?? 0,
-          changePct24h: live?.changePct24h ?? 0,
-          volume24h: live?.volume24h ?? 0,
-          sparkline: live ? buildSparkline(live.price, live.changePct24h) : [],
+          symbol:      l?.symbol      ?? `${base}USDT`,
+          base,
+          quote:       (l?.quoteAsset  ?? 'USDT') as string,
+          displayName: l?.displayName ?? base,
+          price:       live.price,
+          changePct24h: live.changePct24h,
+          volume24h:   live.volume24h,
+          sparkline:   buildSparkline(live.price, live.changePct24h),
         };
       });
 
-      res.json({ tickers });
+      // Sort: DB-listed coins first (by rank), then unlisted alphabetically
+      tickers.sort((a, b) => {
+        const la = listingMap.get(a.base);
+        const lb = listingMap.get(b.base);
+        if (la && lb) return la.rank - lb.rank;
+        if (la) return -1;
+        if (lb) return 1;
+        return a.base.localeCompare(b.base);
+      });
+
+      const payload = { tickers };
+      await redisSet(MARKETS_TICKERS_CACHE_KEY, payload, MARKETS_TICKERS_TTL);
+      res.json(payload);
     } catch (error) {
       next(error);
     }
@@ -121,11 +192,19 @@ export class MarketsController {
   /** GET /api/markets/listings — public catalogue (no prices) */
   static async listings(_req: Request, res: Response, next: NextFunction) {
     try {
+      const cached = await redisGet<{ listings: unknown[] }>(MARKETS_LISTINGS_CACHE_KEY);
+      if (cached) {
+        return res.json(cached);
+      }
+
       const listings = await prisma.marketListing.findMany({
         where: { isActive: true },
         orderBy: { rank: 'asc' },
       });
-      res.json({ listings });
+
+      const payload = { listings };
+      await redisSet(MARKETS_LISTINGS_CACHE_KEY, payload, MARKETS_LISTINGS_TTL);
+      res.json(payload);
     } catch (error) {
       next(error);
     }

@@ -54,6 +54,10 @@ export function validateEnv() {
       fail('JWT_SECRET and JWT_REFRESH_SECRET must differ in production.');
     }
   }
+
+  if (process.env.REDIS_URL !== undefined && process.env.REDIS_URL.trim().length === 0) {
+    fail('REDIS_URL is set but empty. Remove it or set a valid Redis connection string.');
+  }
 }
 
 export const isProduction = () => process.env.NODE_ENV === 'production';

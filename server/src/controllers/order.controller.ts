@@ -4,6 +4,8 @@ import { Decimal } from '@prisma/client/runtime/library';
 import { prisma } from '../utils/prisma';
 import { AppError } from '../middleware/errorHandler';
 import { AuthRequest } from '../types';
+import { collectFee } from '../services/fee/feeCollector.service';
+import { emitActivity } from '../utils/realtime';
 
 // Accept amount as string OR number to preserve precision. parseFloat
 // on user input is unsafe for money — never coerce to JS Number before
@@ -80,7 +82,7 @@ export class OrderController {
             data: { balance: { increment: usdtReceived } },
           });
 
-          await tx.order.create({
+          const buyOrder = await tx.order.create({
             data: {
               userId: req.user!.id, side: 'BUY', type: 'MARKET', baseCurrency: 'USDT',
               quoteCurrency: data.quoteCurrency, amount, price, filled: amount,
@@ -104,7 +106,21 @@ export class OrderController {
               },
             ],
           });
+
+          // Pour the trading fee into the platform wallet
+          await collectFee({
+            tx,
+            source:   'order',
+            sourceId: buyOrder.id,
+            payerId:  req.user!.id,
+            amount:   fee,
+            currency: 'USDT',
+            description: `BUY ${data.quoteCurrency} fee`,
+            metadata: { side: 'BUY', baseCurrency: 'USDT', quoteCurrency: data.quoteCurrency },
+          });
         });
+
+        emitActivity(req, [req.user!.id], { kind: 'transaction', type: 'BUY' });
 
         res.status(201).json({
           message: 'Order filled successfully',
@@ -156,7 +172,7 @@ export class OrderController {
           data: { balance: { increment: quoteReceived } },
         });
 
-        await tx.order.create({
+        const sellOrder = await tx.order.create({
           data: {
             userId: req.user!.id, side: 'SELL', type: 'MARKET', baseCurrency: 'USDT',
             quoteCurrency: data.quoteCurrency, amount, price, filled: amount,
@@ -180,7 +196,21 @@ export class OrderController {
             },
           ],
         });
+
+        // Pour the trading fee into the platform wallet
+        await collectFee({
+          tx,
+          source:   'order',
+          sourceId: sellOrder.id,
+          payerId:  req.user!.id,
+          amount:   sellFee,
+          currency: data.quoteCurrency,
+          description: `SELL USDT fee`,
+          metadata: { side: 'SELL', baseCurrency: 'USDT', quoteCurrency: data.quoteCurrency },
+        });
       });
+
+      emitActivity(req, [req.user!.id], { kind: 'transaction', type: 'SELL' });
 
       res.status(201).json({
         message: 'Order filled successfully',

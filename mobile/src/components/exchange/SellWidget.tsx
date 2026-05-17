@@ -1,11 +1,12 @@
 /**
- * SellWidget — Trust Wallet-style sell sheet.
- * Asset chip row · large amount input · live USD value · full-width CTA.
+ * SellWidget — sell any token the user holds.
+ * Uses the same quote + execute flow as BuyWidget.
  */
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Keyboard,
+  Modal,
   Pressable,
   ScrollView,
   Text,
@@ -14,245 +15,512 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
-import { useThemedPalette } from '@/store/themeStore';
 import { useAuthStore } from '@/store/authStore';
-import { useHaptics, useMarkets, useSwap, useWallets, extractErrorMessage } from '@/hooks';
-import type { Currency } from '@/types';
+import { useThemedPalette } from '@/store/themeStore';
+import { useWallets, useMarkets, extractErrorMessage } from '@/hooks';
+import { cryptoExchangeAPI, type CryptoQuote, type AssetSearchResult } from '@/lib/cryptoApi';
 
-const COINS: Currency[] = ['BTC', 'ETH', 'USDT', 'SOL', 'BNB', 'XRP', 'ADA', 'DOGE', 'MATIC', 'DOT', 'AVAX'];
-
-const ASSET_META: Record<string, { label: string; color: string; bg: string; icon: string }> = {
-  BTC:  { label: 'Bitcoin',   color: '#fb923c', bg: 'rgba(251,146,60,0.14)',  icon: '₿' },
-  ETH:  { label: 'Ethereum',  color: '#818cf8', bg: 'rgba(129,140,248,0.14)', icon: 'Ξ' },
-  SOL:  { label: 'Solana',    color: '#a78bfa', bg: 'rgba(167,139,250,0.14)', icon: '◎' },
-  USDT: { label: 'Tether',    color: '#4ade80', bg: 'rgba(74,222,128,0.14)',  icon: '₮' },
-  BNB:  { label: 'BNB',       color: '#f3ba2f', bg: 'rgba(243,186,47,0.14)',  icon: 'B' },
-  XRP:  { label: 'XRP',       color: '#7eb8f7', bg: 'rgba(126,184,247,0.14)', icon: '✕' },
-  ADA:  { label: 'Cardano',   color: '#3b82f6', bg: 'rgba(59,130,246,0.14)',  icon: '₳' },
-  DOGE: { label: 'Dogecoin',  color: '#c3a634', bg: 'rgba(195,166,52,0.14)',  icon: 'Ð' },
-  MATIC:{ label: 'Polygon',   color: '#8247e5', bg: 'rgba(130,71,229,0.14)',  icon: '◆' },
-  DOT:  { label: 'Polkadot',  color: '#e6007a', bg: 'rgba(230,0,122,0.14)',   icon: '●' },
-  AVAX: { label: 'Avalanche', color: '#e84142', bg: 'rgba(232,65,66,0.14)',   icon: '▲' },
+// ── Static metadata (kept in sync with BuyWidget) ────────────────────────────
+const KNOWN: Record<string, { label: string; color: string; icon: string }> = {
+  BTC:   { label: 'Bitcoin',     color: '#f7931a', icon: '₿'  },
+  ETH:   { label: 'Ethereum',    color: '#627eea', icon: 'Ξ'  },
+  SOL:   { label: 'Solana',      color: '#9945ff', icon: '◎'  },
+  USDT:  { label: 'Tether',      color: '#26a17b', icon: '₮'  },
+  USDC:  { label: 'USD Coin',    color: '#2775ca', icon: '◎'  },
+  BNB:   { label: 'BNB',         color: '#f3ba2f', icon: '⬡'  },
+  XRP:   { label: 'XRP',         color: '#346aa9', icon: '✕'  },
+  ADA:   { label: 'Cardano',     color: '#0033ad', icon: '₳'  },
+  DOGE:  { label: 'Dogecoin',    color: '#c3a634', icon: 'Ð'  },
+  MATIC: { label: 'Polygon',     color: '#8247e5', icon: '◆'  },
+  DOT:   { label: 'Polkadot',    color: '#e6007a', icon: '●'  },
+  AVAX:  { label: 'Avalanche',   color: '#e84142', icon: '▲'  },
+  LTC:   { label: 'Litecoin',    color: '#bfbbbb', icon: 'Ł'  },
+  LINK:  { label: 'Chainlink',   color: '#2a5ada', icon: '⬡'  },
+  UNI:   { label: 'Uniswap',     color: '#ff007a', icon: '🦄' },
+  AAVE:  { label: 'Aave',        color: '#b6509e', icon: '👻' },
+  ATOM:  { label: 'Cosmos',      color: '#6f7590', icon: '⚛'  },
+  ALGO:  { label: 'Algorand',    color: '#000000', icon: 'Ⓐ'  },
+  NEAR:  { label: 'NEAR',        color: '#000000', icon: '𝗡'  },
+  FTM:   { label: 'Fantom',      color: '#1969ff', icon: 'F'  },
+  VET:   { label: 'VeChain',     color: '#15bdff', icon: 'V'  },
+  TRX:   { label: 'TRON',        color: '#ef0027', icon: 'T'  },
+  XLM:   { label: 'Stellar',     color: '#7d00ff', icon: '*'  },
+  FIL:   { label: 'Filecoin',    color: '#0090ff', icon: '⨎'  },
+  SHIB:  { label: 'Shiba Inu',   color: '#e44d26', icon: '🐕' },
+  PEPE:  { label: 'Pepe',        color: '#00a550', icon: '🐸' },
+  WIF:   { label: 'dogwifhat',   color: '#9b4dca', icon: '🐶' },
+  ARB:   { label: 'Arbitrum',    color: '#12aaff', icon: 'A'  },
+  OP:    { label: 'Optimism',    color: '#ff0420', icon: 'O'  },
+  SUI:   { label: 'Sui',         color: '#4da2ff', icon: 'S'  },
+  APT:   { label: 'Aptos',       color: '#00d4aa', icon: 'Ⓐ'  },
+  INJ:   { label: 'Injective',   color: '#00b0ff', icon: 'I'  },
+  SEI:   { label: 'Sei',         color: '#9d4edd', icon: 'S'  },
+  TON:   { label: 'Toncoin',     color: '#0098ea', icon: '💎' },
 };
 
-const CURRENCY_SYMBOLS: Record<string, string> = { USD: '$', EUR: '€', GBP: '£' };
-function sym(c: string) { return CURRENCY_SYMBOLS[c] ?? c; }
+const DEFAULT_NETWORK: Record<string, string> = {
+  BTC: 'BTC', ETH: 'ERC20', SOL: 'SOL', USDT: 'ERC20', USDC: 'ERC20',
+  BNB: 'BEP20', XRP: 'XRP', ADA: 'Cardano', DOGE: 'DOGE', TRX: 'TRON',
+  LTC: 'LTC', MATIC: 'ERC20',
+};
+function defaultNetwork(symbol: string) {
+  return DEFAULT_NETWORK[symbol.toUpperCase()] ?? symbol.toUpperCase();
+}
+
+function symbolColor(sym: string): string {
+  let h = 0;
+  for (let i = 0; i < sym.length; i++) h = sym.charCodeAt(i) + ((h << 5) - h);
+  return `hsl(${Math.abs(h) % 360}, 65%, 55%)`;
+}
+
+function assetMeta(symbol: string): { label: string; color: string; icon: string } {
+  return KNOWN[symbol.toUpperCase()] ?? {
+    label: symbol.toUpperCase(),
+    color: symbolColor(symbol),
+    icon: symbol[0]?.toUpperCase() ?? '?',
+  };
+}
+
+const CURRENCY_SYMBOLS: Record<string, string> = { USD: '$', EUR: '€', GBP: '£', AED: 'د.إ', SAR: '﷼' };
+function sym(c: string) { return CURRENCY_SYMBOLS[c] ?? c + ' '; }
+function fmt(n: string | number, d = 6) {
+  const x = Number(n);
+  if (!Number.isFinite(x)) return '—';
+  return x.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: d });
+}
+function fmtPrice(p: number): string {
+  if (p >= 1000) return p.toLocaleString(undefined, { maximumFractionDigits: 2 });
+  if (p >= 1)    return p.toLocaleString(undefined, { maximumFractionDigits: 4 });
+  if (p >= 0.01) return p.toFixed(5);
+  return p.toFixed(8);
+}
+
+// Crypto-like currency keys that should appear in the sell picker
+const CRYPTO_KEYS = new Set([
+  'ETH','BTC','SOL','USDT','USDT_ERC20','USDT_TRC20',
+  'BNB','XRP','ADA','DOGE','MATIC','DOT','AVAX','LTC','LINK',
+  'UNI','AAVE','ATOM','ALGO','NEAR','FTM','VET','TRX','XLM',
+  'FIL','SHIB','PEPE','WIF','ARB','OP','SUI','APT','INJ','SEI','TON',
+  'USDC',
+]);
+function isCryptoKey(currency: string) {
+  return CRYPTO_KEYS.has(currency.toUpperCase()) || !currency.match(/^(USD|EUR|GBP|AED|SAR|EGP|LYD|CAD|AUD|CHF|JPY|CNY)$/i);
+}
 
 export function SellWidget() {
+  const { user } = useAuthStore();
   const p = useThemedPalette();
-  const haptics = useHaptics();
-  const user = useAuthStore((s) => s.user);
-  const { data: tickers } = useMarkets();
   const { data: wallets } = useWallets();
-  const swap = useSwap();
+  const { data: tickers } = useMarkets();
   const baseCurrency = (user as any)?.baseCurrency ?? 'USD';
-  const currSym = sym(baseCurrency);
 
-  const [coin, setCoin]       = useState<Currency>('BTC');
-  const [amount, setAmount]   = useState('');
-  const [ctaState, setCta]    = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
-  const [ctaError, setCtaErr] = useState<string | null>(null);
-
-  // Only show coins that exist in the user's wallets with balance, fallback to full list
-  const availableCoins = useMemo(() => {
-    if (!wallets) return COINS;
-    const withBalance = wallets.filter((w) => Number(w.balance) > 0).map((w) => w.currency as Currency);
-    const filtered = COINS.filter((c) => withBalance.includes(c));
-    return filtered.length > 0 ? filtered : COINS;
+  // ── Holdings with nonzero balance ────────────────────────────────
+  const holdings = useMemo(() => {
+    if (!wallets) return [];
+    return wallets
+      .filter((w) => isCryptoKey(w.currency) && parseFloat(w.balance) > 0)
+      .map((w) => {
+        const sym_ = w.currency.replace('_ERC20','').replace('_TRC20','');
+        return { currency: w.currency, displaySymbol: sym_, balance: parseFloat(w.balance) };
+      });
   }, [wallets]);
 
-  const ticker  = tickers?.find((t) => t.base === coin) ?? null;
-  const wallet  = wallets?.find((w) => w.currency === coin);
-  const balance = wallet ? Number(wallet.balance) : 0;
-  const spot    = ticker ? Number(ticker.price) : 0;
-  const meta    = ASSET_META[coin] ?? ASSET_META.BTC;
-  const cryptoAmt = Number(amount || 0);
-  const fiatValue = cryptoAmt * spot;
-  const overspend = cryptoAmt > balance;
+  // Default to first holding or BTC
+  const [asset, setAsset] = useState('BTC');
+  const [network, setNetwork] = useState('BTC');
+  const [assetSheetOpen, setAssetSheetOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<AssetSearchResult[]>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const searchRef = useRef<TextInput>(null);
 
-  const change24h = ticker?.changePct24h ?? 0;
-  const changePos = change24h >= 0;
+  // ── Trade state ───────────────────────────────────────────────────
+  const [cryptoAmt, setCryptoAmt] = useState('');
+  const [quote,    setQuote]    = useState<CryptoQuote | null>(null);
+  const [loading,  setLoading]  = useState(false);
+  const [exec,     setExec]     = useState(false);
+  const [error,    setError]    = useState<string | null>(null);
+  const [success,  setSuccess]  = useState<string | null>(null);
+  const [seconds,  setSeconds]  = useState(0);
+  const [showFees, setShowFees] = useState(false);
+  const idemRef = useRef(`ord_${Date.now()}`);
 
-  const onSell = async () => {
-    if (cryptoAmt <= 0 || overspend) return;
-    setCta('loading'); setCtaErr(null);
+  // Auto-select first holding
+  useEffect(() => {
+    if (holdings.length > 0 && !holdings.find((h) => h.displaySymbol === asset)) {
+      setAsset(holdings[0].displaySymbol);
+    }
+  }, [holdings]);
+  useEffect(() => { setNetwork(defaultNetwork(asset)); }, [asset]);
+
+  // Current balance for selected asset
+  const currentHolding = useMemo(() =>
+    holdings.find((h) => h.displaySymbol === asset || h.currency === asset),
+  [holdings, asset]);
+  const balance = currentHolding?.balance ?? 0;
+
+  const livePrice = tickers?.find((t) => t.base === asset)?.price
+    ?? searchResults.find((r) => r.symbol === asset)?.price ?? 0;
+  const change24h = tickers?.find((t) => t.base === asset)?.changePct24h
+    ?? searchResults.find((r) => r.symbol === asset)?.change24h;
+
+  // ── Live search (for asset sheet) ────────────────────────────────
+  useEffect(() => {
+    if (!assetSheetOpen) return;
+    const q = searchQuery.trim();
+    const id = setTimeout(async () => {
+      setSearchLoading(true);
+      try {
+        const res = await cryptoExchangeAPI.search(q);
+        setSearchResults(res.data.results);
+      } catch {
+        setSearchResults([]);
+      } finally {
+        setSearchLoading(false);
+      }
+    }, 300);
+    return () => clearTimeout(id);
+  }, [searchQuery, assetSheetOpen]);
+
+  useEffect(() => {
+    if (assetSheetOpen) { setSearchQuery(''); setSearchResults([]); }
+  }, [assetSheetOpen]);
+
+  // ── Quote fetching ────────────────────────────────────────────────
+  useEffect(() => {
+    const amt = parseFloat(cryptoAmt);
+    if (!amt || amt <= 0) { setQuote(null); return; }
+    const id = setTimeout(async () => {
+      setLoading(true); setError(null);
+      try {
+        const res = await cryptoExchangeAPI.quote({ asset, network, side: 'SELL', cryptoAmount: String(amt) });
+        setQuote(res.data.quote);
+        idemRef.current = `ord_${Date.now()}`;
+      } catch (e: any) {
+        setError(e?.response?.data?.error ?? 'Could not get quote');
+        setQuote(null);
+      } finally { setLoading(false); }
+    }, 500);
+    return () => clearTimeout(id);
+  }, [asset, network, cryptoAmt]);
+
+  // ── Quote countdown ───────────────────────────────────────────────
+  useEffect(() => {
+    if (!quote) return;
+    const tick = () => {
+      const s = Math.max(0, Math.floor((quote.expiresAt - Date.now()) / 1000));
+      setSeconds(s);
+      if (s <= 0) setQuote(null);
+    };
+    tick();
+    const iv = setInterval(tick, 1000);
+    return () => clearInterval(iv);
+  }, [quote]);
+
+  // ── Confirm ───────────────────────────────────────────────────────
+  async function onConfirm() {
+    if (!quote) return;
+    setExec(true); setError(null);
     try {
-      await swap.mutateAsync({ from: coin, to: 'USD', amount: cryptoAmt });
+      await cryptoExchangeAPI.execute({ quoteId: quote.id, confirmedByUser: true, idempotencyKey: idemRef.current });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      setCta('success');
-      setAmount('');
-      setTimeout(() => setCta('idle'), 2000);
+      setSuccess(`${fmt(quote.cryptoAmount, 8)} ${asset} sold for ${sym(baseCurrency)}${fmt(quote.fiatAmount, 2)} ✓`);
+      setQuote(null); setCryptoAmt('');
     } catch (e: any) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      setCtaErr(extractErrorMessage(e, 'Order failed'));
-      setCta('error');
-      setTimeout(() => setCta('idle'), 2000);
-    }
-  };
+      setError(e?.response?.data?.error ?? 'Order failed');
+    } finally { setExec(false); }
+  }
+
+  const meta = assetMeta(asset);
+  const overspend = parseFloat(cryptoAmt) > balance;
+  const timerCritical = seconds > 0 && seconds < 8;
+  const canConfirm = !!quote && !exec && seconds > 0 && !overspend;
+
+  // Asset sheet: show holdings first, then search results
+  const displayList: AssetSearchResult[] = searchResults.length > 0
+    ? searchResults
+    : holdings.map((h) => ({
+        symbol: h.displaySymbol,
+        price: Number(tickers?.find((t) => t.base === h.displaySymbol)?.price ?? 0),
+        change24h: tickers?.find((t) => t.base === h.displaySymbol)?.changePct24h ?? 0,
+        volume24h: 0,
+      }));
 
   return (
     <View style={{ paddingHorizontal: 20, paddingBottom: 8 }}>
 
-      {/* ── Coin selector chips ── */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, marginBottom: 20 }}>
-        {availableCoins.map((c) => {
-          const m = ASSET_META[c];
-          const active = coin === c;
-          return (
-            <Pressable
-              key={c}
-              onPress={() => { haptics.selection(); setCoin(c); setAmount(''); setCta('idle'); }}
-              style={({ pressed }) => ({
-                flexDirection: 'row', alignItems: 'center', gap: 8,
-                paddingHorizontal: 14, paddingVertical: 10, borderRadius: 24,
-                backgroundColor: active ? p.fg : p.bgElev,
-                borderWidth: 1, borderColor: active ? p.fg : p.border,
-                opacity: pressed ? 0.8 : 1,
-              })}
-            >
-              <View style={{ width: 26, height: 26, borderRadius: 13, backgroundColor: active ? 'rgba(255,255,255,0.15)' : m.bg, alignItems: 'center', justifyContent: 'center' }}>
-                <Text style={{ color: active ? p.bg : m.color, fontSize: 13, fontWeight: '800' }}>{m.icon}</Text>
-              </View>
-              <Text style={{ color: active ? p.bg : p.fg, fontSize: 13, fontWeight: '800' }}>{c}</Text>
-            </Pressable>
-          );
+      {/* ── Asset selector ── */}
+      <Pressable
+        onPress={() => { Haptics.selectionAsync(); setAssetSheetOpen(true); }}
+        style={({ pressed }) => ({
+          flexDirection: 'row', alignItems: 'center',
+          backgroundColor: p.bgElev, borderRadius: 18,
+          borderWidth: 1, borderColor: p.border,
+          padding: 14, marginBottom: 16, opacity: pressed ? 0.8 : 1,
         })}
-      </ScrollView>
-
-      {/* ── Price info card ── */}
-      <View style={{
-        backgroundColor: p.bgElev, borderRadius: 18, borderWidth: 1, borderColor: p.border,
-        padding: 16, marginBottom: 16, flexDirection: 'row', alignItems: 'center',
-      }}>
-        <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: meta.bg, alignItems: 'center', justifyContent: 'center', marginRight: 14 }}>
-          <Text style={{ color: meta.color, fontSize: 20, fontWeight: '700' }}>{meta.icon}</Text>
+      >
+        <View style={{ width: 46, height: 46, borderRadius: 23, backgroundColor: `${meta.color}22`, alignItems: 'center', justifyContent: 'center' }}>
+          <Text style={{ fontSize: 22, color: meta.color, fontWeight: '800' }}>{meta.icon}</Text>
         </View>
-        <View style={{ flex: 1 }}>
-          <Text style={{ color: p.fg, fontSize: 16, fontWeight: '800' }}>{meta.label}</Text>
-          <Text style={{ color: p.fgMuted, fontSize: 12, marginTop: 1 }}>{coin}</Text>
+        <View style={{ flex: 1, marginLeft: 14 }}>
+          <Text style={{ color: p.fg, fontSize: 17, fontWeight: '800', letterSpacing: -0.3 }}>{meta.label}</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 2 }}>
+            <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '500' }}>
+              {asset}{livePrice > 0 ? `  ·  ${sym(baseCurrency)}${fmtPrice(Number(livePrice))}` : ''}
+            </Text>
+            {change24h !== undefined && (
+              <View style={{ paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, backgroundColor: change24h >= 0 ? p.greenBg : p.redBg }}>
+                <Text style={{ color: change24h >= 0 ? p.greenFg : p.redFg, fontSize: 10, fontWeight: '800' }}>
+                  {change24h >= 0 ? '+' : ''}{Number(change24h).toFixed(2)}%
+                </Text>
+              </View>
+            )}
+          </View>
         </View>
-        <View style={{ alignItems: 'flex-end' }}>
-          <Text style={{ color: p.fg, fontSize: 18, fontWeight: '800', fontVariant: ['tabular-nums'] }}>
-            {currSym}{spot > 0 ? spot.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'}
-          </Text>
-          {change24h !== 0 && (
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 2 }}>
-              <Ionicons name={changePos ? 'trending-up' : 'trending-down'} size={12} color={changePos ? p.greenFg : p.redFg} />
-              <Text style={{ color: changePos ? p.greenFg : p.redFg, fontSize: 12, fontWeight: '700' }}>
-                {changePos ? '+' : ''}{change24h.toFixed(2)}%
-              </Text>
-            </View>
-          )}
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '600' }}>Change</Text>
+          <Ionicons name="chevron-down" size={18} color={p.fgMuted} />
         </View>
-      </View>
+      </Pressable>
 
       {/* ── Amount input ── */}
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-        <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '700', letterSpacing: 0.5 }}>YOU SELL ({coin})</Text>
-        <Pressable onPress={() => { haptics.selection(); setAmount(String(balance)); }} hitSlop={8}>
+        <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '700', letterSpacing: 0.8 }}>YOU SELL ({asset})</Text>
+        <Pressable onPress={() => { Haptics.selectionAsync(); setCryptoAmt(String(balance)); setQuote(null); setError(null); }} hitSlop={8}>
           <Text style={{ color: p.ctaBg, fontSize: 12, fontWeight: '800' }}>USE MAX</Text>
         </Pressable>
       </View>
       <View style={{
         flexDirection: 'row', alignItems: 'center',
         backgroundColor: p.bgElev, borderRadius: 18,
-        borderWidth: 1.5, borderColor: overspend ? p.redFg : p.border,
-        paddingHorizontal: 18, marginBottom: 8,
+        borderWidth: 1.5, borderColor: overspend ? p.redFg : (error ? p.redFg : p.border),
+        paddingHorizontal: 18, marginBottom: 10,
       }}>
         <TextInput
-          value={amount}
-          onChangeText={(v) => setAmount(v.replace(/[^0-9.]/g, '').replace(/(\..*)\./g, '$1'))}
-          placeholder="0.00"
+          value={cryptoAmt}
+          onChangeText={(v) => {
+            const clean = v.replace(/[^0-9.]/g, '').replace(/(\..*)\./g, '$1');
+            setCryptoAmt(clean); setQuote(null); setError(null); setSuccess(null); setShowFees(false);
+          }}
+          placeholder="0.00000000"
           placeholderTextColor={p.fgFaint}
           keyboardType="decimal-pad"
           returnKeyType="done"
           onSubmitEditing={Keyboard.dismiss}
-          style={{ flex: 1, color: p.fg, fontSize: 34, fontWeight: '700', paddingVertical: 16, fontVariant: ['tabular-nums'] }}
+          style={{ flex: 1, color: p.fg, fontSize: 28, fontWeight: '700', paddingVertical: 16, fontVariant: ['tabular-nums'] }}
         />
-        <Text style={{ color: p.fgMuted, fontSize: 16, fontWeight: '700' }}>{coin}</Text>
+        <Text style={{ color: p.fgMuted, fontSize: 14, fontWeight: '700' }}>{asset}</Text>
       </View>
 
-      {/* Balance / fiat estimate */}
+      {/* Balance row */}
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 20 }}>
         <Text style={{ color: overspend ? p.redFg : p.fgMuted, fontSize: 13, fontWeight: '600' }}>
           {overspend
-            ? `Over by ${(cryptoAmt - balance).toLocaleString(undefined, { maximumFractionDigits: 8 })} ${coin}`
-            : `Balance: ${balance.toLocaleString(undefined, { maximumFractionDigits: 8 })} ${coin}`}
+            ? `Over by ${(parseFloat(cryptoAmt) - balance).toLocaleString(undefined, { maximumFractionDigits: 8 })} ${asset}`
+            : `Balance: ${balance.toLocaleString(undefined, { maximumFractionDigits: 8 })} ${asset}`}
         </Text>
-        {fiatValue > 0 && !overspend && (
+        {parseFloat(cryptoAmt) > 0 && !overspend && livePrice > 0 && (
           <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '600' }}>
-            ≈ {currSym}{fiatValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            ≈ {sym(baseCurrency)}{(parseFloat(cryptoAmt) * Number(livePrice)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </Text>
         )}
       </View>
 
-      {/* ── You receive panel ── */}
+      {/* ── Quote panel ── */}
       <View style={{
-        backgroundColor: p.bgElev, borderRadius: 18, borderWidth: 1, borderColor: p.border,
-        padding: 16, marginBottom: 20,
+        backgroundColor: p.bgElev, borderRadius: 18,
+        borderWidth: 1, borderColor: p.border,
+        padding: 16, marginBottom: 14, minHeight: 72, justifyContent: 'center',
       }}>
-        <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '700', letterSpacing: 0.5, marginBottom: 6 }}>YOU RECEIVE</Text>
-        <Text style={{ color: p.fg, fontSize: 28, fontWeight: '800', letterSpacing: -0.6, fontVariant: ['tabular-nums'] }}>
-          {fiatValue > 0 && !overspend
-            ? `${currSym}${fiatValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-            : `${currSym}0.00`}
-        </Text>
-        <Text style={{ color: p.fgFaint, fontSize: 12, marginTop: 4 }}>Instant · No hidden fees</Text>
+        {loading ? (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+            <ActivityIndicator size="small" color={meta.color} />
+            <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '600' }}>Getting best price…</Text>
+          </View>
+        ) : quote ? (
+          <>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+              <View>
+                <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '700', letterSpacing: 0.5, marginBottom: 4 }}>YOU RECEIVE</Text>
+                <Text style={{ color: p.fg, fontSize: 26, fontWeight: '800', letterSpacing: -0.5 }}>
+                  {sym(baseCurrency)}{fmt(quote.fiatAmount, 2)}{' '}
+                  <Text style={{ color: p.fgMuted, fontSize: 14 }}>USDT</Text>
+                </Text>
+              </View>
+              <View style={{
+                flexDirection: 'row', alignItems: 'center', gap: 4,
+                paddingHorizontal: 10, paddingVertical: 5, borderRadius: 12,
+                backgroundColor: timerCritical ? 'rgba(239,68,68,0.12)' : p.pillBg,
+                borderWidth: 1, borderColor: timerCritical ? p.redFg : p.border,
+              }}>
+                <Ionicons name="timer-outline" size={13} color={timerCritical ? p.redFg : p.fgMuted} />
+                <Text style={{ color: timerCritical ? p.redFg : p.fgMuted, fontSize: 12, fontWeight: '800' }}>{seconds}s</Text>
+              </View>
+            </View>
+            <Pressable
+              onPress={() => setShowFees(!showFees)}
+              style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 12, paddingTop: 10, borderTopWidth: 1, borderTopColor: p.border }}
+            >
+              <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '600' }}>
+                Fee  {sym(baseCurrency)}{fmt(Number(quote.platformFee) + Number(quote.networkFee), 2)}
+              </Text>
+              <Ionicons name={showFees ? 'chevron-up' : 'chevron-down'} size={14} color={p.fgMuted} />
+            </Pressable>
+            {showFees && (
+              <View style={{ marginTop: 10, gap: 6 }}>
+                {[
+                  ['Market price', `${sym(baseCurrency)}${fmtPrice(Number(quote.marketPrice))}`],
+                  ['Your price',   `${sym(baseCurrency)}${fmtPrice(Number(quote.quotedPrice))}`],
+                  ['Platform fee', `${sym(baseCurrency)}${fmt(quote.platformFee, 2)}`],
+                  ['Network fee',  `${sym(baseCurrency)}${fmt(quote.networkFee, 2)}`],
+                ].map(([k, v]) => (
+                  <View key={k} style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                    <Text style={{ color: p.fgMuted, fontSize: 12 }}>{k}</Text>
+                    <Text style={{ color: p.fg, fontSize: 12, fontWeight: '600' }}>{v}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+          </>
+        ) : (
+          <Text style={{ color: p.fgFaint, fontSize: 14, textAlign: 'center' }}>
+            {parseFloat(cryptoAmt) > 0 && !overspend ? 'Fetching quote…' : 'Enter an amount to sell'}
+          </Text>
+        )}
       </View>
 
-      {/* Success / Error feedback */}
-      {ctaState === 'success' && (
+      {/* Success / Error banners */}
+      {success && (
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: p.greenBg, borderRadius: 12, padding: 12, marginBottom: 14 }}>
           <Ionicons name="checkmark-circle" size={16} color={p.greenFg} />
-          <Text style={{ color: p.greenFg, fontSize: 13, flex: 1, fontWeight: '600' }}>
-            Sold {cryptoAmt > 0 ? `${amount} ` : ''}{coin} for {currSym}{fiatValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-          </Text>
+          <Text style={{ color: p.greenFg, fontSize: 13, flex: 1, fontWeight: '600' }}>{success}</Text>
         </View>
       )}
-      {ctaState === 'error' && (
+      {error && (
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: 'rgba(239,68,68,0.1)', borderRadius: 12, padding: 12, marginBottom: 14, borderWidth: 1, borderColor: 'rgba(239,68,68,0.2)' }}>
           <Ionicons name="alert-circle-outline" size={16} color={p.redFg} />
-          <Text style={{ color: p.redFg, fontSize: 13, flex: 1 }}>{ctaError ?? 'Order failed'}</Text>
+          <Text style={{ color: p.redFg, fontSize: 13, flex: 1 }}>{error}</Text>
         </View>
       )}
 
       {/* ── CTA ── */}
       <Pressable
-        onPress={onSell}
-        disabled={cryptoAmt <= 0 || overspend || ctaState === 'loading'}
-        style={({ pressed }) => {
-          const active = cryptoAmt > 0 && !overspend && ctaState !== 'loading';
-          const bg = ctaState === 'success' ? p.greenFg : ctaState === 'error' ? p.redFg : active ? p.ctaBg : p.bgElev;
-          return {
-            height: 56, borderRadius: 28,
-            backgroundColor: bg,
-            borderWidth: active ? 0 : 1, borderColor: p.border,
-            alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8,
-            opacity: pressed || ctaState === 'loading' ? 0.85 : 1,
-            shadowColor: active ? p.ctaBg : 'transparent',
-            shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.3, shadowRadius: 14, elevation: 6,
-          };
-        }}
+        onPress={onConfirm}
+        disabled={!canConfirm}
+        style={({ pressed }) => ({
+          height: 56, borderRadius: 28,
+          backgroundColor: canConfirm ? meta.color : p.bgElev,
+          borderWidth: canConfirm ? 0 : 1, borderColor: p.border,
+          alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8,
+          opacity: pressed || exec ? 0.85 : 1,
+          shadowColor: canConfirm ? meta.color : 'transparent',
+          shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.35, shadowRadius: 16, elevation: 6,
+        })}
       >
-        {ctaState === 'loading' ? (
-          <ActivityIndicator color={p.ctaFg} />
+        {exec ? (
+          <ActivityIndicator color="#fff" />
         ) : (
           <>
-            <Ionicons
-              name={ctaState === 'success' ? 'checkmark' : ctaState === 'error' ? 'alert-circle' : 'trending-down'}
-              size={18}
-              color={cryptoAmt > 0 && !overspend ? p.ctaFg : p.fgMuted}
-            />
-            <Text style={{ color: cryptoAmt > 0 && !overspend ? p.ctaFg : p.fgMuted, fontSize: 16, fontWeight: '800' }}>
-              {ctaState === 'success' ? `Sold ${coin}!`
-                : ctaState === 'error' ? 'Try again'
-                : cryptoAmt > 0 && !overspend
-                  ? `Sell ${amount} ${coin} · ${currSym}${fiatValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-                  : `Sell ${coin}`}
+            <Ionicons name={success ? 'checkmark' : 'trending-down'} size={18} color={canConfirm ? '#fff' : p.fgMuted} />
+            <Text style={{ color: canConfirm ? '#fff' : p.fgMuted, fontSize: 16, fontWeight: '800' }}>
+              {success
+                ? 'Sold!'
+                : canConfirm
+                  ? `Sell ${fmt(quote!.cryptoAmount, 8)} ${asset} · ${sym(baseCurrency)}${fmt(quote!.fiatAmount, 2)}`
+                  : `Sell ${asset}`}
             </Text>
           </>
         )}
       </Pressable>
+
+      {/* ── Asset picker sheet ── */}
+      <Modal visible={assetSheetOpen} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setAssetSheetOpen(false)}>
+        <View style={{ flex: 1, backgroundColor: p.bg }}>
+          {/* Header */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', padding: 20, paddingTop: 24, borderBottomWidth: 1, borderBottomColor: p.border }}>
+            <Text style={{ flex: 1, color: p.fg, fontSize: 18, fontWeight: '800' }}>Select asset to sell</Text>
+            <Pressable onPress={() => setAssetSheetOpen(false)} hitSlop={12}>
+              <Ionicons name="close" size={24} color={p.fg} />
+            </Pressable>
+          </View>
+          {/* Search bar */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', margin: 16, backgroundColor: p.bgElev, borderRadius: 14, borderWidth: 1, borderColor: p.border, paddingHorizontal: 14, gap: 10 }}>
+            <Ionicons name="search" size={16} color={p.fgMuted} />
+            <TextInput
+              ref={searchRef}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              placeholder="Search any token…"
+              placeholderTextColor={p.fgFaint}
+              autoCapitalize="none"
+              autoCorrect={false}
+              style={{ flex: 1, color: p.fg, fontSize: 15, paddingVertical: 12 }}
+            />
+            {searchLoading && <ActivityIndicator size="small" color={p.fgMuted} />}
+          </View>
+          {/* Section label */}
+          <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '700', letterSpacing: 0.5, marginHorizontal: 20, marginBottom: 8 }}>
+            {searchQuery.trim() ? 'SEARCH RESULTS' : 'YOUR HOLDINGS'}
+          </Text>
+          <ScrollView keyboardShouldPersistTaps="handled">
+            {displayList.map((item) => {
+              const m = assetMeta(item.symbol);
+              const holding = holdings.find((h) => h.displaySymbol === item.symbol);
+              return (
+                <Pressable
+                  key={item.symbol}
+                  onPress={() => {
+                    Haptics.selectionAsync();
+                    setAsset(item.symbol);
+                    setCryptoAmt(''); setQuote(null); setError(null); setSuccess(null);
+                    setAssetSheetOpen(false);
+                  }}
+                  style={({ pressed }) => ({
+                    flexDirection: 'row', alignItems: 'center',
+                    paddingHorizontal: 20, paddingVertical: 14,
+                    backgroundColor: pressed ? p.bgElev : 'transparent',
+                  })}
+                >
+                  <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: `${m.color}22`, alignItems: 'center', justifyContent: 'center', marginRight: 14 }}>
+                    <Text style={{ fontSize: 20, color: m.color, fontWeight: '800' }}>{m.icon}</Text>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ color: p.fg, fontSize: 15, fontWeight: '700' }}>{m.label}</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
+                      <Text style={{ color: p.fgMuted, fontSize: 12 }}>{item.symbol}</Text>
+                      {holding && (
+                        <Text style={{ color: p.fgMuted, fontSize: 12 }}>
+                          · {holding.balance.toLocaleString(undefined, { maximumFractionDigits: 6 })} held
+                        </Text>
+                      )}
+                    </View>
+                  </View>
+                  <View style={{ alignItems: 'flex-end', gap: 4 }}>
+                    {item.price > 0 && (
+                      <Text style={{ color: p.fg, fontSize: 14, fontWeight: '700', fontVariant: ['tabular-nums'] }}>
+                        {sym(baseCurrency)}{fmtPrice(item.price)}
+                      </Text>
+                    )}
+                    {item.change24h !== 0 && (
+                      <View style={{ paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, backgroundColor: item.change24h >= 0 ? p.greenBg : p.redBg }}>
+                        <Text style={{ color: item.change24h >= 0 ? p.greenFg : p.redFg, fontSize: 10, fontWeight: '800' }}>
+                          {item.change24h >= 0 ? '+' : ''}{item.change24h.toFixed(2)}%
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                </Pressable>
+              );
+            })}
+            {displayList.length === 0 && !searchLoading && (
+              <Text style={{ color: p.fgFaint, textAlign: 'center', marginTop: 40, fontSize: 14 }}>
+                {searchQuery.trim() ? 'No results found' : 'No holdings yet — buy some crypto first'}
+              </Text>
+            )}
+          </ScrollView>
+        </View>
+      </Modal>
     </View>
   );
 }

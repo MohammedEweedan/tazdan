@@ -2,10 +2,11 @@
  * Notifications inbox — real API-driven.
  */
 
-import { Pressable, Text, View, ActivityIndicator } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { ScreenShell, Panel } from '@/components/ui/ScreenShell';
+import { LoadingPulse } from '@/components/ui/LoadingPulse';
 import { useThemedPalette } from '@/store/themeStore';
 import { useHaptics, useNotifications, useMarkRead, useMarkAllRead } from '@/hooks';
 import { formatRelativeTime } from '@/utils/format';
@@ -66,7 +67,7 @@ export default function Notifications() {
     >
       {isLoading && (
         <View style={{ padding: 48, alignItems: 'center' }}>
-          <ActivityIndicator color={p.fg} />
+          <LoadingPulse size={56} icon="notifications-outline" />
         </View>
       )}
 

@@ -229,6 +229,52 @@ export const adminAPI = {
   getAMLFlags: (page = 1, status?: string, severity?: string) =>
     api.get(`/admin/aml-flags?page=${page}${status ? `&status=${status}` : ''}${severity ? `&severity=${severity}` : ''}`),
   resolveAMLFlag: (id: string, data: { status: string; resolution: string }) => api.put(`/admin/aml-flags/${id}/resolve`, data),
+  // Real-time metrics (txs/min, fees/min, fees by source)
+  getMetrics: () => api.get('/admin/metrics'),
+  // ── Extended admin coverage ─────────────────────────────────────
+  getP2PListings: (page = 1, status?: string) => api.get(`/admin/p2p/listings?page=${page}${status ? `&status=${status}` : ''}`),
+  getP2PTrades:   (page = 1, status?: string) => api.get(`/admin/p2p/trades?page=${page}${status ? `&status=${status}` : ''}`),
+  getP2PDisputes: (page = 1, status?: string) => api.get(`/admin/p2p/disputes?page=${page}${status ? `&status=${status}` : ''}`),
+  resolveP2PDispute: (id: string, data: { resolution: string; status?: string }) => api.put(`/admin/p2p/disputes/${id}/resolve`, data),
+
+  getCards:             (page = 1, status?: string) => api.get(`/admin/cards?page=${page}${status ? `&status=${status}` : ''}`),
+  getCardTransactions:  (page = 1, declined?: 'true' | 'false') => api.get(`/admin/card-transactions?page=${page}${declined ? `&declined=${declined}` : ''}`),
+
+  getMessages:        (page = 1) => api.get(`/admin/messages?page=${page}`),
+  getMessageReports:  (page = 1, status?: string) => api.get(`/admin/message-reports?page=${page}${status ? `&status=${status}` : ''}`),
+  getUserBlocks:      (page = 1) => api.get(`/admin/user-blocks?page=${page}`),
+
+  getReferrals: (page = 1, status?: string) => api.get(`/admin/referrals?page=${page}${status ? `&status=${status}` : ''}`),
+
+  getApiKeys:      (page = 1) => api.get(`/admin/api-keys?page=${page}`),
+  revokeApiKey:    (id: string) => api.put(`/admin/api-keys/${id}/revoke`),
+  getSessions:     (page = 1) => api.get(`/admin/sessions?page=${page}`),
+  revokeSession:   (id: string) => api.delete(`/admin/sessions/${id}`),
+  getLoginHistory: (page = 1) => api.get(`/admin/login-history?page=${page}`),
+
+  getWhatsAppMessages: (page = 1, direction?: string) => api.get(`/admin/whatsapp/messages?page=${page}${direction ? `&direction=${direction}` : ''}`),
+  getWhatsAppStats:    () => api.get('/admin/whatsapp/stats'),
+
+  getOnRamps:  (page = 1, status?: string) => api.get(`/admin/onramps?page=${page}${status ? `&status=${status}` : ''}`),
+  getOffRamps: (page = 1, status?: string) => api.get(`/admin/offramps?page=${page}${status ? `&status=${status}` : ''}`),
+
+  getMarkets:       (page = 1) => api.get(`/admin/markets?page=${page}`),
+  toggleMarket:     (id: string, isActive: boolean) => api.put(`/admin/markets/${id}/toggle`, { isActive }),
+
+  getOnChainTransactions: (page = 1) => api.get(`/admin/onchain-transactions?page=${page}`),
+  getWithdrawalWhitelist: (page = 1) => api.get(`/admin/withdrawal-whitelist?page=${page}`),
+
+  getTransfers:    (page = 1) => api.get(`/admin/transfers?page=${page}`),
+
+  getNotifications:       (page = 1) => api.get(`/admin/notifications?page=${page}`),
+  broadcastNotification:  (data: { title: string; message: string; type?: string; userIds?: string[] }) =>
+    api.post('/admin/notifications/broadcast', data),
+
+  // Platform banks (deposit rails)
+  getPlatformBanks:    () => api.get('/admin/platform-banks'),
+  createPlatformBank:  (data: any) => api.post('/admin/platform-banks', data),
+  updatePlatformBank:  (id: string, data: any) => api.put(`/admin/platform-banks/${id}`, data),
+  deletePlatformBank:  (id: string) => api.delete(`/admin/platform-banks/${id}`),
 };
 
 // Referrals
