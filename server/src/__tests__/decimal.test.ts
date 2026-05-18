@@ -18,7 +18,8 @@ describe('Decimal financial arithmetic', () => {
   it('handles micro amounts without losing precision', () => {
     const amount = new Decimal('0.00000001'); // 1 satoshi
     const fee = amount.mul('0.001');
-    expect(fee.toString()).toBe('0.00000000001');
+    // Use toFixed to force non-scientific notation for small values
+    expect(fee.toFixed(11)).toBe('0.00000000001');
   });
 
   it('correctly computes spread on BUY', () => {
@@ -35,8 +36,11 @@ describe('Decimal financial arithmetic', () => {
     expect(quotedPrice.toFixed(2)).toBe('49750.00');
   });
 
-  it('throws when dividing by zero', () => {
-    expect(() => new Decimal('100').div('0')).toThrow();
+  it('returns Infinity when dividing by zero (use explicit zero-guard in prod)', () => {
+    // Decimal.js returns Infinity rather than throwing; production code must
+    // guard against zero divisor before calling .div().
+    const result = new Decimal('100').div('0');
+    expect(result.isFinite()).toBe(false);
   });
 
   it('correctly handles large numbers (LYD volumes)', () => {

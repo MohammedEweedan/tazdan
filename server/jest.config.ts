@@ -18,7 +18,12 @@ const config: Config = {
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/src/$1',
   },
-  setupFilesAfterFramework: [],
+  setupFiles: ['<rootDir>/src/__tests__/setup.ts'],
+  testTimeout: 30000,
+  // Transform ESM-only packages that Jest can't require() directly
+  transformIgnorePatterns: ['node_modules/(?!(ed25519-hd-key)/)'],
+  // Integration tests require a live DB — run separately in CI
+  testPathIgnorePatterns: ['/node_modules/', '/dist/', 'integration\\.'],
 };
 
 export default config;

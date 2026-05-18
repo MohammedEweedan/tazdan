@@ -23,10 +23,26 @@
 import Decimal from 'decimal.js';
 import { Prisma } from '@prisma/client';
 import { ethers } from 'ethers';
+import axios from 'axios';
+import * as bitcoin from 'bitcoinjs-lib';
+import ECPairFactory from 'ecpair';
+import * as ecc from 'tiny-secp256k1';
+import {
+  Connection as SolConnection,
+  Keypair as SolKeypair,
+  PublicKey as SolPublicKey,
+  SystemProgram,
+  Transaction as SolTransaction,
+  sendAndConfirmTransaction,
+  LAMPORTS_PER_SOL,
+} from '@solana/web3.js';
 import { prisma } from '../../utils/prisma';
 import { AppError } from '../../middleware/errorHandler';
 import { deriveKeyForChain } from './walletDerivation.service';
 import { logger } from '../../utils/logger';
+
+bitcoin.initEccLib(ecc);
+const ECPair = ECPairFactory(ecc);
 
 Decimal.set({ precision: 40 });
 
@@ -203,10 +219,119 @@ async function broadcastUsdtErc20(opts: {
   return tx.hash;
 }
 
-// BTC / SOL / TRON broadcasting is stubbed — real impl needs UTXO
-// assembly (BTC), recent blockhash (SOL), signed Transaction (TRON).
-// For MVP we record the settlement request and flag it for a later
-// treasury sweep. Ledger side still debits, so UX is coherent.
+async function broadcastBtc(opts: {
+  privateKeyHex: string;
+  toAddress: string;
+  amountSat: bigint;
+}): Promise<string> {
+  const network = bitcoin.networks.bitcoin;
+  const keyPair = ECPair.fromPrivateKey(Buffer.from(opts.privateKeyHex.replace('0x', ''), 'hex'), { network });
+  const { address: fromAddress } = bitcoin.payments.p2wpkh({ pubkey: Buffer.from(keyPair.publicKey), network });
+  if (!fromAddress) return '';
+
+  // Fetch UTXOs from mempool.space
+  const utxoRes = await axios.get(`https://mempool.space/api/address/${fromAddress}/utxo`, { timeout: 8000 });
+  const utxos: Array<{ txid: string; vout: number; value: number }> = utxoRes.data;
+  if (!utxos.length) return '';
+
+  // Simple greedy coin selection
+  const feeRes = await axios.get('https://mempool.space/api/v1/fees/recommended', { timeout: 4000 });
+  const feeRate: number = feeRes.data?.halfHourFee ?? 10;
+  const estimatedFeeSat = BigInt(Math.ceil(feeRate * 141));
+  const needed = opts.amountSat + estimatedFeeSat;
+
+  const selected: typeof utxos = [];
+  let total = 0n;
+  for (const u of utxos.sort((a, b) => b.value - a.value)) {
+    selected.push(u);
+    total += BigInt(u.value);
+    if (total >= needed) break;
+  }
+  if (total < needed) return '';
+
+  // Fetch raw txs for non-witness inputs
+  const psbt = new bitcoin.Psbt({ network });
+  for (const utxo of selected) {
+    const rawRes = await axios.get(`https://mempool.space/api/tx/${utxo.txid}/hex`, { timeout: 8000 });
+    psbt.addInput({
+      hash: utxo.txid,
+      index: utxo.vout,
+      witnessUtxo: {
+        script: bitcoin.payments.p2wpkh({ pubkey: Buffer.from(keyPair.publicKey), network }).output!,
+        value: BigInt(utxo.value),
+      },
+      nonWitnessUtxo: Buffer.from(rawRes.data, 'hex'),
+    });
+  }
+
+  psbt.addOutput({ address: opts.toAddress, value: opts.amountSat });
+  const change = total - opts.amountSat - estimatedFeeSat;
+  if (change > 546n) psbt.addOutput({ address: fromAddress, value: change });
+
+  psbt.signAllInputs(keyPair);
+  psbt.finalizeAllInputs();
+  const txHex = psbt.extractTransaction().toHex();
+
+  const broadcastRes = await axios.post('https://mempool.space/api/tx', txHex, {
+    headers: { 'Content-Type': 'text/plain' },
+    timeout: 10000,
+  });
+  return broadcastRes.data as string;
+}
+
+async function broadcastSol(opts: {
+  privateKeyHex: string;
+  toAddress: string;
+  amountLamports: bigint;
+}): Promise<string> {
+  const rpcUrl = process.env.SOLANA_RPC_URL ?? 'https://api.mainnet-beta.solana.com';
+  const connection = new SolConnection(rpcUrl, 'confirmed');
+
+  const secretKey = Buffer.from(opts.privateKeyHex.replace('0x', ''), 'hex');
+  // BIP-44 derived keys are 32 bytes; Solana keypair needs 64-byte seed
+  const keypair = secretKey.length === 64
+    ? SolKeypair.fromSecretKey(secretKey)
+    : SolKeypair.fromSeed(secretKey.slice(0, 32));
+
+  const tx = new SolTransaction().add(
+    SystemProgram.transfer({
+      fromPubkey: keypair.publicKey,
+      toPubkey: new SolPublicKey(opts.toAddress),
+      lamports: opts.amountLamports,
+    })
+  );
+
+  const sig = await sendAndConfirmTransaction(connection, tx, [keypair], { commitment: 'confirmed' });
+  return sig;
+}
+
+async function broadcastUsdtTrc20(opts: {
+  privateKeyHex: string;
+  toAddress: string;
+  amount: string; // decimal USDT
+}): Promise<string> {
+  const fullNodeUrl = process.env.TRON_FULL_NODE ?? 'https://api.trongrid.io';
+  const solidityNodeUrl = process.env.TRON_SOLIDITY_NODE ?? 'https://api.trongrid.io';
+  const eventServerUrl = process.env.TRON_EVENT_SERVER ?? 'https://api.trongrid.io';
+
+  // Dynamic import — tronweb is an optional dep; if missing we return '' to fall back to SIMULATED
+  let TronWeb: any;
+  try {
+    ({ default: TronWeb } = await import('tronweb'));
+  } catch {
+    logger.warn('[withdrawal] tronweb not installed — BTC TRC20 broadcast skipped');
+    return '';
+  }
+
+  const tronWeb = new TronWeb({ fullHost: fullNodeUrl, privateKey: opts.privateKeyHex.replace('0x', '') });
+  const USDT_TRC20 = process.env.USDT_TRC20_ADDRESS ?? 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t';
+  const contract = await tronWeb.contract().at(USDT_TRC20);
+
+  // TRC-20 has 6 decimals
+  const amountSun = BigInt(Math.round(parseFloat(opts.amount) * 1_000_000));
+  const tx = await contract.transfer(opts.toAddress, amountSun.toString()).send();
+  return tx as string;
+}
 
 /**
  * Initiate a withdrawal. Atomically debits the internal ledger and
@@ -283,9 +408,14 @@ export async function initiateWithdrawal(opts: {
       txHash = await broadcastEvm({ privateKey: key.privateKey, toAddress: opts.toAddress, amountEth: amount.toFixed(18) });
     } else if (asset === 'USDT' && network === 'ERC20') {
       txHash = await broadcastUsdtErc20({ privateKey: key.privateKey, toAddress: opts.toAddress, amount: amount.toFixed(6) });
-    } else {
-      // BTC / SOL / USDT_TRC20 paths — TODO implement live broadcast.
-      simulated = true;
+    } else if (asset === 'BTC') {
+      const amountSat = BigInt(Math.round(amount.toNumber() * 1e8));
+      txHash = await broadcastBtc({ privateKeyHex: key.privateKey, toAddress: opts.toAddress, amountSat });
+    } else if (asset === 'SOL') {
+      const amountLamports = BigInt(Math.round(amount.toNumber() * LAMPORTS_PER_SOL));
+      txHash = await broadcastSol({ privateKeyHex: key.privateKey, toAddress: opts.toAddress, amountLamports });
+    } else if (asset === 'USDT' && network === 'TRC20') {
+      txHash = await broadcastUsdtTrc20({ privateKeyHex: key.privateKey, toAddress: opts.toAddress, amount: amount.toFixed(6) });
     }
     if (!txHash) simulated = true;
     // Wipe the key reference ASAP.

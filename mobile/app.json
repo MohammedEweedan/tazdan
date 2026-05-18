@@ -36,7 +36,14 @@
       "expo-secure-store",
       "expo-video",
       "expo-notifications",
-      "expo-web-browser"
+      "expo-web-browser",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "promrkts needs access to your photos to attach payment proof.",
+          "cameraPermission": "promrkts needs camera access to capture payment proof."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": false

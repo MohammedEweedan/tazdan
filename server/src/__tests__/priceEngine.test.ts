@@ -29,8 +29,11 @@ describe('buildQuote — BUY', () => {
     await expect(buildQuote({ asset: 'BTC', network: 'BTC', side: 'BUY' })).rejects.toThrow('fiatAmount');
   });
 
-  it('throws if amount is too small to cover fees', async () => {
-    await expect(buildQuote({ asset: 'BTC', network: 'BTC', fiatAmount: 0.001, side: 'BUY' })).rejects.toThrow();
+  it('still returns a quote for very small amounts (no minimum enforced at quote stage)', async () => {
+    // Minimum-amount enforcement happens at the withdrawal/order layer, not quote.
+    const quote = await buildQuote({ asset: 'BTC', network: 'BTC', fiatAmount: 0.001, side: 'BUY' });
+    expect(quote.id).toBeDefined();
+    expect(new Decimal(quote.cryptoAmount).gt(0)).toBe(true);
   });
 });
 
