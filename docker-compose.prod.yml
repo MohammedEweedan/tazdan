@@ -1,6 +1,6 @@
 # Production compose. Requires a .env file at project root with all secrets.
-# Bring up: docker compose -f docker-compose.prod.yml up -d
-# First deploy: docker compose -f docker-compose.prod.yml exec server npx prisma migrate deploy
+# Server only: docker compose -f docker-compose.prod.yml up -d redis server
+# Migrations:  docker compose -f docker-compose.prod.yml exec server npx prisma migrate deploy
 
 services:
   redis:
@@ -32,10 +32,13 @@ services:
       NODE_ENV: production
       PORT: 5000
       REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+    ports:
+      - '5000:5000'
     volumes:
       - uploads:/app/uploads
     networks:
       - internal
+      - external
 
   client:
     build:
