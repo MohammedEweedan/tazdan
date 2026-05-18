@@ -47,7 +47,7 @@ export default function PublicFooter() {
       title: t("footer_support"),
       links: [
         { label: t("nav_help"), href: "/help" },
-        { label: "FAQ", href: "/#faq" },
+        { label: "FAQ", href: "/faq" },
         { label: t("nav_contact"), href: "/contact" },
         { label: t("footer_terms"), href: "/terms" },
         { label: t("footer_privacy"), href: "/privacy" },
