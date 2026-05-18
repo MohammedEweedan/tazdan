@@ -1,7 +1,3 @@
-# Production compose. Requires a .env file at project root with all secrets.
-# Server only: docker compose -f docker-compose.prod.yml up -d redis server
-# Migrations:  docker compose -f docker-compose.prod.yml exec server npx prisma migrate deploy
-
 services:
   redis:
     image: redis:7-alpine
@@ -16,7 +12,7 @@ services:
       timeout: 5s
       retries: 5
     networks:
-      - internal
+      - app
 
   server:
     build:
@@ -37,8 +33,7 @@ services:
     volumes:
       - uploads:/app/uploads
     networks:
-      - internal
-      - external
+      - app
 
   client:
     build:
@@ -54,7 +49,7 @@ services:
       NEXT_PUBLIC_API_URL: https://${DOMAIN}/api
       NEXT_PUBLIC_WS_URL: https://${DOMAIN}
     networks:
-      - internal
+      - app
 
   nginx:
     image: nginx:1.27-alpine
@@ -72,8 +67,7 @@ services:
       - certbot-www:/var/www/certbot:ro
       - certbot-certs:/etc/letsencrypt:ro
     networks:
-      - internal
-      - external
+      - app
 
   certbot:
     image: certbot/certbot:latest
@@ -84,10 +78,7 @@ services:
     entrypoint: /bin/sh -c "trap exit TERM; while :; do certbot renew --webroot -w /var/www/certbot --quiet; sleep 12h & wait $${!}; done"
 
 networks:
-  internal:
-    driver: bridge
-    internal: true
-  external:
+  app:
     driver: bridge
 
 volumes:
