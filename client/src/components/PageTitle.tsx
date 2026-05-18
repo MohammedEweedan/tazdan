@@ -4,7 +4,7 @@ import { useEffect } from "react";
 import { usePathname } from "next/navigation";
 
 const TITLE_MAP: Record<string, string> = {
-  "/": "Home - promrkts",
+  "/": "promrkts — crypto made simple",
   "/about": "About - promrkts",
   "/contact": "Contact - promrkts",
   "/careers": "Careers - promrkts",
@@ -46,6 +46,11 @@ const TITLE_MAP: Record<string, string> = {
   "/forgot-password": "Forgot Password - promrkts",
   "/reset-password": "Reset Password - promrkts",
   "/pay": "Pay - promrkts",
+  "/cards": "Cards - promrkts",
+  "/features": "Features - promrkts",
+  "/faq": "FAQ - promrkts",
+  "/partners": "Partners - promrkts",
+  "/risk": "Risk Summary - promrkts",
 };
 
 export default function PageTitle() {

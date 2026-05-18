@@ -1,20 +1,30 @@
-@import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600;700;800;900&family=Cairo:wght@300;400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;0,9..40,800;0,9..40,900;1,9..40,400&family=Cairo:wght@300;400;500;600;700;800;900&display=swap');
 
 html, body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  font-family: 'DM Sans', 'Inter', system-ui, sans-serif;
+}
+
+html[lang='ar'],
+html[dir='rtl'] {
+  --ls-tight: 0em;
+  --ls-normal: 0em;
+  --ls-wide: 0em;
+}
+
+html[lang='ar'] *,
+html[dir='rtl'] * {
+  font-family: 'Cairo', system-ui, sans-serif;
+  letter-spacing: 0em !important;
+  word-spacing: normal;
+  text-rendering: optimizeLegibility;
+  -webkit-font-feature-settings: "kern" 1, "liga" 1, "calt" 1;
+  font-feature-settings: "kern" 1, "liga" 1, "calt" 1;
+}
+
+h1, h2, h3, h4, h5, h6 {
   font-family: 'DM Sans', system-ui, sans-serif;
-}
-
-h1, h2, h3, h4, .amwa-serif {
-  font-family: 'DM Serif Display', 'Cairo', serif;
-  letter-spacing: -0.02em;
-}
-.amwa-italic { font-style: italic; }
-
-[dir='rtl'] body { font-family: 'Cairo', 'DM Sans', system-ui, sans-serif !important; }
-[dir='rtl'] h1, [dir='rtl'] h2, [dir='rtl'] h3, [dir='rtl'] h4 {
-  font-family: 'Cairo', 'DM Serif Display', serif !important;
 }
 
 /* ── Bidi handling ────────────────────────────────────────
@@ -37,16 +47,6 @@ html[lang='ar'] [class*="chakra-heading"] {
   unicode-bidi: plaintext !important;
 }
 
-/* Arabic-language font swap (dir still stays LTR) */
-html[lang='ar'] body,
-html[lang='ar'] p,
-html[lang='ar'] [class*="chakra-text"] {
-  font-family: 'Cairo', 'DM Sans', system-ui, sans-serif;
-}
-html[lang='ar'] h1, html[lang='ar'] h2, html[lang='ar'] h3, html[lang='ar'] h4,
-html[lang='ar'] [class*="chakra-heading"] {
-  font-family: 'Cairo', 'DM Serif Display', serif;
-}
 
 /* ── Justification ────────────────────────────────────────
    Justify paragraph-level copy only. We skip anything the

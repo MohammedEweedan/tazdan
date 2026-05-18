@@ -23,11 +23,11 @@ export default function NotFound() {
   const { colorMode } = useColorMode();
   const dark = colorMode === "dark";
 
-  const bg = dark ? "#0a0a0f" : "#fafbfe";
+  const bg = dark ? "#000000" : "#ffffff";
   const textMain = dark ? "#ffffff" : "#0a0f1e";
-  const textSub = dark ? "rgba(255,255,255,0.6)" : "#475569";
-  const cardBg = dark ? "rgba(255,255,255,0.03)" : "white";
-  const cardBorder = dark ? "rgba(255,255,255,0.06)" : "rgba(0,87,184,0.08)";
+  const textSub = dark ? "rgba(255,255,255,0.6)" : "#64748b";
+  const cardBg = dark ? "rgba(255,255,255,0.04)" : "#f4f4f4";
+  const cardBorder = dark ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.10)";
   const ctaBg = dark ? "white" : "#0a0f1e";
   const ctaFg = dark ? "#0a0f1e" : "white";
 
@@ -54,7 +54,7 @@ export default function NotFound() {
           borderColor={cardBorder}
           borderRadius="24px"
           p={{ base: 8, md: 14 }}
-          boxShadow={dark ? "none" : "0 10px 40px rgba(0,87,184,0.06)"}
+          boxShadow={dark ? "none" : "0 10px 40px rgba(0,0,0,0.06)"}
         >
           <IconLogo size={56} variant="color" />
 
@@ -63,7 +63,9 @@ export default function NotFound() {
               fontSize={{ base: "72px", md: "96px" }}
               fontWeight="800"
               lineHeight="1"
-              bgGradient="linear(to-br, #0057b8, #00a3ff)"
+              bgGradient={dark
+                ? "linear(to-b, #ffffff 0%, rgba(255,255,255,0.4) 100%)"
+                : "linear(to-b, #000000 0%, rgba(0,0,0,0.3) 100%)"}
               bgClip="text"
               letterSpacing="-0.04em"
             >

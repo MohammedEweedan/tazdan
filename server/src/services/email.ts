@@ -103,7 +103,7 @@ function baseTemplate(title: string, body: string): string {
     /* ── Layout ── */
     .wrapper    { max-width: 560px; margin: 0 auto; padding: 48px 24px; }
     .logo-wrap  { text-align: left; margin-bottom: 40px; }
-    .logo-wrap img { height: 28px; width: auto; }
+    .logo-wrap img { height: 24px; width: auto; max-width: 100px; }
     .card       { border-radius: 20px; padding: 36px 32px; }
     h1 {
       font-size: 22px;
@@ -305,6 +305,28 @@ export async function sendVerificationEmail({
     </div>`
   );
   await sendEmail({ to, subject: 'Your promrkts verification code', html });
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Waitlist Confirmation
+───────────────────────────────────────────────────────────── */
+export async function sendWaitlistConfirmation({ to }: { to: string }) {
+  const html = baseTemplate(
+    "You're on the waitlist — promrkts",
+    `<h1 class="text-main">You're on the list.</h1>
+    <p class="text-muted">Thanks for joining the promrkts early-access waitlist. You'll be among the first to know when we open your region — and you'll get <strong class="text-main">0% fees for your first 6 months</strong>.</p>
+
+    <div class="divider"></div>
+
+    <p class="text-main" style="font-weight:700; font-size:15px; margin-bottom:6px;">What happens next?</p>
+    <p class="text-muted">We're onboarding users region by region. When your spot is ready you'll receive an invitation with a direct link to create your account.</p>
+    <p class="text-muted">In the meantime, share your link with friends — each referral moves you up the queue automatically.</p>
+
+    <div class="divider"></div>
+
+    <p class="text-muted" style="font-size:13px; margin:0;">Questions? Reply to this email or visit <a href="${CLIENT_URL}/faq" style="color:inherit;">promrkts.com/faq</a>.</p>`,
+  );
+  await sendEmail({ to, subject: "You're on the promrkts waitlist", html });
 }
 
 /* ─────────────────────────────────────────────────────────────

@@ -1,53 +1,24 @@
 'use client';
 
 import { useState } from 'react';
+import { useTranslate } from '@tolgee/react';
 import {
   Box, Container, Heading, Text, VStack, HStack,
   Icon, Collapse, Divider, useColorMode,
 } from '@chakra-ui/react';
 import { FiPlus, FiMinus } from 'react-icons/fi';
 
-const FAQS = [
-  {
-    q: 'What is promrkts?',
-    a: 'promrkts is a MENA-first financial super-app. You can buy and sell crypto, hold fiat currencies (USD, EUR, GBP, AED, SAR, EGP, LYD), send money internationally, trade peer-to-peer, and get a virtual Visa card — all in one place.',
-  },
-  {
-    q: 'Which countries are supported?',
-    a: 'We focus on the MENA region: Libya, Egypt, UAE, Saudi Arabia, Jordan, Kuwait, Bahrain, Qatar, Oman, Morocco, Tunisia, Algeria, Lebanon, and Iraq — plus the UK and US for the diaspora. More territories are added regularly.',
-  },
-  {
-    q: 'How do I deposit money?',
-    a: 'You can deposit via bank transfer in your local currency, or by card (Visa / Mastercard / Apple Pay / Google Pay). On-chain crypto deposits (BTC, ETH, USDT, SOL, TRX) are also supported directly to your wallet address.',
-  },
-  {
-    q: 'What are the fees?',
-    a: 'Crypto-to-crypto swaps charge 0.5%. Card deposits have a 2.9% + $0.30 processing fee. Bank transfers are free. Early-access members get 0% fees for their first 6 months.',
-  },
-  {
-    q: 'Is my money safe?',
-    a: 'Yes. Fiat funds are held in segregated accounts. Crypto assets are held in cold-storage wallets with multi-signature authorization. We use Sumsub for KYC/AML compliance and require identity verification before withdrawals.',
-  },
-  {
-    q: 'What is the P2P marketplace?',
-    a: 'The P2P marketplace lets you trade directly with other users at the rate you set. An escrow system holds funds until both parties confirm, so every trade is safe — even between strangers.',
-  },
-  {
-    q: 'How does the virtual Visa card work?',
-    a: 'Once KYC is approved you can issue a virtual Visa card from your promrkts balance in under 60 seconds. Use it for online purchases, subscriptions, and international payments anywhere Visa is accepted.',
-  },
-  {
-    q: 'Do I need to complete KYC?',
-    a: 'Basic account features (crypto deposits, viewing prices) work without KYC. Fiat deposits, withdrawals, P2P trading, and the virtual card all require identity verification — typically completed in under 5 minutes with a government ID and selfie.',
-  },
-  {
-    q: 'What currencies can I hold?',
-    a: 'Fiat: USD, EUR, GBP, AED, SAR, EGP, LYD. Crypto: BTC, ETH, USDT, SOL, XRP, BNB, ADA, DOGE, MATIC, DOT, AVAX, and more being added each quarter.',
-  },
-  {
-    q: 'How do I join the early-access waitlist?',
-    a: 'Scroll down and enter your email. You\'ll get 0% fees for 6 months once we open your region. Refer friends to move up the list — each referral bumps you up automatically.',
-  },
+const FAQ_KEYS = [
+  { q: 'faq_s_q1',  a: 'faq_s_a1'  },
+  { q: 'faq_s_q2',  a: 'faq_s_a2'  },
+  { q: 'faq_s_q3',  a: 'faq_s_a3'  },
+  { q: 'faq_s_q4',  a: 'faq_s_a4'  },
+  { q: 'faq_s_q5',  a: 'faq_s_a5'  },
+  { q: 'faq_s_q6',  a: 'faq_s_a6'  },
+  { q: 'faq_s_q7',  a: 'faq_s_a7'  },
+  { q: 'faq_s_q8',  a: 'faq_s_a8'  },
+  { q: 'faq_s_q9',  a: 'faq_s_a9'  },
+  { q: 'faq_s_q10', a: 'faq_s_a10' },
 ];
 
 function FAQItem({ q, a, last }: { q: string; a: string; last?: boolean }) {
@@ -57,8 +28,8 @@ function FAQItem({ q, a, last }: { q: string; a: string; last?: boolean }) {
 
   const textMain  = dark ? '#ffffff' : '#0a0f1e';
   const textSub   = dark ? 'rgba(255,255,255,0.6)' : '#475569';
-  const border    = dark ? 'rgba(255,255,255,0.07)' : 'rgba(0,87,184,0.09)';
-  const iconColor = dark ? 'rgba(255,255,255,0.4)' : 'rgba(0,87,184,0.5)';
+  const border    = dark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.08)';
+  const iconColor = dark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.35)';
 
   return (
     <Box borderBottom={last ? 'none' : '1px solid'} borderColor={border}>
@@ -113,11 +84,12 @@ function FAQItem({ q, a, last }: { q: string; a: string; last?: boolean }) {
 }
 
 export default function FAQSection() {
+  const { t } = useTranslate();
   const { colorMode } = useColorMode();
   const dark = colorMode === 'dark';
   const textMain = dark ? '#ffffff' : '#0a0f1e';
   const textSub  = dark ? 'rgba(255,255,255,0.55)' : '#64748b';
-  const accentBg = dark ? 'rgba(0,87,184,0.12)' : 'rgba(0,87,184,0.06)';
+  const accentBg = dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)';
 
   return (
     <Box id="faq" py={{ base: 20, md: 28 }} px={{ base: 5, md: 8 }}>
@@ -133,9 +105,9 @@ export default function FAQSection() {
             fontWeight="800"
             letterSpacing="0.12em"
             textTransform="uppercase"
-            color="#0057b8"
+            color={textMain}
           >
-            FAQ
+            {t('faq_section_tag')}
           </Box>
           <Heading
             fontSize={{ base: '34px', md: '50px' }}
@@ -144,22 +116,22 @@ export default function FAQSection() {
             color={textMain}
             lineHeight="1.05"
           >
-            Common questions
+            {t('faq_section_title')}
           </Heading>
           <Text
             fontSize={{ base: '15px', md: '17px' }}
             color={textSub}
             maxW="440px"
           >
-            Everything you need to know before you start. Can&apos;t find an answer?{' '}
+            {t('faq_section_sub')}{' '}
             <Box
               as="a"
               href="/contact"
-              color="#0057b8"
+              color={textMain}
               fontWeight="700"
               _hover={{ textDecoration: 'underline' }}
             >
-              Ask us directly.
+              {t('faq_section_ask')}
             </Box>
           </Text>
         </VStack>
@@ -167,14 +139,14 @@ export default function FAQSection() {
         {/* Accordion */}
         <Box
           border="1px solid"
-          borderColor={dark ? 'rgba(255,255,255,0.07)' : 'rgba(0,87,184,0.09)'}
+          borderColor={dark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.08)'}
           borderRadius="20px"
           px={{ base: 5, md: 8 }}
-          bg={dark ? 'rgba(255,255,255,0.02)' : 'white'}
-          boxShadow={dark ? 'none' : '0 4px 24px rgba(0,87,184,0.06)'}
+          bg={dark ? 'rgba(255,255,255,0.02)' : '#f9f9f9'}
+          boxShadow={dark ? 'none' : '0 4px 24px rgba(0,0,0,0.04)'}
         >
-          {FAQS.map((item, i) => (
-            <FAQItem key={item.q} q={item.q} a={item.a} last={i === FAQS.length - 1} />
+          {FAQ_KEYS.map((item, i) => (
+            <FAQItem key={item.q} q={t(item.q)} a={t(item.a)} last={i === FAQ_KEYS.length - 1} />
           ))}
         </Box>
       </Box>

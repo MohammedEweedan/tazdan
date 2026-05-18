@@ -2,327 +2,301 @@
 
 import NextLink from 'next/link';
 import {
-  Box, Container, VStack, HStack, Heading, Text, Button, SimpleGrid, Icon,
-  useColorModeValue, Divider, Badge, Flex, List, ListItem, ListIcon,
+  Box, Container, VStack, HStack, Heading, Text, Button, SimpleGrid,
+  Icon, Flex, Badge,
 } from '@chakra-ui/react';
-import { useTranslate } from '@tolgee/react';
 import {
   FiMapPin, FiBriefcase, FiClock, FiDollarSign, FiTrendingUp, FiUsers,
-  FiAward, FiTarget, FiSend, FiArrowRight, FiCheckCircle, FiStar, FiShield,
+  FiAward, FiTarget, FiSend, FiArrowRight, FiShield, FiZap, FiGlobe,
 } from 'react-icons/fi';
-import Logo from '@/components/ui/Logo';
+import { motion } from 'framer-motion';
+import { useColorMode } from '@chakra-ui/react';
+import PublicNav from '@/components/ui/PublicNav';
+import PublicFooter from '@/components/ui/PublicFooter';
+import WaitlistSection from '@/components/ui/WaitlistSection';
+
+const MotionBox = motion(Box as any);
+
+const BENEFITS = [
+  { icon: FiDollarSign, title: 'Competitive Salary',     desc: 'Market-leading compensation with performance bonuses.' },
+  { icon: FiAward,      title: 'Equity',                 desc: 'Real ownership in a fast-growing fintech company.' },
+  { icon: FiClock,      title: 'Flexible Hours',         desc: 'Async-first culture. Work when you do your best thinking.' },
+  { icon: FiTarget,     title: 'Growth Path',            desc: 'Clear career ladders and budget for continuous learning.' },
+  { icon: FiUsers,      title: 'World-class Team',       desc: 'Work alongside engineers and operators from top companies.' },
+  { icon: FiGlobe,      title: 'Remote-friendly',        desc: 'Most roles are fully remote with optional Tripoli hub access.' },
+];
+
+const VALUES = [
+  { icon: FiShield,      title: 'Security First',   desc: 'Every product decision starts with "is this safe for the user?"' },
+  { icon: FiZap,         title: 'Move Fast',         desc: 'We ship weekly, learn in days, and avoid death-by-committee.' },
+  { icon: FiTrendingUp,  title: 'Own the Outcome',  desc: 'We hire adults. You own your work end-to-end.' },
+];
+
+const POSITIONS = [
+  { title: 'Senior Frontend Engineer',      dept: 'Engineering', loc: 'Remote / Tripoli', type: 'Full-time', exp: '5+ yrs', skills: ['React', 'TypeScript', 'Next.js', 'Chakra UI'] },
+  { title: 'Backend Engineer',              dept: 'Engineering', loc: 'Tripoli',           type: 'Full-time', exp: '3+ yrs', skills: ['Node.js', 'PostgreSQL', 'API Design', 'Security'] },
+  { title: 'Product Manager',               dept: 'Product',     loc: 'Remote',            type: 'Full-time', exp: '3+ yrs', skills: ['Fintech', 'Agile', 'Data Analysis', 'User Research'] },
+  { title: 'Compliance & AML Officer',      dept: 'Compliance',  loc: 'Tripoli',           type: 'Full-time', exp: '2+ yrs', skills: ['AML/KYC', 'Regulations', 'Risk Management', 'Auditing'] },
+  { title: 'Customer Support Specialist',   dept: 'Support',     loc: 'Remote',            type: 'Full-time', exp: '1+ yrs', skills: ['Customer Service', 'Crypto', 'Multilingual'] },
+  { title: 'Growth & Marketing Manager',    dept: 'Marketing',   loc: 'Remote',            type: 'Full-time', exp: '4+ yrs', skills: ['Digital Marketing', 'Analytics', 'Growth', 'Content'] },
+];
 
 export default function CareersPage() {
-  const { t } = useTranslate();
+  const { colorMode } = useColorMode();
+  const dark = colorMode === 'dark';
 
-  // All useColorModeValue calls at top level
-  const cardBg = useColorModeValue('white', 'gray.800');
-  const cardBorder = useColorModeValue('gray.200', 'gray.700');
-  const subtleText = useColorModeValue('gray.600', 'gray.400');
-  const accentBg = useColorModeValue('brand.50', 'whiteAlpha.100');
+  const pageBg    = dark ? '#000000' : '#ffffff';
+  const textMain  = dark ? '#ffffff' : '#0a0f1e';
+  const textSub   = dark ? 'rgba(255,255,255,0.6)' : '#64748b';
+  const cardBg    = dark ? 'rgba(255,255,255,0.04)' : '#f4f4f4';
+  const cardBorder = dark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.10)';
+  const ctaBg     = dark ? '#ffffff' : '#0a0f1e';
+  const ctaFg     = dark ? '#000000' : '#ffffff';
 
-  const benefits = [
-    { icon: FiDollarSign, title: 'Competitive Salary', desc: 'Market-leading compensation packages' },
-    { icon: FiAward, title: 'Stock Options', desc: 'Equity in our growing company' },
-    { icon: FiClock, title: 'Flexible Hours', desc: 'Work-life balance with flexible schedules' },
-    { icon: FiTarget, title: 'Growth Opportunities', desc: 'Clear career advancement paths' },
-    { icon: FiUsers, title: 'Great Team', desc: 'Work with talented professionals' },
-    { icon: FiStar, title: 'Health Benefits', desc: 'Comprehensive health and wellness coverage' },
-  ];
-
-  const openPositions = [
-    {
-      title: 'Senior Frontend Developer',
-      department: 'Engineering',
-      location: 'Remote / Tripoli',
-      type: 'Full-time',
-      experience: '5+ years',
-      skills: ['React', 'TypeScript', 'Next.js', 'Chakra UI'],
-    },
-    {
-      title: 'Backend Engineer',
-      department: 'Engineering',
-      location: 'Tripoli',
-      type: 'Full-time',
-      experience: '3+ years',
-      skills: ['Node.js', 'PostgreSQL', 'API Design', 'Security'],
-    },
-    {
-      title: 'Product Manager',
-      department: 'Product',
-      location: 'Remote',
-      type: 'Full-time',
-      experience: '3+ years',
-      skills: ['Fintech', 'Agile', 'Data Analysis', 'User Research'],
-    },
-    {
-      title: 'Compliance Officer',
-      department: 'Compliance',
-      location: 'Tripoli',
-      type: 'Full-time',
-      experience: '2+ years',
-      skills: ['AML/KYC', 'Regulations', 'Risk Management', 'Auditing'],
-    },
-    {
-      title: 'Customer Support Specialist',
-      department: 'Support',
-      location: 'Remote',
-      type: 'Full-time',
-      experience: '1+ years',
-      skills: ['Customer Service', 'Cryptocurrency', 'Multilingual', 'Problem Solving'],
-    },
-    {
-      title: 'Marketing Manager',
-      department: 'Marketing',
-      location: 'Remote',
-      type: 'Full-time',
-      experience: '4+ years',
-      skills: ['Digital Marketing', 'Content Strategy', 'Analytics', 'Growth Hacking'],
-    },
-  ];
+  const titleGradient = dark
+    ? 'linear(to-b, #ffffff 0%, rgba(255,255,255,0.85) 60%, rgba(255,255,255,0.3) 100%)'
+    : 'linear(to-b, #000000 0%, rgba(0,0,0,0.7) 60%, rgba(0,0,0,0.2) 100%)';
 
   return (
-    <Box minH="100vh">
-      {/* Hero Section */}
-      <Box py={{ base: 20, md: 28 }} bgGradient="linear(to-b, brand.50, transparent 50%)">
-        <Container maxW="7xl">
-          <VStack spacing={8} textAlign="center" maxW="3xl" mx="auto">
-            <HStack as={NextLink} href="/" spacing={2} _hover={{ opacity: 0.85 }} transition="opacity 0.2s">
-              <Logo h={40} />
-            </HStack>
-            <Badge colorScheme="brand" px={4} py={2} rounded="full" fontSize="sm" textTransform="uppercase" letterSpacing="wider">
-              Join Our Team
-            </Badge>
-            <Heading size={{ base: '3xl', md: '4xl' }} fontWeight="extrabold" lineHeight="1.2">
-              Build the Future of
-              <br />
-              <Text as="span" bgGradient="linear(to-r, #0057b8, #1f9bff)" bgClip="text">
-                Global Crypto Trading
-              </Text>
-            </Heading>
-            <Text fontSize={{ base: 'lg', md: 'xl' }} color={subtleText} lineHeight="tall">
-              Join promrkts and help revolutionize cryptocurrency trading globally. We're looking for talented individuals who are passionate about fintech and want to make a real impact.
-            </Text>
-            <HStack spacing={4}>
-              <Button
-                as="a"
-                href="#open-positions"
-                bg="#0057b8"
-                color="white"
-                size="lg"
-                rightIcon={<FiArrowRight />}
-                _hover={{ bg: '#004ea7', transform: 'translateY(-2px)' }}
-                transition="all 0.2s"
-              >
-                View Open Positions
-              </Button>
-              <Button
-                as="a"
-                href="#culture"
-                variant="outline"
-                borderColor="brand.500"
-                color="brand.500"
-                size="lg"
-                _hover={{ bg: 'brand.50', _dark: { bg: 'whiteAlpha.100' } }}
-              >
-                Our Culture
-              </Button>
-            </HStack>
-          </VStack>
-        </Container>
-      </Box>
+    <Box minH="100vh" bg={pageBg} color={textMain} overflowX="clip">
+      <PublicNav />
 
-      {/* Why Join Us */}
-      <Box py={20} id="culture">
-        <Container maxW="7xl">
-          <VStack spacing={12}>
-            <VStack spacing={4} textAlign="center">
-              <Heading size="2xl" fontWeight="bold">Why Join promrkts?</Heading>
-              <Text fontSize="lg" color={subtleText} maxW="2xl">
-                We're building a leading global cryptocurrency exchange with a mission to make digital assets accessible to everyone.
+      {/* ── Hero ── */}
+      <Box pt={{ base: '120px', md: '170px' }} pb={{ base: 14, md: 20 }} textAlign="center">
+        <Container maxW="860px">
+          <motion.div initial={{ opacity: 0, y: 32 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.65, ease: [0.22, 1, 0.36, 1] }}>
+            <VStack spacing={6}>
+              <Box
+                display="inline-block" px={3} py={1} borderRadius="full"
+                bg={dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)'}
+                border="1px solid" borderColor={cardBorder}
+                fontSize="11px" fontWeight="800" letterSpacing="0.14em" textTransform="uppercase" color={textMain}
+              >
+                We&apos;re Hiring
+              </Box>
+              <Heading
+                as="h1" fontWeight="900"
+                fontSize={{ base: '52px', md: '88px' }}
+                lineHeight="0.95" letterSpacing="-0.045em"
+                bgGradient={titleGradient} bgClip="text"
+              >
+                Build the future{'\n'}of money
+              </Heading>
+              <Text fontSize={{ base: '15px', md: '19px' }} color={textSub} maxW="520px" lineHeight="1.7">
+                Join the team making crypto and cross-border finance simple for millions of people across the MENA region and beyond.
               </Text>
-            </VStack>
-
-            <SimpleGrid columns={{ base: 1, md: 2, lg: 3 }} spacing={8}>
-              {benefits.map((benefit, i) => (
-                <Box
-                  key={i}
-                  p={6}
-                  bg={cardBg}
-                  borderWidth="1px"
-                  borderColor={cardBorder}
-                  rounded="2xl"
-                  transition="all 0.3s"
-                  _hover={{ shadow: 'lg', borderColor: 'brand.500', transform: 'translateY(-4px)' }}
+              <HStack spacing={3} pt={2} flexWrap="wrap" justify="center">
+                <Button
+                  as="a" href="#open-positions"
+                  h="52px" px={8} bg={ctaBg} color={ctaFg}
+                  borderRadius="full" fontWeight="800" fontSize="14px"
+                  rightIcon={<Icon as={FiArrowRight} />}
+                  _hover={{ opacity: 0.88, transform: 'translateY(-1px)' }}
+                  transition="all 0.15s"
                 >
-                  <Flex align="center" justify="center" w={12} h={12} rounded="xl" bg={accentBg} mb={4}>
-                    <Icon as={benefit.icon} boxSize={6} color="brand.500" />
-                  </Flex>
-                  <Heading size="md" mb={2}>{benefit.title}</Heading>
-                  <Text fontSize="sm" color={subtleText} lineHeight="tall">{benefit.desc}</Text>
-                </Box>
-              ))}
-            </SimpleGrid>
-          </VStack>
+                  View Open Positions
+                </Button>
+                <Button
+                  as="a" href="#culture"
+                  h="52px" px={8}
+                  bg={dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)'}
+                  color={textMain}
+                  border="1px solid" borderColor={cardBorder}
+                  borderRadius="full" fontWeight="700" fontSize="14px"
+                  _hover={{ bg: dark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)' }}
+                  transition="all 0.15s"
+                >
+                  Our Culture
+                </Button>
+              </HStack>
+            </VStack>
+          </motion.div>
         </Container>
       </Box>
 
-      {/* Open Positions */}
-      <Box py={20} bg={cardBg} id="open-positions">
-        <Container maxW="7xl">
-          <VStack spacing={12}>
-            <VStack spacing={4} textAlign="center">
-              <Heading size="2xl" fontWeight="bold">Open Positions</Heading>
-              <Text fontSize="lg" color={subtleText}>
-                Find your next opportunity with us
+      {/* ── Why Join ── */}
+      <Box py={{ base: 16, md: 24 }} id="culture">
+        <Container maxW="1100px">
+          <motion.div initial={{ opacity: 0, y: 24 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, amount: 0.3 }} transition={{ duration: 0.6 }}>
+            <VStack spacing={3} mb={{ base: 10, md: 14 }} textAlign="center">
+              <Text fontSize="11px" fontWeight="800" letterSpacing="0.14em" textTransform="uppercase" color={textSub}>WHY PROMRKTS</Text>
+              <Heading fontSize={{ base: '32px', md: '52px' }} fontWeight="900" letterSpacing="-0.04em" color={textMain} lineHeight="1">
+                A career worth building
+              </Heading>
+            </VStack>
+          </motion.div>
+          <SimpleGrid columns={{ base: 1, md: 2, lg: 3 }} gap={4}>
+            {BENEFITS.map((b, i) => (
+              <motion.div key={b.title} initial={{ opacity: 0, y: 24 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, amount: 0.2 }} transition={{ duration: 0.5, delay: i * 0.07 }}>
+                <Box
+                  bg={cardBg} border="1px solid" borderColor={cardBorder}
+                  borderRadius="20px" p={6} h="100%"
+                  transition="all 0.2s ease"
+                  _hover={{ transform: 'translateY(-3px)', borderColor: dark ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.25)' }}
+                >
+                  <Flex w="40px" h="40px" borderRadius="12px"
+                    bg={dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)'}
+                    border="1px solid" borderColor={cardBorder}
+                    align="center" justify="center" mb={4}
+                  >
+                    <Icon as={b.icon} color={textMain} boxSize={4} />
+                  </Flex>
+                  <Text fontSize="16px" fontWeight="800" color={textMain} mb={2} letterSpacing="-0.01em">{b.title}</Text>
+                  <Text fontSize="13.5px" color={textSub} lineHeight="1.6">{b.desc}</Text>
+                </Box>
+              </motion.div>
+            ))}
+          </SimpleGrid>
+        </Container>
+      </Box>
+
+      {/* ── Values ── */}
+      <Box py={{ base: 16, md: 24 }} bg={dark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.02)'}>
+        <Container maxW="1100px">
+          <motion.div initial={{ opacity: 0, y: 24 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, amount: 0.3 }} transition={{ duration: 0.6 }}>
+            <VStack spacing={3} mb={{ base: 10, md: 14 }} textAlign="center">
+              <Text fontSize="11px" fontWeight="800" letterSpacing="0.14em" textTransform="uppercase" color={textSub}>OUR VALUES</Text>
+              <Heading fontSize={{ base: '32px', md: '52px' }} fontWeight="900" letterSpacing="-0.04em" color={textMain} lineHeight="1">
+                What we stand for
+              </Heading>
+            </VStack>
+          </motion.div>
+          <SimpleGrid columns={{ base: 1, md: 3 }} gap={4}>
+            {VALUES.map((v, i) => (
+              <motion.div key={v.title} initial={{ opacity: 0, y: 24 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, amount: 0.2 }} transition={{ duration: 0.5, delay: i * 0.08 }}>
+                <VStack
+                  bg={cardBg} border="1px solid" borderColor={cardBorder}
+                  borderRadius="20px" p={8} spacing={4} align="center" textAlign="center" h="100%"
+                  transition="all 0.2s ease"
+                  _hover={{ transform: 'translateY(-3px)', borderColor: dark ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.25)' }}
+                >
+                  <Flex w="56px" h="56px" borderRadius="16px"
+                    bg={dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)'}
+                    border="1px solid" borderColor={cardBorder}
+                    align="center" justify="center"
+                  >
+                    <Icon as={v.icon} color={textMain} boxSize={6} />
+                  </Flex>
+                  <Text fontSize="18px" fontWeight="800" color={textMain} letterSpacing="-0.015em">{v.title}</Text>
+                  <Text fontSize="14px" color={textSub} lineHeight="1.7">{v.desc}</Text>
+                </VStack>
+              </motion.div>
+            ))}
+          </SimpleGrid>
+        </Container>
+      </Box>
+
+      {/* ── Open Positions ── */}
+      <Box py={{ base: 16, md: 24 }} id="open-positions">
+        <Container maxW="1100px">
+          <motion.div initial={{ opacity: 0, y: 24 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, amount: 0.3 }} transition={{ duration: 0.6 }}>
+            <VStack spacing={3} mb={{ base: 10, md: 14 }} textAlign="center">
+              <Text fontSize="11px" fontWeight="800" letterSpacing="0.14em" textTransform="uppercase" color={textSub}>OPEN ROLES</Text>
+              <Heading fontSize={{ base: '32px', md: '52px' }} fontWeight="900" letterSpacing="-0.04em" color={textMain} lineHeight="1">
+                Find your role
+              </Heading>
+              <Text fontSize={{ base: '15px', md: '17px' }} color={textSub} maxW="400px">
+                All roles offer meaningful equity and real impact.
               </Text>
             </VStack>
+          </motion.div>
 
-            <SimpleGrid columns={{ base: 1, lg: 2 }} spacing={6}>
-              {openPositions.map((position, i) => (
+          <SimpleGrid columns={{ base: 1, lg: 2 }} gap={4}>
+            {POSITIONS.map((pos, i) => (
+              <motion.div key={pos.title} initial={{ opacity: 0, y: 24 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, amount: 0.15 }} transition={{ duration: 0.5, delay: i * 0.06 }}>
                 <Box
-                  key={i}
-                  p={6}
-                  borderWidth="1px"
-                  borderColor={cardBorder}
-                  rounded="2xl"
-                  transition="all 0.3s"
-                  _hover={{ shadow: 'lg', borderColor: 'brand.500' }}
+                  bg={cardBg} border="1px solid" borderColor={cardBorder}
+                  borderRadius="20px" p={6} h="100%"
+                  transition="all 0.2s ease"
+                  _hover={{ transform: 'translateY(-3px)', borderColor: dark ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.25)' }}
                 >
                   <VStack align="start" spacing={4}>
-                    <HStack justify="space-between" w="full">
-                      <Heading size="md" fontWeight="bold">{position.title}</Heading>
-                      <Badge colorScheme="green" variant="subtle">Open</Badge>
+                    <HStack justify="space-between" w="100%">
+                      <Text fontSize="17px" fontWeight="800" color={textMain} letterSpacing="-0.01em">{pos.title}</Text>
+                      <Badge
+                        bg={dark ? 'rgba(74,222,128,0.15)' : 'rgba(22,163,74,0.10)'}
+                        color={dark ? '#4ade80' : '#16a34a'}
+                        fontSize="9.5px" px={2.5} py={1} borderRadius="full" letterSpacing="0.08em" fontWeight="800"
+                      >
+                        OPEN
+                      </Badge>
                     </HStack>
-
                     <HStack spacing={4} flexWrap="wrap">
-                      <HStack spacing={1}>
-                        <Icon as={FiBriefcase} boxSize={4} color={subtleText} />
-                        <Text fontSize="sm" color={subtleText}>{position.department}</Text>
+                      <HStack spacing={1.5}>
+                        <Icon as={FiBriefcase} boxSize={3.5} color={textSub} />
+                        <Text fontSize="13px" color={textSub}>{pos.dept}</Text>
                       </HStack>
-                      <HStack spacing={1}>
-                        <Icon as={FiMapPin} boxSize={4} color={subtleText} />
-                        <Text fontSize="sm" color={subtleText}>{position.location}</Text>
+                      <HStack spacing={1.5}>
+                        <Icon as={FiMapPin} boxSize={3.5} color={textSub} />
+                        <Text fontSize="13px" color={textSub}>{pos.loc}</Text>
                       </HStack>
-                      <HStack spacing={1}>
-                        <Icon as={FiClock} boxSize={4} color={subtleText} />
-                        <Text fontSize="sm" color={subtleText}>{position.type}</Text>
+                      <HStack spacing={1.5}>
+                        <Icon as={FiClock} boxSize={3.5} color={textSub} />
+                        <Text fontSize="13px" color={textSub}>{pos.exp}</Text>
                       </HStack>
                     </HStack>
-
-                    <VStack align="start" spacing={2}>
-                      <Text fontSize="sm" fontWeight="medium">Experience Required:</Text>
-                      <Text fontSize="sm" color={subtleText}>{position.experience}</Text>
-                    </VStack>
-
-                    <VStack align="start" spacing={2}>
-                      <Text fontSize="sm" fontWeight="medium">Key Skills:</Text>
-                      <HStack spacing={2} flexWrap="wrap">
-                        {position.skills.map((skill, j) => (
-                          <Badge key={j} variant="outline" fontSize="xs" colorScheme="brand">
-                            {skill}
-                          </Badge>
-                        ))}
-                      </HStack>
-                    </VStack>
-
+                    <HStack spacing={2} flexWrap="wrap">
+                      {pos.skills.map((skill) => (
+                        <Box key={skill}
+                          px={2.5} py={1} borderRadius="8px"
+                          bg={dark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.05)'}
+                          border="1px solid" borderColor={cardBorder}
+                        >
+                          <Text fontSize="11px" fontWeight="700" color={textSub} letterSpacing="0.04em">{skill}</Text>
+                        </Box>
+                      ))}
+                    </HStack>
                     <Button
                       as="a"
-                      href={`mailto:careers@promrkts.com?subject=Application for ${position.title}`}
-                      bg="#0057b8"
-                      color="white"
-                      size="sm"
-                      rightIcon={<FiSend />}
-                      _hover={{ bg: '#004ea7' }}
-                      w="full"
+                      href={`mailto:careers@promrkts.com?subject=Application — ${pos.title}`}
+                      h="40px" px={5} w="100%"
+                      bg={ctaBg} color={ctaFg}
+                      borderRadius="full" fontWeight="700" fontSize="13px"
+                      rightIcon={<Icon as={FiSend} boxSize={3.5} />}
+                      _hover={{ opacity: 0.88 }}
+                      transition="all 0.15s"
                     >
                       Apply Now
                     </Button>
                   </VStack>
                 </Box>
-              ))}
-            </SimpleGrid>
+              </motion.div>
+            ))}
+          </SimpleGrid>
 
-            <VStack spacing={4} textAlign="center" py={8}>
-              <Heading size="lg" fontWeight="bold">Don't see what you're looking for?</Heading>
-              <Text color={subtleText} maxW="md">
-                We're always looking for talented people to join our team. Send us your resume and we'll keep you in mind for future opportunities.
+          {/* General application */}
+          <motion.div initial={{ opacity: 0, y: 24 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, amount: 0.3 }} transition={{ duration: 0.5, delay: 0.2 }}>
+            <VStack
+              mt={8} py={10} px={8} spacing={4} textAlign="center"
+              bg={cardBg} border="1px solid" borderColor={cardBorder} borderRadius="24px"
+            >
+              <Text fontSize="20px" fontWeight="800" color={textMain} letterSpacing="-0.02em">
+                Don&apos;t see your role?
+              </Text>
+              <Text fontSize="15px" color={textSub} maxW="400px" lineHeight="1.7">
+                We&apos;re always looking for exceptional talent. Send your CV and we&apos;ll reach out when the right role opens.
               </Text>
               <Button
                 as="a"
                 href="mailto:careers@promrkts.com?subject=General Application"
-                variant="outline"
-                borderColor="brand.500"
-                color="brand.500"
-                _hover={{ bg: 'brand.50', _dark: { bg: 'whiteAlpha.100' } }}
+                h="46px" px={7}
+                bg={dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)'}
+                color={textMain}
+                border="1px solid" borderColor={cardBorder}
+                borderRadius="full" fontWeight="700" fontSize="14px"
+                rightIcon={<Icon as={FiArrowRight} />}
+                _hover={{ bg: dark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.09)' }}
+                transition="all 0.15s"
               >
                 Send General Application
               </Button>
             </VStack>
-          </VStack>
+          </motion.div>
         </Container>
       </Box>
 
-      {/* Our Values */}
-      <Box py={20}>
-        <Container maxW="7xl">
-          <VStack spacing={12}>
-            <VStack spacing={4} textAlign="center">
-              <Heading size="2xl" fontWeight="bold">Our Values</Heading>
-              <Text fontSize="lg" color={subtleText} maxW="2xl">
-                The principles that guide everything we do
-              </Text>
-            </VStack>
-
-            <SimpleGrid columns={{ base: 1, md: 3 }} spacing={8}>
-              <VStack spacing={4} align="center">
-                <Flex align="center" justify="center" w={16} h={16} rounded="2xl" bg="brand.50" _dark={{ bg: 'whiteAlpha.100' }}>
-                  <Icon as={FiShield} boxSize={8} color="brand.500" />
-                </Flex>
-                <Heading size="md" textAlign="center">Security First</Heading>
-                <Text fontSize="sm" color={subtleText} textAlign="center" lineHeight="tall">
-                  We prioritize the security of our users' assets above everything else
-                </Text>
-              </VStack>
-
-              <VStack spacing={4} align="center">
-                <Flex align="center" justify="center" w={16} h={16} rounded="2xl" bg="brand.50" _dark={{ bg: 'whiteAlpha.100' }}>
-                  <Icon as={FiTrendingUp} boxSize={8} color="brand.500" />
-                </Flex>
-                <Heading size="md" textAlign="center">Innovation</Heading>
-                <Text fontSize="sm" color={subtleText} textAlign="center" lineHeight="tall">
-                  We constantly push boundaries to create better financial solutions
-                </Text>
-              </VStack>
-
-              <VStack spacing={4} align="center">
-                <Flex align="center" justify="center" w={16} h={16} rounded="2xl" bg="brand.50" _dark={{ bg: 'whiteAlpha.100' }}>
-                  <Icon as={FiUsers} boxSize={8} color="brand.500" />
-                </Flex>
-                <Heading size="md" textAlign="center">Customer Focus</Heading>
-                <Text fontSize="sm" color={subtleText} textAlign="center" lineHeight="tall">
-                  Our users are at the heart of every decision we make
-                </Text>
-              </VStack>
-            </SimpleGrid>
-          </VStack>
-        </Container>
-      </Box>
-
-      {/* Footer */}
-      <Box py={12} borderTopWidth="1px" borderColor={cardBorder}>
-        <Container maxW="7xl">
-          <Flex align="center" justify="space-between" direction={{ base: 'column', md: 'row' }} gap={4}>
-            <HStack spacing={2}>
-              <Logo h={32} />
-            </HStack>
-            <Text fontSize="sm" color={subtleText}>
-              Questions about careers? Contact us at{' '}
-              <Text as="span" color="brand.500" fontWeight="medium">careers@promrkts.com</Text>
-            </Text>
-          </Flex>
-        </Container>
-      </Box>
+      <WaitlistSection />
+      <PublicFooter />
     </Box>
   );
 }
