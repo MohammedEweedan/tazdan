@@ -36,6 +36,7 @@
       "expo-secure-store",
       "expo-video",
       "expo-notifications",
+      "expo-device",
       "expo-web-browser",
       [
         "expo-image-picker",

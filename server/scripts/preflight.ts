@@ -74,6 +74,27 @@ check('REDIS_URL set', 'WARN', !!env.REDIS_URL,
 check('KYC_PROVIDER set', isProd ? 'WARN' : 'INFO',
   !!env.KYC_PROVIDER && env.KYC_PROVIDER !== 'mock',
   `current: ${env.KYC_PROVIDER ?? 'not set'}`);
+check('SUMSUB_APP_TOKEN set', env.KYC_PROVIDER === 'SUMSUB' ? 'CRITICAL' : 'INFO',
+  !!env.SUMSUB_APP_TOKEN, 'required when KYC_PROVIDER=SUMSUB');
+check('SUMSUB_SECRET set', env.KYC_PROVIDER === 'SUMSUB' ? 'CRITICAL' : 'INFO',
+  !!env.SUMSUB_SECRET, 'required when KYC_PROVIDER=SUMSUB');
+check('SUMSUB_WEBHOOK_SECRET set', env.KYC_PROVIDER === 'SUMSUB' ? 'WARN' : 'INFO',
+  !!env.SUMSUB_WEBHOOK_SECRET, 'webhook verification; strongly recommended in production');
+
+// ── On-ramp (card payments) ───────────────────────────────────────────
+check('ONRAMP_PROVIDER set', isProd ? 'WARN' : 'INFO',
+  !!env.ONRAMP_PROVIDER && env.ONRAMP_PROVIDER !== 'MOCK',
+  `current: ${env.ONRAMP_PROVIDER ?? 'not set'}`);
+check('CHECKOUT_SECRET_KEY set', env.ONRAMP_PROVIDER === 'CHECKOUT' ? 'CRITICAL' : 'INFO',
+  !!env.CHECKOUT_SECRET_KEY, 'required when ONRAMP_PROVIDER=CHECKOUT');
+check('CHECKOUT_WEBHOOK_SECRET set', env.ONRAMP_PROVIDER === 'CHECKOUT' ? 'WARN' : 'INFO',
+  !!env.CHECKOUT_WEBHOOK_SECRET, 'Cko-Signature webhook verification');
+
+// ── Deposit webhooks ──────────────────────────────────────────────────
+check('ALCHEMY_WEBHOOK_SIGNING_KEY set', isProd ? 'WARN' : 'INFO',
+  !!env.ALCHEMY_WEBHOOK_SIGNING_KEY, 'HMAC verification for EVM on-chain deposits');
+check('TRON_WEBHOOK_API_KEY set', isProd ? 'WARN' : 'INFO',
+  !!env.TRON_WEBHOOK_API_KEY, 'API key verification for TRC-20 USDT deposits');
 
 // ── Print results ────────────────────────────────────────────────────
 const RESET  = '\x1b[0m';
