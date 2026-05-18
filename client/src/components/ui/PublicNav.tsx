@@ -80,6 +80,7 @@ export default function PublicNav() {
     : [
         { label: t("nav_markets"), href: "/markets" },
         { label: t("nav_fees"), href: "/fees" },
+        { label: "FAQ", href: "/#faq" },
         { label: t("nav_help"), href: "/help" },
         { label: t("nav_about"), href: "/about" },
       ];

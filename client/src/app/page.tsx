@@ -46,6 +46,8 @@ import PublicNav from "@/components/ui/PublicNav";
 import PublicFooter from "@/components/ui/PublicFooter";
 import FeeCalculator from "@/components/ui/FeeCalculator";
 import WaitlistSection from "@/components/ui/WaitlistSection";
+import FAQSection from "@/components/ui/FAQSection";
+import SupportSection from "@/components/ui/SupportSection";
 
 /* ─────────────────────────────────────────────────────────────────
    RESPONSIVE PHONE SIZING SYSTEM
@@ -2110,6 +2112,12 @@ export default function LandingPage() {
             <FeeCalculator />
           </VStack>
         </Box>
+
+        {/* ── FAQ section ──────────────────────────────────────────── */}
+        <FAQSection />
+
+        {/* ── Support / contact section ─────────────────────────────── */}
+        <SupportSection />
 
         {/* ── Waitlist section ─────────────────────────────────────── */}
         <WaitlistSection />
