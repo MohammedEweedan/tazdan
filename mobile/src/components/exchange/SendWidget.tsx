@@ -3,15 +3,8 @@
  * Recipient search · currency chips · large amount input · summary · CTA.
  */
 import { useEffect, useMemo, useState } from 'react';
-import {
-  ActivityIndicator,
-  Keyboard,
-  Pressable,
-  ScrollView,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { ActivityIndicator, Keyboard, Pressable, ScrollView, View } from 'react-native';
+import { Text, TextInput } from '@/components/ui/Text';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useQuery } from '@tanstack/react-query';
@@ -166,7 +159,7 @@ export function SendWidget() {
             onPress={() => { haptics.selection(); setMode(m); }}
             style={{ flex: 1, paddingVertical: 10, borderRadius: 11, alignItems: 'center', backgroundColor: mode === m ? p.ctaBg : 'transparent' }}
           >
-            <Text style={{ color: mode === m ? p.ctaFg : p.fgMuted, fontSize: 12, fontWeight: '800', letterSpacing: 0.4 }}>
+            <Text style={{ color: mode === m ? p.ctaFg : p.fgMuted, fontSize: 12, fontWeight: '600', letterSpacing: 0.4 }}>
               {m === 'FIAT' ? 'FIAT' : 'CRYPTO'}
             </Text>
           </Pressable>
@@ -218,7 +211,7 @@ export function SendWidget() {
                 })}
               >
                 <View style={{ width: 38, height: 38, borderRadius: 19, backgroundColor: '#7c3aed', alignItems: 'center', justifyContent: 'center' }}>
-                  <Text style={{ color: '#fff', fontWeight: '800', fontSize: 15 }}>
+                  <Text style={{ color: '#fff', fontWeight: '600', fontSize: 15 }}>
                     {m.firstName?.[0]?.toUpperCase() ?? m.username[0].toUpperCase()}
                   </Text>
                 </View>
@@ -228,7 +221,7 @@ export function SendWidget() {
                 </View>
                 {m.kycTier && m.kycTier !== 'TIER_0' && (
                   <View style={{ paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, backgroundColor: p.greenBg }}>
-                    <Text style={{ color: p.greenFg, fontSize: 9, fontWeight: '800' }}>KYC</Text>
+                    <Text style={{ color: p.greenFg, fontSize: 9, fontWeight: '600' }}>KYC</Text>
                   </View>
                 )}
               </Pressable>
@@ -256,9 +249,9 @@ export function SendWidget() {
               })}
             >
               <View style={{ width: 22, height: 22, borderRadius: 11, backgroundColor: active ? 'rgba(255,255,255,0.15)' : m.bg, alignItems: 'center', justifyContent: 'center' }}>
-                <Text style={{ color: active ? p.bg : m.color, fontSize: 11, fontWeight: '800' }}>{m.icon}</Text>
+                <Text style={{ color: active ? p.bg : m.color, fontSize: 11, fontWeight: '600' }}>{m.icon}</Text>
               </View>
-              <Text style={{ color: active ? p.bg : p.fg, fontSize: 12, fontWeight: '800' }}>{c}</Text>
+              <Text style={{ color: active ? p.bg : p.fg, fontSize: 12, fontWeight: '600' }}>{c}</Text>
             </Pressable>
           );
         })}
@@ -268,7 +261,7 @@ export function SendWidget() {
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
         <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '700', letterSpacing: 0.5 }}>{t('send.amount').toUpperCase()}</Text>
         <Pressable onPress={() => { haptics.selection(); setAmount(String(balance)); }} hitSlop={8}>
-          <Text style={{ color: p.ctaBg, fontSize: 12, fontWeight: '800' }}>{t('common.useMax').toUpperCase()}</Text>
+          <Text style={{ color: p.ctaBg, fontSize: 12, fontWeight: '600' }}>{t('common.useMax').toUpperCase()}</Text>
         </Pressable>
       </View>
       <View style={{
@@ -362,7 +355,7 @@ export function SendWidget() {
         ) : (
           <>
             <Ionicons name="paper-plane" size={17} color={valid ? p.ctaFg : p.fgMuted} />
-            <Text style={{ color: valid ? p.ctaFg : p.fgMuted, fontSize: 16, fontWeight: '800' }}>
+            <Text style={{ color: valid ? p.ctaFg : p.fgMuted, fontSize: 16, fontWeight: '600' }}>
               {valid
                 ? `Send ${sendAmount.toLocaleString('en-US', { maximumFractionDigits: 8 })} ${currency}`
                 : t('send.cta')}

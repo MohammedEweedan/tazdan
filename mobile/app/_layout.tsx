@@ -3,7 +3,8 @@
  */
 
 import { useEffect, useState } from 'react';
-import { AppState, Image } from 'react-native';
+import { AppState, Image, I18nManager } from 'react-native';
+import { Text, TextInput } from '@/components/ui/Text';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -12,6 +13,23 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { QueryClientProvider } from '@tanstack/react-query';
 import * as SystemUI from 'expo-system-ui';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
+import {
+  useFonts,
+  Outfit_300Light,
+  Outfit_400Regular,
+  Outfit_500Medium,
+  Outfit_600SemiBold,
+  Outfit_700Bold,
+  Outfit_800ExtraBold,
+  Outfit_900Black,
+} from '@expo-google-fonts/outfit';
+import {
+  IBMPlexSansArabic_300Light,
+  IBMPlexSansArabic_400Regular,
+  IBMPlexSansArabic_500Medium,
+  IBMPlexSansArabic_600SemiBold,
+  IBMPlexSansArabic_700Bold,
+} from '@expo-google-fonts/ibm-plex-sans-arabic';
 
 import { queryClient } from '@/lib/queryClient';
 import { setUnauthorizedHandler } from '@/lib/api';
@@ -23,6 +41,9 @@ import { STORAGE_KEYS } from '@/constants';
 // Match the dark palette bg exactly so the system chrome (keyboard toolbar,
 // nav bar on Android) never flashes a different shade of black.
 SystemUI.setBackgroundColorAsync('#141518').catch(() => {});
+
+// Force LTR everywhere
+try { I18nManager.allowRTL(false); I18nManager.forceRTL(false); } catch { /* noop */ }
 
 function AuthGate() {
   const segments = useSegments();
@@ -104,6 +125,24 @@ function SplashOverlay() {
 }
 
 export default function RootLayout() {
+  const [fontsLoaded] = useFonts({
+    Outfit_300Light,
+    Outfit_400Regular,
+    Outfit_500Medium,
+    Outfit_600SemiBold,
+    Outfit_700Bold,
+    Outfit_800ExtraBold,
+    Outfit_900Black,
+    IBMPlexSansArabic_300Light,
+    IBMPlexSansArabic_400Regular,
+    IBMPlexSansArabic_500Medium,
+    IBMPlexSansArabic_600SemiBold,
+    IBMPlexSansArabic_700Bold,
+  });
+
+  // Block rendering until custom fonts are ready so no FOUT on first frame.
+  if (!fontsLoaded) return null;
+
   return (
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: '#141518' }}>
       <SafeAreaProvider>

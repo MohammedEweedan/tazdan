@@ -266,9 +266,11 @@ export const adminAPI = {
 
   getTransfers:    (page = 1) => api.get(`/admin/transfers?page=${page}`),
 
-  getNotifications:       (page = 1) => api.get(`/admin/notifications?page=${page}`),
-  broadcastNotification:  (data: { title: string; message: string; type?: string; userIds?: string[] }) =>
+  getNotifications:           (page = 1) => api.get(`/admin/notifications?page=${page}`),
+  broadcastNotification:      (data: { title: string; message: string; type?: string; userIds?: string[] }) =>
     api.post('/admin/notifications/broadcast', data),
+  getBroadcastRecipients:     (broadcastId: string, page = 1, read?: 'true' | 'false') =>
+    api.get(`/admin/notifications/${broadcastId}/recipients?page=${page}${read ? `&read=${read}` : ''}`),
 
   // Platform banks (deposit rails)
   getPlatformBanks:    () => api.get('/admin/platform-banks'),

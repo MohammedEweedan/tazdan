@@ -18,7 +18,8 @@
  * dominates. The optional `youReceive` row is split below a divider
  * — visually distinct from the cost stack.
  */
-import { View, Text } from 'react-native';
+import { View } from 'react-native';
+import { Text } from '@/components/ui/Text';
 import { useThemedPalette } from '@/store/themeStore';
 import { formatMoney } from '@/utils/format';
 import type { Currency } from '@/types';

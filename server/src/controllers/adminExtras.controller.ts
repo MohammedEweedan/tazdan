@@ -9,9 +9,11 @@
  */
 import { Response, NextFunction } from 'express';
 import { z } from 'zod';
+import { Prisma } from '@prisma/client';
 import { prisma } from '../utils/prisma';
 import { AppError } from '../middleware/errorHandler';
 import { AuthRequest } from '../types';
+import { emitNotification } from '../utils/realtime';
 
 function pageLimit(req: AuthRequest): { page: number; limit: number; skip: number } {
   const page  = Math.max(1, parseInt(String(req.query.page ?? '1'),  10) || 1);
@@ -391,44 +393,193 @@ export class AdminExtrasController {
   }
 
   // ── Notifications ──────────────────────────────────────────────
+  // Admin view: group by broadcastId (preferred) or fall back to title+message+minute bucket.
+  // Returns one row per broadcast with recipient/read counts and sender info.
   static async listNotifications(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const { page, limit, skip } = pageLimit(req);
-      const [items, total] = await Promise.all([
+
+      const grouped = await prisma.$queryRaw<Array<{
+        broadcastId: string | null;
+        title: string;
+        subtitle: string | null;
+        message: string;
+        description: string | null;
+        mediaUrl: string | null;
+        mediaType: string | null;
+        type: string;
+        createdBy: string | null;
+        createdByEmail: string | null;
+        createdByName: string | null;
+        recipientCount: bigint;
+        readCount: bigint;
+        sampleId: string;
+        createdAt: Date;
+      }>>`
+        SELECT
+          n."broadcastId",
+          n.title,
+          n.subtitle,
+          n.message,
+          n.description,
+          n."mediaUrl",
+          n."mediaType",
+          n.type,
+          n."createdBy",
+          u.email                                         AS "createdByEmail",
+          CONCAT(u."firstName", ' ', u."lastName")        AS "createdByName",
+          COUNT(*)::bigint                                AS "recipientCount",
+          COUNT(*) FILTER (WHERE n."isRead")::bigint      AS "readCount",
+          MIN(n.id)                                       AS "sampleId",
+          MAX(n."createdAt")                              AS "createdAt"
+        FROM "Notification" n
+        LEFT JOIN "User" u ON u.id = n."createdBy"
+        GROUP BY
+          n."broadcastId",
+          n.title, n.subtitle, n.message, n.description,
+          n."mediaUrl", n."mediaType", n.type,
+          n."createdBy", u.email, u."firstName", u."lastName",
+          date_trunc('minute', n."createdAt")
+        ORDER BY MAX(n."createdAt") DESC
+        LIMIT ${limit} OFFSET ${skip}
+      `;
+
+      const totalGroups = await prisma.$queryRaw<Array<{ count: bigint }>>`
+        SELECT COUNT(*) AS count FROM (
+          SELECT 1 FROM "Notification"
+          GROUP BY "broadcastId", title, subtitle, message, description, "mediaUrl", "mediaType", type, "createdBy", date_trunc('minute', "createdAt")
+        ) sub
+      `;
+      const total = Number((totalGroups[0] as any)?.count ?? 0);
+
+      const items = grouped.map((g) => ({
+        id:             g.sampleId,
+        broadcastId:    g.broadcastId,
+        title:          g.title,
+        subtitle:       g.subtitle,
+        message:        g.message,
+        description:    g.description,
+        mediaUrl:       g.mediaUrl,
+        mediaType:      g.mediaType,
+        type:           g.type,
+        createdAt:      g.createdAt,
+        recipientCount: Number(g.recipientCount),
+        readCount:      Number(g.readCount),
+        sender: g.createdBy ? {
+          id:    g.createdBy,
+          email: g.createdByEmail,
+          name:  g.createdByName?.trim() || g.createdByEmail,
+        } : null,
+      }));
+
+      res.json(packPage(items, total, page, limit));
+    } catch (e) { next(e); }
+  }
+
+  // GET /admin/notifications/:broadcastId/recipients — paginated list of users + read status
+  static async getBroadcastRecipients(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const { broadcastId } = req.params;
+      const { page, limit, skip } = pageLimit(req);
+      const readFilter = req.query.read; // 'true' | 'false' | undefined
+
+      const where: any = { broadcastId };
+      if (readFilter === 'true') where.isRead = true;
+      if (readFilter === 'false') where.isRead = false;
+
+      const [rows, total] = await Promise.all([
         prisma.notification.findMany({
-          orderBy: { createdAt: 'desc' }, skip, take: limit,
+          where,
+          orderBy: { createdAt: 'desc' },
+          skip,
+          take: limit,
+          select: {
+            id: true,
+            isRead: true,
+            createdAt: true,
+            user: { select: { id: true, email: true, firstName: true, lastName: true, username: true, avatarUrl: true } },
+          },
         }),
-        prisma.notification.count(),
+        prisma.notification.count({ where }),
       ]);
+
+      const items = rows.map((r) => ({
+        notifId:  r.id,
+        isRead:   r.isRead,
+        readAt:   r.isRead ? r.createdAt : null,
+        user:     r.user,
+      }));
+
       res.json(packPage(items, total, page, limit));
     } catch (e) { next(e); }
   }
 
   static async broadcastNotification(req: AuthRequest, res: Response, next: NextFunction) {
     try {
-      const { title, message, type = 'announcement', userIds } = z.object({
-        title:   z.string().min(1).max(120),
-        message: z.string().min(1).max(2000),
-        type:    z.string().optional(),
-        userIds: z.array(z.string().uuid()).optional(),
+      const parsed = z.object({
+        title:        z.string().min(1).max(120),
+        subtitle:     z.string().max(200).optional(),
+        description:  z.string().max(2000).optional(),
+        message:      z.string().min(1).max(2000).optional(),
+        body:         z.string().min(1).max(2000).optional(),
+        type:         z.string().optional(),
+        mediaUrl:     z.string().url().max(500).optional(),
+        mediaType:    z.enum(['image', 'gif', 'video', 'none']).optional(),
+        locales:      z.record(z.object({ title: z.string(), subtitle: z.string().optional(), description: z.string().optional() })).optional(),
+        targetRoles:  z.array(z.string()).optional(),
+        targetUserIds: z.array(z.string().uuid()).optional(),
       }).parse(req.body);
+      const { title, subtitle, description, type = 'announcement', mediaUrl, mediaType, locales, targetRoles, targetUserIds } = parsed;
+      const message = parsed.message ?? parsed.body ?? '';
+      if (!message && !description) return next(new AppError('body, message or description is required', 400));
 
-      let targets: string[];
-      if (userIds && userIds.length > 0) {
-        targets = userIds;
-      } else {
-        const rows = await prisma.user.findMany({
-          where: { role: 'USER', status: 'ACTIVE' },
-          select: { id: true },
-        });
-        targets = rows.map((r) => r.id);
-      }
+      const broadcastId = crypto.randomUUID();
+      const adminId = req.user!.id;
+
+      let userWhere: any = { status: 'ACTIVE' };
+      if (targetRoles && targetRoles.length > 0) userWhere.role = { in: targetRoles };
+      if (targetUserIds && targetUserIds.length > 0) userWhere.id = { in: targetUserIds };
+
+      const rows = await prisma.user.findMany({ where: userWhere, select: { id: true } });
+      const targets = rows.map((r) => r.id);
+
+      if (targets.length === 0) return res.json({ delivered: 0 });
+
       await prisma.notification.createMany({
-        data: targets.map((userId) => ({ userId, title, message, type })),
+        data: targets.map((userId) => ({
+          userId,
+          title,
+          subtitle:    subtitle    ?? null,
+          message,
+          description: description ?? null,
+          mediaUrl:    mediaUrl    ?? null,
+          mediaType:   mediaType   ?? null,
+          locales: locales != null ? (locales as Prisma.InputJsonValue) : Prisma.JsonNull,
+          type,
+          broadcastId,
+          createdBy: adminId,
+        })),
       });
-      res.json({ delivered: targets.length });
+      emitNotification(req, targets, { title, subtitle, message, description, mediaUrl, mediaType, type });
+      res.json({ delivered: targets.length, broadcastId });
     } catch (e) {
       if (e instanceof z.ZodError) return next(new AppError('Invalid payload', 400));
+      next(e);
+    }
+  }
+
+  static async uploadMedia(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      console.log('[uploadMedia] content-type:', req.headers['content-type']);
+      console.log('[uploadMedia] req.file:', req.file);
+      console.log('[uploadMedia] req.files:', req.files);
+      console.log('[uploadMedia] req.body keys:', Object.keys(req.body ?? {}));
+      if (!req.file) return next(new AppError('No file uploaded', 400));
+      const baseUrl = process.env.BASE_URL || `${req.protocol}://${req.get('host')}`;
+      const url = `${baseUrl}/media/${req.file.filename}`;
+      const mediaType = req.file.mimetype.startsWith('video/') ? 'video' : 'image';
+      res.json({ url, mediaType, filename: req.file.filename });
+    } catch (e) {
       next(e);
     }
   }
@@ -498,6 +649,96 @@ export class AdminExtrasController {
     try {
       await (prisma as any).platformBankAccount.delete({ where: { id: req.params.id } });
       res.json({ ok: true });
+    } catch (e) { next(e); }
+  }
+
+  // ── Data browser (raw paginated reads of every core model) ───────
+  static async listRawTransactions(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const { page, limit, skip } = pageLimit(req);
+      const search = String(req.query.search ?? '');
+      const type = req.query.type ? String(req.query.type) : undefined;
+      const currency = req.query.currency ? String(req.query.currency) : undefined;
+      const where: any = {};
+      if (type) where.type = type;
+      if (currency) where.currency = currency;
+      if (search) where.OR = [
+        { id: { contains: search, mode: 'insensitive' } },
+        { reference: { contains: search, mode: 'insensitive' } },
+      ];
+      const [items, total] = await prisma.$transaction([
+        prisma.transaction.findMany({ where, skip, take: limit, orderBy: { createdAt: 'desc' }, include: { user: { select: { email: true, username: true } } } }),
+        prisma.transaction.count({ where }),
+      ]);
+      res.json(packPage(items, total, page, limit));
+    } catch (e) { next(e); }
+  }
+
+  static async listRawWallets(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const { page, limit, skip } = pageLimit(req);
+      const currency = req.query.currency ? String(req.query.currency) : undefined;
+      const userId = req.query.userId ? String(req.query.userId) : undefined;
+      const where: any = {};
+      if (currency) where.currency = currency;
+      if (userId) where.userId = userId;
+      const [items, total] = await prisma.$transaction([
+        prisma.wallet.findMany({ where, skip, take: limit, orderBy: { updatedAt: 'desc' }, include: { user: { select: { email: true, username: true } } } }),
+        prisma.wallet.count({ where }),
+      ]);
+      res.json(packPage(items, total, page, limit));
+    } catch (e) { next(e); }
+  }
+
+  static async listRawBankAccounts(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const { page, limit, skip } = pageLimit(req);
+      const search = String(req.query.search ?? '');
+      const where: any = search ? {
+        OR: [
+          { bankName: { contains: search, mode: 'insensitive' } },
+          { accountName: { contains: search, mode: 'insensitive' } },
+        ],
+      } : {};
+      const [items, total] = await prisma.$transaction([
+        prisma.bankAccount.findMany({ where, skip, take: limit, orderBy: { createdAt: 'desc' }, include: { user: { select: { email: true, username: true } } } }),
+        prisma.bankAccount.count({ where }),
+      ]);
+      res.json(packPage(items, total, page, limit));
+    } catch (e) { next(e); }
+  }
+
+  static async listRawP2PTrades(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const { page, limit, skip } = pageLimit(req);
+      const status = req.query.status ? String(req.query.status) : undefined;
+      const where: any = status ? { status } : {};
+      const [items, total] = await prisma.$transaction([
+        prisma.p2PTrade.findMany({ where, skip, take: limit, orderBy: { createdAt: 'desc' }, include: { buyer: { select: { email: true, username: true } }, seller: { select: { email: true, username: true } } } }),
+        prisma.p2PTrade.count({ where }),
+      ]);
+      res.json(packPage(items, total, page, limit));
+    } catch (e) { next(e); }
+  }
+
+  static async listPlatformFees(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const { page, limit, skip } = pageLimit(req);
+      const source = req.query.source ? String(req.query.source) : undefined;
+      const currency = req.query.currency ? String(req.query.currency) : undefined;
+      const where: any = {};
+      if (source) where.source = source;
+      if (currency) where.currency = currency;
+      const [items, total, totals] = await Promise.all([
+        prisma.platformFee.findMany({ where, skip, take: limit, orderBy: { createdAt: 'desc' } }),
+        prisma.platformFee.count({ where }),
+        prisma.platformFee.groupBy({
+          by: ['currency'],
+          where,
+          _sum: { amountUsd: true, amount: true },
+        }),
+      ]);
+      res.json({ ...packPage(items, total, page, limit), totalsByCurrency: totals });
     } catch (e) { next(e); }
   }
 }

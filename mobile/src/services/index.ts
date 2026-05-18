@@ -10,7 +10,7 @@
 
 import { api } from '@/lib/api';
 import { secureStore } from '@/lib/secureStore';
-import { STORAGE_KEYS } from '@/constants';
+import { APP, STORAGE_KEYS } from '@/constants';
 import {
   MOCK_CARDS, MOCK_MARKETS, MOCK_P2P_OFFERS, MOCK_TRANSACTIONS, MOCK_WALLETS,
 } from '@/data/fakeData';
@@ -414,6 +414,10 @@ export const notificationService = {
   },
   markRead: (id: string) => api.put(`/notifications/${id}/read`),
   markAllRead: () => api.put('/notifications/read-all'),
+  latestAnnouncement: async (): Promise<{ notification: any | null }> => {
+    const { data } = await api.get('/notifications/latest-announcement');
+    return data;
+  },
 };
 
 // ───────── Messages ─────────
@@ -718,13 +722,14 @@ export const adminService = {
     const { data } = await api.put(`/admin/withdrawals/${id}/reject`, { reason });
     return data;
   },
-  kyc: () => withFallback<{ pendingKyc: any[]; total: number }>(
-    async () => {
-      const { data } = await api.get('/admin/kyc');
-      return data;
-    },
-    { pendingKyc: [], total: 0 },
-  ),
+  kyc: (params?: { status?: string; page?: number; limit?: number }) =>
+    withFallback<{ users: any[]; total: number; page: number; totalPages: number }>(
+      async () => {
+        const { data } = await api.get('/admin/kyc', { params });
+        return data;
+      },
+      { users: [], total: 0, page: 1, totalPages: 1 },
+    ),
   approveKYC: async (userId: string) => {
     const { data } = await api.put(`/admin/kyc/${userId}/approve`);
     return data;
@@ -853,6 +858,34 @@ export const adminService = {
       async () => (await api.get('/admin/p2p/disputes', { params })).data,
       { items: [], total: 0, page: 1, totalPages: 1 },
     ),
+  resolveP2PDispute: async (id: string, payload: { resolution: string; status?: 'RESOLVED' | 'CLOSED' | 'ESCALATED' }) => {
+    const { data } = await api.put(`/admin/p2p/disputes/${id}/resolve`, payload);
+    return data;
+  },
+  toggleMarket: async (id: string) => {
+    const { data } = await api.put(`/admin/markets/${id}/toggle`);
+    return data;
+  },
+  markOnChainSent: async (id: string) => {
+    const { data } = await api.put(`/admin/on-chain-txs/${id}/sent`);
+    return data;
+  },
+  revokeApiKey: async (id: string) => {
+    const { data } = await api.put(`/admin/api-keys/${id}/revoke`);
+    return data;
+  },
+  createPlatformBank: async (payload: any) => {
+    const { data } = await api.post('/admin/platform-banks', payload);
+    return data;
+  },
+  updatePlatformBank: async (id: string, payload: any) => {
+    const { data } = await api.put(`/admin/platform-banks/${id}`, payload);
+    return data;
+  },
+  deletePlatformBank: async (id: string) => {
+    const { data } = await api.delete(`/admin/platform-banks/${id}`);
+    return data;
+  },
   rawCardTransactions: (params?: { page?: number; limit?: number; cardId?: string }) =>
     withFallback<{ items: any[]; total: number; page: number; totalPages: number }>(
       async () => (await api.get('/admin/card-transactions', { params })).data,
@@ -933,6 +966,11 @@ export const adminService = {
       async () => (await api.get('/admin/platform-banks', { params })).data,
       { items: [], total: 0, page: 1, totalPages: 1 },
     ),
+  manualCredit: async (payload: { userId: string; currency: string; amount: number; note?: string }) => {
+    const { data } = await api.post('/admin/manual-credit', payload);
+    return data;
+  },
+
   revokeSession: async (id: string) => {
     const { data } = await api.delete(`/admin/sessions/${id}`);
     return data;
@@ -941,8 +979,46 @@ export const adminService = {
     const { data } = await api.post('/admin/whatsapp/send', payload);
     return data;
   },
-  broadcastNotification: async (payload: { userIds?: string[]; title: string; body: string; data?: any }) => {
+  broadcastNotification: async (payload: {
+    title: string;
+    subtitle?: string;
+    description?: string;
+    message?: string;
+    body?: string;
+    type?: string;
+    mediaUrl?: string;
+    mediaType?: 'image' | 'gif' | 'video' | 'none';
+    locales?: Record<string, { title: string; subtitle?: string; description?: string }>;
+    targetRoles?: string[];
+    targetUserIds?: string[];
+  }) => {
     const { data } = await api.post('/admin/notifications/broadcast', payload);
     return data;
+  },
+  uploadMedia: async (file: { uri: string; name: string; type: string }) => {
+    // Must use fetch, NOT axios — axios's default Content-Type:application/json header
+    // overrides the multipart boundary, breaking multer server-side.
+    const token = await secureStore.get(STORAGE_KEYS.accessToken);
+    const endpoint = `${APP.apiBaseUrl.replace(/\/+$/, '')}/admin/media-upload`;
+    const headers: Record<string, string> = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
+    const form = new FormData();
+    if (typeof document !== 'undefined') {
+      // Web (Expo web / browser): asset.uri is a blob: URL — fetch it into a real Blob
+      const blobRes = await fetch(file.uri);
+      const blob = await blobRes.blob();
+      form.append('file', new File([blob], file.name, { type: file.type }));
+    } else {
+      // React Native: pass the {uri, name, type} object — RN's FormData handles it natively
+      (form as any).append('file', { uri: file.uri, name: file.name, type: file.type });
+    }
+
+    const res = await fetch(endpoint, { method: 'POST', headers, body: form });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+      throw Object.assign(new Error(err?.error ?? 'Upload failed'), { response: { data: err } });
+    }
+    return res.json() as Promise<{ url: string; mediaType: string; filename: string }>;
   },
 };

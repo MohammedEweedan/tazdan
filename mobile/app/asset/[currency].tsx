@@ -5,7 +5,8 @@
  */
 
 import { useEffect, useMemo, useState } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Pressable, View } from 'react-native';
+import { Text } from '@/components/ui/Text';
 import { LoadingPulse } from '@/components/ui/LoadingPulse';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -13,6 +14,8 @@ import Svg, { Circle, Defs, LinearGradient, Path, Stop, Line as SvgLine } from '
 import { useQuery } from '@tanstack/react-query';
 
 import { ScreenShell, Panel } from '@/components/ui/ScreenShell';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import Animated, { useSharedValue, useAnimatedStyle, runOnJS, withTiming } from 'react-native-reanimated';
 import { useThemedPalette, type Palette } from '@/store/themeStore';
 import { useHaptics, useWallets, useTransactions } from '@/hooks';
 import { useMarkets, ID_TO_SYM, type CoinGeckoMarket } from '@/hooks/useMarkets';
@@ -106,6 +109,7 @@ export default function AssetDetail() {
   const { data: wallets } = useWallets();
   const [range, setRange] = useState<Range>('24H');
 
+  const [hoverPrice, setHoverPrice] = useState<number | null>(null);
   const isFiat = FIAT_CODES.has(sym);
   const coinId = SYM_TO_ID[sym];
   // Whether this coin has a CoinGecko market record
@@ -173,10 +177,10 @@ export default function AssetDetail() {
       <View style={{ alignItems: 'center', marginTop: 6 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
           <Text style={{
-            color: p.fg, fontSize: 40, fontWeight: '800',
+            color: p.fg, fontSize: 40, fontWeight: '600',
             letterSpacing: -1.2, fontVariant: ['tabular-nums'],
           }}>
-            ${formatPrice(price)}
+            ${formatPrice(hoverPrice !== null ? hoverPrice : price)}
           </Text>
           <View style={{
             flexDirection: 'row', alignItems: 'center', gap: 4,
@@ -189,7 +193,7 @@ export default function AssetDetail() {
             }} />
             <Text style={{
               color: isLive ? p.greenFg : p.fgMuted,
-              fontSize: 9, fontWeight: '800', letterSpacing: 0.5,
+              fontSize: 9, fontWeight: '600', letterSpacing: 0.5,
             }}>
               {isLive ? 'LIVE' : 'DELAYED'}
             </Text>
@@ -234,6 +238,7 @@ export default function AssetDetail() {
                 values={chartValues}
                 color={positive ? '#10b981' : '#ef4444'}
                 palette={p}
+                onHoverPrice={setHoverPrice}
               />
             )}
           </View>
@@ -334,7 +339,7 @@ export default function AssetDetail() {
                 />
                 <Text style={{
                   color: positive ? p.greenFg : p.redFg,
-                  fontSize: 10, fontWeight: '800',
+                  fontSize: 10, fontWeight: '600',
                 }}>
                   {positive ? '+' : ''}${Math.abs(holdingsDelta).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </Text>
@@ -345,7 +350,7 @@ export default function AssetDetail() {
           {wallet && balance > 0 ? (
             <>
               <Text style={{
-                color: p.fg, fontSize: 26, fontWeight: '800',
+                color: p.fg, fontSize: 26, fontWeight: '600',
                 fontVariant: ['tabular-nums'], marginTop: 8, letterSpacing: -0.4,
               }}>
                 ${holdingsUsd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -382,7 +387,7 @@ export default function AssetDetail() {
           })}
         >
           <Ionicons name="add" size={16} color={p.ctaFg} />
-          <Text style={{ color: p.ctaFg, fontSize: 15, fontWeight: '800' }}>Buy</Text>
+          <Text style={{ color: p.ctaFg, fontSize: 15, fontWeight: '600' }}>Buy</Text>
         </Pressable>
         <Pressable
           onPress={() => { h.medium(); router.push('/sell'); }}
@@ -397,16 +402,17 @@ export default function AssetDetail() {
           })}
         >
           <Ionicons name="remove" size={16} color={p.fg} />
-          <Text style={{ color: p.fg, fontSize: 15, fontWeight: '800' }}>Sell</Text>
+          <Text style={{ color: p.fg, fontSize: 15, fontWeight: '600' }}>Sell</Text>
         </Pressable>
       </View>
     </ScreenShell>
   );
 }
 
+
 /* ── Sparkline chart ─── */
-function SparklineChart({ values, color, palette: p }: {
-  values: number[]; color: string; palette: Palette;
+function SparklineChart({ values, color, palette: p, onHoverPrice }: {
+  values: number[]; color: string; palette: Palette; onHoverPrice?: (price: number | null) => void;
 }) {
   const W = 320;
   const H = 160;
@@ -433,6 +439,7 @@ function SparklineChart({ values, color, palette: p }: {
   const pts = values.map((v, i) => ({
     x: PAD + i * step,
     y: PAD + (H - PAD * 2) * (1 - (v - min) / spread),
+    val: v
   }));
 
   const last = pts[pts.length - 1];
@@ -440,28 +447,93 @@ function SparklineChart({ values, color, palette: p }: {
   const areaPath = `${linePath} L ${pts[pts.length - 1].x} ${H - PAD} L ${pts[0].x} ${H - PAD} Z`;
   const grid = [0.25, 0.5, 0.75].map((f) => PAD + (H - PAD * 2) * f);
 
+  // Interaction
+  const hoverX = useSharedValue(-1);
+  const hoverY = useSharedValue(-1);
+  const hoverOpacity = useSharedValue(0);
+
+  const handleHover = (x: number) => {
+    if (x < PAD || x > W - PAD) {
+      if (onHoverPrice) onHoverPrice(null);
+      hoverOpacity.value = withTiming(0, { duration: 150 });
+      return;
+    }
+    const idx = Math.min(pts.length - 1, Math.max(0, Math.round((x - PAD) / step)));
+    const pt = pts[idx];
+    hoverX.value = pt.x;
+    hoverY.value = pt.y;
+    hoverOpacity.value = withTiming(1, { duration: 50 });
+    if (onHoverPrice) onHoverPrice(pt.val);
+  };
+
+  const pan = Gesture.Pan()
+    .onBegin((e: any) => {
+      runOnJS(handleHover)(e.x);
+    })
+    .onChange((e: any) => {
+      runOnJS(handleHover)(e.x);
+    })
+    .onFinalize(() => {
+      runOnJS(handleHover)(-1);
+    });
+
+  const cursorStyle = useAnimatedStyle(() => ({
+    opacity: hoverOpacity.value,
+    transform: [{ translateX: hoverX.value }, { translateY: hoverY.value }],
+    position: 'absolute',
+    left: -6,
+    top: -6,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: color,
+    borderWidth: 2,
+    borderColor: p.bgElev,
+    shadowColor: color,
+    shadowOpacity: 0.5,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 4
+  }));
+
+  const lineStyle = useAnimatedStyle(() => ({
+    opacity: hoverOpacity.value,
+    transform: [{ translateX: hoverX.value }],
+    position: 'absolute',
+    left: 0,
+    top: PAD,
+    width: 1,
+    height: H - PAD * 2,
+    backgroundColor: p.border,
+  }));
+
   return (
-    <View style={{
-      borderRadius: 16, backgroundColor: p.bgElev,
-      borderWidth: 1, borderColor: p.border, padding: 8,
-    }}>
-      <Svg width="100%" height={H} viewBox={`0 0 ${W} ${H}`}>
-        <Defs>
-          <LinearGradient id="grad" x1="0" y1="0" x2="0" y2="1">
-            <Stop offset="0" stopColor={color} stopOpacity="0.35" />
-            <Stop offset="1" stopColor={color} stopOpacity="0" />
-          </LinearGradient>
-        </Defs>
-        {grid.map((y, i) => (
-          <SvgLine key={i} x1={PAD} x2={W - PAD} y1={y} y2={y}
-            stroke={p.border} strokeWidth={1} strokeDasharray="3,4" />
-        ))}
-        <Path d={areaPath} fill="url(#grad)" />
-        <Path d={linePath} stroke={color} strokeWidth={2.2} fill="none" strokeLinejoin="round" strokeLinecap="round" />
-        <Circle cx={last.x} cy={last.y} r={8} fill={color} opacity={0.25} />
-        <Circle cx={last.x} cy={last.y} r={4} fill={color} />
-      </Svg>
-    </View>
+    <GestureDetector gesture={pan}>
+      <Animated.View style={{
+        borderRadius: 16, backgroundColor: p.bgElev,
+        borderWidth: 1, borderColor: p.border, padding: 8,
+        overflow: 'hidden'
+      }}>
+        <Svg width="100%" height={H} viewBox={`0 0 ${W} ${H}`}>
+          <Defs>
+            <LinearGradient id="grad" x1="0" y1="0" x2="0" y2="1">
+              <Stop offset="0" stopColor={color} stopOpacity="0.35" />
+              <Stop offset="1" stopColor={color} stopOpacity="0" />
+            </LinearGradient>
+          </Defs>
+          {grid.map((y, i) => (
+            <SvgLine key={i} x1={PAD} x2={W - PAD} y1={y} y2={y}
+              stroke={p.border} strokeWidth={1} strokeDasharray="3,4" />
+          ))}
+          <Path d={areaPath} fill="url(#grad)" />
+          <Path d={linePath} stroke={color} strokeWidth={2.2} fill="none" strokeLinejoin="round" strokeLinecap="round" />
+          <Circle cx={last.x} cy={last.y} r={8} fill={color} opacity={0.25} />
+          <Circle cx={last.x} cy={last.y} r={4} fill={color} />
+        </Svg>
+        <Animated.View style={lineStyle} />
+        <Animated.View style={cursorStyle} />
+      </Animated.View>
+    </GestureDetector>
   );
 }
 
@@ -478,7 +550,7 @@ function StatTile({ label, value, icon, palette: p }: {
         <Ionicons name={icon} size={12} color={p.fgMuted} />
         <Text style={{ color: p.fgMuted, fontSize: 10, fontWeight: '700', letterSpacing: 0.6 }}>{label}</Text>
       </View>
-      <Text numberOfLines={1} style={{ color: p.fg, fontSize: 16, fontWeight: '800', fontVariant: ['tabular-nums'] }}>
+      <Text numberOfLines={1} style={{ color: p.fg, fontSize: 16, fontWeight: '600', fontVariant: ['tabular-nums'] }}>
         {value}
       </Text>
     </View>
@@ -536,7 +608,7 @@ function FiatAssetView({ sym, wallet, p, h, router }: {
           <CurrencyBadge code={sym} size="sm" variant="chip" />
         </View>
         <Text style={{
-          color: p.fg, fontSize: 38, fontWeight: '800',
+          color: p.fg, fontSize: 38, fontWeight: '600',
           letterSpacing: -1.4, marginTop: 8, fontVariant: ['tabular-nums'],
         }}>
           {formatMoney(balance, sym as Currency, { showSymbol: true })}
@@ -559,7 +631,7 @@ function FiatAssetView({ sym, wallet, p, h, router }: {
           })}
         >
           <Ionicons name="arrow-down-circle-outline" size={18} color={p.ctaFg} />
-          <Text style={{ color: p.ctaFg, fontSize: 15, fontWeight: '800' }}>Deposit</Text>
+          <Text style={{ color: p.ctaFg, fontSize: 15, fontWeight: '600' }}>Deposit</Text>
         </Pressable>
         <Pressable
           onPress={() => { h.medium(); router.push(`/send?currency=${sym}` as any); }}
@@ -571,7 +643,7 @@ function FiatAssetView({ sym, wallet, p, h, router }: {
           })}
         >
           <Ionicons name="paper-plane-outline" size={16} color={p.fg} />
-          <Text style={{ color: p.fg, fontSize: 15, fontWeight: '800' }}>Withdraw</Text>
+          <Text style={{ color: p.fg, fontSize: 15, fontWeight: '600' }}>Withdraw</Text>
         </Pressable>
       </View>
 

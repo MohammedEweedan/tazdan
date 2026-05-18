@@ -5,9 +5,8 @@
  */
 
 import { useMemo, useState } from 'react';
-import {
-  Alert, KeyboardAvoidingView, Modal, Platform, Pressable, RefreshControl, ScrollView, Text, TextInput, View,
-} from 'react-native';
+import { Alert, KeyboardAvoidingView, Modal, Platform, Pressable, RefreshControl, ScrollView, View } from 'react-native';
+import { Text, TextInput } from '@/components/ui/Text';
 import { Ionicons } from '@expo/vector-icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
@@ -19,6 +18,7 @@ import { useThemedPalette, useTheme } from '@/store/themeStore';
 import { useAuthStore } from '@/store/authStore';
 import { adminService } from '@/services';
 import { LoadingPulse } from '@/components/ui/LoadingPulse';
+import { TopGradient } from '@/components/ui/ScreenShell';
 
 type Rate = {
   id: string;
@@ -71,6 +71,7 @@ export default function AdminRates() {
   if (!isAdmin) {
     return (
       <View style={{ flex: 1, backgroundColor: p.bg, alignItems: 'center', justifyContent: 'center' }}>
+      <TopGradient />
         <Text style={{ color: p.fg }}>Admin only</Text>
       </View>
     );
@@ -84,10 +85,10 @@ export default function AdminRates() {
           <Pressable onPress={() => router.back()} hitSlop={8}>
             <Ionicons name="chevron-back" size={26} color={p.fg} />
           </Pressable>
-          <Text style={{ flex: 1, color: p.fg, fontSize: 18, fontWeight: '800', letterSpacing: -0.3 }}>Exchange Rates</Text>
+          <Text style={{ flex: 1, color: p.fg, fontSize: 18, fontWeight: '600', letterSpacing: -0.3 }}>Exchange Rates</Text>
           <Pressable onPress={() => setCreating(true)} hitSlop={8} style={{ paddingHorizontal: 11, paddingVertical: 7, borderRadius: 10, backgroundColor: p.ctaBg, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
             <Ionicons name="add" size={15} color={p.ctaFg} />
-            <Text style={{ color: p.ctaFg, fontSize: 12, fontWeight: '800' }}>NEW</Text>
+            <Text style={{ color: p.ctaFg, fontSize: 12, fontWeight: '600' }}>NEW</Text>
           </Pressable>
         </View>
 
@@ -124,10 +125,10 @@ export default function AdminRates() {
               <View key={r.id} style={{ backgroundColor: p.bgElev, borderRadius: 14, borderWidth: 1, borderColor: r.isActive ? p.border : 'rgba(239,68,68,0.3)', padding: 14, marginBottom: 10 }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
                   <View style={{ paddingHorizontal: 10, paddingVertical: 6, borderRadius: 9, backgroundColor: p.fg }}>
-                    <Text style={{ color: p.bg, fontSize: 14, fontWeight: '800', letterSpacing: 0.3 }}>{r.baseCurrency}/{r.quoteCurrency}</Text>
+                    <Text style={{ color: p.bg, fontSize: 14, fontWeight: '600', letterSpacing: 0.3 }}>{r.baseCurrency}/{r.quoteCurrency}</Text>
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Text style={{ color: p.fgFaint, fontSize: 10, fontWeight: '800', letterSpacing: 0.4 }}>
+                    <Text style={{ color: p.fgFaint, fontSize: 10, fontWeight: '600', letterSpacing: 0.4 }}>
                       SPREAD {(((r.buyPrice - r.sellPrice) / r.sellPrice) * 100).toFixed(2)}%
                     </Text>
                     {r.setByUser && (
@@ -140,7 +141,7 @@ export default function AdminRates() {
                     paddingHorizontal: 7, paddingVertical: 3, borderRadius: 6,
                     backgroundColor: r.isActive ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)',
                   }}>
-                    <Text style={{ color: r.isActive ? '#22c55e' : '#ef4444', fontSize: 10, fontWeight: '800', letterSpacing: 0.4 }}>
+                    <Text style={{ color: r.isActive ? '#22c55e' : '#ef4444', fontSize: 10, fontWeight: '600', letterSpacing: 0.4 }}>
                       {r.isActive ? 'OVERRIDE' : 'LIVE FX'}
                     </Text>
                   </View>
@@ -148,14 +149,14 @@ export default function AdminRates() {
 
                 <View style={{ flexDirection: 'row', gap: 10, marginTop: 12 }}>
                   <View style={{ flex: 1, padding: 12, borderRadius: 10, backgroundColor: 'rgba(34,197,94,0.10)', borderWidth: 1, borderColor: 'rgba(34,197,94,0.25)' }}>
-                    <Text style={{ color: '#22c55e', fontSize: 10, fontWeight: '800', letterSpacing: 0.5 }}>BUY</Text>
-                    <Text style={{ color: p.fg, fontSize: 18, fontWeight: '800', marginTop: 2, fontVariant: ['tabular-nums'] }}>
+                    <Text style={{ color: '#22c55e', fontSize: 10, fontWeight: '600', letterSpacing: 0.5 }}>BUY</Text>
+                    <Text style={{ color: p.fg, fontSize: 18, fontWeight: '600', marginTop: 2, fontVariant: ['tabular-nums'] }}>
                       {r.buyPrice.toLocaleString('en-US', { maximumFractionDigits: 8 })}
                     </Text>
                   </View>
                   <View style={{ flex: 1, padding: 12, borderRadius: 10, backgroundColor: 'rgba(239,68,68,0.10)', borderWidth: 1, borderColor: 'rgba(239,68,68,0.25)' }}>
-                    <Text style={{ color: '#ef4444', fontSize: 10, fontWeight: '800', letterSpacing: 0.5 }}>SELL</Text>
-                    <Text style={{ color: p.fg, fontSize: 18, fontWeight: '800', marginTop: 2, fontVariant: ['tabular-nums'] }}>
+                    <Text style={{ color: '#ef4444', fontSize: 10, fontWeight: '600', letterSpacing: 0.5 }}>SELL</Text>
+                    <Text style={{ color: p.fg, fontSize: 18, fontWeight: '600', marginTop: 2, fontVariant: ['tabular-nums'] }}>
                       {r.sellPrice.toLocaleString('en-US', { maximumFractionDigits: 8 })}
                     </Text>
                   </View>
@@ -167,7 +168,7 @@ export default function AdminRates() {
                     style={{ flex: 1, paddingVertical: 10, borderRadius: 10, backgroundColor: p.ctaBg, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 5 }}
                   >
                     <Ionicons name="pencil" size={13} color={p.ctaFg} />
-                    <Text style={{ color: p.ctaFg, fontSize: 12, fontWeight: '800' }}>Edit</Text>
+                    <Text style={{ color: p.ctaFg, fontSize: 12, fontWeight: '600' }}>Edit</Text>
                   </Pressable>
                   <Pressable
                     onPress={() => Alert.alert('Refresh from upstream?', `Pull live ${r.baseCurrency}/${r.quoteCurrency} from FX provider?`, [
@@ -252,22 +253,22 @@ function RateForm({ mode, initial, onClose, onSaved, p }: { mode: 'create' | 'ed
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' }}>
       <View style={{ backgroundColor: p.bg, borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 20, paddingBottom: 36 }}>
         <View style={{ alignSelf: 'center', width: 36, height: 4, borderRadius: 2, backgroundColor: p.border, marginBottom: 14 }} />
-        <Text style={{ color: p.fg, fontSize: 18, fontWeight: '800', marginBottom: 16 }}>
+        <Text style={{ color: p.fg, fontSize: 18, fontWeight: '600', marginBottom: 16 }}>
           {mode === 'create' ? 'Create Pair' : `Edit ${base}/${quote}`}
         </Text>
 
         {mode === 'create' && (
           <View style={{ flexDirection: 'row', gap: 10, marginBottom: 12 }}>
             <View style={{ flex: 1 }}>
-              <Text style={{ color: p.fgFaint, fontSize: 10, fontWeight: '800', letterSpacing: 0.5, marginBottom: 5 }}>BASE</Text>
+              <Text style={{ color: p.fgFaint, fontSize: 10, fontWeight: '600', letterSpacing: 0.5, marginBottom: 5 }}>BASE</Text>
               <View style={{ backgroundColor: p.bgElev, borderRadius: 12, borderWidth: 1, borderColor: p.border, paddingHorizontal: 12 }}>
-                <TextInput value={base} onChangeText={setBase} placeholder="USD" placeholderTextColor={p.fgFaint} autoCapitalize="characters" maxLength={6} style={{ color: p.fg, fontSize: 16, fontWeight: '800', paddingVertical: 12 }} />
+                <TextInput value={base} onChangeText={setBase} placeholder="USD" placeholderTextColor={p.fgFaint} autoCapitalize="characters" maxLength={6} style={{ color: p.fg, fontSize: 16, fontWeight: '600', paddingVertical: 12 }} />
               </View>
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={{ color: p.fgFaint, fontSize: 10, fontWeight: '800', letterSpacing: 0.5, marginBottom: 5 }}>QUOTE</Text>
+              <Text style={{ color: p.fgFaint, fontSize: 10, fontWeight: '600', letterSpacing: 0.5, marginBottom: 5 }}>QUOTE</Text>
               <View style={{ backgroundColor: p.bgElev, borderRadius: 12, borderWidth: 1, borderColor: p.border, paddingHorizontal: 12 }}>
-                <TextInput value={quote} onChangeText={setQuote} placeholder="LYD" placeholderTextColor={p.fgFaint} autoCapitalize="characters" maxLength={6} style={{ color: p.fg, fontSize: 16, fontWeight: '800', paddingVertical: 12 }} />
+                <TextInput value={quote} onChangeText={setQuote} placeholder="LYD" placeholderTextColor={p.fgFaint} autoCapitalize="characters" maxLength={6} style={{ color: p.fg, fontSize: 16, fontWeight: '600', paddingVertical: 12 }} />
               </View>
             </View>
           </View>
@@ -275,15 +276,15 @@ function RateForm({ mode, initial, onClose, onSaved, p }: { mode: 'create' | 'ed
 
         <View style={{ flexDirection: 'row', gap: 10, marginBottom: 18 }}>
           <View style={{ flex: 1 }}>
-            <Text style={{ color: '#22c55e', fontSize: 10, fontWeight: '800', letterSpacing: 0.5, marginBottom: 5 }}>BUY PRICE</Text>
+            <Text style={{ color: '#22c55e', fontSize: 10, fontWeight: '600', letterSpacing: 0.5, marginBottom: 5 }}>BUY PRICE</Text>
             <View style={{ backgroundColor: p.bgElev, borderRadius: 12, borderWidth: 1, borderColor: p.border, paddingHorizontal: 12 }}>
-              <TextInput value={buy} onChangeText={setBuy} placeholder="0.00" placeholderTextColor={p.fgFaint} keyboardType="decimal-pad" style={{ color: p.fg, fontSize: 16, fontWeight: '800', paddingVertical: 12 }} />
+              <TextInput value={buy} onChangeText={setBuy} placeholder="0.00" placeholderTextColor={p.fgFaint} keyboardType="decimal-pad" style={{ color: p.fg, fontSize: 16, fontWeight: '600', paddingVertical: 12 }} />
             </View>
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={{ color: '#ef4444', fontSize: 10, fontWeight: '800', letterSpacing: 0.5, marginBottom: 5 }}>SELL PRICE</Text>
+            <Text style={{ color: '#ef4444', fontSize: 10, fontWeight: '600', letterSpacing: 0.5, marginBottom: 5 }}>SELL PRICE</Text>
             <View style={{ backgroundColor: p.bgElev, borderRadius: 12, borderWidth: 1, borderColor: p.border, paddingHorizontal: 12 }}>
-              <TextInput value={sell} onChangeText={setSell} placeholder="0.00" placeholderTextColor={p.fgFaint} keyboardType="decimal-pad" style={{ color: p.fg, fontSize: 16, fontWeight: '800', paddingVertical: 12 }} />
+              <TextInput value={sell} onChangeText={setSell} placeholder="0.00" placeholderTextColor={p.fgFaint} keyboardType="decimal-pad" style={{ color: p.fg, fontSize: 16, fontWeight: '600', paddingVertical: 12 }} />
             </View>
           </View>
         </View>
@@ -291,7 +292,7 @@ function RateForm({ mode, initial, onClose, onSaved, p }: { mode: 'create' | 'ed
         {!!Number(buy) && !!Number(sell) && Number(buy) > Number(sell) && (
           <View style={{ backgroundColor: p.pillBg, padding: 10, borderRadius: 10, marginBottom: 14, borderWidth: 1, borderColor: p.border }}>
             <Text style={{ color: p.fgMuted, fontSize: 11 }}>
-              Spread: <Text style={{ color: p.fg, fontWeight: '800' }}>{(((Number(buy) - Number(sell)) / Number(sell)) * 100).toFixed(2)}%</Text>
+              Spread: <Text style={{ color: p.fg, fontWeight: '600' }}>{(((Number(buy) - Number(sell)) / Number(sell)) * 100).toFixed(2)}%</Text>
             </Text>
           </View>
         )}
@@ -305,7 +306,7 @@ function RateForm({ mode, initial, onClose, onSaved, p }: { mode: 'create' | 'ed
             disabled={mut.isPending}
             style={{ flex: 1, height: 50, borderRadius: 12, backgroundColor: p.ctaBg, alignItems: 'center', justifyContent: 'center' }}
           >
-            <Text style={{ color: p.ctaFg, fontWeight: '800' }}>{mut.isPending ? 'Saving…' : 'Save'}</Text>
+            <Text style={{ color: p.ctaFg, fontWeight: '600' }}>{mut.isPending ? 'Saving…' : 'Save'}</Text>
           </Pressable>
         </View>
       </View>

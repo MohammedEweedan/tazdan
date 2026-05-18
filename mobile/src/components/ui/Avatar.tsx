@@ -1,4 +1,5 @@
-import { Text } from 'react-native';
+
+import { Text } from './Text';
 import { LinearGradient } from 'expo-linear-gradient';
 import { initialsOf } from '@/utils/format';
 import { AuthedImage } from './AuthedImage';

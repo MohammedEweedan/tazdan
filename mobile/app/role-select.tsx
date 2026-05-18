@@ -6,7 +6,8 @@
  */
 
 import { useEffect, useRef } from 'react';
-import { Animated, Easing, Pressable, Text, View } from 'react-native';
+import { Animated, Easing, Pressable, View } from 'react-native';
+import { Text } from '@/components/ui/Text';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -64,10 +65,10 @@ export default function RoleSelectScreen() {
         <View style={{ flex: 1, paddingHorizontal: 24, paddingTop: 36, justifyContent: 'space-between' }}>
           {/* Heading */}
           <View>
-            <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '800', letterSpacing: 0.7 }}>
+            <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '600', letterSpacing: 0.7 }}>
               WELCOME BACK, {(user?.firstName ?? 'ADMIN').toUpperCase()}
             </Text>
-            <Text style={{ color: p.fg, fontSize: 32, fontWeight: '800', letterSpacing: -0.8, marginTop: 4 }}>
+            <Text style={{ color: p.fg, fontSize: 32, fontWeight: '600', letterSpacing: -0.8, marginTop: 4 }}>
               Continue as…
             </Text>
             <Text style={{ color: p.fgMuted, fontSize: 14, marginTop: 6, lineHeight: 20 }}>
@@ -109,10 +110,10 @@ export default function RoleSelectScreen() {
                       transform: [{ scale: dotScale }],
                       opacity: dotOpacity,
                     }} />
-                    <Text style={{ color: '#22c55e', fontSize: 10, fontWeight: '800', letterSpacing: 0.6 }}>LIVE OPS</Text>
+                    <Text style={{ color: '#22c55e', fontSize: 10, fontWeight: '600', letterSpacing: 0.6 }}>LIVE OPS</Text>
                   </View>
                 </View>
-                <Text style={{ color: p.fg, fontSize: 22, fontWeight: '800', letterSpacing: -0.4 }}>
+                <Text style={{ color: p.fg, fontSize: 22, fontWeight: '600', letterSpacing: -0.4 }}>
                   Admin Console
                 </Text>
                 <Text style={{ color: p.fgMuted, fontSize: 13, marginTop: 4, lineHeight: 19 }}>
@@ -151,10 +152,10 @@ export default function RoleSelectScreen() {
                   <Ionicons name="person" size={24} color={p.bg} />
                 </View>
                 <View style={{ paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, backgroundColor: p.pillBg }}>
-                  <Text style={{ color: p.fgMuted, fontSize: 10, fontWeight: '800', letterSpacing: 0.6 }}>USER VIEW</Text>
+                  <Text style={{ color: p.fgMuted, fontSize: 10, fontWeight: '600', letterSpacing: 0.6 }}>USER VIEW</Text>
                 </View>
               </View>
-              <Text style={{ color: p.fg, fontSize: 22, fontWeight: '800', letterSpacing: -0.4 }}>
+              <Text style={{ color: p.fg, fontSize: 22, fontWeight: '600', letterSpacing: -0.4 }}>
                 My Wallet
               </Text>
               <Text style={{ color: p.fgMuted, fontSize: 13, marginTop: 4, lineHeight: 19 }}>

@@ -67,6 +67,8 @@ export const authLimiter = rateLimit({
 export const registerLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
   max: process.env.NODE_ENV === 'development' ? 10_000 : 5,
+  skip: skipRateLimit,
+  message: { error: 'Too many registrations.' },
 });
 
 /**

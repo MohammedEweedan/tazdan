@@ -4,9 +4,8 @@
  */
 
 import { useState } from 'react';
-import {
-  Alert, Modal, Pressable, RefreshControl, ScrollView, Text, TextInput, View,
-} from 'react-native';
+import { Alert, Modal, Pressable, RefreshControl, ScrollView, View } from 'react-native';
+import { Text, TextInput } from '@/components/ui/Text';
 import { Ionicons } from '@expo/vector-icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
@@ -18,6 +17,7 @@ import { useAuthStore } from '@/store/authStore';
 import { adminService } from '@/services';
 import { LoadingPulse } from '@/components/ui/LoadingPulse';
 import { formatRelativeTime } from '@/utils/format';
+import { TopGradient } from '@/components/ui/ScreenShell';
 
 type Tab =
   | 'TRANSACTIONS' | 'P2P_TRADES' | 'P2P_LISTINGS' | 'P2P_DISPUTES'
@@ -141,7 +141,8 @@ export default function AdminData() {
   });
 
   if (!isAdmin) {
-    return <View style={{ flex: 1, backgroundColor: p.bg, alignItems: 'center', justifyContent: 'center' }}><Text style={{ color: p.fg }}>Admin only</Text></View>;
+    return <View style={{ flex: 1, backgroundColor: p.bg, alignItems: 'center', justifyContent: 'center' }}>
+      <TopGradient /><Text style={{ color: p.fg }}>Admin only</Text></View>;
   }
 
   const items = q.data?.items ?? [];
@@ -156,7 +157,7 @@ export default function AdminData() {
           <Pressable onPress={() => router.back()} hitSlop={8}>
             <Ionicons name="chevron-back" size={26} color={p.fg} />
           </Pressable>
-          <Text style={{ flex: 1, color: p.fg, fontSize: 18, fontWeight: '800', letterSpacing: -0.3 }}>Database</Text>
+          <Text style={{ flex: 1, color: p.fg, fontSize: 18, fontWeight: '600', letterSpacing: -0.3 }}>Database</Text>
           <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '700' }}>{q.data?.total ?? 0}</Text>
         </View>
 
@@ -170,7 +171,7 @@ export default function AdminData() {
                 onPress={() => { setTab(key); setPage(1); setSearch(''); }}
                 style={{ paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10, backgroundColor: on ? p.fg : p.pillBg, borderWidth: 1, borderColor: on ? p.fg : p.border }}
               >
-                <Text style={{ color: on ? p.bg : p.fg, fontSize: 11, fontWeight: '800', letterSpacing: 0.4 }}>{label}</Text>
+                <Text style={{ color: on ? p.bg : p.fg, fontSize: 11, fontWeight: '600', letterSpacing: 0.4 }}>{label}</Text>
               </Pressable>
             );
           })}
@@ -231,7 +232,7 @@ export default function AdminData() {
                     onPress={() => revokeMut.mutate(row.id)}
                     style={{ paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, backgroundColor: 'rgba(239,68,68,0.15)' }}
                   >
-                    <Text style={{ color: '#ef4444', fontSize: 11, fontWeight: '800' }}>Revoke</Text>
+                    <Text style={{ color: '#ef4444', fontSize: 11, fontWeight: '600' }}>Revoke</Text>
                   </Pressable>
                 ) : (
                   <Ionicons name="chevron-forward" size={14} color={p.fgFaint} />

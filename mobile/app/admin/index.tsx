@@ -6,11 +6,12 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
-import { Alert, Animated, Easing, Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
+import { Alert, Animated, Easing, Pressable, RefreshControl, ScrollView, View } from 'react-native';
+import { Text } from '@/components/ui/Text';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
+import { TopGradient } from '@/components/ui/ScreenShell';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 
@@ -132,7 +133,7 @@ export default function AdminScreen() {
       <View style={{ flex: 1, backgroundColor: p.bg, alignItems: 'center', justifyContent: 'center', padding: 40 }}>
         <StatusBar style={themeMode === 'dark' ? 'light' : 'dark'} />
         <Ionicons name="lock-closed-outline" size={48} color={p.fgFaint} />
-        <Text style={{ color: p.fg, fontSize: 18, fontWeight: '800', marginTop: 14 }}>Admin access only</Text>
+        <Text style={{ color: p.fg, fontSize: 18, fontWeight: '600', marginTop: 14 }}>Admin access only</Text>
         <Pressable onPress={() => router.back()} style={{ marginTop: 24, paddingHorizontal: 18, paddingVertical: 11, borderRadius: 12, backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border }}>
           <Text style={{ color: p.fg, fontWeight: '700' }}>Back</Text>
         </Pressable>
@@ -152,14 +153,7 @@ export default function AdminScreen() {
   return (
     <View style={{ flex: 1, backgroundColor: p.bg }}>
       <StatusBar style={themeMode === 'dark' ? 'light' : 'dark'} />
-      <LinearGradient
-        colors={themeMode === 'dark'
-          ? ['rgba(74,143,224,0.18)', 'rgba(74,143,224,0.06)', 'transparent']
-          : ['rgba(74,143,224,0.16)', 'rgba(74,143,224,0.05)', 'transparent']}
-        locations={[0, 0.5, 1]}
-        style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 380 }}
-        pointerEvents="none"
-      />
+      <TopGradient />
 
       <SafeAreaView style={{ flex: 1, backgroundColor: 'transparent' }} edges={['top']}>
         <ScrollView
@@ -174,16 +168,16 @@ export default function AdminScreen() {
             </Pressable>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
               <Animated.View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#22c55e', transform: [{ scale: dotScale }], opacity: dotOpacity }} />
-              <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '800', letterSpacing: 0.6 }}>LIVE</Text>
+              <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '600', letterSpacing: 0.6 }}>LIVE</Text>
               <Pressable onPress={switchToUser} hitSlop={8} style={{ marginLeft: 8, paddingHorizontal: 9, paddingVertical: 5, borderRadius: 7, backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border }}>
-                <Text style={{ color: p.fg, fontSize: 10, fontWeight: '800', letterSpacing: 0.5 }}>USER VIEW</Text>
+                <Text style={{ color: p.fg, fontSize: 10, fontWeight: '600', letterSpacing: 0.5 }}>USER VIEW</Text>
               </Pressable>
             </View>
           </View>
 
           <View style={{ paddingHorizontal: 24, marginTop: 4 }}>
             <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '700', letterSpacing: 0.7 }}>ADMIN CONSOLE</Text>
-            <Text style={{ color: p.fg, fontSize: 28, fontWeight: '800', letterSpacing: -0.6, marginTop: 2 }}>
+            <Text style={{ color: p.fg, fontSize: 28, fontWeight: '600', letterSpacing: -0.6, marginTop: 2 }}>
               Operations
             </Text>
             <Text style={{ color: p.fgMuted, fontSize: 13, marginTop: 4 }}>
@@ -207,7 +201,7 @@ export default function AdminScreen() {
                     onPress={() => setPeriod(per)}
                     style={{ flex: 1, paddingVertical: 9, borderRadius: 9, backgroundColor: on ? p.fg : 'transparent', alignItems: 'center' }}
                   >
-                    <Text style={{ color: on ? p.bg : p.fgMuted, fontSize: 12, fontWeight: '800', letterSpacing: 0.4, textTransform: 'capitalize' }}>
+                    <Text style={{ color: on ? p.bg : p.fgMuted, fontSize: 12, fontWeight: '600', letterSpacing: 0.4, textTransform: 'capitalize' }}>
                       {per}
                     </Text>
                   </Pressable>
@@ -222,10 +216,10 @@ export default function AdminScreen() {
               borderRadius: 20, padding: 20,
               backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border,
             }}>
-              <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '800', letterSpacing: 0.7 }}>
+              <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '600', letterSpacing: 0.7 }}>
                 FEES COLLECTED · {PERIOD_LABEL[period].current.toUpperCase()}
               </Text>
-              <Text style={{ color: p.fg, fontSize: 40, fontWeight: '800', letterSpacing: -1.4, marginTop: 6, fontVariant: ['tabular-nums'] }}>
+              <Text style={{ color: p.fg, fontSize: 40, fontWeight: '600', letterSpacing: -1.4, marginTop: 6, fontVariant: ['tabular-nums'] }}>
                 {formatUSD(stats?.fees ?? 0)}
               </Text>
               <DeltaRow current={stats?.fees ?? 0} prev={stats?.prevFees ?? 0} delta={stats?.feesDelta ?? 0} prevLabel={PERIOD_LABEL[period].previous} p={p} />
@@ -241,7 +235,7 @@ export default function AdminScreen() {
 
           {/* Real-time strip */}
           <View style={{ marginTop: 18, paddingHorizontal: 20 }}>
-            <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '800', letterSpacing: 0.7, marginBottom: 10 }}>REAL-TIME</Text>
+            <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '600', letterSpacing: 0.7, marginBottom: 10 }}>REAL-TIME</Text>
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
               <KpiCard label="USERS ONLINE"  value={(m?.onlineUsers ?? 0).toLocaleString()} hint={`${m?.onlineSockets ?? 0} sockets`} icon="people-outline" accent="#22c55e" p={p} />
               <KpiCard label="TXS / 5MIN"    value={(m?.recentTransactions5m ?? 0).toLocaleString()} hint={`${m?.recentOrders5m ?? 0} orders`} icon="flash-outline" accent="#f59e0b" p={p} />
@@ -254,7 +248,7 @@ export default function AdminScreen() {
 
           {/* Lifetime totals strip */}
           <View style={{ marginTop: 18, paddingHorizontal: 20 }}>
-            <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '800', letterSpacing: 0.7, marginBottom: 10 }}>LIFETIME</Text>
+            <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '600', letterSpacing: 0.7, marginBottom: 10 }}>LIFETIME</Text>
             <View style={{
               flexDirection: 'row', flexWrap: 'wrap',
               backgroundColor: p.bgElev, borderRadius: 14, borderWidth: 1, borderColor: p.border,
@@ -269,7 +263,7 @@ export default function AdminScreen() {
 
           {/* Pending action queue */}
           <View style={{ marginTop: 18, paddingHorizontal: 20 }}>
-            <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '800', letterSpacing: 0.7, marginBottom: 10 }}>PENDING ACTIONS</Text>
+            <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '600', letterSpacing: 0.7, marginBottom: 10 }}>PENDING ACTIONS</Text>
             <ActionRow icon="document-text-outline"   label="KYC Reviews"             count={d?.pendingKYC ?? 0}         onPress={() => router.push('/admin/kyc' as any)} p={p} />
             <ActionRow icon="arrow-down-circle-outline" label="Deposits Awaiting"     count={d?.pendingDeposits ?? 0}    onPress={() => router.push('/admin/deposits' as any)} p={p} />
             <ActionRow icon="arrow-up-circle-outline"  label="Withdrawal Queue"        count={d?.pendingWithdrawals ?? 0} onPress={() => router.push('/admin/withdrawals' as any)} p={p} />
@@ -279,18 +273,18 @@ export default function AdminScreen() {
 
           {/* Trade flow */}
           <View style={{ marginTop: 18, paddingHorizontal: 20 }}>
-            <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '800', letterSpacing: 0.7, marginBottom: 10 }}>TRADE FLOW</Text>
+            <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '600', letterSpacing: 0.7, marginBottom: 10 }}>TRADE FLOW</Text>
             <View style={{ backgroundColor: p.bgElev, borderRadius: 14, borderWidth: 1, borderColor: p.border, padding: 16 }}>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
                 <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '700' }}>{PERIOD_LABEL[period].current} Volume</Text>
-                <Text style={{ color: p.fg, fontSize: 16, fontWeight: '800', fontVariant: ['tabular-nums'] }}>
+                <Text style={{ color: p.fg, fontSize: 16, fontWeight: '600', fontVariant: ['tabular-nums'] }}>
                   {formatUSD(stats?.volume ?? 0, { compact: true })}
                 </Text>
               </View>
               <BuySellBar buys={d?.buyOrders ?? 0} sells={d?.sellOrders ?? 0} p={p} />
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 }}>
-                <Text style={{ color: '#22c55e', fontSize: 11, fontWeight: '800' }}>BUY · {(d?.buyOrders ?? 0).toLocaleString()}</Text>
-                <Text style={{ color: '#ef4444', fontSize: 11, fontWeight: '800' }}>SELL · {(d?.sellOrders ?? 0).toLocaleString()}</Text>
+                <Text style={{ color: '#22c55e', fontSize: 11, fontWeight: '600' }}>BUY · {(d?.buyOrders ?? 0).toLocaleString()}</Text>
+                <Text style={{ color: '#ef4444', fontSize: 11, fontWeight: '600' }}>SELL · {(d?.sellOrders ?? 0).toLocaleString()}</Text>
               </View>
             </View>
           </View>
@@ -298,7 +292,7 @@ export default function AdminScreen() {
           {/* Top pairs */}
           {!!d?.ordersByPair?.length && (
             <View style={{ marginTop: 18, paddingHorizontal: 20 }}>
-              <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '800', letterSpacing: 0.7, marginBottom: 10 }}>TOP PAIRS BY ORDER COUNT</Text>
+              <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '600', letterSpacing: 0.7, marginBottom: 10 }}>TOP PAIRS BY ORDER COUNT</Text>
               <View style={{ backgroundColor: p.bgElev, borderRadius: 14, borderWidth: 1, borderColor: p.border, overflow: 'hidden' }}>
                 {d.ordersByPair.slice(0, 6).map((row, i, arr) => {
                   const max = Math.max(...d.ordersByPair.map((r) => r.count));
@@ -324,7 +318,7 @@ export default function AdminScreen() {
           {/* User growth */}
           {!!d?.userGrowth?.length && (
             <View style={{ marginTop: 18, paddingHorizontal: 20 }}>
-              <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '800', letterSpacing: 0.7, marginBottom: 10 }}>USER GROWTH · 7 DAYS</Text>
+              <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '600', letterSpacing: 0.7, marginBottom: 10 }}>USER GROWTH · 7 DAYS</Text>
               <View style={{ backgroundColor: p.bgElev, borderRadius: 14, borderWidth: 1, borderColor: p.border, padding: 16 }}>
                 <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 6, height: 80 }}>
                   {d.userGrowth.map((g) => {
@@ -353,7 +347,7 @@ export default function AdminScreen() {
               }}>
                 <Ionicons name="flash-outline" size={22} color="#f59e0b" />
                 <View style={{ flex: 1 }}>
-                  <Text style={{ color: p.fg, fontSize: 13, fontWeight: '800' }}>Backfill historical fees</Text>
+                  <Text style={{ color: p.fg, fontSize: 13, fontWeight: '600' }}>Backfill historical fees</Text>
                   <Text style={{ color: p.fgMuted, fontSize: 11, marginTop: 2 }}>Import fees from existing orders, withdrawals, and P2P trades into the platform ledger.</Text>
                 </View>
                 <Pressable
@@ -361,7 +355,7 @@ export default function AdminScreen() {
                   disabled={backfillMut.isPending}
                   style={{ paddingHorizontal: 14, paddingVertical: 9, borderRadius: 10, backgroundColor: '#f59e0b' }}
                 >
-                  <Text style={{ color: '#fff', fontSize: 12, fontWeight: '800' }}>
+                  <Text style={{ color: '#fff', fontSize: 12, fontWeight: '600' }}>
                     {backfillMut.isPending ? 'Importing…' : 'Run'}
                   </Text>
                 </Pressable>
@@ -371,7 +365,7 @@ export default function AdminScreen() {
 
           {/* Manage tiles */}
           <View style={{ marginTop: 22, paddingHorizontal: 20 }}>
-            <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '800', letterSpacing: 0.7, marginBottom: 10 }}>MANAGE</Text>
+            <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '600', letterSpacing: 0.7, marginBottom: 10 }}>MANAGE</Text>
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
               <NavTile icon="people-outline"            label="Users"          onPress={() => router.push('/admin/users' as any)} p={p} />
               <NavTile icon="trending-up-outline"       label="Rates"          onPress={() => router.push('/admin/rates' as any)} p={p} />
@@ -411,7 +405,7 @@ function DeltaRow({ current, prev, delta, prevLabel, p }: { current: number; pre
         backgroundColor: positive ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)',
       }}>
         <Ionicons name={positive ? 'caret-up' : 'caret-down'} size={10} color={color} />
-        <Text style={{ color, fontSize: 11, fontWeight: '800', fontVariant: ['tabular-nums'] }}>{formatPct(delta)}</Text>
+        <Text style={{ color, fontSize: 11, fontWeight: '600', fontVariant: ['tabular-nums'] }}>{formatPct(delta)}</Text>
       </View>
       <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '600' }}>
         vs {prevLabel.toLowerCase()} (${prev.toLocaleString('en-US', { maximumFractionDigits: 2 })})
@@ -425,8 +419,8 @@ function PeriodMiniStat({ label, curr, prev, delta, format, p }: { label: string
   const color = positive ? '#22c55e' : '#ef4444';
   return (
     <View style={{ flex: 1, paddingVertical: 8 }}>
-      <Text style={{ color: p.fgFaint, fontSize: 9, fontWeight: '800', letterSpacing: 0.5 }}>{label.toUpperCase()}</Text>
-      <Text style={{ color: p.fg, fontSize: 18, fontWeight: '800', marginTop: 4, fontVariant: ['tabular-nums'] }}>{format(curr)}</Text>
+      <Text style={{ color: p.fgFaint, fontSize: 9, fontWeight: '600', letterSpacing: 0.5 }}>{label.toUpperCase()}</Text>
+      <Text style={{ color: p.fg, fontSize: 18, fontWeight: '600', marginTop: 4, fontVariant: ['tabular-nums'] }}>{format(curr)}</Text>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 3 }}>
         <Ionicons name={positive ? 'caret-up' : 'caret-down'} size={9} color={color} />
         <Text style={{ color, fontSize: 10, fontWeight: '700' }}>{formatPct(delta)}</Text>
@@ -440,10 +434,10 @@ function KpiCard({ label, value, hint, icon, accent, p }: { label: string; value
   return (
     <View style={{ width: '48%', backgroundColor: p.bgElev, borderRadius: 14, borderWidth: 1, borderColor: p.border, padding: 14 }}>
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-        <Text style={{ color: p.fgFaint, fontSize: 10, fontWeight: '800', letterSpacing: 0.6 }}>{label}</Text>
+        <Text style={{ color: p.fgFaint, fontSize: 10, fontWeight: '600', letterSpacing: 0.6 }}>{label}</Text>
         <Ionicons name={icon} size={15} color={accent} />
       </View>
-      <Text style={{ color: p.fg, fontSize: 22, fontWeight: '800', letterSpacing: -0.5, fontVariant: ['tabular-nums'] }}>{value}</Text>
+      <Text style={{ color: p.fg, fontSize: 22, fontWeight: '600', letterSpacing: -0.5, fontVariant: ['tabular-nums'] }}>{value}</Text>
       {hint && <Text style={{ color: p.fgMuted, fontSize: 10, fontWeight: '600', marginTop: 3 }}>{hint}</Text>}
     </View>
   );
@@ -456,8 +450,8 @@ function BigCell({ label, value, p, last }: { label: string; value: string; p: a
       borderRightWidth: 1, borderRightColor: p.border,
       borderBottomWidth: last ? 0 : 1, borderBottomColor: p.border,
     }}>
-      <Text style={{ color: p.fgFaint, fontSize: 9, fontWeight: '800', letterSpacing: 0.5 }}>{label}</Text>
-      <Text style={{ color: p.fg, fontSize: 18, fontWeight: '800', marginTop: 4, fontVariant: ['tabular-nums'] }}>{value}</Text>
+      <Text style={{ color: p.fgFaint, fontSize: 9, fontWeight: '600', letterSpacing: 0.5 }}>{label}</Text>
+      <Text style={{ color: p.fg, fontSize: 18, fontWeight: '600', marginTop: 4, fontVariant: ['tabular-nums'] }}>{value}</Text>
     </View>
   );
 }
@@ -482,7 +476,7 @@ function ActionRow({ icon, label, count, onPress, p }: { icon: keyof typeof Ioni
       <Text style={{ flex: 1, color: p.fg, fontSize: 14, fontWeight: '700' }}>{label}</Text>
       {hasCount ? (
         <View style={{ paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, backgroundColor: urgent ? '#ef4444' : p.pillBg }}>
-          <Text style={{ color: urgent ? '#fff' : p.fgMuted, fontSize: 12, fontWeight: '800', fontVariant: ['tabular-nums'] }}>{(count ?? 0).toLocaleString()}</Text>
+          <Text style={{ color: urgent ? '#fff' : p.fgMuted, fontSize: 12, fontWeight: '600', fontVariant: ['tabular-nums'] }}>{(count ?? 0).toLocaleString()}</Text>
         </View>
       ) : (
         <Ionicons name="chevron-forward" size={16} color={p.fgFaint} />

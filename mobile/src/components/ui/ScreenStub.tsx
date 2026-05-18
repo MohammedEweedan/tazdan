@@ -3,7 +3,8 @@
  * Theme-aware. No NativeWind.
  */
 
-import { Text, View } from 'react-native';
+import { View } from 'react-native';
+import { Text } from '@/components/ui/Text';
 import { ScreenShell, Panel } from './ScreenShell';
 import { useThemedPalette } from '@/store/themeStore';
 
@@ -19,7 +20,7 @@ export function ScreenStub({ title, subtitle, description }: Props) {
     <ScreenShell title={title} subtitle={subtitle} contentStyle={{ flexGrow: 1, justifyContent: 'center' }}>
       <Panel style={{ padding: 24 }}>
         <Text style={{
-          color: p.fg, fontSize: 24, fontWeight: '800',
+          color: p.fg, fontSize: 24, fontWeight: '600',
           letterSpacing: -0.4, marginBottom: 8,
         }}>
           Coming soon

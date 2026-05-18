@@ -12,6 +12,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@expo-google-fonts/ibm-plex-sans-arabic": "^0.4.2",
+    "@expo-google-fonts/outfit": "^0.4.3",
     "@expo/vector-icons": "^15.0.0",
     "@hookform/resolvers": "^3.9.0",
     "@react-native-async-storage/async-storage": "~2.2.0",
@@ -24,8 +26,10 @@
     "expo-clipboard": "~8.0.8",
     "expo-constants": "~18.0.0",
     "expo-dev-client": "~6.0.21",
+    "expo-device": "~8.0.10",
     "expo-haptics": "~15.0.0",
     "expo-image": "~3.0.0",
+    "expo-image-picker": "^55.0.20",
     "expo-linear-gradient": "~15.0.0",
     "expo-linking": "~8.0.12",
     "expo-local-authentication": "~17.0.8",

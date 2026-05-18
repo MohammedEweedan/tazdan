@@ -10,10 +10,8 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import {
-  ActionSheetIOS, Alert, Animated, KeyboardAvoidingView, Modal, Platform, Pressable,
-  ScrollView, Text, TextInput, View,
-} from 'react-native';
+import { ActionSheetIOS, Alert, Animated, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, View } from 'react-native';
+import { Text, TextInput } from '@/components/ui/Text';
 import { SendMoneySheet } from '@/components/messages/SendMoneySheet';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -33,6 +31,7 @@ import { profileService, messageService } from '@/services';
 import { QUERY_KEYS } from '@/constants';
 import { PaymentReceiptBubble } from '@/components/messages/PaymentReceiptBubble';
 import { REPORT_REASONS, type ApiMessage, type Conversation } from '@/types/messages';
+import { TopGradient } from '@/components/ui/ScreenShell';
 
 const BRAND_BLUE = '#0057B8';
 
@@ -340,6 +339,7 @@ const { data: messages = [], isLoading } = useThread(partnerId);  const sendMut 
 
   return (
     <View style={{ flex: 1, backgroundColor: p.bg }}>
+      <TopGradient />
       <StatusBar style={themeMode === 'dark' ? 'light' : 'dark'} />
       <SafeAreaView style={{ flex: 1 }} edges={['top']}>
         {/* Header */}
@@ -371,14 +371,14 @@ const { data: messages = [], isLoading } = useThread(partnerId);  const sendMut 
             ) : partner?.avatarUrl ? (
               <Text style={{ fontSize: 18 }}>{partner.avatarUrl}</Text>
             ) : (
-              <Text style={{ color: '#fff', fontSize: 14, fontWeight: '800' }}>
+              <Text style={{ color: '#fff', fontSize: 14, fontWeight: '600' }}>
                 {(partner?.firstName?.[0] ?? partner?.username?.[0] ?? '?').toUpperCase()}
               </Text>
             )}
           </View>
           <View style={{ flex: 1 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-              <Text numberOfLines={1} style={{ color: p.fg, fontSize: 15, fontWeight: '800', letterSpacing: -0.2 }}>
+              <Text numberOfLines={1} style={{ color: p.fg, fontSize: 15, fontWeight: '600', letterSpacing: -0.2 }}>
                 {partner ? `${partner.firstName ?? ''} ${partner.lastName ?? ''}`.trim() || `@${partner.username ?? '…'}` : 'Conversation'}
               </Text>
               {isSupport && (
@@ -386,7 +386,7 @@ const { data: messages = [], isLoading } = useThread(partnerId);  const sendMut 
                   paddingHorizontal: 5, paddingVertical: 1.5, borderRadius: 5,
                   backgroundColor: BRAND_BLUE,
                 }}>
-                  <Text style={{ color: '#fff', fontSize: 9, fontWeight: '800' }}>STAFF</Text>
+                  <Text style={{ color: '#fff', fontSize: 9, fontWeight: '600' }}>STAFF</Text>
                 </View>
               )}
               {partner?.kycStatus === 'APPROVED' && !isSupport && (
@@ -837,7 +837,7 @@ function ReportSheet({
           <View style={{ alignItems: 'center', marginBottom: 4 }}>
             <View style={{ width: 42, height: 4, borderRadius: 2, backgroundColor: p.border }} />
           </View>
-          <Text style={{ color: p.fg, fontSize: 18, fontWeight: '800', letterSpacing: -0.3 }}>
+          <Text style={{ color: p.fg, fontSize: 18, fontWeight: '600', letterSpacing: -0.3 }}>
             Report
           </Text>
           <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '500' }}>
@@ -889,7 +889,7 @@ function ReportSheet({
               opacity: pressed ? 0.9 : 1,
             })}
           >
-            <Text style={{ color: '#fff', fontSize: 15, fontWeight: '800' }}>
+            <Text style={{ color: '#fff', fontSize: 15, fontWeight: '600' }}>
               Submit report
             </Text>
           </Pressable>

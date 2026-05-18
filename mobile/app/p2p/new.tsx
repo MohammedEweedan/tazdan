@@ -10,12 +10,14 @@
  */
 
 import { useState } from 'react';
-import { Alert, Modal, Platform, Pressable, ScrollView, Text, TextInput, View, KeyboardAvoidingView, ActivityIndicator } from 'react-native';
+import { Alert, Modal, Platform, Pressable, ScrollView, View, KeyboardAvoidingView, ActivityIndicator } from 'react-native';
+import { Text, TextInput } from '@/components/ui/Text';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
 import { useThemedPalette } from '@/store/themeStore';
+import { TopGradient } from '@/components/ui/ScreenShell';
 import { useCreateP2PListing, useHaptics } from '@/hooks';
 import type { Palette } from '@/store/themeStore';
 
@@ -122,9 +124,11 @@ export default function NewListing() {
               backgroundColor: p.bg,
               borderTopLeftRadius: 28, borderTopRightRadius: 28,
               maxHeight: '85%',
+              overflow: 'hidden',
             }}
             onPress={(e) => e.stopPropagation()}
           >
+            <TopGradient height={220} />
             {/* Handle + header */}
             <View style={{ alignItems: 'center', paddingTop: 10, paddingBottom: 2 }}>
               <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: p.border }} />
@@ -133,7 +137,7 @@ export default function NewListing() {
               flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
               paddingHorizontal: 24, paddingTop: 8, paddingBottom: 4,
             }}>
-              <Text style={{ color: p.fg, fontSize: 20, fontWeight: '800', letterSpacing: -0.4 }}>
+              <Text style={{ color: p.fg, fontSize: 20, fontWeight: '600', letterSpacing: -0.4 }}>
                 New P2P listing
               </Text>
               <Pressable onPress={() => router.back()} hitSlop={8} style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border, alignItems: 'center', justifyContent: 'center' }}>
@@ -164,7 +168,7 @@ export default function NewListing() {
             >
               <Text style={{
                 color: side === s ? p.bg : p.fgMuted,
-                fontSize: 13, fontWeight: '800', letterSpacing: 0.4,
+                fontSize: 13, fontWeight: '600', letterSpacing: 0.4,
               }}>
                 I WANT TO {s}
               </Text>
@@ -235,7 +239,7 @@ export default function NewListing() {
                   >
                     <Text style={{
                       color: minMode === mode ? p.bg : p.fgMuted,
-                      fontSize: 11, fontWeight: '800',
+                      fontSize: 11, fontWeight: '600',
                     }}>
                       {mode === 'fiat' ? fiatCurrency : currency}
                     </Text>
@@ -268,7 +272,7 @@ export default function NewListing() {
                   >
                     <Text style={{
                       color: maxMode === mode ? p.bg : p.fgMuted,
-                      fontSize: 11, fontWeight: '800',
+                      fontSize: 11, fontWeight: '600',
                     }}>
                       {mode === 'fiat' ? fiatCurrency : currency}
                     </Text>
@@ -382,7 +386,7 @@ export default function NewListing() {
           )}
           <Text style={{
             color: valid ? p.ctaFg : p.fgMuted,
-            fontSize: 16, fontWeight: '800', letterSpacing: -0.2,
+            fontSize: 16, fontWeight: '600', letterSpacing: -0.2,
           }}>
             {create.isPending ? 'Posting…' : `Post ${side} listing`}
           </Text>

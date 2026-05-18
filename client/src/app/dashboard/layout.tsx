@@ -77,7 +77,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           items: [
             { href: "/dashboard", icon: FiHome, label: t("nav_home") },
             { href: "/dashboard/trade", icon: FiRepeat, label: t("nav_trade") },
-            { href: "/markets", icon: FiBarChart2, label: t("nav_markets") },
             { href: "/dashboard/p2p", icon: FiShoppingBag, label: "P2P Market" },
             { href: "/dashboard/portfolio", icon: FiPieChart, label: "Portfolio" },
           ],

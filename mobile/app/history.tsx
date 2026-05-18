@@ -11,7 +11,8 @@
  */
 
 import { useMemo } from 'react';
-import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
+import { Alert, Pressable, ScrollView, View } from 'react-native';
+import { Text } from '@/components/ui/Text';
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 
@@ -166,7 +167,7 @@ function TxRow({
         <View style={{ alignItems: 'flex-end' }}>
           <Text style={{
             color: negative ? p.fg : p.greenFg,
-            fontSize: 15, fontWeight: '800', fontVariant: ['tabular-nums'],
+            fontSize: 15, fontWeight: '600', fontVariant: ['tabular-nums'],
           }}>
             {negative ? '-' : '+'}{abs.toLocaleString('en-US', { maximumFractionDigits: 8 })} {tx.currency}
           </Text>
@@ -213,7 +214,7 @@ function StatusPill({ status, palette: p }: { status: string; palette: Palette }
       paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6,
       backgroundColor: bg, marginTop: 2,
     }}>
-      <Text style={{ color: fg, fontSize: 9, fontWeight: '800', letterSpacing: 0.4 }}>
+      <Text style={{ color: fg, fontSize: 9, fontWeight: '600', letterSpacing: 0.4 }}>
         {status}
       </Text>
     </View>

@@ -157,6 +157,8 @@ model User {
   passwordResetToken           String?                      @unique
   passwordResetExpires         DateTime?
   phoneVerified                Boolean                      @default(false)
+  phoneOtpCode                 String?
+  phoneOtpExpires              DateTime?
   referralCode                 String                       @unique
   referredBy                   String?
   lastLoginAt                  DateTime?
@@ -166,7 +168,6 @@ model User {
   // locked until `lockoutUntil`.
   failedLoginAttempts          Int                          @default(0)
   lockoutUntil                 DateTime?
-  expoPushToken                String?                      // Expo push notification token (nullable — registered after login)
   createdAt                    DateTime                     @default(now())
   updatedAt                    DateTime                     @updatedAt
   wallets                      Wallet[]
@@ -445,18 +446,27 @@ model PlatformFee {
 }
 
 model Notification {
-  id        String   @id @default(uuid())
-  userId    String
-  title     String
-  message   String
-  type      String   @default("info")
-  isRead    Boolean  @default(false)
-  metadata  Json?
-  createdAt DateTime @default(now())
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id          String   @id @default(uuid())
+  userId      String
+  title       String
+  subtitle    String?
+  message     String
+  description String?
+  mediaUrl    String?
+  mediaType   String?  // image | gif | video | none
+  locales     Json?    // { "ar": { "title": "...", "subtitle": "...", "description": "..." } }
+  type        String   @default("info")
+  isRead      Boolean  @default(false)
+  metadata    Json?
+  createdBy   String?  // admin userId who sent the broadcast (null for system notifications)
+  broadcastId String?  // shared UUID across all rows of a single broadcast batch
+  createdAt   DateTime @default(now())
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([isRead])
+  @@index([type])
+  @@index([broadcastId])
 }
 
 model AuditLog {

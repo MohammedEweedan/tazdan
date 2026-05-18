@@ -14,7 +14,8 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
-import { Alert, Animated, Pressable, Text, View } from 'react-native';
+import { Alert, Animated, Pressable, View } from 'react-native';
+import { Text } from '@/components/ui/Text';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as LocalAuthentication from 'expo-local-authentication';
@@ -273,7 +274,7 @@ function CardFront({
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <View>
           <Text style={{
-            color: theme.text, fontSize: 13, fontWeight: '800',
+            color: theme.text, fontSize: 13, fontWeight: '600',
             letterSpacing: -0.3, lineHeight: 15,
           }}>
             pro
@@ -301,7 +302,7 @@ function CardFront({
               backgroundColor: 'rgba(255,255,255,0.18)',
             }}>
               <Ionicons name="snow" size={10} color="#fff" />
-              <Text style={{ color: '#fff', fontSize: 10, fontWeight: '800' }}>FROZEN</Text>
+              <Text style={{ color: '#fff', fontSize: 10, fontWeight: '600' }}>FROZEN</Text>
             </View>
           )}
           <ContactlessIcon color={theme.text} />
@@ -343,7 +344,7 @@ function CardFront({
             </Text>
           </View>
           <Text style={{
-            color: theme.visa, fontSize: 22, fontWeight: '800',
+            color: theme.visa, fontSize: 22, fontWeight: '600',
             fontStyle: 'italic', letterSpacing: -1,
           }}>
             VISA
@@ -398,7 +399,7 @@ function CardBack({
       {/* VISA */}
       <View style={{ flex: 1, justifyContent: 'flex-end', alignItems: 'flex-end', paddingHorizontal: 18, paddingBottom: 14 }}>
         <Text style={{
-          color: theme.visa, fontSize: 20, fontWeight: '800',
+          color: theme.visa, fontSize: 20, fontWeight: '600',
           fontStyle: 'italic', letterSpacing: -1,
         }}>
           VISA

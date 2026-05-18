@@ -10,7 +10,8 @@
  */
 
 import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, ScrollView, View } from 'react-native';
+import { Text, TextInput } from '@/components/ui/Text';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery } from '@tanstack/react-query';
@@ -176,7 +177,7 @@ export default function Send() {
                     backgroundColor: '#7c3aed',
                     alignItems: 'center', justifyContent: 'center',
                   }}>
-                    <Text style={{ color: '#fff', fontWeight: '800', fontSize: 14 }}>
+                    <Text style={{ color: '#fff', fontWeight: '600', fontSize: 14 }}>
                       {m.firstName?.[0]?.toUpperCase() ?? m.username[0].toUpperCase()}
                     </Text>
                   </View>
@@ -193,7 +194,7 @@ export default function Send() {
                       paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6,
                       backgroundColor: p.greenBg,
                     }}>
-                      <Text style={{ color: p.greenFg, fontSize: 9, fontWeight: '800' }}>
+                      <Text style={{ color: p.greenFg, fontSize: 9, fontWeight: '600' }}>
                         {m.kycTier.replace('_', ' ')}
                       </Text>
                     </View>

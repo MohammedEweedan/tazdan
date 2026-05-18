@@ -4,7 +4,8 @@
  */
 
 import { useMemo, useState } from 'react';
-import { Alert, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { Alert, Pressable, ScrollView, View } from 'react-native';
+import { Text, TextInput } from '@/components/ui/Text';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -115,13 +116,13 @@ export default function OfferDetail() {
               alignItems: 'center', justifyContent: 'center',
               borderWidth: 1, borderColor: p.border,
             }}>
-              <Text style={{ color: p.fg, fontSize: 18, fontWeight: '800' }}>
+              <Text style={{ color: p.fg, fontSize: 18, fontWeight: '600' }}>
                 {offer.trader.name.charAt(0).toUpperCase()}
               </Text>
             </View>
             <View style={{ flex: 1 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                <Text style={{ color: p.fg, fontSize: 15, fontWeight: '800' }}>
+                <Text style={{ color: p.fg, fontSize: 15, fontWeight: '600' }}>
                   {offer.trader.handle}
                 </Text>
                 {offer.trader.verified && (
@@ -136,7 +137,7 @@ export default function OfferDetail() {
               paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8,
               backgroundColor: sideBg,
             }}>
-              <Text style={{ color: sideColor, fontSize: 11, fontWeight: '800', letterSpacing: 0.4 }}>
+              <Text style={{ color: sideColor, fontSize: 11, fontWeight: '600', letterSpacing: 0.4 }}>
                 {offer.side}
               </Text>
             </View>
@@ -198,7 +199,7 @@ export default function OfferDetail() {
               {t('p2p.youPay').toUpperCase()} ({offer.quote})
             </Text>
             <Pressable hitSlop={8} onPress={() => { h.selection(); setFiatAmount(String(maxLimit)); }}>
-              <Text style={{ color: p.fg, fontSize: 12, fontWeight: '800', letterSpacing: 0.4 }}>
+              <Text style={{ color: p.fg, fontSize: 12, fontWeight: '600', letterSpacing: 0.4 }}>
                 {t('p2p.useMax')}
               </Text>
             </Pressable>
@@ -221,7 +222,7 @@ export default function OfferDetail() {
               keyboardType="decimal-pad"
               style={{
                 flex: 1, color: p.fg,
-                fontSize: 36, fontWeight: '800',
+                fontSize: 36, fontWeight: '600',
                 letterSpacing: -1, fontVariant: ['tabular-nums'],
                 textAlign: 'center',
               }}
@@ -261,7 +262,7 @@ export default function OfferDetail() {
               {t('p2p.youReceive').toUpperCase()}
             </Text>
             <Text style={{
-              color: p.fg, fontSize: 26, fontWeight: '800',
+              color: p.fg, fontSize: 26, fontWeight: '600',
               letterSpacing: -0.8, fontVariant: ['tabular-nums'],
             }}>
               {cryptoAmt.toLocaleString('en-US', { maximumFractionDigits: 8 })}
@@ -288,7 +289,7 @@ export default function OfferDetail() {
               >
                 <Text style={{
                   color: isActive ? p.ctaFg : p.fg,
-                  fontSize: 12, fontWeight: '800',
+                  fontSize: 12, fontWeight: '600',
                   fontVariant: ['tabular-nums'],
                 }}>
                   {Number(v).toLocaleString()} {offer.quote}

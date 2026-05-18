@@ -2,7 +2,8 @@
  * Referral — share a code, earn cash. Theme-aware.
  */
 
-import { Alert, Pressable, Share, Text, View } from 'react-native';
+import { Alert, Pressable, Share, View } from 'react-native';
+import { Text } from '@/components/ui/Text';
 import * as Clipboard from 'expo-clipboard';
 import { Ionicons } from '@expo/vector-icons';
 import { ScreenShell, Panel, CTAButton } from '@/components/ui/ScreenShell';
@@ -27,7 +28,7 @@ export default function Referral() {
         }}>
           <Ionicons name="gift" size={36} color={p.fg} />
         </View>
-        <Text style={{ color: p.fg, fontSize: 28, fontWeight: '800', letterSpacing: -0.6, marginTop: 18, textAlign: 'center' }}>
+        <Text style={{ color: p.fg, fontSize: 28, fontWeight: '600', letterSpacing: -0.6, marginTop: 18, textAlign: 'center' }}>
           Earn $10 for every friend
         </Text>
         <Text style={{ color: p.fgMuted, fontSize: 14, fontWeight: '500', marginTop: 8, textAlign: 'center', paddingHorizontal: 12 }}>
@@ -46,7 +47,7 @@ export default function Referral() {
               YOUR CODE
             </Text>
             <Text selectable style={{
-              color: p.fg, fontSize: 22, fontWeight: '800', letterSpacing: 1, marginTop: 4,
+              color: p.fg, fontSize: 22, fontWeight: '600', letterSpacing: 1, marginTop: 4,
             }}>
               {code}
             </Text>
@@ -128,7 +129,7 @@ function Stat({ label, value, accent, palette: p }: { label: string; value: stri
       </Text>
       <Text style={{
         color: accent ?? p.fg,
-        fontSize: 24, fontWeight: '800', letterSpacing: -0.5, marginTop: 6,
+        fontSize: 24, fontWeight: '600', letterSpacing: -0.5, marginTop: 6,
         fontVariant: ['tabular-nums'],
       }}>
         {value}

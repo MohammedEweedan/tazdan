@@ -13,10 +13,8 @@
  */
 
 import { useEffect, useMemo, useState } from 'react';
-import {
-  KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, Text,
-  TextInput, View,
-} from 'react-native';
+import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, View } from 'react-native';
+import { Text, TextInput } from '@/components/ui/Text';
 import { Ionicons } from '@expo/vector-icons';
 
 import { type Palette } from '@/store/themeStore';
@@ -89,7 +87,7 @@ export function SendMoneySheet({
 
             {/* Title + recipient */}
             <View>
-              <Text style={{ color: p.fg, fontSize: 18, fontWeight: '800', letterSpacing: -0.3 }}>
+              <Text style={{ color: p.fg, fontSize: 18, fontWeight: '600', letterSpacing: -0.3 }}>
                 Send a payment
               </Text>
               {!!recipientLabel && (
@@ -140,7 +138,7 @@ export function SendMoneySheet({
                       >
                         <Text style={{
                           color: active ? p.bg : p.fg,
-                          fontSize: 13, fontWeight: '800', letterSpacing: 0.2,
+                          fontSize: 13, fontWeight: '600', letterSpacing: 0.2,
                         }}>
                           {meta?.flagOrIcon ?? w.currency.slice(0, 1)} {w.currency}
                         </Text>
@@ -181,7 +179,7 @@ export function SendMoneySheet({
                           borderWidth: 1, borderColor: p.border,
                         }}
                       >
-                        <Text style={{ color: p.fg, fontSize: 10, fontWeight: '800', letterSpacing: 0.4 }}>
+                        <Text style={{ color: p.fg, fontSize: 10, fontWeight: '600', letterSpacing: 0.4 }}>
                           MAX
                         </Text>
                       </Pressable>
@@ -195,12 +193,12 @@ export function SendMoneySheet({
                       keyboardType="decimal-pad"
                       placeholderTextColor={p.fgFaint}
                       style={{
-                        flex: 1, color: p.fg, fontSize: 28, fontWeight: '800',
+                        flex: 1, color: p.fg, fontSize: 28, fontWeight: '600',
                         fontVariant: ['tabular-nums'], letterSpacing: -0.5,
                         paddingVertical: 0,
                       }}
                     />
-                    <Text style={{ color: p.fgMuted, fontSize: 14, fontWeight: '800' }}>
+                    <Text style={{ color: p.fgMuted, fontSize: 14, fontWeight: '600' }}>
                       {currency}
                     </Text>
                   </View>
@@ -242,7 +240,7 @@ export function SendMoneySheet({
               })}
             >
               <Ionicons name="paper-plane" size={15} color="#fff" />
-              <Text style={{ color: '#fff', fontSize: 15, fontWeight: '800' }}>
+              <Text style={{ color: '#fff', fontSize: 15, fontWeight: '600' }}>
                 {valid ? `Send ${formatAmount(numAmount)} ${currency}` : 'Send payment'}
               </Text>
             </Pressable>

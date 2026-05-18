@@ -23,6 +23,7 @@ export { useForexRates } from './useForexRates';
 export { useDisplayCurrency, CURRENCY_SYMBOLS } from './useDisplayCurrency';
 export { useBackendTickers as useMarkets } from './useBackendTickers';
 export { useActivityRealtime } from './useActivityRealtime';
+export { useNotificationRealtime } from './useNotificationRealtime';
 export { useCountries, useBanksByCountry, usePaymentMethods, usePlatformBanks } from './useGeo';
 
 export const useWallets = () =>
@@ -188,3 +189,10 @@ export function useMarkAllRead() {
     },
   });
 }
+
+export const useLatestAnnouncement = () =>
+  useQuery({
+    queryKey: ['latest-announcement'],
+    queryFn: () => notificationService.latestAnnouncement(),
+    refetchInterval: 30_000,
+  });

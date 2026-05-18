@@ -3,7 +3,8 @@
  */
 
 import { useState } from 'react';
-import { Alert, Image, Pressable, Share, Text, View } from 'react-native';
+import { Alert, Image, Pressable, Share, View } from 'react-native';
+import { Text } from '@/components/ui/Text';
 import * as Clipboard from 'expo-clipboard';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -74,7 +75,7 @@ export default function Receive() {
             />
           </View>
           <Text style={{
-            color: p.fg, fontSize: 28, fontWeight: '800',
+            color: p.fg, fontSize: 28, fontWeight: '600',
             letterSpacing: -0.6, marginTop: 22,
           }}>
             @{handle}

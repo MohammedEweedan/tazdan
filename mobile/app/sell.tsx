@@ -3,7 +3,8 @@
  */
 
 import { useMemo, useState } from 'react';
-import { Alert, Pressable, Text, TextInput, View } from 'react-native';
+import { Alert, Pressable, View } from 'react-native';
+import { Text, TextInput } from '@/components/ui/Text';
 import { useRouter } from 'expo-router';
 
 import { ScreenShell, CTAButton, Panel } from '@/components/ui/ScreenShell';
@@ -64,7 +65,7 @@ export default function Sell() {
       <Panel style={{ marginTop: 18, padding: 18 }}>
         <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '600' }}>1 {coin} =</Text>
         <Text style={{
-          color: p.fg, fontSize: 26, fontWeight: '800',
+          color: p.fg, fontSize: 26, fontWeight: '600',
           letterSpacing: -0.7, marginTop: 4, fontVariant: ['tabular-nums'],
         }}>
           ${spot.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}

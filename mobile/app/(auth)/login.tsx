@@ -5,10 +5,8 @@
  */
 
 import { useEffect, useState } from 'react';
-import {
-  ActivityIndicator, Alert, Image, KeyboardAvoidingView, Modal, Platform, Pressable,
-  ScrollView, Text, TextInput, View,
-} from 'react-native';
+import { ActivityIndicator, Alert, Image, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, View } from 'react-native';
+import { Text, TextInput } from '@/components/ui/Text';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
@@ -22,6 +20,7 @@ import { useAuthStore } from '@/store/authStore';
 import { useHaptics } from '@/hooks';
 import { useTheme, useThemedPalette, type Palette } from '@/store/themeStore';
 import { useI18n, useT, LOCALE_META } from '@/store/i18nStore';
+import { TopGradient } from '@/components/ui/ScreenShell';
 
 const schema = z.object({
   // Can be email or handle (username)
@@ -119,6 +118,7 @@ export default function Login() {
 
   return (
     <View style={{ flex: 1, backgroundColor: p.bg }}>
+      <TopGradient />
       <StatusBar style={themeMode === 'dark' ? 'light' : 'dark'} />
       <KeyboardAvoidingView
         style={{ flex: 1 }}
@@ -193,7 +193,7 @@ export default function Login() {
             </View>
 
             {/* Heading */}
-            <Text style={{ color: p.fg, fontSize: 34, fontWeight: '800', letterSpacing: -1.1 }}>
+            <Text style={{ color: p.fg, fontSize: 34, fontWeight: '600', letterSpacing: -1.1 }}>
               {t('login.title')}
             </Text>
             <Text style={{ color: p.fgMuted, fontSize: 15, lineHeight: 22, marginTop: 8 }}>
@@ -279,7 +279,7 @@ export default function Login() {
             >
               {submitting && <ActivityIndicator size="small" color={p.ctaFg} />}
               <Ionicons name="arrow-forward" size={18} color={p.ctaFg} />
-              <Text style={{ color: p.ctaFg, fontSize: 16, fontWeight: '800', letterSpacing: -0.2 }}>
+              <Text style={{ color: p.ctaFg, fontSize: 16, fontWeight: '600', letterSpacing: -0.2 }}>
                 {submitting ? t('login.loading') : t('login.cta')}
               </Text>
             </Pressable>
@@ -376,7 +376,7 @@ export default function Login() {
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 24, paddingBottom: 8 }}>
               <Text style={{ color: p.fgMuted, fontSize: 14 }}>{t('login.newTo')}</Text>
               <Pressable onPress={() => { h.selection(); router.push('/register'); }} hitSlop={6}>
-                <Text style={{ color: p.fg, fontSize: 14, fontWeight: '800' }}>{t('login.create')}</Text>
+                <Text style={{ color: p.fg, fontSize: 14, fontWeight: '600' }}>{t('login.create')}</Text>
               </Pressable>
             </View>
           </ScrollView>
@@ -392,7 +392,7 @@ export default function Login() {
       >
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'center', paddingHorizontal: 28 }}>
           <View style={{ backgroundColor: p.bg, borderRadius: 24, padding: 24, borderWidth: 1, borderColor: p.border }}>
-            <Text style={{ color: p.fg, fontSize: 20, fontWeight: '800', marginBottom: 8 }}>
+            <Text style={{ color: p.fg, fontSize: 20, fontWeight: '600', marginBottom: 8 }}>
               Two-factor code
             </Text>
             <Text style={{ color: p.fgMuted, fontSize: 14, marginBottom: 16, lineHeight: 20 }}>
@@ -445,7 +445,7 @@ export default function Login() {
                 }}
               >
                 {submitting && <ActivityIndicator size="small" color={p.ctaFg} />}
-                <Text style={{ color: p.ctaFg, fontSize: 14, fontWeight: '800' }}>Verify</Text>
+                <Text style={{ color: p.ctaFg, fontSize: 14, fontWeight: '600' }}>Verify</Text>
               </Pressable>
             </View>
           </View>

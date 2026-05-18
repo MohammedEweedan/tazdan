@@ -10,15 +10,8 @@
  * - Bank list per country
  */
 import { useState, useEffect } from 'react';
-import {
-  ActivityIndicator,
-  Modal,
-  Pressable,
-  ScrollView,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { ActivityIndicator, Modal, Pressable, ScrollView, View } from 'react-native';
+import { Text, TextInput } from '@/components/ui/Text';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useQuery } from '@tanstack/react-query';
@@ -318,7 +311,7 @@ export function AddBankAccountModal({ onSuccess, onCancel }: { onSuccess: () => 
   return (
     <View style={{ paddingHorizontal: 20, paddingBottom: 8 }}>
       {/* Header */}
-      <Text style={{ color: p.fg, fontSize: 20, fontWeight: '800', marginBottom: 20 }}>
+      <Text style={{ color: p.fg, fontSize: 20, fontWeight: '600', marginBottom: 20 }}>
         {step === 'form' ? t('bankAccount.addTitle') : t('bankAccount.confirmTitle')}
       </Text>
 
@@ -626,7 +619,7 @@ export function AddBankAccountModal({ onSuccess, onCancel }: { onSuccess: () => 
               shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.3, shadowRadius: 14, elevation: 6,
             })}
           >
-            <Text style={{ color: formValid ? p.ctaFg : p.fgMuted, fontSize: 16, fontWeight: '800' }}>
+            <Text style={{ color: formValid ? p.ctaFg : p.fgMuted, fontSize: 16, fontWeight: '600' }}>
               {t('common.continue')}
             </Text>
           </Pressable>
@@ -776,7 +769,7 @@ export function AddBankAccountModal({ onSuccess, onCancel }: { onSuccess: () => 
               ) : (
                 <>
                   <Ionicons name="checkmark-circle" size={17} color={p.ctaFg} />
-                  <Text style={{ color: p.ctaFg, fontSize: 16, fontWeight: '800' }}>{t('bankAccount.confirmAdd')}</Text>
+                  <Text style={{ color: p.ctaFg, fontSize: 16, fontWeight: '600' }}>{t('bankAccount.confirmAdd')}</Text>
                 </>
               )}
             </Pressable>

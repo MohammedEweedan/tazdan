@@ -3,7 +3,8 @@
  * Matches BuyWidget/SellWidget visual language.
  */
 import { useState } from 'react';
-import { Alert, Image, Pressable, Share, Text, View } from 'react-native';
+import { Alert, Image, Pressable, Share, View } from 'react-native';
+import { Text } from '@/components/ui/Text';
 import * as Clipboard from 'expo-clipboard';
 import { Ionicons } from '@expo/vector-icons';
 import { useThemedPalette } from '@/store/themeStore';
@@ -85,7 +86,7 @@ export function ReceiveWidget() {
               <Image source={{ uri: qrUrl }} style={{ width: 184, height: 184 }} resizeMode="contain" />
             </View>
 
-            <Text style={{ color: p.fg, fontSize: 26, fontWeight: '800', letterSpacing: -0.5, marginTop: 20 }}>
+            <Text style={{ color: p.fg, fontSize: 26, fontWeight: '600', letterSpacing: -0.5, marginTop: 20 }}>
               @{handle}
             </Text>
             <Text selectable style={{ color: p.fgMuted, fontSize: 12, fontWeight: '500', marginTop: 4 }}>
@@ -155,7 +156,7 @@ export function ReceiveWidget() {
             })}
           >
             <Ionicons name="copy-outline" size={18} color={p.ctaFg} />
-            <Text style={{ color: p.ctaFg, fontSize: 16, fontWeight: '800' }}>{t('receive.copyIban')}</Text>
+            <Text style={{ color: p.ctaFg, fontSize: 16, fontWeight: '600' }}>{t('receive.copyIban')}</Text>
           </Pressable>
 
           <Text style={{ color: p.fgFaint, fontSize: 12, textAlign: 'center', marginTop: 14, lineHeight: 18 }}>

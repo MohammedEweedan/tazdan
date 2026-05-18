@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { authenticate, requireAdmin } from '../middleware/auth';
 import { AdminController } from '../controllers/admin.controller';
 import { AdminExtrasController as X } from '../controllers/adminExtras.controller';
+import { mediaUpload } from '../middleware/mediaUpload';
 
 export const adminRouter = Router();
 
@@ -44,6 +45,15 @@ adminRouter.put('/aml-flags/:id/resolve', AdminController.resolveAMLFlag);
 // Real-time platform metrics
 adminRouter.get('/metrics', AdminController.getMetrics);
 
+// Production-safe manual wallet credit
+adminRouter.post('/manual-credit', AdminController.manualCredit);
+
+// Backfill historical fees from existing orders/withdrawals/P2P trades
+adminRouter.post('/backfill-fees', AdminController.backfillFees);
+
+// Dev-only: directly credit a user's wallet (simulator / testing use only)
+adminRouter.post('/seed-balance', AdminController.seedBalance);
+
 // Support escalations
 adminRouter.get('/escalations', AdminController.getEscalations);
 adminRouter.put('/escalations/:id/assign', AdminController.assignEscalation);
@@ -84,11 +94,32 @@ adminRouter.get('/withdrawal-whitelist', X.listWithdrawalWhitelist);
 
 adminRouter.get('/transfers',        X.listTransfers);
 
-adminRouter.get('/notifications',    X.listNotifications);
-adminRouter.post('/notifications/broadcast', X.broadcastNotification);
+adminRouter.get('/notifications',                          X.listNotifications);
+adminRouter.post('/notifications/broadcast',               X.broadcastNotification);
+adminRouter.get('/notifications/:broadcastId/recipients',  X.getBroadcastRecipients);
+adminRouter.post(
+  '/media-upload',
+  (req, res, next) => {
+    mediaUpload.single('file')(req, res, (err) => {
+      if (err) {
+        console.error('[media-upload] multer error:', err);
+        return res.status(400).json({ error: err.message ?? 'Multer error' });
+      }
+      next();
+    });
+  },
+  X.uploadMedia,
+);
 
 // Platform bank accounts (deposit rails admins manage)
 adminRouter.get('/platform-banks',          X.listPlatformBanks);
 adminRouter.post('/platform-banks',         X.createPlatformBank);
 adminRouter.put('/platform-banks/:id',      X.updatePlatformBank);
 adminRouter.delete('/platform-banks/:id',   X.deletePlatformBank);
+
+// Data browser — raw paginated reads of every core model
+adminRouter.get('/data/transactions',   X.listRawTransactions);
+adminRouter.get('/data/wallets',        X.listRawWallets);
+adminRouter.get('/data/bank-accounts',  X.listRawBankAccounts);
+adminRouter.get('/data/p2p-trades',     X.listRawP2PTrades);
+adminRouter.get('/data/platform-fees',  X.listPlatformFees);

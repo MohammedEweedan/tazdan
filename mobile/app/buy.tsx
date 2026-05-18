@@ -11,7 +11,8 @@
  */
 
 import { useMemo, useState } from 'react';
-import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
+import { Alert, Pressable, ScrollView, View } from 'react-native';
+import { Text } from '@/components/ui/Text';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -152,7 +153,7 @@ export default function Buy() {
             {mode === 'FIAT' && (
               <Text style={{
                 color: overspend ? p.redFg : p.fg,
-                fontSize: 56, fontWeight: '800', letterSpacing: -2.4,
+                fontSize: 56, fontWeight: '600', letterSpacing: -2.4,
               }}>
                 {fiatSymbol(fiat)}
               </Text>
@@ -161,7 +162,7 @@ export default function Buy() {
               style={{
                 color: overspend ? p.redFg : p.fg,
                 fontSize: 64,
-                fontWeight: '800',
+                fontWeight: '600',
                 letterSpacing: -2.4,
                 fontVariant: ['tabular-nums'],
                 minWidth: 80,
@@ -329,7 +330,7 @@ function PickerRow({
       }}>
         {label}
       </Text>
-      <Text style={{ color: p.fg, fontSize: 16, fontWeight: '800', flex: 1 }}>
+      <Text style={{ color: p.fg, fontSize: 16, fontWeight: '600', flex: 1 }}>
         {value}
       </Text>
       <Ionicons

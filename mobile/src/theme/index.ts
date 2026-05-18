@@ -85,14 +85,73 @@ export const spacing = {
   16: 64,  20: 80,  24: 96,
 } as const;
 
-export const typography = {
-  // RN doesn't support a single token, so we expose family + weight + size triplets
-  display: { fontFamily: 'System', fontWeight: '800' as const },
-  heading: { fontFamily: 'System', fontWeight: '700' as const },
-  body:    { fontFamily: 'System', fontWeight: '500' as const },
-  caption: { fontFamily: 'System', fontWeight: '500' as const },
-  mono:    { fontFamily: 'Menlo',  fontWeight: '600' as const },
+/**
+ * Font families:
+ *   English / LTR → Outfit (geometric humanist, MENA-leaning proportions)
+ *   Arabic  / RTL → IBM Plex Sans Arabic (same density + x-height as Outfit,
+ *                   tabular numerals that align perfectly when language switches)
+ *
+ * Each token is a weight-specific font name matching the key passed to
+ * useFonts() in _layout.tsx. In React Native you set `fontFamily` to the
+ * exact registered name — you cannot use `fontWeight` to synthesise a bold
+ * variant from a variable font; you must reference the correct weight file.
+ *
+ * Usage:
+ *   // English text (LTR)
+ *   style={{ fontFamily: F.display, fontSize: 22 }}
+ *   // Arabic text (RTL) — same weight scale, different family
+ *   style={{ fontFamily: FAR.display, fontSize: 22, writingDirection: 'rtl' }}
+ */
+export const F = {
+  // Outfit weight map
+  thin:      'Outfit_300Light',
+  regular:   'Outfit_400Regular',
+  medium:    'Outfit_500Medium',
+  semibold:  'Outfit_600SemiBold',
+  bold:      'Outfit_700Bold',
+  extrabold: 'Outfit_800ExtraBold',
+  black:     'Outfit_900Black',
 } as const;
+
+export const FAR = {
+  // IBM Plex Sans Arabic weight map — same slots as F for easy swapping
+  thin:      'IBMPlexSansArabic_300Light',
+  regular:   'IBMPlexSansArabic_400Regular',
+  medium:    'IBMPlexSansArabic_500Medium',
+  semibold:  'IBMPlexSansArabic_600SemiBold',
+  bold:      'IBMPlexSansArabic_700Bold',
+  // IBM Plex tops at 700 — map heavier slots to bold
+  extrabold: 'IBMPlexSansArabic_700Bold',
+  black:     'IBMPlexSansArabic_700Bold',
+} as const;
+
+export const typography = {
+  // Convenience triplets — fontFamily only; callers set fontSize themselves.
+  // fontWeight is intentionally omitted: in RN you pick the weight via the
+  // font file name, not the weight prop (which only affects system fonts).
+  display: { fontFamily: F.extrabold },
+  heading: { fontFamily: F.bold },
+  body:    { fontFamily: F.medium },
+  caption: { fontFamily: F.regular },
+  mono:    { fontFamily: 'Menlo' },
+} as const;
+
+/**
+ * Locale-aware font hook. Returns the correct family map (F or FAR)
+ * based on the currently active language — call this instead of
+ * importing F/FAR directly so Arabic users automatically get IBM Plex.
+ *
+ *   const fonts = useFonts();
+ *   <Text style={{ fontFamily: fonts.bold, fontSize: 16 }}>…</Text>
+ */
+export function useFontFamily() {
+  // Lazy import to avoid a circular dependency — i18nStore imports nothing
+  // from theme, so this direction is safe.
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { useI18n } = require('../store/i18nStore') as typeof import('../store/i18nStore');
+  const locale = useI18n((s: any) => s.locale) as string;
+  return locale === 'ar' ? FAR : F;
+}
 
 /** iOS-style soft shadows. Pass to RN `style={{ ...shadows.card }}`. */
 export const shadows = {

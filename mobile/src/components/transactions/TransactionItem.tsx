@@ -4,7 +4,8 @@
  * Right: signed amount + status pill (only when not COMPLETED).
  */
 
-import { Pressable, Text, View } from 'react-native';
+import { Pressable, View } from 'react-native';
+import { Text } from '@/components/ui/Text';
 import { Ionicons } from '@expo/vector-icons';
 import { Avatar } from '@/components/ui/Avatar';
 import { formatAmount, formatRelativeTime } from '@/utils/format';

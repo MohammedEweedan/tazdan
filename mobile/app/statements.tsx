@@ -5,7 +5,8 @@
  */
 
 import { useMemo, useState } from 'react';
-import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
+import { Alert, Pressable, ScrollView, View } from 'react-native';
+import { Text } from '@/components/ui/Text';
 import { LoadingPulse } from '@/components/ui/LoadingPulse';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -172,7 +173,7 @@ export default function Statements() {
                   borderWidth: 1, borderColor: currency === 'ALL' ? p.fg : p.border,
                 }}
               >
-                <Text style={{ color: currency === 'ALL' ? p.bg : p.fg, fontSize: 12, fontWeight: '800' }}>
+                <Text style={{ color: currency === 'ALL' ? p.bg : p.fg, fontSize: 12, fontWeight: '600' }}>
                   All currencies
                 </Text>
               </View>
@@ -248,7 +249,7 @@ function Section({ label, p, children }: { label: string; p: ReturnType<typeof u
     <View style={{ marginTop: 22 }}>
       <Text
         style={{
-          color: p.fgMuted, fontSize: 11, fontWeight: '800',
+          color: p.fgMuted, fontSize: 11, fontWeight: '600',
           letterSpacing: 0.8, marginBottom: 10,
         }}
       >
@@ -272,7 +273,7 @@ function Chip({
         borderWidth: 1, borderColor: active ? p.fg : p.border,
       }}
     >
-      <Text style={{ color: active ? p.bg : p.fg, fontSize: 12, fontWeight: '800', letterSpacing: 0.2 }}>
+      <Text style={{ color: active ? p.bg : p.fg, fontSize: 12, fontWeight: '600', letterSpacing: 0.2 }}>
         {label}
       </Text>
     </PressableScale>

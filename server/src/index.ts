@@ -125,7 +125,15 @@ app.use(cookieParser());
 // just exempt it from JSON parsing.
 app.use((req, res, next) => {
   if (req.path === '/api/deposits/webhook/stripe') return next();
-  return express.json({ limit: '1mb' })(req, res, next);
+  // Capture raw body on the Meta WhatsApp webhook so we can verify the
+  // X-Hub-Signature-256 HMAC. The body is still parsed into req.body.
+  const isMetaWebhook = req.path === '/api/whatsapp/webhook/meta';
+  return express.json({
+    limit:  '1mb',
+    verify: isMetaWebhook
+      ? (req2: any, _res, buf) => { req2.rawBody = buf.toString('utf8'); }
+      : undefined,
+  })(req, res, next);
 });
 app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 
@@ -142,6 +150,20 @@ app.use('/api/auth/register', registerLimiter);
 app.use('/api/withdrawals', withdrawalLimiter);
 app.use('/api/withdrawal', withdrawalLimiter);
 app.use('/api/withdrawal/webhook', webhookLimiter);
+
+// Public media files for announcements (UUID filenames = unguessable).
+const MEDIA_DIR = path.resolve(process.env.MEDIA_UPLOAD_DIR || './uploads/media');
+app.use('/media', (req, res, next) => {
+  const name = req.path.replace(/^\//, '');
+  if (!/^[A-Za-z0-9_-]+\.(jpg|jpeg|png|webp|gif|mp4|webm)$/.test(name)) {
+    return res.status(400).json({ error: 'Invalid filename' });
+  }
+  const absolute = path.resolve(MEDIA_DIR, name);
+  if (!absolute.startsWith(MEDIA_DIR + path.sep)) {
+    return res.status(400).json({ error: 'Invalid path' });
+  }
+  res.sendFile(absolute, (err) => { if (err) next(); });
+});
 
 // Auth-gated downloads for /uploads (KYC docs, avatars, evidence).
 // IMPORTANT: never serve this directory as raw static.
@@ -316,4 +338,4 @@ async function shutdown(signal: string) {
 process.on('SIGTERM', () => shutdown('SIGTERM'));
 process.on('SIGINT',  () => shutdown('SIGINT'));
 
-export { app, io };
+export { io };

@@ -4,7 +4,8 @@
  */
 
 import { useEffect } from 'react';
-import { Text, type TextStyle } from 'react-native';
+import { type TextStyle } from 'react-native';
+import { Text } from '@/components/ui/Text';
 import Animated, {
   useAnimatedProps,
   useSharedValue,

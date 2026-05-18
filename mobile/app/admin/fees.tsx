@@ -4,7 +4,8 @@
  */
 
 import { useState } from 'react';
-import { Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
+import { Pressable, RefreshControl, ScrollView, View } from 'react-native';
+import { Text } from '@/components/ui/Text';
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
@@ -16,6 +17,7 @@ import { useAuthStore } from '@/store/authStore';
 import { adminService } from '@/services';
 import { LoadingPulse } from '@/components/ui/LoadingPulse';
 import { formatRelativeTime } from '@/utils/format';
+import { TopGradient } from '@/components/ui/ScreenShell';
 
 type Source = 'ALL' | 'order' | 'crypto_order' | 'withdrawal' | 'p2p_trade';
 
@@ -44,7 +46,8 @@ export default function AdminFees() {
   });
 
   if (!isAdmin) {
-    return <View style={{ flex: 1, backgroundColor: p.bg, alignItems: 'center', justifyContent: 'center' }}><Text style={{ color: p.fg }}>Admin only</Text></View>;
+    return <View style={{ flex: 1, backgroundColor: p.bg, alignItems: 'center', justifyContent: 'center' }}>
+      <TopGradient /><Text style={{ color: p.fg }}>Admin only</Text></View>;
   }
 
   const fees = q.data?.items ?? [];
@@ -59,7 +62,7 @@ export default function AdminFees() {
           <Pressable onPress={() => router.back()} hitSlop={8}>
             <Ionicons name="chevron-back" size={26} color={p.fg} />
           </Pressable>
-          <Text style={{ flex: 1, color: p.fg, fontSize: 18, fontWeight: '800', letterSpacing: -0.3 }}>Fee Ledger</Text>
+          <Text style={{ flex: 1, color: p.fg, fontSize: 18, fontWeight: '600', letterSpacing: -0.3 }}>Fee Ledger</Text>
         </View>
 
         <ScrollView
@@ -68,15 +71,15 @@ export default function AdminFees() {
         >
           {/* Big total */}
           <View style={{ backgroundColor: p.bgElev, borderRadius: 16, borderWidth: 1, borderColor: p.border, padding: 18, marginBottom: 14 }}>
-            <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '800', letterSpacing: 0.6 }}>TOTAL COMMISSIONS</Text>
-            <Text style={{ color: p.fg, fontSize: 36, fontWeight: '800', letterSpacing: -1, marginTop: 4, fontVariant: ['tabular-nums'] }}>
+            <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '600', letterSpacing: 0.6 }}>TOTAL COMMISSIONS</Text>
+            <Text style={{ color: p.fg, fontSize: 36, fontWeight: '600', letterSpacing: -1, marginTop: 4, fontVariant: ['tabular-nums'] }}>
               ${totalUsd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </Text>
             {totals.length > 0 && (
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 12 }}>
                 {totals.map((t: any) => (
                   <View key={t.currency} style={{ paddingHorizontal: 9, paddingVertical: 5, borderRadius: 7, backgroundColor: p.bg, borderWidth: 1, borderColor: p.border }}>
-                    <Text style={{ color: p.fg, fontSize: 11, fontWeight: '800' }}>
+                    <Text style={{ color: p.fg, fontSize: 11, fontWeight: '600' }}>
                       {Number(t._sum?.amount ?? 0).toLocaleString('en-US', { maximumFractionDigits: 4 })} {t.currency}
                     </Text>
                   </View>
@@ -95,7 +98,7 @@ export default function AdminFees() {
                   onPress={() => setSource(s)}
                   style={{ paddingHorizontal: 12, paddingVertical: 7, borderRadius: 9, backgroundColor: on ? p.fg : p.pillBg, borderWidth: 1, borderColor: on ? p.fg : p.border }}
                 >
-                  <Text style={{ color: on ? p.bg : p.fg, fontSize: 11, fontWeight: '800', letterSpacing: 0.4 }}>{SOURCE_LABEL[s]}</Text>
+                  <Text style={{ color: on ? p.bg : p.fg, fontSize: 11, fontWeight: '600', letterSpacing: 0.4 }}>{SOURCE_LABEL[s]}</Text>
                 </Pressable>
               );
             })}
@@ -116,10 +119,10 @@ export default function AdminFees() {
               <View key={f.id} style={{ backgroundColor: p.bgElev, borderRadius: 12, borderWidth: 1, borderColor: p.border, padding: 12, marginBottom: 8 }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                   <View style={{ paddingHorizontal: 7, paddingVertical: 3, borderRadius: 5, backgroundColor: 'rgba(34,197,94,0.15)' }}>
-                    <Text style={{ color: '#22c55e', fontSize: 10, fontWeight: '800', letterSpacing: 0.4 }}>{f.source.toUpperCase()}</Text>
+                    <Text style={{ color: '#22c55e', fontSize: 10, fontWeight: '600', letterSpacing: 0.4 }}>{f.source.toUpperCase()}</Text>
                   </View>
                   <Text style={{ color: p.fgFaint, fontSize: 10 }}>{formatRelativeTime(f.createdAt)}</Text>
-                  <Text style={{ color: p.fg, fontSize: 15, fontWeight: '800', marginLeft: 'auto', fontVariant: ['tabular-nums'] }}>
+                  <Text style={{ color: p.fg, fontSize: 15, fontWeight: '600', marginLeft: 'auto', fontVariant: ['tabular-nums'] }}>
                     +{Number(f.amount).toLocaleString('en-US', { maximumFractionDigits: 8 })} {f.currency}
                   </Text>
                 </View>

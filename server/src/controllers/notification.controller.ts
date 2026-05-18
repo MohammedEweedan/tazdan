@@ -71,6 +71,19 @@ export class NotificationController {
     }
   }
 
+  // Get latest unread announcement for banner
+  static async getLatestAnnouncement(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const notification = await prisma.notification.findFirst({
+        where: { userId: req.user!.id, type: 'announcement', isRead: false },
+        orderBy: { createdAt: 'desc' },
+      });
+      res.json({ notification: notification ?? null });
+    } catch (error) {
+      next(error);
+    }
+  }
+
   // Helper: create a notification (used by other controllers)
   static async create(userId: string, title: string, message: string, type = 'info', metadata?: any) {
     return prisma.notification.create({

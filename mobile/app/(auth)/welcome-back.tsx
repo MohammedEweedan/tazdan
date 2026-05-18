@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from 'react-native';
+import { Text, TextInput } from '@/components/ui/Text';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
@@ -11,6 +12,7 @@ import { useHaptics } from '@/hooks';
 import { useTheme, useThemedPalette } from '@/store/themeStore';
 import { useT } from '@/store/i18nStore';
 import { LocalePickerModal } from '@/components/ui/LocalePickerModal';
+import { TopGradient } from '@/components/ui/ScreenShell';
 
 function extractErrorMessage(e: unknown): string {
   if (typeof e === 'object' && e !== null) {
@@ -94,6 +96,7 @@ export default function WelcomeBack() {
 
   return (
     <View style={{ flex: 1, backgroundColor: p.bg }}>
+      <TopGradient />
       <StatusBar style={themeMode === 'dark' ? 'light' : 'dark'} />
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <SafeAreaView style={{ flex: 1 }} edges={['top', 'bottom']}>
@@ -121,10 +124,10 @@ export default function WelcomeBack() {
                 {lastUser.avatarUrl ? (
                   <Text style={{ fontSize: 44 }}>{lastUser.avatarUrl}</Text>
                 ) : (
-                  <Text style={{ color: p.fg, fontSize: 38, fontWeight: '800' }}>{initial}</Text>
+                  <Text style={{ color: p.fg, fontSize: 38, fontWeight: '600' }}>{initial}</Text>
                 )}
               </View>
-              <Text style={{ color: p.fg, fontSize: 32, fontWeight: '800', letterSpacing: -1, marginTop: 22, textAlign: 'center' }}>
+              <Text style={{ color: p.fg, fontSize: 32, fontWeight: '600', letterSpacing: -1, marginTop: 22, textAlign: 'center' }}>
                 {t('auth.welcomeBack', { handle })}
               </Text>
               <Text style={{ color: p.fgMuted, fontSize: 15, fontWeight: '600', marginTop: 6, textAlign: 'center' }}>
@@ -181,7 +184,7 @@ export default function WelcomeBack() {
               >
                 {submitting && <ActivityIndicator size="small" color={p.ctaFg} />}
                 <Ionicons name="lock-open-outline" size={18} color={p.ctaFg} />
-                <Text style={{ color: p.ctaFg, fontSize: 16, fontWeight: '800' }}>
+                <Text style={{ color: p.ctaFg, fontSize: 16, fontWeight: '600' }}>
                   {t('auth.loginWithPassword')}
                 </Text>
               </Pressable>

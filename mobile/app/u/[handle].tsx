@@ -13,7 +13,8 @@
  */
 
 import { useMemo } from 'react';
-import { Pressable, Text, View, ActivityIndicator } from 'react-native';
+import { Pressable, View, ActivityIndicator } from 'react-native';
+import { Text } from '@/components/ui/Text';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -81,10 +82,10 @@ export default function PublicProfile() {
             alignItems: 'center', justifyContent: 'center',
             marginBottom: 14,
           }}>
-            <Text style={{ color: '#fff', fontSize: 34, fontWeight: '800' }}>{initial}</Text>
+            <Text style={{ color: '#fff', fontSize: 34, fontWeight: '600' }}>{initial}</Text>
           </View>
 
-          <Text style={{ color: p.fg, fontSize: 22, fontWeight: '800', letterSpacing: -0.4 }}>
+          <Text style={{ color: p.fg, fontSize: 22, fontWeight: '600', letterSpacing: -0.4 }}>
             {fullName}
           </Text>
           <Text style={{ color: p.fgMuted, fontSize: 14, fontWeight: '600', marginTop: 2 }}>
@@ -105,7 +106,7 @@ export default function PublicProfile() {
             />
             <Text style={{
               color: data.kycVerified ? p.greenFg : p.fgMuted,
-              fontSize: 11, fontWeight: '800', letterSpacing: 0.5,
+              fontSize: 11, fontWeight: '600', letterSpacing: 0.5,
             }}>
               {tierLabel}
             </Text>
@@ -178,7 +179,7 @@ export default function PublicProfile() {
                 }}>
                   <Text style={{
                     color: o.side === 'BUY' ? p.greenFg : p.redFg,
-                    fontSize: 10, fontWeight: '800', letterSpacing: 0.4,
+                    fontSize: 10, fontWeight: '600', letterSpacing: 0.4,
                   }}>
                     {o.side}
                   </Text>
@@ -223,7 +224,7 @@ export default function PublicProfile() {
           })}
         >
           <Ionicons name="swap-horizontal" size={16} color={p.fg} />
-          <Text style={{ color: p.fg, fontSize: 14, fontWeight: '800' }}>
+          <Text style={{ color: p.fg, fontSize: 14, fontWeight: '600' }}>
             View P2P marketplace
           </Text>
         </Pressable>
@@ -243,7 +244,7 @@ function StatCard({ palette: p, value, label }: { palette: Palette; value: strin
       alignItems: 'center',
     }}>
       <Text style={{
-        color: p.fg, fontSize: 20, fontWeight: '800',
+        color: p.fg, fontSize: 20, fontWeight: '600',
         letterSpacing: -0.4, fontVariant: ['tabular-nums'],
       }}>
         {value}

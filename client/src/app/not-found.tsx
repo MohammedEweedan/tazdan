@@ -98,23 +98,6 @@ export default function NotFound() {
             >
               {t("notfound_home", "Go home")}
             </Button>
-            <Button
-              as={NextLink}
-              href="/markets"
-              size="md"
-              variant="outline"
-              borderColor={cardBorder}
-              color={textMain}
-              borderRadius="full"
-              fontWeight="600"
-              fontSize="14px"
-              px={6}
-              h="44px"
-              leftIcon={<Icon as={FiSearch} />}
-              _hover={{ bg: dark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)" }}
-            >
-              {t("notfound_markets", "Browse markets")}
-            </Button>
           </HStack>
 
           <HStack

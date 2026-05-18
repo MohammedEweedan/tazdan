@@ -3,7 +3,8 @@
  * full markets screen. Coin icon + name → price + 24h % → sparkline.
  */
 
-import { Pressable, Text, View } from 'react-native';
+import { Pressable, View } from 'react-native';
+import { Text } from '@/components/ui/Text';
 import { Sparkline } from '@/components/ui/Sparkline';
 import { CURRENCY_META } from '@/constants';
 import { formatPercent } from '@/utils/format';

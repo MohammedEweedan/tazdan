@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { Pressable, ScrollView, View } from 'react-native';
+import { Text } from '@/components/ui/Text';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
@@ -10,6 +11,7 @@ import { useWallets, useMarkets } from '@/hooks';
 import { getCurrencyMeta } from '@/constants';
 import { useTheme, useThemedPalette, type Palette } from '@/store/themeStore';
 import type { Wallet } from '@/types';
+import { TopGradient } from '@/components/ui/ScreenShell';
 
 type SortOption = 'value' | 'change' | 'name';
 
@@ -114,6 +116,7 @@ export default function CryptoPortfolio() {
 
   return (
     <View style={{ flex: 1, backgroundColor: p.bg }}>
+      <TopGradient />
       <StatusBar style={themeMode === 'dark' ? 'light' : 'dark'} />
       <SafeAreaView style={{ flex: 1 }} edges={['top']}>
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>

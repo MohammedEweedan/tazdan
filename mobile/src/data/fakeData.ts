@@ -68,10 +68,10 @@ export const MOCK_MARKETS: MarketTicker[] = [
 ];
 
 export const MOCK_P2P_OFFERS: P2POffer[] = [
-  { id: 'p1', side: 'SELL', trader: { handle: '@trader.uae', name: 'Sami', rating: 4.9, orders: 1240, verified: true }, base: 'USDT', quote: 'AED', price: '3.68',  available: '20000', minLimit: '500',  maxLimit: '5000',  paymentMethods: ['Bank Transfer', 'Apple Pay'], country: 'AE' },
-  { id: 'p2', side: 'SELL', trader: { handle: '@fast.sa',     name: 'Khalid', rating: 4.8, orders:  820, verified: true }, base: 'USDT', quote: 'SAR', price: '3.75',  available: '15000', minLimit: '300',  maxLimit: '4000',  paymentMethods: ['Bank Transfer'],            country: 'SA' },
-  { id: 'p3', side: 'BUY',  trader: { handle: '@global.trader',name: 'Lina',   rating: 5.0, orders: 2100, verified: true }, base: 'BTC',  quote: 'USDT', price: '65180', available:  '0.4',  minLimit: '0.01', maxLimit: '0.5',   paymentMethods: ['Internal Wallet'],          country: 'EG' },
-  { id: 'p4', side: 'SELL', trader: { handle: '@quickly',     name: 'Omar',   rating: 4.7, orders:  650, verified: false}, base: 'USDT', quote: 'EGP', price: '49.00', available: '12000', minLimit: '100',  maxLimit: '3000',  paymentMethods: ['Vodafone Cash', 'Bank'],    country: 'EG' },
+  { id: 'p1', side: 'SELL', trader: { handle: '@trader.uae', name: 'Sami',   rating: 4.9, orders: 1240, verified: true,  anonymous: false }, base: 'USDT', quote: 'AED',  price: '3.68',  available: '20000', minLimit: '500',  maxLimit: '5000',  paymentMethods: ['Bank Transfer', 'Apple Pay'], country: 'AE' },
+  { id: 'p2', side: 'SELL', trader: { handle: '@fast.sa',     name: 'Khalid', rating: 4.8, orders:  820, verified: true,  anonymous: false }, base: 'USDT', quote: 'SAR',  price: '3.75',  available: '15000', minLimit: '300',  maxLimit: '4000',  paymentMethods: ['Bank Transfer'],            country: 'SA' },
+  { id: 'p3', side: 'BUY',  trader: { handle: '@global.trader',name: 'Lina',  rating: 5.0, orders: 2100, verified: true,  anonymous: false }, base: 'BTC',  quote: 'USDT', price: '65180', available:  '0.4',  minLimit: '0.01', maxLimit: '0.5',   paymentMethods: ['Internal Wallet'],          country: 'EG' },
+  { id: 'p4', side: 'SELL', trader: { handle: '@quickly',     name: 'Omar',   rating: 4.7, orders:  650, verified: false, anonymous: false }, base: 'USDT', quote: 'EGP',  price: '49.00', available: '12000', minLimit: '100',  maxLimit: '3000',  paymentMethods: ['Vodafone Cash', 'Bank'],    country: 'EG' },
 ];
 
 export const MOCK_CARDS: CardEntity[] = [

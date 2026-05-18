@@ -11,11 +11,8 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import {
-  ActivityIndicator, Alert, FlatList, KeyboardAvoidingView,
-  Modal, Platform, Pressable, ScrollView,
-  Text, TextInput, View,
-} from 'react-native';
+import { ActivityIndicator, Alert, FlatList, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, View } from 'react-native';
+import { Text, TextInput } from '@/components/ui/Text';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useQueryClient } from '@tanstack/react-query';
@@ -91,7 +88,7 @@ export default function P2PTrades() {
             <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '700', letterSpacing: 0.6 }}>
               {t('p2p.inEscrow').toUpperCase()}
             </Text>
-            <Text style={{ color: p.fg, fontSize: 32, fontWeight: '800', letterSpacing: -0.7, marginTop: 4, fontVariant: ['tabular-nums'] }}>
+            <Text style={{ color: p.fg, fontSize: 32, fontWeight: '600', letterSpacing: -0.7, marginTop: 4, fontVariant: ['tabular-nums'] }}>
               ${lockedFiat.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </Text>
             <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '500', marginTop: 4 }}>
@@ -106,7 +103,7 @@ export default function P2PTrades() {
             const label = f === 'ACTIVE' ? t('p2p.filter.active') : f === 'COMPLETED' ? t('p2p.filter.completed') : t('p2p.filter.all');
             return (
               <Pressable key={f} onPress={() => { h.selection(); setFilter(f); }} style={{ flex: 1, paddingVertical: 9, borderRadius: 9, backgroundColor: filter === f ? p.fg : 'transparent', alignItems: 'center' }}>
-                <Text style={{ color: filter === f ? p.bg : p.fgMuted, fontSize: 11, fontWeight: '800', letterSpacing: 0.5 }}>
+                <Text style={{ color: filter === f ? p.bg : p.fgMuted, fontSize: 11, fontWeight: '600', letterSpacing: 0.5 }}>
                   {label.toUpperCase()}
                 </Text>
               </Pressable>
@@ -233,7 +230,7 @@ function TradeCard({ trade: tr, palette: p, busy, t, currentUserId, onPaid, onCo
 
         <View style={{ marginTop: 10, flexDirection: 'row', alignItems: 'center', gap: 10 }}>
           <View style={{ width: 38, height: 38, borderRadius: 19, backgroundColor: p.pillBg, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: p.border }}>
-            <Text style={{ color: p.fg, fontSize: 14, fontWeight: '800' }}>{cpInitial}</Text>
+            <Text style={{ color: p.fg, fontSize: 14, fontWeight: '600' }}>{cpInitial}</Text>
           </View>
           <View style={{ flex: 1 }}>
             <Text style={{ color: p.fg, fontSize: 15, fontWeight: '700' }} numberOfLines={1}>{cpName}</Text>
@@ -274,7 +271,7 @@ function TradeCard({ trade: tr, palette: p, busy, t, currentUserId, onPaid, onCo
             {status === 'PAYMENT_SENT' && isSeller && (
               <Pressable onPress={onDeny} style={({ pressed }) => ({ marginTop: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 9, borderRadius: 12, backgroundColor: 'rgba(239,68,68,0.08)', borderWidth: 1, borderColor: 'rgba(239,68,68,0.35)', opacity: pressed ? 0.7 : 1 })}>
                 <Ionicons name="close-circle-outline" size={14} color={p.redFg} />
-                <Text style={{ color: p.redFg, fontSize: 12, fontWeight: '800' }}>I DID NOT RECEIVE PAYMENT</Text>
+                <Text style={{ color: p.redFg, fontSize: 12, fontWeight: '600' }}>I DID NOT RECEIVE PAYMENT</Text>
               </Pressable>
             )}
 
@@ -282,7 +279,7 @@ function TradeCard({ trade: tr, palette: p, busy, t, currentUserId, onPaid, onCo
             {status === 'PAYMENT_CONFIRMED' && isBuyer && (
               <Pressable onPress={onDeny} style={({ pressed }) => ({ marginTop: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 9, borderRadius: 12, backgroundColor: 'rgba(239,68,68,0.08)', borderWidth: 1, borderColor: 'rgba(239,68,68,0.35)', opacity: pressed ? 0.7 : 1 })}>
                 <Ionicons name="close-circle-outline" size={14} color={p.redFg} />
-                <Text style={{ color: p.redFg, fontSize: 12, fontWeight: '800' }}>I DID NOT RECEIVE CRYPTO</Text>
+                <Text style={{ color: p.redFg, fontSize: 12, fontWeight: '600' }}>I DID NOT RECEIVE CRYPTO</Text>
               </Pressable>
             )}
 
@@ -290,7 +287,7 @@ function TradeCard({ trade: tr, palette: p, busy, t, currentUserId, onPaid, onCo
             {(status === 'PAYMENT_SENT' && isBuyer) && (
               <Pressable onPress={onDispute} style={({ pressed }) => ({ marginTop: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 9, borderRadius: 12, backgroundColor: 'rgba(239,68,68,0.08)', borderWidth: 1, borderColor: 'rgba(239,68,68,0.35)', opacity: pressed ? 0.7 : 1 })}>
                 <Ionicons name="alert-circle-outline" size={14} color={p.redFg} />
-                <Text style={{ color: p.redFg, fontSize: 12, fontWeight: '800' }}>{t('p2p.dispute').toUpperCase()}</Text>
+                <Text style={{ color: p.redFg, fontSize: 12, fontWeight: '600' }}>{t('p2p.dispute').toUpperCase()}</Text>
               </Pressable>
             )}
 
@@ -310,7 +307,7 @@ function TradeCard({ trade: tr, palette: p, busy, t, currentUserId, onPaid, onCo
           <Pressable onPress={onShare} style={({ pressed }) => ({ marginTop: 12, padding: 12, borderRadius: 12, backgroundColor: p.greenBg, borderWidth: 1, borderColor: 'rgba(34,197,94,0.35)', flexDirection: 'row', alignItems: 'center', gap: 10, opacity: pressed ? 0.85 : 1 })}>
             <Ionicons name="sparkles-outline" size={16} color={p.greenFg} />
             <View style={{ flex: 1 }}>
-              <Text style={{ color: p.greenFg, fontSize: 12, fontWeight: '800', letterSpacing: 0.3 }}>
+              <Text style={{ color: p.greenFg, fontSize: 12, fontWeight: '600', letterSpacing: 0.3 }}>
                 {t('p2p.shareProfile').toUpperCase()}
               </Text>
               <Text style={{ color: p.greenFg, fontSize: 11, fontWeight: '500', marginTop: 2, opacity: 0.85 }} numberOfLines={2}>
@@ -440,10 +437,10 @@ function TradeChatModal({ trade, currentUserId, myHandle, palette: p, t, onClose
             <Ionicons name="chevron-down" size={18} color={p.fg} />
           </Pressable>
           <View style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: '#7c3aed', alignItems: 'center', justifyContent: 'center' }}>
-            <Text style={{ color: '#fff', fontSize: 14, fontWeight: '800' }}>{cpInitial}</Text>
+            <Text style={{ color: '#fff', fontSize: 14, fontWeight: '600' }}>{cpInitial}</Text>
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={{ color: p.fg, fontSize: 15, fontWeight: '800', letterSpacing: -0.2 }} numberOfLines={1}>{cpName}</Text>
+            <Text style={{ color: p.fg, fontSize: 15, fontWeight: '600', letterSpacing: -0.2 }} numberOfLines={1}>{cpName}</Text>
             {isActive ? (
               <TradeTimer expiresAt={expiresAt} palette={p} />
             ) : (
@@ -453,7 +450,7 @@ function TradeChatModal({ trade, currentUserId, myHandle, palette: p, t, onClose
           <StatusPill status={trade.status} palette={p} />
           {isActive && trade.status !== 'DISPUTED' && (
             <Pressable onPress={handleEscalate} style={({ pressed }) => ({ paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, backgroundColor: 'rgba(239,68,68,0.12)', borderWidth: 1, borderColor: p.redFg, opacity: pressed ? 0.7 : 1 })}>
-              <Text style={{ color: p.redFg, fontSize: 11, fontWeight: '800' }}>ESCALATE</Text>
+              <Text style={{ color: p.redFg, fontSize: 11, fontWeight: '600' }}>ESCALATE</Text>
             </Pressable>
           )}
         </View>
@@ -591,7 +588,7 @@ function StatusPill({ status, palette: p }: { status: P2PTrade['status']; palett
   const c = cfg[status] ?? { bg: p.pillBg, fg: p.fgMuted, label: String(status) };
   return (
     <View style={{ paddingHorizontal: 9, paddingVertical: 4, borderRadius: 8, backgroundColor: c.bg }}>
-      <Text style={{ color: c.fg, fontSize: 10, fontWeight: '800', letterSpacing: 0.5 }}>{c.label}</Text>
+      <Text style={{ color: c.fg, fontSize: 10, fontWeight: '600', letterSpacing: 0.5 }}>{c.label}</Text>
     </View>
   );
 }
@@ -658,7 +655,7 @@ function DisputeModal({ trade, currentUserId, palette: p, t, onClose, onSubmitte
           <Text style={{ color: invalid ? p.fgFaint : p.greenFg, fontSize: 11, fontWeight: '600', marginTop: 6 }}>{trimmedLen}/1000 (min 10)</Text>
           <Pressable onPress={submit} disabled={invalid || busy} style={({ pressed }) => ({ marginTop: 20, height: 48, borderRadius: 24, backgroundColor: p.redFg, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: invalid ? 0.4 : pressed || busy ? 0.85 : 1 })}>
             {busy ? <ActivityIndicator color="#fff" /> : <Ionicons name="shield-half-outline" size={16} color="#fff" />}
-            <Text style={{ color: '#fff', fontSize: 13, fontWeight: '800', letterSpacing: 0.3 }}>{t('p2p.disputeSubmit').toUpperCase()}</Text>
+            <Text style={{ color: '#fff', fontSize: 13, fontWeight: '600', letterSpacing: 0.3 }}>{t('p2p.disputeSubmit').toUpperCase()}</Text>
           </Pressable>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -710,7 +707,7 @@ function PostTradeShareModal({ trade, currentUserId, palette: p, t, onClose }: {
         <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 24 + insets.bottom }} keyboardShouldPersistTaps="handled">
           <View style={{ alignItems: 'center', paddingVertical: 16, borderRadius: 16, backgroundColor: p.greenBg, borderWidth: 1, borderColor: 'rgba(34,197,94,0.35)' }}>
             <Ionicons name="checkmark-circle" size={36} color={p.greenFg} />
-            <Text style={{ color: p.greenFg, fontSize: 14, fontWeight: '800', marginTop: 8 }}>{t('p2p.tradeCompleted')}</Text>
+            <Text style={{ color: p.greenFg, fontSize: 14, fontWeight: '600', marginTop: 8 }}>{t('p2p.tradeCompleted')}</Text>
             <Text style={{ color: p.greenFg, fontSize: 12, fontWeight: '500', marginTop: 4, opacity: 0.85 }}>{t('p2p.shareProfileDesc')}</Text>
           </View>
           <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '700', letterSpacing: 0.5, marginTop: 22, marginBottom: 8 }}>
@@ -736,11 +733,11 @@ function PostTradeShareModal({ trade, currentUserId, palette: p, t, onClose }: {
           </View>
           <View style={{ flexDirection: 'row', gap: 10, marginTop: 24 }}>
             <Pressable onPress={onClose} style={({ pressed }) => ({ flex: 1, height: 48, borderRadius: 24, borderWidth: 1, borderColor: p.border, alignItems: 'center', justifyContent: 'center', opacity: pressed ? 0.7 : 1 })}>
-              <Text style={{ color: p.fg, fontSize: 13, fontWeight: '800', letterSpacing: 0.3 }}>{t('p2p.notNow').toUpperCase()}</Text>
+              <Text style={{ color: p.fg, fontSize: 13, fontWeight: '600', letterSpacing: 0.3 }}>{t('p2p.notNow').toUpperCase()}</Text>
             </Pressable>
             <Pressable onPress={share} disabled={(!myHandle && !emoji) || shared || sendMsg.isPending} style={({ pressed }) => ({ flex: 1.4, height: 48, borderRadius: 24, backgroundColor: p.ctaBg, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: (!myHandle && !emoji) ? 0.4 : pressed ? 0.85 : 1 })}>
               {sendMsg.isPending ? <ActivityIndicator color={p.ctaFg} /> : shared ? <Ionicons name="checkmark" size={18} color={p.ctaFg} /> : <Ionicons name="paper-plane" size={16} color={p.ctaFg} />}
-              <Text style={{ color: p.ctaFg, fontSize: 13, fontWeight: '800', letterSpacing: 0.3 }}>{(shared ? t('p2p.shareSent') : t('p2p.shareProfile')).toUpperCase()}</Text>
+              <Text style={{ color: p.ctaFg, fontSize: 13, fontWeight: '600', letterSpacing: 0.3 }}>{(shared ? t('p2p.shareSent') : t('p2p.shareProfile')).toUpperCase()}</Text>
             </Pressable>
           </View>
         </ScrollView>
@@ -757,7 +754,7 @@ function ActionBtn({ palette: p, label, icon, primary, busy, onPress }: {
   return (
     <Pressable onPress={onPress} disabled={busy} style={({ pressed }) => ({ flex: 1, height: 42, borderRadius: 21, backgroundColor: primary ? p.ctaBg : 'transparent', borderWidth: primary ? 0 : 1, borderColor: p.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, opacity: busy ? 0.6 : pressed ? 0.85 : 1 })}>
       {busy ? <ActivityIndicator size="small" color={primary ? p.ctaFg : p.fg} /> : <Ionicons name={icon} size={14} color={primary ? p.ctaFg : p.fg} />}
-      <Text style={{ color: primary ? p.ctaFg : p.fg, fontSize: 12, fontWeight: '800', letterSpacing: 0.2 }}>{label}</Text>
+      <Text style={{ color: primary ? p.ctaFg : p.fg, fontSize: 12, fontWeight: '600', letterSpacing: 0.2 }}>{label}</Text>
     </Pressable>
   );
 }

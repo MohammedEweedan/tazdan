@@ -9,11 +9,8 @@
  */
 
 import { useMemo, useRef, useState } from 'react';
-import {
-  ActivityIndicator, Alert, Animated, Dimensions,
-  Modal, Platform, Pressable, ScrollView,
-  Text, TextInput, View,
-} from 'react-native';
+import { ActivityIndicator, Alert, Animated, Dimensions, Modal, Platform, Pressable, ScrollView, View } from 'react-native';
+import { Text, TextInput } from '@/components/ui/Text';
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Circle, Path, Rect } from 'react-native-svg';
 import { Ionicons } from '@expo/vector-icons';
@@ -216,7 +213,7 @@ function VisaCard({
       {/* Top row: brand + frozen badge + contactless */}
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <View>
-          <Text style={{ color: '#fff', fontSize: Math.round(width * 0.035), fontWeight: '800', letterSpacing: 0.4, opacity: 0.9 }}>
+          <Text style={{ color: '#fff', fontSize: Math.round(width * 0.035), fontWeight: '600', letterSpacing: 0.4, opacity: 0.9 }}>
             promrkts
           </Text>
           <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: Math.round(width * 0.023), fontWeight: '700', letterSpacing: 1.5, marginTop: 1 }}>
@@ -227,7 +224,7 @@ function VisaCard({
           {isFrozen && (
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 6, paddingHorizontal: 7, paddingVertical: 3 }}>
               <Ionicons name="snow" size={9} color="#fff" />
-              <Text style={{ color: '#fff', fontSize: 8, fontWeight: '800', letterSpacing: 0.6 }}>FROZEN</Text>
+              <Text style={{ color: '#fff', fontSize: 8, fontWeight: '600', letterSpacing: 0.6 }}>FROZEN</Text>
             </View>
           )}
           <ContactlessSvg size={Math.round(width * 0.065)} />
@@ -273,7 +270,7 @@ function VisaCard({
         <Text style={{
           color: 'rgba(255,255,255,0.95)',
           fontSize: Math.round(width * 0.075),
-          fontWeight: '800',
+          fontWeight: '600',
           fontStyle: 'italic',
           letterSpacing: 1.5,
           textShadowColor: 'rgba(0,0,0,0.25)',
@@ -350,7 +347,7 @@ function AddToWalletButton(_props: { card: CardEntity; palette: Palette }) {
         flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
       }}>
         <Ionicons name="checkmark-circle" size={16} color="#22c55e" />
-        <Text style={{ color: '#22c55e', fontSize: 13, fontWeight: '800' }}>
+        <Text style={{ color: '#22c55e', fontSize: 13, fontWeight: '600' }}>
           Added to {isIOS ? 'Apple Pay' : 'Google Pay'}
         </Text>
       </View>
@@ -375,7 +372,7 @@ function AddToWalletButton(_props: { card: CardEntity; palette: Palette }) {
       ) : (
         <>
           <Ionicons name={isIOS ? 'logo-apple' : 'logo-google'} size={16} color={isIOS ? '#fff' : '#000'} />
-          <Text style={{ color: isIOS ? '#fff' : '#000', fontSize: 13, fontWeight: '800' }}>
+          <Text style={{ color: isIOS ? '#fff' : '#000', fontSize: 13, fontWeight: '600' }}>
             {isIOS ? 'Add to Apple Pay' : 'Add to Google Pay'}
           </Text>
         </>
@@ -514,7 +511,7 @@ function SimulatePurchaseModal({
           <View style={{ alignItems: 'center', marginBottom: 4 }}>
             <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: p.border }} />
           </View>
-          <Text style={{ color: p.fg, fontSize: 20, fontWeight: '800', letterSpacing: -0.4 }}>
+          <Text style={{ color: p.fg, fontSize: 20, fontWeight: '600', letterSpacing: -0.4 }}>
             {t('cards.simulatePurchase')}
           </Text>
           {card && (
@@ -586,7 +583,7 @@ function SimulatePurchaseModal({
             })}
           >
             {loading && <ActivityIndicator size="small" color={p.ctaFg} />}
-            <Text style={{ color: valid ? p.ctaFg : p.fgMuted, fontSize: 16, fontWeight: '800' }}>
+            <Text style={{ color: valid ? p.ctaFg : p.fgMuted, fontSize: 16, fontWeight: '600' }}>
               {loading ? 'Processing…' : t('cards.simulatePurchase')}
             </Text>
           </Pressable>
@@ -657,7 +654,7 @@ function TopUpModal({
             <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: p.border }} />
           </View>
 
-          <Text style={{ color: p.fg, fontSize: 20, fontWeight: '800', letterSpacing: -0.4 }}>
+          <Text style={{ color: p.fg, fontSize: 20, fontWeight: '600', letterSpacing: -0.4 }}>
             Top Up Card
           </Text>
           {card && (
@@ -753,7 +750,7 @@ function TopUpModal({
             })}
           >
             {loading && <ActivityIndicator size="small" color={p.ctaFg} />}
-            <Text style={{ color: valid ? p.ctaFg : p.fgMuted, fontSize: 16, fontWeight: '800' }}>
+            <Text style={{ color: valid ? p.ctaFg : p.fgMuted, fontSize: 16, fontWeight: '600' }}>
               {loading ? 'Processing…' : `Top Up ${amt > 0 ? amt.toLocaleString() : ''}`}
             </Text>
           </Pressable>
@@ -783,7 +780,7 @@ function PinModal({ card, palette: p, onClose }: { card: CardEntity | null; pale
           <View style={{ width: 60, height: 60, borderRadius: 20, backgroundColor: p.pillBg, alignItems: 'center', justifyContent: 'center', alignSelf: 'center' }}>
             <Ionicons name="finger-print" size={28} color={p.fg} />
           </View>
-          <Text style={{ color: p.fg, fontSize: 20, fontWeight: '800', textAlign: 'center', marginTop: 16, letterSpacing: -0.4 }}>
+          <Text style={{ color: p.fg, fontSize: 20, fontWeight: '600', textAlign: 'center', marginTop: 16, letterSpacing: -0.4 }}>
             Card PIN
           </Text>
           <Text style={{ color: p.fgMuted, fontSize: 13, textAlign: 'center', marginTop: 4 }}>
@@ -803,7 +800,7 @@ function PinModal({ card, palette: p, onClose }: { card: CardEntity | null; pale
                 backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border,
                 alignItems: 'center', justifyContent: 'center',
               }}>
-                <Text style={{ color: p.fg, fontSize: 32, fontWeight: '800', fontVariant: ['tabular-nums'] }}>
+                <Text style={{ color: p.fg, fontSize: 32, fontWeight: '600', fontVariant: ['tabular-nums'] }}>
                   {digit}
                 </Text>
               </View>
@@ -825,7 +822,7 @@ function PinModal({ card, palette: p, onClose }: { card: CardEntity | null; pale
               alignItems: 'center', justifyContent: 'center',
             })}
           >
-            <Text style={{ color: p.ctaFg, fontSize: 15, fontWeight: '800' }}>Done</Text>
+            <Text style={{ color: p.ctaFg, fontSize: 15, fontWeight: '600' }}>Done</Text>
           </Pressable>
         </Pressable>
       </Pressable>
@@ -921,7 +918,7 @@ function IssueCardModal({
           {/* ── STEP 1: Pick tier ── */}
           {step === 'PICK' && (
             <View style={{ paddingHorizontal: 24, paddingBottom: 40 }}>
-              <Text style={{ color: p.fg, fontSize: 22, fontWeight: '800', letterSpacing: -0.5, marginTop: 12, marginBottom: 4 }}>
+              <Text style={{ color: p.fg, fontSize: 22, fontWeight: '600', letterSpacing: -0.5, marginTop: 12, marginBottom: 4 }}>
                 Choose your card
               </Text>
               <Text style={{ color: p.fgMuted, fontSize: 13, marginBottom: 24 }}>
@@ -947,10 +944,10 @@ function IssueCardModal({
                     {/* Mini card preview */}
                     <View style={{ width: miniW * 0.42, height: Math.round(miniW * 0.42 * 0.628), borderRadius: 10, overflow: 'hidden' }}>
                       <LinearGradient colors={tc.gradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={{ flex: 1, padding: 10, justifyContent: 'space-between' }}>
-                        <Text style={{ color: '#fff', fontSize: 8, fontWeight: '800' }}>promrkts</Text>
+                        <Text style={{ color: '#fff', fontSize: 8, fontWeight: '600' }}>promrkts</Text>
                         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' }}>
-                          <Text style={{ color: '#fff', fontSize: 9, fontWeight: '800' }}>{tc.label}</Text>
-                          <Text style={{ color: 'rgba(255,255,255,0.9)', fontSize: 13, fontWeight: '800', fontStyle: 'italic' }}>VISA</Text>
+                          <Text style={{ color: '#fff', fontSize: 9, fontWeight: '600' }}>{tc.label}</Text>
+                          <Text style={{ color: 'rgba(255,255,255,0.9)', fontSize: 13, fontWeight: '600', fontStyle: 'italic' }}>VISA</Text>
                         </View>
                       </LinearGradient>
                     </View>
@@ -958,7 +955,7 @@ function IssueCardModal({
                     {/* Info */}
                     <View style={{ flex: 1 }}>
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                        <Text style={{ color: p.fg, fontSize: 16, fontWeight: '800' }}>{tc.label}</Text>
+                        <Text style={{ color: p.fg, fontSize: 16, fontWeight: '600' }}>{tc.label}</Text>
                         <View style={{ backgroundColor: p.pillBg, borderRadius: 6, paddingHorizontal: 7, paddingVertical: 2 }}>
                           <Text style={{ color: p.fgMuted, fontSize: 10, fontWeight: '700' }}>{tc.fee}</Text>
                         </View>
@@ -996,7 +993,7 @@ function IssueCardModal({
                   elevation: 8,
                 })}
               >
-                <Text style={{ color: '#fff', fontSize: 16, fontWeight: '800' }}>
+                <Text style={{ color: '#fff', fontSize: 16, fontWeight: '600' }}>
                   Continue with {TIER_CFG[tier].label}
                 </Text>
               </Pressable>
@@ -1006,7 +1003,7 @@ function IssueCardModal({
           {/* ── STEP 2: Confirm ── */}
           {step === 'CONFIRM' && (
             <View style={{ paddingHorizontal: 24, paddingBottom: 40 }}>
-              <Text style={{ color: p.fg, fontSize: 22, fontWeight: '800', letterSpacing: -0.5, marginTop: 12, marginBottom: 20 }}>
+              <Text style={{ color: p.fg, fontSize: 22, fontWeight: '600', letterSpacing: -0.5, marginTop: 12, marginBottom: 20 }}>
                 Confirm card
               </Text>
 
@@ -1066,7 +1063,7 @@ function IssueCardModal({
                 >
                   {issuing
                     ? <ActivityIndicator color="#fff" />
-                    : <Text style={{ color: '#fff', fontSize: 15, fontWeight: '800' }}>Issue Card</Text>}
+                    : <Text style={{ color: '#fff', fontSize: 15, fontWeight: '600' }}>Issue Card</Text>}
                 </Pressable>
               </View>
             </View>
@@ -1079,7 +1076,7 @@ function IssueCardModal({
                 <View style={{ width: CARD_W, height: CARD_H, borderRadius: 20, overflow: 'hidden', shadowColor: cfg.shadowColor, shadowOffset: { width: 0, height: 16 }, shadowOpacity: 0.5, shadowRadius: 24, elevation: 16 }}>
                   <LinearGradient colors={cfg.gradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={{ flex: 1, padding: 24, justifyContent: 'space-between' }}>
                     <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                      <Text style={{ color: '#fff', fontSize: 13, fontWeight: '800' }}>promrkts</Text>
+                      <Text style={{ color: '#fff', fontSize: 13, fontWeight: '600' }}>promrkts</Text>
                       <ContactlessSvg />
                     </View>
                     <ChipSvg />
@@ -1090,7 +1087,7 @@ function IssueCardModal({
                     </View>
                     <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' }}>
                       <Text style={{ color: '#fff', fontSize: 13, fontWeight: '700' }}>{holderName}</Text>
-                      <Text style={{ color: 'rgba(255,255,255,0.9)', fontSize: 26, fontWeight: '800', fontStyle: 'italic' }}>VISA</Text>
+                      <Text style={{ color: 'rgba(255,255,255,0.9)', fontSize: 26, fontWeight: '600', fontStyle: 'italic' }}>VISA</Text>
                     </View>
                   </LinearGradient>
                 </View>
@@ -1099,7 +1096,7 @@ function IssueCardModal({
               <View style={{ width: 56, height: 56, borderRadius: 28, backgroundColor: 'rgba(34,197,94,0.12)', alignItems: 'center', justifyContent: 'center', marginBottom: 12 }}>
                 <Ionicons name="checkmark-circle" size={30} color="#22c55e" />
               </View>
-              <Text style={{ color: p.fg, fontSize: 22, fontWeight: '800', letterSpacing: -0.5, textAlign: 'center' }}>
+              <Text style={{ color: p.fg, fontSize: 22, fontWeight: '600', letterSpacing: -0.5, textAlign: 'center' }}>
                 Card issued!
               </Text>
               <Text style={{ color: p.fgMuted, fontSize: 13, textAlign: 'center', marginTop: 6, marginBottom: 28 }}>
@@ -1121,7 +1118,7 @@ function IssueCardModal({
                   alignItems: 'center', justifyContent: 'center',
                 })}
               >
-                <Text style={{ color: p.ctaFg, fontSize: 15, fontWeight: '800' }}>Done</Text>
+                <Text style={{ color: p.ctaFg, fontSize: 15, fontWeight: '600' }}>Done</Text>
               </Pressable>
             </View>
           )}
@@ -1191,7 +1188,7 @@ export default function Cards() {
           <Pressable onPress={() => router.back()} hitSlop={8}>
             <Ionicons name="chevron-back" size={24} color={p.fg} />
           </Pressable>
-          <Text style={{ color: p.fg, fontSize: 18, fontWeight: '800', letterSpacing: -0.4 }}>{t('cards.title')}</Text>
+          <Text style={{ color: p.fg, fontSize: 18, fontWeight: '600', letterSpacing: -0.4 }}>{t('cards.title')}</Text>
           <Pressable
             onPress={() => { h.medium(); setIssueOpen(true); }}
             style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: p.pillBg, borderWidth: 1, borderColor: p.border, alignItems: 'center', justifyContent: 'center' }}
@@ -1212,7 +1209,7 @@ export default function Cards() {
               <View style={{ width: CARD_W, height: CARD_H, borderRadius: 20, overflow: 'hidden', marginBottom: 32 }}>
                 <LinearGradient colors={TIER_CFG.PRO.gradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={{ flex: 1, padding: 24, justifyContent: 'space-between' }}>
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                    <Text style={{ color: '#fff', fontSize: 13, fontWeight: '800', opacity: 0.6 }}>promrkts</Text>
+                    <Text style={{ color: '#fff', fontSize: 13, fontWeight: '600', opacity: 0.6 }}>promrkts</Text>
                     <ContactlessSvg />
                   </View>
                   <ChipSvg />
@@ -1221,11 +1218,11 @@ export default function Cards() {
                   </View>
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' }}>
                     <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 13, fontWeight: '700' }}>YOUR NAME</Text>
-                    <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 26, fontWeight: '800', fontStyle: 'italic' }}>VISA</Text>
+                    <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 26, fontWeight: '600', fontStyle: 'italic' }}>VISA</Text>
                   </View>
                 </LinearGradient>
               </View>
-              <Text style={{ color: p.fg, fontSize: 22, fontWeight: '800', textAlign: 'center', letterSpacing: -0.5 }}>
+              <Text style={{ color: p.fg, fontSize: 22, fontWeight: '600', textAlign: 'center', letterSpacing: -0.5 }}>
                 {t('cards.emptyTitle')}
               </Text>
               <Text style={{ color: p.fgMuted, fontSize: 14, textAlign: 'center', marginTop: 8, lineHeight: 20 }}>
@@ -1241,7 +1238,7 @@ export default function Cards() {
                 })}
               >
                 <Ionicons name="add-circle-outline" size={20} color="#fff" />
-                <Text style={{ color: '#fff', fontSize: 16, fontWeight: '800' }}>{t('cards.orderCard')}</Text>
+                <Text style={{ color: '#fff', fontSize: 16, fontWeight: '600' }}>{t('cards.orderCard')}</Text>
               </Pressable>
             </View>
           ) : (
@@ -1288,7 +1285,7 @@ export default function Cards() {
                     <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 16 }}>
                       <View>
                         <Text style={{ color: p.fgFaint, fontSize: 10, fontWeight: '700', letterSpacing: 0.8, marginBottom: 4 }}>{t('cards.cashbackEarned').toUpperCase()}</Text>
-                        <Text style={{ color: '#22c55e', fontSize: 20, fontWeight: '800' }}>
+                        <Text style={{ color: '#22c55e', fontSize: 20, fontWeight: '600' }}>
                           ${Number(activeCard.cashbackBalance).toFixed(2)}
                         </Text>
                       </View>
@@ -1306,7 +1303,7 @@ export default function Cards() {
                               activeCard.status === 'FROZEN' ? '#60a5fa' : '#ef4444',
                           }} />
                           <Text style={{
-                            fontSize: 11, fontWeight: '800',
+                            fontSize: 11, fontWeight: '600',
                             color: activeCard.status === 'ACTIVE' ? '#22c55e' :
                               activeCard.status === 'FROZEN' ? '#60a5fa' : '#ef4444',
                           }}>
@@ -1411,7 +1408,7 @@ export default function Cards() {
 
                   {/* ── TRANSACTIONS ── */}
                   <View style={{ marginHorizontal: 24, marginTop: 24 }}>
-                    <Text style={{ color: p.fg, fontSize: 16, fontWeight: '800', letterSpacing: -0.3, marginBottom: 12 }}>
+                    <Text style={{ color: p.fg, fontSize: 16, fontWeight: '600', letterSpacing: -0.3, marginBottom: 12 }}>
                       {t('cards.recentSpending')}
                     </Text>
                     <View style={{ backgroundColor: p.bgElev, borderRadius: 20, borderWidth: 1, borderColor: p.border, overflow: 'hidden' }}>

@@ -1,12 +1,14 @@
 import { useRef, useState } from 'react';
 import { useRouter } from 'expo-router';
-import { View, Text, Pressable, Animated, Dimensions } from 'react-native';
+import { View, Pressable, Animated, Dimensions } from 'react-native';
+import { Text } from '@/components/ui/Text';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useThemedPalette, useTheme } from '@/store/themeStore';
 import { useHaptics } from '@/hooks';
+import { TopGradient } from '@/components/ui/ScreenShell';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 const SCAN_SIZE = Math.min(SCREEN_W * 0.72, 280);
@@ -64,6 +66,7 @@ export default function ScannerPage() {
   if (!permission) {
     return (
       <View style={{ flex: 1, backgroundColor: p.bg, alignItems: 'center', justifyContent: 'center' }}>
+      <TopGradient />
         <StatusBar style={themeMode === 'dark' ? 'light' : 'dark'} />
         <Text style={{ color: p.fgMuted, fontSize: 14 }}>Requesting camera permission…</Text>
       </View>
@@ -75,7 +78,7 @@ export default function ScannerPage() {
       <View style={{ flex: 1, backgroundColor: p.bg, alignItems: 'center', justifyContent: 'center', padding: 32 }}>
         <StatusBar style={themeMode === 'dark' ? 'light' : 'dark'} />
         <Ionicons name="camera-outline" size={48} color={p.fgFaint} />
-        <Text style={{ color: p.fg, fontSize: 18, fontWeight: '800', marginTop: 16, textAlign: 'center' }}>
+        <Text style={{ color: p.fg, fontSize: 18, fontWeight: '600', marginTop: 16, textAlign: 'center' }}>
           Camera access denied
         </Text>
         <Text style={{ color: p.fgMuted, fontSize: 14, marginTop: 8, textAlign: 'center', lineHeight: 22 }}>
@@ -167,7 +170,7 @@ export default function ScannerPage() {
           >
             <Ionicons name="chevron-back" size={20} color="#fff" />
           </Pressable>
-          <Text style={{ flex: 1, textAlign: 'center', color: '#fff', fontSize: 17, fontWeight: '800', marginRight: 48 }}>
+          <Text style={{ flex: 1, textAlign: 'center', color: '#fff', fontSize: 17, fontWeight: '600', marginRight: 48 }}>
             Scan QR Code
           </Text>
         </View>

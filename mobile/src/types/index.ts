@@ -109,7 +109,7 @@ export interface P2POffer {
   paymentMethods: string[];
   country?: string;
   city?: string;
-  timeframeMins: number;
+  timeframeMins?: number;
 }
 
 export interface CardEntity {
@@ -124,15 +124,15 @@ export interface CardEntity {
   spentMonth: string;
   dailyLimit: string;
   monthlyLimit: string;
-  spentTotal: string;
-  cashbackRate: string;
+  spentTotal?: string;
+  cashbackRate?: string;
   cashbackBalance: string;
   nickname?: string;
-  colorway: 'midnight' | 'ocean' | 'sunset' | 'forest';
+  colorway: 'midnight' | 'ocean' | 'sunset' | 'forest' | 'sapphire' | 'obsidian' | 'emerald';
   frozen: boolean;
-  contactlessOn: boolean;
-  onlineOn: boolean;
-  atmOn: boolean;
+  contactlessOn?: boolean;
+  onlineOn?: boolean;
+  atmOn?: boolean;
   issuedAt?: string;
   activatedAt?: string;
 }

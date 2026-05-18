@@ -8,13 +8,59 @@
  */
 
 import { ReactNode } from 'react';
-import { Pressable, ScrollView, Text, View, type StyleProp, type ViewStyle } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { Pressable, ScrollView, View, type StyleProp, type ViewStyle } from 'react-native';
+import { Text } from './Text';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme, useThemedPalette } from '@/store/themeStore';
 import { useHaptics } from '@/hooks';
+
+/**
+ * Shared top-of-screen accent gradient — matches the one on the home tab.
+ * Renders as an absolute overlay so it doesn't affect layout.
+ * Consumed automatically by ScreenShell and GradientBackground.
+ * Can also be used standalone in custom-layout screens.
+ */
+export function TopGradient({ height }: { height?: number }) {
+  const themeMode = useTheme((s) => s.mode);
+  const insets = useSafeAreaInsets();
+
+  // Control height here ↓
+  const h = height ?? (120 + insets.top); // was 340, much slimmer now
+
+  return (
+    <LinearGradient
+      colors={
+        themeMode === 'dark'
+          ? [
+              'rgba(255,255,255,0.10)', // subtle white top
+              'rgba(120,120,120,0.08)', // soft grey middle
+              'rgba(0,0,0,0)',          // fade to transparent
+            ]
+          : [
+              'rgba(0,0,0,0.08)',       // subtle black top
+              'rgba(160,160,160,0.06)', // soft grey middle
+              'rgba(255,255,255,0)',    // fade to transparent
+            ]
+      }
+      locations={[0, 0.45, 1]}
+      start={{ x: 0.5, y: 0 }}
+      end={{ x: 0.5, y: 1 }}
+      style={{
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        height: h, // <- main height control
+        zIndex: 0,
+      }}
+      pointerEvents="none"
+    />
+  );
+}
 
 interface Props {
   title?: string;
@@ -45,6 +91,7 @@ export function ScreenShell({
   return (
     <View style={{ flex: 1, backgroundColor: p.bg }}>
       <StatusBar style={themeMode === 'dark' ? 'light' : 'dark'} />
+      <TopGradient />
       <SafeAreaView style={{ flex: 1 }} edges={['top']}>
         {/* Header */}
         <View style={{
@@ -69,7 +116,7 @@ export function ScreenShell({
 
           <View style={{ flex: 1 }}>
             {title && (
-              <Text style={{ color: p.fg, fontSize: 17, fontWeight: '700', letterSpacing: -0.3 }} numberOfLines={1}>
+              <Text style={{ color: p.fg, fontSize: 17, fontWeight: '500', letterSpacing: -0.3 }} numberOfLines={1}>
                 {title}
               </Text>
             )}
@@ -158,7 +205,7 @@ export function CTAButton({
       })}
     >
       {displayIcon && <Ionicons name={displayIcon} size={18} color={fg} />}
-      <Text style={{ color: fg, fontSize: 16, fontWeight: '700', letterSpacing: -0.2 }}>
+      <Text style={{ color: fg, fontSize: 16, fontWeight: '500', letterSpacing: -0.1 }}>
         {displayLabel}
       </Text>
     </Pressable>
@@ -188,7 +235,7 @@ export function SecondaryButton({
       })}
     >
       {icon && <Ionicons name={icon} size={18} color={p.fg} />}
-      <Text style={{ color: p.fg, fontSize: 15, fontWeight: '700' }}>{label}</Text>
+      <Text style={{ color: p.fg, fontSize: 15, fontWeight: '500' }}>{label}</Text>
     </Pressable>
   );
 }
@@ -240,7 +287,7 @@ export function PanelRow({
       }}>
         <Ionicons name={icon} size={16} color={fg} />
       </View>
-      <Text style={{ color: fg, fontSize: 15, fontWeight: '600', flex: 1 }}>{label}</Text>
+      <Text style={{ color: fg, fontSize: 15, fontWeight: '500', flex: 1 }}>{label}</Text>
       {right ?? (!danger && <Ionicons name="chevron-forward" size={16} color={p.fgFaint} />)}
     </Pressable>
   );

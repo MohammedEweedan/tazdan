@@ -12,9 +12,7 @@
  * no worklet overhead for trivial cases).
  */
 import { useEffect, useRef, type ReactNode } from 'react';
-import {
-  Animated, Easing, Pressable, type PressableProps, type ViewStyle,
-} from 'react-native';
+import { Animated, Easing, Pressable, type PressableProps, type ViewStyle } from 'react-native';
 import Reanimated, {
   useSharedValue, useAnimatedStyle, withSpring, withTiming,
   type AnimatedStyle,

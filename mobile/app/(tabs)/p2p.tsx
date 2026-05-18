@@ -5,10 +5,8 @@
  */
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import {
-  ActivityIndicator, Alert, Modal,
-  Pressable, ScrollView, Text, TextInput, View,
-} from 'react-native';
+import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, View } from 'react-native';
+import { Text, TextInput } from '@/components/ui/Text';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { router, useRouter } from 'expo-router';
@@ -21,6 +19,7 @@ import { CURRENCY_META } from '@/constants';
 import { useTheme, useThemedPalette, type Palette } from '@/store/themeStore';
 import { useT } from '@/store/i18nStore';
 import type { Currency, MarketTicker, P2POffer } from '@/types';
+import { TopGradient } from '@/components/ui/ScreenShell';
 
 type Side = 'BUY' | 'SELL';
 const FIATS: Currency[]   = ['USD', 'AED', 'SAR', 'EUR', 'EGP'];
@@ -63,6 +62,7 @@ export default function P2P() {
 
   return (
     <View style={{ flex: 1, backgroundColor: p.bg }}>
+      <TopGradient />
       <StatusBar style={themeMode === 'dark' ? 'light' : 'dark'} />
       <SafeAreaView style={{ flex: 1 }} edges={['top']}>
         {/* Header */}
@@ -301,7 +301,7 @@ function OfferCard({ offer, palette: p, onPress }: {
         }}>
           <Text style={{
             color: isBuy ? p.greenFg : p.redFg,
-            fontSize: 10.5, fontWeight: '800', letterSpacing: 0.5,
+            fontSize: 10.5, fontWeight: '600', letterSpacing: 0.5,
           }}>
             {offer.side}
           </Text>
@@ -311,7 +311,7 @@ function OfferCard({ offer, palette: p, onPress }: {
       {/* Rate */}
       <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 6, marginTop: 14 }}>
         <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '600' }}>RATE</Text>
-        <Text style={{ color: p.fg, fontSize: 22, fontWeight: '800', letterSpacing: -0.5 }}>
+        <Text style={{ color: p.fg, fontSize: 22, fontWeight: '600', letterSpacing: -0.5 }}>
           {Number(offer.price).toLocaleString('en-US', { maximumFractionDigits: 4 })}
         </Text>
         <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '600' }}>
@@ -433,15 +433,15 @@ function OfferDetailSheet({ offer, palette: p, t, onClose, onTradeStarted }: {
               {/* Trader info */}
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 8 }}>
                 <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: p.pillBg, alignItems: 'center', justifyContent: 'center' }}>
-                  <Text style={{ color: p.fg, fontSize: 18, fontWeight: '800' }}>
+                  <Text style={{ color: p.fg, fontSize: 18, fontWeight: '600' }}>
                     {offer.trader.anonymous ? '🥷' : offer.trader.name.charAt(0).toUpperCase()}
                   </Text>
                 </View>
                 <View style={{ flex: 1 }}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                     {offer.trader.anonymous
-                      ? <Text style={{ color: p.fgMuted, fontSize: 16, fontWeight: '800' }}>Anonymous</Text>
-                      : <Text style={{ color: p.fg, fontSize: 16, fontWeight: '800' }}>{offer.trader.handle}</Text>
+                      ? <Text style={{ color: p.fgMuted, fontSize: 16, fontWeight: '600' }}>Anonymous</Text>
+                      : <Text style={{ color: p.fg, fontSize: 16, fontWeight: '600' }}>{offer.trader.handle}</Text>
                     }
                     {offer.trader.verified && <Ionicons name="shield-checkmark" size={14} color={p.greenFg} />}
                   </View>
@@ -451,7 +451,7 @@ function OfferDetailSheet({ offer, palette: p, t, onClose, onTradeStarted }: {
                   </Text>
                 </View>
                 <View style={{ paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10, backgroundColor: isBuy ? p.greenBg : 'rgba(239,68,68,0.16)' }}>
-                  <Text style={{ color: isBuy ? p.greenFg : p.redFg, fontSize: 11, fontWeight: '800' }}>{offer.side}</Text>
+                  <Text style={{ color: isBuy ? p.greenFg : p.redFg, fontSize: 11, fontWeight: '600' }}>{offer.side}</Text>
                 </View>
               </View>
 
@@ -459,7 +459,7 @@ function OfferDetailSheet({ offer, palette: p, t, onClose, onTradeStarted }: {
               <View style={{ marginTop: 16, padding: 14, borderRadius: 14, backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border }}>
                 <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 6 }}>
                   <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '700' }}>RATE</Text>
-                  <Text style={{ color: p.fg, fontSize: 26, fontWeight: '800', letterSpacing: -0.5 }}>
+                  <Text style={{ color: p.fg, fontSize: 26, fontWeight: '600', letterSpacing: -0.5 }}>
                     {price.toLocaleString('en-US', { maximumFractionDigits: 4 })}
                   </Text>
                   <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '700' }}>{offer.quote}/{offer.base}</Text>
@@ -511,7 +511,7 @@ function OfferDetailSheet({ offer, palette: p, t, onClose, onTradeStarted }: {
                   {(['fiat', 'crypto'] as const).map((mode) => (
                     <Pressable key={mode} onPress={() => { h.selection(); setInputMode(mode); setRawAmount(''); }}
                       style={{ paddingHorizontal: 12, paddingVertical: 5, borderRadius: 8, backgroundColor: inputMode === mode ? p.fg : 'transparent' }}>
-                      <Text style={{ color: inputMode === mode ? p.bg : p.fgMuted, fontSize: 11, fontWeight: '800' }}>
+                      <Text style={{ color: inputMode === mode ? p.bg : p.fgMuted, fontSize: 11, fontWeight: '600' }}>
                         {mode === 'fiat' ? offer.quote : offer.base}
                       </Text>
                     </Pressable>
@@ -556,7 +556,7 @@ function OfferDetailSheet({ offer, palette: p, t, onClose, onTradeStarted }: {
               {valid && (
                 <View style={{ marginTop: 12, padding: 14, borderRadius: 14, backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border }}>
                   <Text style={{ color: p.fgFaint, fontSize: 10, fontWeight: '700', letterSpacing: 0.6, marginBottom: 4 }}>YOU RECEIVE</Text>
-                  <Text style={{ color: p.fg, fontSize: 22, fontWeight: '800', letterSpacing: -0.5, fontVariant: ['tabular-nums'] }}>
+                  <Text style={{ color: p.fg, fontSize: 22, fontWeight: '600', letterSpacing: -0.5, fontVariant: ['tabular-nums'] }}>
                     {cryptoAmount.toLocaleString('en-US', { maximumFractionDigits: 8 })}{' '}
                     <Text style={{ fontSize: 14, fontWeight: '700', color: p.fgMuted }}>{offer.base}</Text>
                   </Text>
@@ -596,7 +596,7 @@ function OfferDetailSheet({ offer, palette: p, t, onClose, onTradeStarted }: {
                   ? <ActivityIndicator size="small" color={p.ctaFg} />
                   : <Ionicons name={isBuy ? 'cash-outline' : 'cart-outline'} size={18} color={valid ? p.ctaFg : p.fgMuted} />
                 }
-                <Text style={{ color: valid ? p.ctaFg : p.fgMuted, fontSize: 15, fontWeight: '800' }}>
+                <Text style={{ color: valid ? p.ctaFg : p.fgMuted, fontSize: 15, fontWeight: '600' }}>
                   {ctaLabel}
                 </Text>
               </Pressable>
@@ -765,7 +765,7 @@ function CreateListingSheet({ palette: p, t, onClose, onCreated }: {
                 style={{
                   color: p.fg,
                   fontSize: 22,
-                  fontWeight: '800',
+                  fontWeight: '600',
                   letterSpacing: -0.4,
                 }}
               >
@@ -803,7 +803,7 @@ function CreateListingSheet({ palette: p, t, onClose, onCreated }: {
                   >
                     <Text style={{
                       color: side === s ? p.bg : p.fgMuted,
-                      fontSize: 13, fontWeight: '800', letterSpacing: 0.4,
+                      fontSize: 13, fontWeight: '600', letterSpacing: 0.4,
                     }}>
                       {t('p2p.listingType').toUpperCase()} {s === 'BUY' ? t('p2p.buy').toUpperCase() : t('p2p.sell').toUpperCase()}
                     </Text>
@@ -835,7 +835,7 @@ function CreateListingSheet({ palette: p, t, onClose, onCreated }: {
                         width: 32, height: 32, borderRadius: 16,
                         backgroundColor: p.pillBg, alignItems: 'center', justifyContent: 'center',
                       }}>
-                        <Text style={{ fontSize: 13, fontWeight: '800', color: p.fg }}>
+                        <Text style={{ fontSize: 13, fontWeight: '600', color: p.fg }}>
                           {currency.slice(0, 2)}
                         </Text>
                       </View>
@@ -870,7 +870,7 @@ function CreateListingSheet({ palette: p, t, onClose, onCreated }: {
                           <View style={{ alignItems: 'center', paddingTop: 12, paddingBottom: 8 }}>
                             <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: p.border }} />
                           </View>
-                          <Text style={{ color: p.fg, fontSize: 17, fontWeight: '800', paddingHorizontal: 20, paddingBottom: 12 }}>
+                          <Text style={{ color: p.fg, fontSize: 17, fontWeight: '600', paddingHorizontal: 20, paddingBottom: 12 }}>
                             Select Asset
                           </Text>
                           {/* Search */}
@@ -927,7 +927,7 @@ function CreateListingSheet({ palette: p, t, onClose, onCreated }: {
                                           width: 38, height: 38, borderRadius: 19,
                                           backgroundColor: p.pillBg, alignItems: 'center', justifyContent: 'center',
                                         }}>
-                                          <Text style={{ fontSize: 13, fontWeight: '800', color: p.fg }}>
+                                          <Text style={{ fontSize: 13, fontWeight: '600', color: p.fg }}>
                                             {w.currency.slice(0, 2)}
                                           </Text>
                                         </View>
@@ -976,7 +976,7 @@ function CreateListingSheet({ palette: p, t, onClose, onCreated }: {
                                           width: 38, height: 38, borderRadius: 19,
                                           backgroundColor: p.pillBg, alignItems: 'center', justifyContent: 'center',
                                         }}>
-                                          <Text style={{ fontSize: 13, fontWeight: '800', color: p.fgMuted }}>
+                                          <Text style={{ fontSize: 13, fontWeight: '600', color: p.fgMuted }}>
                                             {c.slice(0, 2)}
                                           </Text>
                                         </View>
@@ -1009,7 +1009,7 @@ function CreateListingSheet({ palette: p, t, onClose, onCreated }: {
                         width: 32, height: 32, borderRadius: 16,
                         backgroundColor: p.pillBg, alignItems: 'center', justifyContent: 'center',
                       }}>
-                        <Text style={{ fontSize: 13, fontWeight: '800', color: p.fg }}>
+                        <Text style={{ fontSize: 13, fontWeight: '600', color: p.fg }}>
                           {currency.slice(0, 2)}
                         </Text>
                       </View>
@@ -1034,7 +1034,7 @@ function CreateListingSheet({ palette: p, t, onClose, onCreated }: {
                           <View style={{ alignItems: 'center', paddingTop: 12, paddingBottom: 8 }}>
                             <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: p.border }} />
                           </View>
-                          <Text style={{ color: p.fg, fontSize: 17, fontWeight: '800', paddingHorizontal: 20, paddingBottom: 12 }}>
+                          <Text style={{ color: p.fg, fontSize: 17, fontWeight: '600', paddingHorizontal: 20, paddingBottom: 12 }}>
                             Select Asset to Buy
                           </Text>
                           <View style={{
@@ -1084,7 +1084,7 @@ function CreateListingSheet({ palette: p, t, onClose, onCreated }: {
                                       width: 38, height: 38, borderRadius: 19,
                                       backgroundColor: p.pillBg, alignItems: 'center', justifyContent: 'center',
                                     }}>
-                                      <Text style={{ fontSize: 13, fontWeight: '800', color: selected ? p.fg : p.fgMuted }}>
+                                      <Text style={{ fontSize: 13, fontWeight: '600', color: selected ? p.fg : p.fgMuted }}>
                                         {c.slice(0, 2)}
                                       </Text>
                                     </View>
@@ -1142,7 +1142,7 @@ function CreateListingSheet({ palette: p, t, onClose, onCreated }: {
                         >
                           <Text style={{
                             color: minMode === mode ? p.bg : p.fgMuted,
-                            fontSize: 11, fontWeight: '800',
+                            fontSize: 11, fontWeight: '600',
                           }}>
                             {mode === 'fiat' ? fiatCurrency : currency}
                           </Text>
@@ -1175,7 +1175,7 @@ function CreateListingSheet({ palette: p, t, onClose, onCreated }: {
                         >
                           <Text style={{
                             color: maxMode === mode ? p.bg : p.fgMuted,
-                            fontSize: 11, fontWeight: '800',
+                            fontSize: 11, fontWeight: '600',
                           }}>
                             {mode === 'fiat' ? fiatCurrency : currency}
                           </Text>
@@ -1349,7 +1349,7 @@ function CreateListingSheet({ palette: p, t, onClose, onCreated }: {
                 }
                 <Text style={{
                   color: valid ? p.ctaFg : p.fgMuted,
-                  fontSize: 16, fontWeight: '800', letterSpacing: -0.2,
+                  fontSize: 16, fontWeight: '600', letterSpacing: -0.2,
                 }}>
                   {create.isPending ? 'Posting…' : t('p2p.publishListing')}
                 </Text>

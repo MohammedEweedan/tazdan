@@ -1,4 +1,5 @@
-import { Modal, Pressable, Text, View } from 'react-native';
+import { Modal, Pressable, View } from 'react-native';
+import { Text } from '@/components/ui/Text';
 import { Ionicons } from '@expo/vector-icons';
 import { useI18n, useT, LOCALE_META } from '@/store/i18nStore';
 import { useThemedPalette } from '@/store/themeStore';
