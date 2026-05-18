@@ -1,8 +1,21 @@
 import dotenv from 'dotenv';
 dotenv.config();
 
+import * as Sentry from '@sentry/node';
+
+// Initialize Sentry early
+if (process.env.SENTRY_DSN) {
+  Sentry.init({
+    dsn: process.env.SENTRY_DSN,
+    environment: process.env.NODE_ENV ?? 'development',
+    tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.1 : 1.0,
+    release: process.env.npm_package_version,
+  });
+}
+
 import { validateEnv, isProduction } from './utils/env';
 import { initRedis } from './utils/redis';
+import { logger } from './utils/logger';
 validateEnv();
 
 import express from 'express';
@@ -49,6 +62,7 @@ import { cryptoWalletRouter } from './routes/cryptoWallet';
 import { cryptoWithdrawalRouter } from './routes/cryptoWithdrawal';
 import { globalLimiter, authLimiter, registerLimiter, withdrawalLimiter, webhookLimiter } from './middleware/rateLimiters';
 import { protectedUploadsRouter } from './middleware/protectedUploads';
+import { ipBanMiddleware } from './middleware/ipBan';
 
 const app = express();
 const httpServer = createServer(app);
@@ -92,6 +106,11 @@ const io = new Server(httpServer, {
 // Trust the first proxy hop (load balancer / ingress) so req.ip is the
 // real client IP — required for rate limiting to work behind a proxy.
 app.set('trust proxy', 1);
+
+// Block banned IPs before any processing
+app.use(ipBanMiddleware);
+
+// Sentry auto-instruments HTTP requests in v8+ — no requestHandler middleware needed.
 
 // Global middleware
 app.use(helmet());
@@ -163,9 +182,46 @@ app.use('/api/withdrawal', cryptoWithdrawalRouter);
 app.use('/api/rates', ratesRouter);
 
 // Health check
-app.get('/api/health', (_req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+app.get('/api/health', async (_req, res) => {
+  const checks: Record<string, 'ok' | 'error'> = {};
+
+  // DB check
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    checks.database = 'ok';
+  } catch {
+    checks.database = 'error';
+  }
+
+  // Redis check
+  try {
+    const { getRedisClient } = await import('./utils/redis');
+    const client = getRedisClient();
+    if (client) {
+      await client.ping();
+      checks.redis = 'ok';
+    } else {
+      checks.redis = 'error';
+    }
+  } catch {
+    checks.redis = 'error';
+  }
+
+  const healthy = Object.values(checks).every(v => v === 'ok');
+  const status = healthy ? 200 : 503;
+
+  res.status(status).json({
+    status: healthy ? 'ok' : 'degraded',
+    version: process.env.npm_package_version ?? '1.0.0',
+    environment: process.env.NODE_ENV ?? 'development',
+    uptime: Math.floor(process.uptime()),
+    timestamp: new Date().toISOString(),
+    checks,
+  });
 });
+
+// Sentry error handler (v8+ API) — must be before your own error handler
+if (process.env.SENTRY_DSN) Sentry.setupExpressErrorHandler(app);
 
 // Error handler
 app.use(errorHandler);
@@ -221,21 +277,43 @@ const PORT = parseInt(process.env.PORT || '5000');
 async function start() {
   try {
     await prisma.$connect();
-    console.log('Database connected');
+    logger.info('Database connected');
 
     await seedAdmin();
     await ensureMasterSeed();
     await initRedis();
 
     httpServer.listen(PORT, () => {
-      console.log(`Server running on port ${PORT}`);
+      logger.info(`Server running on port ${PORT}`);
     });
   } catch (error) {
-    console.error('Failed to start server:', error);
+    logger.error('Failed to start server:', { err: error });
     process.exit(1);
   }
 }
 
 start();
+
+async function shutdown(signal: string) {
+  logger.info(`${signal} received — shutting down gracefully`);
+  httpServer.close(async () => {
+    logger.info('HTTP server closed');
+    try {
+      await prisma.$disconnect();
+      logger.info('Database disconnected');
+    } catch (e) {
+      logger.error('Error during shutdown', { err: e });
+    }
+    process.exit(0);
+  });
+  // Force-exit after 15 s if still draining
+  setTimeout(() => {
+    logger.error('Shutdown timeout — forcing exit');
+    process.exit(1);
+  }, 15_000).unref();
+}
+
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT',  () => shutdown('SIGINT'));
 
 export { io };

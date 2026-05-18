@@ -119,7 +119,7 @@ export async function executeQuote(opts: {
     if (prior) return prior;
   }
 
-  const quote = consumeQuote(quoteId);
+  const quote = await consumeQuote(quoteId);
   if (!quote) throw new AppError('Quote expired or not found. Request a new quote.', 400);
 
   const fiat    = new Decimal(quote.fiatAmount);

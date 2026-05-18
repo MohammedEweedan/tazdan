@@ -18,6 +18,7 @@
 import crypto from 'crypto';
 import * as bip39 from 'bip39';
 import { prisma } from '../../utils/prisma';
+import { logger } from '../../utils/logger';
 
 const ALGO = 'aes-256-gcm';
 const SEED_VERSION = 1;
@@ -84,7 +85,7 @@ export async function ensureMasterSeed(): Promise<void> {
   });
   // Deliberately not logging the mnemonic. Only a short fingerprint.
   const fp = crypto.createHash('sha256').update(mnemonic).digest('hex').slice(0, 8);
-  console.log(`[masterSeed] Generated new master seed (fp=${fp}, v${SEED_VERSION})`);
+  logger.info(`[masterSeed] Generated new master seed (fp=${fp}, v${SEED_VERSION})`);
 }
 
 /**

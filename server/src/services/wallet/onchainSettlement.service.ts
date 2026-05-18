@@ -26,6 +26,7 @@ import { ethers } from 'ethers';
 import { prisma } from '../../utils/prisma';
 import { AppError } from '../../middleware/errorHandler';
 import { deriveKeyForChain } from './walletDerivation.service';
+import { logger } from '../../utils/logger';
 
 Decimal.set({ precision: 40 });
 
@@ -69,18 +70,99 @@ function fromAddressField(asset: string, network: string):
 // Required confirmations per spec.
 const CONFIRMATIONS = { ETH: 3, BTC: 6, SOL: 32, TRON: 20 } as const;
 
+// Static fallback fee table — used when RPC is unavailable.
+const STATIC_FEE_FALLBACK: Record<string, { asset: string; estimate: string }> = {
+  ETH:       { asset: 'ETH', estimate: '0.0008' },
+  BTC:       { asset: 'BTC', estimate: '0.00015' },
+  SOL:       { asset: 'SOL', estimate: '0.000005' },
+  USDT_ERC20:{ asset: 'ETH', estimate: '0.0015' },
+  USDT_TRC20:{ asset: 'TRX', estimate: '15' },
+};
+
+// Gas units consumed by common operations (EVM).
+const EVM_GAS_UNITS = { ETH_TRANSFER: 21_000, ERC20_TRANSFER: 65_000 };
+
 /**
- * Rough fee estimates in the destination asset (NOT USDT).
- * TODO: replace with live RPC eth_gasPrice / feeEstimate calls.
+ * Estimate the network fee for a withdrawal using live RPC where possible,
+ * falling back to a conservative static table when RPC is unavailable.
+ *
+ * Returns the fee in the gas token (ETH, BTC, SOL, TRX) — NOT in the
+ * transferred asset. The caller should check the user has enough gas token
+ * in their custodial wallet before deducting.
  */
-export function estimateFee(asset: string, network: string): { asset: string; estimate: string } {
+export async function estimateFee(
+  asset: string,
+  network: string,
+): Promise<{ asset: string; estimate: string; live: boolean }> {
   const a = asset.toUpperCase();
   const n = network.toUpperCase();
-  if (a === 'ETH') return { asset: 'ETH', estimate: '0.0008' };
-  if (a === 'BTC') return { asset: 'BTC', estimate: '0.00015' };
-  if (a === 'SOL') return { asset: 'SOL', estimate: '0.000005' };
-  if (a === 'USDT' && n === 'ERC20') return { asset: 'ETH', estimate: '0.0015' };
-  if (a === 'USDT' && n === 'TRC20') return { asset: 'TRX', estimate: '15' };
+
+  // ── EVM (ETH native + ERC-20 USDT) ────────────────────────────────
+  if (a === 'ETH' || (a === 'USDT' && n === 'ERC20')) {
+    const rpc = process.env.ALCHEMY_RPC_URL
+      ?? (process.env.ALCHEMY_API_KEY
+        ? `https://eth-mainnet.g.alchemy.com/v2/${process.env.ALCHEMY_API_KEY}`
+        : null);
+    if (rpc) {
+      try {
+        const provider = new ethers.JsonRpcProvider(rpc);
+        const feeData = await provider.getFeeData();
+        // Use maxFeePerGas when available (EIP-1559), else fall back to gasPrice.
+        const gasPriceWei = feeData.maxFeePerGas ?? feeData.gasPrice ?? 0n;
+        const gasUnits = a === 'ETH' ? EVM_GAS_UNITS.ETH_TRANSFER : EVM_GAS_UNITS.ERC20_TRANSFER;
+        // Add 20% safety margin.
+        const feeWei = gasPriceWei * BigInt(gasUnits) * 120n / 100n;
+        const feeEth = ethers.formatEther(feeWei);
+        return { asset: 'ETH', estimate: feeEth, live: true };
+      } catch {
+        // Fall through to static table
+      }
+    }
+    const key = a === 'USDT' ? 'USDT_ERC20' : 'ETH';
+    return { ...STATIC_FEE_FALLBACK[key]!, live: false };
+  }
+
+  // ── Solana ─────────────────────────────────────────────────────────
+  if (a === 'SOL') {
+    const rpcUrl = process.env.SOLANA_RPC_URL ?? 'https://api.mainnet-beta.solana.com';
+    try {
+      // SOL fee per signature via JSON-RPC (no SDK dependency).
+      const res = await import('axios').then(({ default: ax }) =>
+        ax.post(rpcUrl, {
+          jsonrpc: '2.0', id: 1, method: 'getRecentBlockhash', params: [{ commitment: 'finalized' }],
+        }, { timeout: 4000 })
+      );
+      const lamportsPerSig: number = res.data?.result?.value?.feeCalculator?.lamportsPerSignature ?? 5000;
+      const sol = (lamportsPerSig / 1e9).toFixed(9);
+      return { asset: 'SOL', estimate: sol, live: true };
+    } catch {
+      return { ...STATIC_FEE_FALLBACK['SOL']!, live: false };
+    }
+  }
+
+  // ── TRC-20 USDT ────────────────────────────────────────────────────
+  if (a === 'USDT' && n === 'TRC20') {
+    // Tron energy cost for TRC-20 transfer ≈ 14–65 TRX depending on congestion.
+    // Use Trongrid to get current energy price when credentials available.
+    return { ...STATIC_FEE_FALLBACK['USDT_TRC20']!, live: false };
+  }
+
+  // ── BTC ────────────────────────────────────────────────────────────
+  if (a === 'BTC') {
+    try {
+      const res = await import('axios').then(({ default: ax }) =>
+        ax.get('https://mempool.space/api/v1/fees/recommended', { timeout: 4000 })
+      );
+      // Use halfHourFee (sat/vB) × typical P2WPKH tx size (141 vB).
+      const satPerVb: number = res.data?.halfHourFee ?? 10;
+      const feeSat = satPerVb * 141;
+      const feeBtc = (feeSat / 1e8).toFixed(8);
+      return { asset: 'BTC', estimate: feeBtc, live: true };
+    } catch {
+      return { ...STATIC_FEE_FALLBACK['BTC']!, live: false };
+    }
+  }
+
   throw new AppError(`Unsupported asset/network: ${asset}/${network}`, 400);
 }
 
@@ -209,7 +291,7 @@ export async function initiateWithdrawal(opts: {
     // Wipe the key reference ASAP.
     (key as any).privateKey = '';
   } catch (err: any) {
-    console.error('[withdrawal] broadcast failed — refunding', onChainTx.id, err?.message);
+    logger.error('[withdrawal] broadcast failed — refunding', { id: onChainTx.id, err });
     await prisma.$transaction(async (tx) => {
       await tx.userWallet.update({
         where: { userId: opts.userId },
