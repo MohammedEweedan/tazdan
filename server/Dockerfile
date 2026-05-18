@@ -10,7 +10,7 @@ RUN npm install --omit=dev && npx prisma generate
 FROM base AS build
 RUN npm install
 COPY . .
-RUN npm run build
+RUN npx prisma generate && npm run build
 
 # Production
 FROM node:20-alpine AS production
