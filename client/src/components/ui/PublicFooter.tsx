@@ -29,7 +29,6 @@ export default function PublicFooter() {
       title: t("footer_product"),
       links: [
         { label: t("nav_features"), href: "/#features" },
-        { label: t("nav_markets"), href: "/markets" },
         { label: t("nav_fees"), href: "/fees" },
         { label: t("footer_cards"), href: "/#cta" },
       ],

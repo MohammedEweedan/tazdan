@@ -4,7 +4,8 @@
  * Includes a sparkline for crypto currencies and a balance summary.
  */
 
-import { Pressable, Text, View } from 'react-native';
+import { Pressable, View } from 'react-native';
+import { Text } from '@/components/ui/Text';
 import { LinearGradient } from 'expo-linear-gradient';
 import { gradients, shadows } from '@/theme';
 import { getCurrencyMeta } from '@/constants';
@@ -84,7 +85,7 @@ export function WalletCard({ wallet, width, height = 200, onPress, sparkline }: 
             <Text style={{ color: 'rgba(255,255,255,0.65)', fontSize: 11, fontWeight: '500', letterSpacing: 0.5 }}>
               BALANCE
             </Text>
-            <Text style={{ color: '#fff', fontWeight: '800', fontSize: 28, letterSpacing: -0.6, marginTop: 2 }}>
+            <Text style={{ color: '#fff', fontWeight: '600', fontSize: 28, letterSpacing: -0.6, marginTop: 2 }}>
               {formatAmount(wallet.balance, wallet.currency, { showSymbol: true })}
             </Text>
             <Text style={{ color: 'rgba(255,255,255,0.55)', fontSize: 12, fontWeight: '500', marginTop: 2 }}>

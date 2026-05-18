@@ -3,10 +3,8 @@
  * Reached after registration (optional skip) or from profile settings.
  */
 import { useEffect, useRef, useState } from 'react';
-import {
-  ActivityIndicator, Pressable, Text, TextInput, View, Keyboard,
-  KeyboardAvoidingView, Platform,
-} from 'react-native';
+import { ActivityIndicator, Pressable, View, Keyboard, KeyboardAvoidingView, Platform } from 'react-native';
+import { Text, TextInput } from '@/components/ui/Text';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
@@ -15,6 +13,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useThemedPalette, useTheme } from '@/store/themeStore';
 import { useHaptics } from '@/hooks';
 import { api } from '@/lib/api';
+import { TopGradient } from '@/components/ui/ScreenShell';
 
 const RESEND_SECONDS = 60;
 
@@ -89,6 +88,7 @@ export default function VerifyPhoneScreen() {
   if (success) {
     return (
       <View style={{ flex: 1, backgroundColor: p.bg }}>
+      <TopGradient />
         <StatusBar style={isDark ? 'light' : 'dark'} />
         <SafeAreaView style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 }}>
           <View style={{
@@ -98,7 +98,7 @@ export default function VerifyPhoneScreen() {
           }}>
             <Ionicons name="checkmark-circle" size={44} color={p.fg} />
           </View>
-          <Text style={{ color: p.fg, fontSize: 26, fontWeight: '800', letterSpacing: -0.6, marginBottom: 10 }}>
+          <Text style={{ color: p.fg, fontSize: 26, fontWeight: '600', letterSpacing: -0.6, marginBottom: 10 }}>
             Phone Verified
           </Text>
           <Text style={{ color: p.fgMuted, fontSize: 15, textAlign: 'center', lineHeight: 22, marginBottom: 36 }}>
@@ -151,7 +151,7 @@ export default function VerifyPhoneScreen() {
               <Ionicons name="phone-portrait-outline" size={30} color={p.fg} />
             </View>
 
-            <Text style={{ color: p.fg, fontSize: 28, fontWeight: '800', letterSpacing: -0.8, marginBottom: 8 }}>
+            <Text style={{ color: p.fg, fontSize: 28, fontWeight: '600', letterSpacing: -0.8, marginBottom: 8 }}>
               {sent ? 'Enter your code' : 'Verify your phone'}
             </Text>
             <Text style={{ color: p.fgMuted, fontSize: 15, lineHeight: 22, marginBottom: 32 }}>

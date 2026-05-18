@@ -12,7 +12,8 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { Pressable, ScrollView, View } from 'react-native';
+import { Text, TextInput } from '@/components/ui/Text';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
@@ -21,6 +22,7 @@ import { useRouter } from 'expo-router';
 import { useTheme, useThemedPalette, type Palette } from '@/store/themeStore';
 import { useHaptics } from '@/hooks';
 import { profileService } from '@/services';
+import { TopGradient } from '@/components/ui/ScreenShell';
 
 interface SearchHit {
   id: string;
@@ -71,6 +73,7 @@ export default function NewChat() {
 
   return (
     <View style={{ flex: 1, backgroundColor: p.bg }}>
+      <TopGradient />
       <StatusBar style={themeMode === 'dark' ? 'light' : 'dark'} />
       <SafeAreaView style={{ flex: 1 }} edges={['top']}>
         {/* Header */}
@@ -91,7 +94,7 @@ export default function NewChat() {
           >
             <Ionicons name="chevron-back" size={18} color={p.fg} />
           </Pressable>
-          <Text style={{ color: p.fg, fontSize: 18, fontWeight: '800', letterSpacing: -0.3 }}>
+          <Text style={{ color: p.fg, fontSize: 18, fontWeight: '600', letterSpacing: -0.3 }}>
             New chat
           </Text>
         </View>
@@ -169,7 +172,7 @@ export default function NewChat() {
                   backgroundColor: '#7c3aed',
                   alignItems: 'center', justifyContent: 'center',
                 }}>
-                  <Text style={{ color: '#fff', fontSize: 16, fontWeight: '800' }}>
+                  <Text style={{ color: '#fff', fontSize: 16, fontWeight: '600' }}>
                     {(u.firstName[0] ?? u.username[0] ?? '?').toUpperCase()}
                   </Text>
                 </View>
@@ -222,14 +225,14 @@ function SupportTile({ palette: p, onPress }: { palette: Palette; onPress: () =>
       </View>
       <View style={{ flex: 1 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-          <Text style={{ color: p.fg, fontSize: 14, fontWeight: '800', letterSpacing: -0.2 }}>
+          <Text style={{ color: p.fg, fontSize: 14, fontWeight: '600', letterSpacing: -0.2 }}>
             promrkts Support
           </Text>
           <View style={{
             paddingHorizontal: 5, paddingVertical: 1, borderRadius: 5,
             backgroundColor: BRAND_BLUE,
           }}>
-            <Text style={{ color: '#fff', fontSize: 9, fontWeight: '800' }}>STAFF</Text>
+            <Text style={{ color: '#fff', fontSize: 9, fontWeight: '600' }}>STAFF</Text>
           </View>
         </View>
         <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '500', marginTop: 2 }}>

@@ -12,7 +12,8 @@
  */
 
 import { useEffect, useRef } from 'react';
-import { Animated, Easing, View, Text, type ViewStyle } from 'react-native';
+import { Animated, Easing, View, type ViewStyle } from 'react-native';
+import { Text } from '@/components/ui/Text';
 import Svg, { Defs, LinearGradient as SvgLinearGradient, Stop, Circle } from 'react-native-svg';
 import { Ionicons } from '@expo/vector-icons';
 import { useThemedPalette } from '@/store/themeStore';

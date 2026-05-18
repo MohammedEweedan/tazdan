@@ -13,8 +13,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { cryptoWalletAPI } from '@/lib/cryptoApi';
-import { LinearGradient } from 'expo-linear-gradient';
-import { ActivityIndicator, Animated, Dimensions, Image, KeyboardAvoidingView, Modal, PanResponder, Platform, Pressable, RefreshControl, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
+import { TopGradient } from '@/components/ui/ScreenShell';
+import { ActivityIndicator, Animated, Dimensions, Image, KeyboardAvoidingView, Modal, PanResponder, Platform, Pressable, RefreshControl, ScrollView, Share, StyleSheet, View } from 'react-native';
+import { Text, TextInput } from '@/components/ui/Text';
 import BalanceSvg, { Path as SvgPath, Defs as SvgDefs, LinearGradient as SvgLinearGradient, Stop as SvgStop, Line as SvgLine, Circle as SvgCircle } from 'react-native-svg';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -23,7 +24,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 
 import { useAuthStore } from '@/store/authStore';
-import { useWallets, useHaptics, useTransactions, useActivities, useActivityRealtime, useUnreadCount, useMarkets, useDisplayCurrency } from '@/hooks';
+import { useWallets, useHaptics, useTransactions, useActivities, useActivityRealtime, useNotificationRealtime, useUnreadCount, useMarkets, useDisplayCurrency } from '@/hooks';
 import { useTheme, useThemedPalette, type Palette } from '@/store/themeStore';
 import { useT } from '@/store/i18nStore';
 import { Sparkline } from '@/components/ui/Sparkline';
@@ -34,6 +35,7 @@ import { ReceiveWidget } from '@/components/exchange/ReceiveWidget';
 import { WithdrawWidget } from '@/components/exchange/WithdrawWidget';
 import { DepositWidget } from '@/components/exchange/DepositWidget';
 import { PressableScale } from '@/components/ui/Motion';
+import { AnnouncementBanner } from '@/components/ui/AnnouncementBanner';
 import type { Wallet } from '@/types';
 
 type Tab = 'ASSETS' | 'WALLETS' | 'ACTIVITY';
@@ -52,6 +54,7 @@ export default function Home() {
   const { data: txData, refetch: refetchTxs } = useTransactions(1);
   const { data: activityData, refetch: refetchActivity } = useActivities(1, 'ALL', 25);
   useActivityRealtime(user?.id);
+  useNotificationRealtime(user?.id);
 
   // Adapt the unified Activity shape to TxItem so the existing
   // ActivityList renderer (which handles every type string we set on
@@ -199,37 +202,19 @@ export default function Home() {
   const handle = user?.username ?? user?.email?.split('@')[0] ?? 'me';
   const userEmoji = user?.avatarUrl;
 
-  // Primary actions sit directly under the balance. Four buttons —
-  // money in (Buy / Deposit), money out (Sell / Withdraw). Receive
-  // and Scan moved to the header; secondary actions live in More.
+  // Primary actions sit directly under the balance. Three pills —
+  // Buy, Sell, Top up (deposit). Withdraw + everything else lives
+  // in the More (···) modal.
   const ACTIONS: ActionDef[] = [
-    { key: 'buy',      icon: 'arrow-up-outline',       label: t('action.buy'),      onPress: () => setBuyModalVisible(true) },
-    { key: 'sell',     icon: 'arrow-down-outline',     label: t('action.sell'),     onPress: () => setSellModalVisible(true) },
-    { key: 'deposit',  icon: 'arrow-down-circle-outline', label: t('action.deposit'), onPress: () => setDepositModalVisible(true) },
-    { key: 'withdraw', icon: 'arrow-up-circle-outline', label: t('action.withdraw'), onPress: () => setWithdrawModalVisible(true) },
+    { key: 'buy',     icon: 'arrow-up-outline',         label: t('action.buy'),     onPress: () => setBuyModalVisible(true) },
+    { key: 'sell',    icon: 'arrow-down-outline',       label: t('action.sell'),    onPress: () => setSellModalVisible(true) },
+    { key: 'topup',   icon: 'arrow-down-circle-outline', label: t('action.topup'),  onPress: () => setDepositModalVisible(true) },
   ];
 
   return (
     <View style={{ flex: 1, backgroundColor: p.bg }}>
       <StatusBar style={themeMode === 'dark' ? 'light' : 'dark'} />
-      {/* Top gradient — grey at the very top, fading to solid bg by the
-          middle of the action buttons row (~440px from the very top of
-          the screen, including the safe area inset). */}
-      <LinearGradient
-        colors={themeMode === 'dark'
-          ? ['rgba(180,180,190,0.22)', 'rgba(140,140,150,0.12)', 'rgba(20,21,24,0)']
-          : ['rgba(120,120,130,0.20)', 'rgba(120,120,130,0.10)', 'rgba(245,245,247,0)']}
-        locations={[0, 0.55, 1]}
-        start={{ x: 0.5, y: 0 }}
-        end={{ x: 0.5, y: 1 }}
-        style={{
-          position: 'absolute',
-          top: 0, left: 0, right: 0,
-          height: 440 + insets.top,
-          zIndex: 0,
-        }}
-        pointerEvents="none"
-      />
+      <TopGradient height={440} />
       <SafeAreaView style={{ flex: 1, backgroundColor: 'transparent' }} edges={['top']}>
         <ScrollView
           showsVerticalScrollIndicator={false}
@@ -268,14 +253,14 @@ export default function Home() {
                   {userEmoji ? (
                     <Text style={{ fontSize: 20 }}>{userEmoji}</Text>
                   ) : (
-                    <Text style={{ color: '#fff', fontWeight: '800', fontSize: 16 }}>{initial}</Text>
+                    <Text style={{ color: '#fff', fontWeight: '600', fontSize: 16 }}>{initial}</Text>
                   )}
                 </View>
                 <Text
                   style={{
                     color: p.fg,
                     fontSize: handle.length <= 8 ? 17 : handle.length <= 14 ? 15 : handle.length <= 20 ? 13 : 11,
-                    fontWeight: '700',
+                    fontWeight: '600',
                     letterSpacing: -0.3,
                     flexShrink: 1,
                     minWidth: 0,
@@ -303,7 +288,7 @@ export default function Home() {
                   })}
                 >
                   <Ionicons name="shield-checkmark" size={11} color="#4a8fe0" />
-                  <Text style={{ color: '#4a8fe0', fontSize: 10, fontWeight: '800', letterSpacing: 0.6 }}>
+                  <Text style={{ color: '#4a8fe0', fontSize: 10, fontWeight: '600', letterSpacing: 0.6 }}>
                     ADMIN
                   </Text>
                 </Pressable>
@@ -329,12 +314,6 @@ export default function Home() {
                 palette={p}
                 a11y="Scan QR"
               />
-              <HeaderIconButton
-                icon="ellipsis-horizontal"
-                onPress={() => { h.selection(); setMoreMenuVisible(true); }}
-                palette={p}
-                a11y={t('home.more')}
-              />
             </View>
           </View>
           <AnimatedTotal
@@ -346,7 +325,7 @@ export default function Home() {
             onPress={() => { h.selection(); setBalanceChartVisible(true); }}
           />
 
-          {/* 24h delta */}
+          {/* 24h delta — masked + greyed when balance is hidden */}
           <View style={{
             flexDirection: 'row', alignItems: 'center', gap: 10,
             justifyContent: 'flex-start',
@@ -356,31 +335,44 @@ export default function Home() {
               color: p.fgMuted,
               fontSize: 14, fontWeight: '600', fontVariant: ['tabular-nums'],
             }}>
-              {positive ? '+' : '-'}{dc.fmt(Math.abs(deltaUsd))}
+              {showBalance
+                ? `${positive ? '+' : '-'}${dc.fmt(Math.abs(deltaUsd))}`
+                : `${dc.symbol}****`}
             </Text>
             <View style={{
               flexDirection: 'row', alignItems: 'center', gap: 4,
               paddingHorizontal: 8, paddingVertical: 3, borderRadius: 7,
-              backgroundColor: positive ? 'rgba(34,197,94,0.12)' : 'rgba(239,68,68,0.12)',
+              backgroundColor: showBalance
+                ? (positive ? 'rgba(34,197,94,0.12)' : 'rgba(239,68,68,0.12)')
+                : p.pillBg,
               borderWidth: 1,
-              borderColor: positive ? 'rgba(34,197,94,0.25)' : 'rgba(239,68,68,0.25)',
+              borderColor: showBalance
+                ? (positive ? 'rgba(34,197,94,0.25)' : 'rgba(239,68,68,0.25)')
+                : p.border,
             }}>
-              <Ionicons name={positive ? 'caret-up' : 'caret-down'} size={9} color={positive ? p.greenFg : p.redFg} />
+              {showBalance && (
+                <Ionicons name={positive ? 'caret-up' : 'caret-down'} size={9} color={positive ? p.greenFg : p.redFg} />
+              )}
               <Text style={{
-                color: positive ? p.greenFg : p.redFg,
-                fontSize: 12, fontWeight: '700',
+                color: showBalance ? (positive ? p.greenFg : p.redFg) : p.fgFaint,
+                fontSize: 12, fontWeight: '600',
               }}>
-                {Math.abs(deltaPct).toFixed(2)}%
+                {showBalance ? `${Math.abs(deltaPct).toFixed(2)}%` : '**.**%'}
               </Text>
             </View>
           </View>
 
-          {/* ── 4 PRIMARY ACTIONS — Buy / Sell / Deposit / Withdraw ── */}
-          <View style={{ flexDirection: 'row', justifyContent: 'space-around', paddingHorizontal: 8, marginTop: 32 }}>
+          {/* ── PRIMARY ACTIONS ── */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, paddingHorizontal: 24, marginTop: 28 }}>
             {ACTIONS.map((a) => (
-              <ActionButton key={a.key} icon={a.icon} label={a.label} to={a.to} onPress={a.onPress} palette={p} />
+              <ActionButton key={a.key} label={a.label} to={a.to} onPress={a.onPress} palette={p} />
             ))}
+            <MoreActionButton palette={p} onPress={() => { h.selection(); setMoreMenuVisible(true); }} />
           </View>
+          {/* Invisible spacer so the row always touches the container edges */}
+
+          {/* Announcement Banner */}
+          <AnnouncementBanner />
 
           {/* Tabs - center-aligned */}
           <View style={{
@@ -407,7 +399,7 @@ export default function Home() {
               {/* Crypto Assets Section */}
               {cryptoAssets.length > 0 && (
                 <View style={{ marginTop: 16 }}>
-                  <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '700', letterSpacing: 0.6, marginBottom: 12, paddingHorizontal: 20 }}>
+                  <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '600', letterSpacing: 0.6, marginBottom: 12, paddingHorizontal: 20}}>
                     {t('home.cryptoAssets').toUpperCase()}
                   </Text>
                   {cryptoAssets.map((w) => {
@@ -421,6 +413,7 @@ export default function Home() {
                         sparkline={sparklineMap[tk]}
                         changePct={changeMap[tk]}
                         liveUsd={price !== undefined ? Number(w.balance) * price : undefined}
+                        showBalance={showBalance}
                         onPress={() => { h.selection(); router.push(`/asset/${w.currency}`); }}
                       />
                     );
@@ -431,7 +424,7 @@ export default function Home() {
               {/* Fiat Assets Section */}
               {fiatAssets.length > 0 && (
                 <View style={{ marginTop: 24 }}>
-                  <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '700', letterSpacing: 0.6, marginBottom: 12, paddingHorizontal: 20 }}>
+                  <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '600', letterSpacing: 0.6, marginBottom: 12, paddingHorizontal: 20, }}>
                     {t('home.fiatAssets').toUpperCase()}
                   </Text>
                   {fiatAssets.map((w) => (
@@ -442,6 +435,7 @@ export default function Home() {
                       sparkline={undefined}
                       changePct={undefined}
                       liveUsd={undefined}
+                      showBalance={showBalance}
                       onPress={() => { h.selection(); router.push(`/asset/${w.currency}`); }}
                     />
                   ))}
@@ -457,10 +451,10 @@ export default function Home() {
               }}>
                 <Ionicons name="wallet-outline" size={26} color={p.fgMuted} />
               </View>
-              <Text style={{ color: p.fg, fontSize: 16, fontWeight: '800', marginTop: 14, letterSpacing: -0.2 }}>
+              <Text style={{ color: p.fg, fontSize: 16, fontWeight: '600', marginTop: 14, letterSpacing: -0.2 }}>
                 {t('home.noAssetsOwned')}
               </Text>
-              <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '500', marginTop: 4, textAlign: 'center' }}>
+              <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '600', marginTop: 4, textAlign: 'center' }}>
                 {t('home.noAssetsBody')}
               </Text>
               <View style={{ flexDirection: 'row', gap: 10, marginTop: 18 }}>
@@ -473,7 +467,7 @@ export default function Home() {
                   })}
                 >
                   <Ionicons name="add" size={14} color={p.ctaFg} />
-                  <Text style={{ color: p.ctaFg, fontSize: 13, fontWeight: '800' }}>{t('home.buyCrypto')}</Text>
+                  <Text style={{ color: p.ctaFg, fontSize: 13, fontWeight: '600' }}>{t('home.buyCrypto')}</Text>
                 </Pressable>
                 <Pressable
                   onPress={() => { h.medium(); setDepositModalVisible(true); }}
@@ -485,7 +479,7 @@ export default function Home() {
                   })}
                 >
                   <Ionicons name="arrow-down" size={14} color={p.fg} />
-                  <Text style={{ color: p.fg, fontSize: 13, fontWeight: '800' }}>{t('action.deposit')}</Text>
+                  <Text style={{ color: p.fg, fontSize: 13, fontWeight: '600' }}>{t('action.deposit')}</Text>
                 </Pressable>
               </View>
             </View>
@@ -499,13 +493,6 @@ export default function Home() {
           <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' }} onPress={() => setBuyModalVisible(false)}>
             <Pressable style={{ backgroundColor: p.bg, borderTopLeftRadius: 28, borderTopRightRadius: 28, maxHeight: '85%' }} onPress={(e) => e.stopPropagation()}>
               <View style={{ alignItems: 'center', paddingTop: 10, paddingBottom: 2 }}>
-                <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: p.border }} />
-              </View>
-              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 24, paddingTop: 8, paddingBottom: 4 }}>
-                <Text style={{ color: p.fg, fontSize: 20, fontWeight: '800', letterSpacing: -0.4 }}>{t('home.buyCryptoTitle')}</Text>
-                <Pressable onPress={() => setBuyModalVisible(false)} hitSlop={8} style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border, alignItems: 'center', justifyContent: 'center' }}>
-                  <Ionicons name="close" size={16} color={p.fg} />
-                </Pressable>
               </View>
               <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: insets.bottom + 8 }}>
                 <BuyWidget />
@@ -521,13 +508,6 @@ export default function Home() {
           <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' }} onPress={() => setSellModalVisible(false)}>
             <Pressable style={{ backgroundColor: p.bg, borderTopLeftRadius: 28, borderTopRightRadius: 28, maxHeight: '85%' }} onPress={(e) => e.stopPropagation()}>
               <View style={{ alignItems: 'center', paddingTop: 10, paddingBottom: 2 }}>
-                <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: p.border }} />
-              </View>
-              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 24, paddingTop: 8, paddingBottom: 4 }}>
-                <Text style={{ color: p.fg, fontSize: 20, fontWeight: '800', letterSpacing: -0.4 }}>{t('home.sellCryptoTitle')}</Text>
-                <Pressable onPress={() => setSellModalVisible(false)} hitSlop={8} style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border, alignItems: 'center', justifyContent: 'center' }}>
-                  <Ionicons name="close" size={16} color={p.fg} />
-                </Pressable>
               </View>
               <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: insets.bottom + 8 }}>
                 <SellWidget />
@@ -546,7 +526,7 @@ export default function Home() {
                 <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: p.border }} />
               </View>
               <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 24, paddingTop: 8, paddingBottom: 4 }}>
-                <Text style={{ color: p.fg, fontSize: 20, fontWeight: '800', letterSpacing: -0.4 }}>{t('home.sendMoney')}</Text>
+                <Text style={{ color: p.fg, fontSize: 20, fontWeight: '600', letterSpacing: -0.4 }}>{t('home.sendMoney')}</Text>
                 <Pressable onPress={() => setSendModalVisible(false)} hitSlop={8} style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border, alignItems: 'center', justifyContent: 'center' }}>
                   <Ionicons name="close" size={16} color={p.fg} />
                 </Pressable>
@@ -568,7 +548,7 @@ export default function Home() {
                 <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: p.border }} />
               </View>
               <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 24, paddingTop: 8, paddingBottom: 4 }}>
-                <Text style={{ color: p.fg, fontSize: 20, fontWeight: '800', letterSpacing: -0.4 }}>{t('action.withdraw')}</Text>
+                <Text style={{ color: p.fg, fontSize: 20, fontWeight: '600', letterSpacing: -0.4 }}>{t('action.withdraw')}</Text>
                 <Pressable onPress={() => setWithdrawModalVisible(false)} hitSlop={8} style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border, alignItems: 'center', justifyContent: 'center' }}>
                   <Ionicons name="close" size={16} color={p.fg} />
                 </Pressable>
@@ -590,7 +570,7 @@ export default function Home() {
                 <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: p.border }} />
               </View>
               <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 24, paddingTop: 8, paddingBottom: 4 }}>
-                <Text style={{ color: p.fg, fontSize: 20, fontWeight: '800', letterSpacing: -0.4 }}>{t('action.receive')}</Text>
+                <Text style={{ color: p.fg, fontSize: 20, fontWeight: '600', letterSpacing: -0.4 }}>{t('action.receive')}</Text>
                 <Pressable onPress={() => setReceiveModalVisible(false)} hitSlop={8} style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border, alignItems: 'center', justifyContent: 'center' }}>
                   <Ionicons name="close" size={16} color={p.fg} />
                 </Pressable>
@@ -610,12 +590,6 @@ export default function Home() {
             <Pressable style={{ backgroundColor: p.bg, borderTopLeftRadius: 28, borderTopRightRadius: 28, maxHeight: '85%' }} onPress={(e) => e.stopPropagation()}>
               <View style={{ alignItems: 'center', paddingTop: 10, paddingBottom: 2 }}>
                 <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: p.border }} />
-              </View>
-              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 24, paddingTop: 8, paddingBottom: 4 }}>
-                <Text style={{ color: p.fg, fontSize: 20, fontWeight: '800', letterSpacing: -0.4 }}>{t('action.deposit')}</Text>
-                <Pressable onPress={() => setDepositModalVisible(false)} hitSlop={8} style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border, alignItems: 'center', justifyContent: 'center' }}>
-                  <Ionicons name="close" size={16} color={p.fg} />
-                </Pressable>
               </View>
               <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: insets.bottom + 8 }}>
                 <DepositWidget />
@@ -640,16 +614,13 @@ export default function Home() {
             style={{ backgroundColor: p.bg, borderRadius: 24, paddingTop: 20, paddingBottom: 8, width: '100%', maxWidth: 360 }}
             onPress={(e) => e.stopPropagation()}
           >
-            <Text style={{ color: p.fg, fontSize: 18, fontWeight: '800', marginBottom: 4, letterSpacing: -0.3, paddingHorizontal: 20 }}>
-              {t('home.more')}
-            </Text>
 
             {/* Primary actions — matches web three-dot */}
             <View style={{ flexDirection: 'row', paddingHorizontal: 16, paddingVertical: 16, gap: 10, borderBottomWidth: 1, borderBottomColor: p.border }}>
               {[
-                { icon: 'swap-horizontal-outline' as const, label: t('action.swap'),     onPress: () => { setMoreMenuVisible(false); router.push('/transfer'); } },
-                { icon: 'arrow-down-circle-outline' as const, label: t('action.deposit'), onPress: () => { setMoreMenuVisible(false); setDepositModalVisible(true); } },
                 { icon: 'arrow-up-circle-outline' as const, label: t('action.withdraw'), onPress: () => { setMoreMenuVisible(false); setWithdrawModalVisible(true); } },
+                { icon: 'swap-horizontal-outline' as const, label: t('action.swap'),     onPress: () => { setMoreMenuVisible(false); router.push('/transfer'); } },
+                { icon: 'paper-plane-outline' as const,   label: t('action.send'),     onPress: () => { setMoreMenuVisible(false); setSendModalVisible(true); } },
               ].map((item) => (
                 <Pressable
                   key={item.label}
@@ -664,7 +635,7 @@ export default function Home() {
                   <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: p.bgElev, alignItems: 'center', justifyContent: 'center' }}>
                     <Ionicons name={item.icon} size={20} color={p.fg} />
                   </View>
-                  <Text style={{ color: p.fg, fontSize: 12, fontWeight: '700' }}>{item.label}</Text>
+                  <Text style={{ color: p.fg, fontSize: 12, fontWeight: '600' }}>{item.label}</Text>
                 </Pressable>
               ))}
             </View>
@@ -709,7 +680,7 @@ export default function Home() {
                   alignItems: 'center', justifyContent: 'center',
                 })}
               >
-                <Text style={{ color: p.fg, fontSize: 15, fontWeight: '700' }}>{t('common.close')}</Text>
+                <Text style={{ color: p.fg, fontSize: 15, fontWeight: '600' }}>{t('common.close')}</Text>
               </Pressable>
             </View>
           </Pressable>
@@ -897,7 +868,7 @@ function BalanceHistoryModal({
           {/* Active balance */}
           <View style={{ paddingHorizontal: 24, marginBottom: 16 }}>
             <Text style={{
-              color: p.fg, fontSize: 34, fontWeight: '800',
+              color: p.fg, fontSize: 34, fontWeight: '600',
               letterSpacing: -1.2, fontVariant: ['tabular-nums'],
             }}>
               {activePoint ? dc.fmt(activePoint.balanceUsd) : dc.fmt(totalUsd)}
@@ -912,7 +883,7 @@ function BalanceHistoryModal({
           {points.length < 2 ? (
             <View style={{ height: CHART_H, alignItems: 'center', justifyContent: 'center', marginHorizontal: 24 }}>
               <Ionicons name="analytics-outline" size={32} color={p.fgFaint} />
-              <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '500', marginTop: 10 }}>
+              <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '600', marginTop: 10 }}>
                 Not enough data yet
               </Text>
             </View>
@@ -1014,7 +985,7 @@ function BalanceHistoryModal({
               >
                 <Text style={{
                   color: range === r ? p.ctaFg : p.fgMuted,
-                  fontSize: 13, fontWeight: '700',
+                  fontSize: 13, fontWeight: '600',
                 }}>
                   {r}
                 </Text>
@@ -1121,18 +1092,31 @@ function AnimatedTotal({
   const digitCount = totalStr.replace(/[^0-9]/g, '').length;
   const fontSize = digitCount <= 7 ? 48 : digitCount <= 9 ? 40 : digitCount <= 11 ? 34 : 28;
 
+  // Masked display preserves layout: keep separators in place, replace
+  // each digit with a star. Eye toggle sits to the right and never shifts.
+  const maskedStr = totalStr.replace(/[0-9]/g, '*');
+
   return (
     <View style={{ alignItems: 'flex-start', paddingHorizontal: 24, paddingVertical: 14 }}>
-      <Pressable onPress={onPress} hitSlop={12}>
-        <Text style={{
-          color: p.fg,
-          fontSize, fontWeight: '800', letterSpacing: -1.6,
-          textAlign: 'left',
-          fontVariant: ['tabular-nums'],
-        }}>
-          {dc.symbol}{totalStr}
-        </Text>
-      </Pressable>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+        <Pressable onPress={onPress} hitSlop={12}>
+          <Text style={{
+            color: p.fg,
+            fontSize, fontWeight: '600', letterSpacing: -1.6,
+            textAlign: 'left',
+            fontVariant: ['tabular-nums'],
+          }}>
+            {dc.symbol}{showBalance ? totalStr : maskedStr}
+          </Text>
+        </Pressable>
+        <Pressable onPress={onToggle} hitSlop={10} style={{ padding: 4 }}>
+          <Ionicons
+            name={showBalance ? 'eye-outline' : 'eye-off-outline'}
+            size={18}
+            color={p.fgFaint}
+          />
+        </Pressable>
+      </View>
 
       {flash && (
         <Animated.View
@@ -1154,7 +1138,7 @@ function AnimatedTotal({
           />
           {/* <Text style={{
             color: flash.dir === 'up' ? p.greenFg : p.redFg,
-            fontSize: 11, fontWeight: '800', fontVariant: ['tabular-nums'],
+            fontSize: 11, fontWeight: '600', fontVariant: ['tabular-nums'],
           }}>
             {flash.dir === 'up' ? '+' : '-'}${formatFiat(Math.abs(flash.delta))}
           </Text> */}
@@ -1164,13 +1148,18 @@ function AnimatedTotal({
   );
 }
 
-/* ── Action button — slightly rectangular pill with soft round edges ─── */
+/* ── Action buttons — pill row (Revolut / Robinhood style) ────────── */
 interface ActionDef { key: string; icon: keyof typeof Ionicons.glyphMap; label: string; to?: string; onPress?: () => void }
 
+/**
+ * Pill colours are tuned to sit on top of the home-screen TopGradient.
+ * Dark: cool blue-grey (#4E72C1 at low alpha) reading like frosted glass.
+ * Light: warm grey-blue tint matching the gradient's lighter blend.
+ * No solid black — the pill should feel like it belongs to the gradient.
+ */
 function ActionButton({
-  icon, label, onPress, to, palette: p,
+  label, onPress, to,
 }: {
-  icon: keyof typeof Ionicons.glyphMap;
   label: string;
   onPress?: () => void;
   to?: string;
@@ -1184,27 +1173,55 @@ function ActionButton({
     else if (to) router.push(to as any);
   };
 
-  // White tile in dark mode, black tile in light mode
-  const tileBg  = themeMode === 'dark' ? '#ffffff' : '#000000';
-  const iconClr = themeMode === 'dark' ? '#000000' : '#ffffff';
+  const bg = themeMode === 'dark' ? '#ffffff' : '#111111';
+  const fg = themeMode === 'dark' ? '#111111' : '#ffffff';
 
   return (
-    <PressableScale onPress={handlePress} style={{ flex: 1, alignItems: 'center', gap: 8 }}>
+    <PressableScale onPress={handlePress}>
       <View style={{
-        width: 72, height: 44, borderRadius: 14,
-        backgroundColor: tileBg,
-        alignItems: 'center', justifyContent: 'center',
-        shadowColor: tileBg,
+        height: 44,
+        paddingHorizontal: 22,
+        borderRadius: 22,
+        backgroundColor: bg,
+        alignItems: 'center',
+        justifyContent: 'center',
+        shadowColor: '#000',
         shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: themeMode === 'dark' ? 0.18 : 0.22,
-        shadowRadius: 6,
+        shadowOpacity: 0.15,
+        shadowRadius: 4,
         elevation: 3,
       }}>
-        <Ionicons name={icon} size={22} color={iconClr} />
+        <Text style={{ color: fg, fontSize: 15, fontWeight: '600', letterSpacing: -0.2 }}>
+          {label}
+        </Text>
       </View>
-      <Text numberOfLines={1} style={{ color: p.fgMuted, fontSize: 12, fontWeight: '600', letterSpacing: 0.1 }}>
-        {label}
-      </Text>
+    </PressableScale>
+  );
+}
+
+function MoreActionButton({ onPress }: { palette: Palette; onPress: () => void }) {
+  const themeMode = useTheme((s) => s.mode);
+
+  const bg = themeMode === 'dark' ? '#ffffff' : '#111111';
+  const fg = themeMode === 'dark' ? '#111111' : '#ffffff';
+
+  return (
+    <PressableScale onPress={onPress}>
+      <View style={{
+        width: 44, height: 44,
+        borderRadius: 22,
+        backgroundColor: bg,
+        alignItems: 'center', justifyContent: 'center',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.15,
+        shadowRadius: 4,
+        elevation: 3,
+      }}>
+        <Text style={{ color: fg, fontSize: 16, fontWeight: '700', letterSpacing: 1.5 }}>
+          {'···'}
+        </Text>
+      </View>
     </PressableScale>
   );
 }
@@ -1247,7 +1264,7 @@ function HeaderIconButton({
             paddingHorizontal: 3,
           }}
         >
-          <Text style={{ color: '#fff', fontSize: 9.5, fontWeight: '800' }}>
+          <Text style={{ color: '#fff', fontSize: 9.5, fontWeight: '600' }}>
             {badge > 9 ? '9+' : badge}
           </Text>
         </View>
@@ -1316,7 +1333,7 @@ function DetailRow({
         <Ionicons name={icon} size={14} color={p.fgMuted} />
       </View>
       <Text style={{ flex: 1, color: p.fgMuted, fontSize: 13, fontWeight: '600' }}>{label}</Text>
-      <Text style={{ color: p.fg, fontSize: 13, fontWeight: '700', fontVariant: ['tabular-nums'] }} numberOfLines={1}>
+      <Text style={{ color: p.fg, fontSize: 13, fontWeight: '600', fontVariant: ['tabular-nums'] }} numberOfLines={1}>
         {value}
       </Text>
     </View>
@@ -1452,7 +1469,7 @@ function TxDetailModal({
                 <Ionicons name={iconName} size={36} color={accent} />
               </View>
 
-              <Text style={{ color: p.fg, fontSize: 24, fontWeight: '800', letterSpacing: -0.5, textAlign: 'center' }}>
+              <Text style={{ color: p.fg, fontSize: 24, fontWeight: '600', letterSpacing: -0.5, textAlign: 'center' }}>
                 {title}
               </Text>
 
@@ -1460,7 +1477,7 @@ function TxDetailModal({
                 marginTop: 10, paddingHorizontal: 14, paddingVertical: 5,
                 borderRadius: 20, backgroundColor: sc.bg,
               }}>
-                <Text style={{ color: sc.fg, fontSize: 11, fontWeight: '800', letterSpacing: 0.8 }}>
+                <Text style={{ color: sc.fg, fontSize: 11, fontWeight: '600', letterSpacing: 0.8 }}>
                   {status}
                 </Text>
               </View>
@@ -1470,7 +1487,7 @@ function TxDetailModal({
                   <>
                     <Text style={{
                       color: type === 'BUY' ? p.greenFg : p.redFg,
-                      fontSize: 36, fontWeight: '800', letterSpacing: -1.2, fontVariant: ['tabular-nums'],
+                      fontSize: 36, fontWeight: '600', letterSpacing: -1.2, fontVariant: ['tabular-nums'],
                     }}>
                       {type === 'BUY' ? '+' : '−'}{cryptoStr}
                     </Text>
@@ -1482,7 +1499,7 @@ function TxDetailModal({
                   </>
                 ) : (
                   <Text style={{
-                    color: accent, fontSize: 36, fontWeight: '800', letterSpacing: -1.2, fontVariant: ['tabular-nums'],
+                    color: accent, fontSize: 36, fontWeight: '600', letterSpacing: -1.2, fontVariant: ['tabular-nums'],
                   }}>
                     {isCredit ? '+' : '−'}{fiatStr}
                   </Text>
@@ -1529,20 +1546,20 @@ function TxDetailModal({
                 }}>
                   {cpAvatar
                     ? <Image source={{ uri: cpAvatar }} style={{ width: 52, height: 52 }} />
-                    : <Text style={{ color: p.fg, fontSize: 20, fontWeight: '800' }}>
+                    : <Text style={{ color: p.fg, fontSize: 20, fontWeight: '600' }}>
                         {(cpName ?? cpHandle ?? '?')[0].toUpperCase()}
                       </Text>
                   }
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '700', letterSpacing: 0.6, marginBottom: 4 }}>
+                  <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '600', letterSpacing: 0.6, marginBottom: 4 }}>
                     {cpDirection}
                   </Text>
                   {cpName && (
-                    <Text style={{ color: p.fg, fontSize: 15, fontWeight: '700' }}>{cpName}</Text>
+                    <Text style={{ color: p.fg, fontSize: 15, fontWeight: '600' }}>{cpName}</Text>
                   )}
                   {cpHandle && (
-                    <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '500', marginTop: 1 }}>
+                    <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '600', marginTop: 1 }}>
                       @{cpHandle}
                     </Text>
                   )}
@@ -1557,10 +1574,10 @@ function TxDetailModal({
                 backgroundColor: p.bgElev, borderRadius: 20,
                 borderWidth: 1, borderColor: p.border, padding: 16,
               }}>
-                <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '700', letterSpacing: 0.6, marginBottom: 8 }}>
+                <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '600', letterSpacing: 0.6, marginBottom: 8 }}>
                   NOTE
                 </Text>
-                <Text style={{ color: p.fg, fontSize: 14, fontWeight: '500', lineHeight: 21 }}>{note}</Text>
+                <Text style={{ color: p.fg, fontSize: 14, fontWeight: '600', lineHeight: 21 }}>{note}</Text>
               </View>
             )}
 
@@ -1572,7 +1589,7 @@ function TxDetailModal({
               padding: 16, flexDirection: 'row', alignItems: 'center',
             }}>
               <View style={{ flex: 1, marginRight: 12 }}>
-                <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '700', letterSpacing: 0.6, marginBottom: 4 }}>
+                <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '600', letterSpacing: 0.6, marginBottom: 4 }}>
                   REFERENCE
                 </Text>
                 <Text style={{ color: p.fg, fontSize: 12, fontWeight: '600', letterSpacing: 0.2 }} numberOfLines={1}>
@@ -1593,7 +1610,7 @@ function TxDetailModal({
                   size={13}
                   color={copied ? p.greenFg : p.fgMuted}
                 />
-                <Text style={{ color: copied ? p.greenFg : p.fgMuted, fontSize: 12, fontWeight: '700' }}>
+                <Text style={{ color: copied ? p.greenFg : p.fgMuted, fontSize: 12, fontWeight: '600' }}>
                   {copied ? 'Copied!' : 'Copy'}
                 </Text>
               </Pressable>
@@ -1622,7 +1639,7 @@ function ActivityList({
     return (
       <View style={{ paddingVertical: 48, alignItems: 'center' }}>
         <Ionicons name="receipt-outline" size={28} color={p.fgFaint} />
-        <Text style={{ color: p.fgMuted, fontSize: 13, marginTop: 12, fontWeight: '500' }}>
+        <Text style={{ color: p.fgMuted, fontSize: 13, marginTop: 12, fontWeight: '600' }}>
           {t('home.noActivity')}
         </Text>
       </View>
@@ -1704,10 +1721,10 @@ function ActivityList({
 
             {/* Title + subtitle */}
             <View style={{ flex: 1, minWidth: 0 }}>
-              <Text style={{ color: p.fg, fontSize: 14, fontWeight: '700' }} numberOfLines={1}>
+              <Text style={{ color: p.fg, fontSize: 14, fontWeight: '600' }} numberOfLines={1}>
                 {title}
               </Text>
-              <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '500', marginTop: 2 }} numberOfLines={1}>
+              <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '600', marginTop: 2 }} numberOfLines={1}>
                 {subtitle}
               </Text>
             </View>
@@ -1716,7 +1733,7 @@ function ActivityList({
             <View style={{ alignItems: 'flex-end', flexShrink: 0 }}>
               {showDual && cryptoStr ? (
                 <>
-                  <Text style={{ color: type === 'BUY' ? p.greenFg : p.redFg, fontSize: 13, fontWeight: '700', fontVariant: ['tabular-nums'] }}>
+                  <Text style={{ color: type === 'BUY' ? p.greenFg : p.redFg, fontSize: 13, fontWeight: '600', fontVariant: ['tabular-nums'] }}>
                     {type === 'BUY' ? '+' : '−'}{cryptoStr}
                   </Text>
                   <Text style={{ color: type === 'BUY' ? p.redFg : p.greenFg, fontSize: 12, fontWeight: '600', marginTop: 2, fontVariant: ['tabular-nums'] }}>
@@ -1726,7 +1743,7 @@ function ActivityList({
               ) : (
                 <Text style={{
                   color: amt >= 0 ? p.greenFg : p.redFg,
-                  fontSize: 14, fontWeight: '700', fontVariant: ['tabular-nums'],
+                  fontSize: 14, fontWeight: '600', fontVariant: ['tabular-nums'],
                 }}>
                   {amt >= 0 ? '+' : '−'}{fiatStr}
                 </Text>
@@ -1750,7 +1767,7 @@ function ActivityList({
           borderWidth: 1, borderColor: p.border,
         })}
       >
-        <Text style={{ color: p.fg, fontSize: 13, fontWeight: '700' }}>{t('home.seeAllTx')}</Text>
+        <Text style={{ color: p.fg, fontSize: 13, fontWeight: '600' }}>{t('home.seeAllTx')}</Text>
         <Ionicons name="chevron-forward" size={14} color={p.fg} />
       </Pressable>
 
@@ -1783,7 +1800,7 @@ function WalletAddressList({
     return (
       <View style={{ paddingVertical: 48, alignItems: 'center' }}>
         <Ionicons name="key-outline" size={28} color={p.fgFaint} />
-        <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '500', marginTop: 12 }}>
+        <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '600', marginTop: 12 }}>
           {t('home.noWallets')}
         </Text>
       </View>
@@ -1833,12 +1850,12 @@ function WalletRow({ wallet: w, palette: p, isCrypto, onCopy, onShowQr }: {
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
         <CurrencyIcon currency={w.currency} />
         <View style={{ flex: 1 }}>
-          <Text style={{ color: p.fg, fontSize: 15, fontWeight: '700' }}>{meta.title}</Text>
+          <Text style={{ color: p.fg, fontSize: 15, fontWeight: '600' }}>{meta.title}</Text>
           <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '600', marginTop: 2 }}>
             {isCrypto ? `${chain} ${t('home.network')}` : t('home.bankReference')}
           </Text>
         </View>
-        <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '700', fontVariant: ['tabular-nums'] }}>
+        <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '600', fontVariant: ['tabular-nums'] }}>
           {Number(w.balance).toLocaleString('en-US', { maximumFractionDigits: Math.min(meta.subDecimals, 8) })} {w.currency}
         </Text>
       </View>
@@ -1931,7 +1948,7 @@ function QrModal({
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
             <CurrencyIcon currency={wallet.currency} />
             <View style={{ flex: 1 }}>
-              <Text style={{ color: p.fg, fontSize: 16, fontWeight: '800' }}>
+              <Text style={{ color: p.fg, fontSize: 16, fontWeight: '600' }}>
                 {t('home.receiveAsset')} {meta.title}
               </Text>
               <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '600', marginTop: 1 }}>
@@ -1965,7 +1982,7 @@ function QrModal({
             backgroundColor: p.bgElev,
             borderWidth: 1, borderColor: p.border,
           }}>
-            <Text style={{ color: p.fgFaint, fontSize: 10, fontWeight: '700', letterSpacing: 0.6 }}>
+            <Text style={{ color: p.fgFaint, fontSize: 10, fontWeight: '600', letterSpacing: 0.6 }}>
               {t('home.address').toUpperCase()}
             </Text>
             <Text
@@ -1993,7 +2010,7 @@ function QrModal({
               })}
             >
               <Ionicons name="copy-outline" size={14} color={p.fg} />
-              <Text style={{ color: p.fg, fontWeight: '800', fontSize: 14 }}>{t('common.copy')}</Text>
+              <Text style={{ color: p.fg, fontWeight: '600', fontSize: 14 }}>{t('common.copy')}</Text>
             </Pressable>
             <Pressable
               onPress={onClose}
@@ -2003,7 +2020,7 @@ function QrModal({
                 alignItems: 'center', justifyContent: 'center',
               })}
             >
-              <Text style={{ color: p.ctaFg, fontWeight: '800', fontSize: 14 }}>{t('common.done')}</Text>
+              <Text style={{ color: p.ctaFg, fontWeight: '600', fontSize: 14 }}>{t('common.done')}</Text>
             </Pressable>
           </View>
 
@@ -2080,13 +2097,14 @@ function useDepositAddress(currency: string, enabled: boolean) {
 }
 
 /* ── Asset row ─── */
-function AssetRow({ wallet, palette: p, onPress, liveUsd, sparkline, changePct }: {
+function AssetRow({ wallet, palette: p, onPress, liveUsd, sparkline, changePct, showBalance = true }: {
   wallet: Wallet;
   palette: Palette;
   onPress?: () => void;
   liveUsd?: number;
   sparkline?: number[];
   changePct?: number;
+  showBalance?: boolean;
 }) {
   const dc = useDisplayCurrency();
   const meta = ASSET_META[wallet.currency] ?? { title: wallet.currency, subDecimals: 6 };
@@ -2094,40 +2112,47 @@ function AssetRow({ wallet, palette: p, onPress, liveUsd, sparkline, changePct }
   const positive = (changePct ?? 0) >= 0;
   const sparkColor = positive ? '#22c55e' : '#ef4444';
   const maxDec = Math.min(meta.subDecimals, 8);
+  const balanceStr = Number(wallet.balance).toLocaleString('en-US', { maximumFractionDigits: maxDec });
+  const usdStr = dc.fmt(usd);
+  const maskedBalance = balanceStr.replace(/[0-9]/g, '*');
+  const maskedUsd = usdStr.replace(/[0-9]/g, '*');
 
   return (
     <Pressable
       onPress={onPress}
       style={({ pressed }) => ({
-        flexDirection: 'row', alignItems: 'center',
         paddingHorizontal: 20, paddingVertical: 12,
         backgroundColor: pressed ? p.bgElev : 'transparent',
         borderBottomWidth: 1, borderBottomColor: p.border,
       })}
     >
-      <CurrencyIcon currency={wallet.currency} />
-      <View style={{ flex: 1, marginLeft: 12, minWidth: 0 }}>
-        <Text style={{ color: p.fg, fontSize: 15, fontWeight: '700' }} numberOfLines={1}>
-          {meta.title}
-        </Text>
-        <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '500', marginTop: 1 }} numberOfLines={1}>
-          {Number(wallet.balance).toLocaleString('en-US', { maximumFractionDigits: maxDec })} {wallet.currency}
-        </Text>
-      </View>
-      {sparkline && sparkline.length >= 2 && (
-        <View style={{ marginHorizontal: 8, opacity: 0.9 }}>
-          <Sparkline data={sparkline} width={60} height={28} color={sparkColor} strokeWidth={1.5} />
-        </View>
-      )}
-      <View style={{ alignItems: 'flex-end' }}>
-        <Text style={{ color: p.fg, fontSize: 14, fontWeight: '700', fontVariant: ['tabular-nums'] }}>
-          {dc.fmt(usd)}
-        </Text>
-        {changePct !== undefined && (
-          <Text style={{ color: positive ? '#22c55e' : '#ef4444', fontSize: 11, fontWeight: '600', marginTop: 1 }}>
-            {positive ? '+' : ''}{changePct.toFixed(2)}%
+      {/* Top row: icon, name/balance, price */}
+      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+        <CurrencyIcon currency={wallet.currency} />
+        <View style={{ flex: 1, marginLeft: 12, minWidth: 0 }}>
+          <Text style={{ color: p.fg, fontSize: 15, fontWeight: '600' }} numberOfLines={1}>
+            {meta.title}
           </Text>
-        )}
+          <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '600', marginTop: 1 }} numberOfLines={1}>
+            {showBalance ? balanceStr : maskedBalance} {wallet.currency}
+          </Text>
+          {changePct !== undefined && (
+            <Text style={{ color: showBalance ? (positive ? '#22c55e' : '#ef4444') : p.fgFaint, fontSize: 11, fontWeight: '600', marginTop: 1 }}>
+              {showBalance ? `${positive ? '+' : ''}${changePct.toFixed(2)}%` : '**.**%'}
+            </Text>
+          )}
+        </View>
+        <View style={{ alignItems: 'flex-end' }}>
+          <Text style={{ color: p.fg, fontSize: 14, fontWeight: '600', fontVariant: ['tabular-nums'] }}>
+            {showBalance ? usdStr : maskedUsd}
+          </Text>
+          {/* Sparkline below */}
+          {sparkline && sparkline.length >= 2 && (
+            <View style={{ marginTop: 8, width: '100%', opacity: 0.9 }}>
+              <Sparkline data={sparkline} width={100} height={32} color={sparkColor} strokeWidth={1.5} />
+            </View>
+          )}
+        </View>
       </View>
     </Pressable>
   );
@@ -2149,7 +2174,7 @@ function CurrencyIcon({ currency }: { currency: string }) {
   };
   return (
     <View style={{ width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }}>
-      <Text style={{ color: cfg.color, fontWeight: '800', fontSize: cfg.fontSize ?? 22, lineHeight: (cfg.fontSize ?? 22) + 6 }}>
+      <Text style={{ color: cfg.color, fontWeight: '600', fontSize: cfg.fontSize ?? 22, lineHeight: (cfg.fontSize ?? 22) + 6 }}>
         {cfg.glyph}
       </Text>
     </View>

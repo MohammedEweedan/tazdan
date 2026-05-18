@@ -37,3 +37,21 @@ export function emitActivity(
     io.to(`user:${uid}`).emit('activity:new', payload ?? {});
   }
 }
+
+/**
+ * Notify the given users that a new in-app notification has been
+ * inserted (admin broadcast, system alert, etc.). Mobile listens for
+ * `notification:new` and refetches the bell-icon list + unread badge.
+ */
+export function emitNotification(
+  source: IOSource,
+  userIds: Array<string | null | undefined>,
+  payload?: Record<string, any>,
+) {
+  const io = resolveIo(source);
+  if (!io) return;
+  const unique = new Set(userIds.filter((u): u is string => Boolean(u)));
+  for (const uid of unique) {
+    io.to(`user:${uid}`).emit('notification:new', payload ?? {});
+  }
+}

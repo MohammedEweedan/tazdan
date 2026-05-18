@@ -6,9 +6,8 @@
  */
 
 import { useMemo, useState } from 'react';
-import {
-  Pressable, RefreshControl, ScrollView, Text, TextInput, View,
-} from 'react-native';
+import { Pressable, RefreshControl, ScrollView, View } from 'react-native';
+import { Text, TextInput } from '@/components/ui/Text';
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
@@ -21,6 +20,7 @@ import { useConversations } from '@/hooks';
 import { adminService } from '@/services';
 import { LoadingPulse } from '@/components/ui/LoadingPulse';
 import { formatRelativeTime } from '@/utils/format';
+import { TopGradient } from '@/components/ui/ScreenShell';
 
 export default function AdminSupport() {
   const p = useThemedPalette();
@@ -57,6 +57,7 @@ export default function AdminSupport() {
 
   return (
     <View style={{ flex: 1, backgroundColor: p.bg }}>
+      <TopGradient />
       <StatusBar style={themeMode === 'dark' ? 'light' : 'dark'} />
       <SafeAreaView style={{ flex: 1 }} edges={['top']}>
         {/* Header */}
@@ -65,7 +66,7 @@ export default function AdminSupport() {
             <Ionicons name="chevron-back" size={26} color={p.fg} />
           </Pressable>
           <View style={{ flex: 1 }}>
-            <Text style={{ color: p.fg, fontSize: 18, fontWeight: '800', letterSpacing: -0.3 }}>Support Chats</Text>
+            <Text style={{ color: p.fg, fontSize: 18, fontWeight: '600', letterSpacing: -0.3 }}>Support Chats</Text>
             <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '700', letterSpacing: 0.5 }}>
               {conversations.length} ACTIVE
             </Text>
@@ -103,7 +104,7 @@ export default function AdminSupport() {
             const on = tab === t;
             return (
               <Pressable key={t} onPress={() => setTab(t)} style={{ paddingBottom: 10 }}>
-                <Text style={{ color: on ? p.fg : p.fgMuted, fontSize: 13, fontWeight: '800', letterSpacing: 0.4 }}>
+                <Text style={{ color: on ? p.fg : p.fgMuted, fontSize: 13, fontWeight: '600', letterSpacing: 0.4 }}>
                   {t}
                 </Text>
                 {on && <View style={{ marginTop: 6, height: 2, backgroundColor: p.fg, borderRadius: 1 }} />}
@@ -157,7 +158,7 @@ export default function AdminSupport() {
                   })}
                 >
                   <View style={{ width: 42, height: 42, borderRadius: 21, backgroundColor: p.pillBg, alignItems: 'center', justifyContent: 'center' }}>
-                    <Text style={{ color: p.fg, fontWeight: '800', fontSize: 14 }}>
+                    <Text style={{ color: p.fg, fontWeight: '600', fontSize: 14 }}>
                       {(u.firstName?.[0] ?? u.email?.[0] ?? '?').toUpperCase()}
                     </Text>
                   </View>
@@ -197,7 +198,7 @@ function ConversationRow({ partner, last, unread, p, onPress }: any) {
       })}
     >
       <View style={{ width: 42, height: 42, borderRadius: 21, backgroundColor: p.pillBg, alignItems: 'center', justifyContent: 'center' }}>
-        <Text style={{ color: p.fg, fontWeight: '800', fontSize: 14 }}>{initial}</Text>
+        <Text style={{ color: p.fg, fontWeight: '600', fontSize: 14 }}>{initial}</Text>
       </View>
       <View style={{ flex: 1 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
@@ -207,7 +208,7 @@ function ConversationRow({ partner, last, unread, p, onPress }: any) {
           </Text>
           {escalation && (
             <View style={{ paddingHorizontal: 6, paddingVertical: 2, borderRadius: 5, backgroundColor: 'rgba(239,68,68,0.15)' }}>
-              <Text style={{ color: '#ef4444', fontSize: 9, fontWeight: '800', letterSpacing: 0.4 }}>ESC</Text>
+              <Text style={{ color: '#ef4444', fontSize: 9, fontWeight: '600', letterSpacing: 0.4 }}>ESC</Text>
             </View>
           )}
         </View>
@@ -219,7 +220,7 @@ function ConversationRow({ partner, last, unread, p, onPress }: any) {
         <Text style={{ color: p.fgFaint, fontSize: 10 }}>{last && formatRelativeTime(last.createdAt)}</Text>
         {unread > 0 && (
           <View style={{ minWidth: 20, paddingHorizontal: 6, height: 18, borderRadius: 9, backgroundColor: '#ef4444', alignItems: 'center', justifyContent: 'center' }}>
-            <Text style={{ color: '#fff', fontSize: 10, fontWeight: '800' }}>{unread}</Text>
+            <Text style={{ color: '#fff', fontSize: 10, fontWeight: '600' }}>{unread}</Text>
           </View>
         )}
       </View>
@@ -241,7 +242,7 @@ function DeniedView({ p, themeMode, onBack }: any) {
     <View style={{ flex: 1, backgroundColor: p.bg, alignItems: 'center', justifyContent: 'center', padding: 40 }}>
       <StatusBar style={themeMode === 'dark' ? 'light' : 'dark'} />
       <Ionicons name="lock-closed-outline" size={48} color={p.fgFaint} />
-      <Text style={{ color: p.fg, fontSize: 18, fontWeight: '800', marginTop: 14 }}>Admin access only</Text>
+      <Text style={{ color: p.fg, fontSize: 18, fontWeight: '600', marginTop: 14 }}>Admin access only</Text>
       <Pressable onPress={onBack} style={{ marginTop: 24, paddingHorizontal: 18, paddingVertical: 11, borderRadius: 12, backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border }}>
         <Text style={{ color: p.fg, fontWeight: '700' }}>Back</Text>
       </Pressable>

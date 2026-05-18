@@ -12,10 +12,8 @@
  */
 
 import { useState } from 'react';
-import {
-  ActivityIndicator, Alert, Image, KeyboardAvoidingView, Platform, Pressable,
-  ScrollView, Text, TextInput, View,
-} from 'react-native';
+import { ActivityIndicator, Alert, Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from 'react-native';
+import { Text, TextInput } from '@/components/ui/Text';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
@@ -31,6 +29,7 @@ import { useTheme, useThemedPalette, type Palette } from '@/store/themeStore';
 import { useI18n, LOCALE_META } from '@/store/i18nStore';
 import { COUNTRIES, COUNTRY_BY_ISO, type Country } from '@/data/countries';
 import { Modal, FlatList } from 'react-native';
+import { TopGradient } from '@/components/ui/ScreenShell';
 
 /* ── Schemas ─────────────────────────────────────── */
 
@@ -220,6 +219,7 @@ export default function Register() {
 
   return (
     <View style={{ flex: 1, backgroundColor: p.bg }}>
+      <TopGradient />
       <StatusBar style={themeMode === 'dark' ? 'light' : 'dark'} />
       <KeyboardAvoidingView
         style={{ flex: 1 }}
@@ -330,7 +330,7 @@ export default function Register() {
 
             {step === 1 && (
               <View>
-                <Text style={{ color: p.fg, fontSize: 30, fontWeight: '800', letterSpacing: -1 }}>
+                <Text style={{ color: p.fg, fontSize: 30, fontWeight: '600', letterSpacing: -1 }}>
                   Create your account
                 </Text>
                 <Text style={{ color: p.fgMuted, fontSize: 15, lineHeight: 22, marginTop: 8 }}>
@@ -648,12 +648,12 @@ export default function Register() {
             {/* ── Step 2 · Email verification ── */}
             {step === 2 && (
               <View>
-                <Text style={{ color: p.fg, fontSize: 30, fontWeight: '800', letterSpacing: -1 }}>
+                <Text style={{ color: p.fg, fontSize: 30, fontWeight: '600', letterSpacing: -1 }}>
                   Verify your email
                 </Text>
                 <Text style={{ color: p.fgMuted, fontSize: 15, lineHeight: 22, marginTop: 8 }}>
                   Enter the 6-digit code we sent to{' '}
-                  <Text style={{ color: p.fg, fontWeight: '800' }}>{one?.email}</Text>
+                  <Text style={{ color: p.fg, fontWeight: '600' }}>{one?.email}</Text>
                 </Text>
 
                 <View style={{ marginTop: 26 }}>
@@ -687,7 +687,7 @@ export default function Register() {
             {/* ── Step 3 · KYC ── */}
             {step === 3 && (
               <View>
-                <Text style={{ color: p.fg, fontSize: 30, fontWeight: '800', letterSpacing: -1 }}>
+                <Text style={{ color: p.fg, fontSize: 30, fontWeight: '600', letterSpacing: -1 }}>
                   Verify your identity
                 </Text>
                 <Text style={{ color: p.fgMuted, fontSize: 15, lineHeight: 22, marginTop: 8 }}>
@@ -746,7 +746,7 @@ export default function Register() {
                   <Ionicons name="checkmark-circle" size={36} color={p.fg} />
                 </View>
                 <View style={{ alignItems: 'center' }}>
-                  <Text style={{ color: p.fg, fontSize: 28, fontWeight: '800', letterSpacing: -0.8 }}>
+                  <Text style={{ color: p.fg, fontSize: 28, fontWeight: '600', letterSpacing: -0.8 }}>
                     You're all set.
                   </Text>
                   <Text style={{ color: p.fgMuted, fontSize: 15, lineHeight: 22, marginTop: 8, textAlign: 'center', maxWidth: 340 }}>
@@ -778,7 +778,7 @@ export default function Register() {
               }}>
                 <Text style={{ color: p.fgMuted, fontSize: 14 }}>Have an account? </Text>
                 <Pressable onPress={() => router.replace('/login')} hitSlop={6}>
-                  <Text style={{ color: p.fg, fontSize: 14, fontWeight: '800' }}>Log in</Text>
+                  <Text style={{ color: p.fg, fontSize: 14, fontWeight: '600' }}>Log in</Text>
                 </Pressable>
               </View>
             )}
@@ -809,7 +809,7 @@ export default function Register() {
               <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: p.border }} />
             </View>
             <Text style={{
-              color: p.fg, fontSize: 18, fontWeight: '800',
+              color: p.fg, fontSize: 18, fontWeight: '600',
               paddingHorizontal: 20, paddingVertical: 12,
             }}>
               Select your country
@@ -888,7 +888,7 @@ function PrimaryCTA({
     >
       {loading && <ActivityIndicator size="small" color={p.ctaFg} />}
       {!loading && <Ionicons name="arrow-forward" size={18} color={p.ctaFg} />}
-      <Text style={{ color: p.ctaFg, fontSize: 16, fontWeight: '800', letterSpacing: -0.2 }}>
+      <Text style={{ color: p.ctaFg, fontSize: 16, fontWeight: '600', letterSpacing: -0.2 }}>
         {label}
       </Text>
     </Pressable>

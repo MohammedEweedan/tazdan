@@ -6,10 +6,8 @@
  */
 
 import { useState } from 'react';
-import {
-  ActivityIndicator, Alert, Keyboard, Pressable,
-  ScrollView, Text, TextInput, View,
-} from 'react-native';
+import { ActivityIndicator, Alert, Keyboard, Pressable, ScrollView, View } from 'react-native';
+import { Text, TextInput } from '@/components/ui/Text';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -63,11 +61,11 @@ function CopyRow({ label, value, p }: { label: string; value: string; p: any }) 
   };
   return (
     <View style={{ marginBottom: 14 }}>
-      <Text style={{ color: p.fgFaint, fontSize: 10, fontWeight: '700', letterSpacing: 0.7, marginBottom: 4 }}>
+      <Text style={{ color: p.fgFaint, fontSize: 10, fontWeight: '500', letterSpacing: 0.7, marginBottom: 4 }}>
         {label}
       </Text>
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-        <Text style={{ color: p.fg, fontSize: 14, fontWeight: '600', flex: 1, marginRight: 8 }} numberOfLines={2}>
+        <Text style={{ color: p.fg, fontSize: 14, fontWeight: '500', flex: 1, marginRight: 8 }} numberOfLines={2}>
           {value}
         </Text>
         <Pressable onPress={copy} hitSlop={8} style={{ padding: 6, borderRadius: 8, backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border }}>
@@ -151,9 +149,6 @@ export function DepositWidget() {
   if (step === 'currency') {
     return (
       <View style={{ paddingHorizontal: 20, paddingTop: 8, paddingBottom: 16 }}>
-        <Text style={{ color: p.fgFaint, fontSize: 10, fontWeight: '700', letterSpacing: 0.7, marginBottom: 14 }}>
-          SELECT CURRENCY
-        </Text>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
           {CURRENCIES.map((c) => {
             const on = c === currency;
@@ -169,7 +164,7 @@ export function DepositWidget() {
                   flexDirection: 'row', alignItems: 'center', gap: 6,
                 })}
               >
-                <Text style={{ color: on ? p.bg : p.fg, fontWeight: '700', fontSize: 14 }}>{c}</Text>
+                <Text style={{ color: on ? p.bg : p.fg, fontWeight: '500', fontSize: 14 }}>{c}</Text>
                 {FIAT_SET.has(c) && (
                   <Text style={{ color: on ? p.bg : p.fgFaint, fontSize: 10 }}>fiat</Text>
                 )}
@@ -187,7 +182,7 @@ export function DepositWidget() {
           }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10 }}>
               <Ionicons name="shield-outline" size={20} color="#f59e0b" />
-              <Text style={{ color: '#f59e0b', fontSize: 14, fontWeight: '800', flex: 1 }}>
+              <Text style={{ color: '#f59e0b', fontSize: 14, fontWeight: '500', flex: 1 }}>
                 KYC Required for Fiat Deposits
               </Text>
             </View>
@@ -198,7 +193,7 @@ export function DepositWidget() {
               onPress={() => router.push('/kyc' as any)}
               style={{ backgroundColor: '#f59e0b', borderRadius: 10, paddingVertical: 12, alignItems: 'center' }}
             >
-              <Text style={{ color: '#fff', fontWeight: '800', fontSize: 14 }}>Complete KYC →</Text>
+              <Text style={{ color: '#fff', fontWeight: '500', fontSize: 14 }}>Complete KYC →</Text>
             </Pressable>
           </View>
         )}
@@ -220,7 +215,7 @@ export function DepositWidget() {
             opacity: pressed ? 0.85 : 1,
           })}
         >
-          <Text style={{ color: (isFiat && !kycApproved) ? p.fgMuted : p.ctaFg, fontSize: 16, fontWeight: '800' }}>
+          <Text style={{ color: (isFiat && !kycApproved) ? p.fgMuted : p.ctaFg, fontSize: 16, fontWeight: '500' }}>
             Continue with {currency}
           </Text>
           <Ionicons name="arrow-forward" size={16} color={(isFiat && !kycApproved) ? p.fgMuted : p.ctaFg} />
@@ -236,16 +231,16 @@ export function DepositWidget() {
         {/* Back */}
         <Pressable onPress={() => setStep('currency')} style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 24 }}>
           <Ionicons name="chevron-back" size={18} color={p.fgMuted} />
-          <Text style={{ color: p.fgMuted, fontSize: 14, fontWeight: '600' }}>{currency}</Text>
+          <Text style={{ color: p.fgMuted, fontSize: 14, fontWeight: '500' }}>{currency}</Text>
         </Pressable>
 
         {/* Big centered amount */}
         <View style={{ alignItems: 'center', paddingVertical: 24 }}>
-          <Text style={{ color: p.fgFaint, fontSize: 13, fontWeight: '600', marginBottom: 16, letterSpacing: 0.5 }}>
+          <Text style={{ color: p.fgFaint, fontSize: 13, fontWeight: '500', marginBottom: 16, letterSpacing: 0.5 }}>
             HOW MUCH?
           </Text>
           <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 4 }}>
-            <Text style={{ color: v > 0 ? p.fg : p.fgFaint, fontSize: 52, fontWeight: '800', letterSpacing: -2 }}>
+            <Text style={{ color: v > 0 ? p.fg : p.fgFaint, fontSize: 52, fontWeight: '500', letterSpacing: -0.5 }}>
               {sym}
             </Text>
             <TextInput
@@ -263,7 +258,7 @@ export function DepositWidget() {
               autoFocus
               style={{
                 color: v > 0 ? p.fg : p.fgFaint,
-                fontSize: 64, fontWeight: '800', letterSpacing: -2,
+                fontSize: 64, fontWeight: '500', letterSpacing: -0.5,
                 fontVariant: ['tabular-nums'],
                 minWidth: 80, textAlign: 'center',
               }}
@@ -287,7 +282,7 @@ export function DepositWidget() {
                 alignItems: 'center', opacity: pressed ? 0.8 : 1,
               })}
             >
-              <Text style={{ color: Number(amount) === q ? p.bg : p.fg, fontSize: 12, fontWeight: '700' }}>
+              <Text style={{ color: Number(amount) === q ? p.bg : p.fg, fontSize: 12, fontWeight: '500' }}>
                 {sym}{q}
               </Text>
             </Pressable>
@@ -305,7 +300,7 @@ export function DepositWidget() {
             opacity: pressed ? 0.85 : 1,
           })}
         >
-          <Text style={{ color: v > 0 ? p.ctaFg : p.fgMuted, fontSize: 16, fontWeight: '800' }}>
+          <Text style={{ color: v > 0 ? p.ctaFg : p.fgMuted, fontSize: 16, fontWeight: '500' }}>
             {v > 0 ? `Deposit ${sym}${v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 'Enter an amount'}
           </Text>
           {v > 0 && <Ionicons name="arrow-forward" size={16} color={p.ctaFg} />}
@@ -324,7 +319,7 @@ export function DepositWidget() {
       {/* Back */}
       <Pressable onPress={() => setStep('amount')} style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 20 }}>
         <Ionicons name="chevron-back" size={18} color={p.fgMuted} />
-        <Text style={{ color: p.fgMuted, fontSize: 14, fontWeight: '600' }}>
+        <Text style={{ color: p.fgMuted, fontSize: 14, fontWeight: '500' }}>
           {sym}{v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
         </Text>
       </Pressable>
@@ -336,8 +331,8 @@ export function DepositWidget() {
         flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
       }}>
         <View>
-          <Text style={{ color: p.fgFaint, fontSize: 10, fontWeight: '700', letterSpacing: 0.6 }}>YOU SEND</Text>
-          <Text style={{ color: p.fg, fontSize: 26, fontWeight: '800', letterSpacing: -1, marginTop: 2 }}>
+          <Text style={{ color: p.fgFaint, fontSize: 10, fontWeight: '500', letterSpacing: 0.6 }}>YOU SEND</Text>
+          <Text style={{ color: p.fg, fontSize: 26, fontWeight: '500', letterSpacing: 0, marginTop: 2 }}>
             {sym}{v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </Text>
         </View>
@@ -352,7 +347,7 @@ export function DepositWidget() {
           backgroundColor: p.bgElev, borderRadius: 14, padding: 16,
           borderWidth: 1, borderColor: p.border, marginBottom: 20,
         }}>
-          <Text style={{ color: p.fgFaint, fontSize: 10, fontWeight: '700', letterSpacing: 0.7, marginBottom: 14 }}>
+          <Text style={{ color: p.fgFaint, fontSize: 10, fontWeight: '500', letterSpacing: 0.7, marginBottom: 14 }}>
             TRANSFER TO THIS ACCOUNT
           </Text>
           <CopyRow label="BANK" value={bank.bankName} p={p} />
@@ -367,14 +362,14 @@ export function DepositWidget() {
             borderWidth: 1, borderColor: p.border,
           }}>
             <Text style={{ color: p.fgMuted, fontSize: 12, lineHeight: 18 }}>
-              Transfer exactly <Text style={{ fontWeight: '800', color: p.fg }}>{sym}{v.toFixed(2)}</Text>. Use your name and the reference below so we can match your payment.
+              Transfer exactly <Text style={{ fontWeight: '500', color: p.fg }}>{sym}{v.toFixed(2)}</Text>. Use your name and the reference below so we can match your payment.
             </Text>
           </View>
         </View>
       )}
 
       {/* Sender name */}
-      <Text style={{ color: p.fgFaint, fontSize: 10, fontWeight: '700', letterSpacing: 0.7, marginBottom: 8 }}>
+      <Text style={{ color: p.fgFaint, fontSize: 10, fontWeight: '500', letterSpacing: 0.7, marginBottom: 8 }}>
         YOUR NAME (AS ON YOUR BANK ACCOUNT)
       </Text>
       <View style={{
@@ -395,7 +390,7 @@ export function DepositWidget() {
       </View>
 
       {/* Reference */}
-      <Text style={{ color: p.fgFaint, fontSize: 10, fontWeight: '700', letterSpacing: 0.7, marginBottom: 8 }}>
+      <Text style={{ color: p.fgFaint, fontSize: 10, fontWeight: '500', letterSpacing: 0.7, marginBottom: 8 }}>
         PAYMENT REFERENCE
       </Text>
       <View style={{
@@ -431,7 +426,7 @@ export function DepositWidget() {
         ) : (
           <>
             <Ionicons name="checkmark-circle" size={17} color={valid ? p.ctaFg : p.fgMuted} />
-            <Text style={{ color: valid ? p.ctaFg : p.fgMuted, fontSize: 16, fontWeight: '800' }}>
+            <Text style={{ color: valid ? p.ctaFg : p.fgMuted, fontSize: 16, fontWeight: '500' }}>
               {valid
                 ? `I've sent ${sym}${v.toFixed(2)}`
                 : 'Complete all fields'}

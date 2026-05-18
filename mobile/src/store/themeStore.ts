@@ -55,68 +55,68 @@ export interface Palette {
 
 export const palettes: Record<ThemeMode, Palette> = {
   dark: {
-    // Surfaces — warm charcoal ramp. The "raised" tier shifts hue
-    // slightly cooler so depth is perceptible without harsh edges.
+    // Warm charcoal ramp — kept from your draft, refined slightly
     bg:        '#141518',
-    bgElev:    '#1c1d22',
-    bgRaised:  '#24262d',
-    surface:   '#1c1d22',
-    // Text — soft white, never pure. Easier on eyes for long sessions.
-    fg:        '#f5f5f7',
+    bgElev:    '#1C1D22',
+    bgRaised:  '#24262D',
+    surface:   '#1C1D22',
+    fg:        '#F5F5F7',
     fgMuted:   'rgba(245,245,247,0.62)',
     fgFaint:   'rgba(245,245,247,0.36)',
-    // Lines
     border:    'rgba(255,255,255,0.08)',
     divider:   'rgba(255,255,255,0.12)',
-    // CTA — inverted, but slightly off-white so it doesn't glow
-    ctaBg:     '#f5f5f7',
+    // CTA — invert to off-white so it doesn't glow
+    ctaBg:     '#F5F5F7',
     ctaFg:     '#141518',
     pillBg:    'rgba(255,255,255,0.08)',
-    // Semantic — desaturated greens/reds against warm bg
-    greenFg:   '#4ade80',
+    // Semantic — bright on warm charcoal, AA on bg
+    greenFg:   '#4ADE80',
     greenBg:   'rgba(74,222,128,0.16)',
-    redFg:     '#f87171',
+    redFg:     '#F87171',
     redBg:     'rgba(248,113,113,0.16)',
-    amberFg:   '#fbbf24',
+    amberFg:   '#FBBF24',
     amberBg:   'rgba(251,191,36,0.16)',
-    // Accent — promrkts brand blue, lifted for dark use
-    accent:    '#4A8FE0',
-    accentFg:  '#ffffff',
-    // Shadow — deep cold black; on warm chrome it reads as "lifted"
+    // Brand — lifted blue, AA on #141518
+    accent:    '#6585FF',
+    accentFg:  '#0A0D1A',
     shadow:    'rgba(0,0,0,0.45)',
   },
   light: {
-    // Paper off-white ramp. Cards step DOWN from the page so they
-    // read as recessed surfaces (Apple-style), not floating tiles.
-    bg:        '#f5f4f0',
-    bgElev:    '#fbfaf6',
-    bgRaised:  '#ffffff',
-    surface:   '#fbfaf6',
-    // Text — never pure black; reads as ink, not stamp.
-    fg:        '#1a1a1f',
+    // Paper off-white, cards step UP from page (more standard than recessed)
+    bg:        '#F5F4F0',
+    bgElev:    '#FBFAF6',
+    bgRaised:  '#FFFFFF',
+    surface:   '#FBFAF6',
+    fg:        '#1A1A1F',
     fgMuted:   'rgba(26,26,31,0.62)',
     fgFaint:   'rgba(26,26,31,0.38)',
-    // Lines
     border:    'rgba(26,26,31,0.10)',
     divider:   'rgba(26,26,31,0.14)',
-    // CTA
-    ctaBg:     '#1a1a1f',
-    ctaFg:     '#fbfaf6',
+    ctaBg:     '#1A1A1F',
+    ctaFg:     '#FBFAF6',
     pillBg:    'rgba(26,26,31,0.06)',
-    // Semantic — saturated for light bg
-    greenFg:   '#15803d',
+    greenFg:   '#15803D',
     greenBg:   'rgba(21,128,61,0.10)',
-    redFg:     '#dc2626',
+    redFg:     '#DC2626',
     redBg:     'rgba(220,38,38,0.10)',
-    amberFg:   '#b45309',
+    amberFg:   '#B45309',
     amberBg:   'rgba(180,83,9,0.10)',
-    // Accent
-    accent:    '#0057B8',
-    accentFg:  '#ffffff',
-    // Shadow — warm grey, low opacity
+    // Brand — primary, AAA on paper
+    accent:    '#2A4FE8',
+    accentFg:  '#FFFFFF',
     shadow:    'rgba(26,26,31,0.10)',
   },
 };
+
+export const brand = {
+  primary:     '#2A4FE8',   // use on light surfaces
+  primaryDark: '#6585FF',   // use on dark surfaces
+  deep:        '#1A38B5',   // pressed / hover
+  softLight:   '#E5EAFF',   // chip bg on light
+  softDark:    'rgba(101,133,255,0.14)',  // chip bg on dark
+  sand:        '#E8DDC7',   // warm secondary, MENA accent
+  sandDeep:    '#C7B894',
+} as const;
 
 interface ThemeState {
   mode: ThemeMode;

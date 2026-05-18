@@ -3,10 +3,8 @@
  */
 
 import { useState } from 'react';
-import {
-  ActivityIndicator, Alert, Image, Modal, Pressable,
-  Switch, Text, TextInput, View,
-} from 'react-native';
+import { ActivityIndicator, Alert, Image, Modal, Pressable, Switch, View } from 'react-native';
+import { Text, TextInput } from '@/components/ui/Text';
 import { Ionicons } from '@expo/vector-icons';
 import { ScreenShell, Panel, PanelRow } from '@/components/ui/ScreenShell';
 import { useTheme, useThemedPalette } from '@/store/themeStore';
@@ -197,7 +195,7 @@ export default function Settings() {
               ? <ActivityIndicator size="small" color={p.fgMuted} />
               : user?.twoFactorEnabled
                 ? <View style={{ paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, backgroundColor: p.greenBg }}>
-                    <Text style={{ color: p.greenFg, fontSize: 10, fontWeight: '800' }}>ON</Text>
+                    <Text style={{ color: p.greenFg, fontSize: 10, fontWeight: '600' }}>ON</Text>
                   </View>
                 : <Ionicons name="chevron-forward" size={16} color={p.fgFaint} />
           }
@@ -262,7 +260,7 @@ export default function Settings() {
         onRequestClose={() => { if (!handleSaving) setHandleModalVisible(false); }}>
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', paddingHorizontal: 28 }}>
           <View style={{ backgroundColor: p.bgElev, borderRadius: 24, padding: 24, borderWidth: 1, borderColor: p.border }}>
-            <Text style={{ color: p.fg, fontSize: 20, fontWeight: '800', marginBottom: 6 }}>Change @handle</Text>
+            <Text style={{ color: p.fg, fontSize: 20, fontWeight: '600', marginBottom: 6 }}>Change @handle</Text>
             <Text style={{ color: p.fgMuted, fontSize: 13, marginBottom: 18, lineHeight: 19 }}>
               Letters, numbers and underscores only. 3–30 characters.
             </Text>
@@ -296,7 +294,7 @@ export default function Settings() {
                 style={{ flex: 1, height: 50, borderRadius: 25, backgroundColor: p.ctaBg, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8, opacity: handleSaving ? 0.7 : 1 }}
               >
                 {handleSaving && <ActivityIndicator size="small" color={p.ctaFg} />}
-                <Text style={{ color: p.ctaFg, fontSize: 14, fontWeight: '800' }}>Save</Text>
+                <Text style={{ color: p.ctaFg, fontSize: 14, fontWeight: '600' }}>Save</Text>
               </Pressable>
             </View>
           </View>
@@ -308,7 +306,7 @@ export default function Settings() {
         onRequestClose={() => { if (!twoFALoading) setTwoFAModal('idle'); }}>
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', paddingHorizontal: 24 }}>
           <View style={{ backgroundColor: p.bgElev, borderRadius: 24, padding: 24, borderWidth: 1, borderColor: p.border }}>
-            <Text style={{ color: p.fg, fontSize: 20, fontWeight: '800', marginBottom: 6 }}>Set up 2FA</Text>
+            <Text style={{ color: p.fg, fontSize: 20, fontWeight: '600', marginBottom: 6 }}>Set up 2FA</Text>
             <Text style={{ color: p.fgMuted, fontSize: 13, lineHeight: 19, marginBottom: 16 }}>
               Scan this QR code with Google Authenticator, Authy, or any TOTP app. Then enter the 6-digit code to confirm.
             </Text>
@@ -351,7 +349,7 @@ export default function Settings() {
                 style={{ flex: 1, height: 50, borderRadius: 25, backgroundColor: p.ctaBg, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8, opacity: (twoFALoading || twoFACode.length < 6) ? 0.6 : 1 }}
               >
                 {twoFALoading && <ActivityIndicator size="small" color={p.ctaFg} />}
-                <Text style={{ color: p.ctaFg, fontSize: 14, fontWeight: '800' }}>Enable</Text>
+                <Text style={{ color: p.ctaFg, fontSize: 14, fontWeight: '600' }}>Enable</Text>
               </Pressable>
             </View>
           </View>
@@ -363,7 +361,7 @@ export default function Settings() {
         onRequestClose={() => { if (!twoFALoading) setTwoFAModal('idle'); }}>
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', paddingHorizontal: 28 }}>
           <View style={{ backgroundColor: p.bgElev, borderRadius: 24, padding: 24, borderWidth: 1, borderColor: p.border }}>
-            <Text style={{ color: p.fg, fontSize: 20, fontWeight: '800', marginBottom: 6 }}>Disable 2FA</Text>
+            <Text style={{ color: p.fg, fontSize: 20, fontWeight: '600', marginBottom: 6 }}>Disable 2FA</Text>
             <Text style={{ color: p.fgMuted, fontSize: 13, lineHeight: 19, marginBottom: 18 }}>
               Enter your current authenticator code to turn off two-factor authentication.
             </Text>
@@ -394,7 +392,7 @@ export default function Settings() {
                 style={{ flex: 1, height: 50, borderRadius: 25, backgroundColor: p.redBg, borderWidth: 1, borderColor: p.redFg, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8, opacity: (twoFALoading || twoFACode.length < 6) ? 0.6 : 1 }}
               >
                 {twoFALoading && <ActivityIndicator size="small" color={p.redFg} />}
-                <Text style={{ color: p.redFg, fontSize: 14, fontWeight: '800' }}>Disable</Text>
+                <Text style={{ color: p.redFg, fontSize: 14, fontWeight: '600' }}>Disable</Text>
               </Pressable>
             </View>
           </View>

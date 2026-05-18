@@ -14,7 +14,8 @@
  */
 
 import { useEffect, useMemo, useRef } from 'react';
-import { Animated, Easing, Text, View } from 'react-native';
+import { Animated, Easing, View } from 'react-native';
+import { Text } from '@/components/ui/Text';
 import { Ionicons } from '@expo/vector-icons';
 import Svg, { Circle, Path } from 'react-native-svg';
 
@@ -173,7 +174,7 @@ export function PaymentReceiptBubble(props: PaymentReceiptProps) {
             {props.fromMe ? 'YOU SENT' : 'YOU RECEIVED'}
           </Text>
           <Text style={{
-            color: p.fg, fontSize: 22, fontWeight: '800', marginTop: 1,
+            color: p.fg, fontSize: 22, fontWeight: '600', marginTop: 1,
             letterSpacing: -0.3, fontVariant: ['tabular-nums'],
           }}>
             {formatAmount(props.amount)}{' '}

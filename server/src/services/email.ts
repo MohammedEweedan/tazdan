@@ -1,15 +1,39 @@
 import nodemailer from 'nodemailer';
+import path from 'path';
 
 const SMTP_HOST = process.env.SMTP_HOST;
 const SMTP_PORT = parseInt(process.env.SMTP_PORT || '587', 10);
 const SMTP_USER = process.env.SMTP_USER;
 const SMTP_PASS = process.env.SMTP_PASS;
-const SMTP_FROM = process.env.SMTP_FROM || process.env.MAIL_FROM || 'noreply@promrkts.com';
+// From address — defaults to the branded sender. Override in .env with SMTP_FROM.
+const SMTP_FROM = process.env.SMTP_FROM || process.env.MAIL_FROM || 'hi@promrkts.com';
 const CLIENT_URL = process.env.CLIENT_URL || process.env.FRONTEND_URL || 'https://promrkts.com';
 
-// Hosted logos — swap these URLs for your actual CDN paths
-const LOGO_WHITE = `${CLIENT_URL}/logo-white.png`;
-const LOGO_BLACK = `${CLIENT_URL}/logo-black.png`;
+// Logos are embedded inline as CID attachments so they render in every email
+// client (Gmail, Outlook, Apple Mail) without needing a public CDN URL.
+// __dirname is:
+//   dev  (ts-node)  → <root>/server/src/services/
+//   prod (node dist) → <root>/server/dist/services/
+// Both resolve to <root>/server/src/assets/ via the logic below.
+function resolveAsset(filename: string): string {
+  const candidates = [
+    path.resolve(__dirname, '..', 'assets', filename),          // ts-node: src/services → src/assets
+    path.resolve(__dirname, '..', '..', 'src', 'assets', filename), // compiled: dist/services → src/assets
+    path.resolve(process.cwd(), 'src', 'assets', filename),     // fallback: cwd/src/assets
+  ];
+  const fs = require('fs') as typeof import('fs');
+  for (const p of candidates) {
+    if (fs.existsSync(p)) return p;
+  }
+  return candidates[0]; // best guess; nodemailer will warn if missing
+}
+
+const LOGO_BLACK_PATH = resolveAsset('logo-black.png');
+const LOGO_WHITE_PATH = resolveAsset('logo-white.png');
+
+// CID values referenced in the HTML via cid:logo-black and cid:logo-white.
+const CID_BLACK = 'logo-black@promrkts.com';
+const CID_WHITE = 'logo-white@promrkts.com';
 
 const hasCredentials = !!(SMTP_HOST && SMTP_USER && SMTP_PASS);
 
@@ -120,10 +144,10 @@ function baseTemplate(title: string, body: string): string {
   <div class="email-bg">
     <div class="wrapper">
 
-      <!-- Logo: switches on dark/light -->
+      <!-- Logo: CID-embedded so it renders without a CDN. Dark/light via media query. -->
       <div class="logo-wrap">
-        <img class="logo-light" src="${LOGO_BLACK}" alt="promrkts" />
-        <img class="logo-dark"  src="${LOGO_WHITE}" alt="promrkts" />
+        <img class="logo-light" src="cid:${CID_BLACK}" alt="promrkts" />
+        <img class="logo-dark"  src="cid:${CID_WHITE}" alt="promrkts" />
       </div>
 
       <div class="card">
@@ -158,10 +182,27 @@ export async function sendEmail({
     return;
   }
   await transporter.sendMail({
-    from: `"promrkts" <${SMTP_FROM}>`,
+    from:    `"promrkts" <${SMTP_FROM}>`,
     to,
     subject,
     html,
+    // Inline attachments — referenced via cid: in the HTML so logos render
+    // in every client without needing a public CDN URL. Gmail, Outlook, and
+    // Apple Mail all support CID-embedded images in HTML email.
+    attachments: [
+      {
+        filename:    'logo-black.png',
+        path:        LOGO_BLACK_PATH,
+        cid:         CID_BLACK,
+        contentDisposition: 'inline',
+      },
+      {
+        filename:    'logo-white.png',
+        path:        LOGO_WHITE_PATH,
+        cid:         CID_WHITE,
+        contentDisposition: 'inline',
+      },
+    ],
   });
 }
 
@@ -296,155 +337,4 @@ export async function sendPasswordResetEmail({
     <p class="text-muted" style="font-size:12px; margin-top:16px;">This link expires in 1 hour. Didn't request this? Your account is safe — ignore this email.</p>`
   );
   await sendEmail({ to, subject: 'Reset your promrkts password', html });
-}
-
-/* ─────────────────────────────────────────────────────────────
-   Withdrawal Confirmed
-───────────────────────────────────────────────────────────── */
-export async function sendWithdrawalConfirmed({
-  to, firstName, asset, amount, txHash, toAddress, network,
-}: {
-  to: string; firstName: string; asset: string; amount: string;
-  txHash: string; toAddress: string; network: string;
-}) {
-  const confirmTimes: Record<string, string> = {
-    ETH: '~1 minute', ERC20: '~1 minute',
-    BTC: '~60 minutes', SOL: '~30 seconds', TRON: '~1 minute', TRC20: '~1 minute',
-  };
-  const eta = confirmTimes[network.toUpperCase()] ?? confirmTimes[asset.toUpperCase()] ?? '~5 minutes';
-  const shortHash = txHash.length > 20 ? `${txHash.slice(0, 10)}…${txHash.slice(-8)}` : txHash;
-  const shortAddr = toAddress.length > 20 ? `${toAddress.slice(0, 10)}…${toAddress.slice(-8)}` : toAddress;
-
-  const html = baseTemplate(
-    `Withdrawal sent — ${amount} ${asset}`,
-    `<h1 class="text-main">Withdrawal sent</h1>
-    <p class="text-muted">Hi ${firstName}, your ${amount} ${asset} has been broadcast to the ${network} network.</p>
-
-    <div class="divider"></div>
-
-    <ul>
-      <li><span class="text-main">Amount</span> — ${amount} ${asset}</li>
-      <li><span class="text-main">Network</span> — ${network}</li>
-      <li><span class="text-main">To</span> — <span style="font-family:monospace;font-size:13px;">${shortAddr}</span></li>
-      <li><span class="text-main">Tx hash</span> — <span style="font-family:monospace;font-size:13px;">${shortHash}</span></li>
-      <li><span class="text-main">Estimated confirmation</span> — ${eta}</li>
-    </ul>
-
-    <div class="notice">
-      <p class="text-muted" style="margin:0; font-size:13px;">This withdrawal cannot be reversed once broadcast. If you did not initiate this, contact <a href="mailto:support@promrkts.com" style="color:inherit;">support@promrkts.com</a> immediately.</p>
-    </div>`,
-  );
-  await sendEmail({ to, subject: `Withdrawal sent — ${amount} ${asset}`, html });
-}
-
-/* ─────────────────────────────────────────────────────────────
-   Deposit Confirmed
-───────────────────────────────────────────────────────────── */
-export async function sendDepositConfirmed({
-  to, firstName, asset, amount, txHash,
-}: {
-  to: string; firstName: string; asset: string; amount: string; txHash: string;
-}) {
-  const shortHash = txHash.length > 20 ? `${txHash.slice(0, 10)}…${txHash.slice(-8)}` : txHash;
-  const html = baseTemplate(
-    `${amount} ${asset} arrived`,
-    `<h1 class="text-main">${amount} ${asset} received</h1>
-    <p class="text-muted">Hi ${firstName}, your deposit has been confirmed and is now available in your promrkts wallet.</p>
-
-    <div class="divider"></div>
-
-    <ul>
-      <li><span class="text-main">Amount</span> — ${amount} ${asset}</li>
-      <li><span class="text-main">Tx hash</span> — <span style="font-family:monospace;font-size:13px;">${shortHash}</span></li>
-    </ul>
-
-    <div class="btn-wrap">
-      <a href="${CLIENT_URL}/dashboard/wallet" class="btn">View wallet</a>
-    </div>`,
-  );
-  await sendEmail({ to, subject: `${amount} ${asset} arrived in your wallet`, html });
-}
-
-/* ─────────────────────────────────────────────────────────────
-   P2P Trade Update
-───────────────────────────────────────────────────────────── */
-const TRADE_STATUS_MAP: Record<string, { label: string; note: string }> = {
-  IN_PROGRESS:     { label: 'Trade started',                        note: 'The trade is now active. Transfer the agreed fiat amount and mark payment sent in the app.' },
-  PAYMENT_PENDING: { label: 'Awaiting payment',                     note: 'The seller is waiting for your payment. Complete the transfer and tap "Mark Payment Sent".' },
-  PAYMENT_SENT:    { label: 'Buyer marked payment sent',            note: 'Check your account. Once you confirm receipt, release the crypto to complete the trade.' },
-  COMPLETED:       { label: 'Trade completed — funds released',     note: 'Crypto has been released to the buyer. The trade is now closed.' },
-  DISPUTED:        { label: 'Trade dispute opened',                 note: 'Our support team has been notified and will review the trade within 24 hours.' },
-  CANCELLED:       { label: 'Trade cancelled',                      note: 'This trade has been cancelled. Any held funds have been returned.' },
-};
-
-export async function sendP2PTradeUpdate({
-  to, firstName, status, asset, amount, tradeId,
-}: {
-  to: string; firstName: string; status: string; asset: string; amount: string; tradeId: string;
-}) {
-  const info = TRADE_STATUS_MAP[status] ?? { label: status.replace(/_/g, ' '), note: '' };
-  const html = baseTemplate(
-    `Trade update — ${info.label}`,
-    `<h1 class="text-main">${info.label}</h1>
-    <p class="text-muted">Hi ${firstName},</p>
-    <p class="text-muted">${info.note}</p>
-
-    <div class="divider"></div>
-
-    <ul>
-      <li><span class="text-main">Asset</span> — ${amount} ${asset}</li>
-      <li><span class="text-main">Trade ID</span> — <span style="font-family:monospace;font-size:13px;">${tradeId.slice(0, 8)}…</span></li>
-    </ul>
-
-    <div class="btn-wrap">
-      <a href="${CLIENT_URL}/dashboard/p2p/${tradeId}" class="btn">View trade</a>
-    </div>`,
-  );
-  await sendEmail({ to, subject: `P2P trade update — ${info.label}`, html });
-}
-
-/* ─────────────────────────────────────────────────────────────
-   KYC Status Update
-───────────────────────────────────────────────────────────── */
-export async function sendKYCStatusUpdate({
-  to, firstName, status, tier, reasonCode,
-}: {
-  to: string; firstName: string;
-  status: 'APPROVED' | 'REJECTED' | 'RESUBMIT_REQUIRED';
-  tier?: string; reasonCode?: string;
-}) {
-  const tierPerks: Record<string, string> = {
-    TIER_1: 'Deposits, P2P trading, and crypto buy/sell are now unlocked.',
-    TIER_2: 'Virtual Visa card issuance, higher daily limits, and off-ramp are now unlocked.',
-    TIER_3: 'Full access — institutional limits and private-key export are now available.',
-  };
-
-  let subject: string;
-  let body: string;
-
-  if (status === 'APPROVED') {
-    subject = `KYC approved — you're now ${tier ?? 'verified'}`;
-    body = `<h1 class="text-main">Identity verified ✓</h1>
-    <p class="text-muted">Hi ${firstName}, your identity has been successfully verified.</p>
-    ${tier ? `<div class="notice"><p class="text-muted" style="margin:0;">${tierPerks[tier] ?? 'Your account limits have been upgraded.'}</p></div>` : ''}
-    <div class="btn-wrap" style="margin-top:24px;">
-      <a href="${CLIENT_URL}/dashboard" class="btn">Go to dashboard</a>
-    </div>`;
-  } else if (status === 'REJECTED') {
-    subject = 'KYC verification unsuccessful';
-    body = `<h1 class="text-main">Verification unsuccessful</h1>
-    <p class="text-muted">Hi ${firstName}, we were unable to verify your identity at this time.</p>
-    ${reasonCode ? `<div class="notice"><p class="text-muted" style="margin:0; font-size:13px;">Reason: <strong>${reasonCode}</strong></p></div>` : ''}
-    <p class="text-muted" style="margin-top:16px;">Please contact <a href="mailto:support@promrkts.com" style="color:inherit;">support@promrkts.com</a> if you believe this is an error or need help resubmitting your documents.</p>`;
-  } else {
-    subject = 'Action required — please resubmit your KYC documents';
-    body = `<h1 class="text-main">Documents need updating</h1>
-    <p class="text-muted">Hi ${firstName}, we need you to resubmit one or more documents to complete your verification.</p>
-    ${reasonCode ? `<div class="notice"><p class="text-muted" style="margin:0; font-size:13px;">Reason: <strong>${reasonCode}</strong></p></div>` : ''}
-    <div class="btn-wrap" style="margin-top:24px;">
-      <a href="${CLIENT_URL}/dashboard/kyc" class="btn">Resubmit documents</a>
-    </div>`;
-  }
-
-  await sendEmail({ to, subject, html: baseTemplate(subject, body) });
 }

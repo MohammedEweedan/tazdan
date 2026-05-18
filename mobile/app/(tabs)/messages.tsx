@@ -12,7 +12,8 @@
  */
 
 import { useMemo, useState } from 'react';
-import { Pressable, RefreshControl, ScrollView, Text, TextInput, View } from 'react-native';
+import { Pressable, RefreshControl, ScrollView, View } from 'react-native';
+import { Text, TextInput } from '@/components/ui/Text';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
@@ -21,6 +22,7 @@ import { useRouter } from 'expo-router';
 import { useTheme, useThemedPalette, type Palette } from '@/store/themeStore';
 import { useConversations, useHaptics } from '@/hooks';
 import type { Conversation } from '@/types/messages';
+import { TopGradient } from '@/components/ui/ScreenShell';
 
 type Filter = 'ALL' | 'UNREAD' | 'PAYMENTS' | 'SUPPORT';
 
@@ -65,6 +67,7 @@ export default function Messages() {
 
   return (
     <View style={{ flex: 1, backgroundColor: p.bg }}>
+      <TopGradient />
       <StatusBar style={themeMode === 'dark' ? 'light' : 'dark'} />
       <SafeAreaView style={{ flex: 1 }} edges={['top']}>
         {/* Header */}
@@ -73,7 +76,7 @@ export default function Messages() {
           paddingHorizontal: 24, paddingTop: 18, paddingBottom: 8,
         }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <Text style={{ color: p.fg, fontSize: 22, fontWeight: '800', letterSpacing: -0.4 }}>
+            <Text style={{ color: p.fg, fontSize: 22, fontWeight: '600', letterSpacing: -0.4 }}>
               Messages
             </Text>
             {totalUnread > 0 && (
@@ -81,7 +84,7 @@ export default function Messages() {
                 paddingHorizontal: 7, paddingVertical: 2, borderRadius: 8,
                 backgroundColor: BRAND_BLUE, minWidth: 22, alignItems: 'center',
               }}>
-                <Text style={{ color: '#fff', fontSize: 11, fontWeight: '800' }}>
+                <Text style={{ color: '#fff', fontSize: 11, fontWeight: '600' }}>
                   {totalUnread}
                 </Text>
               </View>
@@ -281,7 +284,7 @@ function Row({
         ) : c.partner.avatarUrl ? (
           <Text style={{ fontSize: 22 }}>{c.partner.avatarUrl}</Text>
         ) : (
-          <Text style={{ color: '#fff', fontSize: 17, fontWeight: '800' }}>
+          <Text style={{ color: '#fff', fontSize: 17, fontWeight: '600' }}>
             {(fullName[0] ?? '?').toUpperCase()}
           </Text>
         )}
@@ -303,7 +306,7 @@ function Row({
               paddingHorizontal: 6, paddingVertical: 1.5, borderRadius: 5,
               backgroundColor: BRAND_BLUE,
             }}>
-              <Text style={{ color: '#fff', fontSize: 9, fontWeight: '800', letterSpacing: 0.5 }}>STAFF</Text>
+              <Text style={{ color: '#fff', fontSize: 9, fontWeight: '600', letterSpacing: 0.5 }}>STAFF</Text>
             </View>
           )}
           {c.partner.kycStatus === 'APPROVED' && !isSupport && (
@@ -331,7 +334,7 @@ function Row({
               backgroundColor: BRAND_BLUE,
               alignItems: 'center', justifyContent: 'center',
             }}>
-              <Text style={{ color: '#fff', fontSize: 10, fontWeight: '800' }}>
+              <Text style={{ color: '#fff', fontSize: 10, fontWeight: '600' }}>
                 {c.unread}
               </Text>
             </View>

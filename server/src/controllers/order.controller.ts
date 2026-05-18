@@ -47,7 +47,7 @@ export class OrderController {
           // the balance check on the same available funds.
           const lockedQuote = await tx.$queryRaw<Array<any>>`
             SELECT id, balance, frozen FROM "Wallet"
-            WHERE "userId" = ${req.user!.id} AND "currency" = ${data.quoteCurrency}
+            WHERE "userId" = ${req.user!.id} AND "currency" = ${data.quoteCurrency}::"Currency"
             FOR UPDATE
           `;
           const qw = lockedQuote?.[0];
@@ -162,7 +162,7 @@ export class OrderController {
 
         const lockedQuote = await tx.$queryRaw<Array<any>>`
           SELECT id, balance FROM "Wallet"
-          WHERE "userId" = ${req.user!.id} AND "currency" = ${data.quoteCurrency}
+          WHERE "userId" = ${req.user!.id} AND "currency" = ${data.quoteCurrency}::"Currency"
           FOR UPDATE
         `;
         const quoteBefore = lockedQuote?.[0] ? dec(lockedQuote[0].balance) : ZERO;

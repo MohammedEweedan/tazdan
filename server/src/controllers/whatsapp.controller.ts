@@ -6,71 +6,131 @@ import { AuthRequest } from '../types';
 import {
   sendWhatsAppText,
   validateTwilioSignature,
+  validateMetaSignature,
   isTwilioConfigured,
-} from '../services/whatsapp/twilio.service';
+  isMetaWhatsAppConfigured,
+  startVerification,
+} from '../services/whatsapp/index';
 
-/* ── Intent patterns ───────────────────────────────────────────────── */
+/* ── Bot intents ───────────────────────────────────────────────────── */
 
-const INTENTS: Array<{ pattern: RegExp; handler: (user: any) => Promise<string> }> = [
+type IntentHandler = (user: any, rawBody: string) => Promise<string>;
+
+const INTENTS: Array<{ pattern: RegExp; handler: IntentHandler }> = [
   {
-    pattern: /\bbalance\b/i,
+    // balance / my balance / check balance
+    pattern: /\bbalance\b|\bmy\s+wallet\b|\bwallet\s+balance\b/i,
     handler: async (user) => {
-      if (!user) return 'Please register at promrkts.com to check your balance.';
+      if (!user) return '🔐 Please register at *promrkts.com* to check your balance.';
       const wallets = await prisma.wallet.findMany({
         where: { userId: user.id },
         select: { currency: true, balance: true },
-        take: 10,
+        orderBy: { currency: 'asc' },
+        take: 15,
       });
-      if (!wallets.length) return `Hi ${user.firstName}! You have no wallets yet. Visit the app to get started.`;
-      const lines = wallets.map((w: any) => `${w.currency}: ${Number(w.balance).toFixed(4)}`).join('\n');
-      return `Hi ${user.firstName}! 👋 Your balances:\n\n${lines}\n\nReply *help* for more options.`;
+      if (!wallets.length) return `👋 Hi *${user.firstName}*! You have no wallets yet. Open the app to get started.`;
+      const lines = wallets
+        .filter((w: any) => Number(w.balance) > 0)
+        .map((w: any) => `  • ${w.currency}: *${Number(w.balance).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}*`)
+        .join('\n');
+      return `👋 Hi *${user.firstName}*! Your balances:\n\n${lines || '  (all zero)'}\n\nReply *help* for more options.`;
     },
   },
   {
+    // kyc / verification / identity
     pattern: /\bkyc\b|\bverif(y|ication)\b|\bidentit(y|ies)\b/i,
     handler: async (user) => {
-      if (!user) return 'Please register at promrkts.com to start your KYC verification.';
+      if (!user) return '🔐 Please register at *promrkts.com* to start KYC verification.';
       const kycStatus = user.kycStatus ?? 'NOT_SUBMITTED';
-      const statusMap: Record<string, string> = {
+      const statusMsg: Record<string, string> = {
         NOT_SUBMITTED: 'not submitted yet. Open the app to complete your KYC.',
-        PENDING: 'under review. We will notify you within a few hours.',
-        APPROVED: 'approved! ✅ You have full access.',
-        REJECTED: 'rejected. Please re-submit your documents via the app.',
+        PENDING:       'under review. ⏳ We will notify you within a few hours.',
+        APPROVED:      'approved! ✅ You have full access to all features.',
+        REJECTED:      'rejected. ❌ Please re-submit your documents via the app.',
       };
-      return `Hi ${user.firstName}! Your KYC is ${statusMap[kycStatus] ?? kycStatus}.`;
+      return `📋 *${user.firstName}*, your KYC status is ${statusMsg[kycStatus] ?? kycStatus}`;
     },
   },
   {
-    pattern: /\bwithdraw(al)?\s*(status|state|pending|update)\b|\bwithdraw.*status\b/i,
+    // withdrawal status
+    pattern: /\bwithdraw(al)?\b.*\b(status|update|pending|done)\b|\b(status|update)\b.*\bwithdraw/i,
     handler: async (user) => {
-      if (!user) return 'Please log in to promrkts.com to check your withdrawal status.';
+      if (!user) return '🔐 Please log in to *promrkts.com* to check your withdrawal status.';
       const recent = await (prisma as any).withdrawal.findFirst({
         where: { userId: user.id },
         orderBy: { createdAt: 'desc' },
         select: { amount: true, currency: true, status: true, createdAt: true },
       });
-      if (!recent) return `Hi ${user.firstName}! No withdrawals found on your account.`;
-      return `Hi ${user.firstName}! Your latest withdrawal: ${recent.amount} ${recent.currency} — Status: *${recent.status}*.`;
+      if (!recent) return `👋 *${user.firstName}*, no withdrawals found on your account.`;
+      const date = new Date(recent.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      return `💸 *${user.firstName}*, your latest withdrawal:\n\n  • Amount: *${Number(recent.amount).toFixed(2)} ${recent.currency}*\n  • Status: *${recent.status}*\n  • Date: ${date}`;
     },
   },
   {
-    pattern: /\bdeposit\s*(status|state|pending|update)\b|\bdeposit.*status\b/i,
+    // deposit status
+    pattern: /\bdeposit\b.*\b(status|update|pending|done)\b|\b(status|update)\b.*\bdeposit/i,
     handler: async (user) => {
-      if (!user) return 'Please log in to promrkts.com to check your deposit status.';
+      if (!user) return '🔐 Please log in to *promrkts.com* to check your deposit status.';
       const recent = await (prisma as any).deposit.findFirst({
         where: { userId: user.id },
         orderBy: { createdAt: 'desc' },
         select: { amount: true, currency: true, status: true, createdAt: true },
       });
-      if (!recent) return `Hi ${user.firstName}! No deposits found on your account.`;
-      return `Hi ${user.firstName}! Your latest deposit: ${recent.amount} ${recent.currency} — Status: *${recent.status}*.`;
+      if (!recent) return `👋 *${user.firstName}*, no deposits found on your account.`;
+      const date = new Date(recent.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      return `💰 *${user.firstName}*, your latest deposit:\n\n  • Amount: *${Number(recent.amount).toFixed(2)} ${recent.currency}*\n  • Status: *${recent.status}*\n  • Date: ${date}`;
     },
   },
   {
-    pattern: /\bhelp\b|\bcommands?\b|\bwhat can you\b/i,
+    // rate / price / USDT rate / exchange rate
+    pattern: /\brate\b|\bprice\b|\bexchange\b|\busdt\b|\bbtc\b|\beth\b/i,
+    handler: async (_user, body) => {
+      // Try to find which asset they're asking about.
+      const assetMatch = body.match(/\b(BTC|ETH|SOL|BNB|XRP|ADA|DOGE|MATIC|AVAX|USDT)\b/i);
+      const asset = assetMatch ? assetMatch[1].toUpperCase() : 'USDT';
+
+      const rate = await prisma.exchangeRate.findFirst({
+        where: {
+          OR: [
+            { baseCurrency: asset as any },
+            { quoteCurrency: asset as any },
+          ],
+          isActive: true,
+        },
+      });
+
+      if (!rate) {
+        return `📊 Live rates are not available right now. Check the app for current prices.`;
+      }
+      return `📊 *${rate.baseCurrency}/${rate.quoteCurrency}* rates:\n\n  • Buy:  *${Number(rate.buyPrice).toFixed(4)}*\n  • Sell: *${Number(rate.sellPrice).toFixed(4)}*\n\nRates update every few minutes. Open the app to trade.`;
+    },
+  },
+  {
+    // send code / resend code / otp / verification code
+    pattern: /\b(send|resend|get)\s+(code|otp|pin|verification)\b|\bverif(y|ication)\s+code\b/i,
     handler: async (user) => {
-      const greeting = user ? `Hi ${user.firstName}! ` : '';
-      return `${greeting}*promrkts WhatsApp Support* 🏦\n\nYou can ask:\n• *balance* – see your wallet balances\n• *kyc* – check verification status\n• *deposit status* – latest deposit\n• *withdraw status* – latest withdrawal\n\nFor anything else just type your question and a support agent will reply shortly.`;
+      if (!user) return '🔐 Please log in to the *promrkts* app first, then request your code from the verification screen.';
+      if (user.phoneVerified) return `✅ *${user.firstName}*, your phone is already verified!`;
+      // Trigger OTP send (uses self-hosted path — code comes from THIS number).
+      const phone = `+${user.phoneCountryCode}${user.phone}`;
+      if (phone === '+undefined') return '⚠️ No phone number found on your account. Please update it in the app.';
+      await startVerification({ phone, channel: 'whatsapp', userId: user.id });
+      return `🔐 A new 6-digit verification code has been sent to this WhatsApp number. Enter it in the *promrkts* app to verify your phone.`;
+    },
+  },
+  {
+    // help / commands / what can you do
+    pattern: /\bhelp\b|\bcommand(s)?\b|\bwhat can you\b|\bhi\b|\bhello\b|\bstart\b/i,
+    handler: async (user) => {
+      const greeting = user ? `Hi *${user.firstName}*! ` : 'Welcome to *promrkts*! ';
+      return `${greeting}👋\n\nI can help you with:\n\n` +
+        `  • *balance* — check your wallet balances\n` +
+        `  • *kyc* — check your verification status\n` +
+        `  • *deposit status* — latest deposit update\n` +
+        `  • *withdraw status* — latest withdrawal update\n` +
+        `  • *rate* or *BTC price* — live exchange rates\n` +
+        `  • *send code* — resend your phone verification OTP\n\n` +
+        `For anything else, just type your question and a support agent will respond shortly.`;
     },
   },
 ];
@@ -83,18 +143,19 @@ function normalizePhone(raw: string): string {
 }
 
 async function findUserByWhatsAppFrom(from: string) {
-  // Twilio sends "whatsapp:+14155238886" — strip prefix first.
+  // Twilio sends "whatsapp:+14155238886" — strip prefix.
   const phone = normalizePhone(from.replace(/^whatsapp:/i, ''));
+  const suffix = phone.replace(/^\+/, '').slice(-10);
   return prisma.user.findFirst({
-    where: { phone: { endsWith: phone.replace(/^\+/, '').slice(-10) } },
+    where: { phone: { endsWith: suffix } },
     select: {
       id: true, firstName: true, lastName: true,
-      phone: true, phoneCountryCode: true, kycStatus: true, role: true,
+      phone: true, phoneCountryCode: true,
+      kycStatus: true, role: true, phoneVerified: true,
     },
   });
 }
 
-/* ── Ensure a support escalation exists for this user ─────────────── */
 async function ensureSupportEscalation(userId: string, reason: string) {
   const supportBot = await prisma.user.findFirst({
     where: { username: 'support' },
@@ -155,23 +216,21 @@ export class WhatsAppController {
         },
       });
 
-      // Route to intent handler or support escalation.
+      // Route to intent handler.
       let botReply: string | null = null;
       for (const intent of INTENTS) {
         if (intent.pattern.test(body)) {
-          botReply = await intent.handler(user);
+          botReply = await intent.handler(user, body);
           break;
         }
       }
 
       if (botReply) {
-        // Auto-reply.
         await sendWhatsAppText({ to: phone, body: botReply, userId: user?.id });
       } else if (user) {
         // Unknown intent — escalate to support queue.
         const esc = await ensureSupportEscalation(user.id, `WhatsApp inbound: "${body.slice(0, 80)}"`);
 
-        // Also persist as an in-app Message so support sees it in their thread.
         const supportBot = await prisma.user.findFirst({ where: { username: 'support' }, select: { id: true } });
         if (supportBot) {
           const msg = await prisma.message.create({
@@ -180,15 +239,10 @@ export class WhatsAppController {
               receiverId: supportBot.id,
               content:    body,
               type:       'TEXT',
-              metadata:   {
-                source:        'whatsapp',
-                escalationId:  esc?.id ?? null,
-                sid:           MessageSid,
-              } as any,
+              metadata:   { source: 'whatsapp', escalationId: esc?.id ?? null, sid: MessageSid } as any,
             },
           });
 
-          // Emit real-time to admin support queue.
           const io = req.app.get('io');
           if (io) {
             io.to(`user:${supportBot.id}`).emit('message:new', {
@@ -200,16 +254,20 @@ export class WhatsAppController {
           }
         }
 
-        // Auto-ack the user.
-        const ack = `Hi ${user.firstName}! A support agent will get back to you shortly. Your reference: #${(esc?.id ?? 'N/A').slice(0, 8)}.`;
+        const ref = (esc?.id ?? 'N/A').slice(0, 8).toUpperCase();
+        const ack = `✅ *${user.firstName}*, your message has been received! A support agent will get back to you shortly.\n\nReference: *#${ref}*`;
         await sendWhatsAppText({ to: phone, body: ack, userId: user.id });
       } else {
         // Unknown user.
-        const reply = `Welcome to *promrkts*! 👋 Please register at promrkts.com to access your account. Reply *help* for more info.`;
+        const reply =
+          `👋 Welcome to *promrkts*!\n\n` +
+          `It looks like this number isn't linked to an account yet.\n\n` +
+          `📲 Download the app or visit *promrkts.com* to register.\n\n` +
+          `Reply *help* to see what I can do.`;
         await sendWhatsAppText({ to: phone, body: reply });
       }
 
-      // Twilio expects a 200 (or TwiML response) — plain 200 suppresses a TwiML <Response>.
+      // Twilio expects 200 — plain 200 without body suppresses TwiML auto-reply.
       res.sendStatus(200);
     } catch (error) {
       next(error);
@@ -309,10 +367,135 @@ export class WhatsAppController {
           inbound:  count(stats24h, 'IN'),
           outbound: count(stats24h, 'OUT'),
         },
-        configured: isTwilioConfigured(),
+        configured: isTwilioConfigured() || isMetaWhatsAppConfigured(),
+        providers: {
+          meta:   isMetaWhatsAppConfigured(),
+          twilio: isTwilioConfigured(),
+        },
       });
     } catch (error) {
       next(error);
+    }
+  }
+
+  /* ── Meta WhatsApp Cloud API webhook ────────────────────────── */
+
+  /**
+   * GET /api/whatsapp/meta/webhook — Meta verification handshake.
+   * Meta calls this once when you register the webhook URL in the
+   * Business dashboard. We echo `hub.challenge` back when the
+   * verify_token matches.
+   */
+  static async verifyMetaWebhook(req: AuthRequest, res: Response, _next: NextFunction) {
+    const mode      = req.query['hub.mode'];
+    const token     = req.query['hub.verify_token'];
+    const challenge = req.query['hub.challenge'];
+
+    if (mode === 'subscribe' && token && token === process.env.META_WA_VERIFY_TOKEN) {
+      res.status(200).send(String(challenge));
+      return;
+    }
+    res.sendStatus(403);
+  }
+
+  /**
+   * POST /api/whatsapp/meta/webhook — inbound message from Meta Cloud API.
+   *
+   * Meta payload shape (trimmed):
+   *   { entry: [{ changes: [{ value: { messages: [{ from, id, text: { body } }] } }] }] }
+   */
+  static async receiveMetaMessage(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      // Validate signature when configured. The raw body must have been
+      // captured by express.json's `verify` hook into req.rawBody.
+      if (isMetaWhatsAppConfigured()) {
+        const sig = req.headers['x-hub-signature-256'] as string | undefined;
+        const raw = (req as any).rawBody ?? JSON.stringify(req.body);
+        const ok  = validateMetaSignature({ signatureHeader: sig, rawBody: raw });
+        if (!ok) {
+          res.status(403).send('Forbidden');
+          return;
+        }
+      }
+
+      // ALWAYS 200 quickly — Meta retries on non-2xx.
+      res.sendStatus(200);
+
+      const entries = (req.body?.entry ?? []) as any[];
+      for (const entry of entries) {
+        for (const change of entry.changes ?? []) {
+          const messages = change.value?.messages ?? [];
+          for (const m of messages) {
+            const from = m.from as string | undefined;
+            const text = m.text?.body as string | undefined;
+            const sid  = m.id   as string | undefined;
+            if (!from || !text) continue;
+
+            const phone = normalizePhone(from);
+            const user  = await findUserByWhatsAppFrom(from);
+
+            await (prisma as any).whatsAppMessage.create({
+              data: {
+                phoneNumber: phone.replace(/^\+/, ''),
+                message:     text,
+                direction:   'IN',
+                userId:      user?.id ?? null,
+                botResponse: { sid },
+              },
+            });
+
+            let botReply: string | null = null;
+            for (const intent of INTENTS) {
+              if (intent.pattern.test(text)) {
+                botReply = await intent.handler(user, text);
+                break;
+              }
+            }
+
+            if (botReply) {
+              await sendWhatsAppText({ to: phone, body: botReply, userId: user?.id });
+            } else if (user) {
+              const esc = await ensureSupportEscalation(user.id, `WhatsApp inbound: "${text.slice(0, 80)}"`);
+              const supportBot = await prisma.user.findFirst({ where: { username: 'support' }, select: { id: true } });
+              if (supportBot) {
+                const msg = await prisma.message.create({
+                  data: {
+                    senderId:   user.id,
+                    receiverId: supportBot.id,
+                    content:    text,
+                    type:       'TEXT',
+                    metadata:   { source: 'whatsapp-meta', escalationId: esc?.id ?? null, sid } as any,
+                  },
+                });
+                const io = req.app.get('io');
+                if (io) {
+                  io.to(`user:${supportBot.id}`).emit('message:new', {
+                    id: msg.id, senderId: user.id, receiverId: supportBot.id,
+                    content: text, type: 'TEXT', isRead: false,
+                    createdAt: msg.createdAt, metadata: msg.metadata,
+                  });
+                  io.to('admin').emit('escalation:new', { escalationId: esc?.id, userId: user.id, source: 'whatsapp' });
+                }
+              }
+              const ref = (esc?.id ?? 'N/A').slice(0, 8).toUpperCase();
+              await sendWhatsAppText({
+                to: phone,
+                body: `✅ *${user.firstName}*, your message has been received! A support agent will get back to you shortly.\n\nReference: *#${ref}*`,
+                userId: user.id,
+              });
+            } else {
+              await sendWhatsAppText({
+                to: phone,
+                body: `👋 Welcome to *promrkts*!\n\nIt looks like this number isn't linked to an account yet.\n\n📲 Download the app or visit *promrkts.com* to register.\n\nReply *help* to see what I can do.`,
+              });
+            }
+          }
+        }
+      }
+    } catch (error) {
+      // Don't bubble — we already sent 200. Just log.
+      console.warn('[meta:wa-webhook] handler error', (error as Error).message);
+      next?.(undefined as any);
     }
   }
 }

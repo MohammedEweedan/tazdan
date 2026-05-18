@@ -27,7 +27,6 @@ import ColorModeToggle from "@/components/ui/ColorModeToggle";
 import LanguageSwitcher from "@/components/ui/LanguageSwitcher";
 
 const NAV_LINKS = [
-  { label: "Markets",  href: "/markets" },
   { label: "Fees",     href: "/fees" },
   { label: "FAQ",      href: "/faq" },
   { label: "Contact",  href: "/contact" },

@@ -12,7 +12,8 @@
  */
 
 import { useMemo, useState } from 'react';
-import { Pressable, ScrollView, Text, View, Modal } from 'react-native';
+import { Pressable, ScrollView, View, Modal } from 'react-native';
+import { Text } from '@/components/ui/Text';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
@@ -26,6 +27,7 @@ import { useTheme, useThemedPalette, type Palette } from '@/store/themeStore';
 import { useT } from '@/store/i18nStore';
 import { CardVisual } from '@/components/cards/CardVisual';
 import type { Wallet, Currency, CardEntity } from '@/types';
+import { TopGradient } from '@/components/ui/ScreenShell';
 
 type Filter = 'ALL' | 'CRYPTO' | 'FIAT' | 'CARDS';
 
@@ -44,7 +46,7 @@ export default function WalletScreen() {
   const priceMap = useMemo(() => {
     const map: Partial<Record<Currency, number>> = {};
     (tickers ?? []).forEach((m) => {
-      map[m.base] = m.price;
+      map[m.base as Currency] = m.price;
     });
     return map;
   }, [tickers]);
@@ -117,6 +119,7 @@ export default function WalletScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: p.bg }}>
+      <TopGradient />
       <StatusBar style={themeMode === 'dark' ? 'light' : 'dark'} />
       <SafeAreaView style={{ flex: 1 }} edges={['top']}>
         <ScrollView
@@ -542,7 +545,7 @@ function BucketTile({
         <Text
           numberOfLines={1}
           style={{
-            color: p.fg, fontSize: 17, fontWeight: '800',
+            color: p.fg, fontSize: 17, fontWeight: '600',
             marginTop: 2, fontVariant: ['tabular-nums'],
           }}
         >

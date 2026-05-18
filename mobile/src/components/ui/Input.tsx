@@ -4,7 +4,8 @@
  */
 
 import { ReactNode, useState } from 'react';
-import { TextInput, View, Text, type TextInputProps, Pressable } from 'react-native';
+import { View, type TextInputProps, Pressable } from 'react-native';
+import { Text, TextInput } from '@/components/ui/Text';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 
 interface Props extends Omit<TextInputProps, 'onChange'> {

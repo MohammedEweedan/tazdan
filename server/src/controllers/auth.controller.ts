@@ -20,7 +20,7 @@ import {
   sendPasswordResetEmail,
 } from '../services/email';
 import { createUserWallets } from '../services/wallet/walletDerivation.service';
-import { startVerification, checkVerification } from '../services/whatsapp/twilio.service';
+import { startVerification, checkVerification } from '../services/whatsapp';
 
 const refreshSchema = z.object({
   refreshToken: z.string().min(10),
@@ -600,10 +600,10 @@ export class AuthController {
       if (dbUser.phoneVerified) throw new AppError('Phone already verified', 400);
 
       const phone = `+${dbUser.phoneCountryCode}${dbUser.phone}`;
-      const result = await startVerification({ phone, channel });
+      const result = await startVerification({ phone, channel, userId: user.id });
       if (!result.ok) throw new AppError(result.reason ?? 'Failed to send code', 502);
 
-      res.json({ message: 'Verification code sent', status: result.status, simulated: result.reason === 'simulated' });
+      res.json({ message: 'Verification code sent', status: result.status, mode: result.mode, simulated: result.reason === 'simulated' });
     } catch (error) {
       next(error);
     }
@@ -624,7 +624,7 @@ export class AuthController {
       if (dbUser.phoneVerified) throw new AppError('Phone already verified', 400);
 
       const phone = `+${dbUser.phoneCountryCode}${dbUser.phone}`;
-      const result = await checkVerification({ phone, code });
+      const result = await checkVerification({ phone, code, userId: user.id });
       if (!result.valid) throw new AppError('Invalid or expired code', 400);
 
       await prisma.user.update({

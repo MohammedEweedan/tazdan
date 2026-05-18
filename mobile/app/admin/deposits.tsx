@@ -5,9 +5,8 @@
  */
 
 import { useState } from 'react';
-import {
-  Alert, Modal, Pressable, RefreshControl, ScrollView, Text, TextInput, View,
-} from 'react-native';
+import { Alert, Modal, Pressable, RefreshControl, ScrollView, View } from 'react-native';
+import { Text, TextInput } from '@/components/ui/Text';
 import { Ionicons } from '@expo/vector-icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
@@ -19,6 +18,7 @@ import { useThemedPalette, useTheme } from '@/store/themeStore';
 import { useAuthStore } from '@/store/authStore';
 import { adminService } from '@/services';
 import { LoadingPulse } from '@/components/ui/LoadingPulse';
+import { TopGradient } from '@/components/ui/ScreenShell';
 
 export default function AdminDeposits() {
   const p = useThemedPalette();
@@ -63,13 +63,14 @@ export default function AdminDeposits() {
 
   return (
     <View style={{ flex: 1, backgroundColor: p.bg }}>
+      <TopGradient />
       <StatusBar style={themeMode === 'dark' ? 'light' : 'dark'} />
       <SafeAreaView style={{ flex: 1 }} edges={['top']}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingTop: 8, paddingBottom: 8 }}>
           <Pressable onPress={() => router.back()} hitSlop={8}>
             <Ionicons name="chevron-back" size={26} color={p.fg} />
           </Pressable>
-          <Text style={{ flex: 1, color: p.fg, fontSize: 18, fontWeight: '800', letterSpacing: -0.3 }}>Deposit Queue</Text>
+          <Text style={{ flex: 1, color: p.fg, fontSize: 18, fontWeight: '600', letterSpacing: -0.3 }}>Deposit Queue</Text>
           <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '700' }}>{deposits.length}</Text>
         </View>
 
@@ -78,7 +79,7 @@ export default function AdminDeposits() {
             const on = filter === s;
             return (
               <Pressable key={s} onPress={() => setFilter(s)} style={{ paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10, backgroundColor: on ? p.fg : p.pillBg, borderWidth: 1, borderColor: on ? p.fg : p.border }}>
-                <Text style={{ color: on ? p.bg : p.fg, fontSize: 12, fontWeight: '800' }}>{s}</Text>
+                <Text style={{ color: on ? p.bg : p.fg, fontSize: 12, fontWeight: '600' }}>{s}</Text>
               </Pressable>
             );
           })}
@@ -99,10 +100,10 @@ export default function AdminDeposits() {
               <View key={d.id} style={{ backgroundColor: p.bgElev, borderRadius: 14, borderWidth: 1, borderColor: p.border, padding: 14, marginBottom: 10 }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                   <View style={{ paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, backgroundColor: p.pillBg }}>
-                    <Text style={{ color: p.fgMuted, fontSize: 10, fontWeight: '800' }}>{d.paymentMethod ?? d.currency}</Text>
+                    <Text style={{ color: p.fgMuted, fontSize: 10, fontWeight: '600' }}>{d.paymentMethod ?? d.currency}</Text>
                   </View>
                   <Text style={{ color: p.fgFaint, fontSize: 11 }}>{formatRelativeTime(d.createdAt)}</Text>
-                  <Text style={{ color: p.fg, fontSize: 18, fontWeight: '800', marginLeft: 'auto', fontVariant: ['tabular-nums'] }}>
+                  <Text style={{ color: p.fg, fontSize: 18, fontWeight: '600', marginLeft: 'auto', fontVariant: ['tabular-nums'] }}>
                     {Number(d.amount).toLocaleString('en-US', { maximumFractionDigits: 8 })} {d.currency}
                   </Text>
                 </View>
@@ -122,13 +123,13 @@ export default function AdminDeposits() {
                       ])}
                       style={{ flex: 1, paddingVertical: 11, borderRadius: 10, backgroundColor: '#22c55e', alignItems: 'center' }}
                     >
-                      <Text style={{ color: '#fff', fontWeight: '800', fontSize: 13 }}>Confirm</Text>
+                      <Text style={{ color: '#fff', fontWeight: '600', fontSize: 13 }}>Confirm</Text>
                     </Pressable>
                     <Pressable
                       onPress={() => { setRejecting(d); setReason(''); }}
                       style={{ flex: 1, paddingVertical: 11, borderRadius: 10, backgroundColor: 'rgba(239,68,68,0.15)', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(239,68,68,0.30)' }}
                     >
-                      <Text style={{ color: '#ef4444', fontWeight: '800', fontSize: 13 }}>Reject</Text>
+                      <Text style={{ color: '#ef4444', fontWeight: '600', fontSize: 13 }}>Reject</Text>
                     </Pressable>
                   </View>
                 )}
@@ -141,7 +142,7 @@ export default function AdminDeposits() {
           <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' }}>
             <View style={{ backgroundColor: p.bg, borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 20, paddingBottom: 36 }}>
               <View style={{ alignSelf: 'center', width: 36, height: 4, borderRadius: 2, backgroundColor: p.border, marginBottom: 14 }} />
-              <Text style={{ color: p.fg, fontSize: 18, fontWeight: '800', marginBottom: 14 }}>Reject Deposit</Text>
+              <Text style={{ color: p.fg, fontSize: 18, fontWeight: '600', marginBottom: 14 }}>Reject Deposit</Text>
               <View style={{ backgroundColor: p.bgElev, borderRadius: 12, borderWidth: 1, borderColor: p.border, padding: 12, marginBottom: 18 }}>
                 <TextInput
                   value={reason}
@@ -162,7 +163,7 @@ export default function AdminDeposits() {
                   disabled={!reason.trim() || rejectMut.isPending}
                   style={{ flex: 1, height: 50, borderRadius: 12, backgroundColor: reason.trim() ? '#ef4444' : p.bgElev, alignItems: 'center', justifyContent: 'center', opacity: reason.trim() ? 1 : 0.6 }}
                 >
-                  <Text style={{ color: '#fff', fontWeight: '800' }}>{rejectMut.isPending ? 'Rejecting…' : 'Reject'}</Text>
+                  <Text style={{ color: '#fff', fontWeight: '600' }}>{rejectMut.isPending ? 'Rejecting…' : 'Reject'}</Text>
                 </Pressable>
               </View>
             </View>
@@ -178,7 +179,7 @@ function DeniedView({ p, themeMode, onBack }: any) {
     <View style={{ flex: 1, backgroundColor: p.bg, alignItems: 'center', justifyContent: 'center', padding: 40 }}>
       <StatusBar style={themeMode === 'dark' ? 'light' : 'dark'} />
       <Ionicons name="lock-closed-outline" size={48} color={p.fgFaint} />
-      <Text style={{ color: p.fg, fontSize: 18, fontWeight: '800', marginTop: 14 }}>Admin only</Text>
+      <Text style={{ color: p.fg, fontSize: 18, fontWeight: '600', marginTop: 14 }}>Admin only</Text>
       <Pressable onPress={onBack} style={{ marginTop: 24, paddingHorizontal: 18, paddingVertical: 11, borderRadius: 12, backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border }}>
         <Text style={{ color: p.fg, fontWeight: '700' }}>Back</Text>
       </Pressable>

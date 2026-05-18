@@ -17,7 +17,8 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.promrkts.app",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSFaceIDUsageDescription": "promrkts uses Face ID to unlock your account and authorise sensitive actions."
       }
     },
     "android": {
@@ -36,13 +37,11 @@
       "expo-secure-store",
       "expo-video",
       "expo-notifications",
-      "expo-device",
       "expo-web-browser",
       [
-        "expo-image-picker",
+        "expo-local-authentication",
         {
-          "photosPermission": "promrkts needs access to your photos to attach payment proof.",
-          "cameraPermission": "promrkts needs camera access to capture payment proof."
+          "faceIDPermission": "promrkts uses Face ID to unlock your account and authorise sensitive actions."
         }
       ]
     ],

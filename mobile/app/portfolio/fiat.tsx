@@ -8,7 +8,8 @@
  */
 
 import { useMemo, useState } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { Pressable, ScrollView, View } from 'react-native';
+import { Text } from '@/components/ui/Text';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
@@ -19,6 +20,7 @@ import { useWallets } from '@/hooks';
 import { getCurrencyMeta } from '@/constants';
 import { useTheme, useThemedPalette } from '@/store/themeStore';
 import type { Wallet } from '@/types';
+import { TopGradient } from '@/components/ui/ScreenShell';
 
 type SortOption = 'value' | 'name' | 'rate';
 
@@ -85,6 +87,7 @@ export default function FiatPortfolio() {
 
   return (
     <View style={{ flex: 1, backgroundColor: p.bg }}>
+      <TopGradient />
       <StatusBar style={themeMode === 'dark' ? 'light' : 'dark'} />
       <SafeAreaView style={{ flex: 1 }} edges={['top']}>
         <ScrollView
@@ -125,7 +128,7 @@ export default function FiatPortfolio() {
             <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '700', letterSpacing: 0.5 }}>
               TOTAL FIAT (USD EQUIVALENT)
             </Text>
-            <Text style={{ color: p.fg, fontSize: 34, fontWeight: '800', letterSpacing: -0.8, marginTop: 6 }}>
+            <Text style={{ color: p.fg, fontSize: 34, fontWeight: '600', letterSpacing: -0.8, marginTop: 6 }}>
               {formatUsd(totalUsd)}
             </Text>
             <Text style={{ color: p.fgMuted, fontSize: 12, marginTop: 4 }}>

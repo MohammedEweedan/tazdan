@@ -13,7 +13,8 @@
  * If you ever feel tempted to write `<Text>${meta.symbol}{currency}</Text>`
  * by hand again — stop. Use this. Uniformity > cleverness.
  */
-import { Text, View, type StyleProp, type ViewStyle, type TextStyle } from 'react-native';
+import { View, type StyleProp, type ViewStyle, type TextStyle } from 'react-native';
+import { Text } from '@/components/ui/Text';
 import { useThemedPalette } from '@/store/themeStore';
 import { getCurrencyMeta } from '@/constants';
 

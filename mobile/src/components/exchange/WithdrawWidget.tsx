@@ -6,10 +6,8 @@
  */
 
 import { useCallback, useState } from 'react';
-import {
-  ActivityIndicator, Alert, FlatList, Keyboard, Modal,
-  Pressable, ScrollView, Text, TextInput, View,
-} from 'react-native';
+import { ActivityIndicator, Alert, FlatList, Keyboard, Modal, Pressable, ScrollView, View } from 'react-native';
+import { Text, TextInput } from '@/components/ui/Text';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -110,7 +108,7 @@ function BankAccountForm({
 
   return (
     <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 20 }}>
-      <Text style={{ color: p.fg, fontSize: 18, fontWeight: '800', marginBottom: 20 }}>
+      <Text style={{ color: p.fg, fontSize: 18, fontWeight: '600', marginBottom: 20 }}>
         {initial?.id ? 'Edit Bank Account' : 'Add Bank Account'}
       </Text>
 
@@ -215,7 +213,7 @@ function BankAccountForm({
         })}
       >
         {saving ? <ActivityIndicator color={p.ctaFg} /> : (
-          <Text style={{ color: valid ? p.ctaFg : p.fgMuted, fontSize: 15, fontWeight: '800' }}>
+          <Text style={{ color: valid ? p.ctaFg : p.fgMuted, fontSize: 15, fontWeight: '600' }}>
             {initial?.id ? 'Save Changes' : 'Add Account'}
           </Text>
         )}
@@ -364,7 +362,7 @@ export function WithdrawWidget() {
           }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8 }}>
               <Ionicons name="shield-outline" size={20} color="#f59e0b" />
-              <Text style={{ color: '#f59e0b', fontSize: 14, fontWeight: '800' }}>KYC Required</Text>
+              <Text style={{ color: '#f59e0b', fontSize: 14, fontWeight: '600' }}>KYC Required</Text>
             </View>
             <Text style={{ color: p.fgMuted, fontSize: 13, lineHeight: 18, marginBottom: 12 }}>
               Fiat withdrawals require identity verification. Crypto withdrawals are available immediately.
@@ -373,7 +371,7 @@ export function WithdrawWidget() {
               onPress={() => router.push('/kyc' as any)}
               style={{ backgroundColor: '#f59e0b', borderRadius: 10, paddingVertical: 11, alignItems: 'center' }}
             >
-              <Text style={{ color: '#fff', fontWeight: '800', fontSize: 14 }}>Verify Identity →</Text>
+              <Text style={{ color: '#fff', fontWeight: '600', fontSize: 14 }}>Verify Identity →</Text>
             </Pressable>
           </View>
         )}
@@ -394,7 +392,7 @@ export function WithdrawWidget() {
             opacity: pressed ? 0.85 : 1,
           })}
         >
-          <Text style={{ color: (isFiat && !kycApproved) ? p.fgMuted : p.ctaFg, fontSize: 16, fontWeight: '800' }}>
+          <Text style={{ color: (isFiat && !kycApproved) ? p.fgMuted : p.ctaFg, fontSize: 16, fontWeight: '600' }}>
             Continue with {currency}
           </Text>
           <Ionicons name="arrow-forward" size={16} color={(isFiat && !kycApproved) ? p.fgMuted : p.ctaFg} />
@@ -497,7 +495,7 @@ export function WithdrawWidget() {
             opacity: pressed ? 0.85 : 1,
           })}
         >
-          <Text style={{ color: selectedBank ? p.ctaFg : p.fgMuted, fontSize: 16, fontWeight: '800' }}>
+          <Text style={{ color: selectedBank ? p.ctaFg : p.fgMuted, fontSize: 16, fontWeight: '600' }}>
             {selectedBank ? `Continue with ${selectedBank.bankName}` : 'Select a bank account'}
           </Text>
           {selectedBank && <Ionicons name="arrow-forward" size={16} color={p.ctaFg} />}
@@ -570,7 +568,7 @@ export function WithdrawWidget() {
       {/* Balance */}
       <View style={{ backgroundColor: p.bgElev, borderRadius: 14, borderWidth: 1, borderColor: p.border, padding: 16, marginBottom: 20 }}>
         <Text style={{ color: p.fgFaint, fontSize: 10, fontWeight: '700', letterSpacing: 0.6 }}>AVAILABLE BALANCE</Text>
-        <Text style={{ color: p.fg, fontSize: 26, fontWeight: '800', letterSpacing: -1, marginTop: 4 }}>
+        <Text style={{ color: p.fg, fontSize: 26, fontWeight: '600', letterSpacing: -1, marginTop: 4 }}>
           {balance.toLocaleString('en-US', { maximumFractionDigits: isFiat ? 2 : 8 })} {currency}
         </Text>
       </View>
@@ -628,7 +626,7 @@ export function WithdrawWidget() {
           onPress={() => setAmount(balance.toFixed(isFiat ? 2 : 8))}
           style={{ paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, backgroundColor: p.pillBg, borderWidth: 1, borderColor: p.border }}
         >
-          <Text style={{ color: p.fg, fontSize: 11, fontWeight: '800' }}>MAX</Text>
+          <Text style={{ color: p.fg, fontSize: 11, fontWeight: '600' }}>MAX</Text>
         </Pressable>
         <Text style={{ color: p.fgMuted, fontSize: 14, fontWeight: '700', marginLeft: 10 }}>{currency}</Text>
       </View>
@@ -652,7 +650,7 @@ export function WithdrawWidget() {
         ) : (
           <>
             <Ionicons name="arrow-up-circle-outline" size={17} color={canSubmit ? p.ctaFg : p.fgMuted} />
-            <Text style={{ color: canSubmit ? p.ctaFg : p.fgMuted, fontSize: 16, fontWeight: '800' }}>
+            <Text style={{ color: canSubmit ? p.ctaFg : p.fgMuted, fontSize: 16, fontWeight: '600' }}>
               {canSubmit
                 ? `Withdraw ${withdrawAmount.toLocaleString('en-US', { maximumFractionDigits: isFiat ? 2 : 8 })} ${currency}`
                 : isCrypto && !walletAddress ? 'Enter wallet address' : 'Enter amount'}

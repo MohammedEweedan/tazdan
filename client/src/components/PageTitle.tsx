@@ -5,9 +5,6 @@ import { usePathname } from "next/navigation";
 
 const TITLE_MAP: Record<string, string> = {
   "/": "Home - promrkts",
-  "/login": "Login - promrkts",
-  "/register": "Register - promrkts",
-  "/markets": "Markets - promrkts",
   "/about": "About - promrkts",
   "/contact": "Contact - promrkts",
   "/careers": "Careers - promrkts",

@@ -21,10 +21,8 @@
  *   - Safe-area aware bottom padding
  */
 import type { ReactNode } from 'react';
-import {
-  KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, Text,
-  View, type StyleProp, type ViewStyle,
-} from 'react-native';
+import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, View, type StyleProp, type ViewStyle } from 'react-native';
+import { Text } from '@/components/ui/Text';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useThemedPalette } from '@/store/themeStore';
@@ -122,7 +120,7 @@ export function BottomSheet({
                   {title && (
                     <Text
                       style={{
-                        color: p.fg, fontSize: 19, fontWeight: '800',
+                        color: p.fg, fontSize: 19, fontWeight: '600',
                         letterSpacing: -0.4,
                       }}
                       numberOfLines={1}
@@ -178,7 +176,7 @@ export function SheetSection({
       <View style={{ flexDirection: 'row', alignItems: 'baseline', marginBottom: 8 }}>
         <Text
           style={{
-            color: p.fgMuted, fontSize: 11, fontWeight: '800',
+            color: p.fgMuted, fontSize: 11, fontWeight: '600',
             letterSpacing: 0.8, textTransform: 'uppercase',
           }}
         >

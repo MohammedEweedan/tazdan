@@ -9,10 +9,14 @@ export const exchangeRouter = Router();
 // Per-user keyed rate limits (fall back to IP for unauthenticated hits).
 const userKey = (req: AuthRequest) => req.user?.id ?? req.ip ?? 'anon';
 
+const isSimulator = (req: any) =>
+  process.env.NODE_ENV !== 'production' && req.headers['x-simulator'] === 'true';
+
 const quoteLimiter = rateLimit({
   windowMs: 60_000,
   max: 5,
   keyGenerator: userKey,
+  skip: isSimulator,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Too many quote requests. Please wait a moment.' },
@@ -22,6 +26,7 @@ const executeLimiter = rateLimit({
   windowMs: 60 * 60_000,
   max: 10,
   keyGenerator: userKey,
+  skip: isSimulator,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Order rate limit hit (10/hour). Try again later.' },

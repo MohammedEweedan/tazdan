@@ -13,11 +13,12 @@
  */
 
 import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, View } from 'react-native';
+import { Text, TextInput } from '@/components/ui/Text';
 import { Ionicons } from '@expo/vector-icons';
 import * as WebBrowser from 'expo-web-browser';
 
-import { CTAButton } from '@/components/ui/ScreenShell';
+import { CTAButton, type CTAState } from '@/components/ui/ScreenShell';
 import { BottomSheet, SheetSection } from '@/components/ui/BottomSheet';
 import { CurrencyBadge } from '@/components/ui/CurrencyBadge';
 import { FeeBreakdown } from '@/components/ui/FeeBreakdown';
@@ -90,6 +91,9 @@ export function TopupBody({
   const [currency, setCurrency] = useState<Currency>(initialCurrency ?? fiats[0]);
   const [amount, setAmount]     = useState('');
   const [busy, setBusy]         = useState(false);
+  const [ctaState, setCtaState] = useState<CTAState>('idle');
+  const [successLabel, setSuccessLabel] = useState<string | null>(null);
+  const [errorLabel, setErrorLabel] = useState<string | null>(null);
 
   useEffect(() => {
     if (!method) return;
@@ -186,12 +190,16 @@ export function TopupBody({
           await WebBrowser.openBrowserAsync(confirm.redirectUrl);
         }
         h.success();
-        onComplete();
+        setCtaState('success');
+        setSuccessLabel('Top-up queued ✓');
+        setTimeout(onComplete, 2000);
         return;
       }
 
       if (method.id === 'P2P') {
-        onComplete();
+        setCtaState('success');
+        setSuccessLabel('Done ✓');
+        setTimeout(onComplete, 1000);
         return;
       }
 
@@ -201,20 +209,18 @@ export function TopupBody({
         notes: method.id === 'LYD_AGENT' ? 'Cash via promrkts agent' : undefined,
       });
       h.success();
-      Alert.alert(
-        'Deposit submitted',
-        method.id === 'LYD_AGENT'
-          ? 'Visit your nearest promrkts agent within 24h with this reference. Funds will appear once the agent confirms cash receipt.'
-          : 'Your bank transfer has been logged. Funds appear once the deposit is matched.',
-        [{ text: 'OK', onPress: onComplete }],
-      );
+      setCtaState('success');
+      setSuccessLabel('Deposit submitted ✓');
+      setTimeout(onComplete, 2000);
     } catch (e: any) {
       h.error();
       if (e instanceof StepUpDeniedError) {
         Alert.alert('Verification needed', e.message);
         return;
       }
-      Alert.alert('Top-up failed', e?.response?.data?.error ?? e?.message ?? 'Please try again.');
+      setCtaState('error');
+      setErrorLabel(e?.response?.data?.error ?? e?.message ?? 'Top-up failed');
+      setTimeout(() => setCtaState('idle'), 3000);
     } finally {
       setBusy(false);
     }
@@ -252,6 +258,9 @@ export function TopupBody({
             amount={numeric}
             feeRows={feeRows}
             busy={busy}
+            ctaState={ctaState}
+            successLabel={successLabel ?? undefined}
+            errorLabel={errorLabel ?? undefined}
             onBack={() => { h.selection(); setStep('AMOUNT'); }}
             onSubmit={submit}
             requiresBiometric={usdEquivalent >= stepUp.threshold}
@@ -289,7 +298,7 @@ function MethodList({
     <View style={{ gap: 10 }}>
       <Text
         style={{
-          color: p.fgMuted, fontSize: 11, fontWeight: '800',
+          color: p.fgMuted, fontSize: 11, fontWeight: '500',
           letterSpacing: 0.8, marginBottom: 4,
         }}
       >
@@ -319,10 +328,10 @@ function MethodList({
           </View>
           <View style={{ flex: 1 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-              <Text style={{ color: p.fg, fontSize: 15, fontWeight: '700' }}>{m.name}</Text>
+              <Text style={{ color: p.fg, fontSize: 15, fontWeight: '500' }}>{m.name}</Text>
               {!m.enabled && (
                 <View style={{ paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, backgroundColor: p.pillBg }}>
-                  <Text style={{ color: p.fgMuted, fontSize: 9, fontWeight: '800' }}>SOON</Text>
+                  <Text style={{ color: p.fgMuted, fontSize: 9, fontWeight: '500' }}>SOON</Text>
                 </View>
               )}
             </View>
@@ -330,9 +339,9 @@ function MethodList({
               {m.description}
             </Text>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 }}>
-              <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '700' }}>{m.speed}</Text>
+              <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '500' }}>{m.speed}</Text>
               <Text style={{ color: p.fgFaint, fontSize: 11 }}>·</Text>
-              <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '600' }}>{m.feeSummary}</Text>
+              <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '500' }}>{m.feeSummary}</Text>
             </View>
           </View>
           <Ionicons name="chevron-forward" size={18} color={p.fgFaint} />
@@ -371,12 +380,12 @@ function AmountStep({
         style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 14 }}
       >
         <Ionicons name="chevron-back" size={16} color={p.fgMuted} />
-        <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '700' }}>{method.name}</Text>
+        <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '500' }}>{method.name}</Text>
       </Pressable>
 
       <Text
         style={{
-          color: p.fgMuted, fontSize: 11, fontWeight: '800',
+          color: p.fgMuted, fontSize: 11, fontWeight: '500',
           letterSpacing: 0.8, marginBottom: 8,
         }}
       >
@@ -405,7 +414,7 @@ function AmountStep({
 
       <Text
         style={{
-          color: p.fgMuted, fontSize: 11, fontWeight: '800',
+          color: p.fgMuted, fontSize: 11, fontWeight: '500',
           letterSpacing: 0.8, marginBottom: 8,
         }}
       >
@@ -428,12 +437,12 @@ function AmountStep({
           keyboardType="decimal-pad"
           style={{
             flex: 1, color: p.fg,
-            fontSize: 36, fontWeight: '800',
+            fontSize: 36, fontWeight: '500',
             letterSpacing: -1.2,
             fontVariant: ['tabular-nums'],
           }}
         />
-        <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '700' }}>{currency}</Text>
+        <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '500' }}>{currency}</Text>
       </View>
 
       <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
@@ -448,7 +457,7 @@ function AmountStep({
               alignItems: 'center',
             }}
           >
-            <Text style={{ color: p.fg, fontSize: 13, fontWeight: '700' }}>
+            <Text style={{ color: p.fg, fontSize: 13, fontWeight: '500' }}>
               {formatMoney(q, currency, { showSymbol: true })}
             </Text>
           </PressableScale>
@@ -459,7 +468,7 @@ function AmountStep({
         <View style={{ marginTop: 22 }}>
           <Text
             style={{
-              color: p.fgMuted, fontSize: 11, fontWeight: '800',
+              color: p.fgMuted, fontSize: 11, fontWeight: '500',
               letterSpacing: 0.8, marginBottom: 8,
             }}
           >
@@ -479,7 +488,7 @@ function AmountStep({
           }}
         >
           <Ionicons name="finger-print" size={16} color={p.amberFg} />
-          <Text style={{ color: p.amberFg, fontSize: 12, fontWeight: '700', flex: 1 }}>
+          <Text style={{ color: p.amberFg, fontSize: 12, fontWeight: '500', flex: 1 }}>
             Face ID required to confirm transactions ≥ ${stepUpThreshold}.
           </Text>
         </View>
@@ -498,13 +507,16 @@ function AmountStep({
 }
 
 function ConfirmStep({
-  method, currency, amount, feeRows, busy, onBack, onSubmit, requiresBiometric, palette: p,
+  method, currency, amount, feeRows, busy, ctaState, successLabel, errorLabel, onBack, onSubmit, requiresBiometric, palette: p,
 }: {
   method: PaymentMethod;
   currency: Currency;
   amount: number;
   feeRows: { rows: any[]; total: any };
   busy: boolean;
+  ctaState: CTAState;
+  successLabel?: string;
+  errorLabel?: string;
   onBack: () => void;
   onSubmit: () => void;
   requiresBiometric: boolean;
@@ -518,14 +530,14 @@ function ConfirmStep({
         style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 14 }}
       >
         <Ionicons name="chevron-back" size={16} color={p.fgMuted} />
-        <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '700' }}>Edit amount</Text>
+        <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '500' }}>Edit amount</Text>
       </Pressable>
 
-      <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '600' }}>You're topping up</Text>
+      <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '500' }}>You're topping up</Text>
       <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 10, marginTop: 6 }}>
         <Text
           style={{
-            color: p.fg, fontSize: 44, fontWeight: '800',
+            color: p.fg, fontSize: 44, fontWeight: '500',
             letterSpacing: -1.6, fontVariant: ['tabular-nums'],
           }}
         >
@@ -552,7 +564,7 @@ function ConfirmStep({
             <Ionicons name={method.icon as any} size={18} color={p.fg} />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={{ color: p.fg, fontSize: 14, fontWeight: '700' }}>{method.name}</Text>
+            <Text style={{ color: p.fg, fontSize: 14, fontWeight: '500' }}>{method.name}</Text>
             <Text style={{ color: p.fgMuted, fontSize: 12, marginTop: 2 }}>{method.speed} · {method.feeSummary}</Text>
           </View>
         </View>
@@ -564,9 +576,12 @@ function ConfirmStep({
 
       <View style={{ marginTop: 22 }}>
         <CTAButton
-          label={busy ? 'Submitting…' : requiresBiometric ? 'Confirm with Face ID' : `Confirm top-up`}
+          label={requiresBiometric ? 'Confirm with Face ID' : `Confirm top-up`}
           icon={requiresBiometric ? 'finger-print' : 'checkmark-circle'}
           loading={busy}
+          state={ctaState}
+          successLabel={successLabel ?? undefined}
+          errorLabel={errorLabel ?? undefined}
           onPress={onSubmit}
         />
       </View>

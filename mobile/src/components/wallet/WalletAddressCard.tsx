@@ -3,7 +3,8 @@
  * we don't bundle a QR generator in the app.
  */
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Image, Pressable, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Image, Pressable, View } from 'react-native';
+import { Text } from '@/components/ui/Text';
 import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
 import { cryptoWalletAPI } from '@/lib/cryptoApi';

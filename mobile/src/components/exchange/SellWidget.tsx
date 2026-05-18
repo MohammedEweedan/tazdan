@@ -3,16 +3,8 @@
  * Uses the same quote + execute flow as BuyWidget.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  ActivityIndicator,
-  Keyboard,
-  Modal,
-  Pressable,
-  ScrollView,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { ActivityIndicator, Alert, Keyboard, Pressable, ScrollView, View, TextInput as RNTextInput, Modal } from 'react-native';
+import { Text, TextInput } from '@/components/ui/Text';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useAuthStore } from '@/store/authStore';
@@ -132,7 +124,7 @@ export function SellWidget() {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<AssetSearchResult[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
-  const searchRef = useRef<TextInput>(null);
+  const searchRef = useRef<RNTextInput>(null);
 
   // ── Trade state ───────────────────────────────────────────────────
   const [cryptoAmt, setCryptoAmt] = useState('');
@@ -261,17 +253,17 @@ export function SellWidget() {
         })}
       >
         <View style={{ width: 46, height: 46, borderRadius: 23, backgroundColor: `${meta.color}22`, alignItems: 'center', justifyContent: 'center' }}>
-          <Text style={{ fontSize: 22, color: meta.color, fontWeight: '800' }}>{meta.icon}</Text>
+          <Text style={{ fontSize: 22, color: meta.color, fontWeight: '500' }}>{meta.icon}</Text>
         </View>
         <View style={{ flex: 1, marginLeft: 14 }}>
-          <Text style={{ color: p.fg, fontSize: 17, fontWeight: '800', letterSpacing: -0.3 }}>{meta.label}</Text>
+          <Text style={{ color: p.fg, fontSize: 17, fontWeight: '500', letterSpacing: 0 }}>{meta.label}</Text>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 2 }}>
             <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '500' }}>
               {asset}{livePrice > 0 ? `  ·  ${sym(baseCurrency)}${fmtPrice(Number(livePrice))}` : ''}
             </Text>
             {change24h !== undefined && (
               <View style={{ paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, backgroundColor: change24h >= 0 ? p.greenBg : p.redBg }}>
-                <Text style={{ color: change24h >= 0 ? p.greenFg : p.redFg, fontSize: 10, fontWeight: '800' }}>
+                <Text style={{ color: change24h >= 0 ? p.greenFg : p.redFg, fontSize: 10, fontWeight: '500' }}>
                   {change24h >= 0 ? '+' : ''}{Number(change24h).toFixed(2)}%
                 </Text>
               </View>
@@ -279,16 +271,16 @@ export function SellWidget() {
           </View>
         </View>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-          <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '600' }}>Change</Text>
+          <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '500' }}>Change</Text>
           <Ionicons name="chevron-down" size={18} color={p.fgMuted} />
         </View>
       </Pressable>
 
       {/* ── Amount input ── */}
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-        <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '700', letterSpacing: 0.8 }}>YOU SELL ({asset})</Text>
+        <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '500', letterSpacing: 0.8 }}>YOU SELL ({asset})</Text>
         <Pressable onPress={() => { Haptics.selectionAsync(); setCryptoAmt(String(balance)); setQuote(null); setError(null); }} hitSlop={8}>
-          <Text style={{ color: p.ctaBg, fontSize: 12, fontWeight: '800' }}>USE MAX</Text>
+          <Text style={{ color: p.ctaBg, fontSize: 12, fontWeight: '500' }}>USE MAX</Text>
         </Pressable>
       </View>
       <View style={{
@@ -308,20 +300,20 @@ export function SellWidget() {
           keyboardType="decimal-pad"
           returnKeyType="done"
           onSubmitEditing={Keyboard.dismiss}
-          style={{ flex: 1, color: p.fg, fontSize: 28, fontWeight: '700', paddingVertical: 16, fontVariant: ['tabular-nums'] }}
+          style={{ flex: 1, color: p.fg, fontSize: 28, fontWeight: '500', paddingVertical: 16, fontVariant: ['tabular-nums'] }}
         />
-        <Text style={{ color: p.fgMuted, fontSize: 14, fontWeight: '700' }}>{asset}</Text>
+        <Text style={{ color: p.fgMuted, fontSize: 14, fontWeight: '500' }}>{asset}</Text>
       </View>
 
       {/* Balance row */}
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 20 }}>
-        <Text style={{ color: overspend ? p.redFg : p.fgMuted, fontSize: 13, fontWeight: '600' }}>
+        <Text style={{ color: overspend ? p.redFg : p.fgMuted, fontSize: 13, fontWeight: '500' }}>
           {overspend
             ? `Over by ${(parseFloat(cryptoAmt) - balance).toLocaleString(undefined, { maximumFractionDigits: 8 })} ${asset}`
             : `Balance: ${balance.toLocaleString(undefined, { maximumFractionDigits: 8 })} ${asset}`}
         </Text>
         {parseFloat(cryptoAmt) > 0 && !overspend && livePrice > 0 && (
-          <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '600' }}>
+          <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '500' }}>
             ≈ {sym(baseCurrency)}{(parseFloat(cryptoAmt) * Number(livePrice)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </Text>
         )}
@@ -336,14 +328,14 @@ export function SellWidget() {
         {loading ? (
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
             <ActivityIndicator size="small" color={meta.color} />
-            <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '600' }}>Getting best price…</Text>
+            <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '500' }}>Getting best price…</Text>
           </View>
         ) : quote ? (
           <>
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
               <View>
-                <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '700', letterSpacing: 0.5, marginBottom: 4 }}>YOU RECEIVE</Text>
-                <Text style={{ color: p.fg, fontSize: 26, fontWeight: '800', letterSpacing: -0.5 }}>
+                <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '500', letterSpacing: 0.5, marginBottom: 4 }}>YOU RECEIVE</Text>
+                <Text style={{ color: p.fg, fontSize: 26, fontWeight: '500', letterSpacing: 0 }}>
                   {sym(baseCurrency)}{fmt(quote.fiatAmount, 2)}{' '}
                   <Text style={{ color: p.fgMuted, fontSize: 14 }}>USDT</Text>
                 </Text>
@@ -355,14 +347,14 @@ export function SellWidget() {
                 borderWidth: 1, borderColor: timerCritical ? p.redFg : p.border,
               }}>
                 <Ionicons name="timer-outline" size={13} color={timerCritical ? p.redFg : p.fgMuted} />
-                <Text style={{ color: timerCritical ? p.redFg : p.fgMuted, fontSize: 12, fontWeight: '800' }}>{seconds}s</Text>
+                <Text style={{ color: timerCritical ? p.redFg : p.fgMuted, fontSize: 12, fontWeight: '500' }}>{seconds}s</Text>
               </View>
             </View>
             <Pressable
               onPress={() => setShowFees(!showFees)}
               style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 12, paddingTop: 10, borderTopWidth: 1, borderTopColor: p.border }}
             >
-              <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '600' }}>
+              <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '500' }}>
                 Fee  {sym(baseCurrency)}{fmt(Number(quote.platformFee) + Number(quote.networkFee), 2)}
               </Text>
               <Ionicons name={showFees ? 'chevron-up' : 'chevron-down'} size={14} color={p.fgMuted} />
@@ -377,7 +369,7 @@ export function SellWidget() {
                 ].map(([k, v]) => (
                   <View key={k} style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
                     <Text style={{ color: p.fgMuted, fontSize: 12 }}>{k}</Text>
-                    <Text style={{ color: p.fg, fontSize: 12, fontWeight: '600' }}>{v}</Text>
+                    <Text style={{ color: p.fg, fontSize: 12, fontWeight: '500' }}>{v}</Text>
                   </View>
                 ))}
               </View>
@@ -390,45 +382,40 @@ export function SellWidget() {
         )}
       </View>
 
-      {/* Success / Error banners */}
-      {success && (
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: p.greenBg, borderRadius: 12, padding: 12, marginBottom: 14 }}>
-          <Ionicons name="checkmark-circle" size={16} color={p.greenFg} />
-          <Text style={{ color: p.greenFg, fontSize: 13, flex: 1, fontWeight: '600' }}>{success}</Text>
-        </View>
-      )}
-      {error && (
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: 'rgba(239,68,68,0.1)', borderRadius: 12, padding: 12, marginBottom: 14, borderWidth: 1, borderColor: 'rgba(239,68,68,0.2)' }}>
-          <Ionicons name="alert-circle-outline" size={16} color={p.redFg} />
-          <Text style={{ color: p.redFg, fontSize: 13, flex: 1 }}>{error}</Text>
-        </View>
-      )}
-
       {/* ── CTA ── */}
       <Pressable
-        onPress={onConfirm}
-        disabled={!canConfirm}
+        onPress={() => { if (canConfirm && !error && !success) onConfirm(); }}
+        disabled={(!canConfirm && !error && !success) || exec}
         style={({ pressed }) => ({
           height: 56, borderRadius: 28,
-          backgroundColor: canConfirm ? meta.color : p.bgElev,
-          borderWidth: canConfirm ? 0 : 1, borderColor: p.border,
+          backgroundColor: success ? p.greenBg : error ? 'rgba(239,68,68,0.15)' : canConfirm ? meta.color : p.bgElev,
+          borderWidth: (canConfirm || success || error) ? 0 : 1, 
+          borderColor: error ? 'rgba(239,68,68,0.3)' : p.border,
           alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8,
           opacity: pressed || exec ? 0.85 : 1,
-          shadowColor: canConfirm ? meta.color : 'transparent',
-          shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.35, shadowRadius: 16, elevation: 6,
+          shadowColor: canConfirm && !success && !error ? meta.color : 'transparent',
+          shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.35, shadowRadius: 16, elevation: canConfirm ? 6 : 0,
         })}
       >
-        {exec ? (
-          <ActivityIndicator color="#fff" />
-        ) : (
+        {exec ? <ActivityIndicator color="#fff" /> : (
           <>
-            <Ionicons name={success ? 'checkmark' : 'trending-down'} size={18} color={canConfirm ? '#fff' : p.fgMuted} />
-            <Text style={{ color: canConfirm ? '#fff' : p.fgMuted, fontSize: 16, fontWeight: '800' }}>
-              {success
-                ? 'Sold!'
-                : canConfirm
-                  ? `Sell ${fmt(quote!.cryptoAmount, 8)} ${asset} · ${sym(baseCurrency)}${fmt(quote!.fiatAmount, 2)}`
-                  : `Sell ${asset}`}
+            {(success || error) && (
+              <Ionicons 
+                name={success ? "checkmark-circle" : "alert-circle"} 
+                size={18} 
+                color={success ? p.greenFg : p.redFg} 
+              />
+            )}
+            <Text 
+              numberOfLines={1} 
+              style={{ 
+                color: success ? p.greenFg : error ? p.redFg : canConfirm ? '#fff' : p.fgMuted, 
+                fontSize: 16, 
+                fontWeight: '500',
+                paddingHorizontal: 8,
+              }}
+            >
+              {success ? success : error ? error : canConfirm ? `Sell ${asset}` : overspend ? 'Insufficient balance' : 'Enter amount'}
             </Text>
           </>
         )}
@@ -439,7 +426,7 @@ export function SellWidget() {
         <View style={{ flex: 1, backgroundColor: p.bg }}>
           {/* Header */}
           <View style={{ flexDirection: 'row', alignItems: 'center', padding: 20, paddingTop: 24, borderBottomWidth: 1, borderBottomColor: p.border }}>
-            <Text style={{ flex: 1, color: p.fg, fontSize: 18, fontWeight: '800' }}>Select asset to sell</Text>
+            <Text style={{ flex: 1, color: p.fg, fontSize: 18, fontWeight: '500' }}>Select asset to sell</Text>
             <Pressable onPress={() => setAssetSheetOpen(false)} hitSlop={12}>
               <Ionicons name="close" size={24} color={p.fg} />
             </Pressable>
@@ -460,7 +447,7 @@ export function SellWidget() {
             {searchLoading && <ActivityIndicator size="small" color={p.fgMuted} />}
           </View>
           {/* Section label */}
-          <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '700', letterSpacing: 0.5, marginHorizontal: 20, marginBottom: 8 }}>
+          <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '500', letterSpacing: 0.5, marginHorizontal: 20, marginBottom: 8 }}>
             {searchQuery.trim() ? 'SEARCH RESULTS' : 'YOUR HOLDINGS'}
           </Text>
           <ScrollView keyboardShouldPersistTaps="handled">
@@ -483,10 +470,10 @@ export function SellWidget() {
                   })}
                 >
                   <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: `${m.color}22`, alignItems: 'center', justifyContent: 'center', marginRight: 14 }}>
-                    <Text style={{ fontSize: 20, color: m.color, fontWeight: '800' }}>{m.icon}</Text>
+                    <Text style={{ fontSize: 20, color: m.color, fontWeight: '500' }}>{m.icon}</Text>
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Text style={{ color: p.fg, fontSize: 15, fontWeight: '700' }}>{m.label}</Text>
+                    <Text style={{ color: p.fg, fontSize: 15, fontWeight: '500' }}>{m.label}</Text>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
                       <Text style={{ color: p.fgMuted, fontSize: 12 }}>{item.symbol}</Text>
                       {holding && (
@@ -498,13 +485,13 @@ export function SellWidget() {
                   </View>
                   <View style={{ alignItems: 'flex-end', gap: 4 }}>
                     {item.price > 0 && (
-                      <Text style={{ color: p.fg, fontSize: 14, fontWeight: '700', fontVariant: ['tabular-nums'] }}>
+                      <Text style={{ color: p.fg, fontSize: 14, fontWeight: '500', fontVariant: ['tabular-nums'] }}>
                         {sym(baseCurrency)}{fmtPrice(item.price)}
                       </Text>
                     )}
                     {item.change24h !== 0 && (
                       <View style={{ paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, backgroundColor: item.change24h >= 0 ? p.greenBg : p.redBg }}>
-                        <Text style={{ color: item.change24h >= 0 ? p.greenFg : p.redFg, fontSize: 10, fontWeight: '800' }}>
+                        <Text style={{ color: item.change24h >= 0 ? p.greenFg : p.redFg, fontSize: 10, fontWeight: '500' }}>
                           {item.change24h >= 0 ? '+' : ''}{item.change24h.toFixed(2)}%
                         </Text>
                       </View>

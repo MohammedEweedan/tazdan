@@ -4,7 +4,8 @@
  */
 
 import { useState } from 'react';
-import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, View } from 'react-native';
+import { Text, TextInput } from '@/components/ui/Text';
 import { LoadingPulse } from '@/components/ui/LoadingPulse';
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -16,6 +17,7 @@ import { useT } from '@/store/i18nStore';
 import { useHaptics } from '@/hooks';
 import { cardsService, bankAccountService } from '@/services';
 import type { CardEntity, BankAccount } from '@/types';
+import { TopGradient } from '@/components/ui/ScreenShell';
 
 export default function LinkedAccountsPage() {
   const p = useThemedPalette();
@@ -64,9 +66,10 @@ export default function LinkedAccountsPage() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: p.bg }}>
+      <TopGradient />
       <View style={{ paddingHorizontal: 20, paddingTop: 12, paddingBottom: 8 }}>
         {/* Header */}
-        <Text style={{ color: p.fg, fontSize: 28, fontWeight: '800', letterSpacing: -0.8, marginBottom: 4 }}>
+        <Text style={{ color: p.fg, fontSize: 28, fontWeight: '600', letterSpacing: -0.8, marginBottom: 4 }}>
           {t('profile.row.linkedAccounts')}
         </Text>
         <Text style={{ color: p.fgMuted, fontSize: 14, fontWeight: '500', marginBottom: 20 }}>
@@ -153,7 +156,7 @@ export default function LinkedAccountsPage() {
                         backgroundColor: card.tier === 'MASTER' ? '#122050' : card.tier === 'PRO' ? '#2B6BC8' : '#5F99D8',
                         alignItems: 'center', justifyContent: 'center',
                       }}>
-                        <Text style={{ color: '#fff', fontSize: 10, fontWeight: '800' }}>VISA</Text>
+                        <Text style={{ color: '#fff', fontSize: 10, fontWeight: '600' }}>VISA</Text>
                       </View>
                       <View>
                         <Text style={{ color: p.fg, fontSize: 16, fontWeight: '700' }}>
@@ -321,7 +324,7 @@ export default function LinkedAccountsPage() {
             }}>
               <Ionicons name="alert-circle" size={28} color="#ef4444" />
             </View>
-            <Text style={{ color: p.fg, fontSize: 20, fontWeight: '800', marginBottom: 8 }}>
+            <Text style={{ color: p.fg, fontSize: 20, fontWeight: '600', marginBottom: 8 }}>
               Delete Bank Account
             </Text>
             {deleteBankModal && (
@@ -339,7 +342,7 @@ export default function LinkedAccountsPage() {
                   opacity: pressed ? 0.85 : 1,
                 })}
               >
-                <Text style={{ color: '#fff', fontSize: 16, fontWeight: '800' }}>Delete</Text>
+                <Text style={{ color: '#fff', fontSize: 16, fontWeight: '600' }}>Delete</Text>
               </Pressable>
               <Pressable
                 onPress={() => setDeleteBankModal(null)}

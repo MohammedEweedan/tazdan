@@ -1,41 +1,36 @@
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { Platform, Pressable, View, ActionSheetIOS, Alert } from 'react-native';
-import { useThemedPalette } from '@/store/themeStore';
+import { Image, Platform, Pressable, Text, View, ActionSheetIOS, Alert } from 'react-native';
+import { useThemedPalette, useTheme } from '@/store/themeStore';
 import { useAuthStore } from '@/store/authStore';
 import { useT } from '@/store/i18nStore';
 import { useMessageRealtime } from '@/hooks';
 
 const ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
-  index: 'home',
   wallet: 'wallet',
   p2p: 'swap-horizontal',
   profile: 'person',
   messages: 'chatbubble-ellipses',
 };
 
-const FAB_SIZE = 56;
+const FAB_SIZE = 62;
 
 export default function TabsLayout() {
   const p = useThemedPalette();
   const t = useT();
   const userId = useAuthStore((s) => s.user?.id);
+  const themeMode = useTheme((s) => s.mode);
 
   useMessageRealtime(userId);
 
-  const isDark = p.bg === '#000' || p.bg.toLowerCase().includes('0');
-  const BRAND_BLUE = '#ffffff';
-  const barHeight = Platform.OS === 'ios' ? 82 : 68;
+  const barHeight = Platform.OS === 'ios' ? 80 : 72;
 
   const handleQuickActions = () => {
     const actions = [t('home.sendMoney'), t('cards.orderCard'), t('nav.wallet'), t('common.cancel')];
 
     if (Platform.OS === 'ios') {
       ActionSheetIOS.showActionSheetWithOptions(
-        {
-          options: actions,
-          cancelButtonIndex: 3,
-        },
+        { options: actions, cancelButtonIndex: 3 },
         () => {}
       );
     } else {
@@ -52,7 +47,7 @@ export default function TabsLayout() {
         tabBarShowLabel: false,
         tabBarStyle: {
           height: barHeight,
-          paddingTop: 12,
+          paddingTop: 8,
           backgroundColor: p.bg,
           borderTopColor: p.border,
           borderTopWidth: 1,
@@ -65,7 +60,7 @@ export default function TabsLayout() {
         options={{
           title: t('nav.messages'),
           tabBarIcon: ({ color, focused }) => (
-            <BarIcon name={ICONS.messages} focused={focused} color={color} />
+            <BarIcon name={ICONS.messages} focused={focused} color={color} label={t('nav.messages')} />
           ),
         }}
       />
@@ -75,7 +70,7 @@ export default function TabsLayout() {
         options={{
           title: t('nav.wallet'),
           tabBarIcon: ({ color, focused }) => (
-            <BarIcon name={ICONS.wallet} focused={focused} color={color} />
+            <BarIcon name={ICONS.wallet} focused={focused} color={color} label={t('nav.wallet')} />
           ),
         }}
       />
@@ -94,9 +89,9 @@ export default function TabsLayout() {
               onPress={props.onPress as any}
               style={{
                 flex: 1,
-                marginTop: -FAB_SIZE / 3 - 1,
                 alignItems: 'center',
-                justifyContent: 'flex-start',
+                justifyContent: 'center',
+                marginTop: -10,
               }}
             >
               <View
@@ -104,23 +99,22 @@ export default function TabsLayout() {
                   width: FAB_SIZE,
                   height: FAB_SIZE,
                   borderRadius: FAB_SIZE / 2,
-                  backgroundColor: isDark ? '#000000' : '#ffffff',
+                  backgroundColor: themeMode === 'dark' ? '#ffffff' : '#111111',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  shadowColor: BRAND_BLUE,
-                  shadowOpacity: 0.45,
-                  shadowRadius: 14,
-                  shadowOffset: { width: 0, height: 2 },
-                  elevation: 4,
+                  shadowColor: '#000',
+                  shadowOpacity: 0.25,
+                  shadowRadius: 12,
+                  shadowOffset: { width: 0, height: 4 },
+                  elevation: 8,
                   borderWidth: 3,
-                  borderColor: isDark ? '#1a1a1a' : p.bg,
-                  transform: [{ scale: 1.02 }],
+                  borderColor: p.bg,
                 }}
               >
-                <Ionicons
-                  name="home"
-                  size={24}
-                  color={isDark ? '#ffffff' : '#000000'}
+                <Image
+                  source={require('../../assets/icon-color.png')}
+                  style={{ width: FAB_SIZE - 20, height: FAB_SIZE - 20 }}
+                  resizeMode="contain"
                 />
               </View>
             </Pressable>
@@ -133,7 +127,7 @@ export default function TabsLayout() {
         options={{
           title: t('nav.p2p'),
           tabBarIcon: ({ color, focused }) => (
-            <BarIcon name={ICONS.p2p} focused={focused} color={color} />
+            <BarIcon name={ICONS.p2p} focused={focused} color={color} label={t('nav.p2p')} />
           ),
         }}
       />
@@ -143,7 +137,7 @@ export default function TabsLayout() {
         options={{
           title: t('nav.profile'),
           tabBarIcon: ({ color, focused }) => (
-            <BarIcon name={ICONS.profile} focused={focused} color={color} />
+            <BarIcon name={ICONS.profile} focused={focused} color={color} label={t('nav.profile')} />
           ),
         }}
       />
@@ -155,35 +149,33 @@ function BarIcon({
   name,
   focused,
   color,
+  label,
 }: {
   name: keyof typeof Ionicons.glyphMap;
   focused: boolean;
   color: string;
+  label: string;
 }) {
   const iconName = focused
     ? name
     : (`${name}-outline` as keyof typeof Ionicons.glyphMap);
 
   return (
-    <View style={{ alignItems: 'center', gap: 5 }}>
-      <View
+    <View style={{ alignItems: 'center', justifyContent: 'center', gap: 3, width: '100%' }}>
+      <Ionicons name={iconName} size={22} color={color} />
+      <Text
+        numberOfLines={1}
+        adjustsFontSizeToFit
         style={{
-          padding: focused ? 2 : 0,
-          borderRadius: 14,
-          backgroundColor: focused ? 'transparent' : 'transparent',
+          fontSize: 10,
+          fontWeight: focused ? '600' : '400',
+          color,
+          textAlign: 'center',
+          width: '100%',
         }}
       >
-        <Ionicons name={iconName} size={24} color={color} />
-      </View>
-
-      <View
-        style={{
-          width: focused ? 8 : 0,
-          height: focused ? 8 : 0,
-          borderRadius: 999,
-          backgroundColor: color,
-        }}
-      />
+        {label}
+      </Text>
     </View>
   );
 }

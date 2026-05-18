@@ -3,7 +3,8 @@
  */
 
 import { useMemo, useState } from 'react';
-import { Alert, Pressable, Text, TextInput, View } from 'react-native';
+import { Alert, Pressable, View } from 'react-native';
+import { Text, TextInput } from '@/components/ui/Text';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -107,7 +108,7 @@ export default function Transfer() {
           <View style={{ height: 1, backgroundColor: p.border, marginVertical: 4 }} />
           <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
             <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '500' }}>You receive</Text>
-            <Text style={{ color: p.fg, fontSize: 14, fontWeight: '800' }}>
+            <Text style={{ color: p.fg, fontSize: 14, fontWeight: '600' }}>
               {youGet.toLocaleString('en-US', { maximumFractionDigits: 8 })} {to}
             </Text>
           </View>

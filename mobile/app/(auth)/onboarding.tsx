@@ -10,10 +10,8 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
-import {
-  Alert, Dimensions, FlatList, Image, Pressable, Text, View,
-  type ListRenderItemInfo,
-} from 'react-native';
+import { Alert, Dimensions, FlatList, Image, Pressable, View, type ListRenderItemInfo } from 'react-native';
+import { Text } from '@/components/ui/Text';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -102,7 +100,7 @@ export default function Onboarding() {
           style={{
             color: p.fg,
             fontSize: 40,
-            fontWeight: '800',
+            fontWeight: '600',
             letterSpacing: -1.2,
             lineHeight: 46,
             textAlign: 'left',
@@ -150,7 +148,7 @@ export default function Onboarding() {
         />
         <LinearGradient
           colors={gradient}
-          locations={[0, 0.4, 0.7, 1]}
+          locations={[0.2, 0.7, 0.9, 1]}
           style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
         />
       </View>
@@ -161,14 +159,13 @@ export default function Onboarding() {
           style={{
             paddingHorizontal: 24,
             paddingTop: 8,
-            paddingBottom: 4,
             flexDirection: 'row',
             justifyContent: 'space-between',
             alignItems: 'center',
           }}
         >
           <Image
-            source={isDark ? require('../../assets/icon-color.png') : require('../../assets/icon-color.png')}
+            source={isDark ? require('../../assets/logo-white.png') : require('../../assets/logo-black.png')}
             style={{ width: 120, height: 32 }}
             resizeMode="contain"
           />

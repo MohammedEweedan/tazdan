@@ -4,9 +4,6 @@ import { Decimal } from '@prisma/client/runtime/library';
 import { prisma } from '../utils/prisma';
 import { AppError } from '../middleware/errorHandler';
 import { AuthRequest } from '../types';
-import { sendKYCStatusUpdate } from '../services/email';
-import { pushKYCUpdate } from '../services/push.service';
-import { logger } from '../utils/logger';
 
 const rateSchema = z.object({
   buyPrice: z.number().positive(),
@@ -466,32 +463,18 @@ export class AdminController {
 
   static async approveKYC(req: AuthRequest, res: Response, next: NextFunction) {
     try {
-      const user = await prisma.user.update({
-        where: { id: req.params.userId },
-        data: { kycStatus: 'APPROVED', kycTier: 'TIER_1' },
-        select: { email: true, firstName: true, kycTier: true },
-      });
+      await prisma.user.update({ where: { id: req.params.userId }, data: { kycStatus: 'APPROVED' } });
       await prisma.kYCDocument.updateMany({ where: { userId: req.params.userId, status: 'PENDING' }, data: { status: 'APPROVED', reviewedBy: req.user!.id, reviewedAt: new Date() } });
       await prisma.notification.create({ data: { userId: req.params.userId, title: 'KYC Approved', message: 'Your identity verification has been approved. You can now trade.', type: 'kyc' } });
-      sendKYCStatusUpdate({ to: user.email, firstName: user.firstName, status: 'APPROVED', tier: 'TIER_1' })
-        .catch((e) => logger.warn('[email] kyc approve failed', { err: e }));
-      pushKYCUpdate(req.params.userId, 'APPROVED').catch(() => {});
       res.json({ message: 'KYC approved' });
     } catch (error) { next(error); }
   }
 
   static async rejectKYC(req: AuthRequest, res: Response, next: NextFunction) {
     try {
-      const user = await prisma.user.update({
-        where: { id: req.params.userId },
-        data: { kycStatus: 'REJECTED' },
-        select: { email: true, firstName: true },
-      });
+      await prisma.user.update({ where: { id: req.params.userId }, data: { kycStatus: 'REJECTED' } });
       await prisma.kYCDocument.updateMany({ where: { userId: req.params.userId, status: 'PENDING' }, data: { status: 'REJECTED', rejectionReason: req.body.reason, reviewedBy: req.user!.id, reviewedAt: new Date() } });
       await prisma.notification.create({ data: { userId: req.params.userId, title: 'KYC Rejected', message: `Your identity verification was rejected. Reason: ${req.body.reason || 'N/A'}`, type: 'kyc' } });
-      sendKYCStatusUpdate({ to: user.email, firstName: user.firstName, status: 'REJECTED', reasonCode: req.body.reason })
-        .catch((e) => logger.warn('[email] kyc reject failed', { err: e }));
-      pushKYCUpdate(req.params.userId, 'REJECTED').catch(() => {});
       res.json({ message: 'KYC rejected' });
     } catch (error) { next(error); }
   }
@@ -1058,6 +1041,185 @@ export class AdminController {
         memoryMb:      Math.round(process.memoryUsage().rss / 1024 / 1024),
         timestamp:     new Date().toISOString(),
       });
+    } catch (error) { next(error); }
+  }
+
+  /**
+   * Production-safe manual balance credit.
+   * Credits a wallet and records a Transaction + notification.
+   * Works in all environments (unlike seedBalance).
+   */
+  static async manualCredit(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const schema = z.object({
+        userId:   z.string().uuid(),
+        currency: z.string().min(1).max(10).toUpperCase(),
+        amount:   z.number().positive(),
+        note:     z.string().max(500).optional(),
+      });
+      const { userId, currency, amount, note } = schema.parse(req.body);
+
+      const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true } });
+      if (!user) throw new AppError('User not found', 404);
+
+      const dec = new Decimal(amount);
+      const cur = currency as any;
+      const reference = `ADMIN-${Date.now()}`;
+      const description = `[admin-credit] ${note ?? 'Manual adjustment'}`;
+
+      await prisma.$transaction(async (tx: any) => {
+        const wallet = await tx.wallet.upsert({
+          where:  { userId_currency: { userId, currency: cur } },
+          create: { userId, currency: cur, balance: dec },
+          update: { balance: { increment: dec } },
+        });
+        const balanceBefore = Number(wallet.balance) - amount;
+        await tx.transaction.create({
+          data: {
+            userId,
+            type:          'DEPOSIT',
+            currency:      cur,
+            amount:        dec,
+            fee:           new Decimal(0),
+            balanceBefore,
+            balanceAfter:  Number(wallet.balance),
+            description,
+            reference,
+          },
+        });
+        await tx.notification.create({
+          data: {
+            userId,
+            title:   `Funds credited: ${amount} ${currency}`,
+            message: description,
+            type:    'deposit',
+          },
+        });
+      });
+
+      await prisma.auditLog.create({
+        data: {
+          userId:    req.user!.id,
+          action:    'MANUAL_CREDIT',
+          entity:    'Wallet',
+          entityId:  userId,
+          newValues: { currency, amount, note: note ?? null, reference },
+        },
+      });
+
+      res.json({ ok: true, userId, currency, amount, reference });
+    } catch (error) { next(error); }
+  }
+
+  /**
+   * Dev/simulator helper — directly credit a wallet balance.
+   * Blocked in production (NODE_ENV=production). Safe for staging/dev.
+   */
+  static async seedBalance(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      if (process.env.NODE_ENV === 'production') {
+        throw new AppError('Not available in production', 403);
+      }
+      const { userId, currency, amount } = z.object({
+        userId:   z.string().uuid(),
+        currency: z.string().min(1).max(10).toUpperCase(),
+        amount:   z.number().positive(),
+      }).parse(req.body);
+
+      const dec = new Decimal(amount);
+      const cur = currency as any;
+      const wallet = await prisma.wallet.upsert({
+        where:  { userId_currency: { userId, currency: cur } },
+        create: { userId, currency: cur, balance: dec },
+        update: { balance: { increment: dec } },
+      });
+      await prisma.transaction.create({
+        data: {
+          userId,
+          type:          'DEPOSIT',
+          currency:      cur,
+          amount:        dec,
+          fee:           new Decimal(0),
+          balanceBefore: Number(wallet.balance) - amount,
+          balanceAfter:  Number(wallet.balance),
+          description:   '[simulator] seed balance',
+          reference:     `SIM-${Date.now()}`,
+        },
+      });
+      res.json({ ok: true, currency, amount, newBalance: wallet.balance });
+    } catch (error) { next(error); }
+  }
+
+  static async backfillFees(_req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const CHUNK = 200;
+      let imported = { orders: 0, withdrawals: 0, cryptoOrders: 0, p2pTrades: 0 };
+
+      // Orders with fee > 0 that have no PlatformFee row
+      const orders = await prisma.order.findMany({
+        where: { fee: { gt: 0 } },
+        select: { id: true, fee: true, quoteCurrency: true, userId: true, createdAt: true },
+        take: CHUNK,
+      });
+      for (const o of orders) {
+        const exists = await prisma.platformFee.findFirst({ where: { sourceId: o.id, source: 'ORDER' } });
+        if (!exists) {
+          await prisma.platformFee.create({
+            data: {
+              source: 'ORDER', sourceId: o.id, payerId: o.userId,
+              currency: o.quoteCurrency as any, amount: o.fee,
+              amountUsd: o.fee,
+              createdAt: o.createdAt,
+            },
+          });
+          imported.orders++;
+        }
+      }
+
+      // Withdrawals with fee > 0
+      const withdrawals = await prisma.withdrawal.findMany({
+        where: { fee: { gt: 0 } },
+        select: { id: true, fee: true, currency: true, userId: true, createdAt: true },
+        take: CHUNK,
+      });
+      for (const w of withdrawals) {
+        const exists = await prisma.platformFee.findFirst({ where: { sourceId: w.id, source: 'WITHDRAWAL' } });
+        if (!exists) {
+          await prisma.platformFee.create({
+            data: {
+              source: 'WITHDRAWAL', sourceId: w.id, payerId: w.userId,
+              currency: w.currency as any, amount: w.fee,
+              amountUsd: w.fee,
+              createdAt: w.createdAt,
+            },
+          });
+          imported.withdrawals++;
+        }
+      }
+
+      // P2P trades with fee > 0
+      const p2pTrades = await (prisma as any).p2PTrade.findMany({
+        where: { platformFee: { gt: 0 } },
+        select: { id: true, platformFee: true, currency: true, buyerId: true, createdAt: true },
+        take: CHUNK,
+      });
+      for (const t of p2pTrades) {
+        const exists = await prisma.platformFee.findFirst({ where: { sourceId: t.id, source: 'P2P_TRADE' } });
+        if (!exists) {
+          await prisma.platformFee.create({
+            data: {
+              source: 'P2P_TRADE', sourceId: t.id, payerId: t.buyerId,
+              currency: (t.currency ?? 'USD') as any, amount: t.platformFee,
+              amountUsd: t.platformFee,
+              createdAt: t.createdAt,
+            },
+          });
+          imported.p2pTrades++;
+        }
+      }
+
+      const total = imported.orders + imported.withdrawals + imported.cryptoOrders + imported.p2pTrades;
+      res.json({ message: `Backfill complete — imported ${total} records`, imported, total });
     } catch (error) { next(error); }
   }
 }

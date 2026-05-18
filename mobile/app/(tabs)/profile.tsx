@@ -2,7 +2,8 @@
  * Profile tab — theme-aware, every Pressable is real.
  */
 
-import { Pressable, ScrollView, Switch, Text, View, Modal, Alert } from 'react-native';
+import { Pressable, ScrollView, Switch, View, Modal, Alert } from 'react-native';
+import { Text } from '@/components/ui/Text';
 import { useState } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -184,7 +185,7 @@ export default function Profile() {
           right: user?.twoFactorEnabled
             ? (
               <View style={{ paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, backgroundColor: p.greenBg }}>
-                <Text style={{ color: p.greenFg, fontSize: 10, fontWeight: '800' }}>{t('profile.on').toUpperCase()}</Text>
+                <Text style={{ color: p.greenFg, fontSize: 10, fontWeight: '600' }}>{t('profile.on').toUpperCase()}</Text>
               </View>
             )
             : <Ionicons name="chevron-forward" size={16} color={p.fgFaint} />,
@@ -269,7 +270,7 @@ export default function Profile() {
                   {userEmoji ? (
                     <Text style={{ fontSize: 28 }}>{userEmoji}</Text>
                   ) : (
-                    <Text style={{ color: '#fff', fontWeight: '800', fontSize: 22 }}>{initial}</Text>
+                    <Text style={{ color: '#fff', fontWeight: '600', fontSize: 22 }}>{initial}</Text>
                   )}
                   {/* Small "edit" badge on the avatar to hint it's editable */}
                   <View style={{
@@ -296,7 +297,7 @@ export default function Profile() {
                   backgroundColor: p.greenBg,
                 }}>
                   <Ionicons name="shield-checkmark" size={11} color={p.greenFg} />
-                  <Text style={{ color: p.greenFg, fontSize: 10.5, fontWeight: '800', letterSpacing: 0.4 }}>
+                  <Text style={{ color: p.greenFg, fontSize: 10.5, fontWeight: '600', letterSpacing: 0.4 }}>
                     {(user?.kycTier ?? 'TIER_0').replace('_', ' ')}
                   </Text>
                 </View>
