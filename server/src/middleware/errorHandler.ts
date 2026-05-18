@@ -1,6 +1,8 @@
 import { Request, Response, NextFunction } from 'express';
 import { ZodError } from 'zod';
 import { Prisma } from '@prisma/client';
+import * as Sentry from '@sentry/node';
+import { logger } from '../utils/logger';
 
 export class AppError extends Error {
   statusCode: number;
@@ -23,6 +25,10 @@ export function errorHandler(
 ) {
   // Operational errors — safe to surface to the caller.
   if (err instanceof AppError) {
+    // Only capture 5xx operational errors in Sentry
+    if (err.statusCode >= 500) {
+      Sentry.captureException(err);
+    }
     return res.status(err.statusCode).json({ error: err.message });
   }
 
@@ -42,8 +48,7 @@ export function errorHandler(
   ) {
     // Log server-side with a request ID for support tracing.
     const tag = `[err:${Date.now().toString(36)}]`;
-    // eslint-disable-next-line no-console
-    console.error(tag, req.method, req.path, err.message);
+    logger.error(`${tag} ${req.method} ${req.path}`, { err });
     return res.status(400).json({ error: 'Bad request', ref: tag });
   }
 
@@ -51,7 +56,7 @@ export function errorHandler(
   // return a generic message — stack traces in API responses are an
   // information disclosure vulnerability.
   const tag = `[err:${Date.now().toString(36)}]`;
-  // eslint-disable-next-line no-console
-  console.error(tag, req.method, req.path, err);
+  logger.error(`${tag} ${req.method} ${req.path}`, { err });
+  Sentry.captureException(err);
   return res.status(500).json({ error: 'Internal server error', ref: tag });
 }

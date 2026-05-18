@@ -44,6 +44,8 @@ import {
 import { IconLogo } from "@/components/ui/Logo";
 import PublicNav from "@/components/ui/PublicNav";
 import PublicFooter from "@/components/ui/PublicFooter";
+import FeeCalculator from "@/components/ui/FeeCalculator";
+import WaitlistSection from "@/components/ui/WaitlistSection";
 
 /* ─────────────────────────────────────────────────────────────────
    RESPONSIVE PHONE SIZING SYSTEM
@@ -2084,6 +2086,56 @@ export default function LandingPage() {
             </VStack>
           </Box>
         </Box>
+        {/* ── Fee Calculator section ───────────────────────────────── */}
+        <Box py={{ base: 20, md: 28 }} px={6} position="relative" zIndex={1}>
+          <VStack spacing={10} maxW="1100px" mx="auto">
+            <VStack spacing={3} textAlign="center">
+              <Text
+                fontSize="11px" fontWeight="800" letterSpacing="0.14em"
+                color={dark ? "rgba(255,255,255,0.55)" : "rgba(0,0,0,0.50)"} textTransform="uppercase"
+              >
+                Transparent Pricing
+              </Text>
+              <Heading
+                fontSize={{ base: "30px", md: "44px" }} fontWeight="900"
+                letterSpacing="-0.04em" color={dark ? "#ffffff" : "#000000"}
+              >
+                See how much you keep
+              </Heading>
+              <Text fontSize={{ base: "15px", md: "17px" }} color={dark ? "rgba(255,255,255,0.55)" : "rgba(0,0,0,0.50)"} maxW="460px">
+                We charge 0.5% — no hidden fees, no bad exchange rates.
+                Traditional services charge 5–10%.
+              </Text>
+            </VStack>
+            <FeeCalculator />
+          </VStack>
+        </Box>
+
+        {/* ── Waitlist section ─────────────────────────────────────── */}
+        <WaitlistSection />
+
+        {/* ── JSON-LD structured data ──────────────────────────────── */}
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              '@context': 'https://schema.org',
+              '@type': 'FinancialService',
+              name: 'promrkts',
+              description:
+                'Crypto exchange and money transfer platform for MENA — Libya, Egypt, UAE, Saudi Arabia.',
+              url: 'https://promrkts.com',
+              areaServed: ['LY', 'EG', 'AE', 'SA', 'GB', 'US', 'EU'],
+              currenciesAccepted: 'USD, EUR, GBP, LYD, EGP, AED, SAR, BTC, ETH, USDT, SOL',
+              serviceType: ['Cryptocurrency Exchange', 'Money Transfer', 'Virtual Card Issuance'],
+              sameAs: [
+                'https://twitter.com/promrkts',
+                'https://t.me/promrkts',
+              ],
+            }),
+          }}
+        />
+
         <Box position="relative" zIndex={1}><PublicFooter /></Box>
       </Box>
     </Box>

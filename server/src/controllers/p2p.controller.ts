@@ -8,6 +8,24 @@ import { AuthRequest } from '../types';
 import { redisGet, redisSet, redisDel } from '../utils/redis';
 import { collectFee } from '../services/fee/feeCollector.service';
 import { emitActivity } from '../utils/realtime';
+import { sendP2PTradeUpdate } from '../services/email';
+import { pushP2PTradeUpdate } from '../services/push.service';
+import { logger } from '../utils/logger';
+
+async function notifyTradeParties(
+  tradeId: string, buyerId: string, sellerId: string,
+  status: string, asset: string, amount: string,
+) {
+  const [buyer, seller] = await Promise.all([
+    prisma.user.findUnique({ where: { id: buyerId }, select: { email: true, firstName: true } }),
+    prisma.user.findUnique({ where: { id: sellerId }, select: { email: true, firstName: true } }),
+  ]);
+  const sends: Promise<any>[] = [];
+  if (buyer)  sends.push(sendP2PTradeUpdate({ to: buyer.email,  firstName: buyer.firstName,  status, asset, amount, tradeId }));
+  if (seller) sends.push(sendP2PTradeUpdate({ to: seller.email, firstName: seller.firstName, status, asset, amount, tradeId }));
+  sends.push(pushP2PTradeUpdate([buyerId, sellerId], status, asset, amount, tradeId));
+  await Promise.all(sends).catch((e) => logger.warn('[email] p2p notify failed', { err: e }));
+}
 
 // ── Currencies that live in the Prisma Currency enum ────────────────
 const ENUM_CURRENCIES = new Set([
@@ -436,6 +454,9 @@ export class P2PController {
         },
       });
 
+      const realTickerPS = (trade.baseAsset ?? trade.currency) as string;
+      notifyTradeParties(trade.id, trade.buyerId, trade.sellerId, 'PAYMENT_SENT', realTickerPS, trade.cryptoAmount?.toString() ?? '').catch(() => {});
+
       res.json({ message: 'Payment marked as sent' });
     } catch (error) {
       next(error);
@@ -592,6 +613,8 @@ export class P2PController {
       });
 
       emitActivity(req, [trade.buyerId, trade.sellerId], { kind: 'p2p_trade', tradeId: trade.id });
+      const realTickerC = (trade.baseAsset ?? trade.currency) as string;
+      notifyTradeParties(trade.id, trade.buyerId, trade.sellerId, 'COMPLETED', realTickerC, trade.cryptoAmount?.toString() ?? '').catch(() => {});
       res.json({ message: 'Trade completed' });
     } catch (error) {
       next(error);
@@ -635,6 +658,8 @@ export class P2PController {
         },
       });
 
+      const realTickerD = (trade.baseAsset ?? trade.currency) as string;
+      notifyTradeParties(trade.id, trade.buyerId, trade.sellerId, 'DISPUTED', realTickerD, trade.cryptoAmount?.toString() ?? '').catch(() => {});
       res.json({ message: 'Trade disputed' });
     } catch (error) {
       next(error);
@@ -681,6 +706,8 @@ export class P2PController {
         },
       });
 
+      const realTickerX = (trade.baseAsset ?? trade.currency) as string;
+      notifyTradeParties(trade.id, trade.buyerId, trade.sellerId, 'CANCELLED', realTickerX, trade.cryptoAmount?.toString() ?? '').catch(() => {});
       res.json({ message: 'Trade cancelled' });
     } catch (error) {
       next(error);

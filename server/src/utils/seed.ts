@@ -1,6 +1,7 @@
 import bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
 import { prisma } from './prisma';
+import { logger } from './logger';
 
 export async function seedAdmin() {
   const adminEmail = process.env.ADMIN_EMAIL || 'moeawidan99@gmail.com';
@@ -46,7 +47,7 @@ export async function seedAdmin() {
       },
     });
 
-    console.log('Admin user seeded');
+    logger.info('Admin user seeded');
   }
 
   // Platform-wide settings — kept outside the admin-bootstrap block so
@@ -100,7 +101,7 @@ export async function seedAdmin() {
         referralCode:  `SUP${uuidv4().slice(0, 8).toUpperCase()}`,
       },
     });
-    console.log('Support user seeded');
+    logger.info('Support user seeded');
   }
 
   // Seed the platform "treasury" user — every collected fee is credited
@@ -128,7 +129,7 @@ export async function seedAdmin() {
         referralCode:  `PLT${uuidv4().slice(0, 8).toUpperCase()}`,
       },
     });
-    console.log('Platform treasury user seeded');
+    logger.info('Platform treasury user seeded');
   }
 
   // Platform deposit-rail bank accounts — admin-managed at runtime via
