@@ -1,6 +1,7 @@
 "use client";
 
 import NextLink from "next/link";
+import NextImage from "next/image";
 import {
   Box,
   Flex,
@@ -22,7 +23,7 @@ export default function PublicFooter() {
 
   const textMain = dark ? "#ffffff" : "#0a0f1e";
   const textSub = dark ? "rgba(255,255,255,0.55)" : "#64748b";
-  const border = dark ? "rgba(255,255,255,0.06)" : "rgba(0,87,184,0.08)";
+  const border = dark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.08)";
 
   const cols: { title: string; links: { label: string; href: string }[] }[] = [
     {
@@ -40,17 +41,19 @@ export default function PublicFooter() {
         { label: t("nav_careers"), href: "/careers" },
         { label: t("nav_contact"), href: "/contact" },
         { label: t("nav_trust"), href: "/trust" },
+        { label: t("nav_partners"), href: "/partners" },
       ],
     },
     {
       title: t("footer_support"),
       links: [
         { label: t("nav_help"), href: "/help" },
-        { label: "FAQ", href: "/faq" },
+        { label: t("nav_faq"), href: "/faq" },
         { label: t("nav_contact"), href: "/contact" },
         { label: t("footer_terms"), href: "/terms" },
         { label: t("footer_privacy"), href: "/privacy" },
         { label: t("footer_compliance"), href: "/compliance" },
+        { label: t("nav_risk"), href: "/risk" },
       ],
     },
   ];
@@ -71,25 +74,23 @@ export default function PublicFooter() {
       borderColor={border}
     >
       <Box maxW="1280px" mx="auto">
-        {/* Top row: brand + nav columns */}
+        {/* Top row: brand (full width on mobile) */}
+        <VStack align="start" spacing={3} mb={{ base: 7, md: 8 }}>
+          <Logo h={32} />
+          <Text fontSize="13px" color={textSub} lineHeight="1.6" maxW="320px">
+            {t("footer_tagline")}
+          </Text>
+        </VStack>
+
+        {/* Nav columns — 3 on mobile, 3 on desktop */}
         <SimpleGrid
-          columns={{ base: 2, sm: 3, md: 5 }}
-          spacingX={{ base: 6, md: 10 }}
+          columns={{ base: 3, md: 3 }}
+          spacingX={{ base: 4, md: 12 }}
           spacingY={{ base: 8, md: 6 }}
           mb={{ base: 8, md: 10 }}
         >
-          <VStack
-            align="start"
-            spacing={3}
-            gridColumn={{ base: "1 / -1", md: "span 2" }}
-          >
-            <Logo h={32} />
-            <Text fontSize="13px" color={textSub} lineHeight="1.6" maxW="280px">
-              {t("footer_tagline")}
-            </Text>
-          </VStack>
           {cols.map((col) => (
-            <VStack key={col.title} align="start" spacing={2.5}>
+            <VStack key={col.title} align="start" spacing={2}>
               <Text
                 fontSize="10px"
                 fontWeight="700"
@@ -97,6 +98,7 @@ export default function PublicFooter() {
                 letterSpacing="0.14em"
                 textTransform="uppercase"
                 opacity={0.85}
+                mb={0.5}
               >
                 {col.title}
               </Text>
@@ -105,11 +107,12 @@ export default function PublicFooter() {
                   key={l.href + l.label}
                   as={l.href.startsWith("/#") ? "a" : NextLink}
                   href={l.href}
-                  fontSize="13px"
+                  fontSize={{ base: "12px", md: "13px" }}
                   color={textSub}
                   _hover={{ color: textMain }}
                   transition="color 0.15s"
                   cursor="pointer"
+                  lineHeight="1.5"
                 >
                   {l.label}
                 </Box>
@@ -118,20 +121,75 @@ export default function PublicFooter() {
           ))}
         </SimpleGrid>
 
-        {/* Bottom row: copy + socials */}
+        {/* Bottom bar — single divider, everything in one row */}
         <Flex
-          pt={{ base: 5, md: 6 }}
+          pt={{ base: 6, md: 7 }}
           borderTop="1px solid"
           borderColor={border}
-          direction={{ base: "column-reverse", md: "row" }}
-          align={{ base: "center", md: "center" }}
+          direction={{ base: "column", md: "row" }}
+          align={{ base: "start", md: "center" }}
           justify="space-between"
-          gap={{ base: 4, md: 0 }}
+          gap={{ base: 5, md: 0 }}
+          wrap="wrap"
         >
-          <Text fontSize="12px" color={textSub} textAlign={{ base: "center", md: "start" }}>
-            {t("footer_copy")}
-          </Text>
-          <HStack spacing={1}>
+          {/* Left cluster: copyright + address + email */}
+          <VStack align="start" spacing={1.5}>
+            <Text fontSize="12px" color={textSub}>
+              {t("footer_copy")}
+            </Text>
+            <Text fontSize="11px" color={dark ? "rgba(255,255,255,0.35)" : "rgba(0,0,0,0.38)"}>
+              128 City Road, London, United Kingdom, EC1V 2NX
+            </Text>
+            <Box
+              as="a"
+              href="mailto:support@promrkts.com"
+              fontSize="11px"
+              color={dark ? "rgba(255,255,255,0.35)" : "rgba(0,0,0,0.38)"}
+              _hover={{ color: textSub }}
+              transition="color 0.15s"
+            >
+              support@promrkts.com
+            </Box>
+          </VStack>
+
+          {/* Right cluster: trust badges + socials */}
+          <HStack spacing={4} align="center" flexWrap="wrap">
+            {/* SOC 2 cert */}
+            <Box
+              w="36px" h="36px"
+              position="relative"
+              flexShrink={0}
+              opacity={dark ? 0.7 : 0.55}
+              _hover={{ opacity: 1 }}
+              transition="opacity 0.15s"
+            >
+              <NextImage src="/SOCcert.avif" alt="SOC 2 Certified" fill style={{ objectFit: "contain" }} />
+            </Box>
+            {/* PCI-DSS badge */}
+            <Box
+              w="52px" h="32px"
+              position="relative"
+              flexShrink={0}
+              opacity={dark ? 0.7 : 0.55}
+              _hover={{ opacity: 1 }}
+              transition="opacity 0.15s"
+            >
+              <NextImage src="/pci-dss.png" alt="PCI-DSS Compliant" fill style={{ objectFit: "contain" }} />
+            </Box>
+            {/* AES-256 badge */}
+            <Box
+              w="52px" h="32px"
+              position="relative"
+              flexShrink={0}
+              opacity={dark ? 0.7 : 0.55}
+              _hover={{ opacity: 1 }}
+              transition="opacity 0.15s"
+            >
+              <NextImage src="/aes-256.webp" alt="AES-256 Encrypted" fill style={{ objectFit: "contain" }} />
+            </Box>
+            {/* Divider */}
+            <Box w="1px" h="20px" bg={border} flexShrink={0} />
+            {/* Social icons */}
             {socials.map((s) => (
               <Box
                 key={s.label}
@@ -143,12 +201,12 @@ export default function PublicFooter() {
                 display="inline-flex"
                 alignItems="center"
                 justifyContent="center"
-                w="34px"
-                h="34px"
+                w="30px"
+                h="30px"
                 borderRadius="full"
-                color={textSub}
-                _hover={{ color: textMain, bg: dark ? "rgba(255,255,255,0.04)" : "rgba(0,87,184,0.06)" }}
-                transition="all 0.15s"
+                color={dark ? "rgba(255,255,255,0.35)" : "rgba(0,0,0,0.38)"}
+                _hover={{ color: textMain }}
+                transition="color 0.15s"
               >
                 <Icon as={s.icon} boxSize={3.5} />
               </Box>

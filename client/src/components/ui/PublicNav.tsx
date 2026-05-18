@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useTranslate } from "@tolgee/react";
 import NextLink from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -25,38 +26,54 @@ import { FiMenu, FiChevronRight } from "react-icons/fi";
 import Logo from "@/components/ui/Logo";
 import ColorModeToggle from "@/components/ui/ColorModeToggle";
 import LanguageSwitcher from "@/components/ui/LanguageSwitcher";
-
-const NAV_LINKS = [
-  { label: "Fees",     href: "/fees" },
-  { label: "FAQ",      href: "/faq" },
-  { label: "Contact",  href: "/contact" },
-  { label: "About",    href: "/about" },
-];
+import WaitlistModal from "@/components/ui/WaitlistModal";
 
 export default function PublicNav() {
+  const { t } = useTranslate();
   const { colorMode } = useColorMode();
   const dark = colorMode === "dark";
   const pathname = usePathname();
   const { isOpen, onOpen, onClose } = useDisclosure();
+  const { isOpen: isWaitlistOpen, onOpen: onWaitlistOpen, onClose: onWaitlistClose } = useDisclosure();
   const [scrolled, setScrolled] = useState(false);
+  const [navTop, setNavTop] = useState(0);
 
   useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 12);
-    onScroll();
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
+    const banner = document.getElementById('risk-banner');
+    const update = () => {
+      const bannerH = banner ? banner.offsetHeight : 0;
+      const scrolled12 = window.scrollY > 12;
+      setScrolled(scrolled12);
+      // Slide the nav up as the banner scrolls out, stop at 0
+      const offset = banner ? Math.max(0, bannerH - window.scrollY) : 0;
+      setNavTop(offset);
+    };
+    update();
+    window.addEventListener('scroll', update, { passive: true });
+    window.addEventListener('resize', update);
+    return () => {
+      window.removeEventListener('scroll', update);
+      window.removeEventListener('resize', update);
+    };
   }, []);
 
   const navBg = dark
     ? scrolled ? "rgba(0,0,0,0.78)" : "rgba(0,0,0,0.45)"
     : scrolled ? "rgba(250,251,254,0.85)" : "rgba(250,251,254,0.65)";
   const navBorder = scrolled
-    ? dark ? "rgba(255,255,255,0.08)" : "rgba(0,87,184,0.1)"
+    ? dark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)"
     : "transparent";
   const textMain = dark ? "#ffffff" : "#0a0f1e";
   const textSub  = dark ? "rgba(255,255,255,0.6)" : "#475569";
   const ctaBg    = dark ? "white" : "#0a0f1e";
   const ctaFg    = dark ? "#0a0f1e" : "white";
+
+  const NAV_LINKS = [
+    { labelKey: "nav_fees",    href: "/fees" },
+    { labelKey: "nav_faq",     href: "/faq" },
+    { labelKey: "nav_contact", href: "/contact" },
+    { labelKey: "nav_about",   href: "/about" },
+  ];
 
   const isActive = (href: string) => {
     if (href === "/") return pathname === "/";
@@ -68,7 +85,7 @@ export default function PublicNav() {
       <Box
         as="nav"
         position="fixed"
-        top={0} left={0} right={0}
+        top={`${navTop}px`} left={0} right={0}
         zIndex={200}
         px={{ base: 3, md: 6 }}
         pt={{ base: 2, md: 4 }}
@@ -90,7 +107,7 @@ export default function PublicNav() {
           borderColor={navBorder}
           borderRadius={{ base: "16px", md: "full" }}
           backdropFilter="blur(22px) saturate(180%)"
-          boxShadow={scrolled ? (dark ? "0 8px 30px rgba(0,0,0,0.45)" : "0 8px 30px rgba(0,87,184,0.08)") : "none"}
+          boxShadow={scrolled ? (dark ? "0 8px 30px rgba(0,0,0,0.45)" : "0 8px 30px rgba(0,0,0,0.07)") : "none"}
           transition="all 0.25s ease"
           px={{ base: 3, md: 2 }}
           py={{ base: 2, md: 1.5 }}
@@ -121,7 +138,7 @@ export default function PublicNav() {
                   transition="all 0.15s ease"
                   boxShadow={active && !dark ? "0 1px 2px rgba(0,0,0,0.04)" : "none"}
                 >
-                  {l.label}
+                  {t(l.labelKey)}
                 </Box>
               );
             })}
@@ -135,8 +152,7 @@ export default function PublicNav() {
             </Box>
             {/* Join Waitlist CTA */}
             <Button
-              as="a"
-              href="/#waitlist"
+              onClick={onWaitlistOpen}
               size="sm"
               bg={ctaBg}
               color={ctaFg}
@@ -145,12 +161,11 @@ export default function PublicNav() {
               fontSize="13px"
               px={{ base: 4, md: 5 }}
               h={{ base: "34px", md: "36px" }}
-              boxShadow="0 0 20px rgba(74,143,224,0.25)"
               _hover={{ opacity: 0.88, transform: "translateY(-1px)" }}
               transition="all 0.15s ease"
               flexShrink={0}
             >
-              Join Waitlist
+              {t("nav_join_waitlist")}
             </Button>
             {/* Mobile hamburger */}
             <IconButton
@@ -165,6 +180,8 @@ export default function PublicNav() {
           </HStack>
         </Flex>
       </Box>
+
+      <WaitlistModal isOpen={isWaitlistOpen} onClose={onWaitlistClose} />
 
       {/* Mobile drawer */}
       <Drawer placement="right" onClose={onClose} isOpen={isOpen} size="xs">
@@ -190,13 +207,13 @@ export default function PublicNav() {
                       px={6} py={4}
                       align="center"
                       justify="space-between"
-                      bg={active ? (dark ? "rgba(0,87,184,0.12)" : "rgba(0,87,184,0.06)") : "transparent"}
+                      bg={active ? (dark ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.04)") : "transparent"}
                       _hover={{ bg: dark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)" }}
                       borderLeft="3px solid"
-                      borderColor={active ? "#0057b8" : "transparent"}
+                      borderColor={active ? textMain : "transparent"}
                       transition="background 0.15s ease"
                     >
-                      <Text fontSize="16px" fontWeight="600" color={textMain}>{l.label}</Text>
+                      <Text fontSize="16px" fontWeight="600" color={textMain}>{t(l.labelKey)}</Text>
                       <Icon as={FiChevronRight} color={textSub} />
                     </Flex>
                   );
@@ -213,9 +230,7 @@ export default function PublicNav() {
 
               <Box px={6} pb={8}>
                 <Button
-                  as="a"
-                  href="/#waitlist"
-                  onClick={onClose}
+                  onClick={() => { onClose(); onWaitlistOpen(); }}
                   w="100%"
                   h="46px"
                   bg={ctaBg}
@@ -225,7 +240,7 @@ export default function PublicNav() {
                   fontSize="15px"
                   _hover={{ opacity: 0.9 }}
                 >
-                  Join Waitlist
+                  {t("nav_join_waitlist")}
                 </Button>
               </Box>
             </Flex>

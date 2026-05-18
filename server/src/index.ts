@@ -54,6 +54,7 @@ import activitiesRouter from './routes/activities';
 import geoRouter from './routes/geo';
 import platformBanksRouter from './routes/platformBanks';
 import ratesRouter from './routes/rates';
+import { waitlistRouter } from './routes/waitlist';
 import { errorHandler } from './middleware/errorHandler';
 import { prisma } from './utils/prisma';
 import { seedAdmin } from './utils/seed';
@@ -202,6 +203,7 @@ app.use('/api/platform-banks', platformBanksRouter);
 app.use('/api/wallet', cryptoWalletRouter);
 app.use('/api/withdrawal', cryptoWithdrawalRouter);
 app.use('/api/rates', ratesRouter);
+app.use('/api/waitlist', waitlistRouter);
 
 // Health check
 app.get('/api/health', async (_req, res) => {
@@ -318,21 +320,25 @@ start();
 
 async function shutdown(signal: string) {
   logger.info(`${signal} received — shutting down gracefully`);
-  httpServer.close(async () => {
-    logger.info('HTTP server closed');
-    try {
-      await prisma.$disconnect();
-      logger.info('Database disconnected');
-    } catch (e) {
-      logger.error('Error during shutdown', { err: e });
-    }
-    process.exit(0);
+  // Close Socket.IO first so it drops all persistent connections,
+  // otherwise httpServer.close() waits forever for them to drain.
+  io.close(() => {
+    httpServer.close(async () => {
+      logger.info('HTTP server closed');
+      try {
+        await prisma.$disconnect();
+        logger.info('Database disconnected');
+      } catch (e) {
+        logger.error('Error during shutdown', { err: e });
+      }
+      process.exit(0);
+    });
   });
-  // Force-exit after 15 s if still draining
+  // Force-exit after 10 s if still draining
   setTimeout(() => {
     logger.error('Shutdown timeout — forcing exit');
     process.exit(1);
-  }, 15_000).unref();
+  }, 10_000).unref();
 }
 
 process.on('SIGTERM', () => shutdown('SIGTERM'));

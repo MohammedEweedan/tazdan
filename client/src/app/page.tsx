@@ -1409,8 +1409,8 @@ function SectionSocialFinance() {
                 <Box as="span" color={dark ? "rgba(255,255,255,0.4)" : "rgba(0,0,0,0.35)"}>{t("sec_social_title_2")}</Box>
               </Heading>
               <Text fontSize={{ base: "14.5px", md: "16.5px" }} color={textSub} maxW="460px">{t("sec_social_desc")}</Text>
-              <Box w="100%" maxW="460px" bg={cardBg} border="1px solid" borderColor={dark ? "rgba(74,143,224,0.2)" : "rgba(74,143,224,0.15)"}
-                boxShadow={dark ? "0 20px 50px rgba(74,143,224,0.12)" : "0 20px 50px rgba(74,143,224,0.08)"}
+              <Box w="100%" maxW="460px" bg={cardBg} border="1px solid" borderColor={cardBorder}
+                boxShadow={dark ? "0 20px 50px rgba(0,0,0,0.3)" : "0 20px 50px rgba(0,0,0,0.07)"}
                 borderRadius="24px" p={6}
               >
                 <HStack align="baseline" spacing={2} mb={4}>
@@ -1490,10 +1490,10 @@ function AlternatingFeatureSection({
                     <motion.div key={f.label} initial={{ opacity: 0, y: 12, scale: 0.96 }} whileInView={{ opacity: 1, y: 0, scale: 1 }} viewport={{ once: true, amount: 0.3 }} transition={{ duration: 0.4, delay: 0.08 * i }}>
                       <HStack h="64px" bg={tileBg} border="1px solid" borderColor={tileBorder} borderRadius="16px" px={4} spacing={3}
                         transition="all 0.2s ease"
-                        _hover={{ transform: "translateY(-3px)", borderColor: dark ? "rgba(74,143,224,0.35)" : "rgba(74,143,224,0.3)" }}
+                        _hover={{ transform: "translateY(-3px)", borderColor: dark ? "rgba(255,255,255,0.3)" : "rgba(0,0,0,0.25)" }}
                       >
                         <Flex w="36px" h="36px" borderRadius="10px" border="1px solid" borderColor={tileBorder} align="center" justify="center" flexShrink={0} bg={dark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)"}>
-                          <Icon as={f.icon} color={dark ? "rgba(74,143,224,0.85)" : "rgba(74,143,224,0.75)"} />
+                          <Icon as={f.icon} color={dark ? "rgba(255,255,255,0.7)" : "rgba(0,0,0,0.55)"} />
                         </Flex>
                         <Text fontSize="13px" fontWeight="700" color={textMain}>{f.label}</Text>
                       </HStack>
@@ -1522,12 +1522,11 @@ function SectionBento() {
     : "linear-gradient(145deg, #111111 0%, #000000 100%)";
 
   const stats = [
-    { label: t("bento_stat_volume_label"), value: "$280,000,000", sub: t("bento_vs_last_month"), icon: FiActivity, span: 2, hero: true },
-    { label: t("bento_countries_label"), value: "120+", sub: t("bento_countries_desc"), icon: FiGlobe, span: 1 },
-    { label: t("bento_traders_label"), value: "35K", sub: "", icon: FiUsers, span: 1 },
-    { label: t("bento_pairs_label"), value: "400+", sub: "", icon: FiBarChart2, span: 1 },
-    { label: t("bento_security_title"), value: "", sub: t("bento_security_desc"), icon: FiShield, span: 1 },
+    { label: t("bento_security_title"), value: "", sub: t("bento_security_desc"), icon: FiShield, span: 2, hero: true },
     { label: t("bento_speed_title"), value: "<2s", sub: t("bento_speed_desc"), icon: FiZap, span: 1 },
+    { label: t("bento_countries_label"), value: "120+", sub: t("bento_countries_desc"), icon: FiGlobe, span: 1 },
+    { label: t("bento_pairs_label"), value: "400+", sub: "", icon: FiBarChart2, span: 1 },
+    { label: "Waitlisted", value: "2,400+", sub: "early access members", icon: FiUsers, span: 1 },
     { label: t("bento_rating_label"), value: "4.2/5", sub: "", icon: FiStar, span: 1 },
   ];
 
@@ -1536,13 +1535,9 @@ function SectionBento() {
       <Container maxW="1200px" position="relative" zIndex={1}>
         <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, amount: 0.4 }} transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}>
           <VStack align="center" spacing={3} mb={{ base: 10, md: 16 }} textAlign="center">
-            <Heading fontFamily="'DM Sans', sans-serif" fontWeight="800" fontSize={{ base: "32px", md: "56px", lg: "64px" }} letterSpacing="-0.04em" bgGradient={dark
-                        ? "linear-gradient(90deg, #7ab3f0 0%, #4a8fe0 35%, #a8c8ff 65%, #7ab3f0 100%)"
-                        : "linear-gradient(90deg, #1a5fb4 0%, #4a8fe0 35%, #2563a8 65%, #1a5fb4 100%)"} bgClip="text" color="transparent" lineHeight={1.1}>
+            <Heading fontFamily="'DM Sans', sans-serif" fontWeight="800" fontSize={{ base: "32px", md: "56px", lg: "64px" }} letterSpacing="-0.04em" color={textMain} lineHeight={1.1}>
               {t("bento_title_1")}{" "}
-              <Box as="span" bgGradient={dark
-                        ? "linear-gradient(90deg, #7ab3f0 0%, #4a8fe0 35%, #a8c8ff 65%, #7ab3f0 100%)"
-                        : "linear-gradient(90deg, #1a5fb4 0%, #4a8fe0 35%, #2563a8 65%, #1a5fb4 100%)"} bgClip="text" color="transparent">{t("bento_title_2")}</Box>
+              <Box as="span" color={dark ? "rgba(255,255,255,0.45)" : "rgba(0,0,0,0.35)"}>{t("bento_title_2")}</Box>
             </Heading>
           </VStack>
         </motion.div>
@@ -1551,12 +1546,12 @@ function SectionBento() {
             <motion.div key={s.label} initial={{ opacity: 0, y: 30, scale: 0.95 }} whileInView={{ opacity: 1, y: 0, scale: 1 }} viewport={{ once: true, amount: 0.25 }} transition={{ delay: i * 0.06, duration: 0.5, ease: [0.22, 1, 0.36, 1] }} style={{ gridColumn: s.span && s.span > 1 ? `span ${s.span}` : undefined }}>
               <Box h="100%" minH={{ base: s.span && s.span > 1 ? "140px" : "110px", md: "auto" }} p={{ base: s.span && s.span > 1 ? 5 : 4, md: 7 }} borderRadius={{ base: "20px", md: "28px" }}
                 bg={(s as any).hero ? heroCardBg : cardBg}
-                border="1px solid" borderColor={(s as any).hero ? "rgba(74,143,224,0.4)" : cardBorder}
+                border="1px solid" borderColor={(s as any).hero ? (dark ? "rgba(255,255,255,0.25)" : "rgba(0,0,0,0.25)") : cardBorder}
                 color={(s as any).hero ? "white" : textMain}
-                boxShadow={dark ? "0 0 0 1px rgba(74,143,224,0.15), 0 20px 50px rgba(0,0,0,0.4)" : "0 0 0 1px rgba(74,143,224,0.12), 0 20px 40px rgba(0,0,0,0.08)"}
+                boxShadow={dark ? "0 20px 50px rgba(0,0,0,0.4)" : "0 20px 40px rgba(0,0,0,0.06)"}
                 position="relative" overflow="hidden"
                 transition="all 0.3s ease"
-                _hover={{ transform: "translateY(-4px)", boxShadow: "0 24px 60px rgba(74,143,224,0.2)", borderColor: (s as any).hero ? "rgba(255,255,255,0.25)" : (dark ? "rgba(255,255,255,0.2)" : "rgba(0,0,0,0.2)") }}
+                _hover={{ transform: "translateY(-4px)", boxShadow: dark ? "0 24px 60px rgba(0,0,0,0.5)" : "0 24px 60px rgba(0,0,0,0.12)", borderColor: dark ? "rgba(255,255,255,0.3)" : "rgba(0,0,0,0.3)" }}
               >
                 <VStack align="start" spacing={{ base: 2, md: 4 }} position="relative">
                   <Flex w={{ base: "36px", md: "44px" }} h={{ base: "36px", md: "44px" }} borderRadius="12px"
@@ -1617,8 +1612,8 @@ function SectionOnRamp() {
                     border="1px solid" borderColor={dark ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.10)"}
                     boxShadow={dark ? "0 4px 14px rgba(0,0,0,0.3)" : "0 4px 14px rgba(0,0,0,0.06)"}
                     transition="box-shadow 0.2s ease" _hover={{ boxShadow: dark
-                      ? "0 8px 22px rgba(0,0,0,0.4), 0 0 0 1px rgba(74,143,224,0.3)"
-                      : "0 8px 22px rgba(0,0,0,0.1), 0 0 0 1px rgba(74,143,224,0.25)"
+                      ? "0 8px 22px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.2)"
+                      : "0 8px 22px rgba(0,0,0,0.1), 0 0 0 1px rgba(0,0,0,0.2)"
                     }}
                   >
                     {m.icon && <Icon as={m.icon} boxSize={`${m.iconSize ?? 24}px`} />}
@@ -1689,31 +1684,14 @@ function SectionSocialProof() {
           <Box position="absolute" top="50%" left="50%" transform="translate(-50%, -50%)" zIndex={2} textAlign="center" pointerEvents="none" w={{ base: "78%", md: "auto" }}>
             <motion.div initial={{ opacity: 0, scale: 0.92 }} whileInView={{ opacity: 1, scale: 1 }} viewport={{ once: true, amount: 0.4 }} transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}>
               <Heading fontFamily="'DM Sans', sans-serif" fontWeight="900"
-                fontSize={{ base: "56px", md: "104px", lg: "128px" }}
-                letterSpacing="-0.04em" lineHeight={1}
-                sx={{
-                    background: dark
-                      ? "linear-gradient(90deg, #7ab3f0 0%, #4a8fe0 35%, #a8c8ff 65%, #7ab3f0 100%)"
-                      : "linear-gradient(90deg, #1a5fb4 0%, #4a8fe0 35%, #2563a8 65%, #1a5fb4 100%)",
-                    backgroundSize: "200% auto",
-                    WebkitBackgroundClip: "text",
-                    WebkitTextFillColor: "transparent",
-                    backgroundClip: "text",
-                    filter: dark
-                      ? "drop-shadow(0 0 28px rgba(74,143,224,0.5)) drop-shadow(0 0 8px rgba(74,143,224,0.25))"
-                      : "drop-shadow(0 0 16px rgba(74,143,224,0.3)) drop-shadow(0 0 4px rgba(74,143,224,0.15))",
-                }}
-              >
-                35,000+
-              </Heading>
-            </motion.div>
-            <motion.div initial={{ opacity: 0, y: 8 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.5, delay: 0.25 }}>
-              <Text mt={{ base: 3, md: 4 }} fontSize={{ base: "13px", md: "17px" }}
-                color={dark ? "rgba(255,255,255,0.6)" : "#64748b"}
-                fontWeight="600" letterSpacing="-0.01em" maxW={{ base: "260px", md: "420px" }} mx="auto"
+                fontSize={{ base: "28px", md: "44px", lg: "56px" }}
+                letterSpacing="-0.04em" lineHeight={1.1}
+                color={dark ? "#ffffff" : "#0a0f1e"}
+                maxW={{ base: "280px", md: "540px" }}
+                mx="auto"
               >
                 {t("socialproof_label")}
-              </Text>
+              </Heading>
             </motion.div>
           </Box>
         </Box>
@@ -1740,7 +1718,7 @@ function StageOverlay({ stages }: { stages: Stage[] }) {
       </Box>
       <Box display={{ base: "none", md: "block" }} position="absolute" top="50%" left={{ md: "5%" }} transform="translateY(-50%)" w={{ md: "28%" }} maxW={{ md: "320px", xl: "380px" }}>
         <VStack align="start" spacing={5}>
-          <Heading fontFamily="'DM Sans', sans-serif" fontWeight="800" fontSize={{ md: "30px", lg: "40px", xl: "52px" }} letterSpacing="-0.04em" color={textMain} lineHeight={1.1}   style={{ filter: "drop-shadow(0 0 20px rgba(74,143,224,0.2))" }}>{s.title}</Heading>
+          <Heading fontFamily="'DM Sans', sans-serif" fontWeight="800" fontSize={{ md: "30px", lg: "40px", xl: "52px" }} letterSpacing="-0.04em" color={textMain} lineHeight={1.1}>{s.title}</Heading>
           <Text fontSize={{ md: "13px", lg: "15px" }} color={textSub} lineHeight={1.5}>{s.desc}</Text>
         </VStack>
       </Box>
@@ -1809,14 +1787,40 @@ export default function LandingPage() {
 
   return (
     <Box minH="100vh" overflowX="clip" color={textMain} bg={pageBg}>
+      {/* ── Risk warning banner ─────────────────────────────────────────── */}
+      <Box
+        id="risk-banner"
+        bg={dark ? "#111111" : "#f4f4f4"}
+        borderBottom="1px solid"
+        borderColor={dark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)"}
+        py={2.5} px={4}
+        textAlign="center"
+      >
+        <Text fontSize={{ base: "11px", md: "12px" }} color={dark ? "rgba(255,255,255,0.6)" : "rgba(0,0,0,0.55)"} lineHeight="1.5">
+          <Box as="span" fontWeight="700" color={dark ? "rgba(255,255,255,0.85)" : "rgba(0,0,0,0.8)"}>
+            {t("risk_banner_bold")}
+          </Box>{" "}
+          {t("risk_banner_text")}{" "}
+          <Box
+            as={NextLink}
+            href="/risk"
+            fontWeight="700"
+            color={dark ? "rgba(255,255,255,0.85)" : "rgba(0,0,0,0.8)"}
+            textDecoration="underline"
+            _hover={{ opacity: 0.75 }}
+          >
+            {t("risk_banner_cta")}
+          </Box>
+        </Text>
+      </Box>
       <PublicNav />
 
       {/* ══ HERO ══ */}
       <Box ref={scrollRef} id="features" position="relative" h={{ base: "200vh", md: "300vh" }} className="snap-none">
-        <Box position="sticky" top={0} h="100vh" overflow="hidden">
+        <Box position="sticky" top={0} h={{ base: "calc(100vh - 44px)", md: "100vh" }} overflow="hidden">
 
           {/* Title */}
-          <motion.div style={{ opacity: titleOpacity, y: titleY, position: "absolute", top: -25, left: 0, right: 0, paddingTop: "140px", zIndex: 4 }}>
+          <motion.div style={{ opacity: titleOpacity, y: titleY, position: "absolute", top: -25, left: 0, right: 0, paddingTop: "clamp(88px, 14vh, 180px)", zIndex: 4 }}>
             <Container maxW="1200px" position="relative">
               <VStack spacing={{ base: 3, md: 4 }} align="center">
 
@@ -1833,23 +1837,9 @@ export default function LandingPage() {
                     <Heading
                       key={idx}
                       as="h1"
-                      fontFamily="'DM Sans', sans-serif"
                       fontWeight="900"
                       fontSize={{ base: "38px", sm: "44px", md: "54px", xl: "62px" }}
-                      letterSpacing="-0.05em"
-                      whiteSpace="nowrap"
-                      sx={idx === 1 ? {
-                        background: dark
-                          ? "linear-gradient(90deg, #7ab3f0 0%, #4a8fe0 35%, #a8c8ff 65%, #7ab3f0 100%)"
-                          : "linear-gradient(90deg, #1a5fb4 0%, #4a8fe0 35%, #2563a8 65%, #1a5fb4 100%)",
-                        backgroundSize: "200% auto",
-                        WebkitBackgroundClip: "text",
-                        WebkitTextFillColor: "transparent",
-                        backgroundClip: "text",
-                        filter: dark
-                          ? "drop-shadow(0 0 28px rgba(74,143,224,0.5)) drop-shadow(0 0 8px rgba(74,143,224,0.25))"
-                          : "drop-shadow(0 0 16px rgba(74,143,224,0.3)) drop-shadow(0 0 4px rgba(74,143,224,0.15))",
-                      } : {}}
+                      color={idx === 1 ? (dark ? "rgba(255,255,255,0.45)" : "rgba(0,0,0,0.35)") : textMain}
                     >
                       {line}
                     </Heading>
@@ -1872,52 +1862,9 @@ export default function LandingPage() {
           </motion.div>
 
           {/* Apple-style bottom CTA strip — visible at rest, fades on scroll */}
-          <Box position="absolute" bottom={{ base: 7, md: 12 }} left={0} right={0} zIndex={5} style={{ pointerEvents: "none" }}>
+          <Box position="absolute" bottom={{ base: 5, md: 12 }} left={0} right={0} zIndex={5} style={{ pointerEvents: "none" }}>
             <motion.div style={{ opacity: heroCTAOpacity }}>
               <VStack spacing={{ base: 3, md: 4 }} align="center" style={{ pointerEvents: "auto" }}>
-                {/* Tagline */}
-                <Text
-                  fontSize={{ base: "13.5px", md: "15px" }}
-                  color={dark ? "rgba(255,255,255,0.5)" : "rgba(0,0,0,0.45)"}
-                  fontWeight="500" letterSpacing="-0.01em" textAlign="center"
-                >
-                  {t("hero_subtitle")}
-                </Text>
-
-                {/* Primary + secondary CTAs */}
-                <HStack spacing={{ base: 3, md: 5 }} justify="center" flexWrap="wrap">
-                  <Button
-                    as={NextLink} href="/register"
-                    h={{ base: "46px", md: "52px" }} px={{ base: 7, md: 9 }}
-                    bg={dark ? "#ffffff" : "#000000"}
-                    color={dark ? "#000000" : "#ffffff"}
-                    borderRadius="full" fontWeight="800"
-                    fontSize={{ base: "14px", md: "15px" }}
-                    rightIcon={<Icon as={FiArrowRight} boxSize={4} />}
-                    _hover={{ transform: "scale(1.03)", opacity: 0.92 }}
-                    transition="all 0.18s"
-                    boxShadow={dark
-                      ? "0 12px 32px rgba(255,255,255,0.15)"
-                      : "0 12px 32px rgba(0,0,0,0.20)"}
-                  >
-                    {t("hero_cta_primary")}
-                  </Button>
-                  <Button
-                    as={NextLink} href="#connect"
-                    h={{ base: "46px", md: "52px" }} px={{ base: 5, md: 6 }}
-                    variant="ghost" color={textMain} borderRadius="full"
-                    fontWeight="700" fontSize={{ base: "14px", md: "15px" }}
-                    opacity={0.7}
-                    _hover={{ opacity: 1 }}
-                    rightIcon={
-                      <Icon as={FiArrowRight} boxSize={4}
-                        style={{ transform: "rotate(90deg)", display: "inline-block" }}
-                      />
-                    }
-                  >
-                    {t("hero_cta_secondary")}
-                  </Button>
-                </HStack>
 
                 {/* App store badges */}
                 <HStack spacing={2.5} justify="center">
@@ -1944,47 +1891,6 @@ export default function LandingPage() {
             </motion.div>
           </Box>
         </Box>
-      </Box>
-
-      {/* ══ CONNECTED ══ */}
-      <Box className="snap-section" id="connect" position="relative" minH="100vh" display="flex" alignItems="center" overflow="hidden">
-        {/* Full-bleed background video */}
-        <Box position="absolute" inset={0} zIndex={0} pointerEvents="none">
-          <LazyBackgroundVideo src="/videos/WebHeader.mp4" opacity={dark ? 0.32 : 0.14} />
-        </Box>
-        {/* Radial gradient — keeps edges dark so text reads cleanly */}
-        <Box position="absolute" inset={0} zIndex={1} pointerEvents="none"
-          background={dark
-            ? "radial-gradient(ellipse 90% 90% at 50% 50%, rgba(0,0,0,0.10) 0%, rgba(0,0,0,0.82) 100%)"
-            : "radial-gradient(ellipse 90% 90% at 50% 50%, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.90) 100%)"}
-        />
-        <VStack position="relative" zIndex={20} spacing={8} maxW="760px" mx="auto" textAlign="center" px={6} py={{ base: 24, md: 32 }}>
-          <Box
-            w="72px" h="72px" borderRadius="20px"
-            bg={dark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.05)"}
-            border="1px solid" borderColor={cardBorder}
-            display="flex" alignItems="center" justifyContent="center"
-            boxShadow={dark ? "0 8px 32px rgba(0,0,0,0.4)" : "0 8px 24px rgba(0,0,0,0.06)"}
-          >
-            <NextImage src={dark ? "/icon-black.png" : "/icon-black.png"} alt="Logo" width={40} height={40} />
-          </Box>
-          <Heading fontSize={{ base: "36px", md: "64px" }} fontWeight="800" letterSpacing="-0.04em" fontFamily="'DM Sans', sans-serif" bgGradient={dark
-                        ? "linear-gradient(90deg, #7ab3f0 0%, #4a8fe0 35%, #a8c8ff 65%, #7ab3f0 100%)"
-                        : "linear-gradient(90deg, #1a5fb4 0%, #4a8fe0 35%, #2563a8 65%, #1a5fb4 100%)"} bgClip="text" color="transparent">
-            {t("connect_title_1")}{" "}
-            <Box as="span" bgGradient={dark
-                        ? "linear-gradient(90deg, #7ab3f0 0%, #4a8fe0 35%, #a8c8ff 65%, #7ab3f0 100%)"
-                        : "linear-gradient(90deg, #1a5fb4 0%, #4a8fe0 35%, #2563a8 65%, #1a5fb4 100%)"} bgClip="text" color="transparent">{t("connect_title_2")}</Box>
-          </Heading>
-          <HStack spacing={3} flexWrap="wrap" justify="center" pt={2}>
-            {[{ icon: FiZap, label: t("connect_pill_speed") }, { icon: FiGlobe, label: t("connect_pill_access") }, { icon: FiShield, label: t("connect_pill_security") }].map((p, i) => (
-              <HStack key={i} bg={dark ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.05)"} border="1px solid" borderColor={cardBorder} px={4} py={2.5} borderRadius="full">
-                <Icon as={p.icon} color={dark ? "rgba(255,255,255,0.6)" : "rgba(0,0,0,0.5)"} boxSize={4} />
-                <Text fontSize="13px" color={textMain} fontWeight="700">{p.label}</Text>
-              </HStack>
-            ))}
-          </HStack>
-        </VStack>
       </Box>
 
       <SectionBento />
@@ -2052,16 +1958,6 @@ export default function LandingPage() {
               >
                 {t("cta_sub")}
               </Text>
-              <Button as={NextLink} href="/register" h="60px" px={12}
-                bg={dark ? "#000000" : "#ffffff"}
-                color={dark ? "#ffffff" : "#000000"}
-                borderRadius="18px" fontWeight="800" fontSize="15px"
-                rightIcon={<Icon as={FiArrowRight} boxSize={5} />}
-                _hover={{ transform: "scale(1.04)", boxShadow: dark ? "0 16px 40px rgba(0,0,0,0.4)" : "0 16px 40px rgba(255,255,255,0.3)" }}
-                transition="all 0.2s"
-              >
-                {t("cta_btn")}
-              </Button>
               {/* App store download badges */}
               <HStack spacing={3} justify="center" pt={2}>
                 {[
@@ -2094,17 +1990,16 @@ export default function LandingPage() {
                 fontSize="11px" fontWeight="800" letterSpacing="0.14em"
                 color={dark ? "rgba(255,255,255,0.55)" : "rgba(0,0,0,0.50)"} textTransform="uppercase"
               >
-                Transparent Pricing
+                {t("calc_section_eyebrow")}
               </Text>
               <Heading
                 fontSize={{ base: "30px", md: "44px" }} fontWeight="900"
                 letterSpacing="-0.04em" color={dark ? "#ffffff" : "#000000"}
               >
-                See how much you keep
+                {t("calc_section_title")}
               </Heading>
               <Text fontSize={{ base: "15px", md: "17px" }} color={dark ? "rgba(255,255,255,0.55)" : "rgba(0,0,0,0.50)"} maxW="460px">
-                We charge 0.5% — no hidden fees, no bad exchange rates.
-                Traditional services charge 5–10%.
+                {t("calc_section_sub")}
               </Text>
             </VStack>
             <FeeCalculator />

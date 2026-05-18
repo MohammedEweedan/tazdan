@@ -8,8 +8,8 @@ const config: ThemeConfig = {
 const theme = extendTheme({
   config,
   fonts: {
-    heading: `'Inter', system-ui, sans-serif`,
-    body: `'Inter', system-ui, sans-serif`,
+    heading: `'DM Sans', system-ui, sans-serif`,
+    body: `'DM Sans', system-ui, sans-serif`,
     mono: `'JetBrains Mono', monospace`,
   },
   colors: {
@@ -43,6 +43,14 @@ const theme = extendTheme({
       body: {
         bg: props.colorMode === 'dark' ? 'gray.900' : 'gray.50',
         color: props.colorMode === 'dark' ? 'white' : 'gray.800',
+      },
+      "html[lang='ar'] *, html[dir='rtl'] *": {
+        fontFamily: `'Cairo', system-ui, sans-serif !important`,
+        letterSpacing: `0em !important`,
+      },
+      "html[lang='ar'] h1, html[lang='ar'] h2, html[lang='ar'] h3, html[lang='ar'] h4, html[lang='ar'] h5, html[lang='ar'] h6, html[dir='rtl'] h1, html[dir='rtl'] h2, html[dir='rtl'] h3, html[dir='rtl'] h4, html[dir='rtl'] h5, html[dir='rtl'] h6": {
+        letterSpacing: `0em !important`,
+        fontWeight: `800`,
       },
     }),
   },

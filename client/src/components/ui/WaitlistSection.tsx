@@ -1,5 +1,6 @@
 'use client';
 import { useState } from 'react';
+import { useTranslate } from '@tolgee/react';
 import {
   Box, VStack, HStack, Heading, Text, Input,
   Button, Icon, useColorModeValue,
@@ -7,6 +8,7 @@ import {
 import { FiArrowRight, FiCheck } from 'react-icons/fi';
 
 export default function WaitlistSection() {
+  const { t } = useTranslate();
   const [email, setEmail] = useState('');
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [errorMsg, setErrorMsg] = useState('');
@@ -18,7 +20,7 @@ export default function WaitlistSection() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!email.includes('@')) { setErrorMsg('Enter a valid email'); return; }
+    if (!email.includes('@')) { setErrorMsg(t('waitlist_error')); return; }
     setStatus('loading');
     setErrorMsg('');
     try {
@@ -31,7 +33,7 @@ export default function WaitlistSection() {
       setStatus('success');
     } catch {
       setStatus('error');
-      setErrorMsg('Something went wrong. Try again.');
+      setErrorMsg(t('waitlist_error'));
     }
   }
 
@@ -43,7 +45,7 @@ export default function WaitlistSection() {
           fontSize="11px" fontWeight="800" letterSpacing="0.14em"
           color={muted} textTransform="uppercase"
         >
-          Early Access
+          {t('waitlist_eyebrow')}
         </Text>
 
         <Heading
@@ -52,21 +54,22 @@ export default function WaitlistSection() {
           letterSpacing="-0.04em"
           color={fg}
           lineHeight="1.05"
+          whiteSpace="pre-line"
         >
-          Be first.<br />Get 0% fees for 6 months.
+          {t('waitlist_title')}
         </Heading>
 
         <Text fontSize={{ base: '15px', md: '17px' }} color={muted} maxW="380px">
-          Join 2,400+ people on the early access list. First in gets the lowest rates — forever.
+          {t('waitlist_sub')}
         </Text>
 
         {/* Social proof mini-bar */}
         <HStack spacing={6} justify="center" flexWrap="wrap">
-          {[
-            { n: '2,400+', label: 'on waitlist' },
-            { n: '0%', label: 'fees — 6 months' },
-            { n: '< 2min', label: 'to send money' },
-          ].map(({ n, label }) => (
+          {([
+            { n: t('waitlist_stat1_n'), label: t('waitlist_stat1_l') },
+            { n: t('waitlist_stat2_n'), label: t('waitlist_stat2_l') },
+            { n: t('waitlist_stat3_n'), label: t('waitlist_stat3_l') },
+          ] as { n: string; label: string }[]).map(({ n, label }) => (
             <VStack key={label} spacing={0}>
               <Text fontSize="22px" fontWeight="900" color={fg} letterSpacing="-0.04em">{n}</Text>
               <Text fontSize="12px" color={muted}>{label}</Text>
@@ -88,8 +91,8 @@ export default function WaitlistSection() {
               <Icon as={FiCheck} color={bg} boxSize={4} />
             </Box>
             <VStack spacing={0} align="start">
-              <Text fontWeight="800" color={fg} fontSize="15px">You&apos;re on the list!</Text>
-              <Text fontSize="13px" color={muted}>Share your link to move up ↗</Text>
+              <Text fontWeight="800" color={fg} fontSize="15px">{t('waitlist_success_title')}</Text>
+              <Text fontSize="13px" color={muted}>{t('waitlist_success_sub')}</Text>
             </VStack>
           </HStack>
         ) : (
@@ -97,7 +100,7 @@ export default function WaitlistSection() {
             <HStack spacing={2}>
               <Input
                 type="email"
-                placeholder="your@email.com"
+                placeholder={t('waitlist_placeholder')}
                 value={email}
                 onChange={e => setEmail(e.target.value)}
                 required
@@ -128,19 +131,19 @@ export default function WaitlistSection() {
                 transition="opacity 0.15s"
                 flexShrink={0}
               >
-                Join
+                {t('waitlist_btn')}
               </Button>
             </HStack>
             {(status === 'error' || errorMsg) && (
               <Text fontSize="13px" color="red.400" mt={2} textAlign="left">
-                {errorMsg || 'Something went wrong. Try again.'}
+                {errorMsg || t('waitlist_error')}
               </Text>
             )}
           </Box>
         )}
 
         <Text fontSize="12px" color={useColorModeValue('rgba(255,255,255,0.35)', 'rgba(0,0,0,0.30)')}>
-          No spam. Unsubscribe anytime. We hate spam too.
+          {t('waitlist_disclaimer')}
         </Text>
       </VStack>
     </Box>
