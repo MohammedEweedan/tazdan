@@ -1,28 +1,8 @@
-version: '3.8'
-
 # Production compose. Requires a .env file at project root with all secrets.
 # Bring up: docker compose -f docker-compose.prod.yml up -d
-# First deploy: run `docker compose -f docker-compose.prod.yml exec server npx prisma migrate deploy`
+# First deploy: docker compose -f docker-compose.prod.yml exec server npx prisma migrate deploy
 
 services:
-  postgres:
-    image: postgres:16-alpine
-    container_name: promrkts-db
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB:-promrkts}
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-    healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER}']
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - internal
-
   redis:
     image: redis:7-alpine
     container_name: promrkts-redis
@@ -45,21 +25,17 @@ services:
     container_name: promrkts-server
     restart: unless-stopped
     depends_on:
-      postgres:
-        condition: service_healthy
       redis:
         condition: service_healthy
     env_file: .env
     environment:
       NODE_ENV: production
       PORT: 5000
-      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-promrkts}
       REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
     volumes:
       - uploads:/app/uploads
     networks:
       - internal
-    # No external ports — nginx is the only ingress.
 
   client:
     build:
@@ -102,21 +78,16 @@ services:
     volumes:
       - certbot-www:/var/www/certbot
       - certbot-certs:/etc/letsencrypt
-    # Run manually: docker compose -f docker-compose.prod.yml run --rm certbot certonly
-    #   --webroot -w /var/www/certbot -d promrkts.com -d www.promrkts.com -d api.promrkts.com
-    # Renew (add to host crontab, runs monthly):
-    #   0 3 1 * * docker compose -f /path/to/docker-compose.prod.yml run --rm certbot renew && docker compose -f /path/to/docker-compose.prod.yml exec nginx nginx -s reload
     entrypoint: /bin/sh -c "trap exit TERM; while :; do certbot renew --webroot -w /var/www/certbot --quiet; sleep 12h & wait $${!}; done"
 
 networks:
   internal:
     driver: bridge
-    internal: true   # no direct internet access for app services
+    internal: true
   external:
-    driver: bridge   # nginx bridges internal → internet
+    driver: bridge
 
 volumes:
-  pgdata:
   redisdata:
   uploads:
   certbot-www:
