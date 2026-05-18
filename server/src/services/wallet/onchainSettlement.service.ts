@@ -39,7 +39,6 @@ import { deriveKeyForChain } from './walletDerivation.service';
 
 bitcoin.initEccLib(ecc);
 const ECPair = ECPairFactory(ecc);
-import { logger } from '../../utils/logger';
 
 Decimal.set({ precision: 40 });
 

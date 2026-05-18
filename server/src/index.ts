@@ -65,7 +65,7 @@ import { globalLimiter, authLimiter, registerLimiter, withdrawalLimiter, webhook
 import { protectedUploadsRouter } from './middleware/protectedUploads';
 import { ipBanMiddleware } from './middleware/ipBan';
 
-const app = express();
+export const app = express();
 const httpServer = createServer(app);
 
 /**
