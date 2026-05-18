@@ -11,15 +11,11 @@ depositRouter.get('/info/payment-methods', authenticate, DepositController.getPa
 depositRouter.post('/gateway/quote',    authenticate, DepositController.gatewayQuote);
 depositRouter.post('/gateway/confirm',  authenticate, DepositController.gatewayConfirm);
 
-// Webhook is unauthenticated (signed by provider). raw() preserves
-// the exact body bytes the provider signed; without this the HMAC
-// check fails because express.json() re-serialises numbers and
-// reorders keys.
-depositRouter.post(
-  '/webhook/stripe',
-  raw({ type: '*/*', limit: '256kb' }),
-  DepositController.webhookStripe,
-);
+// Webhooks are unauthenticated but HMAC-verified. raw() preserves the
+// exact body bytes the provider signed.
+depositRouter.post('/webhook/stripe',    raw({ type: '*/*', limit: '256kb' }), DepositController.webhookStripe);
+depositRouter.post('/webhook/alchemy',   raw({ type: '*/*', limit: '512kb' }), DepositController.webhookAlchemy);
+depositRouter.post('/webhook/trongrid',  raw({ type: '*/*', limit: '512kb' }), DepositController.webhookTrongrid);
 
 // Bank-transfer (manual review) flow.
 depositRouter.post('/', authenticate, upload.single('proof'), DepositController.create);

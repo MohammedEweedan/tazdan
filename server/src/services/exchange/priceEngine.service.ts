@@ -7,13 +7,14 @@
  *   - a flat platform fee (0.5%),
  *   - an asset/network-specific "network fee" bucket (gas + slippage).
  *
- * Quotes are minted with a 30-second expiry and cached in-memory against
- * a UUID. The execution path looks them up by ID and rejects expired
- * quotes. TODO: move the cache to Redis once infra is provisioned.
+ * Quotes are minted with a 30-second expiry and cached in Redis (with
+ * in-memory fallback when Redis is unavailable). The execution path
+ * looks them up by ID and rejects expired quotes.
  */
 import axios from 'axios';
 import Decimal from 'decimal.js';
 import { randomUUID } from 'crypto';
+import { redisGet, redisSet, redisDel, getRedisClient } from '../../utils/redis';
 
 Decimal.set({ precision: 40 });
 
@@ -143,10 +144,11 @@ export interface Quote {
   expiresAt: number;       // unix ms
 }
 
-// ── In-memory quote cache ────────────────────────────────────────────
-// TODO: Redis. A single process is fine for dev; for horizontal scale
-// every node must see every quote.
+// ── Quote cache (Redis-backed with in-memory fallback) ───────────────
 const QUOTE_TTL_MS = 30_000;
+const QUOTE_TTL_S = QUOTE_TTL_MS / 1000; // 30 seconds
+
+// In-memory fallback store (used when Redis is unavailable)
 const quoteStore = new Map<string, Quote>();
 
 function sweepQuotes() {
@@ -157,7 +159,35 @@ function sweepQuotes() {
 }
 setInterval(sweepQuotes, 10_000).unref?.();
 
-export function getQuote(id: string): Quote | null {
+async function setQuote(quote: Quote): Promise<void> {
+  // Use Redis when available; fall back to in-memory otherwise.
+  if (getRedisClient()) {
+    try {
+      await redisSet(`quote:${quote.id}`, quote, QUOTE_TTL_S);
+      return;
+    } catch {
+      // Redis write failed — fall through to in-memory
+    }
+  }
+  quoteStore.set(quote.id, quote);
+}
+
+export async function getQuote(id: string): Promise<Quote | null> {
+  // Try Redis first
+  try {
+    const redisQuote = await redisGet<Quote>(`quote:${id}`);
+    if (redisQuote !== null) {
+      if (redisQuote.expiresAt <= Date.now()) {
+        await redisDel(`quote:${id}`);
+        return null;
+      }
+      return redisQuote;
+    }
+  } catch {
+    // Redis unavailable — fall through to in-memory
+  }
+
+  // Fall back to in-memory
   const q = quoteStore.get(id);
   if (!q) return null;
   if (q.expiresAt <= Date.now()) {
@@ -167,9 +197,16 @@ export function getQuote(id: string): Quote | null {
   return q;
 }
 
-export function consumeQuote(id: string): Quote | null {
-  const q = getQuote(id);
-  if (q) quoteStore.delete(id);
+export async function consumeQuote(id: string): Promise<Quote | null> {
+  const q = await getQuote(id);
+  if (q) {
+    try {
+      await redisDel(`quote:${id}`);
+    } catch {
+      // ignore Redis errors
+    }
+    quoteStore.delete(id);
+  }
   return q;
 }
 
@@ -270,6 +307,6 @@ export async function buildQuote(opts: {
     totalUserPays: side === 'BUY' ? fiatAmount.toFixed(8) : cryptoAmount.toFixed(18),
     expiresAt: Date.now() + QUOTE_TTL_MS,
   };
-  quoteStore.set(quote.id, quote);
+  await setQuote(quote);
   return quote;
 }

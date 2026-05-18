@@ -99,7 +99,7 @@ export class ExchangeController {
       const body = executeSchema.parse(req.body);
       // Surface the quote before consumption so the client can re-render
       // even on the 400 expired path.
-      const peek = getQuote(body.quoteId);
+      const peek = await getQuote(body.quoteId);
       if (!peek) throw new AppError('Quote expired or not found', 400);
 
       // 2FA enforcement on every BUY/SELL — sensitive action.

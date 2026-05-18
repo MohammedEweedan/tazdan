@@ -23,9 +23,28 @@
 import Decimal from 'decimal.js';
 import { Prisma } from '@prisma/client';
 import { ethers } from 'ethers';
+import axios from 'axios';
+import * as bitcoin from 'bitcoinjs-lib';
+import ECPairFactory from 'ecpair';
+import * as ecc from 'tiny-secp256k1';
+import {
+  Connection as SolConnection,
+  Keypair as SolKeypair,
+  PublicKey as SolPublicKey,
+  SystemProgram,
+  Transaction as SolTransaction,
+  sendAndConfirmTransaction,
+  LAMPORTS_PER_SOL,
+} from '@solana/web3.js';
 import { prisma } from '../../utils/prisma';
 import { AppError } from '../../middleware/errorHandler';
 import { deriveKeyForChain } from './walletDerivation.service';
+import { logger } from '../../utils/logger';
+import { sendWithdrawalConfirmed, sendDepositConfirmed } from '../email';
+import { pushWithdrawalSent, pushDepositConfirmed } from '../push.service';
+
+bitcoin.initEccLib(ecc);
+const ECPair = ECPairFactory(ecc);
 
 Decimal.set({ precision: 40 });
 
@@ -69,18 +88,99 @@ function fromAddressField(asset: string, network: string):
 // Required confirmations per spec.
 const CONFIRMATIONS = { ETH: 3, BTC: 6, SOL: 32, TRON: 20 } as const;
 
+// Static fallback fee table — used when RPC is unavailable.
+const STATIC_FEE_FALLBACK: Record<string, { asset: string; estimate: string }> = {
+  ETH:       { asset: 'ETH', estimate: '0.0008' },
+  BTC:       { asset: 'BTC', estimate: '0.00015' },
+  SOL:       { asset: 'SOL', estimate: '0.000005' },
+  USDT_ERC20:{ asset: 'ETH', estimate: '0.0015' },
+  USDT_TRC20:{ asset: 'TRX', estimate: '15' },
+};
+
+// Gas units consumed by common operations (EVM).
+const EVM_GAS_UNITS = { ETH_TRANSFER: 21_000, ERC20_TRANSFER: 65_000 };
+
 /**
- * Rough fee estimates in the destination asset (NOT USDT).
- * TODO: replace with live RPC eth_gasPrice / feeEstimate calls.
+ * Estimate the network fee for a withdrawal using live RPC where possible,
+ * falling back to a conservative static table when RPC is unavailable.
+ *
+ * Returns the fee in the gas token (ETH, BTC, SOL, TRX) — NOT in the
+ * transferred asset. The caller should check the user has enough gas token
+ * in their custodial wallet before deducting.
  */
-export function estimateFee(asset: string, network: string): { asset: string; estimate: string } {
+export async function estimateFee(
+  asset: string,
+  network: string,
+): Promise<{ asset: string; estimate: string; live: boolean }> {
   const a = asset.toUpperCase();
   const n = network.toUpperCase();
-  if (a === 'ETH') return { asset: 'ETH', estimate: '0.0008' };
-  if (a === 'BTC') return { asset: 'BTC', estimate: '0.00015' };
-  if (a === 'SOL') return { asset: 'SOL', estimate: '0.000005' };
-  if (a === 'USDT' && n === 'ERC20') return { asset: 'ETH', estimate: '0.0015' };
-  if (a === 'USDT' && n === 'TRC20') return { asset: 'TRX', estimate: '15' };
+
+  // ── EVM (ETH native + ERC-20 USDT) ────────────────────────────────
+  if (a === 'ETH' || (a === 'USDT' && n === 'ERC20')) {
+    const rpc = process.env.ALCHEMY_RPC_URL
+      ?? (process.env.ALCHEMY_API_KEY
+        ? `https://eth-mainnet.g.alchemy.com/v2/${process.env.ALCHEMY_API_KEY}`
+        : null);
+    if (rpc) {
+      try {
+        const provider = new ethers.JsonRpcProvider(rpc);
+        const feeData = await provider.getFeeData();
+        // Use maxFeePerGas when available (EIP-1559), else fall back to gasPrice.
+        const gasPriceWei = feeData.maxFeePerGas ?? feeData.gasPrice ?? 0n;
+        const gasUnits = a === 'ETH' ? EVM_GAS_UNITS.ETH_TRANSFER : EVM_GAS_UNITS.ERC20_TRANSFER;
+        // Add 20% safety margin.
+        const feeWei = gasPriceWei * BigInt(gasUnits) * 120n / 100n;
+        const feeEth = ethers.formatEther(feeWei);
+        return { asset: 'ETH', estimate: feeEth, live: true };
+      } catch {
+        // Fall through to static table
+      }
+    }
+    const key = a === 'USDT' ? 'USDT_ERC20' : 'ETH';
+    return { ...STATIC_FEE_FALLBACK[key]!, live: false };
+  }
+
+  // ── Solana ─────────────────────────────────────────────────────────
+  if (a === 'SOL') {
+    const rpcUrl = process.env.SOLANA_RPC_URL ?? 'https://api.mainnet-beta.solana.com';
+    try {
+      // SOL fee per signature via JSON-RPC (no SDK dependency).
+      const res = await import('axios').then(({ default: ax }) =>
+        ax.post(rpcUrl, {
+          jsonrpc: '2.0', id: 1, method: 'getRecentBlockhash', params: [{ commitment: 'finalized' }],
+        }, { timeout: 4000 })
+      );
+      const lamportsPerSig: number = res.data?.result?.value?.feeCalculator?.lamportsPerSignature ?? 5000;
+      const sol = (lamportsPerSig / 1e9).toFixed(9);
+      return { asset: 'SOL', estimate: sol, live: true };
+    } catch {
+      return { ...STATIC_FEE_FALLBACK['SOL']!, live: false };
+    }
+  }
+
+  // ── TRC-20 USDT ────────────────────────────────────────────────────
+  if (a === 'USDT' && n === 'TRC20') {
+    // Tron energy cost for TRC-20 transfer ≈ 14–65 TRX depending on congestion.
+    // Use Trongrid to get current energy price when credentials available.
+    return { ...STATIC_FEE_FALLBACK['USDT_TRC20']!, live: false };
+  }
+
+  // ── BTC ────────────────────────────────────────────────────────────
+  if (a === 'BTC') {
+    try {
+      const res = await import('axios').then(({ default: ax }) =>
+        ax.get('https://mempool.space/api/v1/fees/recommended', { timeout: 4000 })
+      );
+      // Use halfHourFee (sat/vB) × typical P2WPKH tx size (141 vB).
+      const satPerVb: number = res.data?.halfHourFee ?? 10;
+      const feeSat = satPerVb * 141;
+      const feeBtc = (feeSat / 1e8).toFixed(8);
+      return { asset: 'BTC', estimate: feeBtc, live: true };
+    } catch {
+      return { ...STATIC_FEE_FALLBACK['BTC']!, live: false };
+    }
+  }
+
   throw new AppError(`Unsupported asset/network: ${asset}/${network}`, 400);
 }
 
@@ -121,10 +221,119 @@ async function broadcastUsdtErc20(opts: {
   return tx.hash;
 }
 
-// BTC / SOL / TRON broadcasting is stubbed — real impl needs UTXO
-// assembly (BTC), recent blockhash (SOL), signed Transaction (TRON).
-// For MVP we record the settlement request and flag it for a later
-// treasury sweep. Ledger side still debits, so UX is coherent.
+async function broadcastBtc(opts: {
+  privateKeyHex: string;
+  toAddress: string;
+  amountSat: bigint;
+}): Promise<string> {
+  const network = bitcoin.networks.bitcoin;
+  const keyPair = ECPair.fromPrivateKey(Buffer.from(opts.privateKeyHex.replace('0x', ''), 'hex'), { network });
+  const { address: fromAddress } = bitcoin.payments.p2wpkh({ pubkey: Buffer.from(keyPair.publicKey), network });
+  if (!fromAddress) return '';
+
+  // Fetch UTXOs from mempool.space
+  const utxoRes = await axios.get(`https://mempool.space/api/address/${fromAddress}/utxo`, { timeout: 8000 });
+  const utxos: Array<{ txid: string; vout: number; value: number }> = utxoRes.data;
+  if (!utxos.length) return '';
+
+  // Simple greedy coin selection
+  const feeRes = await axios.get('https://mempool.space/api/v1/fees/recommended', { timeout: 4000 });
+  const feeRate: number = feeRes.data?.halfHourFee ?? 10;
+  const estimatedFeeSat = BigInt(Math.ceil(feeRate * 141));
+  const needed = opts.amountSat + estimatedFeeSat;
+
+  const selected: typeof utxos = [];
+  let total = 0n;
+  for (const u of utxos.sort((a, b) => b.value - a.value)) {
+    selected.push(u);
+    total += BigInt(u.value);
+    if (total >= needed) break;
+  }
+  if (total < needed) return '';
+
+  // Fetch raw txs for non-witness inputs
+  const psbt = new bitcoin.Psbt({ network });
+  for (const utxo of selected) {
+    const rawRes = await axios.get(`https://mempool.space/api/tx/${utxo.txid}/hex`, { timeout: 8000 });
+    psbt.addInput({
+      hash: utxo.txid,
+      index: utxo.vout,
+      witnessUtxo: {
+        script: bitcoin.payments.p2wpkh({ pubkey: Buffer.from(keyPair.publicKey), network }).output!,
+        value: BigInt(utxo.value),
+      },
+      nonWitnessUtxo: Buffer.from(rawRes.data, 'hex'),
+    });
+  }
+
+  psbt.addOutput({ address: opts.toAddress, value: opts.amountSat });
+  const change = total - opts.amountSat - estimatedFeeSat;
+  if (change > 546n) psbt.addOutput({ address: fromAddress, value: change });
+
+  psbt.signAllInputs(keyPair);
+  psbt.finalizeAllInputs();
+  const txHex = psbt.extractTransaction().toHex();
+
+  const broadcastRes = await axios.post('https://mempool.space/api/tx', txHex, {
+    headers: { 'Content-Type': 'text/plain' },
+    timeout: 10000,
+  });
+  return broadcastRes.data as string;
+}
+
+async function broadcastSol(opts: {
+  privateKeyHex: string;
+  toAddress: string;
+  amountLamports: bigint;
+}): Promise<string> {
+  const rpcUrl = process.env.SOLANA_RPC_URL ?? 'https://api.mainnet-beta.solana.com';
+  const connection = new SolConnection(rpcUrl, 'confirmed');
+
+  const secretKey = Buffer.from(opts.privateKeyHex.replace('0x', ''), 'hex');
+  // BIP-44 derived keys are 32 bytes; Solana keypair needs 64-byte seed
+  const keypair = secretKey.length === 64
+    ? SolKeypair.fromSecretKey(secretKey)
+    : SolKeypair.fromSeed(secretKey.slice(0, 32));
+
+  const tx = new SolTransaction().add(
+    SystemProgram.transfer({
+      fromPubkey: keypair.publicKey,
+      toPubkey: new SolPublicKey(opts.toAddress),
+      lamports: opts.amountLamports,
+    })
+  );
+
+  const sig = await sendAndConfirmTransaction(connection, tx, [keypair], { commitment: 'confirmed' });
+  return sig;
+}
+
+async function broadcastUsdtTrc20(opts: {
+  privateKeyHex: string;
+  toAddress: string;
+  amount: string; // decimal USDT
+}): Promise<string> {
+  const fullNodeUrl = process.env.TRON_FULL_NODE ?? 'https://api.trongrid.io';
+  const solidityNodeUrl = process.env.TRON_SOLIDITY_NODE ?? 'https://api.trongrid.io';
+  const eventServerUrl = process.env.TRON_EVENT_SERVER ?? 'https://api.trongrid.io';
+
+  // Dynamic import — tronweb is an optional dep; if missing we return '' to fall back to SIMULATED
+  let TronWeb: any;
+  try {
+    ({ default: TronWeb } = await import('tronweb'));
+  } catch {
+    logger.warn('[withdrawal] tronweb not installed — BTC TRC20 broadcast skipped');
+    return '';
+  }
+
+  const tronWeb = new TronWeb({ fullHost: fullNodeUrl, privateKey: opts.privateKeyHex.replace('0x', '') });
+  const USDT_TRC20 = process.env.USDT_TRC20_ADDRESS ?? 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t';
+  const contract = await tronWeb.contract().at(USDT_TRC20);
+
+  // TRC-20 has 6 decimals
+  const amountSun = BigInt(Math.round(parseFloat(opts.amount) * 1_000_000));
+  const tx = await contract.transfer(opts.toAddress, amountSun.toString()).send();
+  return tx as string;
+}
 
 /**
  * Initiate a withdrawal. Atomically debits the internal ledger and
@@ -201,15 +410,20 @@ export async function initiateWithdrawal(opts: {
       txHash = await broadcastEvm({ privateKey: key.privateKey, toAddress: opts.toAddress, amountEth: amount.toFixed(18) });
     } else if (asset === 'USDT' && network === 'ERC20') {
       txHash = await broadcastUsdtErc20({ privateKey: key.privateKey, toAddress: opts.toAddress, amount: amount.toFixed(6) });
-    } else {
-      // BTC / SOL / USDT_TRC20 paths — TODO implement live broadcast.
-      simulated = true;
+    } else if (asset === 'BTC') {
+      const amountSat = BigInt(Math.round(amount.toNumber() * 1e8));
+      txHash = await broadcastBtc({ privateKeyHex: key.privateKey, toAddress: opts.toAddress, amountSat });
+    } else if (asset === 'SOL') {
+      const amountLamports = BigInt(Math.round(amount.toNumber() * LAMPORTS_PER_SOL));
+      txHash = await broadcastSol({ privateKeyHex: key.privateKey, toAddress: opts.toAddress, amountLamports });
+    } else if (asset === 'USDT' && network === 'TRC20') {
+      txHash = await broadcastUsdtTrc20({ privateKeyHex: key.privateKey, toAddress: opts.toAddress, amount: amount.toFixed(6) });
     }
     if (!txHash) simulated = true;
     // Wipe the key reference ASAP.
     (key as any).privateKey = '';
   } catch (err: any) {
-    console.error('[withdrawal] broadcast failed — refunding', onChainTx.id, err?.message);
+    logger.error('[withdrawal] broadcast failed — refunding', { id: onChainTx.id, err });
     await prisma.$transaction(async (tx) => {
       await tx.userWallet.update({
         where: { userId: opts.userId },
@@ -223,13 +437,27 @@ export async function initiateWithdrawal(opts: {
     throw new AppError('Withdrawal broadcast failed — refunded', 502);
   }
 
-  return prisma.onChainTransaction.update({
+  const updated = await prisma.onChainTransaction.update({
     where: { id: onChainTx.id },
-    data: {
-      txHash: txHash || null,
-      status: simulated ? 'PENDING' : 'PENDING', // stays pending until confirmed
-    },
+    data: { txHash: txHash || null, status: 'PENDING' },
   });
+
+  if (txHash) {
+    prisma.user.findUnique({ where: { id: opts.userId }, select: { email: true, firstName: true } })
+      .then((u) => {
+        if (u) {
+          sendWithdrawalConfirmed({
+            to: u.email, firstName: u.firstName,
+            asset, amount: amount.toFixed(8), txHash,
+            toAddress: opts.toAddress, network,
+          }).catch((e) => logger.warn('[email] withdrawal confirm failed', { err: e }));
+        }
+      })
+      .catch(() => {});
+    pushWithdrawalSent(opts.userId, asset, amount.toFixed(8)).catch(() => {});
+  }
+
+  return updated;
 }
 
 /**
@@ -291,10 +519,23 @@ export async function processDeposit(opts: {
         where: { id: wallet.id },
         data: { [field]: { increment: new Prisma.Decimal(amount.toFixed(18)) } },
       });
-      return tx.onChainTransaction.update({
+      const confirmed = await tx.onChainTransaction.update({
         where: { id: row.id },
         data: { status: 'CONFIRMED', confirmedAt: new Date() },
       });
+      // Fire-and-forget deposit email outside the transaction
+      prisma.user.findUnique({ where: { id: wallet.userId }, select: { email: true, firstName: true } })
+        .then((u) => {
+          if (u) {
+            sendDepositConfirmed({
+              to: u.email, firstName: u.firstName,
+              asset, amount: amount.toFixed(8), txHash: opts.txHash,
+            }).catch((e) => logger.warn('[email] deposit confirm failed', { err: e }));
+          }
+        })
+        .catch(() => {});
+      pushDepositConfirmed(wallet.userId, asset, amount.toFixed(8)).catch(() => {});
+      return confirmed;
     }
     return row;
   });

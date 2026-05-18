@@ -8,6 +8,7 @@ import * as LocalAuthentication from 'expo-local-authentication';
 import { secureStore } from '@/lib/secureStore';
 import { STORAGE_KEYS } from '@/constants';
 import { authService } from '@/services';
+import { registerPushToken, unregisterPushToken } from '@/lib/pushNotifications';
 import type { User } from '@/types';
 
 const BIOMETRIC_KEY  = 'promrkts.biometricEnabled';
@@ -138,6 +139,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       viewMode: null,
       needsViewSelection: user.role === 'ADMIN',
     });
+    // Register push token fire-and-forget — non-fatal if it fails
+    registerPushToken().catch(() => {});
   },
 
   setViewMode: async (mode) => {
@@ -211,6 +214,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   logout: async () => {
+    unregisterPushToken().catch(() => {});
     await authService.logout();
     // Drop the websocket so the server doesn't keep emitting events
     // into a dead user room and a fresh JWT is picked up on next login.

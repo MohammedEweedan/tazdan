@@ -3,9 +3,39 @@ import AppProviders from '@/providers/AppProviders';
 import PageTitle from '@/components/PageTitle';
 
 export const metadata: Metadata = {
-  title: 'promrkts - money, simplified',
-  description: 'Buy and sell crypto easily and swiftly.',
+  title: {
+    default: 'promrkts — Crypto Exchange & Money Transfer for MENA',
+    template: '%s | promrkts',
+  },
+  description:
+    'Send money to Libya, Egypt & UAE instantly. Buy & sell crypto with a P2P marketplace. Get a virtual Visa card. No SWIFT fees, no bank queues.',
+  keywords: [
+    'Libya crypto', 'LYD USDT', 'send money Libya', 'Libya remittance',
+    'MENA crypto exchange', 'P2P crypto marketplace', 'virtual Visa crypto card',
+    'Egypt crypto', 'UAE crypto', 'crypto to fiat MENA', 'promrkts',
+  ],
   manifest: '/manifest.json',
+  authors: [{ name: 'promrkts' }],
+  creator: 'promrkts',
+  openGraph: {
+    type: 'website',
+    locale: 'en_US',
+    url: 'https://promrkts.com',
+    siteName: 'promrkts',
+    title: 'promrkts — Crypto Exchange & Money Transfer for MENA',
+    description:
+      'Send money to Libya, Egypt & UAE instantly. Buy & sell crypto. Get a virtual Visa card. No SWIFT fees.',
+    images: [{ url: '/og-image.png', width: 1200, height: 630, alt: 'promrkts — Banking the MENA' }],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'promrkts — Crypto & Money Transfer for MENA',
+    description: 'Send money to Libya instantly. Buy & sell crypto. Virtual Visa card.',
+    images: ['/og-image.png'],
+    creator: '@promrkts',
+  },
+  robots: { index: true, follow: true },
+  alternates: { canonical: 'https://promrkts.com' },
 };
 
 export const viewport: Viewport = {

@@ -4,6 +4,9 @@ import { Decimal } from '@prisma/client/runtime/library';
 import { prisma } from '../utils/prisma';
 import { AppError } from '../middleware/errorHandler';
 import { AuthRequest } from '../types';
+import { sendKYCStatusUpdate } from '../services/email';
+import { pushKYCUpdate } from '../services/push.service';
+import { logger } from '../utils/logger';
 
 const rateSchema = z.object({
   buyPrice: z.number().positive(),
@@ -463,18 +466,32 @@ export class AdminController {
 
   static async approveKYC(req: AuthRequest, res: Response, next: NextFunction) {
     try {
-      await prisma.user.update({ where: { id: req.params.userId }, data: { kycStatus: 'APPROVED' } });
+      const user = await prisma.user.update({
+        where: { id: req.params.userId },
+        data: { kycStatus: 'APPROVED', kycTier: 'TIER_1' },
+        select: { email: true, firstName: true, kycTier: true },
+      });
       await prisma.kYCDocument.updateMany({ where: { userId: req.params.userId, status: 'PENDING' }, data: { status: 'APPROVED', reviewedBy: req.user!.id, reviewedAt: new Date() } });
       await prisma.notification.create({ data: { userId: req.params.userId, title: 'KYC Approved', message: 'Your identity verification has been approved. You can now trade.', type: 'kyc' } });
+      sendKYCStatusUpdate({ to: user.email, firstName: user.firstName, status: 'APPROVED', tier: 'TIER_1' })
+        .catch((e) => logger.warn('[email] kyc approve failed', { err: e }));
+      pushKYCUpdate(req.params.userId, 'APPROVED').catch(() => {});
       res.json({ message: 'KYC approved' });
     } catch (error) { next(error); }
   }
 
   static async rejectKYC(req: AuthRequest, res: Response, next: NextFunction) {
     try {
-      await prisma.user.update({ where: { id: req.params.userId }, data: { kycStatus: 'REJECTED' } });
+      const user = await prisma.user.update({
+        where: { id: req.params.userId },
+        data: { kycStatus: 'REJECTED' },
+        select: { email: true, firstName: true },
+      });
       await prisma.kYCDocument.updateMany({ where: { userId: req.params.userId, status: 'PENDING' }, data: { status: 'REJECTED', rejectionReason: req.body.reason, reviewedBy: req.user!.id, reviewedAt: new Date() } });
       await prisma.notification.create({ data: { userId: req.params.userId, title: 'KYC Rejected', message: `Your identity verification was rejected. Reason: ${req.body.reason || 'N/A'}`, type: 'kyc' } });
+      sendKYCStatusUpdate({ to: user.email, firstName: user.firstName, status: 'REJECTED', reasonCode: req.body.reason })
+        .catch((e) => logger.warn('[email] kyc reject failed', { err: e }));
+      pushKYCUpdate(req.params.userId, 'REJECTED').catch(() => {});
       res.json({ message: 'KYC rejected' });
     } catch (error) { next(error); }
   }

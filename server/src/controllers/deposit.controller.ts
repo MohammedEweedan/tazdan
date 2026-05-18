@@ -1,10 +1,13 @@
 import { Response, NextFunction, Request } from 'express';
 import { z } from 'zod';
+import crypto from 'node:crypto';
 import { prisma } from '../utils/prisma';
 import { AppError } from '../middleware/errorHandler';
 import { generateReference } from '../utils/helpers';
 import { AuthRequest } from '../types';
 import { getOnRampProvider } from '../services/onramp';
+import { processDeposit } from '../services/wallet/onchainSettlement.service';
+import { logger } from '../utils/logger';
 import { Currency } from '@prisma/client';
 import type { RampPaymentMethod, RampProvider } from '@prisma/client';
 
@@ -375,6 +378,106 @@ export class DepositController {
           });
         }
       });
+
+      res.json({ ok: true });
+    } catch (e) { next(e); }
+  }
+
+  /**
+   * Alchemy webhook — EVM on-chain deposits (ETH / USDT-ERC20).
+   *
+   * Alchemy sends an HMAC-SHA256 signature in the X-Alchemy-Signature
+   * header, computed over the raw request body using the signing key
+   * you configure in the Alchemy dashboard
+   * (ALCHEMY_WEBHOOK_SIGNING_KEY env var).
+   *
+   * Mounted with express.raw() to preserve exact bytes for HMAC.
+   */
+  static async webhookAlchemy(req: Request, res: Response, next: NextFunction) {
+    try {
+      const rawBody = (req.body as Buffer).toString('utf8');
+      const signingKey = process.env.ALCHEMY_WEBHOOK_SIGNING_KEY;
+
+      if (signingKey) {
+        const sig = req.headers['x-alchemy-signature'] as string | undefined;
+        if (!sig) {
+          logger.warn('[webhook:alchemy] missing signature header');
+          return res.status(401).json({ error: 'Missing signature' });
+        }
+        const expected = crypto
+          .createHmac('sha256', signingKey)
+          .update(rawBody)
+          .digest('hex');
+        if (!crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected))) {
+          logger.warn('[webhook:alchemy] invalid signature');
+          return res.status(401).json({ error: 'Invalid signature' });
+        }
+      }
+
+      const payload = JSON.parse(rawBody);
+      // Alchemy Activity webhook shape: { event: { activity: [...] } }
+      const activities = payload?.event?.activity ?? payload?.activity ?? [];
+
+      for (const act of activities) {
+        try {
+          const asset: string = act.asset ?? (act.rawContract?.address ? 'USDT' : 'ETH');
+          const network = asset === 'ETH' ? 'ETH' : 'ERC20';
+          const amount: string = act.value?.toString() ?? '0';
+          const toAddress: string = act.toAddress ?? act.to ?? '';
+          const fromAddress: string = act.fromAddress ?? act.from ?? '';
+          const txHash: string = act.hash ?? act.transactionHash ?? '';
+          const confirmations: number = act.confirmations ?? 1;
+
+          if (!txHash || !toAddress || parseFloat(amount) <= 0) continue;
+
+          await processDeposit({ txHash, asset, network, toAddress, fromAddress, amount, confirmations });
+        } catch (actErr) {
+          logger.warn('[webhook:alchemy] activity error', { err: actErr, act });
+        }
+      }
+
+      res.json({ ok: true });
+    } catch (e) { next(e); }
+  }
+
+  /**
+   * Trongrid webhook — TRC-20 USDT deposits.
+   *
+   * Trongrid uses an API-key header (TRON_WEBHOOK_API_KEY) rather than
+   * HMAC. The key is configured in your Trongrid event subscription.
+   */
+  static async webhookTrongrid(req: Request, res: Response, next: NextFunction) {
+    try {
+      const apiKey = process.env.TRON_WEBHOOK_API_KEY;
+      if (apiKey) {
+        const provided = req.headers['x-api-key'] as string | undefined;
+        if (!provided || provided !== apiKey) {
+          logger.warn('[webhook:trongrid] invalid API key');
+          return res.status(401).json({ error: 'Unauthorized' });
+        }
+      }
+
+      const rawBody = (req.body as Buffer).toString('utf8');
+      const payload = JSON.parse(rawBody);
+      // Trongrid shape: { contractData: { owner_address, to_address, amount }, transaction_id, ... }
+      const events = Array.isArray(payload) ? payload : [payload];
+
+      for (const evt of events) {
+        try {
+          const txHash: string = evt.transaction_id ?? evt.txID ?? '';
+          const toAddress: string = evt.contractData?.to_address ?? evt.to_address ?? '';
+          const fromAddress: string = evt.contractData?.owner_address ?? evt.from_address ?? '';
+          // Trongrid amount is in SUN (1 TRX = 1e6 SUN); for TRC-20 USDT it's in 1e6 units
+          const rawAmount: number = evt.contractData?.amount ?? evt.amount ?? 0;
+          const amount = (rawAmount / 1_000_000).toFixed(6);
+
+          if (!txHash || !toAddress || parseFloat(amount) <= 0) continue;
+
+          await processDeposit({ txHash, asset: 'USDT', network: 'TRC20', toAddress, fromAddress, amount, confirmations: 20 });
+        } catch (evtErr) {
+          logger.warn('[webhook:trongrid] event error', { err: evtErr });
+        }
+      }
 
       res.json({ ok: true });
     } catch (e) { next(e); }
