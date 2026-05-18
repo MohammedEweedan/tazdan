@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import {
-  Avatar, AvatarFallback,
+  Avatar,
   Badge,
   Box, Button, Divider, Flex, HStack, Icon,
   Modal, ModalBody, ModalCloseButton, ModalContent, ModalHeader, ModalOverlay,
@@ -70,7 +70,7 @@ function RecipientDrawer({
   return (
     <Modal isOpen onClose={onClose} size="xl" scrollBehavior="inside">
       <ModalOverlay bg="rgba(0,0,0,0.6)" />
-      <ModalContent bg={tok.cardBg} borderColor={tok.panelBorder} borderWidth="1px" borderRadius="16px">
+      <ModalContent bg={tok.panelBg} borderColor={tok.panelBorder} borderWidth="1px" borderRadius="16px">
         <ModalHeader color={tok.textMain} fontSize="15px" fontWeight="800" borderBottom="1px solid" borderColor={tok.panelBorder}>
           <HStack spacing={2}>
             <Icon as={FiUsers} boxSize={4} />
@@ -113,7 +113,6 @@ function RecipientDrawer({
                     src={r.user?.avatarUrl}
                     name={`${r.user?.firstName ?? ""} ${r.user?.lastName ?? ""}`.trim() || r.user?.email}
                   >
-                    <AvatarFallback>{(r.user?.firstName?.[0] ?? r.user?.email?.[0] ?? "?").toUpperCase()}</AvatarFallback>
                   </Avatar>
                   <Box flex={1} minW={0}>
                     <Text fontSize="13px" fontWeight="700" color={tok.textMain} noOfLines={1}>
