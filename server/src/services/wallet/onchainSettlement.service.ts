@@ -40,6 +40,8 @@ import { prisma } from '../../utils/prisma';
 import { AppError } from '../../middleware/errorHandler';
 import { deriveKeyForChain } from './walletDerivation.service';
 import { logger } from '../../utils/logger';
+import { sendWithdrawalConfirmed, sendDepositConfirmed } from '../email';
+import { pushWithdrawalSent, pushDepositConfirmed } from '../push.service';
 
 bitcoin.initEccLib(ecc);
 const ECPair = ECPairFactory(ecc);
@@ -435,13 +437,27 @@ export async function initiateWithdrawal(opts: {
     throw new AppError('Withdrawal broadcast failed — refunded', 502);
   }
 
-  return prisma.onChainTransaction.update({
+  const updated = await prisma.onChainTransaction.update({
     where: { id: onChainTx.id },
-    data: {
-      txHash: txHash || null,
-      status: simulated ? 'PENDING' : 'PENDING', // stays pending until confirmed
-    },
+    data: { txHash: txHash || null, status: 'PENDING' },
   });
+
+  if (txHash) {
+    prisma.user.findUnique({ where: { id: opts.userId }, select: { email: true, firstName: true } })
+      .then((u) => {
+        if (u) {
+          sendWithdrawalConfirmed({
+            to: u.email, firstName: u.firstName,
+            asset, amount: amount.toFixed(8), txHash,
+            toAddress: opts.toAddress, network,
+          }).catch((e) => logger.warn('[email] withdrawal confirm failed', { err: e }));
+        }
+      })
+      .catch(() => {});
+    pushWithdrawalSent(opts.userId, asset, amount.toFixed(8)).catch(() => {});
+  }
+
+  return updated;
 }
 
 /**
@@ -503,10 +519,23 @@ export async function processDeposit(opts: {
         where: { id: wallet.id },
         data: { [field]: { increment: new Prisma.Decimal(amount.toFixed(18)) } },
       });
-      return tx.onChainTransaction.update({
+      const confirmed = await tx.onChainTransaction.update({
         where: { id: row.id },
         data: { status: 'CONFIRMED', confirmedAt: new Date() },
       });
+      // Fire-and-forget deposit email outside the transaction
+      prisma.user.findUnique({ where: { id: wallet.userId }, select: { email: true, firstName: true } })
+        .then((u) => {
+          if (u) {
+            sendDepositConfirmed({
+              to: u.email, firstName: u.firstName,
+              asset, amount: amount.toFixed(8), txHash: opts.txHash,
+            }).catch((e) => logger.warn('[email] deposit confirm failed', { err: e }));
+          }
+        })
+        .catch(() => {});
+      pushDepositConfirmed(wallet.userId, asset, amount.toFixed(8)).catch(() => {});
+      return confirmed;
     }
     return row;
   });

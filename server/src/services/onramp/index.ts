@@ -130,6 +130,12 @@ export function getOnRampProvider(): OnRampProvider {
       cached = new StripeOnRamp();
       break;
     }
+    case 'CHECKOUT': {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { CheckoutOnRamp } = require('./checkout.provider') as typeof import('./checkout.provider');
+      cached = new CheckoutOnRamp();
+      break;
+    }
     case 'MOCK':
     default:        cached = new MockOnRampProvider();    break;
   }

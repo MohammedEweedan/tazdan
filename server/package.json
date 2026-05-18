@@ -41,6 +41,7 @@
     "ecpair": "^3.0.1",
     "ed25519-hd-key": "^2.0.0",
     "ethers": "^6.16.0",
+    "expo-server-sdk": "^6.1.0",
     "express": "^4.18.3",
     "express-rate-limit": "^7.1.5",
     "helmet": "^7.1.0",
