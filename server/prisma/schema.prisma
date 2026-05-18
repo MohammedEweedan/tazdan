@@ -168,6 +168,7 @@ model User {
   // locked until `lockoutUntil`.
   failedLoginAttempts          Int                          @default(0)
   lockoutUntil                 DateTime?
+  expoPushToken                String?                      // Expo push notification token (nullable — registered after login)
   createdAt                    DateTime                     @default(now())
   updatedAt                    DateTime                     @updatedAt
   wallets                      Wallet[]
