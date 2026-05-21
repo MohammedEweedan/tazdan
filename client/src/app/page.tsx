@@ -1959,26 +1959,26 @@ export default function LandingPage() {
                 {t("cta_sub")}
               </Text>
               {/* App store download badges */}
-              <HStack spacing={3} justify="center" pt={2}>
-                {[
-                  { store: "App Store", icon: FaApple },
-                  { store: "Google Play", icon: FaGooglePlay },
-                ].map((b) => (
-                  <HStack key={b.store}
-                    bg={dark ? "rgba(0,0,0,0.10)" : "rgba(255,255,255,0.14)"}
-                    border="1px solid"
-                    borderColor={dark ? "rgba(0,0,0,0.18)" : "rgba(255,255,255,0.22)"}
-                    borderRadius="4px" px={4} h={8} spacing={2.5} cursor="pointer"
-                    _hover={{ bg: dark ? "rgba(0,0,0,0.18)" : "rgba(255,255,255,0.22)" }}
-                    transition="background 0.15s"
-                  >
-                    <Icon as={b.icon} color={dark ? "#000000" : "#ffffff"} flexShrink={0} />
-                    <VStack spacing={0} align="start">
-                      <Text color={dark ? "#000000" : "#ffffff"} fontWeight="800" letterSpacing="-0.01em">{b.store}</Text>
-                    </VStack>
-                  </HStack>
-                ))}
-              </HStack>
+              <HStack spacing={2.5} justify="center">
+                  {[
+                    { store: "App Store", icon: FaApple },
+                    { store: "Google Play", icon: FaGooglePlay },
+                  ].map((b) => (
+                    <HStack key={b.store}
+                      bg={dark ? "rgba(255,255,255,0.09)" : "rgba(0,0,0,0.06)"}
+                      border="1px solid"
+                      borderColor={dark ? "rgba(255,255,255,0.16)" : "rgba(0,0,0,0.10)"}
+                      borderRadius="12px" px={4} h="42px" spacing={2.5} cursor="pointer"
+                      _hover={{ bg: dark ? "rgba(255,255,255,0.14)" : "rgba(0,0,0,0.10)" }}
+                      transition="background 0.15s"
+                    >
+                      <Icon as={b.icon} boxSize="18px" color={dark ? "rgba(0,0,0,0.7)" : "rgba(255,255,255,0.8)"} flexShrink={0} />
+                      <VStack spacing={0} align="start">
+                        <Text fontSize="13px" color={dark ? "rgba(0,0,0,0.7)" : "rgba(255,255,255,0.8)"} fontWeight="800" letterSpacing="-0.01em">{b.store}</Text>
+                      </VStack>
+                    </HStack>
+                  ))}
+                </HStack>
             </VStack>
           </Box>
         </Box>
