@@ -16,16 +16,16 @@ export function useDashboardTokens() {
   const dark = colorMode === "dark";
   return {
     dark,
-    brand: "#4A8FE0",
+    brand: "#226dff",
     brandLight: "#6aa8e8",
     panelBg: dark ? "rgba(255,255,255,0.025)" : "rgba(255,255,255,0.96)",
-    panelBorder: dark ? "rgba(255,255,255,0.06)" : "rgba(74,143,224,0.08)",
-    panelInner: dark ? "rgba(255,255,255,0.02)" : "rgba(74,143,224,0.03)",
+    panelBorder: dark ? "rgba(255,255,255,0.06)" : "rgba(34,109,255,0.08)",
+    panelInner: dark ? "rgba(255,255,255,0.02)" : "rgba(34,109,255,0.03)",
     divider: dark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)",
     textMain: dark ? "#f1f5f9" : "#0f172a",
     textSub: dark ? "#94a3b8" : "#64748b",
     textMuted: dark ? "#475569" : "#94a3b8",
-    hover: dark ? "rgba(255,255,255,0.04)" : "rgba(74,143,224,0.04)",
+    hover: dark ? "rgba(255,255,255,0.04)" : "rgba(34,109,255,0.04)",
     success: "#22c55e",
     danger: "#ef4444",
     warning: "#f59e0b",
@@ -102,9 +102,9 @@ export function GlassCard({
       borderRadius="16px"
       p={p ?? 4}
       backdropFilter="blur(14px)"
-      boxShadow={t.dark ? "0 10px 30px rgba(0,0,0,0.25)" : "0 6px 20px rgba(74,143,224,0.05)"}
+      boxShadow={t.dark ? "0 10px 30px rgba(0,0,0,0.25)" : "0 6px 20px rgba(34,109,255,0.05)"}
       transition="all 0.2s cubic-bezier(0.2,0.8,0.2,1)"
-      _hover={hover ? { borderColor: t.brand, transform: "translateY(-1px)", boxShadow: `0 14px 40px ${t.dark ? "rgba(74,143,224,0.2)" : "rgba(74,143,224,0.1)"}` } : undefined}
+      _hover={hover ? { borderColor: t.brand, transform: "translateY(-1px)", boxShadow: `0 14px 40px ${t.dark ? "rgba(34,109,255,0.2)" : "rgba(34,109,255,0.1)"}` } : undefined}
       {...rest}
     >
       {children}

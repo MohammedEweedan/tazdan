@@ -40,7 +40,7 @@ function pal(dark: boolean) {
     greenBg:   "rgba(34,197,94,0.12)",
     redFg:     "#ef4444",
     redBg:     "rgba(239,68,68,0.12)",
-    brand:     "#4a8fe0",
+    brand:     "#226dff",
     cardBg:    dark ? "#0d0d0d" : "#f5f5f7",
     sidebarBg: dark ? "#050505" : "#f8f8f8",
   };
@@ -215,7 +215,7 @@ function Sidebar({ p, handle, initial, emoji, onLogout }: {
       {/* Wordmark */}
       <Box px={6} pt={7} pb={7}>
         <Text fontSize="19px" fontWeight="900" letterSpacing="-0.04em" color={p.fg}>
-          promrkts
+          fortuni
         </Text>
       </Box>
 
@@ -997,7 +997,7 @@ export default function AuthenticatedHome() {
             transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
           >
             <Box
-              bg="#4a8fe0"
+              bg="#226dff"
               px={{ base: 6, lg: 10 }}
               pt={{ base: 10, lg: 14 }}
               pb={{ base: 10, lg: 14 }}

@@ -297,7 +297,7 @@ export default function BankAccountsPage() {
       {/* ── Top bar ── */}
       <Flex h="48px" borderBottom="1px solid" borderColor="rgba(255,255,255,0.06)" px={6} align="center" justify="space-between" bg="rgba(5,5,18,0.97)" backdropFilter="blur(16px)" position="sticky" top={0} zIndex={200}>
         <HStack spacing={6}>
-          <Text fontSize="14px" fontWeight="900" letterSpacing="-0.04em" bgGradient="linear(135deg,#3b82f6,#06b6d4)" bgClip="text" color="transparent">PROMRKTS</Text>
+          <Text fontSize="14px" fontWeight="900" letterSpacing="-0.04em" bgGradient="linear(135deg,#3b82f6,#06b6d4)" bgClip="text" color="transparent">FORTUNI</Text>
           <Box w="1px" h="16px" bg="rgba(255,255,255,0.06)" />
           <Text fontSize="11px" color="#334155" letterSpacing=".04em" fontWeight="600">BANK ACCOUNTS</Text>
         </HStack>

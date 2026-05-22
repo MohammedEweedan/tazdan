@@ -65,7 +65,7 @@ export default function VerifyEmailPage() {
         >
           {status === "loading" && (
             <>
-              <Spinner size="xl" color="#4a8fe0" mb="20px" />
+              <Spinner size="xl" color="#226dff" mb="20px" />
               <Heading fontSize="18px" fontWeight="700" color="#f1f0ee" mb="8px">
                 Verifying your email
               </Heading>

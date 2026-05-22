@@ -40,8 +40,8 @@ import { cryptoExchangeAPI, type CryptoAsset, type CryptoQuote } from '@/lib/api
 import { useAuthStore } from '@/stores/authStore';
 import { walletAPI } from '@/lib/api';
 
-const BRAND = '#4A8FE0';
-const BRAND_LIGHT = '#4a8fe0';
+const BRAND = '#226dff';
+const BRAND_LIGHT = '#7649ff';
 const SUCCESS_GREEN = '#22c55e';
 
 const NETWORKS: Record<CryptoAsset, string[]> = {
