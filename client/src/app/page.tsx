@@ -446,7 +446,7 @@ const ScreenDashboard = memo(function ScreenDashboard() {
             bg="#232327" align="center" justify="center" flexShrink={0}>
             <Text style={{ fontSize: "calc(var(--ph)*0.024)" }}>⚡</Text>
           </Flex>
-          <Text style={{ fontSize: fs.handle }} color={APP.fg} fontWeight="800" letterSpacing="-0.02em">@awidan</Text>
+          <Text style={{ fontSize: fs.handle }} color={APP.fg} fontWeight="800" letterSpacing="-0.02em">@jack.green</Text>
         </HStack>
         <HStack spacing="calc(var(--pw)*0.035)">
           {[
@@ -596,12 +596,8 @@ const ScreenDashboard = memo(function ScreenDashboard() {
                   bg="#ffffff" align="center" justify="center"
                   mt="calc(var(--ph)*-0.026)"
                   boxShadow="0 calc(var(--ph)*0.006) calc(var(--ph)*0.02) rgba(0,0,0,0.45)">
-                  <Flex style={{
-                      width: "calc(var(--ph)*0.036)", height: "calc(var(--ph)*0.036)",
-                      borderRadius: "calc(var(--ph)*0.009)",
-                    }}
-                    bg={APP.accent} align="center" justify="center">
-                    <Text style={{ fontSize: "calc(var(--ph)*0.024)" }} color="#fff" fontWeight="900">P</Text>
+                  <Flex align="center" justify="center">
+                      <NextImage src="/icon-color.png" alt="+" width={60} height={60} />
                   </Flex>
                 </Flex>
               ) : (
@@ -1154,11 +1150,11 @@ function ScreenChat() {
         <HStack spacing="calc(var(--pw)*0.03)" flex={1} px="calc(var(--pw)*0.04)">
           <Flex style={{ width: fs.avatar, height: fs.avatar, borderRadius: "50%" }}
             bg="#232327" align="center" justify="center" flexShrink={0}>
-            <Text style={{ fontSize: "calc(var(--ph)*0.022)" }}>🦂</Text>
+            <Text style={{ fontSize: "calc(var(--ph)*0.022)" }}>♾️</Text>
           </Flex>
           <VStack align="start" spacing={0}>
-            <Text style={{ fontSize: fs.name }} color={c.fg} fontWeight="800">Rayan Zahi</Text>
-            <Text style={{ fontSize: fs.sub }} color={c.muted} fontWeight="500">@rayofsunshine</Text>
+            <Text style={{ fontSize: fs.name }} color={c.fg} fontWeight="800">Jack Green</Text>
+            <Text style={{ fontSize: fs.sub }} color={c.muted} fontWeight="500">@jack.green</Text>
           </VStack>
         </HStack>
         <Flex style={{ width: fs.hdrBtn, height: fs.hdrBtn, borderRadius: "50%" }}
