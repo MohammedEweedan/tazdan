@@ -123,7 +123,7 @@ export default function PublicPayPage() {
       {/* Top bar */}
       <Flex h="52px" px={5} align="center" justify="space-between" borderBottom="1px solid rgba(255,255,255,0.06)" bg="rgba(5,5,18,0.97)" backdropFilter="blur(16px)">
         <HStack spacing={2}>
-          <Text fontSize="16px" fontWeight="900" letterSpacing="-.04em" color={brand}>PROMRKTS</Text>
+          <Text fontSize="16px" fontWeight="900" letterSpacing="-.04em" color={brand}>FORTUNI</Text>
           <Box w="1px" h="16px" bg="rgba(255,255,255,0.06)" />
           <Text fontSize="11px" color="#475569" fontWeight="600">PAY</Text>
         </HStack>
@@ -254,7 +254,7 @@ export default function PublicPayPage() {
             <HStack spacing={2}>
               <Icon as={FiShield} color={brand} boxSize={4} flexShrink={0} />
               <Text fontSize="11px" color="#94a3b8">
-                Payments are processed instantly on the promrkts platform. Currently, internal transfers are supported for USDT.
+                Payments are processed instantly on the fortuni platform. Currently, internal transfers are supported for USDT.
                 External blockchain payments coming soon.
               </Text>
             </HStack>
@@ -263,7 +263,7 @@ export default function PublicPayPage() {
 
         {/* Footer */}
         <Text fontSize="11px" color="#334155" textAlign="center" mt={8}>
-          Powered by <Text as="span" color={brand} fontWeight="700">PROMRKTS</Text> Exchange
+          Powered by <Text as="span" color={brand} fontWeight="700">FORTUNI</Text> Exchange
         </Text>
       </Box>
     </Box>

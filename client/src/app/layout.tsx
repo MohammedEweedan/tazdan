@@ -4,32 +4,32 @@ import PageTitle from '@/components/PageTitle';
 
 export const metadata: Metadata = {
   title: {
-    default: 'promrkts — Crypto Exchange & Money Transfer for MENA',
-    template: '%s | promrkts',
+    default: 'fortuni — Crypto Exchange & Money Transfer for MENA',
+    template: '%s | fortuni',
   },
   description:
     'Send money to Libya, Egypt & UAE instantly. Buy & sell crypto with a P2P marketplace. Get a virtual Visa card. No SWIFT fees, no bank queues.',
   keywords: [
     'Libya crypto', 'LYD USDT', 'send money Libya', 'Libya remittance',
     'MENA crypto exchange', 'P2P crypto marketplace', 'virtual Visa crypto card',
-    'Egypt crypto', 'UAE crypto', 'crypto to fiat MENA', 'promrkts',
+    'Egypt crypto', 'UAE crypto', 'crypto to fiat MENA', 'fortuni',
   ],
   manifest: '/manifest.json',
-  authors: [{ name: 'promrkts' }],
-  creator: 'promrkts',
+  authors: [{ name: 'fortuni' }],
+  creator: 'fortuni',
   openGraph: {
     type: 'website',
     locale: 'en_US',
     url: 'https://promrkts.com',
-    siteName: 'promrkts',
-    title: 'promrkts — Crypto Exchange & Money Transfer for MENA',
+    siteName: 'fortuni',
+    title: 'fortuni — Crypto Exchange & Money Transfer for MENA',
     description:
       'Send money to Libya, Egypt & UAE instantly. Buy & sell crypto. Get a virtual Visa card. No SWIFT fees.',
-    images: [{ url: '/og-image.png', width: 1200, height: 630, alt: 'promrkts — Banking the MENA' }],
+    images: [{ url: '/og-image.png', width: 1200, height: 630, alt: 'fortuni — Banking the MENA' }],
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'promrkts — Crypto & Money Transfer for MENA',
+    title: 'fortuni — Crypto & Money Transfer for MENA',
     description: 'Send money to Libya instantly. Buy & sell crypto. Virtual Visa card.',
     images: ['/og-image.png'],
     creator: '@promrkts',

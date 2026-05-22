@@ -119,7 +119,7 @@ export default function CareersPage() {
         <Container maxW="1100px">
           <motion.div initial={{ opacity: 0, y: 24 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, amount: 0.3 }} transition={{ duration: 0.6 }}>
             <VStack spacing={3} mb={{ base: 10, md: 14 }} textAlign="center">
-              <Text fontSize="11px" fontWeight="800" letterSpacing="0.14em" textTransform="uppercase" color={textSub}>WHY PROMRKTS</Text>
+              <Text fontSize="11px" fontWeight="800" letterSpacing="0.14em" textTransform="uppercase" color={textSub}>WHY FORTUNI</Text>
               <Heading fontSize={{ base: '32px', md: '52px' }} fontWeight="900" letterSpacing="-0.04em" color={textMain} lineHeight="1">
                 A career worth building
               </Heading>

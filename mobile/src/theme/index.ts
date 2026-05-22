@@ -1,5 +1,5 @@
 /**
- * promrkts design tokens.
+ * fortuni design tokens.
  * Mirrors the Tailwind/NativeWind config in `tailwind.config.js`. Use this
  * file from any non-NW context (e.g. LinearGradient `colors`, ShadowOffset).
  */

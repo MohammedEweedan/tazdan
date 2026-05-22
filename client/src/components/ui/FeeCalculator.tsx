@@ -85,10 +85,10 @@ export default function FeeCalculator() {
   const [destKey, setDestKey] = useState<DestKey>('Libya');
 
   const cfg = DESTINATIONS.find((d) => d.key === destKey)!;
-  const promrktsFee = Math.max(amount * 0.005, 2);
+  const fortuniFee = Math.max(amount * 0.005, 2);
   const wuFee       = calcFee(amount, cfg.wuPct);
   const bankFee     = cfg.bankFlat + amount * cfg.bankPct;
-  const savings     = Math.max(wuFee - promrktsFee, 0);
+  const savings     = Math.max(wuFee - fortuniFee, 0);
 
   const bg      = dark ? '#0a0a0a' : '#ffffff';
   const border  = dark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.10)';
@@ -170,7 +170,7 @@ export default function FeeCalculator() {
 
         {/* Comparison */}
         <VStack spacing={2} align="stretch">
-          {/* promrkts */}
+          {/* fortuni */}
           <HStack
             justify="space-between"
             bg={dark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)'}
@@ -180,7 +180,7 @@ export default function FeeCalculator() {
             px={4} py={3}
           >
             <HStack spacing={2}>
-              <Text fontSize="15px" fontWeight="800" color={fg}>promrkts</Text>
+              <Text fontSize="15px" fontWeight="800" color={fg}>fortuni</Text>
               <Badge
                 bg={fg} color={bg}
                 borderRadius="6px" px={2} py={0.5}
@@ -190,7 +190,7 @@ export default function FeeCalculator() {
               </Badge>
             </HStack>
             <Text fontSize="17px" fontWeight="800" color={fg}>
-              ${promrktsFee.toFixed(2)}
+              ${fortuniFee.toFixed(2)}
             </Text>
           </HStack>
 
