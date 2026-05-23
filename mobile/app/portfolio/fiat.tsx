@@ -263,17 +263,9 @@ export default function FiatPortfolio() {
                       marginBottom: 8,
                     })}
                   >
-                    <View style={{
-                      width: 40, height: 40, borderRadius: 20,
-                      backgroundColor: p.pillBg,
-                      alignItems: 'center', justifyContent: 'center',
-                      borderWidth: 1, borderColor: p.border,
-                      marginRight: 12,
-                    }}>
-                      <Text style={{ color: p.fg, fontWeight: '700', fontSize: 14 }}>
-                        {meta.flagOrIcon}
-                      </Text>
-                    </View>
+                    <Text style={{ fontSize: 28, width: 40, textAlign: 'center', marginRight: 12 }}>
+                      {meta.flagOrIcon}
+                    </Text>
                     <View style={{ flex: 1 }}>
                       <Text style={{ color: p.fg, fontSize: 15, fontWeight: '700' }}>{meta.name}</Text>
                       <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '500', marginTop: 2 }}>

@@ -21,6 +21,7 @@ validateEnv();
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
+import compression from 'compression';
 import cookieParser from 'cookie-parser';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
@@ -159,6 +160,9 @@ app.use((_req, res, next) => {
 
 // Global middleware
 app.use(helmet());
+// Gzip/Brotli compression for all JSON and text responses.
+// Skip compression for small payloads (<1kb) and streaming responses.
+app.use(compression({ threshold: 1024 }));
 app.use(cors({ origin: corsOrigin, credentials: true }));
 app.use(cookieParser());
 

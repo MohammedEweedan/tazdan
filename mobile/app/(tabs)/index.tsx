@@ -28,6 +28,8 @@ import { useWallets, useHaptics, useTransactions, useActivities, useActivityReal
 import { useTheme, useThemedPalette, type Palette } from '@/store/themeStore';
 import { useT } from '@/store/i18nStore';
 import { Sparkline } from '@/components/ui/Sparkline';
+import { CoinIcon } from '@/components/ui/CoinIcon';
+import { getCurrencyMeta } from '@/constants';
 import { BuyWidget } from '@/components/exchange/BuyWidget';
 import { SellWidget } from '@/components/exchange/SellWidget';
 import { SendWidget } from '@/components/exchange/SendWidget';
@@ -38,7 +40,7 @@ import { PressableScale } from '@/components/ui/Motion';
 import { AnnouncementBanner } from '@/components/ui/AnnouncementBanner';
 import type { Wallet } from '@/types';
 
-type Tab = 'ASSETS' | 'WALLETS' | 'ACTIVITY';
+type Tab = 'ASSETS' | 'ACTIVITY';
 
 export default function Home() {
   const router = useRouter();
@@ -197,6 +199,8 @@ export default function Home() {
   const deltaUsd = (totalUsd * deltaPct) / 100;
   const positive = deltaPct >= 0;
   const [showBalance, setShowBalance] = useState(true);
+  const [cryptoOpen, setCryptoOpen] = useState(true);
+  const [fiatOpen, setFiatOpen] = useState(true);
 
   const initial = (user?.firstName?.[0] ?? user?.email?.[0] ?? 'P').toUpperCase();
   const handle = user?.username ?? user?.email?.split('@')[0] ?? 'me';
@@ -381,7 +385,6 @@ export default function Home() {
             justifyContent: 'center',
           }}>
             <TabBtn label={t('home.assets')}   active={tab === 'ASSETS'}   palette={p} onPress={() => { h.selection(); setTab('ASSETS'); }} />
-            <TabBtn label={t('home.wallets')}  active={tab === 'WALLETS'}  palette={p} onPress={() => { h.selection(); setTab('WALLETS'); }} />
             <TabBtn label={t('home.activity')} active={tab === 'ACTIVITY'} palette={p} onPress={() => { h.selection(); setTab('ACTIVITY'); }} />
           </View>
 
@@ -390,19 +393,31 @@ export default function Home() {
           {/* Rows */}
           {tab === 'ACTIVITY' ? (
             <ActivityList palette={p} dc={dc} items={activityItems} onSeeAll={() => { h.light(); router.push('/history'); }} />
-          ) : tab === 'WALLETS' ? (
-            // Wallets tab — QR addresses + bank references inline
-            <WalletAddressList palette={p} wallets={list} onCopy={() => h.selection()} />
           ) : ownedAssets.length > 0 ? (
             // Assets tab - divided into crypto and fiat sections
             <>
               {/* Crypto Assets Section */}
               {cryptoAssets.length > 0 && (
                 <View style={{ marginTop: 16 }}>
-                  <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '600', letterSpacing: 0.6, marginBottom: 12, paddingHorizontal: 20}}>
-                    {t('home.cryptoAssets').toUpperCase()}
-                  </Text>
-                  {cryptoAssets.map((w) => {
+                  <Pressable
+                    onPress={() => setCryptoOpen((v) => !v)}
+                    style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, marginBottom: 12 }}
+                  >
+                    <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '600', letterSpacing: 0.6 }}>
+                      {t('home.cryptoAssets').toUpperCase()}
+                    </Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                      <Text style={{ color: p.fgFaint, fontSize: 12, fontWeight: '600', fontVariant: ['tabular-nums'] }}>
+                        {showBalance ? dc.fmt(cryptoAssets.reduce((s, w) => {
+                          const tk = tickerKey(w.currency);
+                          const price = priceMap[tk] ?? (tk === 'USDT' ? 1 : 0);
+                          return s + Number(w.balance) * price;
+                        }, 0)) : '****'}
+                      </Text>
+                      <Ionicons name={cryptoOpen ? 'chevron-up' : 'chevron-down'} size={14} color={p.fgFaint} />
+                    </View>
+                  </Pressable>
+                  {cryptoOpen && cryptoAssets.map((w) => {
                     const tk = tickerKey(w.currency);
                     const price = priceMap[tk] ?? (tk === 'USDT' ? 1 : undefined);
                     return (
@@ -424,10 +439,21 @@ export default function Home() {
               {/* Fiat Assets Section */}
               {fiatAssets.length > 0 && (
                 <View style={{ marginTop: 24 }}>
-                  <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '600', letterSpacing: 0.6, marginBottom: 12, paddingHorizontal: 20, }}>
-                    {t('home.fiatAssets').toUpperCase()}
-                  </Text>
-                  {fiatAssets.map((w) => (
+                  <Pressable
+                    onPress={() => setFiatOpen((v) => !v)}
+                    style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, marginBottom: 12 }}
+                  >
+                    <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '600', letterSpacing: 0.6 }}>
+                      {t('home.fiatAssets').toUpperCase()}
+                    </Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                      <Text style={{ color: p.fgFaint, fontSize: 12, fontWeight: '600', fontVariant: ['tabular-nums'] }}>
+                        {showBalance ? dc.fmt(fiatAssets.reduce((s, w) => s + Number(w.fiatValueUsd), 0)) : '****'}
+                      </Text>
+                      <Ionicons name={fiatOpen ? 'chevron-up' : 'chevron-down'} size={14} color={p.fgFaint} />
+                    </View>
+                  </Pressable>
+                  {fiatOpen && fiatAssets.map((w) => (
                     <AssetRow
                       key={w.id}
                       wallet={w}
@@ -1848,7 +1874,7 @@ function WalletRow({ wallet: w, palette: p, isCrypto, onCopy, onShowQr }: {
       gap: 10,
     }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-        <CurrencyIcon currency={w.currency} />
+        <CurrencyIcon currency={w.currency} palette={p} />
         <View style={{ flex: 1 }}>
           <Text style={{ color: p.fg, fontSize: 15, fontWeight: '600' }}>{meta.title}</Text>
           <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '600', marginTop: 2 }}>
@@ -1946,7 +1972,7 @@ function QrModal({
         >
           {/* Header */}
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-            <CurrencyIcon currency={wallet.currency} />
+            <CurrencyIcon currency={wallet.currency} palette={p} />
             <View style={{ flex: 1 }}>
               <Text style={{ color: p.fg, fontSize: 16, fontWeight: '600' }}>
                 {t('home.receiveAsset')} {meta.title}
@@ -2128,7 +2154,7 @@ function AssetRow({ wallet, palette: p, onPress, liveUsd, sparkline, changePct, 
     >
       {/* Top row: icon, name/balance, price */}
       <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-        <CurrencyIcon currency={wallet.currency} />
+        <CurrencyIcon currency={wallet.currency} palette={p} />
         <View style={{ flex: 1, marginLeft: 12, minWidth: 0 }}>
           <Text style={{ color: p.fg, fontSize: 15, fontWeight: '600' }} numberOfLines={1}>
             {meta.title}
@@ -2160,23 +2186,15 @@ function AssetRow({ wallet, palette: p, onPress, liveUsd, sparkline, changePct, 
 
 
 /* ── Currency icons ── */
-function symbolColor(sym: string): string {
-  let h = 0;
-  for (let i = 0; i < sym.length; i++) h = sym.charCodeAt(i) + ((h << 5) - h);
-  return `hsl(${Math.abs(h) % 360}, 60%, 55%)`;
-}
-
-function CurrencyIcon({ currency }: { currency: string }) {
-  const cfg = ICON_CFG[currency] ?? {
-    color: symbolColor(currency),
-    glyph: currency.slice(0, 3),
-    fontSize: currency.length > 3 ? 11 : 14,
-  };
+function CurrencyIcon({ currency, palette: p }: { currency: string; palette: Palette }) {
+  const meta = getCurrencyMeta(currency);
+  const isCrypto = meta?.kind === 'crypto';
+  if (isCrypto) {
+    return <CoinIcon symbol={currency} size={44} />;
+  }
   return (
     <View style={{ width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }}>
-      <Text style={{ color: cfg.color, fontWeight: '600', fontSize: cfg.fontSize ?? 22, lineHeight: (cfg.fontSize ?? 22) + 6 }}>
-        {cfg.glyph}
-      </Text>
+      <Text style={{ fontSize: 22, lineHeight: 28, color: p.fg }}>{meta?.flagOrIcon ?? currency.slice(0, 2)}</Text>
     </View>
   );
 }
@@ -2231,51 +2249,3 @@ const ASSET_META: Record<string, AssetMeta> = {
   DEFAULT:    { title: 'Asset',           subDecimals: 4 },
 };
 
-interface IconCfg { color: string; glyph: string; fontSize?: number }
-const ICON_CFG: Record<string, IconCfg> = {
-  // ── Crypto — brand colour on the symbol ─────────────────────────
-  BTC:        { color: '#f7931a', glyph: '₿',  fontSize: 24 },
-  ETH:        { color: '#627eea', glyph: 'Ξ',  fontSize: 22 },
-  USDT:       { color: '#26a17b', glyph: '₮',  fontSize: 22 },
-  USDT_ERC20: { color: '#26a17b', glyph: '₮',  fontSize: 22 },
-  USDT_TRC20: { color: '#26a17b', glyph: '₮',  fontSize: 22 },
-  USDC:       { color: '#2775ca', glyph: '◎',  fontSize: 22 },
-  SOL:        { color: '#9945ff', glyph: '◎',  fontSize: 22 },
-  BNB:        { color: '#f3ba2f', glyph: '⬡',  fontSize: 22 },
-  XRP:        { color: '#346aa9', glyph: '✕',  fontSize: 20 },
-  ADA:        { color: '#0033ad', glyph: '₳',  fontSize: 22 },
-  DOGE:       { color: '#c3a634', glyph: 'Ð',  fontSize: 22 },
-  MATIC:      { color: '#8247e5', glyph: '◆',  fontSize: 18 },
-  DOT:        { color: '#e6007a', glyph: '●',  fontSize: 20 },
-  AVAX:       { color: '#e84142', glyph: '▲',  fontSize: 18 },
-  LTC:        { color: '#bfbbbb', glyph: 'Ł',  fontSize: 22 },
-  LINK:       { color: '#2a5ada', glyph: '⬡',  fontSize: 20 },
-  UNI:        { color: '#ff007a', glyph: '🦄', fontSize: 22 },
-  AAVE:       { color: '#b6509e', glyph: '👻', fontSize: 22 },
-  ATOM:       { color: '#6f7590', glyph: '⚛',  fontSize: 20 },
-  ALGO:       { color: '#6cc3a8', glyph: 'Ⓐ',  fontSize: 20 },
-  NEAR:       { color: '#00c08b', glyph: 'N',   fontSize: 20 },
-  FTM:        { color: '#1969ff', glyph: 'F',   fontSize: 20 },
-  VET:        { color: '#15bdff', glyph: 'V',   fontSize: 20 },
-  TRX:        { color: '#ef0027', glyph: 'T',   fontSize: 20 },
-  XLM:        { color: '#7d00ff', glyph: '*',   fontSize: 24 },
-  FIL:        { color: '#0090ff', glyph: '⨎',  fontSize: 20 },
-  SHIB:       { color: '#e44d26', glyph: '🐕', fontSize: 22 },
-  PEPE:       { color: '#00a550', glyph: '🐸', fontSize: 22 },
-  WIF:        { color: '#9b4dca', glyph: '🐶', fontSize: 22 },
-  ARB:        { color: '#12aaff', glyph: 'A',   fontSize: 20 },
-  OP:         { color: '#ff0420', glyph: 'O',   fontSize: 20 },
-  SUI:        { color: '#4da2ff', glyph: 'S',   fontSize: 20 },
-  APT:        { color: '#00d4aa', glyph: 'Ⓐ',  fontSize: 20 },
-  INJ:        { color: '#00b0ff', glyph: 'I',   fontSize: 20 },
-  SEI:        { color: '#9d4edd', glyph: 'S',   fontSize: 20 },
-  TON:        { color: '#0098ea', glyph: '💎', fontSize: 22 },
-  // ── Fiat — flag emoji ────────────────────────────────────────────
-  USD:        { color: '#ffffff', glyph: '🇺🇸', fontSize: 28 },
-  EUR:        { color: '#ffffff', glyph: '🇪🇺', fontSize: 28 },
-  GBP:        { color: '#ffffff', glyph: '🇬🇧', fontSize: 28 },
-  AED:        { color: '#ffffff', glyph: '🇦🇪', fontSize: 28 },
-  SAR:        { color: '#ffffff', glyph: '🇸🇦', fontSize: 28 },
-  EGP:        { color: '#ffffff', glyph: '🇪🇬', fontSize: 28 },
-  LYD:        { color: '#ffffff', glyph: '🇱🇾', fontSize: 28 },
-};

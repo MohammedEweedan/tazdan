@@ -3,14 +3,17 @@
  * Phantom × Binance × MoonPay energy.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ActivityIndicator, Alert, Keyboard, Pressable, ScrollView, View, TextInput as RNTextInput, Modal } from 'react-native';
 import { Text, TextInput } from '@/components/ui/Text';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useAuthStore } from '@/store/authStore';
-import { useThemedPalette, brand } from '@/store/themeStore';
+import { useThemedPalette, useTheme, brand } from '@/store/themeStore';
 import { SlideToConfirm } from '@/components/ui/SlideToConfirm';
+import { ExpressPayButton } from '@/components/ui/ExpressPayButton';
 import { useWallets, useCards, useMarkets } from '@/hooks';
+import { CoinAvatar } from '@/components/ui/CoinAvatar';
 import { cryptoExchangeAPI, type CryptoQuote, type AssetSearchResult } from '@/lib/cryptoApi';
 
 // ── Static metadata for well-known coins ─────────────────────────────────────
@@ -80,6 +83,7 @@ function symbolColor(sym: string): string {
   return `hsl(${Math.abs(h) % 360}, 65%, 55%)`;
 }
 
+
 function assetMeta(symbol: string): { label: string; color: string; icon: string } {
   return KNOWN[symbol.toUpperCase()] ?? {
     label: symbol.toUpperCase(),
@@ -130,6 +134,8 @@ function methodLabel(m: PayMethod) {
 export function BuyWidget() {
   const { user } = useAuthStore();
   const p = useThemedPalette();
+  const themeMode = useTheme((s) => s.mode);
+  const brandAccent = themeMode === 'dark' ? brand.primaryDark : brand.primary;
   const { data: wallets } = useWallets();
   const { data: cards } = useCards();
   const { data: tickers } = useMarkets();
@@ -142,7 +148,10 @@ export function BuyWidget() {
   const [searchQuery,    setSearchQuery]    = useState('');
   const [searchResults,  setSearchResults]  = useState<AssetSearchResult[]>([]);
   const [searchLoading,  setSearchLoading]  = useState(false);
+  const [recentSearches, setRecentSearches] = useState<string[]>([]);
   const searchRef = useRef<RNTextInput>(null);
+
+  const RECENT_KEY = '@buy_recent_searches';
 
   // ── Trade state ───────────────────────────────────────────────────
   const [fiat,     setFiat]     = useState('');
@@ -176,6 +185,20 @@ export function BuyWidget() {
   useEffect(() => { if (payMethods.length && !payMethod) setPayMethod(payMethods[0]); }, [payMethods, payMethod]);
   useEffect(() => { setNetwork(defaultNetwork(asset)); }, [asset]);
 
+  // ── Asset selection + recent search persistence ─────────────────
+  const selectAsset = useCallback((symbol: string) => {
+    Haptics.selectionAsync();
+    setAsset(symbol);
+    setQuote(null); setError(null);
+    setAssetSheetOpen(false);
+    // Persist recent search
+    setRecentSearches((prev) => {
+      const next = [symbol, ...prev.filter((s) => s !== symbol)].slice(0, 8);
+      AsyncStorage.setItem(RECENT_KEY, JSON.stringify(next));
+      return next;
+    });
+  }, []);
+
   // ── Live search via server → Binance ─────────────────────────────
   useEffect(() => {
     const q = searchQuery.trim();
@@ -194,11 +217,14 @@ export function BuyWidget() {
     return () => clearTimeout(id);
   }, [searchQuery, assetSheetOpen]);
 
-  // Populate search when sheet opens
+  // Load recent searches when sheet opens
   useEffect(() => {
     if (assetSheetOpen) {
       setSearchQuery('');
       setSearchResults([]);
+      AsyncStorage.getItem(RECENT_KEY).then((v) => {
+        if (v) setRecentSearches(JSON.parse(v));
+      });
     }
   }, [assetSheetOpen]);
 
@@ -277,14 +303,34 @@ export function BuyWidget() {
     ? (intent === 'send' ? `Slide to send ${asset}` : `Slide to buy ${asset}`)
     : 'Enter amount';
 
-  // Displayed list in picker: search results if query, else featured
-  const displayList: AssetSearchResult[] = searchResults.length > 0
-    ? searchResults
-    : FEATURED.map((s) => {
-        const base = serverAsset(s);
-        const price = base === 'USDT' ? 1 : Number(tickers?.find((t) => t.base === base)?.price ?? 0);
-        return { symbol: s, price, change24h: 0, volume24h: 0 };
-      });
+  // Top gainers: top 5 by 24h change from tickers
+  const topGainers = useMemo(() => {
+    if (!tickers) return [];
+    return [...tickers]
+      .filter((t) => t.changePct24h !== 0)
+      .sort((a, b) => b.changePct24h - a.changePct24h)
+      .slice(0, 5)
+      .map((t) => ({
+        symbol: t.base,
+        name: t.displayName ?? t.base,
+        price: t.price,
+        change24h: t.changePct24h,
+        volume24h: 0,
+      }));
+  }, [tickers]);
+
+  // Top 10 featured coins
+  const topTen = useMemo(() =>
+    FEATURED.slice(0, 10).map((s) => {
+      const base = serverAsset(s);
+      const t = tickers?.find((x) => x.base === base);
+      const price = base === 'USDT' ? 1 : Number(t?.price ?? 0);
+      return { symbol: s, name: assetMeta(s).label, price, change24h: Number(t?.changePct24h ?? 0), volume24h: 0 };
+    }),
+  [tickers]);
+
+  // Displayed list in picker: search results if query, else empty (sections render separately)
+  const displayList: AssetSearchResult[] = searchResults.length > 0 ? searchResults : [];
 
   return (
     <View style={{ paddingHorizontal: 20, paddingBottom: 8 }}>
@@ -294,44 +340,59 @@ export function BuyWidget() {
         onPress={() => { Haptics.selectionAsync(); setAssetSheetOpen(true); }}
         style={({ pressed }) => ({
           flexDirection: 'row', alignItems: 'center',
-          backgroundColor: p.bgElev, borderRadius: 18,
+          backgroundColor: p.bgElev, borderRadius: 20,
           borderWidth: 1, borderColor: p.border,
-          padding: 14, marginBottom: 16, opacity: pressed ? 0.8 : 1,
+          padding: 14, marginBottom: 18, opacity: pressed ? 0.85 : 1,
         })}
       >
-        <View style={{ width: 46, height: 46, borderRadius: 23, backgroundColor: `${meta.color}22`, alignItems: 'center', justifyContent: 'center' }}>
-          <Text style={{ fontSize: 22, color: meta.color, fontWeight: '500' }}>{meta.icon}</Text>
-        </View>
+        <CoinAvatar sym={asset} size={48} color={meta.color} />
         <View style={{ flex: 1, marginLeft: 14 }}>
-          <Text style={{ color: p.fg, fontSize: 17, fontWeight: '500', letterSpacing: 0 }}>{meta.label}</Text>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 2 }}>
-            <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '500' }}>
-              {asset}{livePrice > 0 ? `  ·  ${sym(baseCurrency)}${fmtPrice(Number(livePrice))}` : ''}
-            </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 8 }}>
+            <Text style={{ color: p.fg, fontSize: 17, fontWeight: '600' }}>{meta.label}</Text>
+            <Text style={{ color: p.fgFaint, fontSize: 12, fontWeight: '500' }}>{asset}</Text>
+          </View>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 3 }}>
+            {livePrice > 0 && (
+              <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '500', fontVariant: ['tabular-nums'] }}>
+                {sym(baseCurrency)}{fmtPrice(Number(livePrice))}
+              </Text>
+            )}
             {change24h !== undefined && (
-              <View style={{ paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, backgroundColor: change24h >= 0 ? p.greenBg : p.redBg }}>
-                <Text style={{ color: change24h >= 0 ? p.greenFg : p.redFg, fontSize: 10, fontWeight: '500' }}>
+              <View style={{ paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6, backgroundColor: change24h >= 0 ? p.greenBg : p.redBg }}>
+                <Text style={{ color: change24h >= 0 ? p.greenFg : p.redFg, fontSize: 11, fontWeight: '700' }}>
                   {change24h >= 0 ? '+' : ''}{change24h.toFixed(2)}%
                 </Text>
               </View>
             )}
           </View>
         </View>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-          <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '500' }}>Change</Text>
-          <Ionicons name="chevron-down" size={18} color={p.fgMuted} />
+        <View style={{
+          paddingHorizontal: 10, paddingVertical: 7, borderRadius: 12,
+          backgroundColor: `${brandAccent}1f`,
+          borderWidth: 1, borderColor: `${brandAccent}3a`,
+          flexDirection: 'row', alignItems: 'center', gap: 4,
+        }}>
+          <Text style={{ color: brandAccent, fontSize: 11, fontWeight: '700', letterSpacing: 0.3 }}>CHANGE</Text>
+          <Ionicons name="chevron-down" size={13} color={brandAccent} />
         </View>
       </Pressable>
 
       {/* ── Amount input ── */}
-      <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '500', letterSpacing: 0.8, marginBottom: 8 }}>YOU PAY</Text>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+        <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '700', letterSpacing: 0.9 }}>YOU PAY</Text>
+        {priceEstimate && !quote && livePrice > 0 && (
+          <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '600', letterSpacing: 0.3 }}>
+            ≈ {fmt(priceEstimate, 6)} {asset}
+          </Text>
+        )}
+      </View>
       <View style={{
         flexDirection: 'row', alignItems: 'center',
-        backgroundColor: p.bgElev, borderRadius: 18,
-        borderWidth: 1.5, borderColor: error ? p.redFg : p.border,
-        paddingHorizontal: 18, marginBottom: 10,
+        backgroundColor: p.bgElev, borderRadius: 20,
+        borderWidth: 1.5, borderColor: error ? p.redFg : (fiatNum > 0 ? brandAccent : p.border),
+        paddingHorizontal: 18, marginBottom: 12,
       }}>
-        <Text style={{ color: p.fgMuted, fontSize: 22, fontWeight: '400', marginRight: 4 }}>{sym(baseCurrency)}</Text>
+        <Text style={{ color: p.fgMuted, fontSize: 24, fontWeight: '500', marginRight: 6 }}>{sym(baseCurrency)}</Text>
         <TextInput
           value={fiat}
           onChangeText={(v) => {
@@ -343,29 +404,36 @@ export function BuyWidget() {
           keyboardType="decimal-pad"
           returnKeyType="done"
           onSubmitEditing={Keyboard.dismiss}
-          style={{ flex: 1, color: p.fg, fontSize: 34, fontWeight: '500', paddingVertical: 16, fontVariant: ['tabular-nums'] }}
+          style={{ flex: 1, color: p.fg, fontSize: 36, fontWeight: '600', paddingVertical: 18, fontVariant: ['tabular-nums'], letterSpacing: -0.5 }}
         />
-        <Text style={{ color: p.fgMuted, fontSize: 14, fontWeight: '500' }}>{baseCurrency}</Text>
+        <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '700', letterSpacing: 0.5 }}>{baseCurrency}</Text>
       </View>
 
       {/* Quick amounts */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, marginBottom: 20 }}>
-        {[25, 50, 100, 250, 500].map((v) => (
-          <Pressable
-            key={v}
-            onPress={() => { Haptics.selectionAsync(); setFiat(String(v)); setQuote(null); setError(null); }}
-            style={({ pressed }) => ({
-              paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20,
-              backgroundColor: Number(fiat) === v ? p.ctaBg : p.bgElev,
-              borderWidth: 1, borderColor: Number(fiat) === v ? p.ctaBg : p.border,
-              opacity: pressed ? 0.75 : 1,
-            })}
-          >
-            <Text style={{ color: Number(fiat) === v ? p.ctaFg : p.fgMuted, fontSize: 13, fontWeight: '500' }}>
-              {sym(baseCurrency)}{v}
-            </Text>
-          </Pressable>
-        ))}
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, marginBottom: 22 }}>
+        {[25, 50, 100, 250, 500].map((v) => {
+          const sel = Number(fiat) === v;
+          return (
+            <Pressable
+              key={v}
+              onPress={() => { Haptics.selectionAsync(); setFiat(String(v)); setQuote(null); setError(null); }}
+              style={({ pressed }) => ({
+                paddingHorizontal: 18, paddingVertical: 9, borderRadius: 22,
+                backgroundColor: sel ? brandAccent : p.bgElev,
+                borderWidth: 1, borderColor: sel ? brandAccent : p.border,
+                opacity: pressed ? 0.8 : 1,
+                shadowColor: sel ? brandAccent : 'transparent',
+                shadowOpacity: sel ? 0.35 : 0,
+                shadowOffset: { width: 0, height: 4 },
+                shadowRadius: 10,
+              })}
+            >
+              <Text style={{ color: sel ? '#ffffff' : p.fgMuted, fontSize: 13, fontWeight: '700' }}>
+                {sym(baseCurrency)}{v}
+              </Text>
+            </Pressable>
+          );
+        })}
       </ScrollView>
 
       {/* ── Quote panel ── */}
@@ -467,14 +535,25 @@ export function BuyWidget() {
       </Pressable>
 
       {/* Intent toggle */}
-      <View style={{ flexDirection: 'row', backgroundColor: p.bgElev, borderRadius: 14, padding: 3, borderWidth: 1, borderColor: p.border, marginBottom: 14 }}>
+      <View style={{
+        flexDirection: 'row', backgroundColor: p.bgElev, borderRadius: 16,
+        padding: 4, borderWidth: 1, borderColor: p.border, marginBottom: 16,
+      }}>
         {(['buy', 'send'] as const).map((v) => (
           <Pressable
             key={v}
             onPress={() => { Haptics.selectionAsync(); setIntent(v); setQuote(null); setError(null); setSuccess(null); }}
-            style={{ flex: 1, paddingVertical: 9, borderRadius: 11, alignItems: 'center', backgroundColor: intent === v ? p.ctaBg : 'transparent' }}
+            style={{
+              flex: 1, paddingVertical: 10, borderRadius: 12,
+              alignItems: 'center',
+              backgroundColor: intent === v ? brandAccent : 'transparent',
+              shadowColor: intent === v ? brandAccent : 'transparent',
+              shadowOpacity: intent === v ? 0.35 : 0,
+              shadowOffset: { width: 0, height: 4 },
+              shadowRadius: 10,
+            }}
           >
-            <Text style={{ color: intent === v ? p.ctaFg : p.fgMuted, fontSize: 12, fontWeight: '500' }}>
+            <Text style={{ color: intent === v ? '#ffffff' : p.fgMuted, fontSize: 13, fontWeight: '700' }}>
               {v === 'buy' ? 'To my wallet' : 'To address'}
             </Text>
           </Pressable>
@@ -494,6 +573,28 @@ export function BuyWidget() {
         </View>
       )}
 
+      {/* ── Express pay (Apple/Google) — appears for "buy to my wallet" only ── */}
+      {intent === 'buy' && fiatNum > 0 && (
+        <View style={{ marginBottom: 12 }}>
+          <ExpressPayButton
+            amount={fiatNum}
+            currency={baseCurrency}
+            cryptoCurrency={serverAsset(asset)}
+            enabled={!exec && !success}
+            onSuccess={() => {
+              setSuccess(`${fmt(quote?.cryptoAmount ?? priceEstimate ?? 0, 8)} ${asset} purchased ✓`);
+              setQuote(null); setFiat('');
+            }}
+            onError={(m) => setError(m)}
+          />
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 12, marginBottom: 2 }}>
+            <View style={{ flex: 1, height: 1, backgroundColor: p.border }} />
+            <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '600', letterSpacing: 0.8 }}>OR</Text>
+            <View style={{ flex: 1, height: 1, backgroundColor: p.border }} />
+          </View>
+        </View>
+      )}
+
       {/* ── CTA — slide to confirm ── */}
       <SlideToConfirm
         label={slideLabel}
@@ -504,7 +605,8 @@ export function BuyWidget() {
         errorLabel={error || undefined}
         seconds={canConfirm ? seconds : undefined}
         totalSeconds={30}
-        accent={brand.primary}
+        accent={brandAccent}
+        accentEnd={brand.deep}
         accentFg="#ffffff"
         trackBg={p.bgElev}
         trackFg={p.fg}
@@ -554,28 +656,55 @@ export function BuyWidget() {
               {searchLoading && <ActivityIndicator size="small" color={p.fgMuted} />}
             </View>
 
-            {!searchQuery && (
-              <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '500', letterSpacing: 0.6, paddingHorizontal: 20, marginTop: 12, marginBottom: 6 }}>
-                FEATURED
-              </Text>
+            {/* ── Recent searches (horizontal chips) ── */}
+            {!searchQuery && recentSearches.length > 0 && (
+              <>
+                <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '600', letterSpacing: 0.6, paddingHorizontal: 20, marginTop: 16, marginBottom: 8 }}>
+                  RECENT SEARCHES
+                </Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20, gap: 10, paddingBottom: 4 }}>
+                  {recentSearches.map((sym) => {
+                    const m = assetMeta(sym);
+                    return (
+                      <Pressable
+                        key={sym}
+                        onPress={() => selectAsset(sym)}
+                        style={({ pressed }) => ({
+                          flexDirection: 'row', alignItems: 'center', gap: 8,
+                          paddingHorizontal: 12, paddingVertical: 8,
+                          borderRadius: 12,
+                          backgroundColor: p.bgElev,
+                          borderWidth: 1, borderColor: p.border,
+                          opacity: pressed ? 0.75 : 1,
+                        })}
+                      >
+                        <CoinAvatar sym={sym} size={24} color={m.color} />
+                        <Text style={{ color: p.fg, fontSize: 13, fontWeight: '600' }}>{sym}</Text>
+                      </Pressable>
+                    );
+                  })}
+                </ScrollView>
+              </>
             )}
 
             <ScrollView
               keyboardShouldPersistTaps="handled"
               contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 56 }}
             >
-              {displayList.map((item) => {
+              {/* Section: Top 10 (when no query) */}
+              {!searchQuery && (
+                <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '600', letterSpacing: 0.6, marginTop: 12, marginBottom: 6 }}>
+                  TOP 10
+                </Text>
+              )}
+
+              {(searchQuery.length > 0 ? displayList : topTen).map((item) => {
                 const m = assetMeta(item.symbol);
                 const isSelected = asset === item.symbol;
                 return (
                   <Pressable
                     key={item.symbol}
-                    onPress={() => {
-                      Haptics.selectionAsync();
-                      setAsset(item.symbol);
-                      setQuote(null); setError(null);
-                      setAssetSheetOpen(false);
-                    }}
+                    onPress={() => selectAsset(item.symbol)}
                     style={({ pressed }) => ({
                       flexDirection: 'row', alignItems: 'center', gap: 14,
                       paddingVertical: 14,
@@ -587,18 +716,11 @@ export function BuyWidget() {
                       marginHorizontal: isSelected ? -10 : 0,
                     })}
                   >
-                    {/* Icon */}
-                    <View style={{ width: 46, height: 46, borderRadius: 23, backgroundColor: `${m.color}22`, alignItems: 'center', justifyContent: 'center' }}>
-                      <Text style={{ fontSize: 20, color: m.color, fontWeight: '500' }}>{m.icon}</Text>
-                    </View>
-
-                    {/* Name + ticker */}
+                    <CoinAvatar sym={item.symbol} size={46} color={m.color} />
                     <View style={{ flex: 1 }}>
                       <Text style={{ color: p.fg, fontSize: 15, fontWeight: '500' }}>{m.label}</Text>
                       <Text style={{ color: p.fgMuted, fontSize: 12, marginTop: 1 }}>{item.symbol}</Text>
                     </View>
-
-                    {/* Price + 24h change */}
                     <View style={{ alignItems: 'flex-end', gap: 4 }}>
                       {item.price > 0 && (
                         <Text style={{ color: p.fg, fontSize: 14, fontWeight: '500', fontVariant: ['tabular-nums'] }}>
@@ -617,6 +739,54 @@ export function BuyWidget() {
                   </Pressable>
                 );
               })}
+
+              {/* Section: Top Gainers (when no query) */}
+              {!searchQuery && topGainers.length > 0 && (
+                <>
+                  <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '600', letterSpacing: 0.6, marginTop: 20, marginBottom: 6 }}>
+                    TOP GAINERS
+                  </Text>
+                  {topGainers.map((item) => {
+                    const m = assetMeta(item.symbol);
+                    const isSelected = asset === item.symbol;
+                    return (
+                      <Pressable
+                        key={item.symbol}
+                        onPress={() => selectAsset(item.symbol)}
+                        style={({ pressed }) => ({
+                          flexDirection: 'row', alignItems: 'center', gap: 14,
+                          paddingVertical: 14,
+                          borderBottomWidth: 1, borderBottomColor: p.border,
+                          opacity: pressed ? 0.7 : 1,
+                          backgroundColor: isSelected ? `${m.color}11` : 'transparent',
+                          borderRadius: isSelected ? 14 : 0,
+                          paddingHorizontal: isSelected ? 10 : 0,
+                          marginHorizontal: isSelected ? -10 : 0,
+                        })}
+                      >
+                        <CoinAvatar sym={item.symbol} size={46} color={m.color} />
+                        <View style={{ flex: 1 }}>
+                          <Text style={{ color: p.fg, fontSize: 15, fontWeight: '500' }}>{m.label}</Text>
+                          <Text style={{ color: p.fgMuted, fontSize: 12, marginTop: 1 }}>{item.symbol}</Text>
+                        </View>
+                        <View style={{ alignItems: 'flex-end', gap: 4 }}>
+                          {item.price > 0 && (
+                            <Text style={{ color: p.fg, fontSize: 14, fontWeight: '500', fontVariant: ['tabular-nums'] }}>
+                              {sym(baseCurrency)}{fmtPrice(item.price)}
+                            </Text>
+                          )}
+                          <View style={{ paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, backgroundColor: p.greenBg }}>
+                            <Text style={{ color: p.greenFg, fontSize: 10, fontWeight: '500' }}>
+                              +{item.change24h.toFixed(2)}%
+                            </Text>
+                          </View>
+                          {isSelected && <Ionicons name="checkmark-circle" size={18} color={m.color} />}
+                        </View>
+                      </Pressable>
+                    );
+                  })}
+                </>
+              )}
 
               {searchQuery.length > 0 && displayList.length === 0 && !searchLoading && (
                 <View style={{ alignItems: 'center', paddingVertical: 48 }}>
@@ -656,9 +826,9 @@ export function BuyWidget() {
                       opacity: pressed ? 0.8 : 1,
                     })}
                   >
-                    <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: `${mc}22`, alignItems: 'center', justifyContent: 'center' }}>
-                      <Text style={{ fontSize: 18 }}>{m.type === 'card' ? '💳' : m.type === 'fiat' ? '💵' : assetMeta(m.type === 'crypto' ? m.asset : '').icon}</Text>
-                    </View>
+                    <Text style={{ fontSize: 22, width: 40, textAlign: 'center' }}>
+                      {m.type === 'card' ? '💳' : m.type === 'fiat' ? '💵' : assetMeta(m.type === 'crypto' ? m.asset : '').icon}
+                    </Text>
                     <View style={{ flex: 1 }}>
                       <Text style={{ color: p.fg, fontSize: 14, fontWeight: '500' }}>{methodLabel(m)}</Text>
                       <Text style={{ color: p.fgMuted, fontSize: 11, marginTop: 2 }}>

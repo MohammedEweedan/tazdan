@@ -11,7 +11,7 @@
     "splash": {
       "image": "./assets/icon-color.png",
       "resizeMode": "contain",
-      "backgroundColor": "#000000"
+      "backgroundColor": "#06112b"
     },
     "ios": {
       "supportsTablet": true,
@@ -19,6 +19,9 @@
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSFaceIDUsageDescription": "fortuni uses Face ID to unlock your account and authorise sensitive actions."
+      },
+      "entitlements": {
+        "com.apple.developer.in-app-payments": ["merchant.com.fortuni.app"]
       }
     },
     "android": {
@@ -42,6 +45,13 @@
         "expo-local-authentication",
         {
           "faceIDPermission": "fortuni uses Face ID to unlock your account and authorise sensitive actions."
+        }
+      ],
+      [
+        "@stripe/stripe-react-native",
+        {
+          "merchantIdentifier": "merchant.com.fortuni.app",
+          "enableGooglePay": true
         }
       ]
     ],

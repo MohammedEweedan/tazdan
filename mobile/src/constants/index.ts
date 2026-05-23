@@ -10,7 +10,7 @@ import type { Currency, CurrencyMeta } from '@/types';
  *  3. On Android emulator, `10.0.2.2` reaches the host machine.
  *  4. Web + iOS Simulator can use `localhost` directly.
  */
-const API_PORT = 5001;
+const API_PORT = 5000;
 function resolveApiBase(): string {
   const fromEnv = process.env.EXPO_PUBLIC_API_BASE;
   if (fromEnv) return fromEnv;
@@ -30,6 +30,25 @@ export const APP = {
   tagline: 'Money. Crypto. One app.',
   supportEmail: 'support@fortuni.app',
   apiBaseUrl: resolveApiBase(),
+};
+
+/**
+ * Stripe configuration. Publishable key is safe to ship to the client
+ * (it can only create tokens, not charge cards). Set this via
+ * `EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY` at build time and the merchant ID
+ * via `EXPO_PUBLIC_APPLE_MERCHANT_ID` (must match the entry in app.json
+ * `ios.entitlements`).
+ *
+ * If the publishable key is missing, the Apple/Google Pay buttons will
+ * fall back to a regular "Pay with card" flow (no Express button).
+ */
+export const STRIPE = {
+  publishableKey: process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? '',
+  merchantIdentifier: process.env.EXPO_PUBLIC_APPLE_MERCHANT_ID ?? 'merchant.com.fortuni.app',
+  // Display name shown in the Apple Pay / Google Pay sheet
+  merchantDisplayName: 'fortuni',
+  // Two-letter country for Apple Pay / Google Pay merchant locale
+  merchantCountryCode: process.env.EXPO_PUBLIC_PAY_COUNTRY ?? 'US',
 };
 
 export const STORAGE_KEYS = {
@@ -72,16 +91,16 @@ export const CURRENCY_META: Record<Currency, CurrencyMeta> = {
   MATIC: { code: 'MATIC', kind: 'crypto', name: 'Polygon',    symbol: 'MATIC',decimals: 4, flagOrIcon: '◆' },
   DOT:   { code: 'DOT',   kind: 'crypto', name: 'Polkadot',   symbol: 'DOT',  decimals: 4, flagOrIcon: '●' },
   AVAX:  { code: 'AVAX',  kind: 'crypto', name: 'Avalanche',  symbol: 'AVAX', decimals: 4, flagOrIcon: '▲' },
-  // fiat
-  USD:   { code: 'USD',   kind: 'fiat',   name: 'US Dollar',         symbol: '$',  decimals: 2, flagOrIcon: '🇺🇸' },
-  EUR:   { code: 'EUR',   kind: 'fiat',   name: 'Euro',              symbol: '€',  decimals: 2, flagOrIcon: '🇪🇺' },
-  GBP:   { code: 'GBP',   kind: 'fiat',   name: 'British Pound',     symbol: '£',  decimals: 2, flagOrIcon: '🇬🇧' },
-  AED:   { code: 'AED',   kind: 'fiat',   name: 'UAE Dirham',        symbol: 'د.إ',decimals: 2, flagOrIcon: '🇦🇪' },
-  SAR:   { code: 'SAR',   kind: 'fiat',   name: 'Saudi Riyal',       symbol: '﷼',  decimals: 2, flagOrIcon: '🇸🇦' },
-  EGP:   { code: 'EGP',   kind: 'fiat',   name: 'Egyptian Pound',    symbol: '£',  decimals: 2, flagOrIcon: '🇪🇬' },
+  // fiat — flagOrIcon shows the currency symbol, not a flag emoji
+  USD:   { code: 'USD',   kind: 'fiat',   name: 'US Dollar',         symbol: '$',  decimals: 2, flagOrIcon: '$' },
+  EUR:   { code: 'EUR',   kind: 'fiat',   name: 'Euro',              symbol: '€',  decimals: 2, flagOrIcon: '€' },
+  GBP:   { code: 'GBP',   kind: 'fiat',   name: 'British Pound',     symbol: '£',  decimals: 2, flagOrIcon: '£' },
+  AED:   { code: 'AED',   kind: 'fiat',   name: 'UAE Dirham',        symbol: 'د.إ',decimals: 2, flagOrIcon: 'د.إ' },
+  SAR:   { code: 'SAR',   kind: 'fiat',   name: 'Saudi Riyal',       symbol: '﷼',  decimals: 2, flagOrIcon: '﷼' },
+  EGP:   { code: 'EGP',   kind: 'fiat',   name: 'Egyptian Pound',    symbol: '£',  decimals: 2, flagOrIcon: '£' },
   // Libyan Dinar — local convention is 3 decimals (millimes). Symbol
   // is "ل.د" (lām-dāl); printed as "LD" in Latin contexts.
-  LYD:   { code: 'LYD',   kind: 'fiat',   name: 'Libyan Dinar',      symbol: 'ل.د', decimals: 3, flagOrIcon: '🇱🇾' },
+  LYD:   { code: 'LYD',   kind: 'fiat',   name: 'Libyan Dinar',      symbol: 'ل.د', decimals: 3, flagOrIcon: 'ل.د' },
 };
 
 export function normalizeCurrencyCode(currency: string): Currency | null {

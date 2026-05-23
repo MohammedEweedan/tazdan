@@ -9,6 +9,7 @@ import Svg, { Circle, Text as SvgText } from 'react-native-svg';
 
 import { useWallets, useMarkets } from '@/hooks';
 import { getCurrencyMeta } from '@/constants';
+import { CoinIcon } from '@/components/ui/CoinIcon';
 import { useTheme, useThemedPalette, type Palette } from '@/store/themeStore';
 import type { Wallet } from '@/types';
 import { TopGradient } from '@/components/ui/ScreenShell';
@@ -263,15 +264,7 @@ export default function CryptoPortfolio() {
                     borderRadius: 12, marginBottom: 8,
                   })}
                 >
-                  <View style={{
-                    width: 40, height: 40, borderRadius: 20, backgroundColor: p.pillBg,
-                    alignItems: 'center', justifyContent: 'center',
-                    borderWidth: 1, borderColor: p.border, marginRight: 12,
-                  }}>
-                    <Text style={{ color: p.fg, fontWeight: '700', fontSize: 14 }}>
-                      {meta?.flagOrIcon ?? asset.currency.slice(0, 2)}
-                    </Text>
-                  </View>
+                  <CoinIcon symbol={asset.currency} size={40} />
                   <View style={{ flex: 1 }}>
                     <Text style={{ color: p.fg, fontSize: 15, fontWeight: '700' }}>
                       {meta?.name ?? asset.currency}

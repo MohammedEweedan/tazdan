@@ -5,23 +5,28 @@
  */
 
 import { useEffect, useMemo, useState } from 'react';
-import { Pressable, View } from 'react-native';
+import { Image, KeyboardAvoidingView, Linking, Modal, Platform, Pressable, ScrollView, View } from 'react-native';
 import { Text } from '@/components/ui/Text';
 import { LoadingPulse } from '@/components/ui/LoadingPulse';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import Svg, { Circle, Defs, LinearGradient, Path, Stop, Line as SvgLine } from 'react-native-svg';
 import { useQuery } from '@tanstack/react-query';
+import * as Clipboard from 'expo-clipboard';
+import { CoinIcon } from '@/components/ui/CoinIcon';
+import { BuyWidget } from '@/components/exchange/BuyWidget';
+import { SellWidget } from '@/components/exchange/SellWidget';
 
 import { ScreenShell, Panel } from '@/components/ui/ScreenShell';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, { useSharedValue, useAnimatedStyle, runOnJS, withTiming } from 'react-native-reanimated';
 import { useThemedPalette, type Palette } from '@/store/themeStore';
 import { useHaptics, useWallets, useTransactions } from '@/hooks';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useMarkets, ID_TO_SYM, type CoinGeckoMarket } from '@/hooks/useMarkets';
 import { useLivePrice } from '@/hooks/useLivePrice';
 import { useOHLC } from '@/hooks/useOHLC';
-import { cryptoExchangeAPI } from '@/lib/cryptoApi';
+import { cryptoExchangeAPI, cryptoWalletAPI } from '@/lib/cryptoApi';
 import type { Currency, Wallet } from '@/types';
 import { CURRENCY_META } from '@/constants';
 import { formatMoney } from '@/utils/format';
@@ -75,7 +80,10 @@ function useBinanceChart(sym: string, range: Range, enabled: boolean) {
       );
       if (!res.ok) throw new Error(`klines ${res.status}`);
       const data: any[] = await res.json();
-      return data.map((k) => parseFloat(k[4])); // close price
+      return {
+        prices: data.map((k) => parseFloat(k[4])),
+        timestamps: data.map((k) => k[0]), // open time ms
+      };
     },
     staleTime: range === '1H' ? 30_000 : 5 * 60_000,
     retry: 1,
@@ -108,6 +116,9 @@ export default function AssetDetail() {
   const { data: markets } = useMarkets();
   const { data: wallets } = useWallets();
   const [range, setRange] = useState<Range>('24H');
+  const [buyOpen, setBuyOpen] = useState(false);
+  const [sellOpen, setSellOpen] = useState(false);
+  const insets = useSafeAreaInsets();
 
   const [hoverPrice, setHoverPrice] = useState<number | null>(null);
   const isFiat = FIAT_CODES.has(sym);
@@ -151,7 +162,17 @@ export default function AssetDetail() {
   const { data: cgOhlc, isLoading: cgLoading } = useOHLC(coinId, range);
   const { data: binanceChart, isLoading: binanceChartLoading } = useBinanceChart(sym, range, needsBinance);
 
-  const chartValues = cgOhlc ?? binanceChart ?? [];
+  const chartPoints: import('@/hooks/useOHLC').ChartPoint[] = useMemo(() => {
+    if (cgOhlc) return cgOhlc;
+    if (binanceChart) {
+      return binanceChart.prices.map((price, i) => ({
+        price,
+        timestamp: binanceChart.timestamps[i] ?? Date.now(),
+      }));
+    }
+    return [];
+  }, [cgOhlc, binanceChart]);
+
   const chartLoading = cgLoading || binanceChartLoading;
   const hasChart = !isFiat && (sym !== 'USDT' && sym !== 'USDT_ERC20' && sym !== 'USDT_TRC20');
 
@@ -163,260 +184,521 @@ export default function AssetDetail() {
 
   const displayName = market?.name ?? friendlyName(sym);
 
+  const stickyBar = (
+    <View style={{
+      flexDirection: 'row', gap: 10,
+      paddingTop: 10, paddingBottom: Math.max(insets.bottom, 10) + 6,
+      paddingHorizontal: 20,
+      backgroundColor: p.bg,
+      borderTopWidth: 1, borderTopColor: p.border,
+    }}>
+      <Pressable
+        onPress={() => { h.medium(); setBuyOpen(true); }}
+        style={({ pressed }) => ({
+          flex: 1, height: 52, borderRadius: 26,
+          backgroundColor: pressed ? '#000' : p.ctaBg,
+          alignItems: 'center', justifyContent: 'center',
+          flexDirection: 'row', gap: 6,
+        })}
+      >
+        <Ionicons name="add" size={16} color={p.ctaFg} />
+        <Text style={{ color: p.ctaFg, fontSize: 15, fontWeight: '600' }}>Buy</Text>
+      </Pressable>
+      <Pressable
+        onPress={() => { h.medium(); setSellOpen(true); }}
+        disabled={!wallet || balance <= 0}
+        style={({ pressed }) => ({
+          flex: 1, height: 52, borderRadius: 26,
+          backgroundColor: pressed ? p.border : p.pillBg,
+          borderWidth: 1, borderColor: p.border,
+          alignItems: 'center', justifyContent: 'center',
+          flexDirection: 'row', gap: 6,
+          opacity: !wallet || balance <= 0 ? 0.4 : 1,
+        })}
+      >
+        <Ionicons name="remove" size={16} color={p.fg} />
+        <Text style={{ color: p.fg, fontSize: 15, fontWeight: '600' }}>Sell</Text>
+      </Pressable>
+    </View>
+  );
+
+  const buyModal = (
+    <Modal visible={buyOpen} transparent animationType="slide" onRequestClose={() => setBuyOpen(false)}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+        <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' }} onPress={() => setBuyOpen(false)}>
+          <Pressable style={{ backgroundColor: p.bg, borderTopLeftRadius: 28, borderTopRightRadius: 28, maxHeight: '85%' }} onPress={(e) => e.stopPropagation()}>
+            <View style={{ alignItems: 'center', paddingTop: 10, paddingBottom: 2 }}>
+              <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: p.border }} />
+            </View>
+            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 24 }}>
+              <BuyWidget />
+            </ScrollView>
+          </Pressable>
+        </Pressable>
+      </KeyboardAvoidingView>
+    </Modal>
+  );
+
+  const sellModal = (
+    <Modal visible={sellOpen} transparent animationType="slide" onRequestClose={() => setSellOpen(false)}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+        <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' }} onPress={() => setSellOpen(false)}>
+          <Pressable style={{ backgroundColor: p.bg, borderTopLeftRadius: 28, borderTopRightRadius: 28, maxHeight: '85%' }} onPress={(e) => e.stopPropagation()}>
+            <View style={{ alignItems: 'center', paddingTop: 10, paddingBottom: 2 }}>
+              <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: p.border }} />
+            </View>
+            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 24 }}>
+              <SellWidget />
+            </ScrollView>
+          </Pressable>
+        </Pressable>
+      </KeyboardAvoidingView>
+    </Modal>
+  );
+
   if (isFiat) {
     return (
-      <ScreenShell title={CURRENCY_META[sym as Currency]?.name ?? sym} subtitle={`${sym} Currency`}>
-        <FiatAssetView sym={sym as Currency} wallet={wallet} p={p} h={h} router={router} />
+      <ScreenShell title={CURRENCY_META[sym as Currency]?.name ?? sym} subtitle={`${sym} Currency`} scroll={false}>
+        <View style={{ flex: 1 }}>
+          <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
+            <FiatAssetView sym={sym as Currency} wallet={wallet} p={p} h={h} />
+          </ScrollView>
+          {stickyBar}
+        </View>
+        {buyModal}
+        {sellModal}
       </ScreenShell>
     );
   }
 
   return (
-    <ScreenShell title={displayName} subtitle={`${sym} / USD`}>
-      {/* Hero price */}
-      <View style={{ alignItems: 'center', marginTop: 6 }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-          <Text style={{
-            color: p.fg, fontSize: 40, fontWeight: '600',
-            letterSpacing: -1.2, fontVariant: ['tabular-nums'],
-          }}>
-            ${formatPrice(hoverPrice !== null ? hoverPrice : price)}
-          </Text>
-          <View style={{
-            flexDirection: 'row', alignItems: 'center', gap: 4,
-            paddingHorizontal: 6, paddingVertical: 3, borderRadius: 6,
-            backgroundColor: isLive ? p.greenBg : p.pillBg,
-          }}>
-            <View style={{
-              width: 6, height: 6, borderRadius: 3,
-              backgroundColor: isLive ? p.greenFg : p.fgFaint,
-            }} />
-            <Text style={{
-              color: isLive ? p.greenFg : p.fgMuted,
-              fontSize: 9, fontWeight: '600', letterSpacing: 0.5,
-            }}>
-              {isLive ? 'LIVE' : 'DELAYED'}
-            </Text>
-          </View>
-        </View>
-
-        <View style={{
-          flexDirection: 'row', alignItems: 'center', gap: 4,
-          marginTop: 6,
-          paddingHorizontal: 9, paddingVertical: 4, borderRadius: 9,
-          backgroundColor: positive ? p.greenBg : 'rgba(239,68,68,0.16)',
-        }}>
-          <Ionicons
-            name={positive ? 'caret-up' : 'caret-down'}
-            size={9}
-            color={positive ? p.greenFg : p.redFg}
-          />
-          <Text style={{
-            color: positive ? p.greenFg : p.redFg,
-            fontSize: 12, fontWeight: '700',
-          }}>
-            {positive ? '+' : ''}{change.toFixed(2)}% · {range}
-          </Text>
-        </View>
-      </View>
-
-      {/* Chart */}
-      {hasChart ? (
-        <>
-          <View style={{ marginTop: 22 }}>
-            {chartLoading ? (
-              <View style={{
-                height: 160, borderRadius: 16,
-                backgroundColor: p.bgElev,
-                borderWidth: 1, borderColor: p.border,
-                alignItems: 'center', justifyContent: 'center',
+    <ScreenShell title={displayName} subtitle={`${sym} / USD`} scroll={false}>
+      <View style={{ flex: 1 }}>
+        <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
+          {/* Hero price */}
+          <View style={{ alignItems: 'center', marginTop: 6 }}>
+            <CoinIcon symbol={sym} size={56} />
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 10 }}>
+              <Text style={{
+                color: p.fg, fontSize: 40, fontWeight: '600',
+                letterSpacing: -1.2, fontVariant: ['tabular-nums'],
               }}>
-                <LoadingPulse size={48} icon="trending-up-outline" />
-              </View>
-            ) : (
-              <SparklineChart
-                values={chartValues}
-                color={positive ? '#10b981' : '#ef4444'}
-                palette={p}
-                onHoverPrice={setHoverPrice}
-              />
-            )}
-          </View>
-
-          <View style={{
-            flexDirection: 'row', justifyContent: 'space-between',
-            marginTop: 14, padding: 4,
-            borderRadius: 14,
-            backgroundColor: p.bgElev,
-            borderWidth: 1, borderColor: p.border,
-            gap: 4,
-          }}>
-            {(['1H', '24H', '7D', '30D'] as Range[]).map((r) => (
-              <Pressable
-                key={r}
-                onPress={() => { h.selection(); setRange(r); }}
-                style={{ flex: 1 }}
-              >
+                ${formatPrice(hoverPrice !== null ? hoverPrice : price)}
+              </Text>
+              <View style={{
+                flexDirection: 'row', alignItems: 'center', gap: 4,
+                paddingHorizontal: 6, paddingVertical: 3, borderRadius: 6,
+                backgroundColor: isLive ? p.greenBg : p.pillBg,
+              }}>
                 <View style={{
-                  paddingVertical: 9, borderRadius: 10, alignItems: 'center',
-                  backgroundColor: range === r ? p.fg : 'transparent',
-                }}>
-                  <Text style={{
-                    color: range === r ? p.bg : p.fgMuted,
-                    fontWeight: '700', fontSize: 11, letterSpacing: 0.5,
-                  }}>
-                    {r}
-                  </Text>
-                </View>
-              </Pressable>
-            ))}
-          </View>
-        </>
-      ) : (
-        <View style={{
-          marginTop: 22, paddingVertical: 24, paddingHorizontal: 20, borderRadius: 16,
-          backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border,
-          alignItems: 'center',
-        }}>
-          <Ionicons name="cash-outline" size={28} color={p.fgFaint} />
-          <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '600', marginTop: 10, textAlign: 'center' }}>
-            USDT is pegged 1:1 to the US dollar — no chart to show.
-          </Text>
-        </View>
-      )}
-
-      {/* Stat tiles */}
-      <View style={{ flexDirection: 'row', gap: 10, marginTop: 18 }}>
-        <StatTile
-          label="24H VOLUME"
-          value={market
-            ? fmtUsdCompact(market.total_volume)
-            : binanceData?.volume24h
-              ? fmtUsdCompact(binanceData.volume24h)
-              : '—'}
-          icon="pulse-outline"
-          palette={p}
-        />
-        <StatTile
-          label="MARKET CAP"
-          value={market ? fmtUsdCompact(market.market_cap) : '—'}
-          icon="layers-outline"
-          palette={p}
-        />
-      </View>
-      <View style={{ flexDirection: 'row', gap: 10, marginTop: 10 }}>
-        <StatTile
-          label="CIRC. SUPPLY"
-          value={market?.circulating_supply ? fmtSupply(market.circulating_supply, sym) : '—'}
-          icon="infinite-outline"
-          palette={p}
-        />
-        <StatTile
-          label="ALL-TIME HIGH"
-          value={market?.ath ? `$${formatPrice(market.ath)}` : '—'}
-          icon="trending-up-outline"
-          palette={p}
-        />
-      </View>
-
-      {/* Holdings */}
-      <Panel style={{ marginTop: 18 }}>
-        <View style={{ padding: 16 }}>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-            <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '700', letterSpacing: 0.6 }}>
-              YOUR HOLDINGS
-            </Text>
-            {wallet && balance > 0 && change !== 0 && (
-              <View style={{
-                flexDirection: 'row', alignItems: 'center', gap: 3,
-                paddingHorizontal: 7, paddingVertical: 3, borderRadius: 7,
-                backgroundColor: positive ? p.greenBg : 'rgba(239,68,68,0.16)',
-              }}>
-                <Ionicons
-                  name={positive ? 'caret-up' : 'caret-down'}
-                  size={8}
-                  color={positive ? p.greenFg : p.redFg}
-                />
+                  width: 6, height: 6, borderRadius: 3,
+                  backgroundColor: isLive ? p.greenFg : p.fgFaint,
+                }} />
                 <Text style={{
-                  color: positive ? p.greenFg : p.redFg,
-                  fontSize: 10, fontWeight: '600',
+                  color: isLive ? p.greenFg : p.fgMuted,
+                  fontSize: 9, fontWeight: '600', letterSpacing: 0.5,
                 }}>
-                  {positive ? '+' : ''}${Math.abs(holdingsDelta).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  {isLive ? 'LIVE' : 'DELAYED'}
                 </Text>
               </View>
-            )}
+            </View>
+
+            <View style={{
+              flexDirection: 'row', alignItems: 'center', gap: 4,
+              marginTop: 6,
+              paddingHorizontal: 9, paddingVertical: 4, borderRadius: 9,
+              backgroundColor: positive ? p.greenBg : 'rgba(239,68,68,0.16)',
+            }}>
+              <Ionicons
+                name={positive ? 'caret-up' : 'caret-down'}
+                size={9}
+                color={positive ? p.greenFg : p.redFg}
+              />
+              <Text style={{
+                color: positive ? p.greenFg : p.redFg,
+                fontSize: 12, fontWeight: '700',
+              }}>
+                {positive ? '+' : ''}{change.toFixed(2)}% · {range}
+              </Text>
+            </View>
           </View>
 
-          {wallet && balance > 0 ? (
+          {/* Chart */}
+          {hasChart ? (
             <>
-              <Text style={{
-                color: p.fg, fontSize: 26, fontWeight: '600',
-                fontVariant: ['tabular-nums'], marginTop: 8, letterSpacing: -0.4,
-              }}>
-                ${holdingsUsd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              </Text>
-              <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '600', marginTop: 2 }}>
-                {balance.toLocaleString('en-US', { maximumFractionDigits: 8 })} {sym}
-                {change !== 0 && (
-                  <>
-                    {' · '}
-                    <Text style={{ color: positive ? p.greenFg : p.redFg }}>
-                      {positive ? '+' : ''}{change.toFixed(2)}% over {range}
-                    </Text>
-                  </>
+              <View style={{ marginTop: 22 }}>
+                {chartLoading ? (
+                  <View style={{
+                    height: 160, borderRadius: 16,
+                    backgroundColor: p.bgElev,
+                    borderWidth: 1, borderColor: p.border,
+                    alignItems: 'center', justifyContent: 'center',
+                  }}>
+                    <LoadingPulse size={48} icon="trending-up-outline" />
+                  </View>
+                ) : (
+                  <SparklineChart
+                    points={chartPoints}
+                    color={positive ? '#10b981' : '#ef4444'}
+                    palette={p}
+                    onHoverPrice={setHoverPrice}
+                  />
                 )}
-              </Text>
+              </View>
+
+              <View style={{
+                flexDirection: 'row', justifyContent: 'space-between',
+                marginTop: 14, padding: 4,
+                borderRadius: 14,
+                backgroundColor: p.bgElev,
+                borderWidth: 1, borderColor: p.border,
+                gap: 4,
+              }}>
+                {(['1H', '24H', '7D', '30D'] as Range[]).map((r) => (
+                  <Pressable
+                    key={r}
+                    onPress={() => { h.selection(); setRange(r); }}
+                    style={{ flex: 1 }}
+                  >
+                    <View style={{
+                      paddingVertical: 9, borderRadius: 10, alignItems: 'center',
+                      backgroundColor: range === r ? p.fg : 'transparent',
+                    }}>
+                      <Text style={{
+                        color: range === r ? p.bg : p.fgMuted,
+                        fontWeight: '700', fontSize: 11, letterSpacing: 0.5,
+                      }}>
+                        {r}
+                      </Text>
+                    </View>
+                  </Pressable>
+                ))}
+              </View>
             </>
           ) : (
-            <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '500', marginTop: 6 }}>
-              You don&apos;t own any {sym} yet.
-            </Text>
+            <View style={{
+              marginTop: 22, paddingVertical: 24, paddingHorizontal: 20, borderRadius: 16,
+              backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border,
+              alignItems: 'center',
+            }}>
+              <Ionicons name="cash-outline" size={28} color={p.fgFaint} />
+              <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '600', marginTop: 10, textAlign: 'center' }}>
+                USDT is pegged 1:1 to the US dollar — no chart to show.
+              </Text>
+            </View>
           )}
-        </View>
-      </Panel>
 
-      {/* Buy / Sell CTAs */}
-      <View style={{ flexDirection: 'row', gap: 10, marginTop: 18, marginBottom: 24 }}>
-        <Pressable
-          onPress={() => { h.medium(); router.push('/buy'); }}
-          style={({ pressed }) => ({
-            flex: 1, height: 52, borderRadius: 26,
-            backgroundColor: pressed ? '#000' : p.ctaBg,
-            alignItems: 'center', justifyContent: 'center',
-            flexDirection: 'row', gap: 6,
-          })}
-        >
-          <Ionicons name="add" size={16} color={p.ctaFg} />
-          <Text style={{ color: p.ctaFg, fontSize: 15, fontWeight: '600' }}>Buy</Text>
-        </Pressable>
-        <Pressable
-          onPress={() => { h.medium(); router.push('/sell'); }}
-          disabled={!wallet || balance <= 0}
-          style={({ pressed }) => ({
-            flex: 1, height: 52, borderRadius: 26,
-            backgroundColor: pressed ? p.border : p.pillBg,
-            borderWidth: 1, borderColor: p.border,
-            alignItems: 'center', justifyContent: 'center',
-            flexDirection: 'row', gap: 6,
-            opacity: !wallet || balance <= 0 ? 0.4 : 1,
-          })}
-        >
-          <Ionicons name="remove" size={16} color={p.fg} />
-          <Text style={{ color: p.fg, fontSize: 15, fontWeight: '600' }}>Sell</Text>
-        </Pressable>
+          {/* Stat tiles */}
+          <View style={{ flexDirection: 'row', gap: 10, marginTop: 18 }}>
+            <StatTile
+              label="24H VOLUME"
+              value={market
+                ? fmtUsdCompact(market.total_volume)
+                : binanceData?.volume24h
+                  ? fmtUsdCompact(binanceData.volume24h)
+                  : '—'}
+              icon="pulse-outline"
+              palette={p}
+            />
+            <StatTile
+              label="MARKET CAP"
+              value={market ? fmtUsdCompact(market.market_cap) : '—'}
+              icon="layers-outline"
+              palette={p}
+            />
+          </View>
+          <View style={{ flexDirection: 'row', gap: 10, marginTop: 10 }}>
+            <StatTile
+              label="CIRC. SUPPLY"
+              value={market?.circulating_supply ? fmtSupply(market.circulating_supply, sym) : '—'}
+              icon="infinite-outline"
+              palette={p}
+            />
+            <StatTile
+              label="ALL-TIME HIGH"
+              value={market?.ath ? `$${formatPrice(market.ath)}` : '—'}
+              icon="trending-up-outline"
+              palette={p}
+            />
+          </View>
+
+          {/* Holdings */}
+          <Panel style={{ marginTop: 18, marginBottom: 16 }}>
+            <View style={{ padding: 16 }}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '700', letterSpacing: 0.6 }}>
+                  YOUR HOLDINGS
+                </Text>
+                {wallet && balance > 0 && change !== 0 && (
+                  <View style={{
+                    flexDirection: 'row', alignItems: 'center', gap: 3,
+                    paddingHorizontal: 7, paddingVertical: 3, borderRadius: 7,
+                    backgroundColor: positive ? p.greenBg : 'rgba(239,68,68,0.16)',
+                  }}>
+                    <Ionicons
+                      name={positive ? 'caret-up' : 'caret-down'}
+                      size={8}
+                      color={positive ? p.greenFg : p.redFg}
+                    />
+                    <Text style={{
+                      color: positive ? p.greenFg : p.redFg,
+                      fontSize: 10, fontWeight: '600',
+                    }}>
+                      {positive ? '+' : ''}${Math.abs(holdingsDelta).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </Text>
+                  </View>
+                )}
+              </View>
+
+              {wallet && balance > 0 ? (
+                <>
+                  <Text style={{
+                    color: p.fg, fontSize: 26, fontWeight: '600',
+                    fontVariant: ['tabular-nums'], marginTop: 8, letterSpacing: -0.4,
+                  }}>
+                    ${holdingsUsd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </Text>
+                  <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '600', marginTop: 2 }}>
+                    {balance.toLocaleString('en-US', { maximumFractionDigits: 8 })} {sym}
+                    {change !== 0 && (
+                      <>
+                        {' · '}
+                        <Text style={{ color: positive ? p.greenFg : p.redFg }}>
+                          {positive ? '+' : ''}{change.toFixed(2)}% over {range}
+                        </Text>
+                      </>
+                    )}
+                  </Text>
+                </>
+              ) : (
+                <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '500', marginTop: 6 }}>
+                  You don&apos;t own any {sym} yet.
+                </Text>
+              )}
+            </View>
+          </Panel>
+
+          {/* Deposit QR for crypto */}
+          <CryptoDepositSection sym={sym} wallet={wallet} p={p} h={h} />
+
+          {/* News */}
+          <NewsSection p={p} sym={sym} />
+        </ScrollView>
+        {stickyBar}
       </View>
+      {buyModal}
+      {sellModal}
     </ScreenShell>
   );
 }
 
 
+/* ── Deposit QR for crypto ─── */
+function CryptoDepositSection({ sym, wallet, p, h }: {
+  sym: string; wallet: Wallet | undefined; p: Palette;
+  h: { selection: () => void; medium: () => void; light: () => void };
+}) {
+  const [addr, setAddr] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const network = sym.replace(/_ERC20|_TRC20/, '');
+  useEffect(() => {
+    if (!wallet) return;
+    setLoading(true);
+    cryptoWalletAPI.depositAddress(sym, network)
+      .then((res) => setAddr(res.data.address))
+      .catch(() => setAddr(null))
+      .finally(() => setLoading(false));
+  }, [sym, wallet]);
+
+  if (!wallet) return null;
+
+  const qrUrl = addr
+    ? `https://api.qrserver.com/v1/create-qr-code/?size=300x300&margin=8&data=${encodeURIComponent(addr)}&bgcolor=ffffff&color=000000`
+    : null;
+
+  return (
+    <Panel style={{ marginBottom: 24 }}>
+      <View style={{ padding: 16 }}>
+        <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '700', letterSpacing: 0.6, marginBottom: 12 }}>
+          DEPOSIT {sym}
+        </Text>
+        {loading ? (
+          <LoadingPulse size={36} icon="qr-code-outline" />
+        ) : addr ? (
+          <>
+            {qrUrl && (
+              <View style={{ alignItems: 'center', marginBottom: 14 }}>
+                <Image source={{ uri: qrUrl }} style={{ width: 180, height: 180, borderRadius: 12 }} resizeMode="contain" />
+              </View>
+            )}
+            <Pressable
+              onPress={() => {
+                Clipboard.setStringAsync(addr);
+                h.selection();
+                setCopied(true);
+                setTimeout(() => setCopied(false), 2000);
+              }}
+              style={({ pressed }) => ({
+                flexDirection: 'row', alignItems: 'center', gap: 10,
+                padding: 12, borderRadius: 12,
+                backgroundColor: p.bgElev,
+                borderWidth: 1, borderColor: p.border,
+                opacity: pressed ? 0.8 : 1,
+              })}
+            >
+              <Ionicons name={copied ? 'checkmark-circle' : 'copy-outline'} size={18} color={copied ? p.greenFg : p.fgMuted} />
+              <Text style={{ color: p.fg, fontSize: 13, fontWeight: '500', flex: 1 }} numberOfLines={1}>{addr}</Text>
+            </Pressable>
+          </>
+        ) : (
+          <Text style={{ color: p.fgMuted, fontSize: 13, textAlign: 'center' }}>Unable to load deposit address</Text>
+        )}
+      </View>
+    </Panel>
+  );
+}
+
+/* ── News feed via CryptoCompare (free tier, no key) ─── */
+interface NewsItem {
+  title: string;
+  source: string;
+  url: string;
+  published: number;
+  imageUrl?: string;
+  body?: string;
+  categories?: string;
+}
+
+const SYM_KEYWORDS: Record<string, string[]> = {
+  BTC: ['BTC', 'BITCOIN'],
+  ETH: ['ETH', 'ETHEREUM'],
+  SOL: ['SOL', 'SOLANA'],
+  BNB: ['BNB'],
+  XRP: ['XRP', 'RIPPLE'],
+  ADA: ['ADA', 'CARDANO'],
+  DOGE: ['DOGE', 'DOGECOIN'],
+  MATIC: ['MATIC', 'POLYGON'],
+  DOT: ['DOT', 'POLKADOT'],
+  AVAX: ['AVAX', 'AVALANCHE'],
+  USDT: ['USDT', 'TETHER'],
+  USDC: ['USDC'],
+  LTC: ['LTC', 'LITECOIN'],
+  LINK: ['LINK', 'CHAINLINK'],
+};
+
+function matchesSym(item: NewsItem, sym: string): boolean {
+  const keywords = SYM_KEYWORDS[sym] ?? [sym];
+  const hay = (
+    (item.title ?? '') + ' ' +
+    (item.source ?? '') + ' ' +
+    (item.body ?? '') + ' ' +
+    (item.categories ?? '')
+  ).toUpperCase();
+  return keywords.some((k) => hay.includes(k));
+}
+
+function NewsSection({ p, sym }: { p: Palette; sym: string }) {
+  const [news, setNews] = useState<NewsItem[]>([]);
+  const [loading, setLoading] = useState(false);
+  const isFiat = FIAT_CODES.has(sym);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+
+    if (isFiat) {
+      setNews([]);
+      setLoading(false);
+      return;
+    }
+
+    fetch('https://min-api.cryptocompare.com/data/v2/news/?lang=EN')
+      .then((res) => res.json())
+      .then((json) => {
+        if (cancelled) return;
+        if (json.Type !== 100 || !Array.isArray(json.Data)) {
+          setNews([]);
+          return;
+        }
+        const all = (json.Data as any[]).slice(0, 100).map((n: any) => ({
+          title: n.title ?? 'Untitled',
+          source: n.source_info?.name ?? n.source ?? 'CryptoCompare',
+          url: n.url ?? '',
+          published: n.published_on ?? 0,
+          imageUrl: n.imageurl,
+          body: n.body ?? '',
+          categories: n.categories ?? '',
+        }));
+        const matched = all.filter((n: NewsItem) => matchesSym(n, sym));
+        setNews(matched.length > 0 ? matched.slice(0, 5) : []);
+      })
+      .catch(() => setNews([]))
+      .finally(() => setLoading(false));
+    return () => { cancelled = true; };
+  }, [sym, isFiat]);
+
+  return (
+    <Panel style={{ marginBottom: 24 }}>
+      <View style={{ padding: 16 }}>
+        <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '700', letterSpacing: 0.6, marginBottom: 12 }}>
+          NEWS
+        </Text>
+        {loading ? (
+          <View style={{ paddingVertical: 24, alignItems: 'center' }}>
+            <Ionicons name="newspaper-outline" size={28} color={p.fgFaint} />
+            <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '500', marginTop: 10 }}>Loading news…</Text>
+          </View>
+        ) : news.length > 0 ? (
+          news.map((item, i) => (
+            <Pressable
+              key={i}
+              onPress={() => item.url && Linking.openURL(item.url)}
+              style={({ pressed }) => ({
+                paddingVertical: 10,
+                borderBottomWidth: i === news.length - 1 ? 0 : 1,
+                borderBottomColor: p.border,
+                opacity: pressed ? 0.7 : 1,
+              })}
+            >
+              <Text style={{ color: p.fg, fontSize: 13, fontWeight: '600' }} numberOfLines={2}>{item.title}</Text>
+              <Text style={{ color: p.fgFaint, fontSize: 11, marginTop: 4 }}>
+                {item.source} · {new Date(item.published * 1000).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}
+              </Text>
+            </Pressable>
+          ))
+        ) : isFiat ? (
+          <View style={{ paddingVertical: 24, alignItems: 'center' }}>
+            <Ionicons name="cash-outline" size={28} color={p.fgFaint} />
+            <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '500', marginTop: 10, textAlign: 'center' }}>
+              Market news is not available for fiat currencies.
+            </Text>
+          </View>
+        ) : (
+          <View style={{ paddingVertical: 24, alignItems: 'center' }}>
+            <Ionicons name="newspaper-outline" size={28} color={p.fgFaint} />
+            <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '500', marginTop: 10, textAlign: 'center' }}>
+              No news found for {sym}.
+            </Text>
+          </View>
+        )}
+      </View>
+    </Panel>
+  );
+}
+
 /* ── Sparkline chart ─── */
-function SparklineChart({ values, color, palette: p, onHoverPrice }: {
-  values: number[]; color: string; palette: Palette; onHoverPrice?: (price: number | null) => void;
+function SparklineChart({ points, color, palette: p, onHoverPrice }: {
+  points: import('@/hooks/useOHLC').ChartPoint[];
+  color: string; palette: Palette; onHoverPrice?: (price: number | null) => void;
 }) {
   const W = 320;
   const H = 160;
   const PAD = 6;
+  const [hoverDate, setHoverDate] = useState<string | null>(null);
+
+  const values = points.map((pt) => pt.price);
 
   if (!values || values.length < 2) {
     return (
@@ -439,7 +721,8 @@ function SparklineChart({ values, color, palette: p, onHoverPrice }: {
   const pts = values.map((v, i) => ({
     x: PAD + i * step,
     y: PAD + (H - PAD * 2) * (1 - (v - min) / spread),
-    val: v
+    val: v,
+    ts: points[i]?.timestamp ?? 0,
   }));
 
   const last = pts[pts.length - 1];
@@ -455,6 +738,7 @@ function SparklineChart({ values, color, palette: p, onHoverPrice }: {
   const handleHover = (x: number) => {
     if (x < PAD || x > W - PAD) {
       if (onHoverPrice) onHoverPrice(null);
+      setHoverDate(null);
       hoverOpacity.value = withTiming(0, { duration: 150 });
       return;
     }
@@ -464,18 +748,14 @@ function SparklineChart({ values, color, palette: p, onHoverPrice }: {
     hoverY.value = pt.y;
     hoverOpacity.value = withTiming(1, { duration: 50 });
     if (onHoverPrice) onHoverPrice(pt.val);
+    const d = new Date(pt.ts);
+    setHoverDate(`${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`);
   };
 
   const pan = Gesture.Pan()
-    .onBegin((e: any) => {
-      runOnJS(handleHover)(e.x);
-    })
-    .onChange((e: any) => {
-      runOnJS(handleHover)(e.x);
-    })
-    .onFinalize(() => {
-      runOnJS(handleHover)(-1);
-    });
+    .onBegin((e: any) => { runOnJS(handleHover)(e.x); })
+    .onChange((e: any) => { runOnJS(handleHover)(e.x); })
+    .onFinalize(() => { runOnJS(handleHover)(-1); });
 
   const cursorStyle = useAnimatedStyle(() => ({
     opacity: hoverOpacity.value,
@@ -509,30 +789,40 @@ function SparklineChart({ values, color, palette: p, onHoverPrice }: {
 
   return (
     <GestureDetector gesture={pan}>
-      <Animated.View style={{
-        borderRadius: 16, backgroundColor: p.bgElev,
-        borderWidth: 1, borderColor: p.border, padding: 8,
-        overflow: 'hidden'
-      }}>
-        <Svg width="100%" height={H} viewBox={`0 0 ${W} ${H}`}>
-          <Defs>
-            <LinearGradient id="grad" x1="0" y1="0" x2="0" y2="1">
-              <Stop offset="0" stopColor={color} stopOpacity="0.35" />
-              <Stop offset="1" stopColor={color} stopOpacity="0" />
-            </LinearGradient>
-          </Defs>
-          {grid.map((y, i) => (
-            <SvgLine key={i} x1={PAD} x2={W - PAD} y1={y} y2={y}
-              stroke={p.border} strokeWidth={1} strokeDasharray="3,4" />
-          ))}
-          <Path d={areaPath} fill="url(#grad)" />
-          <Path d={linePath} stroke={color} strokeWidth={2.2} fill="none" strokeLinejoin="round" strokeLinecap="round" />
-          <Circle cx={last.x} cy={last.y} r={8} fill={color} opacity={0.25} />
-          <Circle cx={last.x} cy={last.y} r={4} fill={color} />
-        </Svg>
-        <Animated.View style={lineStyle} />
-        <Animated.View style={cursorStyle} />
-      </Animated.View>
+      <View style={{ position: 'relative' }}>
+        <Animated.View style={{
+          borderRadius: 16, backgroundColor: p.bgElev,
+          borderWidth: 1, borderColor: p.border, padding: 8,
+          overflow: 'hidden'
+        }}>
+          <Svg width="100%" height={H} viewBox={`0 0 ${W} ${H}`}>
+            <Defs>
+              <LinearGradient id="grad" x1="0" y1="0" x2="0" y2="1">
+                <Stop offset="0" stopColor={color} stopOpacity="0.35" />
+                <Stop offset="1" stopColor={color} stopOpacity="0" />
+              </LinearGradient>
+            </Defs>
+            {grid.map((y, i) => (
+              <SvgLine key={i} x1={PAD} x2={W - PAD} y1={y} y2={y}
+                stroke={p.border} strokeWidth={1} strokeDasharray="3,4" />
+            ))}
+            <Path d={areaPath} fill="url(#grad)" />
+            <Path d={linePath} stroke={color} strokeWidth={2.2} fill="none" strokeLinejoin="round" strokeLinecap="round" />
+            <Circle cx={last.x} cy={last.y} r={8} fill={color} opacity={0.25} />
+            <Circle cx={last.x} cy={last.y} r={4} fill={color} />
+          </Svg>
+          <Animated.View style={lineStyle} />
+          <Animated.View style={cursorStyle} />
+        </Animated.View>
+        {hoverDate && (
+          <Text style={{
+            position: 'absolute',
+            bottom: -12, left: 0, right: 0,
+            textAlign: 'center', color: p.fgFaint,
+            fontSize: 11, fontWeight: '500',
+          }}>{hoverDate}</Text>
+        )}
+      </View>
     </GestureDetector>
   );
 }
@@ -582,12 +872,11 @@ function fmtSupply(n: number, sym: string): string {
 }
 
 /* ── Fiat asset detail ─── */
-function FiatAssetView({ sym, wallet, p, h, router }: {
+function FiatAssetView({ sym, wallet, p, h }: {
   sym: Currency;
   wallet: Wallet | undefined;
   p: Palette;
   h: { selection: () => void; medium: () => void; light: () => void };
-  router: { push: (href: any) => void };
 }) {
   const { data: txData } = useTransactions(1);
   const txs = (txData?.items ?? []).filter((t: any) => t.currency === sym).slice(0, 8);
@@ -595,8 +884,13 @@ function FiatAssetView({ sym, wallet, p, h, router }: {
   const usdValue = wallet ? Number(wallet.fiatValueUsd) : 0;
   const fxRate = balance > 0 ? usdValue / balance : 0;
 
+  const meta = CURRENCY_META[sym as Currency];
   return (
     <View style={{ paddingHorizontal: 20, paddingBottom: 40 }}>
+      <View style={{ alignItems: 'center', marginTop: 8, marginBottom: 12 }}>
+        <Text style={{ fontSize: 56, lineHeight: 64, color: p.fg }}>{meta?.flagOrIcon ?? sym.slice(0, 2)}</Text>
+        <Text style={{ color: p.fgMuted, fontSize: 14, fontWeight: '600', marginTop: 4 }}>{meta?.name ?? sym}</Text>
+      </View>
       <View style={{
         borderRadius: 20, padding: 20, marginBottom: 20,
         backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border,
@@ -621,33 +915,7 @@ function FiatAssetView({ sym, wallet, p, h, router }: {
         )}
       </View>
 
-      <View style={{ flexDirection: 'row', gap: 12, marginBottom: 28 }}>
-        <Pressable
-          onPress={() => { h.medium(); router.push(`/topup?currency=${sym}` as any); }}
-          style={({ pressed }) => ({
-            flex: 1, height: 52, borderRadius: 26, backgroundColor: p.ctaBg,
-            opacity: pressed ? 0.85 : 1, alignItems: 'center', justifyContent: 'center',
-            flexDirection: 'row', gap: 6,
-          })}
-        >
-          <Ionicons name="arrow-down-circle-outline" size={18} color={p.ctaFg} />
-          <Text style={{ color: p.ctaFg, fontSize: 15, fontWeight: '600' }}>Deposit</Text>
-        </Pressable>
-        <Pressable
-          onPress={() => { h.medium(); router.push(`/send?currency=${sym}` as any); }}
-          style={({ pressed }) => ({
-            flex: 1, height: 52, borderRadius: 26,
-            backgroundColor: pressed ? p.border : p.pillBg,
-            borderWidth: 1, borderColor: p.border,
-            alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 6,
-          })}
-        >
-          <Ionicons name="paper-plane-outline" size={16} color={p.fg} />
-          <Text style={{ color: p.fg, fontSize: 15, fontWeight: '600' }}>Withdraw</Text>
-        </Pressable>
-      </View>
-
-      <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '700', letterSpacing: 0.6, marginBottom: 12 }}>
+      <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '700', letterSpacing: 0.6, marginBottom: 12, marginTop: 8 }}>
         RECENT ACTIVITY
       </Text>
       {txs.length > 0 ? txs.map((t: any) => {
@@ -684,6 +952,49 @@ function FiatAssetView({ sym, wallet, p, h, router }: {
           <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '500', marginTop: 10 }}>No transactions yet</Text>
         </View>
       )}
+
+      {/* Bank Details */}
+      <Panel style={{ marginTop: 8, marginBottom: 24 }}>
+        <View style={{ padding: 16 }}>
+          <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '700', letterSpacing: 0.6, marginBottom: 12 }}>
+            BANK DETAILS
+          </Text>
+          <BankDetailRow label="Account Name" value="Promrkts Ltd" p={p} />
+          <BankDetailRow label="Bank Name" value="Emirates NBD" p={p} />
+          <BankDetailRow label="IBAN" value="AE00 0000 0000 0000 0000 000" p={p} />
+          <BankDetailRow label="SWIFT" value="EBILAEAD" p={p} />
+          <BankDetailRow label="Reference" value={sym} p={p} last />
+        </View>
+      </Panel>
+
+      <NewsSection p={p} sym={sym} />
     </View>
+  );
+}
+
+function BankDetailRow({ label, value, p, last }: {
+  label: string; value: string; p: Palette; last?: boolean;
+}) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <Pressable
+      onPress={() => {
+        Clipboard.setStringAsync(value);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      }}
+      style={({ pressed }) => ({
+        flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+        paddingVertical: 10,
+        borderBottomWidth: last ? 0 : 1, borderBottomColor: p.border,
+        opacity: pressed ? 0.7 : 1,
+      })}
+    >
+      <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '500' }}>{label}</Text>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+        <Text style={{ color: p.fg, fontSize: 13, fontWeight: '600' }} numberOfLines={1}>{value}</Text>
+        <Ionicons name={copied ? 'checkmark-circle' : 'copy-outline'} size={14} color={copied ? p.greenFg : p.fgFaint} />
+      </View>
+    </Pressable>
   );
 }

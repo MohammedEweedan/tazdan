@@ -175,6 +175,7 @@ export default function WelcomeBack() {
                 onPress={submitPassword}
                 disabled={submitting}
                 style={({ pressed }) => ({
+                  alignSelf: 'stretch', width: '100%',
                   marginTop: 18, height: 58, borderRadius: 29,
                   backgroundColor: p.ctaBg,
                   opacity: submitting ? 0.7 : pressed ? 0.85 : 1,
@@ -194,6 +195,7 @@ export default function WelcomeBack() {
                   onPress={() => submitBiometric('Face ID')}
                   disabled={bioLoading}
                   style={({ pressed }) => ({
+                    alignSelf: 'stretch', width: '100%',
                     marginTop: 12, height: 56, borderRadius: 28,
                     backgroundColor: pressed ? p.bgElev : p.pillBg,
                     borderWidth: 1, borderColor: p.border,
@@ -216,6 +218,7 @@ export default function WelcomeBack() {
                   onPress={() => submitBiometric('Passkey')}
                   disabled={bioLoading}
                   style={({ pressed }) => ({
+                    alignSelf: 'stretch', width: '100%',
                     marginTop: 12, height: 56, borderRadius: 28,
                     backgroundColor: pressed ? p.bgElev : p.pillBg,
                     borderWidth: 1, borderColor: p.border,

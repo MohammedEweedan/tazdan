@@ -25,6 +25,7 @@ export { useBackendTickers as useMarkets } from './useBackendTickers';
 export { useActivityRealtime } from './useActivityRealtime';
 export { useNotificationRealtime } from './useNotificationRealtime';
 export { useCountries, useBanksByCountry, usePaymentMethods, usePlatformBanks } from './useGeo';
+export { useCoinIcons } from './useCoinIcons';
 
 export const useWallets = () =>
   useQuery({

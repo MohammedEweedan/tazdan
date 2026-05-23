@@ -1,7 +1,8 @@
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Image, Platform, Pressable, Text, View, ActionSheetIOS, Alert } from 'react-native';
-import { useThemedPalette, useTheme } from '@/store/themeStore';
+import { useThemedPalette, useTheme, brand } from '@/store/themeStore';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useAuthStore } from '@/store/authStore';
 import { useT } from '@/store/i18nStore';
 import { useMessageRealtime } from '@/hooks';
@@ -20,6 +21,7 @@ export default function TabsLayout() {
   const t = useT();
   const userId = useAuthStore((s) => s.user?.id);
   const themeMode = useTheme((s) => s.mode);
+  const brandAccent = themeMode === 'dark' ? brand.primaryDark : brand.primary;
 
   useMessageRealtime(userId);
 
@@ -42,7 +44,7 @@ export default function TabsLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: p.fg,
+        tabBarActiveTintColor: brandAccent,
         tabBarInactiveTintColor: p.fgFaint,
         tabBarShowLabel: false,
         tabBarStyle: {
@@ -99,21 +101,30 @@ export default function TabsLayout() {
                   width: FAB_SIZE,
                   height: FAB_SIZE,
                   borderRadius: FAB_SIZE / 2,
-                  backgroundColor: themeMode === 'dark' ? '#ffffff' : '#111111',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  shadowColor: '#000',
-                  shadowOpacity: 0.25,
-                  shadowRadius: 12,
-                  shadowOffset: { width: 0, height: 4 },
-                  elevation: 8,
+                  shadowColor: brandAccent,
+                  shadowOpacity: 0.55,
+                  shadowRadius: 18,
+                  shadowOffset: { width: 0, height: 8 },
+                  elevation: 10,
                   borderWidth: 3,
                   borderColor: p.bg,
+                  overflow: 'hidden',
                 }}
               >
+                <LinearGradient
+                  colors={[brand.primaryDark, brand.primary, brand.deep]}
+                  start={{ x: 0.1, y: 0 }}
+                  end={{ x: 0.9, y: 1 }}
+                  style={{
+                    position: 'absolute', left: 0, right: 0, top: 0, bottom: 0,
+                    borderRadius: FAB_SIZE / 2,
+                  }}
+                />
                 <Image
                   source={require('../../assets/icon-color.png')}
-                  style={{ width: FAB_SIZE - 5, height: FAB_SIZE - 5 }}
+                  style={{ width: FAB_SIZE - 18, height: FAB_SIZE - 18, tintColor: '#ffffff' }}
                   resizeMode="contain"
                 />
               </View>

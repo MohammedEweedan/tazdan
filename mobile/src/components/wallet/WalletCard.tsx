@@ -11,6 +11,7 @@ import { gradients, shadows } from '@/theme';
 import { getCurrencyMeta } from '@/constants';
 import { formatAmount, formatPercent } from '@/utils/format';
 import { Sparkline } from '@/components/ui/Sparkline';
+import { CoinIcon } from '@/components/ui/CoinIcon';
 import type { Wallet } from '@/types';
 
 interface Props {
@@ -30,7 +31,6 @@ export function WalletCard({ wallet, width, height = 200, onPress, sparkline }: 
   const meta = getCurrencyMeta(wallet.currency);
   const grad = gradients.cards[colorwayFor(wallet.currency.charCodeAt(0))];
   const positive = (wallet.changePct24h ?? 0) >= 0;
-  const icon = meta?.flagOrIcon ?? wallet.currency.slice(0, 1);
   const code = meta?.code ?? wallet.currency;
   const name = meta?.name ?? wallet.currency;
 
@@ -53,15 +53,7 @@ export function WalletCard({ wallet, width, height = 200, onPress, sparkline }: 
           {/* Top row */}
           <View className="flex-row items-center justify-between">
             <View className="flex-row items-center gap-2">
-              <View
-                style={{
-                  width: 30, height: 30, borderRadius: 15,
-                  backgroundColor: 'rgba(255,255,255,0.14)',
-                  alignItems: 'center', justifyContent: 'center',
-                }}
-              >
-                <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>{icon}</Text>
-              </View>
+              <CoinIcon symbol={wallet.currency} size={30} />
               <Text style={{ color: 'rgba(255,255,255,0.78)', fontSize: 12, fontWeight: '600', letterSpacing: 0.4 }}>
                 {code} · {name.toUpperCase()}
               </Text>

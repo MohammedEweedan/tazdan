@@ -261,6 +261,8 @@ export default function Login() {
               accessibilityRole="button"
               accessibilityLabel={t('login.cta')}
               style={({ pressed }) => ({
+                alignSelf: 'stretch',
+                width: '100%',
                 marginTop: 28,
                 height: 58,
                 minHeight: 58,
@@ -300,6 +302,8 @@ export default function Login() {
                 Alert.alert('Apple Sign-In', 'Apple Sign-In is coming soon. Use email + password for now.');
               }}
               style={({ pressed }) => ({
+                alignSelf: 'stretch',
+                width: '100%',
                 marginTop: 18,
                 height: 56,
                 borderRadius: 28,
@@ -331,6 +335,8 @@ export default function Login() {
                 }}
                 disabled={bioLoading}
                 style={({ pressed }) => ({
+                  alignSelf: 'stretch',
+                  width: '100%',
                   marginTop: 12,
                   height: 56,
                   borderRadius: 28,
