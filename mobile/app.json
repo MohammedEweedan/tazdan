@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "promrkts",
-    "slug": "promrkts",
+    "name": "fortuni",
+    "slug": "fortuni",
     "version": "0.1.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "scheme": "promrkts",
+    "scheme": "fortuni",
     "userInterfaceStyle": "dark",
     "newArchEnabled": true,
     "splash": {
@@ -15,10 +15,10 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.promrkts.app",
+      "bundleIdentifier": "com.fortuni.app",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
-        "NSFaceIDUsageDescription": "promrkts uses Face ID to unlock your account and authorise sensitive actions."
+        "NSFaceIDUsageDescription": "fortuni uses Face ID to unlock your account and authorise sensitive actions."
       }
     },
     "android": {
@@ -26,7 +26,7 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#030818"
       },
-      "package": "com.promrkts.app"
+      "package": "com.fortuni.app"
     },
     "web": {
       "bundler": "metro",
@@ -41,7 +41,7 @@
       [
         "expo-local-authentication",
         {
-          "faceIDPermission": "promrkts uses Face ID to unlock your account and authorise sensitive actions."
+          "faceIDPermission": "fortuni uses Face ID to unlock your account and authorise sensitive actions."
         }
       ]
     ],

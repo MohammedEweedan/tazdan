@@ -28,15 +28,15 @@ function resolveApiBase(): string {
 export const APP = {
   name: 'fortuni',
   tagline: 'Money. Crypto. One app.',
-  supportEmail: 'support@promrkts.app',
+  supportEmail: 'support@fortuni.app',
   apiBaseUrl: resolveApiBase(),
 };
 
 export const STORAGE_KEYS = {
-  accessToken:  'promrkts.accessToken',
-  refreshToken: 'promrkts.refreshToken',
-  onboarded:    'promrkts.onboarded',
-  lastUser:     'promrkts.lastUser',
+  accessToken:  'fortuni.accessToken',
+  refreshToken: 'fortuni.refreshToken',
+  onboarded:    'fortuni.onboarded',
+  lastUser:     'fortuni.lastUser',
 } as const;
 
 export const QUERY_KEYS = {

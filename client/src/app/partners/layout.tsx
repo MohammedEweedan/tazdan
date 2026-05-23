@@ -6,9 +6,9 @@ export const metadata: Metadata = {
   openGraph: {
     title: 'Partners — fortuni',
     description: 'Regulated infrastructure behind fortuni. Buy, sell, and swap through compliant rails powered by Banxa and Crypto.com.',
-    url: 'https://promrkts.com/partners',
+    url: 'https://fortuni.com/partners',
   },
-  alternates: { canonical: 'https://promrkts.com/partners' },
+  alternates: { canonical: 'https://fortuni.com/partners' },
 };
 
 export default function PartnersLayout({ children }: { children: React.ReactNode }) {

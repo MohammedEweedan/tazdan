@@ -10,8 +10,8 @@ import { STORAGE_KEYS } from '@/constants';
 import { authService } from '@/services';
 import type { User } from '@/types';
 
-const BIOMETRIC_KEY  = 'promrkts.biometricEnabled';
-const VIEW_MODE_KEY  = 'promrkts.viewMode';
+const BIOMETRIC_KEY  = 'fortuni.biometricEnabled';
+const VIEW_MODE_KEY  = 'fortuni.viewMode';
 
 export type ViewMode = 'admin' | 'user';
 

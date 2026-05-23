@@ -8,9 +8,9 @@ export const metadata: Metadata = {
     title: 'fortuni Visa Card — Spend Crypto Anywhere',
     description:
       'Virtual and physical Visa card. Zero FX markup. 1% USDT cashback. 190+ countries. Instant freeze from the app.',
-    url: 'https://promrkts.com/cards',
+    url: 'https://fortuni.com/cards',
   },
-  alternates: { canonical: 'https://promrkts.com/cards' },
+  alternates: { canonical: 'https://fortuni.com/cards' },
 };
 
 export default function CardsLayout({ children }: { children: React.ReactNode }) {

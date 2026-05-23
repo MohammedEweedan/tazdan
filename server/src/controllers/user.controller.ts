@@ -269,7 +269,7 @@ export class UserController {
         </head>
         <body>
           <div class="header">
-            <h1>promrkts Exchange</h1>
+            <h1>fortuni Exchange</h1>
             <h2>Account Statement</h2>
             <p>Generated: ${new Date().toLocaleDateString()}</p>
           </div>
@@ -314,8 +314,8 @@ export class UserController {
           </div>
 
           <div class="section">
-            <p><em>This is an official statement from promrkts Exchange.</em></p>
-            <p><em>For any questions, please contact support@promrkts.com</em></p>
+            <p><em>This is an official statement from fortuni Exchange.</em></p>
+            <p><em>For any questions, please contact support@fortuni.com</em></p>
           </div>
         </body>
         </html>

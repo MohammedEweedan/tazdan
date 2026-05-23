@@ -16,13 +16,13 @@
       "distribution": "internal",
       "android": { "buildType": "apk" },
       "env": {
-        "EXPO_PUBLIC_API_BASE": "https://staging-api.promrkts.com/api"
+        "EXPO_PUBLIC_API_BASE": "https://staging-api.fortuni.com/api"
       }
     },
     "production": {
       "autoIncrement": true,
       "env": {
-        "EXPO_PUBLIC_API_BASE": "https://api.promrkts.com/api"
+        "EXPO_PUBLIC_API_BASE": "https://api.fortuni.com/api"
       },
       "ios": {
         "resourceClass": "m-medium"

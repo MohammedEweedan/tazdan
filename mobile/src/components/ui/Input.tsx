@@ -31,7 +31,7 @@ export function Input({ label, error, right, value, onFocus, onBlur, ...rest }: 
           height: 64,
           borderRadius: 16,
           borderWidth: 1,
-          borderColor: error ? '#ef4444' : focused ? '#4A8FE0' : 'rgba(255,255,255,0.10)',
+          borderColor: error ? '#ef4444' : focused ? '#226dff' : 'rgba(255,255,255,0.10)',
           backgroundColor: 'rgba(255,255,255,0.04)',
           justifyContent: 'center',
           paddingTop: 18,
@@ -55,7 +55,7 @@ export function Input({ label, error, right, value, onFocus, onBlur, ...rest }: 
             onBlur?.(e);
           }}
           placeholderTextColor="rgba(255,255,255,0.30)"
-          selectionColor="#4A8FE0"
+          selectionColor="#226dff"
           style={{ color: '#fff', fontSize: 16, fontWeight: '500', paddingTop: 6 }}
         />
         {right && (

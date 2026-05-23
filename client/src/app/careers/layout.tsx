@@ -8,9 +8,9 @@ export const metadata: Metadata = {
     title: 'Careers at fortuni',
     description:
       'We are hiring engineers, PMs, and compliance specialists. Build the future of money with us.',
-    url: 'https://promrkts.com/careers',
+    url: 'https://fortuni.com/careers',
   },
-  alternates: { canonical: 'https://promrkts.com/careers' },
+  alternates: { canonical: 'https://fortuni.com/careers' },
 };
 
 export default function CareersLayout({ children }: { children: React.ReactNode }) {

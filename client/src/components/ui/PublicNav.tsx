@@ -65,7 +65,7 @@ export default function PublicNav() {
     : "transparent";
   const textMain = dark ? "#ffffff" : "#0a0f1e";
   const textSub  = dark ? "rgba(255,255,255,0.6)" : "#475569";
-  const ctaBg    = dark ? "white" : "#0a0f1e";
+  const ctaBg    =  "#226dff";
   const ctaFg    = dark ? "#0a0f1e" : "white";
 
   const NAV_LINKS = [
@@ -116,7 +116,7 @@ export default function PublicNav() {
         >
           {/* Brand */}
           <Box as={NextLink} href="/" flexShrink={0} display="flex" alignItems="center" px={{ base: 0, md: 2 }}>
-            <Logo h={36} />
+            <Logo h={46} />
           </Box>
 
           {/* Desktop links */}
@@ -155,7 +155,7 @@ export default function PublicNav() {
               onClick={onWaitlistOpen}
               size="sm"
               bg={ctaBg}
-              color={ctaFg}
+              color="white"
               borderRadius="full"
               fontWeight="700"
               fontSize="13px"
@@ -191,7 +191,7 @@ export default function PublicNav() {
           <DrawerBody p={0}>
             <Flex direction="column" h="100%" pt={6}>
               <Box px={6} pb={4}>
-                <Logo h={28} />
+                <Logo h={30} />
               </Box>
               <Divider borderColor={dark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)"} />
 

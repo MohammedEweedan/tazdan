@@ -49,11 +49,11 @@ export function QuickActions() {
               <View
                 style={{
                   width: 38, height: 38, borderRadius: 19,
-                  backgroundColor: 'rgba(74,143,224,0.18)',
+                  backgroundColor: 'rgba(34,109,255,0.18)',
                   alignItems: 'center', justifyContent: 'center',
                 }}
               >
-                <Ionicons name={a.icon} size={18} color="#4A8FE0" />
+                <Ionicons name={a.icon} size={18} color="#226dff" />
               </View>
               <Text className="text-ink-primary text-xs font-semibold">{a.label}</Text>
             </View>

@@ -4,7 +4,7 @@ const SMTP_HOST = process.env.SMTP_HOST;
 const SMTP_PORT = parseInt(process.env.SMTP_PORT || '587', 10);
 const SMTP_USER = process.env.SMTP_USER;
 const SMTP_PASS = process.env.SMTP_PASS;
-const SMTP_FROM = process.env.SMTP_FROM || 'hi@promrkts.com';
+const SMTP_FROM = process.env.SMTP_FROM || 'hi@fortuni.com';
 
 const transporter =
   SMTP_HOST && SMTP_USER && SMTP_PASS
@@ -51,7 +51,7 @@ function base(title: string, body: string) {
 <div class="logo">fortuni</div>
 <div class="card">${body}</div>
 <div class="footer">
-  <p>Need help? <a href="mailto:support@promrkts.com" style="color:inherit">support@promrkts.com</a></p>
+  <p>Need help? <a href="mailto:support@fortuni.com" style="color:inherit">support@fortuni.com</a></p>
   <p>fortuni — money, simplified</p>
 </div>
 </div></div></body></html>`;
@@ -75,7 +75,7 @@ export function waitlistConfirmation(email: string) {
     <p class="muted">We're onboarding users region by region. When your spot is ready you'll receive an invitation with a direct link to create your account.</p>
     <p class="muted">In the meantime, share your referral link with friends — each referral moves you up the list automatically.</p>
     <div class="divider"></div>
-    <p class="muted" style="font-size:13px;margin:0;">Questions? Reply to this email or visit <a href="https://promrkts.com/faq" style="color:inherit">promrkts.com/faq</a>.</p>`,
+    <p class="muted" style="font-size:13px;margin:0;">Questions? Reply to this email or visit <a href="https://fortuni.com/faq" style="color:inherit">fortuni.com/faq</a>.</p>`,
   );
   return { to: email, subject: 'You\'re on the fortuni waitlist', html };
 }
@@ -87,9 +87,9 @@ export function contactConfirmation(name: string, email: string) {
     <p class="muted">Thanks for reaching out to fortuni support. Our team will review your message and get back to you at <strong class="main">${email}</strong> within 4 hours on business days.</p>
     <div class="divider"></div>
     <p class="main" style="font-weight:700;font-size:15px;margin-bottom:6px;">Need a faster answer?</p>
-    <p class="muted">Browse our <a href="https://promrkts.com/faq" style="color:inherit">FAQ</a> — most common questions are answered there instantly. You can also reach us via the fortuni mobile app once you have an account.</p>
+    <p class="muted">Browse our <a href="https://fortuni.com/faq" style="color:inherit">FAQ</a> — most common questions are answered there instantly. You can also reach us via the fortuni mobile app once you have an account.</p>
     <div class="notice">
-      <p class="muted" style="margin:0;font-size:13px;">fortuni will never ask for your password, 2FA code, or seed phrase via email. If you receive a suspicious message, contact us at <a href="mailto:security@promrkts.com" style="color:inherit">security@promrkts.com</a>.</p>
+      <p class="muted" style="margin:0;font-size:13px;">fortuni will never ask for your password, 2FA code, or seed phrase via email. If you receive a suspicious message, contact us at <a href="mailto:security@fortuni.com" style="color:inherit">security@fortuni.com</a>.</p>
     </div>`,
   );
   return { to: email, subject: 'We received your message — fortuni support', html };

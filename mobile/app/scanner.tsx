@@ -1,6 +1,5 @@
 import { useRef, useState } from 'react';
 import { useRouter } from 'expo-router';
-import { View, Pressable, Animated, Dimensions } from 'react-native';
 import { Text } from '@/components/ui/Text';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -8,6 +7,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useThemedPalette, useTheme } from '@/store/themeStore';
 import { useHaptics } from '@/hooks';
+import { View, Pressable, Animated, Dimensions, Image } from 'react-native';
 import { TopGradient } from '@/components/ui/ScreenShell';
 
 const { width: SCREEN_W } = Dimensions.get('window');
@@ -17,6 +17,7 @@ export default function ScannerPage() {
   const router = useRouter();
   const h = useHaptics();
   const p = useThemedPalette();
+  const LOGO = require('../assets/logo-color.png');
   const themeMode = useTheme((s) => s.mode);
 
   const [permission, requestPermission] = useCameraPermissions();
@@ -42,11 +43,11 @@ export default function ScannerPage() {
 
     // Parse handle from QR data. Supports:
     //   @handle
-    //   promrkts://u/handle
-    //   https://promrkts.com/u/handle
+    //   fortuni://u/handle
+    //   https://fortuni.com/u/handle
     let handle = '';
     const atMatch = data.match(/@([a-zA-Z0-9._]+)/);
-    const urlMatch = data.match(/(?:promrkts:\/\/u\/|https?:\/\/(?:[^\/]+\.)?promrkts\.(?:com|app)\/u\/)([a-zA-Z0-9._]+)/);
+    const urlMatch = data.match(/(?:fortuni:\/\/u\/|https?:\/\/(?:[^\/]+\.)?fortuni\.(?:com|app)\/u\/)([a-zA-Z0-9._]+)/);
     if (atMatch) handle = atMatch[1];
     else if (urlMatch) handle = urlMatch[1];
     else handle = data.replace(/^@/, '').trim();
@@ -177,12 +178,33 @@ export default function ScannerPage() {
       </SafeAreaView>
 
       {/* Bottom hint */}
-      <View style={{
-        position: 'absolute', bottom: 48, left: 0, right: 0,
-        alignItems: 'center',
-      }}>
-        <Text style={{ color: 'rgba(255,255,255,0.65)', fontSize: 13, fontWeight: '600' }}>
-          Point camera at a promrkts QR code
+      <View
+        style={{
+          position: 'absolute',
+          bottom: 42,
+          left: 0,
+          right: 0,
+          alignItems: 'center',
+        }}
+      >
+        <Image
+          source={LOGO}
+          resizeMode="contain"
+          style={{
+            width: 180, // scaled from 1548x490 (~3.16:1)
+            height: 57,
+            marginBottom: 14,
+          }}
+        />
+
+        <Text
+          style={{
+            color: 'rgba(255,255,255,0.65)',
+            fontSize: 13,
+            fontWeight: '600',
+          }}
+        >
+          Point camera at a fortuni QR code
         </Text>
       </View>
 

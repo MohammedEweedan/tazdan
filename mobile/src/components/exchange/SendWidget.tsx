@@ -22,7 +22,7 @@ const FIAT_SET = new Set<string>(FIATS);
 // Static meta for known assets; unknown alts get a generated fallback below.
 const KNOWN_META: Record<string, { label: string; color: string; bg: string; icon: string }> = {
   BTC:  { label: 'Bitcoin',     color: '#fb923c', bg: 'rgba(251,146,60,0.14)',  icon: '₿' },
-  ETH:  { label: 'Ethereum',    color: '#818cf8', bg: 'rgba(129,140,248,0.14)', icon: 'Ξ' },
+  ETH:  { label: 'Ethereum',    color: '#627eea', bg: 'rgba(98,126,234,0.14)',  icon: 'Ξ' },
   SOL:  { label: 'Solana',      color: '#a78bfa', bg: 'rgba(167,139,250,0.14)', icon: '◎' },
   BNB:  { label: 'BNB',         color: '#f0b90b', bg: 'rgba(240,185,11,0.14)',  icon: '⬡' },
   XRP:  { label: 'XRP',         color: '#346aa9', bg: 'rgba(52,106,169,0.14)',  icon: '✕' },

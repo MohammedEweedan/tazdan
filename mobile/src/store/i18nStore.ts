@@ -15,7 +15,7 @@ import { create } from 'zustand';
 
 export type Locale = 'en' | 'ar' | 'fr' | 'es' | 'de' | 'nl' | 'ru' | 'zh';
 
-const KEY = 'promrkts.locale';
+const KEY = 'fortuni.locale';
 
 // rtl is always false — the app stays LTR regardless of language.
 // Arabic text renders correctly in LTR containers; we only swap the font.
@@ -140,11 +140,11 @@ const dict: Record<Locale, Strings> = {
     'settings.useDark':      'Use dark',
     'settings.about':        'About',
     'settings.terms':        'Terms of service',
-    'settings.termsAlert':   'Available at https://promrkts.app/terms',
+    'settings.termsAlert':   'Available at https://fortuni.app/terms',
     'settings.privacyPolicy':'Privacy policy',
-    'settings.privacyAlert': 'Available at https://promrkts.app/privacy',
+    'settings.privacyAlert': 'Available at https://fortuni.app/privacy',
     'settings.support':      'Help & support',
-    'settings.supportAlert': 'Email support@promrkts.app',
+    'settings.supportAlert': 'Email support@fortuni.app',
     'nav.home':              'Home',
     'nav.messages':          'Chat',
     'nav.wallet':            'Wallet',
@@ -526,11 +526,11 @@ const dict: Record<Locale, Strings> = {
     'settings.useDark':      'استخدام الوضع الداكن',
     'settings.about':        'حول',
     'settings.terms':        'شروط الخدمة',
-    'settings.termsAlert':   'متاحة على https://promrkts.app/terms',
+    'settings.termsAlert':   'متاحة على https://fortuni.app/terms',
     'settings.privacyPolicy':'سياسة الخصوصية',
-    'settings.privacyAlert': 'متاحة على https://promrkts.app/privacy',
+    'settings.privacyAlert': 'متاحة على https://fortuni.app/privacy',
     'settings.support':      'المساعدة والدعم',
-    'settings.supportAlert': 'راسل support@promrkts.app',
+    'settings.supportAlert': 'راسل support@fortuni.app',
     'nav.home':              'الرئيسية',
     'nav.messages':          'الرسائل',
     'nav.wallet':            'المحفظة',
@@ -904,11 +904,11 @@ const dict: Record<Locale, Strings> = {
     'settings.useDark':      'Utiliser le sombre',
     'settings.about':        'À propos',
     'settings.terms':        'Conditions d’utilisation',
-    'settings.termsAlert':   'Disponible sur https://promrkts.app/terms',
+    'settings.termsAlert':   'Disponible sur https://fortuni.app/terms',
     'settings.privacyPolicy':'Politique de confidentialité',
-    'settings.privacyAlert': 'Disponible sur https://promrkts.app/privacy',
+    'settings.privacyAlert': 'Disponible sur https://fortuni.app/privacy',
     'settings.support':      'Aide et support',
-    'settings.supportAlert': 'Envoyez un e-mail à support@promrkts.app',
+    'settings.supportAlert': 'Envoyez un e-mail à support@fortuni.app',
     'nav.home':              'Accueil',
     'nav.messages':          'Chats',
     'nav.wallet':            'Portefeuille',
@@ -1282,11 +1282,11 @@ const dict: Record<Locale, Strings> = {
     'settings.useDark':      'Usar oscuro',
     'settings.about':        'Acerca de',
     'settings.terms':        'Términos de servicio',
-    'settings.termsAlert':   'Disponible en https://promrkts.app/terms',
+    'settings.termsAlert':   'Disponible en https://fortuni.app/terms',
     'settings.privacyPolicy':'Política de privacidad',
-    'settings.privacyAlert': 'Disponible en https://promrkts.app/privacy',
+    'settings.privacyAlert': 'Disponible en https://fortuni.app/privacy',
     'settings.support':      'Ayuda y soporte',
-    'settings.supportAlert': 'Escribe a support@promrkts.app',
+    'settings.supportAlert': 'Escribe a support@fortuni.app',
     'nav.home':              'Inicio',
     'nav.messages':          'Chat',
     'nav.wallet':            'Billetera',

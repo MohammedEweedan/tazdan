@@ -36,14 +36,14 @@ export function TopGradient({ height }: { height?: number }) {
       colors={
         themeMode === 'dark'
           ? [
-              'rgba(255,255,255,0.10)', // subtle white top
-              'rgba(120,120,120,0.08)', // soft grey middle
+              'rgba(34, 109, 255, 0.25)', // subtle white top
+              'rgba(56, 121, 251, 0.10)', // soft grey middle
               'rgba(0,0,0,0)',          // fade to transparent
             ]
           : [
-              'rgba(0,0,0,0.08)',       // subtle black top
-              'rgba(160,160,160,0.06)', // soft grey middle
-              'rgba(255,255,255,0)',    // fade to transparent
+              'rgba(34, 109, 255, 0.25)', // subtle white top
+              'rgba(56, 121, 251, 0.10)', // soft grey middle
+              'rgba(0,0,0,0)',    // fade to transparent
             ]
       }
       locations={[0, 0.45, 1]}

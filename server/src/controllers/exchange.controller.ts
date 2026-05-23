@@ -185,29 +185,57 @@ export class ExchangeController {
    * GET /api/exchange/search?q=doge
    * Returns matching Binance USDT pairs with live price.
    * Used by the mobile asset picker to support any tradeable token.
+   *
+   * Strategy: the full 24hr ticker list is cached in Redis for 20 s (it is
+   * large — ~1 200 pairs). Per-query results are also cached for 10 s so
+   * repeated identical searches (very common when a user types slowly) are
+   * served entirely from memory without any Binance round-trip.
    */
   static async searchAssets(req: AuthRequest, res: Response, next: NextFunction) {
     try {
+      const { redisGet: rGet, redisSet: rSet } = await import('../utils/redis');
       const q = String(req.query.q ?? '').toUpperCase().trim();
       const BINANCE_REST = process.env.BINANCE_REST_URL || 'https://api.binance.com';
 
-      // Fetch all USDT pairs from Binance 24hr ticker (lightweight)
-      const { data } = await axios.get(`${BINANCE_REST}/api/v3/ticker/24hr`, { timeout: 8000 });
-      const usdt: Array<{ symbol: string; lastPrice: string; priceChangePercent: string; volume: string }> = data;
+      // ── 1. Per-query cache (10 s) ─────────────────────────────
+      const qKey = `search:${q}`;
+      const qCached = await rGet<{ results: unknown[] }>(qKey);
+      if (qCached) {
+        res.setHeader('X-Cache', 'HIT');
+        return res.json(qCached);
+      }
 
-      const results = usdt
+      // ── 2. Full ticker list cache (20 s) ──────────────────────
+      type TickerRow = { symbol: string; lastPrice: string; priceChangePercent: string; volume: string };
+      const allKey = 'search:all_tickers';
+      let allTickers = await rGet<TickerRow[]>(allKey);
+      if (!allTickers) {
+        const { data } = await axios.get<TickerRow[]>(
+          `${BINANCE_REST}/api/v3/ticker/24hr`,
+          { timeout: 8_000 },
+        );
+        allTickers = data;
+        rSet(allKey, allTickers, 20).catch(() => { /* non-fatal */ });
+      }
+
+      // ── 3. Filter + rank ──────────────────────────────────────
+      const results = (allTickers as TickerRow[])
         .filter((t) => t.symbol.endsWith('USDT'))
         .map((t) => ({
-          symbol: t.symbol.replace('USDT', ''),
-          price: parseFloat(t.lastPrice),
+          symbol:    t.symbol.replace('USDT', ''),
+          price:     parseFloat(t.lastPrice),
           change24h: parseFloat(t.priceChangePercent),
           volume24h: parseFloat(t.volume),
         }))
         .filter((t) => !q || t.symbol.includes(q))
-        .sort((a, b) => b.volume24h - a.volume24h)  // most liquid first
+        .sort((a, b) => b.volume24h - a.volume24h)
         .slice(0, 50);
 
-      res.json({ results });
+      const payload = { results };
+      rSet(qKey, payload, 10).catch(() => { /* non-fatal */ });
+
+      res.setHeader('X-Cache', 'MISS');
+      res.json(payload);
     } catch (error) {
       next(error);
     }

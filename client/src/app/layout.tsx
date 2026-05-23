@@ -20,7 +20,7 @@ export const metadata: Metadata = {
   openGraph: {
     type: 'website',
     locale: 'en_US',
-    url: 'https://promrkts.com',
+    url: 'https://fortuni.com',
     siteName: 'fortuni',
     title: 'fortuni — Crypto Exchange & Money Transfer for MENA',
     description:
@@ -32,10 +32,10 @@ export const metadata: Metadata = {
     title: 'fortuni — Crypto & Money Transfer for MENA',
     description: 'Send money to Libya instantly. Buy & sell crypto. Virtual Visa card.',
     images: ['/og-image.png'],
-    creator: '@promrkts',
+    creator: '@fortuni',
   },
   robots: { index: true, follow: true },
-  alternates: { canonical: 'https://promrkts.com' },
+  alternates: { canonical: 'https://fortuni.com' },
 };
 
 export const viewport: Viewport = {
