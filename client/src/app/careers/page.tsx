@@ -119,7 +119,7 @@ export default function CareersPage() {
         <Container maxW="1100px">
           <motion.div initial={{ opacity: 0, y: 24 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, amount: 0.3 }} transition={{ duration: 0.6 }}>
             <VStack spacing={3} mb={{ base: 10, md: 14 }} textAlign="center">
-              <Text fontSize="11px" fontWeight="800" letterSpacing="0.14em" textTransform="uppercase" color={textSub}>WHY PROMRKTS</Text>
+              <Text fontSize="11px" fontWeight="800" letterSpacing="0.14em" textTransform="uppercase" color={textSub}>WHY FORTUNI</Text>
               <Heading fontSize={{ base: '32px', md: '52px' }} fontWeight="900" letterSpacing="-0.04em" color={textMain} lineHeight="1">
                 A career worth building
               </Heading>
@@ -248,7 +248,7 @@ export default function CareersPage() {
                     </HStack>
                     <Button
                       as="a"
-                      href={`mailto:careers@promrkts.com?subject=Application — ${pos.title}`}
+                      href={`mailto:careers@fortuni.com?subject=Application — ${pos.title}`}
                       h="40px" px={5} w="100%"
                       bg={ctaBg} color={ctaFg}
                       borderRadius="full" fontWeight="700" fontSize="13px"
@@ -278,7 +278,7 @@ export default function CareersPage() {
               </Text>
               <Button
                 as="a"
-                href="mailto:careers@promrkts.com?subject=General Application"
+                href="mailto:careers@fortuni.com?subject=General Application"
                 h="46px" px={7}
                 bg={dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)'}
                 color={textMain}

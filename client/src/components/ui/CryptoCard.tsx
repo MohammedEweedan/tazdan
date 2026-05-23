@@ -100,7 +100,7 @@ const CryptoCard = () => {
             <HStack spacing={2}>
               <Box w="10px" h="10px" borderRadius="full" bg={brand} boxShadow={`0 0 10px ${brand}`} />
               <Text fontSize="sm" fontWeight="800" color={brand} letterSpacing="0.1em" textTransform="uppercase">
-                promrkts Live
+                fortuni Live
               </Text>
             </HStack>
             <Badge colorScheme="green" variant="subtle" borderRadius="full" px={3} py={0.5} fontSize="9px" fontWeight="700">

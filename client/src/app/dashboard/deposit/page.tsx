@@ -36,7 +36,7 @@ function pal(dark: boolean) {
     redFg:     "#ef4444",
     amberFg:   "#f59e0b",
     amberBg:   "rgba(245,158,11,0.14)",
-    brand:     "#4a8fe0",
+    brand:     "#226dff",
     cardBg:    dark ? "#0d0d0d" : "#f5f5f7",
   };
 }
@@ -65,7 +65,7 @@ interface MethodDef {
 const METHODS: MethodDef[] = [
   {
     id: "BANK_TRANSFER", label: "Bank Transfer", desc: "Wire from your bank account",
-    iconKind: "FI", icon: FiHome, brandColor: "#4a8fe0",
+    iconKind: "FI", icon: FiHome, brandColor: "#226dff",
     status: "ACTIVE", eta: "1–3 business days", fees: "Free",
     minAmount: 50, currencies: ["USD", "USDT"],
   },

@@ -31,7 +31,7 @@ export default function ResetPasswordPage() {
   }, [password]);
 
   const strengthLabel = ["Weak", "Fair", "Good", "Strong"][strength - 1] || "";
-  const strengthColor = ["#ef4444", "#f59e0b", "#4a8fe0", "#22c55e"][strength - 1] || "transparent";
+  const strengthColor = ["#ef4444", "#f59e0b", "#226dff", "#22c55e"][strength - 1] || "transparent";
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -91,7 +91,7 @@ export default function ResetPasswordPage() {
                       color="#f1f0ee"
                       fontSize="15px"
                       pr="48px"
-                      _focus={{ borderColor: "#4a8fe0", boxShadow: "none" }}
+                      _focus={{ borderColor: "#226dff", boxShadow: "none" }}
                     />
                     <IconButton
                       aria-label="Toggle password"
@@ -128,7 +128,7 @@ export default function ResetPasswordPage() {
                     bg="rgba(255,255,255,0.03)"
                     color="#f1f0ee"
                     fontSize="15px"
-                    _focus={{ borderColor: "#4a8fe0", boxShadow: "none" }}
+                    _focus={{ borderColor: "#226dff", boxShadow: "none" }}
                   />
                 </Box>
 
@@ -182,7 +182,7 @@ export default function ResetPasswordPage() {
 
           <Flex align="center" justify="center" mt="24px" gap="6px">
             <Icon as={FiArrowLeft} color="#8b92a5" boxSize={14} />
-            <Box as="button" onClick={() => router.push("/login")} color="#4a8fe0" fontSize="14px" fontWeight="700" textDecoration="none">
+            <Box as="button" onClick={() => router.push("/login")} color="#226dff" fontSize="14px" fontWeight="700" textDecoration="none">
               Back to Login
             </Box>
           </Flex>

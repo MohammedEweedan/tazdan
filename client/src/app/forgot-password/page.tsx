@@ -63,7 +63,7 @@ export default function ForgotPasswordPage() {
                     color="#f1f0ee"
                     fontSize="15px"
                     pl="48px"
-                    _focus={{ borderColor: "#4a8fe0", boxShadow: "none" }}
+                    _focus={{ borderColor: "#226dff", boxShadow: "none" }}
                   />
                   <Box position="absolute" left="16px" top="50%" transform="translateY(-50%)" color="#8b92a5">
                     <Icon as={FiMail} size={25} />
@@ -120,7 +120,7 @@ export default function ForgotPasswordPage() {
 
           <Flex align="center" justify="center" mt="24px" gap="6px">
             <Icon as={FiArrowLeft} color="#8b92a5" size={20} />
-            <Box as={NextLink} href="/login" color="#4a8fe0" fontSize="14px" fontWeight="700" textDecoration="none">
+            <Box as={NextLink} href="/login" color="#226dff" fontSize="14px" fontWeight="700" textDecoration="none">
               Back to Login
             </Box>
           </Flex>

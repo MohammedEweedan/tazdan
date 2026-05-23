@@ -10,8 +10,8 @@ import { STORAGE_KEYS } from '@/constants';
 import { authService } from '@/services';
 import type { User } from '@/types';
 
-const BIOMETRIC_KEY  = 'promrkts.biometricEnabled';
-const VIEW_MODE_KEY  = 'promrkts.viewMode';
+const BIOMETRIC_KEY  = 'fortuni.biometricEnabled';
+const VIEW_MODE_KEY  = 'fortuni.viewMode';
 
 export type ViewMode = 'admin' | 'user';
 
@@ -169,7 +169,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       ]);
       if (!hasHardware || !isEnrolled) return false;
       const result = await LocalAuthentication.authenticateAsync({
-        promptMessage: 'Sign in to promrkts',
+        promptMessage: 'Sign in to fortuni',
         cancelLabel: 'Cancel',
         disableDeviceFallback: false,
       });

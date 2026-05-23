@@ -46,7 +46,7 @@ export default function Profile() {
   const [bioLoading, setBioLoading] = useState(false);
 
   const initial = (user?.firstName?.[0] ?? user?.email?.[0] ?? 'P').toUpperCase();
-  const fullName = `${user?.firstName ?? ''} ${user?.lastName ?? ''}`.trim() || 'promrkts user';
+  const fullName = `${user?.firstName ?? ''} ${user?.lastName ?? ''}`.trim() || 'fortuni user';
   const handle = user?.username ?? user?.email?.split('@')[0] ?? 'me';
   const userEmoji = (user as any)?.avatarUrl;
   const baseCurrency = (user as any)?.baseCurrency || 'USD';
@@ -96,7 +96,7 @@ export default function Profile() {
           Alert.alert('Not available', 'Face ID / biometrics are not set up on this device.');
           return;
         }
-        const result = await LocalAuthentication.authenticateAsync({ promptMessage: 'Enable Face ID for promrkts' });
+        const result = await LocalAuthentication.authenticateAsync({ promptMessage: 'Enable Face ID for fortuni' });
         if (result.success) { await enableBiometric(); h.success(); }
         else h.error();
       }
@@ -338,7 +338,7 @@ export default function Profile() {
             color: p.fgFaint, fontSize: 11, fontWeight: '500',
             textAlign: 'center', marginTop: 28,
           }}>
-            promrkts · v0.1.0
+            fortuni · v0.1.0
           </Text>
         </ScrollView>
       </SafeAreaView>

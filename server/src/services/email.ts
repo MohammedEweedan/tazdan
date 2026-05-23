@@ -6,8 +6,8 @@ const SMTP_PORT = parseInt(process.env.SMTP_PORT || '587', 10);
 const SMTP_USER = process.env.SMTP_USER;
 const SMTP_PASS = process.env.SMTP_PASS;
 // From address — defaults to the branded sender. Override in .env with SMTP_FROM.
-const SMTP_FROM = process.env.SMTP_FROM || process.env.MAIL_FROM || 'hi@promrkts.com';
-const CLIENT_URL = process.env.CLIENT_URL || process.env.FRONTEND_URL || 'https://promrkts.com';
+const SMTP_FROM = process.env.SMTP_FROM || process.env.MAIL_FROM || 'hi@fortuni.com';
+const CLIENT_URL = process.env.CLIENT_URL || process.env.FRONTEND_URL || 'https://fortuni.com';
 
 // Logos are embedded inline as CID attachments so they render in every email
 // client (Gmail, Outlook, Apple Mail) without needing a public CDN URL.
@@ -32,8 +32,8 @@ const LOGO_BLACK_PATH = resolveAsset('logo-black.png');
 const LOGO_WHITE_PATH = resolveAsset('logo-white.png');
 
 // CID values referenced in the HTML via cid:logo-black and cid:logo-white.
-const CID_BLACK = 'logo-black@promrkts.com';
-const CID_WHITE = 'logo-white@promrkts.com';
+const CID_BLACK = 'logo-black@fortuni.com';
+const CID_WHITE = 'logo-white@fortuni.com';
 
 const hasCredentials = !!(SMTP_HOST && SMTP_USER && SMTP_PASS);
 
@@ -146,8 +146,8 @@ function baseTemplate(title: string, body: string): string {
 
       <!-- Logo: CID-embedded so it renders without a CDN. Dark/light via media query. -->
       <div class="logo-wrap">
-        <img class="logo-light" src="cid:${CID_BLACK}" alt="promrkts" />
-        <img class="logo-dark"  src="cid:${CID_WHITE}" alt="promrkts" />
+        <img class="logo-light" src="cid:${CID_BLACK}" alt="fortuni" />
+        <img class="logo-dark"  src="cid:${CID_WHITE}" alt="fortuni" />
       </div>
 
       <div class="card">
@@ -155,8 +155,8 @@ function baseTemplate(title: string, body: string): string {
       </div>
 
       <div class="footer">
-        <p class="footer-text">Need help? <a href="mailto:support@promrkts.com">support@promrkts.com</a></p>
-        <p class="footer-text">promrkts — money, simplified</p>
+        <p class="footer-text">Need help? <a href="mailto:support@fortuni.com">support@fortuni.com</a></p>
+        <p class="footer-text">fortuni — money, simplified</p>
       </div>
 
     </div>
@@ -182,7 +182,7 @@ export async function sendEmail({
     return;
   }
   await transporter.sendMail({
-    from:    `"promrkts" <${SMTP_FROM}>`,
+    from:    `"fortuni" <${SMTP_FROM}>`,
     to,
     subject,
     html,
@@ -217,9 +217,9 @@ export async function sendWelcomeEmail({
   firstName: string;
 }) {
   const html = baseTemplate(
-    'Welcome to promrkts',
+    'Welcome to fortuni',
     `<h1 class="text-main">Welcome aboard, ${firstName}.</h1>
-    <p class="text-muted">Your email is verified and your promrkts account is live. Below is a short, deliberate first run so you can start trading with confidence — most of it takes under five minutes.</p>
+    <p class="text-muted">Your email is verified and your fortuni account is live. Below is a short, deliberate first run so you can start trading with confidence — most of it takes under five minutes.</p>
 
     <div class="divider"></div>
 
@@ -251,12 +251,12 @@ export async function sendWelcomeEmail({
     <ul>
       <li><span class="text-main">Trade</span> — buy & sell BTC, ETH, SOL and 400+ pairs at live Binance prices.</li>
       <li><span class="text-main">P2P</span> — match with local buyers/sellers in your fiat currency.</li>
-      <li><span class="text-main">Send &amp; receive</span> — pay any promrkts @handle instantly, or any external wallet.</li>
+      <li><span class="text-main">Send &amp; receive</span> — pay any fortuni @handle instantly, or any external wallet.</li>
       <li><span class="text-main">Self-custody</span> — export your private keys whenever you want full ownership.</li>
     </ul>
 
     <div class="notice">
-      <p class="text-muted" style="margin:0; font-size:13px;">Security reminder: promrkts will never ask for your password, 2FA code, or seed phrase. If anything looks wrong, email <a href="mailto:support@promrkts.com" style="color:inherit;">support@promrkts.com</a> immediately.</p>
+      <p class="text-muted" style="margin:0; font-size:13px;">Security reminder: fortuni will never ask for your password, 2FA code, or seed phrase. If anything looks wrong, email <a href="mailto:support@fortuni.com" style="color:inherit;">support@fortuni.com</a> immediately.</p>
     </div>
 
     <p class="text-muted" style="font-size:13px; margin:24px 0 8px;">Get the app</p>
@@ -273,7 +273,7 @@ export async function sendWelcomeEmail({
   );
   await sendEmail({
     to,
-    subject: `Welcome to promrkts, ${firstName} — let's get you set up`,
+    subject: `Welcome to fortuni, ${firstName} — let's get you set up`,
     html,
   });
 }
@@ -292,9 +292,9 @@ export async function sendVerificationEmail({
   code: string;
 }) {
   const html = baseTemplate(
-    'Verify your email — promrkts',
+    'Verify your email — fortuni',
     `<h1 class="text-main">Confirm your email</h1>
-    <p class="text-muted">Hi ${firstName}, enter this code to verify your promrkts account.</p>
+    <p class="text-muted">Hi ${firstName}, enter this code to verify your fortuni account.</p>
 
     <div class="code-box">
       <div class="code-text">${code}</div>
@@ -304,7 +304,7 @@ export async function sendVerificationEmail({
       <p class="text-muted" style="margin:0; font-size:13px;">Expires in 24 hours. Didn't sign up? You can safely ignore this.</p>
     </div>`
   );
-  await sendEmail({ to, subject: 'Your promrkts verification code', html });
+  await sendEmail({ to, subject: 'Your fortuni verification code', html });
 }
 
 /* ─────────────────────────────────────────────────────────────
@@ -312,9 +312,9 @@ export async function sendVerificationEmail({
 ───────────────────────────────────────────────────────────── */
 export async function sendWaitlistConfirmation({ to }: { to: string }) {
   const html = baseTemplate(
-    "You're on the waitlist — promrkts",
+    "You're on the waitlist — fortuni",
     `<h1 class="text-main">You're on the list.</h1>
-    <p class="text-muted">Thanks for joining the promrkts early-access waitlist. You'll be among the first to know when we open your region — and you'll get <strong class="text-main">0% fees for your first 6 months</strong>.</p>
+    <p class="text-muted">Thanks for joining the fortuni early-access waitlist. You'll be among the first to know when we open your region — and you'll get <strong class="text-main">0% fees for your first 6 months</strong>.</p>
 
     <div class="divider"></div>
 
@@ -324,9 +324,9 @@ export async function sendWaitlistConfirmation({ to }: { to: string }) {
 
     <div class="divider"></div>
 
-    <p class="text-muted" style="font-size:13px; margin:0;">Questions? Reply to this email or visit <a href="${CLIENT_URL}/faq" style="color:inherit;">promrkts.com/faq</a>.</p>`,
+    <p class="text-muted" style="font-size:13px; margin:0;">Questions? Reply to this email or visit <a href="${CLIENT_URL}/faq" style="color:inherit;">fortuni.com/faq</a>.</p>`,
   );
-  await sendEmail({ to, subject: "You're on the promrkts waitlist", html });
+  await sendEmail({ to, subject: "You're on the fortuni waitlist", html });
 }
 
 /* ─────────────────────────────────────────────────────────────
@@ -343,9 +343,9 @@ export async function sendPasswordResetEmail({
 }) {
   const resetUrl = `${CLIENT_URL}/auth/reset-password?token=${token}`;
   const html = baseTemplate(
-    'Reset your password — promrkts',
+    'Reset your password — fortuni',
     `<h1 class="text-main">Reset your password</h1>
-    <p class="text-muted">Hi ${firstName}, we received a request to reset your promrkts password.</p>
+    <p class="text-muted">Hi ${firstName}, we received a request to reset your fortuni password.</p>
 
     <div class="btn-wrap">
       <a href="${resetUrl}" class="btn">Set New Password</a>
@@ -358,7 +358,7 @@ export async function sendPasswordResetEmail({
 
     <p class="text-muted" style="font-size:12px; margin-top:16px;">This link expires in 1 hour. Didn't request this? Your account is safe — ignore this email.</p>`
   );
-  await sendEmail({ to, subject: 'Reset your promrkts password', html });
+  await sendEmail({ to, subject: 'Reset your fortuni password', html });
 }
 /* ─────────────────────────────────────────────────────────────
    Withdrawal Confirmed
@@ -393,7 +393,7 @@ export async function sendWithdrawalConfirmed({
     </ul>
 
     <div class="notice">
-      <p class="text-muted" style="margin:0; font-size:13px;">This withdrawal cannot be reversed once broadcast. If you did not initiate this, contact <a href="mailto:support@promrkts.com" style="color:inherit;">support@promrkts.com</a> immediately.</p>
+      <p class="text-muted" style="margin:0; font-size:13px;">This withdrawal cannot be reversed once broadcast. If you did not initiate this, contact <a href="mailto:support@fortuni.com" style="color:inherit;">support@fortuni.com</a> immediately.</p>
     </div>`,
   );
   await sendEmail({ to, subject: `Withdrawal sent — ${amount} ${asset}`, html });
@@ -411,7 +411,7 @@ export async function sendDepositConfirmed({
   const html = baseTemplate(
     `${amount} ${asset} arrived`,
     `<h1 class="text-main">${amount} ${asset} received</h1>
-    <p class="text-muted">Hi ${firstName}, your deposit has been confirmed and is now available in your promrkts wallet.</p>
+    <p class="text-muted">Hi ${firstName}, your deposit has been confirmed and is now available in your fortuni wallet.</p>
 
     <div class="divider"></div>
 
@@ -497,7 +497,7 @@ export async function sendKYCStatusUpdate({
     body = `<h1 class="text-main">Verification unsuccessful</h1>
     <p class="text-muted">Hi ${firstName}, we were unable to verify your identity at this time.</p>
     ${reasonCode ? `<div class="notice"><p class="text-muted" style="margin:0; font-size:13px;">Reason: <strong>${reasonCode}</strong></p></div>` : ''}
-    <p class="text-muted" style="margin-top:16px;">Please contact <a href="mailto:support@promrkts.com" style="color:inherit;">support@promrkts.com</a> if you believe this is an error or need help resubmitting your documents.</p>`;
+    <p class="text-muted" style="margin-top:16px;">Please contact <a href="mailto:support@fortuni.com" style="color:inherit;">support@fortuni.com</a> if you believe this is an error or need help resubmitting your documents.</p>`;
   } else {
     subject = 'Action required — please resubmit your KYC documents';
     body = `<h1 class="text-main">Documents need updating</h1>

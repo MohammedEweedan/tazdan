@@ -51,7 +51,7 @@ export default function SupportSection() {
       title: t('support_community_title'),
       desc: t('support_community_desc'),
       cta: t('support_community_cta'),
-      href: 'https://t.me/promrkts',
+      href: 'https://t.me/fortuni',
       badge: null,
       external: true,
     },

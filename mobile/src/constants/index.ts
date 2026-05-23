@@ -10,7 +10,7 @@ import type { Currency, CurrencyMeta } from '@/types';
  *  3. On Android emulator, `10.0.2.2` reaches the host machine.
  *  4. Web + iOS Simulator can use `localhost` directly.
  */
-const API_PORT = 5000;
+const API_PORT = 5001;
 function resolveApiBase(): string {
   const fromEnv = process.env.EXPO_PUBLIC_API_BASE;
   if (fromEnv) return fromEnv;
@@ -26,17 +26,17 @@ function resolveApiBase(): string {
 }
 
 export const APP = {
-  name: 'promrkts',
+  name: 'fortuni',
   tagline: 'Money. Crypto. One app.',
-  supportEmail: 'support@promrkts.app',
+  supportEmail: 'support@fortuni.app',
   apiBaseUrl: resolveApiBase(),
 };
 
 export const STORAGE_KEYS = {
-  accessToken:  'promrkts.accessToken',
-  refreshToken: 'promrkts.refreshToken',
-  onboarded:    'promrkts.onboarded',
-  lastUser:     'promrkts.lastUser',
+  accessToken:  'fortuni.accessToken',
+  refreshToken: 'fortuni.refreshToken',
+  onboarded:    'fortuni.onboarded',
+  lastUser:     'fortuni.lastUser',
 } as const;
 
 export const QUERY_KEYS = {

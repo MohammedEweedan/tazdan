@@ -363,7 +363,7 @@ export default function SettingsPage() {
             bgClip="text"
             color="transparent"
           >
-            PROMRKTS
+            FORTUNI
           </Text>
           <Box w="1px" h="16px" bg="rgba(255,255,255,0.06)" />
           <Text

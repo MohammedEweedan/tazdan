@@ -8,7 +8,8 @@ import { Text, TextInput } from '@/components/ui/Text';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useAuthStore } from '@/store/authStore';
-import { useThemedPalette } from '@/store/themeStore';
+import { useThemedPalette, brand } from '@/store/themeStore';
+import { SlideToConfirm } from '@/components/ui/SlideToConfirm';
 import { useWallets, useCards, useMarkets } from '@/hooks';
 import { cryptoExchangeAPI, type CryptoQuote, type AssetSearchResult } from '@/lib/cryptoApi';
 
@@ -201,6 +202,9 @@ export function BuyWidget() {
     }
   }, [assetSheetOpen]);
 
+  // Bumping this triggers a fresh quote without the user changing fiat/asset
+  const [requoteKey, setRequoteKey] = useState(0);
+
   // ── Quote fetching ────────────────────────────────────────────────
   useEffect(() => {
     const amt = parseFloat(fiat);
@@ -217,15 +221,20 @@ export function BuyWidget() {
       } finally { setLoading(false); }
     }, 500);
     return () => clearTimeout(id);
-  }, [asset, network, fiat]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [asset, network, fiat, requoteKey]);
 
-  // ── Quote countdown ───────────────────────────────────────────────
+  // ── Quote countdown — auto-requote when it expires ───────────────
   useEffect(() => {
     if (!quote) return;
     const tick = () => {
       const s = Math.max(0, Math.floor((quote.expiresAt - Date.now()) / 1000));
       setSeconds(s);
-      if (s <= 0) setQuote(null);
+      if (s <= 0) {
+        setQuote(null);
+        // Trigger a fresh quote automatically (user doesn't need to do anything)
+        setRequoteKey((k) => k + 1);
+      }
     };
     tick();
     const iv = setInterval(tick, 1000);
@@ -254,10 +263,19 @@ export function BuyWidget() {
   const meta = assetMeta(asset);
   // USDT_ERC20/TRC20 map to the USDT ticker (price = $1, pegged)
   const tickerBase = serverAsset(asset);
-  const livePrice = tickerBase === 'USDT' ? 1 : (tickers?.find((t) => t.base === tickerBase)?.price ?? searchResults.find((r) => r.symbol === tickerBase)?.price ?? 0);
-  const change24h = searchResults.find((r) => r.symbol === tickerBase)?.change24h;
+  const livePrice  = tickerBase === 'USDT' ? 1 : (tickers?.find((t) => t.base === tickerBase)?.price ?? searchResults.find((r) => r.symbol === tickerBase)?.price ?? 0);
+  const change24h  = searchResults.find((r) => r.symbol === tickerBase)?.change24h;
   const timerCritical = seconds > 0 && seconds < 8;
-  const canConfirm = !!quote && !exec && seconds > 0;
+  const canConfirm    = !!quote && !exec && seconds > 0;
+
+  // Instant price estimate: shown while no quote exists but amount + livePrice are known
+  const fiatNum       = parseFloat(fiat) || 0;
+  const priceEstimate = livePrice > 0 && fiatNum > 0 ? fiatNum / Number(livePrice) : null;
+
+  // Slider label — clean, no embedded seconds (badge handles that)
+  const slideLabel = canConfirm
+    ? (intent === 'send' ? `Slide to send ${asset}` : `Slide to buy ${asset}`)
+    : 'Enter amount';
 
   // Displayed list in picker: search results if query, else featured
   const displayList: AssetSearchResult[] = searchResults.length > 0
@@ -410,9 +428,23 @@ export function BuyWidget() {
               </View>
             )}
           </>
+        ) : priceEstimate ? (
+          // Instant price estimate from live ticker — before full quote arrives
+          <View>
+            <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '500', letterSpacing: 0.5, marginBottom: 4 }}>
+              {intent === 'send' ? 'RECIPIENT RECEIVES (EST.)' : 'YOU RECEIVE (EST.)'}
+            </Text>
+            <Text style={{ color: p.fgFaint, fontSize: 24, fontWeight: '500' }}>
+              ≈ {fmt(priceEstimate, 8)}{' '}
+              <Text style={{ color: meta.color, fontSize: 16 }}>{asset}</Text>
+            </Text>
+            <Text style={{ color: p.fgFaint, fontSize: 11, marginTop: 6 }}>
+              {loading ? 'Getting exact quote…' : 'Live estimate · quote loading'}
+            </Text>
+          </View>
         ) : (
           <Text style={{ color: p.fgFaint, fontSize: 13, fontWeight: '500', textAlign: 'center' }}>
-            {Number(fiat) > 0 ? '…' : 'Enter an amount to see a live quote'}
+            Enter an amount to see a live quote
           </Text>
         )}
       </View>
@@ -462,42 +494,24 @@ export function BuyWidget() {
         </View>
       )}
 
-      {/* ── CTA ── */}
-      <Pressable
-        onPress={() => { if (canConfirm && !error && !success) onConfirm(); }}
-        disabled={(!canConfirm && !error && !success) || exec}
-        style={({ pressed }) => ({
-          height: 56, borderRadius: 16,
-          backgroundColor: success ? p.greenBg : error ? 'rgba(239,68,68,0.15)' : exec ? p.bgElev : canConfirm ? p.ctaBg : p.bgElev,
-          borderWidth: (canConfirm || success || error) && !exec ? 0 : 1, 
-          borderColor: error ? 'rgba(239,68,68,0.3)' : p.border,
-          alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8,
-          opacity: pressed || exec ? 0.8 : 1,
-        })}
-      >
-        {exec ? <ActivityIndicator color={p.fg} /> : (
-          <>
-            {(success || error) && (
-              <Ionicons 
-                name={success ? "checkmark-circle" : "alert-circle"} 
-                size={18} 
-                color={success ? p.greenFg : p.redFg} 
-              />
-            )}
-            <Text 
-              numberOfLines={1} 
-              style={{ 
-                color: success ? p.greenFg : error ? p.redFg : canConfirm ? p.ctaFg : p.fgMuted, 
-                fontSize: 16, 
-                fontWeight: '500',
-                paddingHorizontal: 8,
-              }}
-            >
-              {success ? success : error ? error : canConfirm ? (intent === 'send' ? `Send ${asset}` : `Buy ${asset}`) : 'Enter amount'}
-            </Text>
-          </>
-        )}
-      </Pressable>
+      {/* ── CTA — slide to confirm ── */}
+      <SlideToConfirm
+        label={slideLabel}
+        onConfirm={() => { if (canConfirm && !error && !success) onConfirm(); }}
+        enabled={canConfirm && !error && !success}
+        status={exec ? 'loading' : success ? 'success' : error ? 'error' : 'idle'}
+        successLabel={success || undefined}
+        errorLabel={error || undefined}
+        seconds={canConfirm ? seconds : undefined}
+        totalSeconds={30}
+        accent={brand.primary}
+        accentFg="#ffffff"
+        trackBg={p.bgElev}
+        trackFg={p.fg}
+        border={p.border}
+        greenBg={p.greenBg} greenFg={p.greenFg}
+        redBg="rgba(239,68,68,0.15)" redFg={p.redFg}
+      />
 
       {/* ══════════════════════════════════════════════════════════════
           ASSET PICKER — full Binance search

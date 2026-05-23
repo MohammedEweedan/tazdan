@@ -64,7 +64,7 @@ check('ADMIN_EMAIL set', 'CRITICAL', !!env.ADMIN_EMAIL);
 check('ADMIN_PASSWORD set', 'CRITICAL', !!env.ADMIN_PASSWORD);
 check('ADMIN_PASSWORD length ≥ 12', 'CRITICAL', (env.ADMIN_PASSWORD?.length ?? 0) >= 12);
 check('ADMIN_PASSWORD not default', 'CRITICAL',
-  !['password', 'admin', 'promrkts', '123456'].includes((env.ADMIN_PASSWORD ?? '').toLowerCase()));
+  !['password', 'admin', 'fortuni', '123456'].includes((env.ADMIN_PASSWORD ?? '').toLowerCase()));
 
 // ── Redis ────────────────────────────────────────────────────────────
 check('REDIS_URL set', 'WARN', !!env.REDIS_URL,
@@ -104,7 +104,7 @@ const GREEN  = '\x1b[32m';
 const CYAN   = '\x1b[36m';
 const BOLD   = '\x1b[1m';
 
-console.log(`\n${BOLD}promrkts pre-flight environment check${RESET}`);
+console.log(`\n${BOLD}fortuni pre-flight environment check${RESET}`);
 console.log(`NODE_ENV: ${CYAN}${env.NODE_ENV ?? 'not set'}${RESET}\n`);
 
 let criticalFails = 0;

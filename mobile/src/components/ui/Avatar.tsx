@@ -23,7 +23,7 @@ export function Avatar({ name, uri, size = 40 }: Props) {
   }
   return (
     <LinearGradient
-      colors={['#4A8FE0', '#0057B8']}
+      colors={['#226dff', '#1a52cc']}
       style={{ width: size, height: size, borderRadius: size / 2, alignItems: 'center', justifyContent: 'center' }}
     >
       <Text style={{ color: 'white', fontWeight: '700', fontSize: size * 0.36, letterSpacing: 0.5 }}>

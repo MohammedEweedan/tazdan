@@ -26,6 +26,8 @@ import { createServer } from 'http';
 import { Server } from 'socket.io';
 import jwt from 'jsonwebtoken';
 import path from 'path';
+import cluster from 'cluster';
+import os from 'os';
 
 import { authRouter } from './routes/auth';
 import { userRouter } from './routes/user';
@@ -65,6 +67,37 @@ import { globalLimiter, authLimiter, registerLimiter, withdrawalLimiter, webhook
 import { protectedUploadsRouter } from './middleware/protectedUploads';
 import { ipBanMiddleware } from './middleware/ipBan';
 
+// ── Cluster load balancing ────────────────────────────────────────────────
+// In production, fork one Express worker per CPU core. The OS distributes
+// incoming TCP connections across workers. Crashed workers restart automatically.
+// In dev/test: single-process (ts-node-dev / jest don't play well with cluster).
+const NUM_WORKERS = parseInt(process.env.CLUSTER_WORKERS ?? '0') || os.cpus().length;
+const CLUSTER_ENABLED = process.env.NODE_ENV === 'production' && NUM_WORKERS > 1 && cluster.isPrimary;
+
+if (CLUSTER_ENABLED) {
+  const log = (msg: string) => process.stdout.write(`[cluster:primary] ${msg}\n`);
+  log(`PID ${process.pid} — forking ${NUM_WORKERS} workers`);
+
+  for (let i = 0; i < NUM_WORKERS; i++) cluster.fork();
+
+  cluster.on('exit', (worker, code, signal) => {
+    log(`Worker ${worker.process.pid} exited (code=${code ?? '—'} signal=${signal ?? '—'}) — restarting`);
+    cluster.fork();
+  });
+
+  cluster.on('online', (w) => log(`Worker ${w.process.pid} online`));
+
+  process.on('SIGTERM', () => {
+    log('SIGTERM — stopping all workers');
+    for (const w of Object.values(cluster.workers ?? {})) w?.send('shutdown');
+    setTimeout(() => process.exit(0), 5_000).unref();
+  });
+
+  // Primary exits the module here — do NOT fall through to Express setup.
+  // (TypeScript doesn't have a clean "stop execution" so we rely on the
+  //  `if (CLUSTER_ENABLED) { ... }` above preventing `start()` below.)
+}
+
 export const app = express();
 const httpServer = createServer(app);
 
@@ -74,9 +107,9 @@ const httpServer = createServer(app);
  * header) are always allowed.
  *
  * CLIENT_URL may be a comma-separated list (e.g.
- * "https://promrkts.com,https://app.promrkts.com").
+ * "https://fortuni.com,https://app.fortuni.com").
  */
-const PROD_ORIGINS = (process.env.CLIENT_URL ?? 'https://promrkts.com')
+const PROD_ORIGINS = (process.env.CLIENT_URL ?? 'https://fortuni.com')
   .split(',')
   .map((o) => o.trim())
   .filter(Boolean);
@@ -111,6 +144,17 @@ app.set('trust proxy', 1);
 // Block banned IPs before any processing
 app.use(ipBanMiddleware);
 
+// ── Vary header for CDN / proxy caching ───────────────────────────────
+// Tell every cache layer that the response varies by Accept-Encoding so a
+// gzip-compressed cached response is never served to a client that doesn't
+// accept it. Actual gzip/Brotli compression should be done at the nginx or
+// CDN layer (add `gzip on;` in nginx.conf) — in-process compression is
+// unnecessary overhead when a reverse proxy is present.
+app.use((_req, res, next) => {
+  res.setHeader('Vary', 'Accept-Encoding');
+  next();
+});
+
 // Sentry auto-instruments HTTP requests in v8+ — no requestHandler middleware needed.
 
 // Global middleware
@@ -137,6 +181,13 @@ app.use((req, res, next) => {
   })(req, res, next);
 });
 app.use(express.urlencoded({ extended: true, limit: '1mb' }));
+
+// ── Cache-Control on public read-only endpoints ───────────────────────
+// Allows CDN / reverse-proxy caching for high-traffic public routes.
+app.use(['/api/markets', '/api/exchange/search'], (_req, res, next) => {
+  res.setHeader('Cache-Control', 'public, max-age=15, stale-while-revalidate=30');
+  next();
+});
 
 // Global rate limit on /api/.
 app.use('/api/', globalLimiter);
@@ -241,6 +292,7 @@ app.get('/api/health', async (_req, res) => {
     uptime: Math.floor(process.uptime()),
     timestamp: new Date().toISOString(),
     checks,
+    worker: process.pid,
   });
 });
 
@@ -308,7 +360,8 @@ async function start() {
     await initRedis();
 
     httpServer.listen(PORT, () => {
-      logger.info(`Server running on port ${PORT}`);
+      const workerTag = cluster.isWorker ? ` [worker ${process.pid}]` : '';
+      logger.info(`Server running on port ${PORT}${workerTag}`);
     });
   } catch (error) {
     logger.error('Failed to start server:', { err: error });
@@ -316,7 +369,11 @@ async function start() {
   }
 }
 
-start();
+// Workers and single-process dev start the Express server.
+// The cluster primary only forks workers (handled above) and never listens.
+if (!CLUSTER_ENABLED) {
+  start();
+}
 
 async function shutdown(signal: string) {
   logger.info(`${signal} received — shutting down gracefully`);
