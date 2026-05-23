@@ -1,39 +1,39 @@
 /**
- * Onboarding — 2 minimal slides.
- *  - Theme-aware (black or white surface, text inverts)
- *  - i18n-aware (4 locales, RTL flips Arabic)
- *  - Top-right: theme toggle + language switcher
+ * Onboarding — fintech vibes.
  *
- * KEY BUG NOTE: in the previous version the FlatList had no `flex` so it
- * collapsed to zero height — that's why the screen looked empty. Fixed by
- * giving FlatList `flex: 1` and the renderItem View `flex: 1` too.
+ *   • Logo top-left.
+ *   • Language switcher (globe icon → LocalePickerModal) + dark mode toggle top-right.
+ *   • Hero: scrolling crypto ticker tape fills the top 58%.
+ *   • Slide content: title + body only — no eyebrow badge.
+ *   • Full-width brand-blue CTAs.
  */
 
 import { useEffect, useRef, useState } from 'react';
-import { Alert, Dimensions, FlatList, Image, Pressable, View, type ListRenderItemInfo } from 'react-native';
+import { Dimensions, FlatList, Image, Pressable, View, type ListRenderItemInfo } from 'react-native';
 import { Text } from '@/components/ui/Text';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as LocalAuthentication from 'expo-local-authentication';
 import { Camera } from 'expo-camera';
+import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 
 import { useHaptics } from '@/hooks';
-import { useTheme, useThemedPalette } from '@/store/themeStore';
+import { useTheme } from '@/store/themeStore';
 import { useI18n, useT, LOCALE_META } from '@/store/i18nStore';
-import { LoopVideo } from '@/components/ui/LoopVideo';
+import { OnboardingHero } from '@/components/ui/OnboardingHero';
+import { LocalePickerModal } from '@/components/ui/LocalePickerModal';
 import { secureStore } from '@/lib/secureStore';
 import { STORAGE_KEYS } from '@/constants';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 
-interface Slide { id: string; titleKey: string; bodyKey: string }
+interface Slide { id: string; titleKey: string; bodyKey: string; variant: 1 | 2 | 3 }
 const SLIDES: Slide[] = [
-  { id: 's1', titleKey: 'onboard.title.1', bodyKey: 'onboard.body.1' },
-  { id: 's2', titleKey: 'onboard.title.2', bodyKey: 'onboard.body.2' },
-  { id: 's3', titleKey: 'onboard.permissions.title', bodyKey: 'onboard.permissions.body' },
+  { id: 's1', titleKey: 'onboard.title.1', bodyKey: 'onboard.body.1', variant: 1 },
+  { id: 's2', titleKey: 'onboard.title.2', bodyKey: 'onboard.body.2', variant: 2 },
+  { id: 's3', titleKey: 'onboard.permissions.title', bodyKey: 'onboard.permissions.body', variant: 3 },
 ];
 
 async function requestAllPermissions() {
@@ -61,29 +61,41 @@ export default function Onboarding() {
   const router = useRouter();
   const h = useHaptics();
   const t = useT();
-  const p = useThemedPalette();
   const themeMode = useTheme((s) => s.mode);
   const toggleTheme = useTheme((s) => s.toggle);
   const locale = useI18n((s) => s.locale);
-  const cycleLocale = useI18n((s) => s.cycle);
 
   const [page, setPage] = useState(0);
+  const [langPickerVisible, setLangPickerVisible] = useState(false);
   const flat = useRef<FlatList<Slide>>(null);
   const last = page === SLIDES.length - 1;
   const onPermissionsSlide = page === 2;
 
-  // Request permissions when the user reaches the permissions slide.
-  useEffect(() => {
-    if (onPermissionsSlide) requestAllPermissions();
-  }, [onPermissionsSlide]);
+  useEffect(() => { if (onPermissionsSlide) requestAllPermissions(); }, [onPermissionsSlide]);
 
   const markOnboardedAndNavigate = async (dest: '/register' | '/login') => {
     await secureStore.set(STORAGE_KEYS.onboarded, 'true');
     router.push(dest);
   };
 
-  // Slide copy lives on a translucent panel so the text always reads
-  // clearly over the moving video, in BOTH light + dark themes.
+  const isDark = themeMode === 'dark';
+
+  // Fintech gradient palette
+  const bg      = isDark ? '#06112b' : '#eef3ff';
+  const fg      = isDark ? '#ffffff' : '#0d1b4b';
+  const fgMuted = isDark ? 'rgba(255,255,255,0.65)' : 'rgba(13,27,75,0.65)';
+  const fgFaint = isDark ? 'rgba(255,255,255,0.38)' : 'rgba(13,27,75,0.38)';
+  const chipBg  = isDark ? 'rgba(255,255,255,0.10)' : 'rgba(13,27,75,0.07)';
+  const chipBd  = isDark ? 'rgba(255,255,255,0.18)' : 'rgba(13,27,75,0.14)';
+  const ctaBg   = '#226dff';
+  const ctaFg   = '#ffffff';
+
+  const LOGO_W = 96;
+  const LOGO_H = 26;
+  const logoSrc = isDark
+    ? require('../../assets/logo-white.png')
+    : require('../../assets/logo-black.png');
+
   const renderItem = ({ item, index }: ListRenderItemInfo<Slide>) => {
     const active = index === page;
     return (
@@ -91,121 +103,105 @@ export default function Onboarding() {
         style={{
           width: SCREEN_W,
           flex: 1,
-          paddingHorizontal: 32,
+          paddingHorizontal: 28,
           justifyContent: 'flex-end',
-          paddingBottom: 40,
+          paddingBottom: 28,
         }}
       >
-        <Text
-          style={{
-            color: p.fg,
-            fontSize: 40,
-            fontWeight: '600',
-            letterSpacing: -1.2,
-            lineHeight: 46,
-            textAlign: 'left',
-            opacity: active ? 1 : 0.4,
-          }}
-        >
-          {t(item.titleKey)}
-        </Text>
-        <Text
-          style={{
-            color: p.fgMuted,
-            fontSize: 17,
-            lineHeight: 24,
-            marginTop: 16,
-            fontWeight: '500',
-            textAlign: 'left',
-            opacity: active ? 1 : 0.4,
-          }}
-        >
-          {t(item.bodyKey)}
-        </Text>
+        <Animated.View entering={FadeInDown.duration(500).springify().damping(18)}>
+          {/* Title — bold, no eyebrow above it */}
+          <Text
+            style={{
+              color: fg,
+              fontSize: 40,
+              fontWeight: '800',
+              letterSpacing: -1.4,
+              lineHeight: 44,
+              textAlign: 'center',
+              opacity: active ? 1 : 0.4,
+            }}
+          >
+            {t(item.titleKey)}
+          </Text>
+
+          {/* Body */}
+          <Text
+            style={{
+              color: fgMuted,
+              fontSize: 16,
+              lineHeight: 24,
+              marginTop: 16,
+              fontWeight: '500',
+              textAlign: 'center',
+              opacity: active ? 1 : 0.4,
+              paddingHorizontal: 4,
+            }}
+          >
+            {t(item.bodyKey)}
+          </Text>
+        </Animated.View>
       </View>
     );
   };
 
-  const isDark = themeMode === 'dark';
-  
-  // A premium fintech feel: let the video play in the top 60%, and 
-  // fade it out smoothly into the solid background color at the bottom
-  // where the clean typography and buttons live.
-  const gradient: [string, string, string, string] = isDark
-    ? ['rgba(15,17,23,0)', 'rgba(15,17,23,0.4)', 'rgba(15,17,23,0.95)', p.bg]
-    : ['rgba(245,245,247,0)', 'rgba(245,245,247,0.4)', 'rgba(245,245,247,0.95)', p.bg];
-
   return (
-    <View style={{ flex: 1, backgroundColor: p.bg }}>
+    <View style={{ flex: 1, backgroundColor: bg }}>
       <StatusBar style={isDark ? 'light' : 'dark'} />
 
-      {/* Video pinned to the top half */}
-      <View style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '70%' }}>
-        <LoopVideo
-          source={require('../../assets/WebHeader.mp4')}
-          style={{ width: '100%', height: '100%' }}
-          opacity={isDark ? 0.6 : 0.8}
-        />
-        <LinearGradient
-          colors={gradient}
-          locations={[0.2, 0.7, 0.9, 1]}
-          style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
-        />
+      {/* Hero pinned to top 58% */}
+      <View style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '58%' }}>
+        <OnboardingHero fg={fg} bg={bg} variant={SLIDES[page]?.variant ?? 1} />
       </View>
 
       <SafeAreaView style={{ flex: 1 }}>
-        {/* ── Top bar ── */}
-        <View
+        {/* Header: logo top-left, controls top-right */}
+        <Animated.View
+          entering={FadeIn.duration(500)}
           style={{
-            paddingHorizontal: 24,
-            paddingTop: 8,
             flexDirection: 'row',
-            justifyContent: 'space-between',
             alignItems: 'center',
+            justifyContent: 'space-between',
+            paddingHorizontal: 20,
+            paddingTop: 12,
           }}
         >
-          <Image
-            source={isDark ? require('../../assets/logo-white.png') : require('../../assets/logo-black.png')}
-            style={{ width: 120, height: 32 }}
-            resizeMode="contain"
-          />
-          <View style={{ flexDirection: 'row', gap: 12, alignItems: 'center' }}>
-            {/* Lang switcher */}
+          {/* Logo — top left */}
+          <Image source={logoSrc} style={{ width: LOGO_W, height: LOGO_H }} resizeMode="contain" />
+
+          {/* Controls — top right: globe (language) + theme toggle */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            {/* Language — globe icon + flag, opens LocalePickerModal (same as profile) */}
             <Pressable
-              onPress={() => { h.selection(); cycleLocale(); }}
-              hitSlop={6}
-              style={{
-                flexDirection: 'row', alignItems: 'center', gap: 6,
-                paddingHorizontal: 12, height: 36, borderRadius: 18,
-                backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)',
-              }}
+              onPress={() => { h.selection(); setLangPickerVisible(true); }}
+              hitSlop={10}
+              style={({ pressed }) => ({
+                flexDirection: 'row', alignItems: 'center', gap: 5,
+                paddingHorizontal: 10, height: 34, borderRadius: 17,
+                backgroundColor: pressed ? chipBg : chipBg,
+                borderWidth: 1, borderColor: chipBd,
+              })}
             >
-              <Text style={{ fontSize: 14 }}>{LOCALE_META[locale].flag}</Text>
-              <Text style={{ color: p.fg, fontSize: 13, fontWeight: '700', letterSpacing: 0.4 }}>
-                {locale.toUpperCase()}
-              </Text>
+              <Ionicons name="globe-outline" size={15} color={fg} />
+              <Text style={{ fontSize: 13 }}>{LOCALE_META[locale].flag}</Text>
             </Pressable>
 
             {/* Theme toggle */}
             <Pressable
               onPress={() => { h.selection(); toggleTheme(); }}
-              hitSlop={6}
+              hitSlop={10}
               style={{
-                width: 36, height: 36, borderRadius: 18,
+                width: 34, height: 34, borderRadius: 17,
                 alignItems: 'center', justifyContent: 'center',
-                backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)',
+                backgroundColor: chipBg,
+                borderWidth: 1, borderColor: chipBd,
               }}
             >
-              <Ionicons
-                name={isDark ? 'sunny' : 'moon'}
-                size={18}
-                color={p.fg}
-              />
+              <Ionicons name={isDark ? 'sunny' : 'moon'} size={15} color={fg} />
             </Pressable>
           </View>
-        </View>
+        </Animated.View>
 
-        {/* ── Slides ── */}
+        {/* Slides */}
         <FlatList
           ref={flat}
           data={SLIDES}
@@ -218,20 +214,16 @@ export default function Onboarding() {
           renderItem={renderItem}
         />
 
-        {/* ── Footer ── */}
-        <View style={{ paddingHorizontal: 32, paddingBottom: 24, paddingTop: 10 }}>
-          {/* Dots */}
-          <View style={{ flexDirection: 'row', justifyContent: 'flex-start', gap: 6, marginBottom: 32 }}>
+        {/* Footer — dots + full-width CTAs */}
+        <View style={{ paddingHorizontal: 24, paddingBottom: 24, paddingTop: 4 }}>
+          <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 6, marginBottom: 24 }}>
             {SLIDES.map((s, i) => (
               <View
                 key={s.id}
                 style={{
-                  height: 4,
-                  borderRadius: 2,
-                  width: i === page ? 24 : 8,
-                  backgroundColor: i === page
-                    ? p.fg
-                    : (isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.15)'),
+                  height: 4, borderRadius: 2,
+                  width: i === page ? 28 : 6,
+                  backgroundColor: i === page ? ctaBg : fgFaint,
                 }}
               />
             ))}
@@ -245,43 +237,47 @@ export default function Onboarding() {
               else flat.current?.scrollToIndex({ index: page + 1, animated: true });
             }}
             style={({ pressed }) => ({
-              height: 56,
-              borderRadius: 28,
-              backgroundColor: p.fg,
-              opacity: pressed ? 0.8 : 1,
+              alignSelf: 'stretch',
+              height: 58,
+              borderRadius: 29,
+              backgroundColor: ctaBg,
+              opacity: pressed ? 0.85 : 1,
               alignItems: 'center',
               justifyContent: 'center',
-              shadowColor: p.fg,
-              shadowOpacity: 0.15,
-              shadowOffset: { width: 0, height: 4 },
-              shadowRadius: 12,
-              elevation: 3,
+              shadowColor: ctaBg,
+              shadowOpacity: 0.28,
+              shadowOffset: { width: 0, height: 8 },
+              shadowRadius: 20,
+              elevation: 4,
             })}
           >
-            <Text style={{ color: p.bg, fontSize: 17, fontWeight: '700', letterSpacing: -0.3 }}>
+            <Text style={{ color: ctaFg, fontSize: 16, fontWeight: '700', letterSpacing: -0.2 }}>
               {last ? t('onboard.create') : t('onboard.continue')}
             </Text>
           </Pressable>
 
-          {/* Secondary CTA */}
+          {/* Secondary */}
           <Pressable
             onPress={() => { h.selection(); markOnboardedAndNavigate('/login'); }}
             style={({ pressed }) => ({
-              height: 56,
-              borderRadius: 28,
+              alignSelf: 'stretch',
+              height: 52,
+              borderRadius: 26,
               alignItems: 'center', justifyContent: 'center',
-              marginTop: 12,
-              backgroundColor: pressed
-                ? (isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)')
-                : 'transparent',
+              marginTop: 10,
+              borderWidth: 1,
+              borderColor: chipBd,
+              backgroundColor: pressed ? chipBg : 'transparent',
             })}
           >
-            <Text style={{ color: p.fg, fontSize: 16, fontWeight: '600' }}>
+            <Text style={{ color: fg, fontSize: 15, fontWeight: '600' }}>
               {t('onboard.haveAccount')}
             </Text>
           </Pressable>
         </View>
       </SafeAreaView>
+
+      <LocalePickerModal visible={langPickerVisible} onClose={() => setLangPickerVisible(false)} />
     </View>
   );
 }

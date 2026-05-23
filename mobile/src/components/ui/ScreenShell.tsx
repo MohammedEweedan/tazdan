@@ -36,13 +36,13 @@ export function TopGradient({ height }: { height?: number }) {
       colors={
         themeMode === 'dark'
           ? [
-              'rgba(34, 109, 255, 0.25)', // subtle white top
-              'rgba(56, 121, 251, 0.10)', // soft grey middle
+              'rgba(34, 109, 255, 0.15)', // subtle white top
+              'rgba(56, 121, 251, 0.05)', // soft grey middle
               'rgba(0,0,0,0)',          // fade to transparent
             ]
           : [
-              'rgba(34, 109, 255, 0.25)', // subtle white top
-              'rgba(56, 121, 251, 0.10)', // soft grey middle
+              'rgba(34, 109, 255, 0.15)', // subtle white top
+              'rgba(56, 121, 251, 0.05)', // soft grey middle
               'rgba(0,0,0,0)',    // fade to transparent
             ]
       }
@@ -191,6 +191,8 @@ export function CTAButton({
       onPress={onPress}
       disabled={disabled || effective === 'loading' || effective === 'success'}
       style={({ pressed }) => ({
+        alignSelf: 'stretch',
+        width: '100%',
         height: 56,
         borderRadius: 28,
         backgroundColor: bg,
@@ -225,6 +227,8 @@ export function SecondaryButton({
     <Pressable
       onPress={onPress}
       style={({ pressed }) => ({
+        alignSelf: 'stretch',
+        width: '100%',
         height: 56,
         borderRadius: 28,
         backgroundColor: pressed ? p.bgElev : 'transparent',

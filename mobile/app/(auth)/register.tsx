@@ -872,6 +872,8 @@ function PrimaryCTA({
       accessibilityRole="button"
       accessibilityLabel={label}
       style={({ pressed }) => ({
+        alignSelf: 'stretch',
+        width: '100%',
         marginTop: 28,
         height: 58, minHeight: 58,
         borderRadius: 29,

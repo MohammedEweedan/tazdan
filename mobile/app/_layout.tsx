@@ -36,7 +36,8 @@ import { setUnauthorizedHandler } from '@/lib/api';
 import { useAuthStore } from '@/store/authStore';
 import { authService } from '@/services';
 import { secureStore } from '@/lib/secureStore';
-import { STORAGE_KEYS } from '@/constants';
+import { STORAGE_KEYS, STRIPE } from '@/constants';
+import { StripeProvider } from '@/lib/stripeShim';
 
 // Match the dark palette bg exactly so the system chrome (keyboard toolbar,
 // nav bar on Android) never flashes a different shade of black.
@@ -108,8 +109,8 @@ function SplashOverlay() {
       style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 1000 }}
     >
       <LinearGradient
-        colors={['#ffffff', '#9ca3af', '#000000']}
-        locations={[0, 0.5, 1]}
+        colors={['#000000', '#f5f5f51f', '#06112b9f']}
+        locations={[0, 0.55, 1]}
         style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}
       >
         <Animated.View entering={FadeIn.duration(500)}>
@@ -147,6 +148,11 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: '#141518' }}>
       <SafeAreaProvider>
         <QueryClientProvider client={queryClient}>
+          <StripeProvider
+            publishableKey={STRIPE.publishableKey}
+            merchantIdentifier={STRIPE.merchantIdentifier}
+            urlScheme="fortuni"
+          >
           <StatusBar style="light" />
           <AuthGate />
           <Stack
@@ -167,6 +173,7 @@ export default function RootLayout() {
             <Stack.Screen name="topup"    options={{ presentation: 'modal' }} />
           </Stack>
           <SplashGate />
+          </StripeProvider>
         </QueryClientProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>

@@ -8,9 +8,10 @@ import { Text, TextInput } from '@/components/ui/Text';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useAuthStore } from '@/store/authStore';
-import { useThemedPalette, brand } from '@/store/themeStore';
+import { useThemedPalette, useTheme, brand } from '@/store/themeStore';
 import { SlideToConfirm } from '@/components/ui/SlideToConfirm';
 import { useWallets, useMarkets, extractErrorMessage } from '@/hooks';
+import { CoinAvatar } from '@/components/ui/CoinAvatar';
 import { cryptoExchangeAPI, type CryptoQuote, type AssetSearchResult } from '@/lib/cryptoApi';
 
 // ── Static metadata (kept in sync with BuyWidget) ────────────────────────────
@@ -103,6 +104,8 @@ function isCryptoKey(currency: string) {
 export function SellWidget() {
   const { user } = useAuthStore();
   const p = useThemedPalette();
+  const themeMode = useTheme((s) => s.mode);
+  const brandAccent = themeMode === 'dark' ? brand.primaryDark : brand.primary;
   const { data: wallets } = useWallets();
   const { data: tickers } = useMarkets();
   const baseCurrency = (user as any)?.baseCurrency ?? 'USD';
@@ -260,47 +263,63 @@ export function SellWidget() {
         onPress={() => { Haptics.selectionAsync(); setAssetSheetOpen(true); }}
         style={({ pressed }) => ({
           flexDirection: 'row', alignItems: 'center',
-          backgroundColor: p.bgElev, borderRadius: 18,
+          backgroundColor: p.bgElev, borderRadius: 20,
           borderWidth: 1, borderColor: p.border,
-          padding: 14, marginBottom: 16, opacity: pressed ? 0.8 : 1,
+          padding: 14, marginBottom: 18, opacity: pressed ? 0.85 : 1,
         })}
       >
-        <View style={{ width: 46, height: 46, borderRadius: 23, backgroundColor: `${meta.color}22`, alignItems: 'center', justifyContent: 'center' }}>
-          <Text style={{ fontSize: 22, color: meta.color, fontWeight: '500' }}>{meta.icon}</Text>
-        </View>
+        <CoinAvatar sym={asset} color={meta.color} size={48} />
         <View style={{ flex: 1, marginLeft: 14 }}>
-          <Text style={{ color: p.fg, fontSize: 17, fontWeight: '500', letterSpacing: 0 }}>{meta.label}</Text>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 2 }}>
-            <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '500' }}>
-              {asset}{livePrice > 0 ? `  ·  ${sym(baseCurrency)}${fmtPrice(Number(livePrice))}` : ''}
-            </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 8 }}>
+            <Text style={{ color: p.fg, fontSize: 17, fontWeight: '600' }}>{meta.label}</Text>
+            <Text style={{ color: p.fgFaint, fontSize: 12, fontWeight: '500' }}>{asset}</Text>
+          </View>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 3 }}>
+            {livePrice > 0 && (
+              <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '500', fontVariant: ['tabular-nums'] }}>
+                {sym(baseCurrency)}{fmtPrice(Number(livePrice))}
+              </Text>
+            )}
             {change24h !== undefined && (
-              <View style={{ paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, backgroundColor: change24h >= 0 ? p.greenBg : p.redBg }}>
-                <Text style={{ color: change24h >= 0 ? p.greenFg : p.redFg, fontSize: 10, fontWeight: '500' }}>
-                  {change24h >= 0 ? '+' : ''}{Number(change24h).toFixed(2)}%
+              <View style={{ paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6, backgroundColor: Number(change24h) >= 0 ? p.greenBg : p.redBg }}>
+                <Text style={{ color: Number(change24h) >= 0 ? p.greenFg : p.redFg, fontSize: 11, fontWeight: '700' }}>
+                  {Number(change24h) >= 0 ? '+' : ''}{Number(change24h).toFixed(2)}%
                 </Text>
               </View>
             )}
           </View>
         </View>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-          <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '500' }}>Change</Text>
-          <Ionicons name="chevron-down" size={18} color={p.fgMuted} />
+        <View style={{
+          paddingHorizontal: 10, paddingVertical: 7, borderRadius: 12,
+          backgroundColor: `${brandAccent}1f`,
+          borderWidth: 1, borderColor: `${brandAccent}3a`,
+          flexDirection: 'row', alignItems: 'center', gap: 4,
+        }}>
+          <Text style={{ color: brandAccent, fontSize: 11, fontWeight: '700', letterSpacing: 0.3 }}>CHANGE</Text>
+          <Ionicons name="chevron-down" size={13} color={brandAccent} />
         </View>
       </Pressable>
 
       {/* ── Amount input ── */}
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-        <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '500', letterSpacing: 0.8 }}>YOU SELL ({asset})</Text>
-        <Pressable onPress={() => { Haptics.selectionAsync(); setCryptoAmt(String(balance)); setQuote(null); setError(null); }} hitSlop={8}>
-          <Text style={{ color: p.ctaBg, fontSize: 12, fontWeight: '500' }}>USE MAX</Text>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+        <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '700', letterSpacing: 0.9 }}>YOU SELL ({asset})</Text>
+        <Pressable
+          onPress={() => { Haptics.selectionAsync(); setCryptoAmt(String(balance)); setQuote(null); setError(null); }}
+          hitSlop={8}
+          style={{
+            paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10,
+            backgroundColor: `${brandAccent}1f`,
+            borderWidth: 1, borderColor: `${brandAccent}3a`,
+          }}
+        >
+          <Text style={{ color: brandAccent, fontSize: 11, fontWeight: '700', letterSpacing: 0.5 }}>USE MAX</Text>
         </Pressable>
       </View>
       <View style={{
         flexDirection: 'row', alignItems: 'center',
-        backgroundColor: p.bgElev, borderRadius: 18,
-        borderWidth: 1.5, borderColor: overspend ? p.redFg : (error ? p.redFg : p.border),
-        paddingHorizontal: 18, marginBottom: 10,
+        backgroundColor: p.bgElev, borderRadius: 20,
+        borderWidth: 1.5, borderColor: overspend || error ? p.redFg : (parseFloat(cryptoAmt) > 0 ? brandAccent : p.border),
+        paddingHorizontal: 18, marginBottom: 12,
       }}>
         <TextInput
           value={cryptoAmt}
@@ -313,9 +332,9 @@ export function SellWidget() {
           keyboardType="decimal-pad"
           returnKeyType="done"
           onSubmitEditing={Keyboard.dismiss}
-          style={{ flex: 1, color: p.fg, fontSize: 28, fontWeight: '500', paddingVertical: 16, fontVariant: ['tabular-nums'] }}
+          style={{ flex: 1, color: p.fg, fontSize: 32, fontWeight: '600', paddingVertical: 18, fontVariant: ['tabular-nums'], letterSpacing: -0.5 }}
         />
-        <Text style={{ color: p.fgMuted, fontSize: 14, fontWeight: '500' }}>{asset}</Text>
+        <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '700', letterSpacing: 0.5 }}>{asset}</Text>
       </View>
 
       {/* Balance row */}
@@ -405,7 +424,8 @@ export function SellWidget() {
         errorLabel={error || undefined}
         seconds={canConfirm ? seconds : undefined}
         totalSeconds={30}
-        accent={brand.primary}
+        accent={brandAccent}
+        accentEnd={brand.deep}
         accentFg="#ffffff"
         trackBg={p.bgElev}
         trackFg={p.fg}
@@ -462,9 +482,7 @@ export function SellWidget() {
                     backgroundColor: pressed ? p.bgElev : 'transparent',
                   })}
                 >
-                  <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: `${m.color}22`, alignItems: 'center', justifyContent: 'center', marginRight: 14 }}>
-                    <Text style={{ fontSize: 20, color: m.color, fontWeight: '500' }}>{m.icon}</Text>
-                  </View>
+                  <CoinAvatar sym={item.symbol} color={m.color} size={44} />
                   <View style={{ flex: 1 }}>
                     <Text style={{ color: p.fg, fontSize: 15, fontWeight: '500' }}>{m.label}</Text>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>

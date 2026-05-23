@@ -6,6 +6,7 @@
 import { Pressable, View } from 'react-native';
 import { Text } from '@/components/ui/Text';
 import { Sparkline } from '@/components/ui/Sparkline';
+import { CoinIcon } from '@/components/ui/CoinIcon';
 import { CURRENCY_META } from '@/constants';
 import { formatPercent } from '@/utils/format';
 import type { MarketTicker } from '@/types';
@@ -25,17 +26,7 @@ export function MarketRow({ ticker, onPress }: Props) {
         opacity: pressed ? 0.78 : 1,
       })}
     >
-      <View
-        style={{
-          width: 38, height: 38, borderRadius: 19,
-          backgroundColor: 'rgba(255,255,255,0.06)',
-          alignItems: 'center', justifyContent: 'center',
-          marginRight: 12,
-          borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)',
-        }}
-      >
-        <Text style={{ color: '#fff', fontSize: 16, fontWeight: '700' }}>{meta?.flagOrIcon ?? ticker.base.slice(0, 3)}</Text>
-      </View>
+      <CoinIcon symbol={ticker.base} size={38} />
 
       <View style={{ flex: 1 }}>
         <Text className="text-ink-primary text-sm font-semibold">{ticker.displayName}</Text>

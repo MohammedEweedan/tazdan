@@ -34,6 +34,9 @@ type Strings = Record<string, string>;
 
 const dict: Record<Locale, Strings> = {
   en: {
+    'onboard.eyebrow.1':     'INTRODUCING FORTUNI',
+    'onboard.eyebrow.2':     'BUILT FOR MOVEMENT',
+    'onboard.eyebrow.3':     'ONE LAST STEP',
     'onboard.title.1':       'One wallet for the world.',
     'onboard.body.1':        'BTC, ETH, USDT and 7 fiat currencies — held side-by-side, swap in seconds.',
     'onboard.title.2':       'Send to anyone, anywhere.',
