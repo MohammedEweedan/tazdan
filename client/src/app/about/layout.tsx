@@ -18,7 +18,7 @@ export const metadata: Metadata = {
     title: "About fortuni — Building the Financial Layer for MENA",
     description:
       "Transparent reserves, regulated infrastructure, and a P2P marketplace built for the Middle East and North Africa.",
-    url: "https://promrkts.com/about",
+    url: "https://fortuni.com/about",
     type: "website",
     images: [
       {
@@ -36,7 +36,7 @@ export const metadata: Metadata = {
       "Our mission: make global money movement as easy as sending a message.",
     images: ["/og-image.png"],
   },
-  alternates: { canonical: "https://promrkts.com/about" },
+  alternates: { canonical: "https://fortuni.com/about" },
 };
 
 export default function AboutLayout({ children }: { children: React.ReactNode }) {

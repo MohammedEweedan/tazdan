@@ -12,7 +12,7 @@ import {
   VStack,
   useColorMode,
 } from "@chakra-ui/react";
-import { FiTwitter, FiGithub, FiLinkedin, FiInstagram } from "react-icons/fi";
+import { FiUserX, FiGithub, FiLinkedin, FiInstagram, FiX } from "react-icons/fi";
 import { useTranslate } from "@tolgee/react";
 import Logo from "@/components/ui/Logo";
 
@@ -58,8 +58,8 @@ export default function PublicFooter() {
     },
   ];
 
-  const socials: { icon: typeof FiTwitter; href: string; label: string }[] = [
-    { icon: FiTwitter, href: "https://twitter.com", label: "Twitter" },
+  const socials: { icon: typeof FiX; href: string; label: string }[] = [
+    { icon: FiX, href: "https://twitter.com", label: "Twitter" },
     { icon: FiInstagram, href: "https://instagram.com", label: "Instagram" },
     { icon: FiLinkedin, href: "https://linkedin.com", label: "LinkedIn" },
     { icon: FiGithub, href: "https://github.com", label: "GitHub" },
@@ -142,13 +142,13 @@ export default function PublicFooter() {
             </Text>
             <Box
               as="a"
-              href="mailto:support@promrkts.com"
+              href="mailto:support@fortuni.com"
               fontSize="11px"
               color={dark ? "rgba(255,255,255,0.35)" : "rgba(0,0,0,0.38)"}
               _hover={{ color: textSub }}
               transition="color 0.15s"
             >
-              support@promrkts.com
+              support@fortuni.com
             </Box>
           </VStack>
 

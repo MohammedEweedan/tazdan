@@ -10,9 +10,9 @@ export const colors = {
     100: '#c4d8f7',
     200: '#9cbef0',
     300: '#73a4e9',
-    400: '#4A8FE0',
+    400: '#226dff',
     500: '#2477d3',
-    600: '#0057B8',
+    600: '#1a52cc',
     700: '#00408a',
     800: '#002a5c',
     900: '#00152e',
@@ -46,8 +46,8 @@ export const colors = {
  */
 export const gradients = {
   // Hero — luxury blue, top-to-bottom
-  brand:    ['#4A8FE0', '#0057B8'],
-  brandReverse: ['#0057B8', '#4A8FE0'],
+  brand:    ['#226dff', '#1a52cc'],
+  brandReverse: ['#1a52cc', '#226dff'],
   // Background sweep — used behind the entire app
   surface:  ['#030818', '#070d22', '#0c1430'],
   // Card highlights — subtle inner sheen
@@ -59,7 +59,7 @@ export const gradients = {
   danger:   ['#dc2626', '#ef4444'],
   // Card slider — five distinct premium card colorways
   cards: {
-    sapphire:  ['#0057B8', '#001f4f'],   // standard
+    sapphire:  ['#1a52cc', '#001f4f'],   // standard
     obsidian:  ['#0a0a0a', '#1a1a1a'],   // black metal
     rose:      ['#9b1d4d', '#3a0a1d'],   // rose gold
     emerald:   ['#0a5d4a', '#022019'],   // green
@@ -157,21 +157,21 @@ export function useFontFamily() {
 export const shadows = {
   none:  { shadowOpacity: 0 },
   card:  {
-    shadowColor:   '#0057B8',
+    shadowColor:   '#1a52cc',
     shadowOffset:  { width: 0, height: 12 },
     shadowOpacity: 0.18,
     shadowRadius:  20,
     elevation:     8,
   },
   cardHigh: {
-    shadowColor:   '#0057B8',
+    shadowColor:   '#1a52cc',
     shadowOffset:  { width: 0, height: 24 },
     shadowOpacity: 0.30,
     shadowRadius:  40,
     elevation:     16,
   },
   glow: {
-    shadowColor:   '#4A8FE0',
+    shadowColor:   '#226dff',
     shadowOffset:  { width: 0, height: 0 },
     shadowOpacity: 0.45,
     shadowRadius:  18,

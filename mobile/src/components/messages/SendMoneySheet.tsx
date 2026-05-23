@@ -22,7 +22,7 @@ import { useWallets } from '@/hooks';
 import { getCurrencyMeta } from '@/constants';
 import type { Currency, Wallet } from '@/types';
 
-const BRAND_BLUE = '#0057B8';
+const BRAND_BLUE = '#1a52cc';
 
 export interface SendMoneySheetProps {
   visible: boolean;

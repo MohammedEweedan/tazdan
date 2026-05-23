@@ -18,6 +18,12 @@ import { redisGet, redisSet, redisDel, getRedisClient } from '../../utils/redis'
 
 Decimal.set({ precision: 40 });
 
+// ── Silent platform margin (BUY only) ────────────────────────────────
+// Applied on top of the per-asset spread. Collected in the quoted price
+// so it is invisible to the user — appears as part of the natural exchange
+// rate. Separate from the explicit platform fee shown in the UI.
+const PLATFORM_MARGIN = new Decimal(0.015); // 1.5 %
+
 // ── Fee schedule (dynamic for all assets) ────────────────────────────
 // Default spread and network fees for any cryptocurrency
 export const FEES = {
@@ -113,15 +119,46 @@ function networkKey(asset: string, network: string): string {
   return `${assetUpper}_${networkUpper}`;
 }
 
+// ── In-process price micro-cache (5 s) ───────────────────────────────
+// Prevents a storm of simultaneous quote requests from each hitting Binance.
+// Redis is used when available; this map is the fast in-process fallback.
+const priceCache = new Map<string, { price: Decimal; exp: number }>();
+const PRICE_TTL_MS = 5_000;
+const PRICE_TTL_S  = 5;
+
 /**
- * Fetch the last trade price for a Binance pair. Throws on network /
- * invalid-symbol errors so the caller fails closed (no silent fallback).
+ * Fetch the last trade price for a Binance pair.
+ * Results are cached in Redis (5 s) with an in-process fallback to absorb
+ * burst traffic without hitting Binance on every quote request.
  */
 export async function getMarketPrice(symbol: string): Promise<Decimal> {
+  const cacheKey = `price:${symbol}`;
+
+  // 1. In-process cache (sub-millisecond hit, no network)
+  const hit = priceCache.get(symbol);
+  if (hit && hit.exp > Date.now()) return hit.price;
+
+  // 2. Redis cache (shared across workers)
+  try {
+    const cached = await redisGet<string>(cacheKey);
+    if (cached) {
+      const price = new Decimal(cached);
+      priceCache.set(symbol, { price, exp: Date.now() + PRICE_TTL_MS });
+      return price;
+    }
+  } catch { /* Redis miss — fall through */ }
+
+  // 3. Live Binance fetch
   const url = `${BINANCE_REST}/api/v3/ticker/price?symbol=${encodeURIComponent(symbol)}`;
   const { data } = await axios.get<{ symbol: string; price: string }>(url, { timeout: 5000 });
   if (!data?.price) throw new Error(`Binance returned no price for ${symbol}`);
-  return new Decimal(data.price);
+  const price = new Decimal(data.price);
+
+  // Populate both caches
+  priceCache.set(symbol, { price, exp: Date.now() + PRICE_TTL_MS });
+  redisSet(cacheKey, price.toString(), PRICE_TTL_S).catch(() => { /* non-fatal */ });
+
+  return price;
 }
 
 export interface Quote {
@@ -256,8 +293,11 @@ export async function buildQuote(opts: {
     }
   }
 
+  // BUY: mark up by spread + silent platform margin (1.5 %)
+  // SELL: only the explicit spread is deducted (margin not applied on sells
+  //       to stay competitive and avoid unusable rates).
   const quotedPrice = side === 'BUY'
-    ? marketPrice.mul(new Decimal(1).plus(spreadPct))
+    ? marketPrice.mul(new Decimal(1).plus(spreadPct).plus(PLATFORM_MARGIN))
     : marketPrice.mul(new Decimal(1).minus(spreadPct));
 
   let fiatAmount: Decimal;

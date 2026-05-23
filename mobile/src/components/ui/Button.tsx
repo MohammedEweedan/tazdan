@@ -1,6 +1,6 @@
 /**
  * Premium fintech button. Three visual variants, three sizes.
- *  - primary  : luxury blue gradient (#4A8FE0 → #0057B8) with subtle inner sheen
+ *  - primary  : luxury blue gradient (#226dff → #1a52cc) with subtle inner sheen
  *  - secondary: glassy white-on-dark (8% white) with hairline border
  *  - ghost    : transparent, brand-coloured label
  *
@@ -68,7 +68,7 @@ export function Button({
       style={{ height: dims.height, paddingHorizontal: dims.padX, gap: 8 }}
     >
       {loading ? (
-        <ActivityIndicator color={variant === 'primary' ? '#fff' : '#4A8FE0'} />
+        <ActivityIndicator color={variant === 'primary' ? '#fff' : '#226dff'} />
       ) : (
         <>
           {iconLeft}

@@ -4,7 +4,7 @@
  * Reachable via:
  *   - QR-code scan on `receive.tsx`
  *   - Tap a `@handle` anywhere in the app
- *   - Direct deep-link `promrkts://u/<handle>`
+ *   - Direct deep-link `fortuni://u/<handle>`
  *
  * Shows: avatar + name + KYC tier badge, P2P stats (orders / completion %),
  *  bio, accepted currencies, and a SEND CTA so any visitor can pay them in

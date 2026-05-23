@@ -24,7 +24,7 @@ export default function LanguageSwitcher() {
 
   const [open, setOpen]     = useState(false);
   const [mobile, setMobile] = useState(false);
-  const [pos, setPos]       = useState<{ top: number; right: number } | null>(null);
+  const [posTop, setPosTop] = useState<number | null>(null);
   const triggerRef          = useRef<HTMLButtonElement>(null);
 
   // Monochrome tokens mirroring screenTokens() in app/page.tsx
@@ -53,16 +53,13 @@ export default function LanguageSwitcher() {
     return () => window.removeEventListener("keydown", handler);
   }, [open]);
 
-  // Recalculate position whenever the dropdown opens or the viewport changes
+  // Recalculate top position whenever the dropdown opens or the viewport scrolls
   useLayoutEffect(() => {
     if (!open || mobile || !triggerRef.current) return;
     const recompute = () => {
       if (!triggerRef.current) return;
       const rect = triggerRef.current.getBoundingClientRect();
-      setPos({
-        top: rect.bottom + 10,
-        right: Math.max(8, window.innerWidth - rect.right),
-      });
+      setPosTop(rect.bottom + 10);
     };
     recompute();
     window.addEventListener("resize", recompute);
@@ -233,7 +230,7 @@ export default function LanguageSwitcher() {
                   </Box>
                 </Box>
               </motion.div>
-            ) : pos ? (
+            ) : posTop !== null ? (
               <motion.div
                 key="dropdown"
                 initial={{ opacity: 0, scale: 0.96, y: -4 }}
@@ -242,11 +239,11 @@ export default function LanguageSwitcher() {
                 transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
                 style={{
                   position: "fixed",
-                  top: pos.top,
-                  right: pos.right,
+                  top: posTop,
+                  left: "calc(50% - 130px)",
                   zIndex: 1401,
-                  width: "240px",
-                  transformOrigin: "top right",
+                  width: "260px",
+                  transformOrigin: "top center",
                 }}
                 role="listbox"
               >

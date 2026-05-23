@@ -22,7 +22,7 @@ export function ReceiveWidget() {
   const [tab, setTab] = useState<Tab>('HANDLE');
 
   const handle = user?.username ?? user?.email?.split('@')[0] ?? 'me';
-  const profileLink = `https://promrkts.com/u/${handle}`;
+  const profileLink = `https://fortuni.com/u/${handle}`;
   const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&margin=16&data=${encodeURIComponent(profileLink)}&bgcolor=ffffff&color=000000`;
 
   const copyLink = async () => {

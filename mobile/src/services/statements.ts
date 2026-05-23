@@ -59,7 +59,7 @@ const css = `
   h1 { font-size: 22px; font-weight: 800; letter-spacing: -0.5px; margin: 0 0 4px; }
   h2 { font-size: 11px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase;
        color: #6b6b75; margin: 28px 0 10px; border-bottom: 1px solid #d8d6cf; padding-bottom: 6px; }
-  .brand { color: #0057B8; }
+  .brand { color: #1a52cc; }
   .meta { color: #6b6b75; font-size: 10.5px; }
   .summary { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 12px; }
   .stat { flex: 1; min-width: 22%; padding: 14px; border: 1px solid #d8d6cf; border-radius: 12px; background: #fbfaf6; }
@@ -179,7 +179,7 @@ export function renderStatementHtml(data: StatementJson, filter: StatementFilter
   <div class="footer">
     This statement was generated from fortuni records on the date shown above. All amounts
     are settled in the corresponding wallet currency. For audit support, contact
-    support@promrkts.app referencing your account email.
+    support@fortuni.app referencing your account email.
   </div>
 </body></html>`;
 }

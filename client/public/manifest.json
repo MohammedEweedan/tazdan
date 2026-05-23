@@ -1,7 +1,7 @@
 {
-  "name": "promrkts - Crypto Exchange",
-  "short_name": "promrkts",
-  "description": "Buy & sell crypto on promrkts.",
+  "name": "fortuni - Crypto Exchange",
+  "short_name": "fortuni",
+  "description": "Buy & sell crypto on fortuni.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0f172a",

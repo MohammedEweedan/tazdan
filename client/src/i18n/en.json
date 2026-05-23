@@ -15,13 +15,11 @@
   "nav_kyc": "KYC Verification",
   "nav_settings": "Settings",
   "nav_sign_out": "Sign Out",
-
   "hero_title_1": "Trade Crypto",
   "hero_title_2": "Without Limits",
   "hero_subtitle": "Trade spot markets, run P2P — all from one global, self-custody-ready crypto platform.",
   "hero_cta": "Start Trading",
   "hero_explore": "Explore Markets",
-
   "features_title": "Why Choose fortuni?",
   "features_subtitle": "Premium infrastructure for crypto traders.",
   "feature_secure_title": "Bank-Grade Security",
@@ -42,7 +40,6 @@
   "feature_mobile_desc": "Trade on the go with our iOS and Android apps",
   "feature_kyc_title": "KYC Verification",
   "feature_kyc_desc": "Fast identity verification for secure trading",
-
   "payment_methods_title": "Payment Methods",
   "payment_methods_subtitle": "Every major global payment method, natively integrated.",
   "pm_sadad": "Sadad",
@@ -51,10 +48,8 @@
   "pm_tadawul": "Tadawul",
   "pm_bank_transfer": "Bank Transfer",
   "pm_cash_deposit": "Cash Deposit",
-
   "cta_subtitle": "Join 120,000+ traders building on one of the world's fastest-growing crypto platforms.",
   "cta_button": "Create Free Account",
-
   "auth_welcome_back": "Welcome Back",
   "auth_login_subtitle": "Sign in to your account to continue trading",
   "auth_email": "Email",
@@ -71,14 +66,12 @@
   "auth_phone": "Phone (optional)",
   "auth_referral_code": "Referral Code (optional)",
   "auth_already_have_account": "Already have an account?",
-
   "dashboard_welcome": "Welcome back,",
   "dashboard_portfolio_value": "Portfolio Value",
   "dashboard_total_balance": "Total Balance",
   "dashboard_quick_actions": "Quick Actions",
   "dashboard_recent_orders": "Recent Orders",
   "dashboard_no_orders": "No orders yet. Start trading!",
-
   "trade_title": "Trade USDT",
   "trade_buy": "Buy",
   "trade_sell": "Sell",
@@ -91,7 +84,6 @@
   "trade_place_order": "Place Order",
   "trade_currency": "Currency",
   "trade_insufficient_balance": "Insufficient balance",
-
   "deposit_title": "Deposit Funds",
   "deposit_currency": "Currency",
   "deposit_amount": "Amount",
@@ -103,7 +95,6 @@
   "deposit_submit": "Submit Deposit",
   "deposit_history": "Deposit History",
   "deposit_min_amount": "Minimum deposit: {amount} {currency}",
-
   "withdraw_title": "Withdraw Funds",
   "withdraw_amount": "Amount",
   "withdraw_method": "Withdrawal Method",
@@ -115,12 +106,10 @@
   "withdraw_history": "Withdrawal History",
   "withdraw_fee": "Withdrawal Fee",
   "withdraw_you_receive": "You will receive",
-
   "wallet_available": "Available",
   "wallet_frozen": "Frozen",
   "wallet_total": "Total",
   "wallet_transactions": "Transaction History",
-
   "orders_title": "Order History",
   "orders_side": "Side",
   "orders_amount": "Amount",
@@ -128,7 +117,6 @@
   "orders_total": "Total",
   "orders_status": "Status",
   "orders_date": "Date",
-
   "kyc_title": "Identity Verification",
   "kyc_subtitle": "Complete KYC to unlock full trading features",
   "kyc_upload_doc": "Upload Identity Document",
@@ -138,7 +126,6 @@
   "kyc_pending": "Pending Review",
   "kyc_not_submitted": "Not Submitted",
   "kyc_rejected": "Rejected",
-
   "settings_title": "Account Settings",
   "settings_profile": "Profile",
   "settings_security": "Security",
@@ -152,7 +139,6 @@
   "settings_dark_mode": "Dark Mode",
   "settings_light_mode": "Light Mode",
   "settings_save": "Save Changes",
-
   "admin_dashboard": "Admin Dashboard",
   "admin_total_users": "Total Users",
   "admin_pending_deposits": "Pending Deposits",
@@ -173,7 +159,6 @@
   "admin_buy_price": "Buy Price",
   "admin_sell_price": "Sell Price",
   "admin_update_rates": "Update Rates",
-
   "common_loading": "Loading...",
   "common_error": "Something went wrong",
   "common_success": "Success",
@@ -197,7 +182,6 @@
   "common_status_active": "Active",
   "common_status_suspended": "Suspended",
   "common_status_banned": "Banned",
-
   "live_markets_title": "Real-time Markets",
   "live_markets_subtitle": "Live data aggregated from global exchanges.",
   "view_all_markets": "View All Markets",
@@ -212,17 +196,13 @@
   "trust_aml": "AML Compliant",
   "trust_kyc": "Instant KYC",
   "trust_lic": "Licensed",
-
   "manual_rate": "Manual rate",
-
   "footer_platform": "Platform",
   "footer_aml": "AML Policy",
   "footer_rights": "© 2025 fortuni. All rights reserved.",
-
   "chat_title": "fortuni Support",
   "chat_online": "Online now",
   "chat_placeholder": "Type a message…",
-
   "markets_title": "Markets",
   "markets_subtitle": "Live prices updated every 5 seconds",
   "search_coins": "Search coins…",
@@ -244,9 +224,6 @@
   "no_favorites": "Star coins to add them here",
   "language_ar": "العربية",
   "switch_language": "Switch Language",
-
-
-
   "send_title": "Send USDT",
   "send_recipient": "Recipient Email or Phone",
   "send_amount": "Amount (USDT)",
@@ -255,8 +232,6 @@
   "send_total": "Total",
   "send_button": "Send USDT",
   "send_sending": "Sending...",
-
-
   "hero_turn_cash": "Turn Cash Into",
   "hero_digital_dollars": "Digital Dollars",
   "hero_desc": "Buy and sell USDT instantly with seamless payment options anywhere in the world.",
@@ -265,7 +240,6 @@
   "hero_buy_rate": "USDT Buy Rate",
   "hero_sell_rate": "USDT Sell Rate",
   "hero_transfer_fees": "Transfer Fees",
-
   "how_title": "How It Works",
   "how_subtitle": "Three simple steps to convert your cash into digital dollars",
   "how_step1_title": "Create Account",
@@ -274,11 +248,9 @@
   "how_step2_desc": "Choose from multiple local and international payment methods to credit your wallet instantly.",
   "how_step3_title": "Use Your USDT",
   "how_step3_desc": "Send to anyone, buy goods, or hold digital dollars. Withdraw back to fiat anytime seamlessly.",
-
   "cta_go_digital": "Ready to Go Digital?",
   "cta_join": "Join hundreds of thousands of users worldwide who trust fortuni for trading and custody.",
   "cta_create_free": "Create Free Account",
-
   "dashboard_usdt_balance": "USDT Balance",
   "dashboard_total_portfolio": "total portfolio",
   "dashboard_deposit": "Deposit",
@@ -290,10 +262,8 @@
   "dashboard_sell_usdt": "Sell USDT",
   "dashboard_recent_txns": "Recent Transactions",
   "dashboard_no_txns": "No transactions yet. Make your first deposit!",
-
   "nav_wallet": "Wallet",
   "nav_queue": "Queue",
-
   "wallet_total_balance": "Total Balance",
   "wallet_frozen_funds": "Frozen Funds",
   "wallet_available_balance": "Available",
@@ -317,7 +287,6 @@
   "wallet_in_pending": "In pending",
   "wallet_ready": "Ready to trade",
   "wallet_active": "Active",
-
   "settings_notifications": "Notifications",
   "settings_email_notif": "Email Notifications",
   "settings_push_notif": "Push Notifications",
@@ -345,7 +314,6 @@
   "settings_error": "Error saving settings",
   "settings_password_changed": "Password changed successfully",
   "settings_password_mismatch": "Passwords do not match",
-
   "admin_active_users": "Active Users",
   "admin_new_today": "New Today",
   "admin_new_week": "New This Week",
@@ -370,17 +338,14 @@
   "admin_volume_flow": "Volume & Flow",
   "admin_user_metrics": "User Metrics",
   "admin_quick_actions": "Quick Actions",
-
   "nav_tokens": "Markets",
   "nav_messages": "Messages",
   "nav_profile": "My Profile",
   "nav_p2p": "P2P Market",
-
   "tokens_title": "Markets",
   "tokens_subtitle": "Explore live markets",
   "messages_title": "Messages",
   "messages_subtitle": "Chat with other users",
-
   "markets_buy": "Buy",
   "markets_sell": "Sell",
   "markets_orderbook": "Order Book",
@@ -395,7 +360,6 @@
   "markets_total": "Total",
   "markets_market_order": "Market",
   "markets_limit_order": "Limit",
-
   "landing_hero_title_1": "The Future of",
   "landing_hero_title_2": "Crypto",
   "landing_hero_desc": "Trade on a truly global crypto platform. From spot markets to P2P — we power it all.",
@@ -424,19 +388,16 @@
   "nav_api_keys": "API Keys",
   "nav_portfolio": "Portfolio",
   "nav_aml": "AML Compliance",
-
   "landing_badge": "The Global Crypto Platform",
   "landing_hero_line1": "Crypto",
   "landing_hero_line2": "Made Effortless",
   "landing_hero_sub": "Trade, invest, and grow with digital assets in one seamless ecosystem.",
   "landing_hero_cta": "Get Started",
   "landing_hero_cta2": "Explore Markets",
-
   "landing_feat_section_tag": "What You Can Do",
   "landing_feat_section_title1": "Trade. Invest.",
   "landing_feat_section_title2": "Build.",
   "landing_feat_section_desc": "Experience the full potential of crypto. Exchange, invest, and connect in one seamless ecosystem.",
-
   "landing_feat_exchange_title": "Instant Exchange",
   "landing_feat_exchange_desc": "Buy and sell 60+ assets with sub-second execution, deep liquidity and maker rebates on every trade.",
   "landing_feat_p2p_title": "P2P Trading",
@@ -445,7 +406,6 @@
   "landing_feat_tokens_desc": "Hold and manage crypto across 9+ blockchain networks with real-time portfolio tracking.",
   "landing_feat_wallets_title": "Multi-Chain Wallets",
   "landing_feat_wallets_desc": "Hold and manage crypto across 9+ blockchain networks with real-time portfolio tracking.",
-
   "landing_connected_tag": "Connected by fortuni",
   "landing_connected_title1": "From cash to money,",
   "landing_connected_title2": "moving value is just a tap away",
@@ -455,11 +415,9 @@
   "landing_access_desc": "Bridge the gap between local cash and global markets. Hold fiat, stablecoins and crypto in one seamless dashboard.",
   "landing_security_title": "Security",
   "landing_security_desc": "Built on trust. Your data is encrypted, your identity is protected, and your assets are secured by world-class infrastructure.",
-
   "landing_cta_title": "Join fortuni",
   "landing_cta_desc": "Fast, secure, and borderless crypto — powered by fortuni",
   "landing_cta_btn": "Join Now",
-
   "landing_footer_tagline": "Fast, secure, and borderless crypto powered by fortuni",
   "landing_footer_home": "Home",
   "landing_footer_features": "Features",
@@ -468,7 +426,6 @@
   "landing_footer_terms": "Terms & Conditions",
   "landing_footer_privacy": "Privacy Policy",
   "landing_footer_copy": "© 2026 fortuni LLC. All Rights Reserved",
-
   "landing_bento_tag": "Powerful Features",
   "landing_bento_title1": "Everything you need",
   "landing_bento_title2": "to master crypto",
@@ -480,9 +437,7 @@
   "landing_bento_card3_desc": "Your funds and data are protected with advanced encryption and multi-layer authentication.",
   "landing_bento_card4_title": "Global Connectivity",
   "landing_bento_card4_desc": "From blockchain networks to local payment rails, fortuni plugs into the backbone of modern finance.",
-
   "landing_connect_desc": "From instant transfers to global spending, explore the tools that make fortuni a fast and seamless way to manage your money",
-
   "landing_contact_title": "We'd Love to Hear From You",
   "landing_contact_sub": "We're here to help. Whether you have questions about your account, transactions, or security — our support team is ready to assist you.",
   "landing_contact_name": "Name",
@@ -491,12 +446,10 @@
   "landing_contact_subject": "Support",
   "landing_contact_msg": "Message (Optional)",
   "landing_contact_btn": "Submit",
-
   "landing_faq_title": "Got any questions?",
   "landing_faq_sub": "Browse our FAQs to find quick solutions to common issues, from payments and security to account management and more.",
   "landing_faq_email": "Email Us",
   "landing_faq_wa": "Whatsapp",
-
   "faq_q1": "How long do transfers take?",
   "faq_a1": "Transfers within the platform are instant. External blockchain transfers depend on network congestion but typically take 5-30 minutes.",
   "faq_q2": "What are the fees for transfers?",
@@ -505,11 +458,9 @@
   "faq_a3": "Yes, we use AES-256 encryption and do not share your private data with third parties.",
   "faq_q4": "How do i verify my identity?",
   "faq_a4": "You can verify your identity through our KYC portal using a government-issued ID.",
-
   "nav_features": "Features",
   "nav_connect": "Connect",
   "nav_download": "Download",
-
   "hero_crypto": "money,",
   "hero_made_effortless": "simplified.",
   "hero_sub": "Trade and spend anywhere — from one pro-grade crypto platform built for the world.",
@@ -517,14 +468,12 @@
   "hero_phone_transfer": "Transfer",
   "hero_phone_invest": "Invest",
   "hero_phone_cta": "Get started",
-
   "home_total_balance": "Total Balance",
   "home_past_30d": "past 30d",
   "home_action_send": "Send",
   "home_action_receive": "Receive",
   "home_action_swap": "Swap",
   "home_action_pay": "Pay",
-
   "p2p_title": "P2P Exchange",
   "p2p_buy": "Buy",
   "p2p_sell": "Sell",
@@ -532,11 +481,9 @@
   "p2p_orders": "orders",
   "p2p_rate": "RATE",
   "p2p_limit": "LIMIT",
-
   "wallet_title": "Your @wallet",
   "wallet_card_desc": "Send and receive money with your personal fortuni social handle. No account numbers, no IBANs.",
   "wallet_recent": "Recent Payments",
-
   "card_title": "My Card",
   "card_cardholder": "CARDHOLDER",
   "card_expires": "EXPIRES",
@@ -544,7 +491,6 @@
   "card_limit": "Limit",
   "card_cashback": "Cashback",
   "card_freeze": "Freeze card",
-
   "feat_home_eyebrow": "HOME",
   "feat_home_title": "Your whole portfolio at a glance.",
   "feat_home_desc": "Track every asset, transaction and payment in one unified dashboard. Fiat, stablecoins and crypto — all in sync, all in real time.",
@@ -557,7 +503,6 @@
   "feat_card_eyebrow": "VISA CARD",
   "feat_card_title": "Spend crypto in the real world.",
   "feat_card_desc": "Top up with any coin, spend anywhere Visa is accepted. Instant conversion, zero FX markup, full cashback in USDT.",
-
   "bento_eyebrow": "Everything you need",
   "bento_title_1": "One wallet.",
   "bento_title_2": "Every crypto.",
@@ -573,7 +518,6 @@
   "bento_speed_desc": "Average confirmation under half a second, 24/7.",
   "bento_global_title": "Borderless access",
   "bento_global_desc": "Trade from New York to Tokyo to São Paulo — one tap.",
-
   "cards_eyebrow": "CARDS COMING SOON",
   "cards_title_1": "Spend crypto",
   "cards_title_2": "anywhere Visa is accepted.",
@@ -583,18 +527,15 @@
   "cards_b3": "Worldwide acceptance",
   "cards_b4": "Virtual + physical",
   "cards_cta": "Join the waitlist",
-
   "connect_title_1": "One platform.",
   "connect_title_2": "Every market.",
   "connect_desc": "Spot trading, P2P swaps — unified on one global exchange. 400+ pairs, 9+ chains, zero friction.",
   "connect_pill_speed": "Speed",
   "connect_pill_access": "Access",
   "connect_pill_security": "Security",
-
   "cta_title": "Start trading in minutes.",
   "cta_sub": "Create a free account and access global spot markets, P2P trading, and on-chain tooling from day one.",
   "cta_btn": "Create Free Account",
-
   "footer_tagline": "Fast, secure, and borderless crypto payments powered by fortuni.",
   "footer_product": "Product",
   "footer_company": "Company",
@@ -607,7 +548,6 @@
   "footer_privacy": "Privacy",
   "footer_copy": "© 2026 fortuni Platform. All rights reserved.",
   "footer_compliance": "Compliance",
-
   "nav_about": "About",
   "nav_fees": "Fees",
   "nav_faq": "FAQ",
@@ -617,38 +557,32 @@
   "nav_join_waitlist": "Join Waitlist",
   "nav_partners": "Partners",
   "nav_risk": "Risk Summary",
-
   "partners_eyebrow": "Partners",
   "partners_title": "Regulated infrastructure behind fortuni",
   "partners_sub": "We connect you to regulated partners for payments and liquidity—we don't custody funds. Buy, sell, and swap through compliant rails.",
   "partners_compliance_note": "Compliance note:",
   "partners_compliance_body": "fortuni acts as a regulated intermediary. We do not hold or custody user funds directly. All fiat and liquidity flows are handled by our licensed partners in accordance with their applicable regulatory obligations.",
-
   "partner_banxa_role": "Fiat Payment Infrastructure",
   "partner_banxa_tagline": "Fiat Payment Infrastructure powered by Banxa",
   "partner_banxa_desc": "Banxa powers our fiat rails: on- and off-ramps with cards, bank transfer, and local methods where supported.",
   "partner_banxa_perk1": "Fast deposits and withdrawals",
   "partner_banxa_perk2": "Broad regional coverage",
   "partner_banxa_perk3": "Regulated, compliance-first processing",
-
   "partner_crypto_role": "Liquidity & OTC Execution Infrastructure",
   "partner_crypto_tagline": "Liquidity & OTC Execution Infrastructure powered by Crypto.com",
   "partner_crypto_desc": "Crypto.com provides liquidity and execution—covering everyday flow and larger OTC-style size.",
   "partner_crypto_perk1": "Deep liquidity on major assets",
   "partner_crypto_perk2": "Competitive pricing and fast execution",
   "partner_crypto_perk3": "Better handling for large blocks and volatile conditions",
-
   "partner_visa_role": "Card Issuer",
   "partner_visa_tagline": "Virtual & Physical Cards powered by Visa",
   "partner_visa_desc": "Our Visa card program is issued through a licensed e-money institution. Spend your crypto balance anywhere Visa is accepted, with real-time conversion at the point of sale.",
   "partner_visa_perk1": "Accepted worldwide at Visa merchants",
   "partner_visa_perk2": "Real-time crypto-to-fiat conversion",
   "partner_visa_perk3": "Issued by a licensed e-money institution",
-
   "risk_banner_bold": "Don't invest unless you're prepared to lose all the money you invest.",
   "risk_banner_text": "This is a high-risk investment and you should not expect to be protected if something goes wrong.",
   "risk_banner_cta": "Take 2 mins to learn more.",
-
   "risk_page_eyebrow": "Risk Summary",
   "risk_page_title": "Understanding the risks",
   "risk_page_reading_time": "Estimated reading time: 2 min",
@@ -662,7 +596,6 @@
   "risk_page_footer_join": ". For further information about cryptoassets, visit the",
   "risk_page_footer_fca_2": "FCA's website here",
   "risk_page_back": "Back to home",
-
   "risk_s1_title": "You could lose all the money you invest",
   "risk_s1_p1": "The performance of most cryptoassets can be highly volatile, with their value dropping as quickly as it can rise. You should be prepared to lose all the money you invest in cryptoassets.",
   "risk_s1_p2": "The cryptoasset market is largely unregulated. There is a risk of losing money or any cryptoassets you purchase due to risks such as cyber-attacks, financial crime and firm failure.",
@@ -678,7 +611,6 @@
   "risk_s5_title": "Don't put all your eggs in one basket",
   "risk_s5_p1": "Putting all your money into a single type of investment is risky. Spreading your money across different investments makes you less dependent on anyone to do well.",
   "risk_s5_p2": "A good rule of thumb is not to invest more than 10% of your money in high-risk investments.",
-
   "risk_a1_name": "Stablecoins",
   "risk_a1_r1": "May not always maintain a 1:1 peg to their underlying asset, leading to value fluctuations.",
   "risk_a1_r2": "Their value depends on issuer reserves, regulatory status, and market conditions, amongst other factors.",
@@ -694,7 +626,6 @@
   "risk_a5_name": "Loss of keys to non-custodial wallet",
   "risk_a5_r1": "Losing private keys or recovery phrases means losing access to funds permanently.",
   "risk_a5_r2": "No third party, including the wallet provider, can recover or restore lost wallets.",
-
   "page_about_eyebrow": "OUR MISSION",
   "page_about_title": "Building the financial layer for the open internet.",
   "page_about_sub": "fortuni is a global crypto platform where anyone, anywhere can trade, and move value across borders — as easily as sending a message.",
@@ -747,7 +678,6 @@
   "page_about_press_2_d": "0.5% P2P, 0% bank deposits. No spread mark-up, no conversion padding. What you see is what you pay.",
   "page_about_press_3_t": "We move fast, safely",
   "page_about_press_3_d": "Two-week release cycles, security-first development, and a bug-bounty programme that's been running since day one.",
-
   "page_terms_eyebrow": "LEGAL",
   "page_terms_title": "Terms of Service",
   "page_terms_updated": "Last updated: April 2026",
@@ -771,8 +701,7 @@
   "page_terms_s9_t": "9. Governing law",
   "page_terms_s9_d": "These Terms are governed by the laws applicable to our place of incorporation, with reference to international commercial dispute resolution where applicable.",
   "page_terms_s10_t": "10. Contact",
-  "page_terms_s10_d": "Questions? Reach our legal team at legal@promrkts.com.",
-
+  "page_terms_s10_d": "Questions? Reach our legal team at legal@fortuni.com.",
   "page_privacy_eyebrow": "LEGAL",
   "page_privacy_title": "Privacy Policy",
   "page_privacy_updated": "Last updated: April 2026",
@@ -784,14 +713,13 @@
   "page_privacy_s3_t": "Who we share with",
   "page_privacy_s3_d": "Regulators when legally required, KYC providers under strict DPAs, payment partners for transaction processing, and cloud hosting (AWS eu-central-1) encrypted at rest.",
   "page_privacy_s4_t": "Your rights",
-  "page_privacy_s4_d": "Access your data, request correction, request deletion (subject to regulatory retention), and portability. Contact privacy@promrkts.com.",
+  "page_privacy_s4_d": "Access your data, request correction, request deletion (subject to regulatory retention), and portability. Contact privacy@fortuni.com.",
   "page_privacy_s5_t": "Data retention",
   "page_privacy_s5_d": "Account and KYC data retained for 7 years after closure to meet regulatory requirements. Marketing preferences honored immediately.",
   "page_privacy_s6_t": "Cookies",
   "page_privacy_s6_d": "We use essential cookies for authentication and analytics cookies to improve the product. You may opt out of non-essential cookies at any time.",
   "page_privacy_s7_t": "Security",
   "page_privacy_s7_d": "Data encrypted at rest (AES-256) and in transit (TLS 1.3). 24/7 SOC monitoring. Bug bounty program. Regular external audits.",
-
   "page_fees_eyebrow": "TRANSPARENT PRICING",
   "page_fees_title": "Fees built to be fair.",
   "page_fees_sub": "No hidden charges. No surprise spreads. Every fee fortuni takes is published here.",
@@ -848,7 +776,6 @@
   "page_fees_hl2_d": "On-chain and social transfers settle in under 2 seconds. No waiting, no batch processing.",
   "page_fees_hl3_t": "No hidden charges",
   "page_fees_hl3_d": "No spread markup, no FX surcharge, no inactivity fee. Every cost is disclosed before you confirm.",
-
   "onramp_headline": "The easiest way to buy, sell, and send crypto",
   "onramp_buy_title": "Buy",
   "onramp_buy_desc": "Purchase crypto instantly with your preferred payment method. Apple Pay, Google Pay, cards, and bank transfers supported.",
@@ -859,9 +786,7 @@
   "onramp_send_title": "Send",
   "onramp_send_desc": "Transfer crypto to anyone, anywhere in the world. Just enter their @handle or wallet address.",
   "onramp_send_cta": "Send Crypto",
-
   "socialproof_label": "impacting how you interact with money",
-
   "page_help_eyebrow": "HELP CENTER",
   "page_help_title": "How can we help?",
   "page_help_sub": "Search our help center or browse the most common topics below.",
@@ -899,21 +824,20 @@
   "page_help_cat_tokens_d": "Token wallets, crypto deposits, withdrawal limits.",
   "page_help_contact_title": "Still need help?",
   "page_help_contact_d": "Our support team responds in under 4 hours, 7 days a week.",
-
   "page_contact_eyebrow": "GET IN TOUCH",
   "page_contact_title": "We're here to help.",
   "page_contact_sub": "Whether you need support, have a press inquiry, or want to explore a partnership — there's a channel for it.",
   "page_contact_ch1_t": "General support",
-  "page_contact_ch1_v": "support@promrkts.com",
+  "page_contact_ch1_v": "support@fortuni.com",
   "page_contact_ch1_d": "Under 4 hours · 7 days a week",
   "page_contact_ch2_t": "Security reports",
-  "page_contact_ch2_v": "security@promrkts.com",
+  "page_contact_ch2_v": "security@fortuni.com",
   "page_contact_ch2_d": "Responsible disclosure · bug bounty",
   "page_contact_ch3_t": "Press & media",
-  "page_contact_ch3_v": "press@promrkts.com",
+  "page_contact_ch3_v": "press@fortuni.com",
   "page_contact_ch3_d": "Interviews, logos, product images",
   "page_contact_ch4_t": "Business & partnerships",
-  "page_contact_ch4_v": "partners@promrkts.com",
+  "page_contact_ch4_v": "partners@fortuni.com",
   "page_contact_ch4_d": "Integrations, liquidity, enterprise",
   "page_contact_office_t": "Head office",
   "page_contact_office_a": "Dubai Internet City · Office 4-201",
@@ -926,14 +850,12 @@
   "page_contact_form_msg": "Message",
   "page_contact_form_send": "Send message",
   "page_contact_form_note": "We typically reply within 4 hours during business hours.",
-
   "sec_spend_title_1": "Built for How You",
   "sec_spend_title_2": "Spend.",
   "sec_spend_sub": "Three tiers of the fortuni Visa card — from virtual-only to the premium metal edition. All with zero FX markup and instant crypto top-up.",
   "sec_spend_tier_virtual": "Virtual",
   "sec_spend_tier_classic": "Classic",
   "sec_spend_tier_metal": "Metal",
-
   "sec_social_eyebrow": "SOCIAL WALLET",
   "sec_social_title_1": "Socialised",
   "sec_social_title_2": "payments",
@@ -942,7 +864,6 @@
   "sec_social_add_note": "Add note (optional)",
   "sec_social_screen_preview": "Preview send",
   "sec_social_screen_send": "Send",
-
   "sec_pay_title_1": "Pay.",
   "sec_pay_title_2": "Transfer.",
   "sec_pay_title_3": "Invest.",
@@ -957,17 +878,14 @@
   "sec_pay_home_withdraw": "Withdraw",
   "sec_pay_home_recent": "Recent activity",
   "sec_pay_home_view_all": "View all",
-
   "hero_badge": "The Global Crypto Platform",
   "hero_line1": "money,",
   "hero_line2": "simplified",
   "hero_cta_primary": "Start Trading",
   "hero_cta_secondary": "Explore Markets",
-
   "stats_countries": "Countries",
   "stats_daily_volume": "24h Volume",
   "stats_traders": "Active Traders",
-
   "screen_spot_spot": "Spot Market",
   "screen_spot_last_24h": "Last 24 hours",
   "screen_spot_orderbook": "ORDER BOOK",
@@ -987,13 +905,11 @@
   "screen_mint_fee": "Platform fee",
   "screen_mint_gas": "Est. gas",
   "screen_mint_deploy": "Deploy Token",
-
   "stage_spot_spot_market": "Spot · Real-time",
   "stage_spot_buy": "Buy",
   "stage_spot_sell": "Sell",
   "stage_p2p_trade": "Trade",
   "stage_mint_your_token": "your portfolio",
-
   "feat_spot_eyebrow": "SPOT TRADING",
   "feat_spot_title": "Deep liquidity, sub-second fills.",
   "feat_spot_desc": "Professional-grade spot trading across 400+ pairs. Market and limit orders with institutional-tight spreads and real-time candlestick charts.",
@@ -1002,10 +918,8 @@
   "feat_markets_desc": "Live aggregated prices from the world's top exchanges. Track BTC, ETH, SOL and thousands of altcoins with millisecond-accurate data.",
   "feat_mint_eyebrow": "PORTFOLIO",
   "feat_mint_title": "Your assets, all in one place.",
-
   "feat_dashboard_title": "Your finances,\nunlocked.",
   "feat_dashboard_desc": "One dashboard. Every asset, balance, and live transaction — all in real time.",
-
   "sec_mint_eyebrow": "MULTI-CHAIN WALLETS",
   "sec_mint_title_1": "Every chain.",
   "sec_mint_title_2": "One wallet.",
@@ -1020,17 +934,13 @@
   "sec_mint_feat_nocode": "No code required",
   "sec_mint_feat_chains": "9+ chains",
   "sec_mint_feat_audited": "Audited templates",
-
-
   "hero_badge_mena": "Trusted globally · Serving 120+ countries",
-
   "screen_social_title": "@wallet",
   "screen_social_handle": "Your social handle",
   "screen_social_desc": "Send and receive crypto with a username, not a 42-char address.",
   "screen_social_recent": "Recent payments",
   "screen_social_send": "Send",
   "screen_social_request": "Request",
-
   "screen_card_title": "My Card",
   "screen_card_holder": "CARDHOLDER",
   "screen_card_expires": "EXPIRES",
@@ -1039,11 +949,9 @@
   "screen_card_cashback": "Cashback",
   "screen_card_recent": "Recent spend",
   "screen_card_freeze": "Freeze card",
-
   "stage_handles_your_tag": "Your social tag, anywhere",
   "stage_card_fx": "FX markup",
   "stage_card_accepted": "Countries",
-
   "bento_stat_volume_label": "24H VOLUME",
   "bento_stat_volume_desc": "Global crypto volume settled on fortuni in the last 24 hours across 400+ pairs and 9+ chains.",
   "bento_vs_last_month": "vs. last month",
@@ -1056,7 +964,6 @@
   "bento_mena_title": "Global reach",
   "bento_mena_desc": "Built for Dubai, Riyadh, Cairo, Casablanca and beyond — serving every country on the planet.",
   "bento_rating_label": "Average user rating",
-
   "stage_intro_badge": "Trusted globally · Live worldwide",
   "stage_intro_title": "One app. Every market.",
   "stage_intro_sub": "Trade, swap, send and spend from a single account — globally.",
@@ -1064,12 +971,10 @@
   "stage_intro_chip_p2p": "P2P",
   "stage_intro_chip_cards": "Visa",
   "stage_intro_chip_mint": "Mint",
-
   "feat_intro_eyebrow": "WELCOME",
   "feat_intro_title": "The global crypto platform, in your pocket.",
   "feat_intro_desc": "Spot trading, P2P swaps, a social wallet, and a Visa card — available to 120+ countries.",
   "coming_soon": "Coming soon",
-
   "faq_section_tag": "FAQ",
   "faq_section_title": "Common questions",
   "faq_section_sub": "Everything you need to know before you start. Can't find an answer?",
@@ -1094,7 +999,6 @@
   "faq_s_a9": "Fiat: USD, EUR, GBP, AED, SAR, EGP, LYD. Crypto: BTC, ETH, USDT, SOL, XRP, BNB, ADA, DOGE, MATIC, DOT, AVAX, and more being added each quarter.",
   "faq_s_q10": "How do I join the early-access waitlist?",
   "faq_s_a10": "Scroll down and enter your email. You'll get 0% fees for 6 months once we open your region. Refer friends to move up the list — each referral bumps you up automatically.",
-
   "calc_dest_libya": "Libya",
   "calc_dest_egypt": "Egypt",
   "calc_dest_uae": "UAE",
@@ -1103,7 +1007,6 @@
   "calc_dest_jordan": "Jordan",
   "calc_dest_morocco": "Morocco",
   "calc_dest_tunisia": "Tunisia",
-
   "calc_title": "How much do you save?",
   "calc_sub": "Compare fortuni vs traditional transfer services",
   "calc_amount_label": "Amount (USD)",
@@ -1116,12 +1019,10 @@
   "calc_section_eyebrow": "Transparent Pricing",
   "calc_section_title": "See how much you keep",
   "calc_section_sub": "We charge 0.5% — no hidden fees, no bad exchange rates. Traditional services charge 5–10%.",
-
   "faq_page_title": "Frequently asked\nquestions",
   "faq_page_sub": "Everything you need to know about fortuni. Still have questions? We're a message away.",
   "faq_page_cta_waitlist": "Join the waitlist",
   "faq_page_cta_contact": "Contact us",
-
   "contact_page_title": "Get in touch",
   "contact_page_sub": "Have a question, issue, or idea? We're here. Pick the channel that works best for you.",
   "contact_form_title": "Send us a message",
@@ -1145,7 +1046,6 @@
   "contact_faq_eyebrow": "Before you write",
   "contact_faq_nudge": "Check our FAQ — most questions are answered there instantly.",
   "contact_faq_link": "Browse FAQ",
-
   "waitlist_eyebrow": "Early Access",
   "waitlist_title": "Be first.\nGet 0% fees for 6 months.",
   "waitlist_sub": "Join 2,400+ people on the early access list. First in gets the lowest rates — forever.",
@@ -1161,11 +1061,9 @@
   "waitlist_btn": "Join",
   "waitlist_error": "Something went wrong. Try again.",
   "waitlist_disclaimer": "No spam. Unsubscribe anytime. We hate spam too.",
-
   "faq_search_results": "Search results",
   "faq_no_results": "No questions matched your search. Try different keywords.",
   "faq_clear_search": "Clear search",
-
   "support_tag": "SUPPORT",
   "support_title": "We're here for you",
   "support_sub": "Pick the channel that works best for you — we reply fast.",
@@ -1182,7 +1080,6 @@
   "support_community_title": "Telegram community",
   "support_community_desc": "Join our Telegram group to connect with other users and the team.",
   "support_community_cta": "Join Telegram",
-
   "trust_eyebrow": "SECURITY & TRUST",
   "trust_title": "Built on trust.\nBacked by proof.",
   "trust_sub": "Every trade, every transfer, every wallet — secured by enterprise-grade infrastructure and regulatory compliance.",
@@ -1225,7 +1122,6 @@
   "trust_legal7": "fortuni reserves the right to freeze or close accounts found to be in violation of our terms of service, AML policy, or applicable law, with or without prior notice.",
   "trust_cta_title": "Ready to trade with confidence?",
   "trust_cta_sub": "Join thousands of users who trust fortuni to move and grow their wealth.",
-
   "page_compliance_eyebrow": "COMPLIANCE",
   "page_compliance_title": "Compliance\nprogramme",
   "page_compliance_updated": "Last updated: May 2026",
@@ -1245,5 +1141,26 @@
   "page_compliance_s7_t": "Record keeping and audit",
   "page_compliance_s7_d": "We retain transaction records, KYC documentation, and account activity logs for the minimum periods required by applicable law — typically 5 to 7 years depending on jurisdiction. These records are available to authorised regulatory bodies and law enforcement upon lawful request. Internal compliance audits are conducted annually by our compliance team.",
   "page_compliance_s8_t": "Reporting a concern",
-  "page_compliance_s8_d": "If you have a concern about potential financial crime, fraud, or a compliance issue involving fortuni or another user, please contact our compliance team at compliance@promrkts.com. All reports are treated confidentially. You will not suffer any detriment for reporting a concern in good faith. Employees and partners can also raise concerns through our internal whistleblower channel."
+  "page_compliance_s8_d": "If you have a concern about potential financial crime, fraud, or a compliance issue involving fortuni or another user, please contact our compliance team at compliance@fortuni.com. All reports are treated confidentially. You will not suffer any detriment for reporting a concern in good faith. Employees and partners can also raise concerns through our internal whistleblower channel.",
+  "feat_buy_eyebrow": "Buy crypto",
+  "feat_buy_title": "Buy in seconds",
+  "feat_buy_desc": "Pick an amount, pay how you like, and your crypto lands in your wallet. No spreads buried in the rate — every fee shown upfront before you confirm.",
+  "feat_buy_f1": "Instant settlement",
+  "feat_buy_f2": "Fees shown upfront",
+  "feat_buy_f3": "Card & bank pay",
+  "feat_buy_f4": "120+ countries",
+  "feat_search_eyebrow": "Every token",
+  "feat_search_title": "One search away",
+  "feat_search_desc": "From Bitcoin to the smallest meme coin — search any token and trade it on the spot. Live prices, real movement, no clutter.",
+  "feat_search_f1": "Search any token",
+  "feat_search_f2": "Live prices",
+  "feat_search_f3": "400+ pairs",
+  "feat_search_f4": "Trade on the spot",
+  "feat_pay_eyebrow": "Pay your way",
+  "feat_pay_title": "Crypto or cash",
+  "feat_pay_desc": "Fund any purchase from your crypto balance or a fiat wallet — USD, EUR, GBP, AED and more. Switch payment source in a single tap.",
+  "feat_pay_f1": "Fiat wallets",
+  "feat_pay_f2": "Crypto balance",
+  "feat_pay_f3": "Multi-currency",
+  "feat_pay_f4": "One-tap switch"
 }

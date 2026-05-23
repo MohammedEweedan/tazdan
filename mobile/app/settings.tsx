@@ -159,7 +159,7 @@ export default function Settings() {
             <Text style={{ color: p.fg, fontSize: 14, fontWeight: '700' }}>{t('settings.publicProfile')}</Text>
             <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '500', marginTop: 2 }}>
               {isPublic
-                ? `${t('settings.visibleAt')} promrkts.app/u/${user?.username ?? 'me'}`
+                ? `${t('settings.visibleAt')} fortuni.app/u/${user?.username ?? 'me'}`
                 : t('settings.privateProfile')}
             </Text>
           </View>
@@ -252,7 +252,7 @@ export default function Settings() {
       </Panel>
 
       <View style={{ alignItems: 'center', marginTop: 28 }}>
-        <Text style={{ color: p.fgFaint, fontSize: 12, fontWeight: '500' }}>promrkts · v0.1.0</Text>
+        <Text style={{ color: p.fgFaint, fontSize: 12, fontWeight: '500' }}>fortuni · v0.1.0</Text>
       </View>
 
       {/* ── Handle change modal ── */}

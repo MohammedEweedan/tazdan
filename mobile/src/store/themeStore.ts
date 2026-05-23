@@ -18,7 +18,7 @@ import { create } from 'zustand';
 
 export type ThemeMode = 'dark' | 'light';
 
-const KEY = 'promrkts.theme';
+const KEY = 'fortuni.theme';
 
 export interface Palette {
   // ── Surfaces (elevation tiers) ──────────────────────────────────
@@ -76,8 +76,8 @@ export const palettes: Record<ThemeMode, Palette> = {
     redBg:     'rgba(248,113,113,0.16)',
     amberFg:   '#FBBF24',
     amberBg:   'rgba(251,191,36,0.16)',
-    // Brand — lifted blue, AA on #141518
-    accent:    '#6585FF',
+    // Brand — lifted periwinkle, AA on #141518
+    accent:    '#5b8cff',
     accentFg:  '#0A0D1A',
     shadow:    'rgba(0,0,0,0.45)',
   },
@@ -101,19 +101,19 @@ export const palettes: Record<ThemeMode, Palette> = {
     redBg:     'rgba(220,38,38,0.10)',
     amberFg:   '#B45309',
     amberBg:   'rgba(180,83,9,0.10)',
-    // Brand — primary, AAA on paper
-    accent:    '#2A4FE8',
+    // Brand — periwinkle, AAA on paper
+    accent:    '#226dff',
     accentFg:  '#FFFFFF',
     shadow:    'rgba(26,26,31,0.10)',
   },
 };
 
 export const brand = {
-  primary:     '#2A4FE8',   // use on light surfaces
-  primaryDark: '#6585FF',   // use on dark surfaces
-  deep:        '#1A38B5',   // pressed / hover
-  softLight:   '#E5EAFF',   // chip bg on light
-  softDark:    'rgba(101,133,255,0.14)',  // chip bg on dark
+  primary:     '#226dff',   // use on light surfaces — periwinkle
+  primaryDark: '#5b8cff',   // use on dark surfaces
+  deep:        '#1a52cc',   // pressed / hover
+  softLight:   '#dde7ff',   // chip bg on light
+  softDark:    'rgba(34,109,255,0.14)',  // chip bg on dark
   sand:        '#E8DDC7',   // warm secondary, MENA accent
   sandDeep:    '#C7B894',
 } as const;
