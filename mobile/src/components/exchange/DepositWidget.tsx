@@ -41,13 +41,13 @@ const PLATFORM_BANKS: Record<string, {
   routingNumber?: string;
   extra?: string;
 }> = {
-  USD: { bankName: 'JPMorgan Chase Bank', accountHolder: 'Promrkts Inc.', accountNumber: '000123456789', swift: 'CHASUS33', routingNumber: '021000021' },
-  EUR: { bankName: 'Deutsche Bank AG', accountHolder: 'Promrkts GmbH', iban: 'DE89370400440532013000', swift: 'DEUTDEFF' },
-  GBP: { bankName: 'Barclays Bank plc', accountHolder: 'Promrkts Ltd', iban: 'GB82WEST12345698765432', swift: 'BARCGB22', sortCode: '20-00-00', accountNumber: '98765432' },
-  AED: { bankName: 'Emirates NBD', accountHolder: 'Promrkts DMCC', iban: 'AE070331234567890123456', swift: 'EBILAEAD' },
-  SAR: { bankName: 'Saudi National Bank', accountHolder: 'Promrkts Arabia', iban: 'SA0380000000608010167519', swift: 'NCBASARI' },
-  EGP: { bankName: 'National Bank of Egypt', accountHolder: 'Promrkts Egypt', iban: 'EG380002000000000012345678901', swift: 'NBEGEGCX' },
-  LYD: { bankName: 'Bank of Commerce & Development', accountHolder: 'Promrkts Libya', accountNumber: '001-123456-001', swift: 'BCDLLYLT' },
+  USD: { bankName: 'JPMorgan Chase Bank', accountHolder: 'Fortuni Inc.', accountNumber: '000123456789', swift: 'CHASUS33', routingNumber: '021000021' },
+  EUR: { bankName: 'Deutsche Bank AG', accountHolder: 'Fortuni GmbH', iban: 'DE89370400440532013000', swift: 'DEUTDEFF' },
+  GBP: { bankName: 'Barclays Bank plc', accountHolder: 'Fortuni Ltd', iban: 'GB82WEST12345698765432', swift: 'BARCGB22', sortCode: '20-00-00', accountNumber: '98765432' },
+  AED: { bankName: 'Emirates NBD', accountHolder: 'Fortuni DMCC', iban: 'AE070331234567890123456', swift: 'EBILAEAD' },
+  SAR: { bankName: 'Saudi National Bank', accountHolder: 'Fortuni Arabia', iban: 'SA0380000000608010167519', swift: 'NCBASARI' },
+  EGP: { bankName: 'National Bank of Egypt', accountHolder: 'Fortuni Egypt', iban: 'EG380002000000000012345678901', swift: 'NBEGEGCX' },
+  LYD: { bankName: 'Bank of Commerce & Development', accountHolder: 'Fortuni Libya', accountNumber: '001-123456-001', swift: 'BCDLLYLT' },
 };
 
 type Step = 'currency' | 'amount' | 'bank';

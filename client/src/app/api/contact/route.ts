@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { sendMail, contactConfirmation } from '@/lib/email';
 
-const SUPPORT_EMAIL = process.env.SUPPORT_EMAIL || 'support@promrkts.com';
+const SUPPORT_EMAIL = process.env.SUPPORT_EMAIL || 'support@fortuni.com';
 
 export async function POST(request: NextRequest) {
   try {

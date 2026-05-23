@@ -113,7 +113,7 @@ export default function TabsLayout() {
               >
                 <Image
                   source={require('../../assets/icon-color.png')}
-                  style={{ width: FAB_SIZE - 20, height: FAB_SIZE - 20 }}
+                  style={{ width: FAB_SIZE - 5, height: FAB_SIZE - 5 }}
                   resizeMode="contain"
                 />
               </View>

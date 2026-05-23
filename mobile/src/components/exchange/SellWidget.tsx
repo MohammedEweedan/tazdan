@@ -8,7 +8,8 @@ import { Text, TextInput } from '@/components/ui/Text';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useAuthStore } from '@/store/authStore';
-import { useThemedPalette } from '@/store/themeStore';
+import { useThemedPalette, brand } from '@/store/themeStore';
+import { SlideToConfirm } from '@/components/ui/SlideToConfirm';
 import { useWallets, useMarkets, extractErrorMessage } from '@/hooks';
 import { cryptoExchangeAPI, type CryptoQuote, type AssetSearchResult } from '@/lib/cryptoApi';
 
@@ -178,6 +179,9 @@ export function SellWidget() {
     if (assetSheetOpen) { setSearchQuery(''); setSearchResults([]); }
   }, [assetSheetOpen]);
 
+  // Bumping this triggers a fresh quote without the user changing cryptoAmt/asset
+  const [requoteKey, setRequoteKey] = useState(0);
+
   // ── Quote fetching ────────────────────────────────────────────────
   useEffect(() => {
     const amt = parseFloat(cryptoAmt);
@@ -194,15 +198,19 @@ export function SellWidget() {
       } finally { setLoading(false); }
     }, 500);
     return () => clearTimeout(id);
-  }, [asset, network, cryptoAmt]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [asset, network, cryptoAmt, requoteKey]);
 
-  // ── Quote countdown ───────────────────────────────────────────────
+  // ── Quote countdown — auto-requote on expiry ──────────────────────
   useEffect(() => {
     if (!quote) return;
     const tick = () => {
       const s = Math.max(0, Math.floor((quote.expiresAt - Date.now()) / 1000));
       setSeconds(s);
-      if (s <= 0) setQuote(null);
+      if (s <= 0) {
+        setQuote(null);
+        setRequoteKey((k) => k + 1);
+      }
     };
     tick();
     const iv = setInterval(tick, 1000);
@@ -228,6 +236,11 @@ export function SellWidget() {
   const overspend = parseFloat(cryptoAmt) > balance;
   const timerCritical = seconds > 0 && seconds < 8;
   const canConfirm = !!quote && !exec && seconds > 0 && !overspend;
+
+  // Slider label — clean, seconds badge handles the countdown display
+  const slideLabel = canConfirm
+    ? `Slide to sell ${asset}`
+    : overspend ? 'Insufficient balance' : 'Enter amount';
 
   // Asset sheet: show holdings first, then search results
   const displayList: AssetSearchResult[] = searchResults.length > 0
@@ -382,44 +395,24 @@ export function SellWidget() {
         )}
       </View>
 
-      {/* ── CTA ── */}
-      <Pressable
-        onPress={() => { if (canConfirm && !error && !success) onConfirm(); }}
-        disabled={(!canConfirm && !error && !success) || exec}
-        style={({ pressed }) => ({
-          height: 56, borderRadius: 28,
-          backgroundColor: success ? p.greenBg : error ? 'rgba(239,68,68,0.15)' : canConfirm ? meta.color : p.bgElev,
-          borderWidth: (canConfirm || success || error) ? 0 : 1, 
-          borderColor: error ? 'rgba(239,68,68,0.3)' : p.border,
-          alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8,
-          opacity: pressed || exec ? 0.85 : 1,
-          shadowColor: canConfirm && !success && !error ? meta.color : 'transparent',
-          shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.35, shadowRadius: 16, elevation: canConfirm ? 6 : 0,
-        })}
-      >
-        {exec ? <ActivityIndicator color="#fff" /> : (
-          <>
-            {(success || error) && (
-              <Ionicons 
-                name={success ? "checkmark-circle" : "alert-circle"} 
-                size={18} 
-                color={success ? p.greenFg : p.redFg} 
-              />
-            )}
-            <Text 
-              numberOfLines={1} 
-              style={{ 
-                color: success ? p.greenFg : error ? p.redFg : canConfirm ? '#fff' : p.fgMuted, 
-                fontSize: 16, 
-                fontWeight: '500',
-                paddingHorizontal: 8,
-              }}
-            >
-              {success ? success : error ? error : canConfirm ? `Sell ${asset}` : overspend ? 'Insufficient balance' : 'Enter amount'}
-            </Text>
-          </>
-        )}
-      </Pressable>
+      {/* ── CTA — slide to confirm ── */}
+      <SlideToConfirm
+        label={slideLabel}
+        onConfirm={() => { if (canConfirm && !error && !success) onConfirm(); }}
+        enabled={canConfirm && !error && !success}
+        status={exec ? 'loading' : success ? 'success' : error ? 'error' : 'idle'}
+        successLabel={success || undefined}
+        errorLabel={error || undefined}
+        seconds={canConfirm ? seconds : undefined}
+        totalSeconds={30}
+        accent={brand.primary}
+        accentFg="#ffffff"
+        trackBg={p.bgElev}
+        trackFg={p.fg}
+        border={p.border}
+        greenBg={p.greenBg} greenFg={p.greenFg}
+        redBg="rgba(239,68,68,0.15)" redFg={p.redFg}
+      />
 
       {/* ── Asset picker sheet ── */}
       <Modal visible={assetSheetOpen} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setAssetSheetOpen(false)}>

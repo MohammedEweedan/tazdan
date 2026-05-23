@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Database backup script for promrkts PostgreSQL
+# Database backup script for fortuni PostgreSQL
 # Usage:
 #   ./scripts/backup-db.sh                          # manual one-off
 #   Add to cron: 0 2 * * * /app/scripts/backup-db.sh
@@ -15,7 +15,7 @@ set -euo pipefail
 BACKUP_DIR="${BACKUP_DIR:-./backups}"
 RETAIN_DAYS="${BACKUP_RETAIN_DAYS:-14}"
 TIMESTAMP=$(date +"%Y-%m-%d_%H-%M-%S")
-FILENAME="promrkts_${TIMESTAMP}.sql.gz"
+FILENAME="fortuni_${TIMESTAMP}.sql.gz"
 FILEPATH="${BACKUP_DIR}/${FILENAME}"
 
 # ── Parse DATABASE_URL ──────────────────────────────────────────────
@@ -58,7 +58,7 @@ fi
 
 # ── Prune old local backups ─────────────────────────────────────────
 echo "[backup] Pruning backups older than ${RETAIN_DAYS} days"
-find "$BACKUP_DIR" -name "promrkts_*.sql.gz" -mtime "+${RETAIN_DAYS}" -delete
+find "$BACKUP_DIR" -name "fortuni_*.sql.gz" -mtime "+${RETAIN_DAYS}" -delete
 echo "[backup] Pruning complete"
 
 echo "[backup] ✓ Backup finished successfully"

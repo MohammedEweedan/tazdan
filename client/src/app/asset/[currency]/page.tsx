@@ -33,7 +33,7 @@ function pal(dark: boolean) {
     greenBg:   "rgba(34,197,94,0.14)",
     redFg:     "#ef4444",
     redBg:     "rgba(239,68,68,0.14)",
-    brand:     "#4a8fe0",
+    brand:     "#226dff",
     cardBg:    dark ? "#0d0d0d" : "#f5f5f7",
   };
 }

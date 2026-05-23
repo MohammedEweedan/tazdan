@@ -43,7 +43,7 @@ export function IconLogo({
   return (
     <Image
       src={ICON_SRC[resolved]}
-      alt="promrkts"
+      alt="fortuni"
       boxSize={`${size}px`}
       objectFit="contain"
     />
@@ -63,7 +63,7 @@ export function TextLogo({
   return (
     <Image
       src={LOGO_SRC[resolved]}
-      alt="promrkts"
+      alt="fortuni"
       height={`${h}px`}
       objectFit="contain"
     />
