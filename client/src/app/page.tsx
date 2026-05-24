@@ -39,9 +39,11 @@ import {
 import { FaApple, FaGooglePlay, FaApplePay, FaGooglePay, FaCcVisa, FaCcMastercard, FaPaypal } from "react-icons/fa";
 import { SiRevolut } from "react-icons/si";
 import {
-  motion, useScroll, useTransform, useMotionValue,
-  MotionValue, AnimatePresence, useMotionValueEvent,
+  motion, useTransform, useMotionValue, useScroll,
+  MotionValue, AnimatePresence,
 } from "framer-motion";
+import { ContainerScroll } from "@/components/ui/container-scroll-animation";
+import { ShaderAnimation } from "@/components/ui/shader-lines";
 import { IconLogo } from "@/components/ui/Logo";
 import PublicNav from "@/components/ui/PublicNav";
 import PublicFooter from "@/components/ui/PublicFooter";
@@ -1638,23 +1640,23 @@ function AlternatingFeatureSection({
   const textSub  = dark ? "rgba(255,255,255,0.6)" : "#64748b";
   const tileBg   = dark ? "rgba(255,255,255,0.04)" : "#f4f4f4";
   const tileBorder = dark ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.10)";
-  /* brand periwinkle — slightly lighter in dark mode for contrast */
-  const brand     = dark ? "#5b8cff" : "#226dff";
-  const brandSoft = dark ? "rgba(91,140,255,0.14)" : "rgba(34,109,255,0.10)";
-  const brandLine = dark ? "rgba(91,140,255,0.30)" : "rgba(34,109,255,0.22)";
+  /* monochrome eyebrow + tile chrome; brand accent is reserved for the dot */
+  const brand     = "#226dff";
+  const brandSoft = dark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)";
+  const brandLine = dark ? "rgba(255,255,255,0.14)" : "rgba(0,0,0,0.12)";
 
   return (
     <Box className="snap-section-normal" position="relative" py={{ base: 16, md: 24 }} px={{ base: 4, md: 10 }} overflow="hidden">
       <Container maxW="1200px" position="relative" zIndex={2}>
         <SimpleGrid columns={{ base: 1, lg: 2 }} gap={{ base: 12, lg: 16 }} alignItems="center">
           <Flex justify="center" order={{ base: 2, lg: imageSide === "left" ? 1 : 2 }} position="relative">
-            {/* soft brand glow behind the device */}
+            {/* deliberate brand accent halo */}
             <Box
               position="absolute" zIndex={0} pointerEvents="none"
               w={{ base: "300px", md: "440px" }} h={{ base: "300px", md: "440px" }}
               borderRadius="full"
-              bg={dark ? "rgba(91,140,255,0.18)" : "rgba(34,109,255,0.14)"}
-              filter="blur(90px)"
+              bg="rgba(34,109,255,0.18)"
+              filter="blur(110px)"
               top="50%" left="50%" transform="translate(-50%, -50%)"
             />
             <motion.div
@@ -1672,21 +1674,15 @@ function AlternatingFeatureSection({
             style={{ order: imageSide === "left" ? 2 : 1 }}
           >
             <VStack align={{ base: "center", lg: "start" }} spacing={{ base: 5, md: 7 }} textAlign={{ base: "center", lg: "start" }}>
-              <HStack spacing={3}>
-                <HStack spacing={2}>
-                  <Box w="6px" h="6px" borderRadius="full" bg={brand} flexShrink={0} />
-                  <Text fontSize={{ base: "11px", md: "12px" }} fontWeight="900" color={brand} letterSpacing="0.16em" textTransform="uppercase">{eyebrow}</Text>
-                </HStack>
-                {comingSoon && (
-                  <Box px={2.5} py={0.5} borderRadius="full"
-                    bg={dark ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.08)"}
-                    border={`1px solid ${dark ? "rgba(255,255,255,0.2)" : "rgba(0,0,0,0.12)"}`}
-                    color={textMain} fontWeight="900" fontSize="10px" letterSpacing="0.05em" textTransform="uppercase"
-                  >
-                    {t("coming_soon")}
-                  </Box>
-                )}
-              </HStack>
+              {comingSoon && (
+                <Box px={3} py={1} borderRadius="full" display="inline-flex"
+                  bg={dark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)"}
+                  border={`1px solid ${dark ? "rgba(255,255,255,0.14)" : "rgba(0,0,0,0.10)"}`}
+                  color={textMain} fontWeight="600" fontSize="11px" letterSpacing="0.02em"
+                >
+                  {t("coming_soon")}
+                </Box>
+              )}
               <Heading fontFamily="'DM Sans', sans-serif" fontWeight="800" fontSize={{ base: "36px", md: "56px", xl: "72px" }} letterSpacing="-0.04em" lineHeight={1.05} color={textMain}>
                 {title}
               </Heading>
@@ -1699,11 +1695,11 @@ function AlternatingFeatureSection({
                     <motion.div key={f.label} initial={{ opacity: 0, y: 12, scale: 0.96 }} animate={{ opacity: 1, y: 0, scale: 1 }} viewport={{ once: true, amount: 0.3 }} transition={{ duration: 0.4, delay: 0.08 * i }}>
                       <HStack h="64px" bg={tileBg} border="1px solid" borderColor={tileBorder} borderRadius="16px" px={4} spacing={3}
                         transition="all 0.2s ease"
-                        _hover={{ transform: "translateY(-3px)", borderColor: brandLine,
-                          boxShadow: dark ? "0 8px 24px rgba(91,140,255,0.12)" : "0 8px 24px rgba(34,109,255,0.10)" }}
+                        _hover={{ transform: "translateY(-3px)", borderColor: brand,
+                          boxShadow: `0 8px 28px rgba(34,109,255,0.18)` }}
                       >
                         <Flex w="36px" h="36px" borderRadius="10px" border="1px solid" borderColor={brandLine} align="center" justify="center" flexShrink={0} bg={brandSoft}>
-                          <Icon as={f.icon} color={brand} />
+                          <Icon as={f.icon} color={textMain} />
                         </Flex>
                         <Text fontSize="13px" fontWeight="700" color={textMain}>{f.label}</Text>
                       </HStack>
@@ -1727,8 +1723,8 @@ function SectionBento() {
   const textSub = dark ? "rgba(255,255,255,0.6)" : "#475569";
   const cardBg = dark ? "rgba(255,255,255,0.04)" : "#f4f4f4";
   const cardBorder = dark ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.10)";
-  const brand     = dark ? "#5b8cff" : "#226dff";
-  const brandSoft = dark ? "rgba(91,140,255,0.16)" : "rgba(34,109,255,0.12)";
+  const brand     = "#226dff";
+  const brandSoft = dark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)";
   const heroCardBg = dark
     ? "linear-gradient(145deg, #1a1a1a 0%, #0a0a0a 100%)"
     : "linear-gradient(145deg, #111111 0%, #000000 100%)";
@@ -1738,7 +1734,6 @@ function SectionBento() {
     { label: t("bento_speed_title"), value: "<2s", sub: t("bento_speed_desc"), icon: FiZap, span: 1 },
     { label: t("bento_countries_label"), value: "120+", sub: t("bento_countries_desc"), icon: FiGlobe, span: 1 },
     { label: t("bento_pairs_label"), value: "400+", sub: "", icon: FiBarChart2, span: 1 },
-    { label: "Waitlisted", value: "2,400+", sub: "early access members", icon: FiUsers, span: 1 },
     { label: t("bento_rating_label"), value: "4.2/5", sub: "", icon: FiStar, span: 1 },
   ];
 
@@ -1767,10 +1762,12 @@ function SectionBento() {
               >
                 <VStack align="start" spacing={{ base: 2, md: 4 }} position="relative">
                   <Flex w={{ base: "36px", md: "44px" }} h={{ base: "36px", md: "44px" }} borderRadius="12px"
-                    bg={(s as any).hero ? "rgba(91,140,255,0.18)" : brandSoft}
+                    bg={(s as any).hero ? "rgba(255,255,255,0.10)" : brandSoft}
+                    border="1px solid"
+                    borderColor={(s as any).hero ? "rgba(255,255,255,0.15)" : (dark ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.08)")}
                     align="center" justify="center"
                   >
-                    <Icon as={s.icon} color={(s as any).hero ? "#7ba2ff" : brand} boxSize={{ base: 5, md: 6 }} />
+                    <Icon as={s.icon} color={(s as any).hero ? "#fff" : textMain} boxSize={{ base: 5, md: 6 }} />
                   </Flex>
                   <Box>
                     <Text fontSize={{ base: "10px", md: "12px" }} fontWeight="700" letterSpacing="0.1em" opacity={0.6} mb={0.5} textTransform="uppercase">{s.label}</Text>
@@ -1942,6 +1939,306 @@ function StageOverlay({ stages }: { stages: Stage[] }) {
 }
 
 /* ═════════════════════════════════════════════════════════════════
+   PHONE JOURNEY
+   One continuous scroll-driven sequence inside a single sticky frame.
+   Phone starts tilted forward & locked, untilts as it unlocks to
+   reveal the dashboard, then the on-screen view cross-fades through
+   each feature surface (chat → buy → search → pay-with). Side copy
+   fades in lockstep. Every label comes from the Tolgee i18n catalog.
+
+   Easing follows Apple's house curve: cubic-bezier(0.22, 1, 0.36, 1)
+   for opacity/position transitions and a slow linear scrub for scroll-
+   driven motion. No gradients on text. Brand accent (#226dff) is used
+   only as a deliberate pop — one dot, one word, one halo.
+   ═════════════════════════════════════════════════════════════════ */
+
+type StageCopyProps = {
+  op: MotionValue<number>;
+  eyebrow: string;
+  title: React.ReactNode;
+  desc?: string;
+  features?: { icon: React.ElementType; label: string }[];
+  accent: string;
+  textMain: string;
+  textMuted: string;
+  hairline: string;
+  tileBg: string;
+};
+
+function StageCopy({ op, title, desc, features, textMain, textMuted, hairline, tileBg }: StageCopyProps) {
+  const y = useTransform(op, [0, 1], [10, 0]);
+  return (
+    <motion.div
+      style={{
+        opacity: op, y,
+        position: "absolute", inset: 0,
+        display: "flex", flexDirection: "column", justifyContent: "center",
+        gap: 20, willChange: "opacity, transform",
+        pointerEvents: "none",
+      }}
+    >
+      <Heading as="h2" fontFamily="'DM Sans', sans-serif" fontWeight="800"
+        fontSize={{ base: "32px", sm: "40px", md: "60px", xl: "84px" }}
+        letterSpacing="-0.05em" lineHeight={0.94} color={textMain}
+        sx={{ fontFeatureSettings: '"ss01", "cv11", "kern"' }}
+      >
+        {title}
+      </Heading>
+      {desc && (
+        <Text fontSize={{ base: "15px", md: "18px" }} color={textMuted}
+          maxW="480px" lineHeight={1.5} fontWeight="400"
+        >
+          {desc}
+        </Text>
+      )}
+      {features && features.length > 0 && (
+        <SimpleGrid columns={2} spacing={2.5} maxW="460px" w="100%">
+          {features.map((f) => (
+            <HStack key={f.label} h={{ base: "44px", md: "52px" }} bg={tileBg}
+              border="1px solid" borderColor={hairline}
+              borderRadius="12px" px={3} spacing={2.5}
+            >
+              <Flex w={{ base: "26px", md: "30px" }} h={{ base: "26px", md: "30px" }}
+                borderRadius="8px" border="1px solid" borderColor={hairline}
+                align="center" justify="center" flexShrink={0}
+              >
+                <Icon as={f.icon} color={textMain} boxSize={{ base: "12px", md: "13px" }} />
+              </Flex>
+              <Text fontSize={{ base: "11.5px", md: "12.5px" }} fontWeight="700" color={textMain} noOfLines={1}>
+                {f.label}
+              </Text>
+            </HStack>
+          ))}
+        </SimpleGrid>
+      )}
+    </motion.div>
+  );
+}
+
+/**
+ * fade(a,b,c,d): opacity is 0 outside [a,d], ramps 0→1 on [a,b], holds 1 on [b,c], ramps 1→0 on [c,d].
+ * Returned MotionValue is wired to the journey's scrollYProgress.
+ */
+
+function PhoneJourney() {
+  const { colorMode } = useColorMode();
+  const dark = colorMode === "dark";
+  const phoneDark = usePhoneDark();
+  const { t } = useTranslate();
+
+  const ref = useRef<HTMLDivElement>(null);
+  const { scrollYProgress } = useScroll({ target: ref, offset: ["start start", "end end"] });
+
+  const textMain  = dark ? "#ffffff" : "#0a0a0a";
+  const textMuted = dark ? "rgba(255,255,255,0.55)" : "rgba(0,0,0,0.55)";
+  const hairline  = dark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)";
+  const tileBg    = dark ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)";
+  const ACCENT = "#226dff";
+
+  /* Stage layout (out of 1 progress).
+     6 stages × ~87vh each fits in 520vh of scroll runway. */
+  // A 0.00 – 0.16  lock → unlock + tilt to upright
+  // B 0.16 – 0.32  dashboard
+  // C 0.32 – 0.48  chat / socialised
+  // D 0.48 – 0.64  buy
+  // E 0.64 – 0.80  search
+  // F 0.80 – 1.00  pay-with
+
+  const tiltX          = useTransform(scrollYProgress, [0, 0.14], [22, 0]);
+  const unlockProgress = useTransform(scrollYProgress, [0.04, 0.15], [0, 1]);
+
+  // screen cross-fades — dashboard is always the base layer
+  const opChat   = useTransform(scrollYProgress, [0.28, 0.34, 0.46, 0.51], [0, 1, 1, 0]);
+  const opBuy    = useTransform(scrollYProgress, [0.44, 0.50, 0.62, 0.67], [0, 1, 1, 0]);
+  const opSearch = useTransform(scrollYProgress, [0.60, 0.66, 0.78, 0.83], [0, 1, 1, 0]);
+  const opPay    = useTransform(scrollYProgress, [0.76, 0.82, 1.00, 1.00], [0, 1, 1, 1]);
+
+  // copy cross-fades — slightly lead the matching screen
+  const copyA = useTransform(scrollYProgress, [0,    0.10, 0.17], [1, 1, 0]);
+  const copyB = useTransform(scrollYProgress, [0.13, 0.20, 0.28, 0.34], [0, 1, 1, 0]);
+  const copyC = useTransform(scrollYProgress, [0.30, 0.36, 0.46, 0.52], [0, 1, 1, 0]);
+  const copyD = useTransform(scrollYProgress, [0.46, 0.52, 0.62, 0.68], [0, 1, 1, 0]);
+  const copyE = useTransform(scrollYProgress, [0.62, 0.68, 0.78, 0.84], [0, 1, 1, 0]);
+  const copyF = useTransform(scrollYProgress, [0.78, 0.84, 1.00], [0, 1, 1]);
+
+  // shader background — strong at top, fades through the journey
+  const shaderOp = useTransform(scrollYProgress, [0, 0.3, 0.85, 1], [0.70, 0.50, 0.30, 0.10]);
+  // ambient halo follows the phone, gently breathing
+  const phoneScale = useTransform(scrollYProgress, [0, 0.16], [0.96, 1]);
+
+  return (
+    <Box ref={ref} position="relative" h={{ base: "520vh", md: "520vh" }}>
+      <Box position="sticky" top={0} h="100vh" w="100%" overflow="hidden"
+        bg={dark ? "#000" : "#fff"}
+      >
+        {/* ── Shader background — centered, fills viewport ── */}
+        <motion.div
+          aria-hidden
+          style={{
+            position: "absolute", inset: 0, opacity: shaderOp,
+            pointerEvents: "none", zIndex: 0,
+          }}
+        >
+          <Box position="absolute" inset={0}
+            style={{ mixBlendMode: dark ? "screen" : "multiply" } as React.CSSProperties}
+          >
+            <ShaderAnimation />
+          </Box>
+        </motion.div>
+
+        {/* ── Vignette — focus the centre of the canvas ── */}
+        <Box position="absolute" inset={0} pointerEvents="none" aria-hidden zIndex={0}
+          bg={dark
+            ? "radial-gradient(ellipse 80% 80% at center, transparent 30%, rgba(0,0,0,0.45) 80%, #000 100%)"
+            : "radial-gradient(ellipse 80% 80% at center, transparent 30%, rgba(255,255,255,0.5) 80%, #fff 100%)"}
+        />
+
+        {/* ── Subtle brand-colour halo behind the phone ── */}
+        <motion.div
+          animate={{ opacity: [0.08, 0.16, 0.08] }}
+          transition={{ duration: 7, repeat: Infinity, ease: "easeInOut" }}
+          style={{
+            position: "absolute", top: "50%", left: "50%",
+            width: 560, height: 560, transform: "translate(-50%,-50%)",
+            borderRadius: "50%", background: ACCENT, filter: "blur(180px)",
+            pointerEvents: "none", zIndex: 0,
+          }}
+        />
+
+        {/* ── Layout grid ── */}
+        <Container maxW="1300px" h="100%" position="relative" zIndex={1} px={{ base: 4, md: 10 }}>
+          <SimpleGrid columns={{ base: 1, lg: 2 }} h="100%"
+            alignItems="center" gap={{ base: 0, lg: 12 }}>
+
+            {/* COPY column — sits LEFT on desktop, BELOW phone on mobile */}
+            <Box position="relative" order={{ base: 2, lg: 1 }}
+              h={{ base: "200px", sm: "240px", lg: "520px" }}
+              w="100%" maxW={{ base: "100%", lg: "560px" }}
+              textAlign={{ base: "center", lg: "left" } as any}
+              pt={{ base: 2, lg: 0 }}
+            >
+              <StageCopy op={copyA} accent={ACCENT} textMain={textMain} textMuted={textMuted} hairline={hairline} tileBg={tileBg}
+                eyebrow={t("coming_soon")}
+                title={
+                  <>
+                    {t("hero_line1")}{" "}
+                    <Box as="span" color={ACCENT}>{t("hero_line2")}</Box>
+                  </>
+                }
+                desc={t("hero_sub")}
+              />
+              <StageCopy op={copyB} accent={ACCENT} textMain={textMain} textMuted={textMuted} hairline={hairline} tileBg={tileBg}
+                eyebrow={t("bento_countries_label")}
+                title={<>{t("bento_title_1")} <Box as="span" color={ACCENT}>{t("bento_title_2")}</Box></>}
+              />
+              <StageCopy op={copyC} accent={ACCENT} textMain={textMain} textMuted={textMuted} hairline={hairline} tileBg={tileBg}
+                eyebrow={t("sec_social_title_1")}
+                title={<>{t("sec_social_title_1")}<br /><Box as="span" color={ACCENT}>{t("sec_social_title_2")}</Box></>}
+                desc={t("sec_social_desc")}
+              />
+              <StageCopy op={copyD} accent={ACCENT} textMain={textMain} textMuted={textMuted} hairline={hairline} tileBg={tileBg}
+                eyebrow={t("feat_buy_eyebrow")}
+                title={<Box as="span" color={textMain}>{t("feat_buy_title")}</Box>}
+                desc={t("feat_buy_desc")}
+                features={[
+                  { icon: FiZap, label: t("feat_buy_f1") },
+                  { icon: FiShield, label: t("feat_buy_f2") },
+                  { icon: FiCreditCard, label: t("feat_buy_f3") },
+                  { icon: FiGlobe, label: t("feat_buy_f4") },
+                ]}
+              />
+              <StageCopy op={copyE} accent={ACCENT} textMain={textMain} textMuted={textMuted} hairline={hairline} tileBg={tileBg}
+                eyebrow={t("feat_search_eyebrow")}
+                title={<Box as="span" color={textMain}>{t("feat_search_title")}</Box>}
+                desc={t("feat_search_desc")}
+                features={[
+                  { icon: FiSearch, label: t("feat_search_f1") },
+                  { icon: FiActivity, label: t("feat_search_f2") },
+                  { icon: FiBarChart2, label: t("feat_search_f3") },
+                  { icon: FiZap, label: t("feat_search_f4") },
+                ]}
+              />
+              <StageCopy op={copyF} accent={ACCENT} textMain={textMain} textMuted={textMuted} hairline={hairline} tileBg={tileBg}
+                eyebrow={t("feat_pay_eyebrow")}
+                title={<Box as="span" color={textMain}>{t("feat_pay_title")}</Box>}
+                desc={t("feat_pay_desc")}
+                features={[
+                  { icon: FiCreditCard, label: t("feat_pay_f1") },
+                  { icon: FiRepeat, label: t("feat_pay_f2") },
+                  { icon: FiGlobe, label: t("feat_pay_f3") },
+                  { icon: FiCheck, label: t("feat_pay_f4") },
+                ]}
+              />
+            </Box>
+
+            {/* PHONE column — sits RIGHT on desktop, ABOVE copy on mobile */}
+            <Flex order={{ base: 1, lg: 2 }} justify="center" align={{ base: "flex-end", lg: "center" }} position="relative"
+              style={{ perspective: "1500px" }}
+              pb={{ base: 2, lg: 0 }}
+            >
+              <motion.div style={{ rotateX: tiltX, scale: phoneScale, transformOrigin: "50% 60%", willChange: "transform" }}>
+                <Box
+                  position="relative"
+                  style={{ ...phoneVars,
+                    ["--ph" as string]: "clamp(260px, 44vh, 720px)",
+                    width: "var(--pw)", height: "var(--ph)",
+                  } as React.CSSProperties}
+                  mx="auto"
+                >
+                  <Box
+                    position="absolute"
+                    style={screenInset as React.CSSProperties}
+                    overflow="hidden"
+                    bg={phoneDark ? "#000000" : "#ffffff"}
+                    boxShadow={phoneDark
+                      ? "inset 0 0 0 1px rgba(255,255,255,0.04)"
+                      : "inset 0 0 0 1px rgba(0,0,0,0.04)"}
+                  >
+                    {/* Base: dashboard, always rendered */}
+                    <Box position="absolute" inset={0}><ScreenDashboard /></Box>
+                    {/* Feature screens cross-fade above the dashboard */}
+                    <motion.div style={{ position: "absolute", inset: 0, opacity: opChat, willChange: "opacity" }}>
+                      <ScreenChat />
+                    </motion.div>
+                    <motion.div style={{ position: "absolute", inset: 0, opacity: opBuy, willChange: "opacity" }}>
+                      <ScreenBuy />
+                    </motion.div>
+                    <motion.div style={{ position: "absolute", inset: 0, opacity: opSearch, willChange: "opacity" }}>
+                      <ScreenTokenSearch />
+                    </motion.div>
+                    <motion.div style={{ position: "absolute", inset: 0, opacity: opPay, willChange: "opacity" }}>
+                      <ScreenPayWith />
+                    </motion.div>
+                    {/* Lock screen sits on top, slides off with unlockProgress */}
+                    <LockScreen unlockProgress={unlockProgress} />
+                  </Box>
+                  <NextImage
+                    src="/iphone-frame.png"
+                    alt=""
+                    fill priority
+                    sizes="(max-width: 480px) 70vw, (max-width: 1024px) 42vw, 360px"
+                    style={{ objectFit: "contain", pointerEvents: "none", zIndex: 10 }}
+                  />
+                </Box>
+              </motion.div>
+            </Flex>
+          </SimpleGrid>
+        </Container>
+
+        {/* ── Scroll-progress rail ── */}
+        <Box position="absolute" left={0} right={0} bottom={0} h="2px"
+          bg={dark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)"} zIndex={2}>
+          <motion.div style={{
+            width: useTransform(scrollYProgress, [0, 1], ["0%", "100%"]),
+            height: "100%", background: ACCENT,
+          }} />
+        </Box>
+      </Box>
+    </Box>
+  );
+}
+
+/* ═════════════════════════════════════════════════════════════════
    LANDING PAGE
    ═════════════════════════════════════════════════════════════════ */
 export default function LandingPage() {
@@ -1954,190 +2251,42 @@ export default function LandingPage() {
 
   const { isAuthenticated, isLoading, fetchUser } = useAuthStore();
 
-  const textMain = dark ? "#ffffff" : "#0a0f1e";
-  const cardBorder = dark ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.10)";
-
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const { scrollYProgress: totalProgress } = useScroll({ target: scrollRef, offset: ["start start", "end end"] });
-
-  const titleOpacity   = useTransform(totalProgress, [0, 0.18, 0.08], [1, 1, 0]);
-  const titleY         = useTransform(totalProgress, [0, 0.08], [0, -40]);
-  const phoneOpacity   = useTransform(totalProgress, [0, 0.05], [1, 1]);
-  const phoneY         = useTransform(totalProgress, [0, 0.15], [0, 0]);
-  const heroCTAOpacity = useTransform(totalProgress, [0, 0.07], [1, 0]);
-
-  const unlockProgress     = useMotionValue(0);
-  const stageOverlayOpacity = useMotionValue(0);
-
-  useEffect(() => {
-  const compute = () => {
-    const el = scrollRef.current;
-    if (!el) return;
-    const rect = el.getBoundingClientRect();
-    const scrolledPast = Math.max(0, -rect.top);
-    // Much slower unlock: starts at 120px scrolled, completes at 600px
-    unlockProgress.set(Math.min(1, Math.max(0, (scrolledPast - 120) / 480)));
-    stageOverlayOpacity.set(Math.max(0, Math.min(1, (scrolledPast - 400) / 300)));
-  };
-  compute();
-  window.addEventListener("scroll", compute, { passive: true });
-  window.addEventListener("resize", compute);
-  return () => { window.removeEventListener("scroll", compute); window.removeEventListener("resize", compute); };
-}, [unlockProgress, stageOverlayOpacity]);
+  const textMain = dark ? "#ffffff" : "#0a0a0a";
+  const textMuted = dark ? "rgba(255,255,255,0.55)" : "rgba(0,0,0,0.55)";
+  const hairline = dark ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.10)";
+  const ACCENT = "#226dff";
 
   useEffect(() => { fetchUser(); }, []);
 
-  /* Title gradient — strictly b&w */
-  const titleGradient = dark
-    ? "linear(to-b, #ffffff 0%, rgba(255,255,255,0.85) 60%, rgba(255,255,255,0.3) 100%)"
-    : "linear(to-b, #000000 0%, rgba(0,0,0,0.7) 60%, rgba(0,0,0,0.2) 100%)";
-
-  const stages: Stage[] = [{ eyebrow: t("feat_dashboard_eyebrow"), title: t("feat_dashboard_title"), desc: t("feat_dashboard_desc"), widget: null }];
+  // Force body to match page background so blank gaps never show Chakra's
+  // default surface colour through. (overflowX:clip was breaking sticky
+  // paint in deep scroll — we use overflowX:hidden on the wrapper instead.)
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const prev = document.body.style.background;
+    document.body.style.background = pageBg;
+    return () => { document.body.style.background = prev; };
+  }, [pageBg]);
 
   if (isLoading) return null;
   if (isAuthenticated) return (<><PublicNav /><AuthenticatedHome /></>);
 
   return (
-    <Box minH="100vh" overflowX="clip" color={textMain} bg={pageBg}>
-      {/* ── Risk warning banner ─────────────────────────────────────────── */}
-      {/* <Box
-        id="risk-banner"
-        bg={dark ? "#111111" : "#f4f4f4"}
-        borderBottom="1px solid"
-        borderColor={dark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)"}
-        py={2.5} px={4}
-        textAlign="center"
-      >
-        <Text fontSize={{ base: "11px", md: "12px" }} color={dark ? "rgba(255,255,255,0.6)" : "rgba(0,0,0,0.55)"} lineHeight="1.5">
-          <Box as="span" fontWeight="700" color={dark ? "rgba(255,255,255,0.85)" : "rgba(0,0,0,0.8)"}>
-            {t("risk_banner_bold")}
-          </Box>{" "}
-          {t("risk_banner_text")}{" "}
-          <Box
-            as={NextLink}
-            href="/risk"
-            fontWeight="700"
-            color={dark ? "rgba(255,255,255,0.85)" : "rgba(0,0,0,0.8)"}
-            textDecoration="underline"
-            _hover={{ opacity: 0.75 }}
-          >
-            {t("risk_banner_cta")}
-          </Box>
-        </Text>
-      </Box> */}
+    <Box minH="100vh" color={textMain} bg={pageBg}>
       <PublicNav />
 
-      {/* ══ HERO ══ */}
-      <Box ref={scrollRef} id="features" position="relative" h={{ base: "200vh", md: "300vh" }} className="snap-none">
-        <Box position="sticky" top={0} h={{ base: "calc(100vh - 44px)", md: "100vh" }} overflow="hidden">
-
-          {/* Title */}
-          <motion.div style={{ opacity: titleOpacity, y: titleY, position: "absolute", top: -25, left: 0, right: 0, paddingTop: "clamp(88px, 14vh, 180px)", zIndex: 4 }}>
-            <Container maxW="1200px" position="relative">
-              <VStack spacing={{ base: 3, md: 4 }} align="center">
-
-                {/* Main headline */}
-                <Flex
-                  justify="center"
-                  align="baseline"
-                  wrap={{ base: "wrap", sm: "nowrap" }}
-                  gap={{ base: "0.3em", sm: "0.5em", md: "0.925em" }}
-                  dir={isAr ? "rtl" : "ltr"}
-                  px={{ base: 4, md: 0 }}
-                  style={{ pointerEvents: "none" }}
-                >
-                  {[t("hero_line1"), t("hero_line2")].map((line, idx) => (
-                    <Heading
-                      key={idx}
-                      as="h1"
-                      fontWeight="900"
-                      fontSize={{ base: "clamp(30px, 9vw, 44px)", md: "54px", xl: "62px" }}
-                      letterSpacing="-0.03em"
-                      lineHeight={1.05}
-                      textAlign="center"
-                      color={idx === 1 ? "#226dff" : textMain}
-                    >
-                      {line}
-                    </Heading>
-                  ))}
-                </Flex>
-              </VStack>
-            </Container>
-          </motion.div>
-
-          {/* Phone */}
-          <Flex position="absolute" inset={0} align="center" justify="center" zIndex={2} pointerEvents="none">
-            <Box
-              position="absolute" zIndex={0} pointerEvents="none"
-              w={{ base: "300px", md: "440px" }} h={{ base: "300px", md: "440px" }}
-              borderRadius="full"
-              bg={dark ? "rgb(91,140,255)" : "rgb(34,109,255)"}
-              filter="blur(90px)"
-              top="50%" left="50%" transform="translate(-50%, -50%)"
-            />
-            <motion.div
-              initial={{ opacity: 0, y: 48, scale: 0.93 }} animate={{ opacity: 1, y: 0, scale: 1 }}
-              viewport={{ once: true, amount: 0.2 }} transition={{ duration: 0.75, ease: [0.22, 1, 0.36, 1] }}
-              style={{ position: "relative", zIndex: 1 }}
-            >
-              <PhoneFrame unlockProgress={unlockProgress} />
-            </motion.div>
-          </Flex>
-
-          {/* Stage overlay */}
-          <motion.div style={{ opacity: stageOverlayOpacity, position: "absolute", inset: 0, zIndex: 3, pointerEvents: "none" }}>
-            <StageOverlay stages={stages} />
-          </motion.div>
-
-          {/* Apple-style bottom CTA strip — visible at rest, fades on scroll */}
-          <Box position="absolute" bottom={{ base: 5, md: 12 }} left={0} right={0} zIndex={5} style={{ pointerEvents: "none" }}>
-            <motion.div style={{ opacity: heroCTAOpacity }}>
-              <VStack spacing={{ base: 3, md: 4 }} align="center" style={{ pointerEvents: "auto" }}>
-
-                {/* App store badges */}
-                <HStack spacing={2.5} justify="center">
-                  {[
-                    { store: "App Store", icon: FaApple },
-                    { store: "Google Play", icon: FaGooglePlay },
-                  ].map((b) => (
-                    <HStack key={b.store}
-                      bg={dark ? "rgba(255,255,255,0.09)" : "rgba(0,0,0,0.06)"}
-                      border="1px solid"
-                      borderColor={dark ? "rgba(255,255,255,0.16)" : "rgba(0,0,0,0.10)"}
-                      borderRadius="12px" px={4} h="42px" spacing={2.5} cursor="pointer"
-                      _hover={{ bg: dark ? "rgba(255,255,255,0.14)" : "rgba(0,0,0,0.10)" }}
-                      transition="background 0.15s"
-                    >
-                      <Icon as={b.icon} boxSize="18px" color={textMain} flexShrink={0} />
-                      <VStack spacing={0} align="start">
-                        <Text fontSize="13px" color={textMain} fontWeight="800" letterSpacing="-0.01em">{b.store}</Text>
-                      </VStack>
-                    </HStack>
-                  ))}
-                </HStack>
-              </VStack>
-            </motion.div>
-          </Box>
-        </Box>
+      {/* ══════════════════════════════════════════════════════════════
+          ONE CONTINUOUS PHONE JOURNEY
+          Tilt → unlock → dashboard → chat → buy → search → pay
+          All copy is i18n — no hard-coded labels.
+          ══════════════════════════════════════════════════════════════ */}
+      <Box id="features">
+        <PhoneJourney />
       </Box>
 
       <SectionBento />
       <SectionOnRamp />
       <SectionSocialProof />
-      <SectionSocialFinance />
-
-      <AlternatingFeatureSection imageSide="left" eyebrow={t("feat_buy_eyebrow")} title={t("feat_buy_title")} desc={t("feat_buy_desc")}
-        features={[{ icon: FiZap, label: t("feat_buy_f1") }, { icon: FiShield, label: t("feat_buy_f2") }, { icon: FiCreditCard, label: t("feat_buy_f3") }, { icon: FiGlobe, label: t("feat_buy_f4") }]}
-        phoneScreen={<ScreenBuy />}
-      />
-      <AlternatingFeatureSection imageSide="right" eyebrow={t("feat_search_eyebrow")} title={t("feat_search_title")} desc={t("feat_search_desc")}
-        features={[{ icon: FiSearch, label: t("feat_search_f1") }, { icon: FiActivity, label: t("feat_search_f2") }, { icon: FiBarChart2, label: t("feat_search_f3") }, { icon: FiZap, label: t("feat_search_f4") }]}
-        phoneScreen={<ScreenTokenSearch />}
-      />
-      <AlternatingFeatureSection imageSide="left" eyebrow={t("feat_pay_eyebrow")} title={t("feat_pay_title")} desc={t("feat_pay_desc")}
-        features={[{ icon: FiCreditCard, label: t("feat_pay_f1") }, { icon: FiRepeat, label: t("feat_pay_f2") }, { icon: FiGlobe, label: t("feat_pay_f3") }, { icon: FiCheck, label: t("feat_pay_f4") }]}
-        phoneScreen={<ScreenPayWith />}
-      />
 
       {/* ══ CTA + FOOTER ══ */}
       <Box position="relative" overflow="hidden">
@@ -2210,12 +2359,6 @@ export default function LandingPage() {
         <Box py={{ base: 20, md: 28 }} px={6} position="relative" zIndex={1}>
           <VStack spacing={10} maxW="1100px" mx="auto">
             <VStack spacing={3} textAlign="center">
-              <Text
-                fontSize="11px" fontWeight="800" letterSpacing="0.14em"
-                color={dark ? "rgba(255,255,255,0.55)" : "rgba(0,0,0,0.50)"} textTransform="uppercase"
-              >
-                {t("calc_section_eyebrow")}
-              </Text>
               <Heading
                 fontSize={{ base: "30px", md: "44px" }} fontWeight="900"
                 letterSpacing="-0.04em" color={dark ? "#ffffff" : "#000000"}

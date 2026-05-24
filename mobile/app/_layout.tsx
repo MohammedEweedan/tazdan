@@ -3,7 +3,7 @@
  */
 
 import { useEffect, useState } from 'react';
-import { AppState, Image, I18nManager } from 'react-native';
+import { AppState, Image, I18nManager, Dimensions, StyleSheet, useColorScheme } from 'react-native';
 import { Text, TextInput } from '@/components/ui/Text';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -12,7 +12,16 @@ import { StatusBar } from 'expo-status-bar';
 import { LinearGradient } from 'expo-linear-gradient';
 import { QueryClientProvider } from '@tanstack/react-query';
 import * as SystemUI from 'expo-system-ui';
-import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
+import Animated, {
+  FadeIn,
+  FadeOut,
+  useSharedValue,
+  useAnimatedStyle,
+  withRepeat,
+  withTiming,
+  Easing,
+} from 'react-native-reanimated';
+import { ShaderLines } from '@/components/ui/ShaderLines';
 import {
   useFonts,
   Outfit_300Light,
@@ -90,9 +99,23 @@ function AuthGate() {
   return null;
 }
 
+const { height: SH } = Dimensions.get('screen');
+
 function SplashOverlay() {
   const isHydrating = useAuthStore((s) => s.isHydrating);
   const [show, setShow] = useState(true);
+  const scheme = useColorScheme();
+  const dark = scheme === 'dark';
+
+  const scanY = useSharedValue(0);
+
+  useEffect(() => {
+    scanY.value = withRepeat(
+      withTiming(SH, { duration: 2200, easing: Easing.inOut(Easing.quad) }),
+      -1,
+      true,
+    );
+  }, []);
 
   useEffect(() => {
     if (!isHydrating) {
@@ -101,26 +124,74 @@ function SplashOverlay() {
     }
   }, [isHydrating]);
 
+  const scanStyle = useAnimatedStyle(() => {
+    const progress = scanY.value / SH;
+    const opacity = progress < 0.1 ? progress / 0.1 * 0.7
+                  : progress > 0.9 ? (1 - progress) / 0.1 * 0.7
+                  : 0.7;
+    return {
+      transform: [{ translateY: scanY.value - SH * 0.5 }],
+      opacity,
+    };
+  });
+
   if (!show) return null;
 
   return (
     <Animated.View
-      exiting={FadeOut.duration(600)}
-      style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 1000 }}
+      exiting={FadeOut.duration(700)}
+      style={StyleSheet.absoluteFillObject}
+      pointerEvents="none"
     >
+      {/* Base — inverts with system colour scheme */}
       <LinearGradient
-        colors={['#000000', '#f5f5f51f', '#06112b9f']}
-        locations={[0, 0.55, 1]}
-        style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}
+        colors={dark ? ['#000000', '#050810', '#000000'] : ['#ffffff', '#f5f7ff', '#ffffff']}
+        locations={[0, 0.5, 1]}
+        style={StyleSheet.absoluteFillObject}
+      />
+
+      {/* WebGL shader lines — exact port of the web ShaderAnimation */}
+      <ShaderLines />
+
+      {/* Moving scan beam */}
+      <Animated.View
+        style={[
+          {
+            position: 'absolute',
+            left: 0,
+            right: 0,
+            top: SH * 0.5,
+            height: SH * 0.5,
+          },
+          scanStyle,
+        ]}
+        pointerEvents="none"
       >
-        <Animated.View entering={FadeIn.duration(500)}>
-          <Image
-            source={require('../assets/icon-color.png')}
-            style={{ width: 120, height: 120 }}
-            resizeMode="contain"
-          />
-        </Animated.View>
-      </LinearGradient>
+        <LinearGradient
+          colors={['transparent', 'rgba(34,109,255,0.08)', 'rgba(34,109,255,0.18)', 'rgba(34,109,255,0.08)', 'transparent']}
+          locations={[0, 0.3, 0.5, 0.7, 1]}
+          style={{ flex: 1 }}
+        />
+      </Animated.View>
+
+      {/* Logo */}
+      <Animated.View
+        entering={FadeIn.duration(600).delay(100)}
+        style={{
+          position: 'absolute',
+          top: 0, left: 0, right: 0, bottom: 0,
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 10,
+        }}
+        pointerEvents="none"
+      >
+        <Image
+          source={dark ? require('../assets/icon-white.png') : require('../assets/icon-black.png')}
+          style={{ width: 160, height: 64 }}
+          resizeMode="contain"
+        />
+      </Animated.View>
     </Animated.View>
   );
 }

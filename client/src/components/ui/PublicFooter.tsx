@@ -61,7 +61,6 @@ export default function PublicFooter() {
   const socials: { icon: typeof FiX; href: string; label: string }[] = [
     { icon: FiX, href: "https://twitter.com", label: "Twitter" },
     { icon: FiInstagram, href: "https://instagram.com", label: "Instagram" },
-    { icon: FiLinkedin, href: "https://linkedin.com", label: "LinkedIn" },
     { icon: FiGithub, href: "https://github.com", label: "GitHub" },
   ];
 
