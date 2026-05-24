@@ -10,7 +10,7 @@ import * as Haptics from 'expo-haptics';
 import { useQuery } from '@tanstack/react-query';
 import { useThemedPalette } from '@/store/themeStore';
 import { useT } from '@/store/i18nStore';
-import { useHaptics, useWallets, extractErrorMessage, useStepUpAuth, StepUpDeniedError } from '@/hooks';
+import { useHaptics, useWallets, extractErrorMessage, useStepUpAuth, StepUpDeniedError, useTransactionSound } from '@/hooks';
 import { useForexRates } from '@/hooks/useForexRates';
 import { profileService, messageService } from '@/services';
 import type { Currency } from '@/types';
@@ -67,6 +67,7 @@ export function SendWidget() {
   const p       = useThemedPalette();
   const t       = useT();
   const haptics = useHaptics();
+  const { playSuccess } = useTransactionSound();
   const { data: wallets } = useWallets();
   const { data: fxRates } = useForexRates();
   const stepUp = useStepUpAuth();
@@ -126,7 +127,7 @@ export function SendWidget() {
       });
 
       await messageService.transfer({ receiverId: picked.id, currency: currency as Currency, amount: sendAmount, note: note || undefined });
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      playSuccess('transfer');
       setCta('success');
       setAmount(''); setNote(''); setRecipient(''); setPicked(null);
       setTimeout(() => setCta('idle'), 2000);

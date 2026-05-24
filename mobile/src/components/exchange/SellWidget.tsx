@@ -10,7 +10,7 @@ import * as Haptics from 'expo-haptics';
 import { useAuthStore } from '@/store/authStore';
 import { useThemedPalette, useTheme, brand } from '@/store/themeStore';
 import { SlideToConfirm } from '@/components/ui/SlideToConfirm';
-import { useWallets, useMarkets, extractErrorMessage } from '@/hooks';
+import { useWallets, useMarkets, extractErrorMessage, useTransactionSound } from '@/hooks';
 import { CoinAvatar } from '@/components/ui/CoinAvatar';
 import { cryptoExchangeAPI, type CryptoQuote, type AssetSearchResult } from '@/lib/cryptoApi';
 
@@ -108,6 +108,7 @@ export function SellWidget() {
   const brandAccent = themeMode === 'dark' ? brand.primaryDark : brand.primary;
   const { data: wallets } = useWallets();
   const { data: tickers } = useMarkets();
+  const { playSuccess } = useTransactionSound();
   const baseCurrency = (user as any)?.baseCurrency ?? 'USD';
 
   // ── Holdings with nonzero balance ────────────────────────────────
@@ -226,7 +227,7 @@ export function SellWidget() {
     setExec(true); setError(null);
     try {
       await cryptoExchangeAPI.execute({ quoteId: quote.id, confirmedByUser: true, idempotencyKey: idemRef.current });
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      playSuccess('sell');
       setSuccess(`${fmt(quote.cryptoAmount, 8)} ${asset} sold for ${sym(baseCurrency)}${fmt(quote.fiatAmount, 2)} ✓`);
       setQuote(null); setCryptoAmt('');
     } catch (e: any) {

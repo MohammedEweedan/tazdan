@@ -16,7 +16,7 @@ import { useRouter } from 'expo-router';
 import { useThemedPalette } from '@/store/themeStore';
 import { useAuthStore } from '@/store/authStore';
 import { useT } from '@/store/i18nStore';
-import { useWallets } from '@/hooks';
+import { useWallets, useTransactionSound } from '@/hooks';
 import { bankAccountService, withdrawalService } from '@/services';
 import type { BankAccount } from '@/types';
 
@@ -232,6 +232,7 @@ export function WithdrawWidget() {
   const router = useRouter();
   const qc = useQueryClient();
   const { data: wallets } = useWallets();
+  const { playSuccess } = useTransactionSound();
 
   const [screen, setScreen] = useState<Screen>('select');
   const [currency, setCurrency] = useState('USD');
@@ -272,7 +273,7 @@ export function WithdrawWidget() {
       }),
     }),
     onSuccess: () => {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      playSuccess('withdrawal');
       Alert.alert(
         'Withdrawal Requested ✓',
         `Your ${currency} withdrawal of ${withdrawAmount.toLocaleString('en-US', { maximumFractionDigits: 8 })} has been submitted and is pending review.`,

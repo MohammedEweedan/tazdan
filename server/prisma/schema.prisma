@@ -1,5 +1,5 @@
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
   binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
 }
 
@@ -169,7 +169,7 @@ model User {
   // locked until `lockoutUntil`.
   failedLoginAttempts          Int                          @default(0)
   lockoutUntil                 DateTime?
-  expoPushToken                String?                      // Expo push notification token (nullable — registered after login)
+  expoPushToken                String? // Expo push notification token (nullable — registered after login)
   createdAt                    DateTime                     @default(now())
   updatedAt                    DateTime                     @updatedAt
   wallets                      Wallet[]
@@ -206,6 +206,13 @@ model User {
   blocksAgainst                UserBlock[]                  @relation("BlocksAgainst")
   reportsFiled                 MessageReport[]              @relation("ReportsFiled")
   reportsAgainst               MessageReport[]              @relation("ReportsAgainst")
+  // Group chats
+  groupsCreated                GroupChat[]                  @relation("GroupCreator")
+  groupMemberships             GroupMember[]
+  groupMessagesSent            GroupMessage[]               @relation("GroupMessageSender")
+  poolsCreated                 LiquidityPool[]              @relation("PoolCreator")
+  poolMemberships              LiquidityPoolMember[]
+  poolContributions            LiquidityPoolContribution[]
   escalationsRaised            SupportEscalation[]          @relation("EscalationsRaised")
   escalationsAssigned          SupportEscalation[]          @relation("EscalationsAssigned")
   // Memecoins & Smart Contracts
@@ -382,12 +389,12 @@ model BankAccount {
   accountNumber String
   accountName   String
   branch        String?
-  country       String?  // ISO 3166-1 alpha-2 (e.g. "GB", "US", "AE")
-  currency      String?  // ISO 4217 currency code (e.g. "GBP", "USD", "EUR")
-  sortCode      String?  // UK sort code (6 digits)
-  routingNumber String?  // US/CA/AU routing number (9 digits)
-  iban          String?  // International Bank Account Number
-  swift         String?  // SWIFT/BIC code
+  country       String? // ISO 3166-1 alpha-2 (e.g. "GB", "US", "AE")
+  currency      String? // ISO 4217 currency code (e.g. "GBP", "USD", "EUR")
+  sortCode      String? // UK sort code (6 digits)
+  routingNumber String? // US/CA/AU routing number (9 digits)
+  iban          String? // International Bank Account Number
+  swift         String? // SWIFT/BIC code
   isDefault     Boolean  @default(false)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
@@ -427,19 +434,19 @@ model PlatformSettings {
 /// wallet (the user with username='platform'). Fees from deposits
 /// and internal transfers are intentionally excluded.
 model PlatformFee {
-  id            String   @id @default(uuid())
+  id          String   @id @default(uuid())
   /// Where the fee originated: order, withdrawal, p2p, swap, crypto_order, p2p_trade
-  source        String
-  sourceId      String?
+  source      String
+  sourceId    String?
   /// The user who paid the fee
-  payerId       String?
-  amount        Decimal  @db.Decimal(20, 8)
-  currency      Currency
+  payerId     String?
+  amount      Decimal  @db.Decimal(20, 8)
+  currency    Currency
   /// USD equivalent at time of capture, for dashboard aggregation
-  amountUsd     Decimal  @default(0) @db.Decimal(20, 8)
-  description   String?
-  metadata      Json?
-  createdAt     DateTime @default(now())
+  amountUsd   Decimal  @default(0) @db.Decimal(20, 8)
+  description String?
+  metadata    Json?
+  createdAt   DateTime @default(now())
 
   @@index([source])
   @@index([payerId])
@@ -455,13 +462,13 @@ model Notification {
   message     String
   description String?
   mediaUrl    String?
-  mediaType   String?  // image | gif | video | none
-  locales     Json?    // { "ar": { "title": "...", "subtitle": "...", "description": "..." } }
+  mediaType   String? // image | gif | video | none
+  locales     Json? // { "ar": { "title": "...", "subtitle": "...", "description": "..." } }
   type        String   @default("info")
   isRead      Boolean  @default(false)
   metadata    Json?
-  createdBy   String?  // admin userId who sent the broadcast (null for system notifications)
-  broadcastId String?  // shared UUID across all rows of a single broadcast batch
+  createdBy   String? // admin userId who sent the broadcast (null for system notifications)
+  broadcastId String? // shared UUID across all rows of a single broadcast batch
   createdAt   DateTime @default(now())
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -531,18 +538,19 @@ model OnChainTx {
 }
 
 model Transfer {
-  id         String   @id @default(uuid())
-  senderId   String
-  receiverId String
-  currency   Currency @default(USDT)
-  amount     Decimal  @db.Decimal(20, 8)
-  fee        Decimal  @default(0) @db.Decimal(20, 8)
-  reference  String   @unique
-  note       String?
-  createdAt  DateTime @default(now())
-  sender     User     @relation("TransferSender", fields: [senderId], references: [id], onDelete: Cascade)
-  receiver   User     @relation("TransferReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
-  message    Message? @relation("MessageTransfer")
+  id               String                     @id @default(uuid())
+  senderId         String
+  receiverId       String
+  currency         Currency                   @default(USDT)
+  amount           Decimal                    @db.Decimal(20, 8)
+  fee              Decimal                    @default(0) @db.Decimal(20, 8)
+  reference        String                     @unique
+  note             String?
+  createdAt        DateTime                   @default(now())
+  sender           User                       @relation("TransferSender", fields: [senderId], references: [id], onDelete: Cascade)
+  receiver         User                       @relation("TransferReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
+  message          Message?                   @relation("MessageTransfer")
+  poolContribution LiquidityPoolContribution? @relation("PoolContribTransfer")
 
   @@index([senderId])
   @@index([receiverId])
@@ -581,9 +589,9 @@ model P2PListing {
   id             String           @id @default(uuid())
   userId         String
   currency       Currency         @default(USDT)
-  baseAsset      String?          // free-text ticker for any altcoin (e.g. PEPE, SHIB); overrides currency when set
+  baseAsset      String? // free-text ticker for any altcoin (e.g. PEPE, SHIB); overrides currency when set
   fiatCurrency   Currency         @default(USD)
-  fiatAsset      String?          // free-text fiat ticker when fiatCurrency overflows the enum
+  fiatAsset      String? // free-text fiat ticker when fiatCurrency overflows the enum
   side           OrderSide // BUY or SELL
   price          Decimal          @db.Decimal(20, 8) // price per unit in fiat
   amount         Decimal          @db.Decimal(20, 8) // total crypto amount
@@ -618,9 +626,9 @@ model P2PTrade {
   buyerId         String
   sellerId        String
   currency        Currency
-  baseAsset       String?        // free-text ticker when currency overflows the enum
+  baseAsset       String? // free-text ticker when currency overflows the enum
   fiatCurrency    Currency
-  fiatAsset       String?        // free-text fiat ticker when fiatCurrency overflows the enum
+  fiatAsset       String? // free-text fiat ticker when fiatCurrency overflows the enum
   cryptoAmount    Decimal        @db.Decimal(20, 8)
   fiatAmount      Decimal        @db.Decimal(20, 8)
   price           Decimal        @db.Decimal(20, 8)
@@ -708,6 +716,178 @@ model Message {
   @@index([tradeId])
   @@index([transferId])
   @@index([createdAt])
+}
+
+/// ───────────────────────────────────────────────────────────────────
+/// Group chats. Intentionally separate from the 1-to-1 Message model
+/// above so DMs stay untouched. A GroupChat has any number of members
+/// (>= 2), each with a role and a granular permissions JSON. Messages
+/// in a group live in GroupMessage. A group can optionally have one
+/// LiquidityPool attached.
+/// ───────────────────────────────────────────────────────────────────
+enum GroupMemberRole {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+model GroupChat {
+  id          String         @id @default(uuid())
+  name        String
+  avatarUrl   String?
+  description String?
+  createdById String
+  /// Once dissolved, no new messages or pool actions are accepted but the
+  /// history stays queryable for audit + dispute reasons.
+  dissolvedAt DateTime?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  createdBy   User           @relation("GroupCreator", fields: [createdById], references: [id], onDelete: Cascade)
+  members     GroupMember[]
+  messages    GroupMessage[]
+  pool        LiquidityPool?
+
+  @@index([createdById])
+  @@index([createdAt])
+}
+
+model GroupMember {
+  id          String          @id @default(uuid())
+  groupId     String
+  userId      String
+  role        GroupMemberRole @default(MEMBER)
+  /// Granular per-member permission overrides. Keys understood by the
+  /// server: canInvite, canRemove, canRename, canManagePool, canPinMessage.
+  /// Missing keys fall back to role defaults.
+  permissions Json?
+  joinedAt    DateTime        @default(now())
+  /// Soft leave — keeps the row so old messages still resolve to a member.
+  leftAt      DateTime?
+  /// Per-member cursor so we can compute unread counts without scanning all messages.
+  lastReadAt  DateTime?
+  group       GroupChat       @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, userId])
+  @@index([groupId])
+  @@index([userId])
+}
+
+model GroupMessage {
+  id            String         @id @default(uuid())
+  groupId       String
+  senderId      String
+  /// TEXT, IMAGE, SYSTEM, POOL_CREATED, POOL_DEPOSIT, POOL_WITHDRAW, POOL_CLOSED
+  type          String         @default("TEXT")
+  /// Free-text content. Empty for IMAGE-only messages (use attachmentUrl).
+  content       String         @default("")
+  /// URL returned by the upload middleware (e.g. /uploads/chat/abcd.jpg).
+  attachmentUrl String?
+  /// Structured payload — e.g. for POOL_DEPOSIT { amount, currency, contributionId }.
+  metadata      Json?
+  /// Optional in-thread reply.
+  replyToId     String?
+  editedAt      DateTime?
+  /// Soft-delete: bubble shows "Message deleted" but preserves audit trail.
+  deletedAt     DateTime?
+  createdAt     DateTime       @default(now())
+  group         GroupChat      @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  sender        User           @relation("GroupMessageSender", fields: [senderId], references: [id], onDelete: Cascade)
+  replyTo       GroupMessage?  @relation("GroupMessageReply", fields: [replyToId], references: [id], onDelete: SetNull)
+  replies       GroupMessage[] @relation("GroupMessageReply")
+
+  @@index([groupId, createdAt])
+  @@index([senderId])
+  @@index([replyToId])
+}
+
+/// ───────────────────────────────────────────────────────────────────
+/// Liquidity pools — one optional pool per group. Two kinds:
+///   - SHARED_WALLET: members contribute any currency, anyone can
+///                    request a withdraw of their share at any time.
+///                    Pool tracks each member's totalContributedUsd and
+///                    derives share % from that.
+///   - GOAL_BASED:    a "savings jar" with a target amount + deadline.
+///                    Contributions accumulate; withdrawals are blocked
+///                    until goal is met OR an admin closes the pool.
+/// ───────────────────────────────────────────────────────────────────
+enum LiquidityPoolKind {
+  SHARED_WALLET
+  GOAL_BASED
+}
+
+enum LiquidityPoolStatus {
+  OPEN
+  LOCKED // goal-based, waiting for goal or deadline
+  COMPLETED // goal reached / fully distributed
+  DISSOLVED // admin closed early, funds returned pro-rata
+}
+
+model LiquidityPool {
+  id              String                      @id @default(uuid())
+  groupId         String                      @unique
+  name            String
+  kind            LiquidityPoolKind           @default(SHARED_WALLET)
+  status          LiquidityPoolStatus         @default(OPEN)
+  /// USD-denominated target. Required when kind = GOAL_BASED, nullable for SHARED_WALLET.
+  targetAmountUsd Decimal?                    @db.Decimal(20, 4)
+  /// Deadline for GOAL_BASED pools. Nullable for SHARED_WALLET.
+  deadline        DateTime?
+  /// Total currently held (sum of contributions − withdrawals), in USD.
+  totalBalanceUsd Decimal                     @default(0) @db.Decimal(20, 4)
+  createdById     String
+  createdAt       DateTime                    @default(now())
+  updatedAt       DateTime                    @updatedAt
+  group           GroupChat                   @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  createdBy       User                        @relation("PoolCreator", fields: [createdById], references: [id], onDelete: Cascade)
+  members         LiquidityPoolMember[]
+  contributions   LiquidityPoolContribution[]
+
+  @@index([createdById])
+  @@index([status])
+}
+
+model LiquidityPoolMember {
+  id                  String        @id @default(uuid())
+  poolId              String
+  userId              String
+  /// Lifetime contribution (USD-equivalent at deposit time) — drives share %.
+  totalContributedUsd Decimal       @default(0) @db.Decimal(20, 4)
+  /// Lifetime withdrawn (USD-equivalent at withdraw time).
+  totalWithdrawnUsd   Decimal       @default(0) @db.Decimal(20, 4)
+  joinedAt            DateTime      @default(now())
+  pool                LiquidityPool @relation(fields: [poolId], references: [id], onDelete: Cascade)
+  user                User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([poolId, userId])
+  @@index([poolId])
+  @@index([userId])
+}
+
+enum LiquidityPoolContribDirection {
+  DEPOSIT
+  WITHDRAW
+}
+
+model LiquidityPoolContribution {
+  id         String                        @id @default(uuid())
+  poolId     String
+  userId     String
+  direction  LiquidityPoolContribDirection
+  amount     Decimal                       @db.Decimal(30, 8)
+  currency   String
+  /// USD-equivalent at the moment of the contribution — used for share math.
+  amountUsd  Decimal                       @db.Decimal(20, 4)
+  /// Optional reference to the underlying Transfer record (so the pool
+  /// movement shows up in the user's activity feed too).
+  transferId String?                       @unique
+  createdAt  DateTime                      @default(now())
+  pool       LiquidityPool                 @relation(fields: [poolId], references: [id], onDelete: Cascade)
+  user       User                          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transfer   Transfer?                     @relation("PoolContribTransfer", fields: [transferId], references: [id])
+
+  @@index([poolId, createdAt])
+  @@index([userId])
 }
 
 /// Per-direction block. A block by A on B prevents B from messaging A.
@@ -1148,7 +1328,7 @@ model UserWallet {
 
   // Generic ledger for any other asset (BNB, XRP, DOGE, MATIC, etc.)
   // Stored as { "BNB": "1.234", "XRP": "500.000000", ... }
-  altBalances  Json    @default("{}")
+  altBalances Json @default("{}")
 
   selfCustodyExported Boolean   @default(false)
   exportedAt          DateTime?
@@ -1267,8 +1447,8 @@ model WithdrawalAddressWhitelist {
 /// replacing the previously-hardcoded constant.
 model PlatformBankAccount {
   id            String   @id @default(uuid())
-  currency      String   // ISO 4217 (USD, EUR, GBP, AED, SAR, EGP, LYD, ...)
-  country       String   // ISO 3166-1 alpha-2
+  currency      String // ISO 4217 (USD, EUR, GBP, AED, SAR, EGP, LYD, ...)
+  country       String // ISO 3166-1 alpha-2
   bankName      String
   accountName   String
   accountNumber String?
@@ -1277,7 +1457,7 @@ model PlatformBankAccount {
   sortCode      String?
   routingNumber String?
   branch        String?
-  memo          String?  // free text shown to the user (reference instructions etc.)
+  memo          String? // free text shown to the user (reference instructions etc.)
   isActive      Boolean  @default(true)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
