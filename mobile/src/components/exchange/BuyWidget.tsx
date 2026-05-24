@@ -12,7 +12,7 @@ import { useAuthStore } from '@/store/authStore';
 import { useThemedPalette, useTheme, brand } from '@/store/themeStore';
 import { SlideToConfirm } from '@/components/ui/SlideToConfirm';
 import { ExpressPayButton } from '@/components/ui/ExpressPayButton';
-import { useWallets, useCards, useMarkets } from '@/hooks';
+import { useWallets, useCards, useMarkets, useTransactionSound } from '@/hooks';
 import { CoinAvatar } from '@/components/ui/CoinAvatar';
 import { cryptoExchangeAPI, type CryptoQuote, type AssetSearchResult } from '@/lib/cryptoApi';
 
@@ -139,6 +139,7 @@ export function BuyWidget() {
   const { data: wallets } = useWallets();
   const { data: cards } = useCards();
   const { data: tickers } = useMarkets();
+  const { playSuccess } = useTransactionSound();
   const baseCurrency = (user as any)?.baseCurrency ?? 'USD';
 
   // ── Asset picker state ────────────────────────────────────────────
@@ -277,7 +278,7 @@ export function BuyWidget() {
         quoteId: quote.id, confirmedByUser: true, idempotencyKey: idemRef.current,
         ...(intent === 'send' ? { recipientAddress: sendAddr.trim() } : {}),
       } as any);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      playSuccess('buy');
       setSuccess(`${fmt(quote.cryptoAmount, 8)} ${asset} ${intent === 'send' ? 'sent' : 'purchased'} ✓`);
       setQuote(null); setFiat(''); setSendAddr('');
     } catch (e: any) {

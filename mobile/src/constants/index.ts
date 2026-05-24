@@ -1,3 +1,9 @@
+// ── Design System ── Re-exports ──
+export * from './config';
+export * from './tokens';
+export * from './content';
+export * from './sounds';
+
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 import type { Currency, CurrencyMeta } from '@/types';
@@ -10,7 +16,7 @@ import type { Currency, CurrencyMeta } from '@/types';
  *  3. On Android emulator, `10.0.2.2` reaches the host machine.
  *  4. Web + iOS Simulator can use `localhost` directly.
  */
-const API_PORT = 5000;
+const API_PORT = 5001;
 function resolveApiBase(): string {
   const fromEnv = process.env.EXPO_PUBLIC_API_BASE;
   if (fromEnv) return fromEnv;

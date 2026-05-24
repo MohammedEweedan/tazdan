@@ -36,8 +36,10 @@ import { SendWidget } from '@/components/exchange/SendWidget';
 import { ReceiveWidget } from '@/components/exchange/ReceiveWidget';
 import { WithdrawWidget } from '@/components/exchange/WithdrawWidget';
 import { DepositWidget } from '@/components/exchange/DepositWidget';
+import { LinearGradient } from 'expo-linear-gradient';
 import { PressableScale } from '@/components/ui/Motion';
 import { AnnouncementBanner } from '@/components/ui/AnnouncementBanner';
+import { brand } from '@/store/themeStore';
 import type { Wallet } from '@/types';
 
 type Tab = 'ASSETS' | 'ACTIVITY';
@@ -1178,10 +1180,9 @@ function AnimatedTotal({
 interface ActionDef { key: string; icon: keyof typeof Ionicons.glyphMap; label: string; to?: string; onPress?: () => void }
 
 /**
- * Pill colours are tuned to sit on top of the home-screen TopGradient.
- * Dark: cool blue-grey (#4E72C1 at low alpha) reading like frosted glass.
- * Light: warm grey-blue tint matching the gradient's lighter blend.
- * No solid black — the pill should feel like it belongs to the gradient.
+ * Action pill — brand-gradient periwinkle with a matching glow. Replaces
+ * the prior stark white/black pills. Sits on top of the home TopGradient
+ * and broadcasts brand identity from the first frame.
  */
 function ActionButton({
   label, onPress, to,
@@ -1192,61 +1193,67 @@ function ActionButton({
   palette: Palette;
 }) {
   const router = useRouter();
-  const themeMode = useTheme((s) => s.mode);
 
   const handlePress = () => {
     if (onPress) onPress();
     else if (to) router.push(to as any);
   };
 
-  const bg = themeMode === 'dark' ? '#ffffff' : '#111111';
-  const fg = themeMode === 'dark' ? '#111111' : '#ffffff';
-
   return (
     <PressableScale onPress={handlePress}>
       <View style={{
         height: 44,
-        paddingHorizontal: 22,
         borderRadius: 22,
-        backgroundColor: bg,
-        alignItems: 'center',
-        justifyContent: 'center',
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.15,
-        shadowRadius: 4,
-        elevation: 3,
+        overflow: 'hidden',
+        shadowColor: brand.primaryDark,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.35,
+        shadowRadius: 10,
+        elevation: 4,
       }}>
-        <Text style={{ color: fg, fontSize: 15, fontWeight: '600', letterSpacing: -0.2 }}>
-          {label}
-        </Text>
+        <LinearGradient
+          colors={[brand.primaryDark, brand.primary, brand.deep]}
+          start={{ x: 0.1, y: 0 }}
+          end={{ x: 0.9, y: 1 }}
+          style={{
+            height: 44,
+            paddingHorizontal: 22,
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <Text style={{ color: '#ffffff', fontSize: 15, fontWeight: '700', letterSpacing: -0.2 }}>
+            {label}
+          </Text>
+        </LinearGradient>
       </View>
     </PressableScale>
   );
 }
 
 function MoreActionButton({ onPress }: { palette: Palette; onPress: () => void }) {
-  const themeMode = useTheme((s) => s.mode);
-
-  const bg = themeMode === 'dark' ? '#ffffff' : '#111111';
-  const fg = themeMode === 'dark' ? '#111111' : '#ffffff';
-
   return (
     <PressableScale onPress={onPress}>
       <View style={{
         width: 44, height: 44,
         borderRadius: 22,
-        backgroundColor: bg,
-        alignItems: 'center', justifyContent: 'center',
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.15,
-        shadowRadius: 4,
-        elevation: 3,
+        overflow: 'hidden',
+        shadowColor: brand.primaryDark,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.35,
+        shadowRadius: 10,
+        elevation: 4,
       }}>
-        <Text style={{ color: fg, fontSize: 16, fontWeight: '700', letterSpacing: 1.5 }}>
-          {'···'}
-        </Text>
+        <LinearGradient
+          colors={[brand.primaryDark, brand.primary, brand.deep]}
+          start={{ x: 0.1, y: 0 }}
+          end={{ x: 0.9, y: 1 }}
+          style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}
+        >
+          <Text style={{ color: '#ffffff', fontSize: 16, fontWeight: '700', letterSpacing: 1.5 }}>
+            {'···'}
+          </Text>
+        </LinearGradient>
       </View>
     </PressableScale>
   );

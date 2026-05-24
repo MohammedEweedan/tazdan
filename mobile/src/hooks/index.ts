@@ -11,6 +11,7 @@ import {
 } from '@/services';
 
 export { useHaptics } from './useHaptics';
+export { useTransactionSound } from './useTransactionSound';
 export { useStepUpAuth, StepUpDeniedError, STEP_UP_USD } from './useStepUpAuth';
 export { useFxRate, useLydRate, type FxRate } from './useFxRate';
 export {
@@ -26,6 +27,13 @@ export { useActivityRealtime } from './useActivityRealtime';
 export { useNotificationRealtime } from './useNotificationRealtime';
 export { useCountries, useBanksByCountry, usePaymentMethods, usePlatformBanks } from './useGeo';
 export { useCoinIcons } from './useCoinIcons';
+export {
+  useGroups, useGroup, useGroupMessages,
+  useCreateGroup, useSendGroupMessage,
+  useAddGroupMembers, useRemoveGroupMember, useDissolveGroup,
+  usePoolDeposit, usePoolWithdraw, usePoolClose,
+  useGroupRealtime,
+} from './useGroups';
 
 export const useWallets = () =>
   useQuery({

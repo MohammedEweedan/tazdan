@@ -18,7 +18,7 @@ import { useThemedPalette } from '@/store/themeStore';
 import { useAuthStore } from '@/store/authStore';
 import { useT } from '@/store/i18nStore';
 import { depositService } from '@/services';
-import { usePlatformBanks } from '@/hooks';
+import { usePlatformBanks, useTransactionSound } from '@/hooks';
 
 // ── Fiat currencies that require KYC ────────────────────────────────
 const FIAT_SET = new Set(['USD', 'EUR', 'GBP', 'AED', 'SAR', 'EGP', 'LYD']);
@@ -82,6 +82,7 @@ export function DepositWidget() {
   const user = useAuthStore((s) => s.user);
   const router = useRouter();
   const queryClient = useQueryClient();
+  const { playSuccess } = useTransactionSound();
 
   const [step, setStep] = useState<Step>('currency');
   const [currency, setCurrency] = useState('USD');
@@ -126,7 +127,7 @@ export function DepositWidget() {
       notes: `REF: ${reference.trim()}`,
     }),
     onSuccess: () => {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      playSuccess('deposit');
       Alert.alert(
         'Deposit Submitted ✓',
         `Your ${sym}${v.toFixed(2)} deposit request has been received. We'll credit your account once the transfer clears (typically 1–3 business days).`,
