@@ -36,10 +36,8 @@ import { SendWidget } from '@/components/exchange/SendWidget';
 import { ReceiveWidget } from '@/components/exchange/ReceiveWidget';
 import { WithdrawWidget } from '@/components/exchange/WithdrawWidget';
 import { DepositWidget } from '@/components/exchange/DepositWidget';
-import { LinearGradient } from 'expo-linear-gradient';
 import { PressableScale } from '@/components/ui/Motion';
 import { AnnouncementBanner } from '@/components/ui/AnnouncementBanner';
-import { brand } from '@/store/themeStore';
 import type { Wallet } from '@/types';
 
 type Tab = 'ASSETS' | 'ACTIVITY';
@@ -1180,9 +1178,7 @@ function AnimatedTotal({
 interface ActionDef { key: string; icon: keyof typeof Ionicons.glyphMap; label: string; to?: string; onPress?: () => void }
 
 /**
- * Action pill — brand-gradient periwinkle with a matching glow. Replaces
- * the prior stark white/black pills. Sits on top of the home TopGradient
- * and broadcasts brand identity from the first frame.
+ * Action pill — white in dark mode, black in light mode.
  */
 function ActionButton({
   label, onPress, to,
@@ -1193,6 +1189,8 @@ function ActionButton({
   palette: Palette;
 }) {
   const router = useRouter();
+  const themeMode = useTheme((s) => s.mode);
+  const isDark = themeMode === 'dark';
 
   const handlePress = () => {
     if (onPress) onPress();
@@ -1204,56 +1202,45 @@ function ActionButton({
       <View style={{
         height: 44,
         borderRadius: 22,
-        overflow: 'hidden',
-        shadowColor: brand.primaryDark,
+        backgroundColor: isDark ? '#ffffff' : '#111111',
+        paddingHorizontal: 22,
+        alignItems: 'center',
+        justifyContent: 'center',
+        shadowColor: isDark ? '#ffffff' : '#000000',
         shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.35,
-        shadowRadius: 10,
-        elevation: 4,
+        shadowOpacity: 0.15,
+        shadowRadius: 8,
+        elevation: 3,
       }}>
-        <LinearGradient
-          colors={[brand.primaryDark, brand.primary, brand.deep]}
-          start={{ x: 0.1, y: 0 }}
-          end={{ x: 0.9, y: 1 }}
-          style={{
-            height: 44,
-            paddingHorizontal: 22,
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-        >
-          <Text style={{ color: '#ffffff', fontSize: 15, fontWeight: '700', letterSpacing: -0.2 }}>
-            {label}
-          </Text>
-        </LinearGradient>
+        <Text style={{ color: isDark ? '#111111' : '#ffffff', fontSize: 15, fontWeight: '700', letterSpacing: -0.2 }}>
+          {label}
+        </Text>
       </View>
     </PressableScale>
   );
 }
 
 function MoreActionButton({ onPress }: { palette: Palette; onPress: () => void }) {
+  const themeMode = useTheme((s) => s.mode);
+  const isDark = themeMode === 'dark';
+
   return (
     <PressableScale onPress={onPress}>
       <View style={{
         width: 44, height: 44,
         borderRadius: 22,
-        overflow: 'hidden',
-        shadowColor: brand.primaryDark,
+        backgroundColor: isDark ? '#ffffff' : '#111111',
+        alignItems: 'center',
+        justifyContent: 'center',
+        shadowColor: isDark ? '#ffffff' : '#000000',
         shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.35,
-        shadowRadius: 10,
-        elevation: 4,
+        shadowOpacity: 0.15,
+        shadowRadius: 8,
+        elevation: 3,
       }}>
-        <LinearGradient
-          colors={[brand.primaryDark, brand.primary, brand.deep]}
-          start={{ x: 0.1, y: 0 }}
-          end={{ x: 0.9, y: 1 }}
-          style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}
-        >
-          <Text style={{ color: '#ffffff', fontSize: 16, fontWeight: '700', letterSpacing: 1.5 }}>
-            {'···'}
-          </Text>
-        </LinearGradient>
+        <Text style={{ color: isDark ? '#111111' : '#ffffff', fontSize: 16, fontWeight: '700', letterSpacing: 1.5 }}>
+          {'···'}
+        </Text>
       </View>
     </PressableScale>
   );
@@ -1432,17 +1419,6 @@ function TxDetailModal({
   const accent   = isIncoming ? p.greenFg : p.redFg;
   const accentBg = isIncoming ? p.greenBg : 'rgba(239,68,68,0.15)';
 
-  const iconName: keyof typeof Ionicons.glyphMap =
-    type === 'BUY'  || type === 'P2P_BUY'   ? 'bag-handle'        :
-    type === 'SELL' || type === 'P2P_SELL'  ? 'cash'              :
-    type === 'DEPOSIT'                      ? 'arrow-down-circle' :
-    type === 'WITHDRAW' || type === 'WITHDRAWAL' ? 'arrow-up-circle' :
-    type === 'SEND' || type === 'TRANSFER_OUT'   ? 'paper-plane'    :
-    type === 'RECEIVE' || type === 'TRANSFER_IN' ? 'arrow-down-circle' :
-    type === 'SWAP'                         ? 'swap-horizontal'   :
-    type === 'CARD_SPEND'                   ? 'card'              :
-    type === 'CASHBACK'                     ? 'gift'              : 'receipt';
-
   const statusColors: Record<string, { bg: string; fg: string }> = {
     COMPLETED:  { bg: p.greenBg,               fg: p.greenFg  },
     PENDING:    { bg: 'rgba(245,158,11,0.15)',  fg: '#f59e0b'  },
@@ -1497,9 +1473,9 @@ function TxDetailModal({
               <View style={{
                 width: 80, height: 80, borderRadius: 40,
                 backgroundColor: accentBg, alignItems: 'center', justifyContent: 'center',
-                marginBottom: 20,
+                marginBottom: 20, overflow: 'hidden',
               }}>
-                <Ionicons name={iconName} size={36} color={accent} />
+                <CurrencyIcon currency={asset} palette={p} size={64} />
               </View>
 
               <Text style={{ color: p.fg, fontSize: 24, fontWeight: '600', letterSpacing: -0.5, textAlign: 'center' }}>
@@ -1688,26 +1664,30 @@ function ActivityList({
         const type = tx.type;
 
         const cpName = meta.counterpartyName ?? tx.counterpartyName ?? tx.description;
+        const txAsset = meta.asset ?? tx.currency;
+        const assetMeta = getCurrencyMeta(txAsset);
+        const assetName = assetMeta?.name ?? txAsset;
+
         let title = '';
-        if      (type === 'BUY')          title = `Bought ${meta.asset ?? tx.currency}`;
-        else if (type === 'SELL')         title = `Sold ${meta.asset ?? tx.currency}`;
-        else if (type === 'DEPOSIT')      title = `Deposit · ${tx.currency}`;
-        else if (type === 'WITHDRAW' || type === 'WITHDRAWAL') title = `Withdrawal · ${tx.currency}`;
-        else if (type === 'TRANSFER_IN')  title = cpName ? `From: ${cpName}` : 'Transfer in';
-        else if (type === 'TRANSFER_OUT') title = cpName ? `To: ${cpName}` : 'Transfer out';
-        else if (type === 'SEND')         title = cpName ? `Sent to: ${cpName}` : 'Sent';
-        else if (type === 'RECEIVE')      title = cpName ? `From: ${cpName}` : 'Received';
-        else if (type === 'SWAP')         title = `Swap · ${tx.currency}`;
-        else if (type === 'P2P_BUY')      title = `P2P Buy · ${meta.asset ?? tx.currency}`;
-        else if (type === 'P2P_SELL')     title = `P2P Sell · ${meta.asset ?? tx.currency}`;
+        if      (type === 'BUY')          title = `Bought ${assetName}`;
+        else if (type === 'SELL')         title = `Sold ${assetName}`;
+        else if (type === 'DEPOSIT')      title = `Deposit · ${assetName}`;
+        else if (type === 'WITHDRAW' || type === 'WITHDRAWAL') title = `Withdrawal · ${assetName}`;
+        else if (type === 'TRANSFER_IN')  title = cpName ? `From ${cpName}` : 'Transfer in';
+        else if (type === 'TRANSFER_OUT') title = cpName ? `To ${cpName}` : 'Transfer out';
+        else if (type === 'SEND')         title = cpName ? `Sent to ${cpName}` : 'Sent';
+        else if (type === 'RECEIVE')      title = cpName ? `From ${cpName}` : 'Received';
+        else if (type === 'SWAP')         title = `Swap · ${assetName}`;
+        else if (type === 'P2P_BUY')      title = `P2P Buy · ${assetName}`;
+        else if (type === 'P2P_SELL')     title = `P2P Sell · ${assetName}`;
         else if (type === 'CARD_SPEND')   title = `Card Spend`;
         else if (type === 'CASHBACK')     title = `Cashback`;
         else title = tx.description ?? (type.charAt(0) + type.slice(1).toLowerCase().replace(/_/g, ' '));
 
         const dateStr = new Date(tx.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
         let subtitle = dateStr;
-        if ((type === 'BUY' || type === 'SELL') && meta.cryptoAmount) {
-          subtitle = `${meta.cryptoAmount.toLocaleString('en-US', { maximumFractionDigits: 6 })} ${meta.asset ?? ''} · ${dateStr}`;
+        if ((type === 'BUY' || type === 'SELL') && meta.cryptoAmount && meta.priceUsd) {
+          subtitle = `@ ${dc.fmt(meta.priceUsd)}  ·  ${dateStr}`;
         } else if ((type === 'TRANSFER_IN' || type === 'TRANSFER_OUT' || type === 'SEND' || type === 'RECEIVE') && (meta.note ?? tx.note ?? tx.description)) {
           subtitle = (meta.note ?? tx.note ?? tx.description ?? '') + '  ·  ' + dateStr;
         }
@@ -1715,20 +1695,8 @@ function ActivityList({
         const showDual  = (type === 'BUY' || type === 'SELL') && meta.cryptoAmount;
         const fiatStr   = dc.fmt(abs);
         const cryptoStr = meta.cryptoAmount
-          ? `${meta.cryptoAmount.toLocaleString('en-US', { maximumFractionDigits: 6 })} ${meta.asset ?? tx.currency}`
+          ? `${meta.cryptoAmount.toLocaleString('en-US', { maximumFractionDigits: 6 })} ${txAsset}`
           : null;
-
-        const isInRow = amt >= 0 || type === 'BUY' || type === 'DEPOSIT' || type === 'RECEIVE' || type === 'TRANSFER_IN' || type === 'CASHBACK';
-        const iconName: keyof typeof Ionicons.glyphMap =
-          type === 'BUY'  || type === 'P2P_BUY'        ? 'bag-handle'     :
-          type === 'SELL' || type === 'P2P_SELL'       ? 'cash'           :
-          type === 'DEPOSIT'                           ? 'add-circle'     :
-          type === 'WITHDRAW' || type === 'WITHDRAWAL' ? 'remove-circle'  :
-          type === 'SEND' || type === 'TRANSFER_OUT'   ? 'arrow-up'       :
-          type === 'RECEIVE' || type === 'TRANSFER_IN' ? 'arrow-down'     :
-          type === 'CARD_SPEND'                        ? 'card'           :
-          type === 'CASHBACK'                          ? 'gift'           :
-          'swap-horizontal';
 
         return (
           <Pressable
@@ -1736,40 +1704,34 @@ function ActivityList({
             onPress={() => setSelectedTx(tx)}
             style={({ pressed }) => ({
               flexDirection: 'row', alignItems: 'center',
-              paddingHorizontal: 24, paddingVertical: 14,
+              paddingHorizontal: 20, paddingVertical: 14,
               borderBottomWidth: 1, borderBottomColor: p.border,
-              gap: 12,
               backgroundColor: pressed ? p.bgElev : 'transparent',
             })}
           >
-            {/* Icon */}
-            <View style={{
-              width: 40, height: 40, borderRadius: 20,
-              backgroundColor: isInRow ? p.greenBg : 'rgba(239,68,68,0.12)',
-              borderWidth: 1, borderColor: p.border,
-              alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-            }}>
-              <Ionicons name={iconName} size={17} color={isInRow ? p.greenFg : p.redFg} />
+            {/* Currency icon */}
+            <View style={{ flexShrink: 0 }}>
+              <CurrencyIcon currency={txAsset} palette={p} size={40} />
             </View>
 
             {/* Title + subtitle */}
-            <View style={{ flex: 1, minWidth: 0 }}>
-              <Text style={{ color: p.fg, fontSize: 14, fontWeight: '600' }} numberOfLines={1}>
+            <View style={{ flex: 1, marginLeft: 12, minWidth: 0 }}>
+              <Text style={{ color: p.fg, fontSize: 15, fontWeight: '600' }} numberOfLines={1}>
                 {title}
               </Text>
-              <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '600', marginTop: 2 }} numberOfLines={1}>
+              <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '500', marginTop: 2 }} numberOfLines={1}>
                 {subtitle}
               </Text>
             </View>
 
-            {/* Value(s) */}
-            <View style={{ alignItems: 'flex-end', flexShrink: 0 }}>
+            {/* Value */}
+            <View style={{ alignItems: 'flex-end', flexShrink: 0, marginLeft: 8 }}>
               {showDual && cryptoStr ? (
                 <>
-                  <Text style={{ color: type === 'BUY' ? p.greenFg : p.redFg, fontSize: 13, fontWeight: '600', fontVariant: ['tabular-nums'] }}>
+                  <Text style={{ color: type === 'BUY' ? p.greenFg : p.redFg, fontSize: 14, fontWeight: '600', fontVariant: ['tabular-nums'] }}>
                     {type === 'BUY' ? '+' : '−'}{cryptoStr}
                   </Text>
-                  <Text style={{ color: type === 'BUY' ? p.redFg : p.greenFg, fontSize: 12, fontWeight: '600', marginTop: 2, fontVariant: ['tabular-nums'] }}>
+                  <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '500', marginTop: 2, fontVariant: ['tabular-nums'] }}>
                     {type === 'BUY' ? '−' : '+'}{fiatStr}
                   </Text>
                 </>
@@ -1782,9 +1744,6 @@ function ActivityList({
                 </Text>
               )}
             </View>
-
-            {/* Chevron hint */}
-            <Ionicons name="chevron-forward" size={13} color={p.fgFaint} />
           </Pressable>
         );
       })}
@@ -2193,15 +2152,15 @@ function AssetRow({ wallet, palette: p, onPress, liveUsd, sparkline, changePct, 
 
 
 /* ── Currency icons ── */
-function CurrencyIcon({ currency, palette: p }: { currency: string; palette: Palette }) {
+function CurrencyIcon({ currency, palette: p, size = 44 }: { currency: string; palette: Palette; size?: number }) {
   const meta = getCurrencyMeta(currency);
   const isCrypto = meta?.kind === 'crypto';
   if (isCrypto) {
-    return <CoinIcon symbol={currency} size={44} />;
+    return <CoinIcon symbol={currency} size={size} />;
   }
   return (
-    <View style={{ width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }}>
-      <Text style={{ fontSize: 22, lineHeight: 28, color: p.fg }}>{meta?.flagOrIcon ?? currency.slice(0, 2)}</Text>
+    <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
+      <Text style={{ fontSize: size * 0.5, lineHeight: size * 0.64, color: p.fg }}>{meta?.flagOrIcon ?? currency.slice(0, 2)}</Text>
     </View>
   );
 }
