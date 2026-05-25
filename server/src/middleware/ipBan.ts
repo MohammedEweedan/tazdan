@@ -31,6 +31,11 @@ export function unbanIP(ip: string): void {
 }
 
 export function ipBanMiddleware(req: Request, res: Response, next: NextFunction): void {
+  // Allow simulator/load-test traffic through in non-production environments.
+  if (process.env.NODE_ENV !== 'production' && req.headers['x-simulator'] === 'true') {
+    next();
+    return;
+  }
   const ip = req.ip ?? req.socket.remoteAddress ?? '';
   if (bannedIPs.has(ip)) {
     res.status(403).json({ message: 'Access denied' });

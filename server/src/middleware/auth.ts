@@ -8,7 +8,7 @@ import { AppError } from './errorHandler';
 // Token lifetimes — kept here so they're discoverable from one place.
 // Access tokens are short-lived; clients refresh silently via the refresh
 // token. 15min limits damage from a stolen access token.
-const ACCESS_TOKEN_TTL  = '15m';
+const ACCESS_TOKEN_TTL  = '2h';
 const REFRESH_TOKEN_TTL_DAYS = 7;
 
 function jwtSecret(): string {

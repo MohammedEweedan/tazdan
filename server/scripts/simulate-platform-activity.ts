@@ -27,8 +27,10 @@ import { randomInt, randomUUID } from 'crypto';
 declare const process: NodeJS.Process;
 declare const console: Console;
 
-const BASE_URL = process.env.API_URL || 'http://localhost:5000';
-const VERBOSE = process.argv.includes('--verbose');
+const BASE_URL    = process.env.API_URL   || 'http://localhost:5000';
+const VERBOSE     = process.argv.includes('--verbose');
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL    || 'admin@exchange.ly';
+const ADMIN_PASS  = process.env.ADMIN_PASSWORD || 'Admin123!@#';
 
 // Parse arguments
 const usersArg = process.argv.find((arg: string) => arg.startsWith('--users='));
@@ -60,6 +62,26 @@ const randomSleep = (min: number, max: number) => sleep(randomInt(min, max));
 const randomChoice = <T>(arr: T[]): T => arr[randomInt(0, arr.length)];
 const randomAmount = (min: number, max: number) => randomInt(min * 100, max * 100) / 100;
 
+// Admin client singleton
+let _adminApi: AxiosInstance | null = null;
+async function getAdminApi(): Promise<AxiosInstance | null> {
+  if (_adminApi) return _adminApi;
+  const http = axios.create({ baseURL: `${BASE_URL}/api`, headers: { 'Content-Type': 'application/json' } });
+  try {
+    const res = await http.post('/auth/login', { email: ADMIN_EMAIL, password: ADMIN_PASS });
+    const token = res.data?.accessToken;
+    if (!token) return null;
+    _adminApi = axios.create({
+      baseURL: `${BASE_URL}/api`,
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    });
+    return _adminApi;
+  } catch {
+    if (VERBOSE) log('  ⚠ Admin login failed — deposits will stay PENDING', 'yellow');
+    return null;
+  }
+}
+
 // Stats tracking
 const stats = {
   registrations: 0,
@@ -71,10 +93,14 @@ const stats = {
   errors: 0,
 };
 
+// Registry of successfully registered sim usernames for cross-user transfers
+const SIM_USER_REGISTRY: string[] = [];
+
 // Simulated User Class
 class SimulatedUser {
   id: string | null = null;
   email: string;
+  username: string | null = null;
   password: string = 'TestPass123!';
   token: string | null = null;
   wallets: any[] = [];
@@ -127,6 +153,8 @@ class SimulatedUser {
       if (VERBOSE) log(`  ✓ Registered: ${this.email}`, 'green');
       this.token = response.data.accessToken;
       this.id = response.data.user.id;
+      this.username = response.data.user.username ?? null;
+      if (this.username) SIM_USER_REGISTRY.push(this.username);
       this.isRegistered = true;
       stats.registrations++;
       return true;
@@ -182,24 +210,14 @@ class SimulatedUser {
   }
 
   async createDeposit(): Promise<boolean> {
+    if (!this.id) return false;
+    const admin = await getAdminApi();
+    if (!admin) return false;
     try {
-      const currencies = ['LYD', 'USD', 'USDT'];
-      const methods = ['SADAD', 'MASREFY', 'BANK_TRANSFER', 'CASH_DEPOSIT'];
-      const currency = randomChoice(currencies);
-      const amount = randomAmount(100, 5000);
-      
-      // Create FormData for deposit with proof
-      const formData = new FormData();
-      formData.append('currency', currency);
-      formData.append('amount', amount.toString());
-      formData.append('paymentMethod', randomChoice(methods));
-      formData.append('senderName', 'Test Sender');
-      
-      const response = await this.api.post('/deposits', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
-      
-      if (VERBOSE) log(`  ✓ Deposit created: ${amount} ${currency}`, 'green');
+      const currency = randomChoice(['USDT', 'USD']);
+      const amount = randomAmount(100, 1000);
+      await admin.post('/admin/seed-balance', { userId: this.id, currency, amount });
+      if (VERBOSE) log(`  ✓ Deposit seeded: ${amount} ${currency}`, 'green');
       stats.deposits++;
       return true;
     } catch (error: any) {
@@ -268,34 +286,17 @@ class SimulatedUser {
 
   async createOrder(): Promise<boolean> {
     try {
-      // Only BUY for now - users need to acquire USDT before they can sell
-      const side = 'BUY';
-      const baseCurrency = 'USDT';
-      const quoteCurrency = randomChoice(['LYD', 'USD']);
-      // Small amounts to ensure sufficient balance
-      const amount = randomAmount(10, 50);
-      
-      // Fetch current rates
-      const ratesResponse = await this.api.get('/exchange/rates');
-      const rate = ratesResponse.data.rates?.find(
-        (r: any) => r.baseCurrency === baseCurrency && r.quoteCurrency === quoteCurrency
-      );
-      
-      if (!rate) {
-        if (VERBOSE) log(`  ⚠ No rate found for ${baseCurrency}/${quoteCurrency}`, 'yellow');
-        return false;
-      }
-      
-      const price = side === 'BUY' ? rate.sellPrice : rate.buyPrice;
-      const total = amount * price;
-      
+      const side = randomChoice(['BUY', 'SELL']) as 'BUY' | 'SELL';
+      const quoteCurrency = 'USD'; // server only accepts USD
+      const amount = randomAmount(10, 100);
+
       const response = await this.api.post('/orders', {
         side,
         quoteCurrency,
         amount,
       });
       
-      if (VERBOSE) log(`  ✓ Order created: ${side} ${amount} ${baseCurrency} @ ${price}`, 'green');
+      if (VERBOSE) log(`  ✓ Order created: ${side} ${amount} USD`, 'green');
       stats.orders[side.toLowerCase() as 'buy' | 'sell']++;
       return true;
     } catch (error: any) {
@@ -318,19 +319,26 @@ class SimulatedUser {
     try {
       const wallets = await this.api.get('/wallets');
       const usdtWallet = wallets.data.wallets?.find((w: any) => w.currency === 'USDT');
-      
+
       if (!usdtWallet || parseFloat(usdtWallet.balance) < 50) {
         if (VERBOSE) log(`  ⚠ No USDT wallet with sufficient balance for transfer`, 'yellow');
         return false;
       }
-      
+
       const maxTransfer = Math.floor(Math.min(100, parseFloat(usdtWallet.balance) * 0.3));
       const amount = randomAmount(10, Math.max(11, maxTransfer));
-      
+
+      // Pick a known sim user (other than self) or fall back to the seeded demo user
+      const others = SIM_USER_REGISTRY.filter((u) => u !== this.username);
+      const recipientUsername = others.length > 0
+        ? randomChoice(others)
+        : 'rayofsunshine'; // seeded demo user
+
       const response = await this.api.post('/transfers/send', {
-        recipientEmail: `simuser_${randomInt(1, 1000)}@test.com`,
+        recipientUsername,
+        currency: 'USDT',
         amount,
-        note: 'Test transfer from simulator',
+        note: randomChoice(['Thanks!', 'Paying back', 'Lunch split', 'Your share', 'Invoice payment']),
       });
       
       if (VERBOSE) log(`  ✓ Transfer sent: ${amount} USDT`, 'green');
@@ -351,39 +359,30 @@ class SimulatedUser {
     }
   }
 
-  // Inject fake balance directly via backend API (simulates confirmed deposits)
+  // Activate account + approve KYC so transfers/cards/P2P work.
+  async activate(): Promise<void> {
+    if (!this.id) return;
+    const admin = await getAdminApi();
+    if (!admin) return;
+    await admin.put(`/admin/users/${this.id}/status`, { status: 'ACTIVE' }).catch(() => {});
+    await admin.put(`/admin/kyc/${this.id}/approve`).catch(() => {});
+  }
+
+  // Directly seed wallet balances via the admin seed-balance endpoint.
   async injectFakeBalance(): Promise<boolean> {
+    if (!this.id) return false;
+    const admin = await getAdminApi();
+    if (!admin) {
+      if (VERBOSE) log(`  ⚠ No admin client — balance injection skipped`, 'yellow');
+      return false;
+    }
     try {
-      // Create deposits via API (only LYD/USD supported, USDT must come from trading)
-      const currencies = ['LYD', 'USD'];
-      const amounts = [10000, 5000]; // Generous starting balances for trading
-      
-      for (let i = 0; i < currencies.length; i++) {
-        const currency = currencies[i];
-        const amount = amounts[i] + randomAmount(0, amounts[i] * 0.5); // Add variance
-        
-        try {
-          // Create deposit request - use SADAD for LYD to auto-confirm
-          const formData = new FormData();
-          formData.append('currency', currency);
-          formData.append('amount', amount.toString());
-          formData.append('paymentMethod', currency === 'LYD' ? 'SADAD' : 'BANK_TRANSFER');
-          formData.append('senderName', 'Simulator');
-          
-          await this.api.post('/deposits', formData, {
-            headers: { 'Content-Type': 'multipart/form-data' },
-          });
-          
-          if (VERBOSE) log(`  💰 Injected ${amount.toFixed(2)} ${currency}`, 'cyan');
-        } catch (e: any) {
-          // Ignore deposit errors, just log
-          if (VERBOSE) log(`  ⚠ Balance injection skipped for ${currency}: ${e.message}`, 'yellow');
-        }
-      }
-      
+      await admin.post('/admin/seed-balance', { userId: this.id, currency: 'USDT', amount: 5000 });
+      await admin.post('/admin/seed-balance', { userId: this.id, currency: 'USD',  amount: 3000 });
+      if (VERBOSE) log(`  💰 Seeded USDT 5000 + USD 3000`, 'cyan');
       return true;
     } catch (error: any) {
-      if (VERBOSE) log(`  ✗ Balance injection failed: ${error.message}`, 'red');
+      if (VERBOSE) log(`  ⚠ Balance seed failed: ${error.response?.data?.message || error.message}`, 'yellow');
       return false;
     }
   }
@@ -394,10 +393,15 @@ class SimulatedUser {
     // Register and login
     const registered = await this.register();
     if (!registered) return;
-    
-    await randomSleep(300, 800);
-    
-    // Inject fake balance for realistic activity
+
+    await randomSleep(200, 500);
+
+    // Activate account + approve KYC (enables transfers, cards, P2P)
+    await this.activate();
+
+    await randomSleep(200, 500);
+
+    // Seed wallet balances
     await this.injectFakeBalance();
     await randomSleep(500, 1000);
     

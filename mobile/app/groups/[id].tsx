@@ -162,8 +162,13 @@ export default function GroupChat() {
             backgroundColor: `${accent}1F`,
             borderWidth: 1, borderColor: `${accent}44`,
             alignItems: 'center', justifyContent: 'center',
+            overflow: 'hidden',
           }}>
-            <Ionicons name="people" size={18} color={accent} />
+            {group.avatarUrl ? (
+              <Image source={{ uri: group.avatarUrl }} style={{ width: 38, height: 38 }} resizeMode="cover" />
+            ) : (
+              <Ionicons name="people" size={18} color={accent} />
+            )}
           </View>
 
           <View style={{ flex: 1, minWidth: 0 }}>

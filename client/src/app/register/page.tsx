@@ -1,7 +1,7 @@
 "use client";
 
-import { useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRef, useState, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import NextLink from "next/link";
 import {
   Box, Flex, Heading, Text, VStack, SimpleGrid,
@@ -562,6 +562,7 @@ function KycSlot({
 // ─── Main Register Page ───────────────────────────────────────────
 export default function RegisterPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { t } = useTranslate();
   const { colorMode, toggleColorMode } = useColorMode();
   const dark = colorMode === "dark";
@@ -569,6 +570,27 @@ export default function RegisterPage() {
   const { register } = useAuthStore();
 
   const [step, setStep] = useState<Step>(1);
+  // ── Account type (Personal | Business) ──────────────────────
+  // Seeded from ?type=business so the /business CTA lands a user
+  // on a pre-toggled signup form. We read it once on mount.
+  const [accountType, setAccountType] = useState<"PERSONAL" | "BUSINESS">("PERSONAL");
+  useEffect(() => {
+    const q = searchParams?.get("type");
+    if (q === "business") setAccountType("BUSINESS");
+  }, [searchParams]);
+
+  // Business profile fields — only sent when accountType === BUSINESS.
+  const [biz, setBiz] = useState({
+    companyName: "",
+    country: "",
+    industry: "",
+    employeeCount: "",
+    website: "",
+    taxId: "",
+  });
+  const updBiz = (key: keyof typeof biz) => (v: string) =>
+    setBiz((b) => ({ ...b, [key]: v }));
+
   const [form, setForm] = useState({
     firstName: "", lastName: "", email: "",
     country: "",      // ISO-2; default to platform's primary market
@@ -634,6 +656,17 @@ export default function RegisterPage() {
       setError("Please agree to the Terms of Service and Privacy Policy to continue.");
       return;
     }
+    // Business validation — server enforces, but front-end fails fast.
+    if (accountType === "BUSINESS") {
+      if (!biz.companyName || biz.companyName.trim().length < 2) {
+        setError("Please enter your company name.");
+        return;
+      }
+      if (!biz.country || !COUNTRY_BY_ISO[biz.country]) {
+        setError("Please select your company's country.");
+        return;
+      }
+    }
     setLoading(true);
     try {
       await register({
@@ -648,6 +681,19 @@ export default function RegisterPage() {
         username: form.username,
         avatarUrl: form.avatarUrl || undefined,
         referralCode: form.referralCode || undefined,
+        accountType,
+        ...(accountType === "BUSINESS"
+          ? {
+              businessProfile: {
+                companyName:   biz.companyName.trim(),
+                country:       biz.country,
+                industry:      biz.industry || undefined,
+                employeeCount: biz.employeeCount || undefined,
+                website:       biz.website || undefined,
+                taxId:         biz.taxId || undefined,
+              },
+            }
+          : {}),
       });
       setStep(2);
     } catch (err: any) {
@@ -835,7 +881,36 @@ export default function RegisterPage() {
               {t("auth_create_subtitle")}
             </Text>
 
-            <VStack spacing="12px" mt="28px">
+            {/* Personal / Business segmented control */}
+            <Flex mt="24px" p="4px" bg={p.bgElev} border="1.5px solid" borderColor={p.border} borderRadius="14px" gap="4px">
+              {([
+                { key: "PERSONAL", label: t("auth_type_personal") },
+                { key: "BUSINESS", label: t("auth_type_business") },
+              ] as const).map((opt) => {
+                const active = accountType === opt.key;
+                return (
+                  <Box
+                    key={opt.key}
+                    as="button"
+                    type="button"
+                    flex={1}
+                    h="40px"
+                    borderRadius="10px"
+                    bg={active ? p.fg : "transparent"}
+                    color={active ? p.bg : p.fgMuted}
+                    fontWeight="700"
+                    fontSize="13.5px"
+                    transition="all 0.15s ease"
+                    onClick={() => setAccountType(opt.key)}
+                    _hover={!active ? { color: p.fg } : undefined}
+                  >
+                    {opt.label}
+                  </Box>
+                );
+              })}
+            </Flex>
+
+            <VStack spacing="12px" mt="20px">
               <SimpleGrid columns={2} spacing="12px" w="100%">
                 <Field label={t("auth_first_name")} value={form.firstName} onChange={upd("firstName")} p={p} autoComplete="given-name" />
                 <Field label={t("auth_last_name")} value={form.lastName} onChange={upd("lastName")} p={p} autoComplete="family-name" />
@@ -1098,6 +1173,71 @@ export default function RegisterPage() {
 
               <Field label={t("auth_referral_code")} value={form.referralCode} onChange={upd("referralCode")} p={p} />
             </VStack>
+
+            {/* ── BUSINESS fields (only when accountType = BUSINESS) ── */}
+            {accountType === "BUSINESS" && (
+              <Box mt="20px" pt="20px" borderTop="1px solid" borderColor={p.border}>
+                <Text fontWeight="800" fontSize="13px" color={p.fgMuted} letterSpacing="0.10em" textTransform="uppercase" mb="14px">
+                  {t("auth_business_section")}
+                </Text>
+                <VStack spacing="12px">
+                  <Field label={t("auth_company_name")} value={biz.companyName} onChange={updBiz("companyName")} p={p} autoComplete="organization" />
+                  {/* Company country */}
+                  <Box w="100%">
+                    <Box position="relative" h="60px" borderRadius="16px" border="1.5px solid"
+                      borderColor={p.border} bg={p.bgElev} overflow="hidden">
+                      <Text as="span" position="absolute" left="16px" top="10px" fontSize="11px"
+                        fontWeight="500" color={p.fgMuted} pointerEvents="none" zIndex={1}>
+                        {t("auth_company_country")}
+                      </Text>
+                      <Box as="select"
+                        value={biz.country}
+                        onChange={(e: any) => updBiz("country")(e.target.value)}
+                        position="absolute" bottom="0" left="0" right="0" h="38px" px="14px"
+                        bg="transparent" border="none" fontSize="16px" fontWeight="500"
+                        color={p.fg} outline="none"
+                        style={{ appearance: "none", WebkitAppearance: "none", MozAppearance: "none" }}
+                      >
+                        <option value="" style={{ color: "#0f172a" }}>—</option>
+                        {COUNTRIES.map((c) => (
+                          <option key={c.code} value={c.code} style={{ color: "#0f172a" }}>
+                            {c.flag}  {c.name}
+                          </option>
+                        ))}
+                      </Box>
+                    </Box>
+                  </Box>
+                  {/* Industry + employees */}
+                  <SimpleGrid columns={2} spacing="12px" w="100%">
+                    <Field label={t("auth_industry")} value={biz.industry} onChange={updBiz("industry")} p={p} />
+                    <Box w="100%">
+                      <Box position="relative" h="60px" borderRadius="16px" border="1.5px solid"
+                        borderColor={p.border} bg={p.bgElev} overflow="hidden">
+                        <Text as="span" position="absolute" left="16px" top="10px" fontSize="11px"
+                          fontWeight="500" color={p.fgMuted} pointerEvents="none" zIndex={1}>
+                          {t("auth_employees")}
+                        </Text>
+                        <Box as="select"
+                          value={biz.employeeCount}
+                          onChange={(e: any) => updBiz("employeeCount")(e.target.value)}
+                          position="absolute" bottom="0" left="0" right="0" h="38px" px="14px"
+                          bg="transparent" border="none" fontSize="16px" fontWeight="500"
+                          color={p.fg} outline="none"
+                          style={{ appearance: "none", WebkitAppearance: "none", MozAppearance: "none" }}
+                        >
+                          <option value="" style={{ color: "#0f172a" }}>—</option>
+                          {["1-10", "11-50", "51-200", "201-1000", "1000+"].map((s) => (
+                            <option key={s} value={s} style={{ color: "#0f172a" }}>{s}</option>
+                          ))}
+                        </Box>
+                      </Box>
+                    </Box>
+                  </SimpleGrid>
+                  <Field label={t("auth_website")} value={biz.website} onChange={updBiz("website")} p={p} type="url" />
+                  <Field label={t("auth_tax_id")} value={biz.taxId} onChange={updBiz("taxId")} p={p} />
+                </VStack>
+              </Box>
+            )}
 
             {/* ── T&C disclaimer ── */}
             <Box mt="20px">

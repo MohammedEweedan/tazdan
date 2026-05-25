@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useEffect, useState, memo, useMemo } from "react";
+import { useRef, useEffect, useState, memo, useMemo, useCallback } from "react";
 import { useTranslate, useTolgee } from "@tolgee/react";
 import dynamic from "next/dynamic";
 import NextLink from "next/link";
@@ -19,6 +19,7 @@ import {
   Badge,
   useColorMode,
   useBreakpointValue,
+  useDisclosure,
 } from "@chakra-ui/react";
 const AuthenticatedHome = dynamic(() => import("@/components/ui/AuthenticatedHome"), {
   ssr: false,
@@ -47,8 +48,7 @@ import { ShaderAnimation } from "@/components/ui/shader-lines";
 import { IconLogo } from "@/components/ui/Logo";
 import PublicNav from "@/components/ui/PublicNav";
 import PublicFooter from "@/components/ui/PublicFooter";
-import FeeCalculator from "@/components/ui/FeeCalculator";
-import WaitlistSection from "@/components/ui/WaitlistSection";
+import WaitlistModal from "@/components/ui/WaitlistModal";
 
 /* ─────────────────────────────────────────────────────────────────
    RESPONSIVE PHONE SIZING SYSTEM
@@ -136,6 +136,17 @@ function MiniChart({ up, dark, heightFrac = 0.155 }: { up: boolean; dark: boolea
       </svg>
     </Box>
   );
+}
+
+/* ─── Page-visibility hook — returns false when tab is backgrounded ─ */
+function usePageVisible() {
+  const [visible, setVisible] = useState(true);
+  useEffect(() => {
+    const onVis = () => setVisible(document.visibilityState === "visible");
+    document.addEventListener("visibilitychange", onVis);
+    return () => document.removeEventListener("visibilitychange", onVis);
+  }, []);
+  return visible;
 }
 
 /* ═════════════════════════════════════════════════════════════════
@@ -389,11 +400,13 @@ const DASH_SNAPSHOTS = [
 
 const ScreenDashboard = memo(function ScreenDashboard() {
   const APP = appTokens(usePhoneDark());
+  const pageVisible = usePageVisible();
   const [tick, setTick] = useState(0);
   useEffect(() => {
+    if (!pageVisible) return;
     const id = setInterval(() => setTick((t) => (t + 1) % DASH_SNAPSHOTS.length), 3000);
     return () => clearInterval(id);
-  }, []);
+  }, [pageVisible]);
   const snap = DASH_SNAPSHOTS[tick];
 
   const fs = {
@@ -774,21 +787,24 @@ const BUY_STEPS = [
   { amt: "500", recv: "0.0062483", fee: "2.50", total: "£500.00" },
 ];
 
-function ScreenBuy() {
+const ScreenBuy = memo(function ScreenBuy() {
   const APP = appTokens(usePhoneDark());
   const px = "calc(var(--pw)*0.07)";
+  const pageVisible = usePageVisible();
   const [bi, setBi] = useState(3);
   useEffect(() => {
+    if (!pageVisible) return;
     const id = setInterval(() => setBi((b) => (b + 1) % BUY_STEPS.length), 2400);
     return () => clearInterval(id);
-  }, []);
+  }, [pageVisible]);
   const step = BUY_STEPS[bi];
   /* live 30s quote countdown — loops, mirrors the real requote timer */
   const [secs, setSecs] = useState(26);
   useEffect(() => {
+    if (!pageVisible) return;
     const id = setInterval(() => setSecs((s) => (s <= 1 ? 30 : s - 1)), 1000);
     return () => clearInterval(id);
-  }, []);
+  }, [pageVisible]);
   const fs = {
     big:   "calc(var(--ph)*0.038)",
     name:  "calc(var(--ph)*0.022)",
@@ -931,12 +947,12 @@ function ScreenBuy() {
       </VStack>
     </SheetScreen>
   );
-}
+});
 
 /* ═════════════════════════════════════════════════════════════════
    TOKEN SEARCH SCREEN — matches the in-app "Search any token" sheet
    ═════════════════════════════════════════════════════════════════ */
-function ScreenTokenSearch() {
+const ScreenTokenSearch = memo(function ScreenTokenSearch() {
   const APP = appTokens(usePhoneDark());
   const px = "calc(var(--pw)*0.07)";
   const fs = {
@@ -1022,12 +1038,12 @@ function ScreenTokenSearch() {
       </VStack>
     </SheetScreen>
   );
-}
+});
 
 /* ═════════════════════════════════════════════════════════════════
    PAY WITH SCREEN — matches the in-app "Pay with" sheet
    ═════════════════════════════════════════════════════════════════ */
-function ScreenPayWith() {
+const ScreenPayWith = memo(function ScreenPayWith() {
   const APP = appTokens(usePhoneDark());
   const px = "calc(var(--pw)*0.07)";
   const fs = {
@@ -1035,11 +1051,13 @@ function ScreenPayWith() {
     sub:  "calc(var(--ph)*0.015)",
   };
   /* selection cycles between payment sources */
+  const pageVisible = usePageVisible();
   const [sel, setSel] = useState(0);
   useEffect(() => {
+    if (!pageVisible) return;
     const id = setInterval(() => setSel((s) => (s + 1) % 4), 2000);
     return () => clearInterval(id);
-  }, []);
+  }, [pageVisible]);
   const opts = [
     { sym: "USDT", amt: "7,797.00 USDT", sub: "Crypto balance",
       iconBg: "#cdeede", glyph: <Text style={{ fontSize: "calc(var(--ph)*0.024)" }} fontWeight="900" color="#26A17B">₮</Text> },
@@ -1093,7 +1111,7 @@ function ScreenPayWith() {
       </VStack>
     </SheetScreen>
   );
-}
+});
 
 /* ═════════════════════════════════════════════════════════════════
    PHONE FRAME — screens perfectly inset to match iphone-frame.png
@@ -1207,7 +1225,7 @@ const CHAT_TIMELINE: ChatItem[] = [
   { type: "typing", delay: 2600 },
 ];
 
-function ScreenChat() {
+const ScreenChat = memo(function ScreenChat() {
   const dark = usePhoneDark();
   const c = dark
     ? { bg: "#0e0e10", headerBg: "#161618", surface: "#1f1f23",
@@ -1413,7 +1431,7 @@ function ScreenChat() {
       </HStack>
     </VStack>
   );
-}
+});
 
 /* ═════════════════════════════════════════════════════════════════
    LAZY BACKGROUND VIDEO
@@ -1790,8 +1808,8 @@ function SectionOnRamp() {
   const dark = colorMode === "dark";
   const textMain = dark ? "white" : "#0a0f1e";
   const textSub = dark ? "rgba(255,255,255,0.5)" : "#64748b";
-  const cardBg = dark ? "rgba(255,255,255,0.04)" : "#f4f4f4";
-  const cardBorder = dark ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.10)";
+  const cardBg = dark ? "rgba(255,255,255,0.04)" : "#f8f8f8";
+  const cardBorder = dark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.07)";
   const methods: { label: string; icon?: React.ElementType; iconSize?: number; showLabel?: boolean }[] = [
     { label: "Apple Pay",  icon: FaApplePay,     iconSize: 36 },
     { label: "Google Pay", icon: FaGooglePay,    iconSize: 34 },
@@ -1800,57 +1818,221 @@ function SectionOnRamp() {
     { label: "Revolut",    icon: SiRevolut,      iconSize: 22, showLabel: true },
   ];
   const cards = [
-    { title: t("onramp_buy_title"), desc: t("onramp_buy_desc"), cta: t("onramp_buy_cta"), video: "/videos/Consumer_UIAnims_Desktop-Buy.mp4" },
-    { title: t("onramp_sell_title"), desc: t("onramp_sell_desc"), cta: t("onramp_sell_cta"), video: "/videos/Consumer_UIAnims_Desktop-Sell.mp4" },
-    { title: t("onramp_send_title"), desc: t("onramp_send_desc"), cta: t("onramp_send_cta"), video: "/videos/Consumer_UIAnims_Desktop-SendReceive.mp4" },
+    { title: t("onramp_buy_title"), desc: t("onramp_buy_desc"), video: "/videos/Consumer_UIAnims_Desktop-Buy.mp4" },
+    { title: t("onramp_sell_title"), desc: t("onramp_sell_desc"), video: "/videos/Consumer_UIAnims_Desktop-Sell.mp4" },
+    { title: t("onramp_send_title"), desc: t("onramp_send_desc"), video: "/videos/Consumer_UIAnims_Desktop-SendReceive.mp4" },
   ];
   return (
     <Box py={{ base: 20, md: 28 }} px={{ base: 4, md: 10 }} position="relative" overflow="hidden">
-      <Container maxW="1200px">
-        <VStack spacing={{ base: 12, md: 16 }} align="center" textAlign="center">
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} viewport={{ once: true, amount: 0.4 }} transition={{ duration: 0.6 }}>
-            <Heading fontFamily="'DM Sans', sans-serif" fontWeight="800" fontSize={{ base: "36px", md: "52px", lg: "64px" }} letterSpacing="-0.04em" color={textMain} lineHeight={1.1} maxW="720px">{t("onramp_headline")}</Heading>
-          </motion.div>
-          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.5, delay: 0.15 }}>
-            <Flex gap={{ base: 2, md: 3 }} flexWrap="wrap" justify="center" maxW="800px">
-              {methods.map((m, i) => (
-                <motion.div key={m.label} initial={{ opacity: 0, y: 8, scale: 0.92 }} animate={{ opacity: 1, y: 0, scale: 1 }} viewport={{ once: true, amount: 0.4 }} transition={{ duration: 0.35, delay: 0.05 * i, ease: [0.22, 1, 0.36, 1] }} whileHover={{ y: -2 }}>
-                  <HStack spacing={2} px={{ base: 3, md: 4 }} h={{ base: "38px", md: "42px" }} borderRadius="full"
-                    bg={dark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)"}
-                    color={dark ? "white" : "#0a0f1e"}
-                    border="1px solid" borderColor={dark ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.10)"}
-                    boxShadow={dark ? "0 4px 14px rgba(0,0,0,0.3)" : "0 4px 14px rgba(0,0,0,0.06)"}
-                    transition="box-shadow 0.2s ease" _hover={{ boxShadow: dark
-                      ? "0 8px 22px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.2)"
-                      : "0 8px 22px rgba(0,0,0,0.1), 0 0 0 1px rgba(0,0,0,0.2)"
-                    }}
+      {/* Ambient background glow */}
+      <motion.div
+        animate={{ opacity: [0.3, 0.6, 0.3] }}
+        transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
+        style={{ position: "absolute", top: "30%", left: "50%", width: 900, height: 400,
+          transform: "translate(-50%,-50%)", borderRadius: "50%",
+          background: "radial-gradient(ellipse, rgba(34,109,255,0.06) 0%, transparent 70%)",
+          pointerEvents: "none" }}
+      />
+      <Container maxW="1200px" position="relative" zIndex={1}>
+        <VStack spacing={{ base: 14, md: 20 }} align="center" textAlign="center">
+          <motion.div initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, amount: 0.3 }} transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}>
+            <VStack spacing={5}>
+              <Heading fontFamily="'DM Sans', sans-serif" fontWeight="800"
+                fontSize={{ base: "36px", md: "52px", lg: "64px" }}
+                letterSpacing="-0.04em" color={textMain} lineHeight={1.05} maxW="720px"
+              >
+                {t("onramp_headline")}
+              </Heading>
+              {/* Payment method pills */}
+              <Flex gap={{ base: 2, md: 3 }} flexWrap="wrap" justify="center" maxW="700px" pt={2}>
+                {methods.map((m, i) => (
+                  <motion.div key={m.label}
+                    initial={{ opacity: 0, scale: 0.88, y: 8 }}
+                    whileInView={{ opacity: 1, scale: 1, y: 0 }}
+                    viewport={{ once: true }}
+                    transition={{ duration: 0.4, delay: 0.1 + 0.06 * i, ease: [0.22, 1, 0.36, 1] }}
+                    whileHover={{ y: -3, scale: 1.04 }}
                   >
-                    {m.icon && <Icon as={m.icon} boxSize={`${m.iconSize ?? 24}px`} />}
-                    {(m.showLabel || !m.icon) && <Text fontSize={{ base: "12px", md: "13.5px" }} fontWeight="900">{m.label}</Text>}
-                  </HStack>
-                </motion.div>
-              ))}
-            </Flex>
+                    <HStack spacing={2} px={{ base: 3, md: 4 }} h={{ base: "36px", md: "40px" }} borderRadius="full"
+                      bg={dark ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.05)"}
+                      color={dark ? "white" : "#0a0f1e"}
+                      border="1px solid" borderColor={dark ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.09)"}
+                      boxShadow={dark ? "0 2px 12px rgba(0,0,0,0.3)" : "0 2px 12px rgba(0,0,0,0.04)"}
+                      transition="all 0.2s ease"
+                      _hover={{ borderColor: dark ? "rgba(255,255,255,0.25)" : "rgba(0,0,0,0.20)",
+                        boxShadow: dark ? "0 8px 24px rgba(0,0,0,0.4)" : "0 8px 24px rgba(0,0,0,0.08)" }}
+                    >
+                      {m.icon && <Icon as={m.icon} boxSize={`${m.iconSize ?? 24}px`} />}
+                      {(m.showLabel || !m.icon) && <Text fontSize={{ base: "12px", md: "13px" }} fontWeight="900">{m.label}</Text>}
+                    </HStack>
+                  </motion.div>
+                ))}
+              </Flex>
+            </VStack>
           </motion.div>
+
+          {/* Cards */}
           <SimpleGrid columns={{ base: 1, md: 3 }} spacing={{ base: 4, md: 5 }} w="100%">
             {cards.map((c, i) => (
-              <motion.div key={c.title} initial={{ opacity: 0, y: 40 }} animate={{ opacity: 1, y: 0 }} viewport={{ once: true, amount: 0.2 }} transition={{ duration: 0.6, delay: 0.2 + i * 0.12, ease: [0.22, 1, 0.36, 1] }}>
-                <VStack bg={cardBg} border="1px solid" borderColor={cardBorder} borderRadius={{ base: "24px", md: "32px" }} overflow="hidden" align="stretch" spacing={0} transition="all 0.3s ease" _hover={{ transform: { md: "translateY(-6px)" }, boxShadow: dark ? "0 24px 60px rgba(0,0,0,0.4)" : "0 24px 60px rgba(0,0,0,0.10)" }}>
-                  <Box display={{ base: "none", md: "block" }} position="relative" w="100%" style={{ aspectRatio: "4 / 3" }} overflow="hidden">
+              <motion.div key={c.title}
+                initial={{ opacity: 0, y: 50 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true, amount: 0.15 }}
+                transition={{ duration: 0.65, delay: 0.1 + i * 0.14, ease: [0.22, 1, 0.36, 1] }}
+                whileHover={{ y: -6 }}
+              >
+                <Box
+                  bg={cardBg} border="1px solid" borderColor={cardBorder}
+                  borderRadius={{ base: "24px", md: "28px" }} overflow="hidden"
+                  transition="box-shadow 0.35s ease"
+                  _hover={{ boxShadow: dark ? "0 28px 70px rgba(0,0,0,0.5)" : "0 28px 70px rgba(0,0,0,0.10)" }}
+                >
+                  <Box position="relative" w="100%" style={{ aspectRatio: "4 / 3" }} overflow="hidden">
                     <LazyBackgroundVideo src={c.video} objectFit="cover" />
+                    {/* Fade bottom of video into card */}
+                    <Box position="absolute" bottom={0} left={0} right={0} h="60px"
+                      bgGradient={dark ? "linear(to-t, rgba(20,20,20,1), transparent)" : "linear(to-t, rgba(248,248,248,1), transparent)"}
+                    />
                   </Box>
-                  <VStack p={{ base: 5, md: 7 }} align="center">
-                    <Heading fontWeight="800" color={textMain} fontFamily="'DM Sans', sans-serif">{c.title}</Heading>
-                    <Text color={textSub} lineHeight={1.5}>{c.desc}</Text>
+                  <VStack p={{ base: 5, md: 7 }} align="center" spacing={2}>
+                    <Heading fontSize={{ base: "18px", md: "20px" }} fontWeight="800" color={textMain} fontFamily="'DM Sans', sans-serif">{c.title}</Heading>
+                    <Text fontSize={{ base: "13.5px", md: "14.5px" }} color={textSub} lineHeight={1.6}>{c.desc}</Text>
                   </VStack>
-                  <Box display={{ base: "block", md: "none" }} position="relative" w="100%" style={{ aspectRatio: "4 / 3" }} bg={dark ? "#111" : "#e8e8e8"} overflow="hidden" borderTop="1px solid" borderColor={cardBorder}>
-                    <LazyBackgroundVideo src={c.video} objectFit="contain" />
-                  </Box>
-                </VStack>
+                </Box>
               </motion.div>
             ))}
           </SimpleGrid>
         </VStack>
+      </Container>
+    </Box>
+  );
+}
+
+/* ═════════════════════════════════════════════════════════════════
+   FORTUNI BUSINESS — B2B landing teaser linking to /business
+   ═════════════════════════════════════════════════════════════════ */
+function SectionBusiness() {
+  const { t } = useTranslate();
+  const { colorMode } = useColorMode();
+  const dark = colorMode === "dark";
+  const textMain  = dark ? "#ffffff" : "#0a0a0a";
+  const textSub   = dark ? "rgba(255,255,255,0.50)" : "rgba(0,0,0,0.50)";
+  const hairline  = dark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)";
+  const surface   = dark ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.025)";
+  const ACCENT    = "#226dff";
+
+  const pillars = [
+    { label: t("biz_f1_title"), value: t("biz_f1_desc") },
+    { label: t("biz_f2_title"), value: t("biz_f2_desc") },
+    { label: t("biz_f3_title"), value: t("biz_f3_desc") },
+    { label: t("biz_f4_title"), value: t("biz_f4_desc") },
+  ];
+
+  return (
+    <Box
+      position="relative" overflow="hidden"
+      py={{ base: 24, md: 36 }} px={{ base: 5, md: 10 }}
+      borderTop="1px solid" borderColor={hairline}
+    >
+      <Container maxW="1200px">
+        {/* ── Two-col editorial layout ── */}
+        <SimpleGrid columns={{ base: 1, lg: 2 }} spacing={{ base: 14, lg: 20 }}>
+
+          {/* LEFT — headline + CTA */}
+          <motion.div
+            initial={{ opacity: 0, y: 28 }} whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, amount: 0.25 }}
+            transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
+          >
+            <VStack align="start" spacing={{ base: 6, md: 8 }} h="100%" justify="space-between">
+              <VStack align="start" spacing={5}>
+                {/* Eyebrow label */}
+                <Text
+                  fontSize="11px" fontWeight="800" letterSpacing="0.14em"
+                  textTransform="uppercase" color={ACCENT}
+                >
+                  Fortuni Business
+                </Text>
+
+                <Heading
+                  fontFamily="'DM Sans', sans-serif" fontWeight="800"
+                  fontSize={{ base: "36px", md: "52px", lg: "64px" }}
+                  letterSpacing="-0.04em" lineHeight={1.00} color={textMain}
+                >
+                  {t("biz_headline_1")}{" "}
+                  <Box as="span" color={ACCENT}>{t("biz_headline_2")}</Box>
+                </Heading>
+
+                <Text
+                  fontSize={{ base: "15px", md: "17px" }} color={textSub}
+                  lineHeight={1.65} maxW="480px"
+                >
+                  {t("biz_sub")}
+                </Text>
+              </VStack>
+
+              {/* CTAs */}
+              <HStack spacing={3} flexWrap="wrap">
+                <NextLink href="/business" passHref legacyBehavior>
+                  <HStack as="a" spacing={2} px={5} h="46px" borderRadius="12px"
+                    bg={ACCENT} color="#fff" cursor="pointer"
+                    transition="all 0.22s ease"
+                    _hover={{ transform: "translateY(-1px)", boxShadow: "0 10px 24px rgba(34,109,255,0.40)" }}
+                  >
+                    <Text fontWeight="800" fontSize="14px">{t("biz_cta_primary")}</Text>
+                    <Icon as={FiArrowRight} boxSize="15px" />
+                  </HStack>
+                </NextLink>
+                <NextLink href="/register?type=business" passHref legacyBehavior>
+                  <Box as="a" cursor="pointer">
+                    <HStack spacing={1.5} color={textSub}
+                      _hover={{ color: textMain }}
+                      transition="color 0.2s ease"
+                    >
+                      <Text fontWeight="700" fontSize="14px">{t("biz_cta_secondary")}</Text>
+                      <Icon as={FiArrowRight} boxSize="13px" />
+                    </HStack>
+                  </Box>
+                </NextLink>
+              </HStack>
+            </VStack>
+          </motion.div>
+
+          {/* RIGHT — feature list */}
+          <VStack align="stretch" spacing={0} divider={<Box h="1px" bg={hairline} />}>
+            {pillars.map((p, i) => (
+              <motion.div
+                key={p.label}
+                initial={{ opacity: 0, x: 16 }} whileInView={{ opacity: 1, x: 0 }}
+                viewport={{ once: true, amount: 0.2 }}
+                transition={{ duration: 0.5, delay: i * 0.07, ease: [0.22, 1, 0.36, 1] }}
+              >
+                <Box
+                  py={{ base: 5, md: 6 }}
+                  _hover={{ "& .biz-label": { color: textMain } }}
+                  transition="all 0.2s ease"
+                  cursor="default"
+                >
+                  <HStack align="start" spacing={6}>
+                    <Text
+                      className="biz-label"
+                      fontSize={{ base: "13px", md: "14px" }} fontWeight="800"
+                      color={textSub} letterSpacing="-0.01em"
+                      minW={{ base: "120px", md: "160px" }}
+                      transition="color 0.2s ease"
+                    >
+                      {p.label}
+                    </Text>
+                    <Text fontSize={{ base: "13px", md: "14px" }} color={textSub} lineHeight={1.6} flex={1}>
+                      {p.value}
+                    </Text>
+                  </HStack>
+                </Box>
+              </motion.div>
+            ))}
+          </VStack>
+
+        </SimpleGrid>
       </Container>
     </Box>
   );
@@ -1864,40 +2046,80 @@ function SectionSocialProof() {
   const prefersReducedMotion = typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const isMobileDevice = typeof window !== "undefined" && window.innerWidth < 768;
   const avatars = [
-    { src: "/screenshots/p1.avif", top: "12%", left: "20%", sizeBase: 56, sizeMd: 88,  delay: 0.05, floatDelay: 0   },
-    { src: "/screenshots/p2.avif", top: "8%",  left: "48%", sizeBase: 62, sizeMd: 96,  delay: 0.1,  floatDelay: 0.6 },
-    { src: "/screenshots/p3.avif", top: "16%", left: "78%", sizeBase: 70, sizeMd: 110, delay: 0.15, floatDelay: 1.2 },
-    { src: "/screenshots/p4.avif", top: "58%", left: "10%", sizeBase: 56, sizeMd: 84,  delay: 0.2,  floatDelay: 0.4 },
-    { src: "/screenshots/p5.avif", top: "60%", left: "84%", sizeBase: 58, sizeMd: 88,  delay: 0.25, floatDelay: 0.9 },
-    { src: "/screenshots/p6.avif", top: "86%", left: "50%", sizeBase: 68, sizeMd: 100, delay: 0.3,  floatDelay: 0.2 },
+    { src: "/screenshots/p1.avif", top: "12%", left: "20%", sizeBase: 56, sizeMd: 88,  delay: 0.0,  floatDelay: 0   },
+    { src: "/screenshots/p2.avif", top: "8%",  left: "48%", sizeBase: 62, sizeMd: 96,  delay: 0.07, floatDelay: 0.6 },
+    { src: "/screenshots/p3.avif", top: "16%", left: "78%", sizeBase: 70, sizeMd: 110, delay: 0.14, floatDelay: 1.2 },
+    { src: "/screenshots/p4.avif", top: "58%", left: "10%", sizeBase: 56, sizeMd: 84,  delay: 0.21, floatDelay: 0.4 },
+    { src: "/screenshots/p5.avif", top: "60%", left: "84%", sizeBase: 58, sizeMd: 88,  delay: 0.28, floatDelay: 0.9 },
+    { src: "/screenshots/p6.avif", top: "86%", left: "50%", sizeBase: 68, sizeMd: 100, delay: 0.35, floatDelay: 0.2 },
   ];
   return (
     <Box position="relative" overflow="hidden" py={{ base: 16, md: 28 }} px={{ base: 4, md: 10 }}>
+      {/* Ambient radial glow */}
+      <motion.div
+        animate={{ opacity: [0.4, 0.8, 0.4], scale: [1, 1.08, 1] }}
+        transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
+        style={{
+          position: "absolute", top: "50%", left: "50%",
+          width: 700, height: 700, borderRadius: "50%",
+          transform: "translate(-50%,-50%)",
+          background: "radial-gradient(circle, rgba(34,109,255,0.07) 0%, transparent 70%)",
+          pointerEvents: "none",
+        }}
+      />
       <Container maxW="1200px" position="relative" zIndex={2}>
         <Box position="relative" w="100%" mx="auto" maxW={{ base: "100%", md: "960px" }} h={{ base: "560px", md: "640px" }}>
           {avatars.map((a) => (
-            <motion.div key={a.src} initial={{ opacity: 0, scale: 0.5 }} animate={{ opacity: 1, scale: 1 }} viewport={{ once: true, amount: 0.2 }} transition={{ duration: 0.55, delay: a.delay, type: "spring", stiffness: 180, damping: 16 }} style={{ position: "absolute", top: a.top, left: a.left, transform: "translate(-50%, -50%)", zIndex: 1 }}>
-              <motion.div animate={(!prefersReducedMotion && !isMobileDevice) ? { y: [0, -10, 0] } : {}} transition={{ duration: 5 + (a.floatDelay % 2), delay: a.floatDelay, repeat: Infinity, ease: "easeInOut" }}>
-                <Box w={{ base: `${a.sizeBase}px`, md: `${a.sizeMd}px` }} h={{ base: `${a.sizeBase}px`, md: `${a.sizeMd}px` }} borderRadius="full" overflow="hidden"
-                  border="3px solid" borderColor={dark ? "rgba(255,255,255,0.18)" : "rgba(0,0,0,0.18)"}
-                  boxShadow="0 16px 40px rgba(0,0,0,0.25)"
-                  transition="transform 0.3s ease, border-color 0.3s ease"
-                  _hover={{ transform: "scale(1.08)", borderColor: dark ? "rgba(255,255,255,0.5)" : "rgba(0,0,0,0.45)" }}
-                  position="relative" bg={dark ? "#111" : "#e8e8e8"}
+            <motion.div
+              key={a.src}
+              initial={{ opacity: 0, scale: 0.4, y: 20 }}
+              whileInView={{ opacity: 1, scale: 1, y: 0 }}
+              viewport={{ once: true, amount: 0.2 }}
+              transition={{ duration: 0.65, delay: a.delay, ease: [0.22, 1, 0.36, 1] }}
+              style={{ position: "absolute", top: a.top, left: a.left, transform: "translate(-50%, -50%)", zIndex: 1 }}
+            >
+              <motion.div
+                animate={(!prefersReducedMotion && !isMobileDevice) ? { y: [0, -12, 0] } : {}}
+                transition={{ duration: 4.5 + (a.floatDelay % 2.5), delay: a.floatDelay, repeat: Infinity, ease: "easeInOut" }}
+                whileHover={{ scale: 1.1, zIndex: 10 }}
+              >
+                <Box
+                  w={{ base: `${a.sizeBase}px`, md: `${a.sizeMd}px` }}
+                  h={{ base: `${a.sizeBase}px`, md: `${a.sizeMd}px` }}
+                  borderRadius="full" overflow="hidden"
+                  border="2px solid"
+                  borderColor={dark ? "rgba(255,255,255,0.14)" : "rgba(0,0,0,0.12)"}
+                  boxShadow={dark
+                    ? "0 16px 48px rgba(0,0,0,0.45), 0 0 0 1px rgba(255,255,255,0.06)"
+                    : "0 16px 48px rgba(0,0,0,0.14), 0 0 0 1px rgba(0,0,0,0.04)"}
+                  transition="all 0.3s ease"
+                  _hover={{ borderColor: "#226dff", boxShadow: "0 20px 60px rgba(34,109,255,0.25)" }}
+                  position="relative"
+                  bg={dark ? "#111" : "#e8e8e8"}
                 >
                   <NextImage src={a.src} alt="" fill style={{ objectFit: "cover" }} sizes="120px" />
                 </Box>
               </motion.div>
             </motion.div>
           ))}
-          <Box position="absolute" top="50%" left="50%" transform="translate(-50%, -50%)" zIndex={2} textAlign="center" pointerEvents="none" w={{ base: "78%", md: "auto" }}>
-            <motion.div initial={{ opacity: 0, scale: 0.92 }} animate={{ opacity: 1, scale: 1 }} viewport={{ once: true, amount: 0.4 }} transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}>
+          <Box
+            position="absolute" top="50%" left="50%" transform="translate(-50%, -50%)"
+            zIndex={2} textAlign="center" pointerEvents="none"
+            w={{ base: "82%", md: "auto" }}
+          >
+            <motion.div
+              initial={{ opacity: 0, y: 24, scale: 0.94 }}
+              whileInView={{ opacity: 1, y: 0, scale: 1 }}
+              viewport={{ once: true, amount: 0.4 }}
+              transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
+            >
               <Heading fontFamily="'DM Sans', sans-serif" fontWeight="900"
                 fontSize={{ base: "28px", md: "44px", lg: "56px" }}
                 letterSpacing="-0.04em" lineHeight={1.1}
-                color={dark ? "#ffffff" : "#0a0f1e"}
+                color={textMain}
                 maxW={{ base: "280px", md: "540px" }}
                 mx="auto"
+                style={{ textShadow: dark ? "0 2px 40px rgba(0,0,0,0.6)" : "0 2px 20px rgba(255,255,255,0.8)" }}
               >
                 {t("socialproof_label")}
               </Heading>
@@ -1954,7 +2176,7 @@ function StageOverlay({ stages }: { stages: Stage[] }) {
 
 type StageCopyProps = {
   op: MotionValue<number>;
-  eyebrow: string;
+  eyebrow?: string;   // accepted but not rendered (eyebrow removed by design)
   title: React.ReactNode;
   desc?: string;
   features?: { icon: React.ElementType; label: string }[];
@@ -1978,7 +2200,7 @@ function StageCopy({ op, title, desc, features, textMain, textMuted, hairline, t
       }}
     >
       <Heading as="h2" fontFamily="'DM Sans', sans-serif" fontWeight="800"
-        fontSize={{ base: "32px", sm: "40px", md: "60px", xl: "84px" }}
+        fontSize={{ base: "26px", sm: "34px", md: "56px", xl: "80px" }}
         letterSpacing="-0.05em" lineHeight={0.94} color={textMain}
         sx={{ fontFeatureSettings: '"ss01", "cv11", "kern"' }}
       >
@@ -2036,40 +2258,47 @@ function PhoneJourney() {
   const ACCENT = "#226dff";
 
   /* Stage layout (out of 1 progress).
-     6 stages × ~87vh each fits in 520vh of scroll runway. */
-  // A 0.00 – 0.16  lock → unlock + tilt to upright
-  // B 0.16 – 0.32  dashboard
-  // C 0.32 – 0.48  chat / socialised
-  // D 0.48 – 0.64  buy
-  // E 0.64 – 0.80  search
-  // F 0.80 – 1.00  pay-with
+     7 stages × ~86vh each fits in 600vh of scroll runway. */
+  // A 0.00 – 0.14  lock → unlock + tilt to upright
+  // B 0.14 – 0.28  dashboard
+  // C 0.28 – 0.43  chat / socialised
+  // D 0.43 – 0.57  buy
+  // E 0.57 – 0.71  search
+  // F 0.71 – 0.86  pay-with
+  // G 0.86 – 1.00  card (Visa)
 
-  const tiltX          = useTransform(scrollYProgress, [0, 0.14], [22, 0]);
-  const unlockProgress = useTransform(scrollYProgress, [0.04, 0.15], [0, 1]);
+  const tiltX          = useTransform(scrollYProgress, [0, 0.12], [22, 0]);
+  const unlockProgress = useTransform(scrollYProgress, [0.04, 0.13], [0, 1]);
 
   // screen cross-fades — dashboard is always the base layer
-  const opChat   = useTransform(scrollYProgress, [0.28, 0.34, 0.46, 0.51], [0, 1, 1, 0]);
-  const opBuy    = useTransform(scrollYProgress, [0.44, 0.50, 0.62, 0.67], [0, 1, 1, 0]);
-  const opSearch = useTransform(scrollYProgress, [0.60, 0.66, 0.78, 0.83], [0, 1, 1, 0]);
-  const opPay    = useTransform(scrollYProgress, [0.76, 0.82, 1.00, 1.00], [0, 1, 1, 1]);
+  const opChat   = useTransform(scrollYProgress, [0.24, 0.30, 0.41, 0.46], [0, 1, 1, 0]);
+  const opBuy    = useTransform(scrollYProgress, [0.39, 0.45, 0.55, 0.60], [0, 1, 1, 0]);
+  const opSearch = useTransform(scrollYProgress, [0.53, 0.59, 0.69, 0.74], [0, 1, 1, 0]);
+  const opPay    = useTransform(scrollYProgress, [0.67, 0.73, 0.84, 0.88], [0, 1, 1, 0]);
+  const opCard   = useTransform(scrollYProgress, [0.82, 0.88, 1.00, 1.00], [0, 1, 1, 1]);
+  // Visa card slides in from the left (card lives left of the phone on desktop)
+  const cardX    = useTransform(scrollYProgress, [0.82, 0.96], [-80,  0]);
+  const cardY    = useTransform(scrollYProgress, [0.82, 0.96], [40,   0]);
+  const cardRot  = useTransform(scrollYProgress, [0.82, 0.96], [-10, -3]);
 
   // copy cross-fades — slightly lead the matching screen
-  const copyA = useTransform(scrollYProgress, [0,    0.10, 0.17], [1, 1, 0]);
-  const copyB = useTransform(scrollYProgress, [0.13, 0.20, 0.28, 0.34], [0, 1, 1, 0]);
-  const copyC = useTransform(scrollYProgress, [0.30, 0.36, 0.46, 0.52], [0, 1, 1, 0]);
-  const copyD = useTransform(scrollYProgress, [0.46, 0.52, 0.62, 0.68], [0, 1, 1, 0]);
-  const copyE = useTransform(scrollYProgress, [0.62, 0.68, 0.78, 0.84], [0, 1, 1, 0]);
-  const copyF = useTransform(scrollYProgress, [0.78, 0.84, 1.00], [0, 1, 1]);
+  const copyA = useTransform(scrollYProgress, [0,    0.09, 0.15], [1, 1, 0]);
+  const copyB = useTransform(scrollYProgress, [0.11, 0.18, 0.25, 0.31], [0, 1, 1, 0]);
+  const copyC = useTransform(scrollYProgress, [0.27, 0.33, 0.41, 0.47], [0, 1, 1, 0]);
+  const copyD = useTransform(scrollYProgress, [0.41, 0.47, 0.55, 0.61], [0, 1, 1, 0]);
+  const copyE = useTransform(scrollYProgress, [0.55, 0.61, 0.69, 0.75], [0, 1, 1, 0]);
+  const copyF = useTransform(scrollYProgress, [0.69, 0.75, 0.84, 0.89], [0, 1, 1, 0]);
+  const copyG = useTransform(scrollYProgress, [0.84, 0.90, 1.00], [0, 1, 1]);
 
-  // shader background — strong at top, fades through the journey
-  const shaderOp = useTransform(scrollYProgress, [0, 0.3, 0.85, 1], [0.70, 0.50, 0.30, 0.10]);
+  // shader background — present at start, fades gently as journey progresses
+  const shaderOp = useTransform(scrollYProgress, [0, 0.25, 0.80, 1], [0.85, 0.60, 0.25, 0.08]);
   // ambient halo follows the phone, gently breathing
   const phoneScale = useTransform(scrollYProgress, [0, 0.16], [0.96, 1]);
 
   return (
-    <Box ref={ref} position="relative" h={{ base: "520vh", md: "520vh" }}>
+    <Box ref={ref} position="relative" h={{ base: "600vh", md: "600vh" }}>
       <Box position="sticky" top={0} h="100vh" w="100%" overflow="hidden"
-        bg={dark ? "#000" : "#fff"}
+        style={{ transform: "translateZ(0)", willChange: "transform" } as React.CSSProperties}
       >
         {/* ── Shader background — centered, fills viewport ── */}
         <motion.div
@@ -2079,29 +2308,28 @@ function PhoneJourney() {
             pointerEvents: "none", zIndex: 0,
           }}
         >
+          {/* Shader has transparent bg — normal blend works for both light & dark */}
           <Box position="absolute" inset={0}
-            style={{ mixBlendMode: dark ? "screen" : "multiply" } as React.CSSProperties}
+            style={{
+              opacity: dark ? 1 : 0.55,
+            } as React.CSSProperties}
           >
             <ShaderAnimation />
           </Box>
         </motion.div>
 
-        {/* ── Vignette — focus the centre of the canvas ── */}
-        <Box position="absolute" inset={0} pointerEvents="none" aria-hidden zIndex={0}
-          bg={dark
-            ? "radial-gradient(ellipse 80% 80% at center, transparent 30%, rgba(0,0,0,0.45) 80%, #000 100%)"
-            : "radial-gradient(ellipse 80% 80% at center, transparent 30%, rgba(255,255,255,0.5) 80%, #fff 100%)"}
-        />
-
-        {/* ── Subtle brand-colour halo behind the phone ── */}
-        <motion.div
-          animate={{ opacity: [0.08, 0.16, 0.08] }}
-          transition={{ duration: 7, repeat: Infinity, ease: "easeInOut" }}
+        {/* ── Brand-colour halo — CSS animation so it's compositor-only ── */}
+        <div
+          aria-hidden
           style={{
             position: "absolute", top: "50%", left: "50%",
-            width: 560, height: 560, transform: "translate(-50%,-50%)",
-            borderRadius: "50%", background: ACCENT, filter: "blur(180px)",
+            width: 560, height: 560,
+            transform: "translate(-50%,-50%)",
+            borderRadius: "50%",
+            background: ACCENT,
+            filter: "blur(180px)",
             pointerEvents: "none", zIndex: 0,
+            animation: "halo-pulse 7s ease-in-out infinite",
           }}
         />
 
@@ -2112,17 +2340,17 @@ function PhoneJourney() {
 
             {/* COPY column — sits LEFT on desktop, BELOW phone on mobile */}
             <Box position="relative" order={{ base: 2, lg: 1 }}
-              h={{ base: "200px", sm: "240px", lg: "520px" }}
+              h={{ base: "180px", sm: "220px", lg: "520px" }}
               w="100%" maxW={{ base: "100%", lg: "560px" }}
               textAlign={{ base: "center", lg: "left" } as any}
-              pt={{ base: 2, lg: 0 }}
+              pt={{ base: 0, lg: 0 }}
             >
               <StageCopy op={copyA} accent={ACCENT} textMain={textMain} textMuted={textMuted} hairline={hairline} tileBg={tileBg}
                 eyebrow={t("coming_soon")}
                 title={
                   <>
                     {t("hero_line1")}{" "}
-                    <Box as="span" color={ACCENT}>{t("hero_line2")}</Box>
+                    <Box as="span">{t("hero_line2")}</Box>
                   </>
                 }
                 desc={t("hero_sub")}
@@ -2169,18 +2397,97 @@ function PhoneJourney() {
                   { icon: FiCheck, label: t("feat_pay_f4") },
                 ]}
               />
+              <StageCopy op={copyG} accent={ACCENT} textMain={textMain} textMuted={textMuted} hairline={hairline} tileBg={tileBg}
+                eyebrow={t("feat_card_eyebrow")}
+                title={<Box as="span" color={textMain}>{t("card_title")}</Box>}
+                desc={t("card_desc")}
+                features={[
+                  { icon: FiGlobe,      label: t("card_f1") },
+                  { icon: FiZap,        label: t("card_f2") },
+                  { icon: FiShield,     label: t("card_f3") },
+                  { icon: FiCreditCard, label: t("card_f4") },
+                ]}
+              />
             </Box>
 
             {/* PHONE column — sits RIGHT on desktop, ABOVE copy on mobile */}
-            <Flex order={{ base: 1, lg: 2 }} justify="center" align={{ base: "flex-end", lg: "center" }} position="relative"
+            <Flex order={{ base: 1, lg: 2 }} justify="center"
+              align={{ base: "center", lg: "center" }}
+              position="relative"
               style={{ perspective: "1500px" }}
+              pt={{ base: 10, sm: 8, lg: 0 }}
               pb={{ base: 2, lg: 0 }}
             >
-              <motion.div style={{ rotateX: tiltX, scale: phoneScale, transformOrigin: "50% 60%", willChange: "transform" }}>
+              <Box position="relative" mx="auto" w="fit-content">
+                {/* ── Floating Visa card — large, slides in to the LEFT of phone during stage G ── */}
+                <motion.div
+                  aria-hidden
+                  style={{
+                    position: "absolute",
+                    /* right: 102% puts the card's right edge flush with phone's left edge */
+                    right: "108%",
+                    top: "16%",
+                    opacity: opCard,
+                    x: cardX,
+                    y: cardY,
+                    rotate: cardRot,
+                    zIndex: 5,
+                    pointerEvents: "none",
+                    willChange: "opacity, transform",
+                  }}
+                >
+                  {/* Desktop: large card beside phone */}
+                  <Box
+                    display={{ base: "none", lg: "block" }}
+                    position="relative"
+                    w="clamp(260px, 24vw, 420px)"
+                    style={{ aspectRatio: "1.586" }}
+                  >
+                    <NextImage
+                      src="/visa.png" alt="Fortuni Visa Card"
+                      fill style={{ objectFit: "contain" }}
+                      sizes="420px"
+                    />
+                  </Box>
+                </motion.div>
+
+                {/* Mobile visa card — appears below phone during stage G */}
+                <motion.div
+                  aria-hidden
+                  style={{
+                    position: "absolute",
+                    bottom: "-26%",
+                    left: "50%",
+                    transform: "translateX(-50%)",
+                    opacity: opCard,
+                    y: cardY,
+                    rotate: cardRot,
+                    zIndex: 5,
+                    pointerEvents: "none",
+                    willChange: "opacity, transform",
+                  }}
+                >
+                  <Box
+                    display={{ base: "block", lg: "none" }}
+                    position="relative"
+                    w={{ base: "200px", sm: "240px", md: "280px" }}
+                    style={{ aspectRatio: "1.586" }}
+                  >
+                    <NextImage
+                      src="/visa.png" alt="Fortuni Visa Card"
+                      fill style={{ objectFit: "contain" }}
+                      sizes="280px"
+                    />
+                  </Box>
+                </motion.div>
+
+                <motion.div style={{ rotateX: tiltX, scale: phoneScale, transformOrigin: "50% 60%", willChange: "transform" }}>
                 <Box
                   position="relative"
-                  style={{ ...phoneVars,
-                    ["--ph" as string]: "clamp(260px, 44vh, 720px)",
+                  style={{
+                    ...phoneVars,
+                    /* Mobile: smaller phone height so it doesn't dominate the screen */
+                    ["--ph" as string]: "clamp(200px, 34vh, 560px)",
                     width: "var(--pw)", height: "var(--ph)",
                   } as React.CSSProperties}
                   mx="auto"
@@ -2216,11 +2523,12 @@ function PhoneJourney() {
                     src="/iphone-frame.png"
                     alt=""
                     fill priority
-                    sizes="(max-width: 480px) 70vw, (max-width: 1024px) 42vw, 360px"
+                    sizes="(max-width: 480px) 55vw, (max-width: 1024px) 38vw, 320px"
                     style={{ objectFit: "contain", pointerEvents: "none", zIndex: 10 }}
                   />
                 </Box>
               </motion.div>
+              </Box>
             </Flex>
           </SimpleGrid>
         </Container>
@@ -2238,6 +2546,20 @@ function PhoneJourney() {
   );
 }
 
+/* ─── Device OS detection — runs once on mount ──────────────────── */
+const IOS_URL     = "https://apps.apple.com/app/fortuni/id0000000000";
+const ANDROID_URL = "https://play.google.com/store/apps/details?id=com.fortuni.app";
+
+function useDeviceOS(): "ios" | "android" | "other" {
+  const [os, setOS] = useState<"ios" | "android" | "other">("other");
+  useEffect(() => {
+    const ua = navigator.userAgent;
+    if (/iPad|iPhone|iPod/.test(ua) && !(window as any).MSStream) setOS("ios");
+    else if (/Android/i.test(ua)) setOS("android");
+  }, []);
+  return os;
+}
+
 /* ═════════════════════════════════════════════════════════════════
    LANDING PAGE
    ═════════════════════════════════════════════════════════════════ */
@@ -2248,6 +2570,7 @@ export default function LandingPage() {
   const { t } = useTranslate();
   const tolgee = useTolgee(["language"]);
   const isAr = tolgee.getLanguage() === "ar";
+  const deviceOS = useDeviceOS();
 
   const { isAuthenticated, isLoading, fetchUser } = useAuthStore();
 
@@ -2257,6 +2580,8 @@ export default function LandingPage() {
   const ACCENT = "#226dff";
 
   useEffect(() => { fetchUser(); }, []);
+
+  const { isOpen: isWaitlistOpen, onOpen: onWaitlistOpen, onClose: onWaitlistClose } = useDisclosure();
 
   // Force body to match page background so blank gaps never show Chakra's
   // default surface colour through. (overflowX:clip was breaking sticky
@@ -2284,97 +2609,109 @@ export default function LandingPage() {
         <PhoneJourney />
       </Box>
 
-      <SectionBento />
-      <SectionOnRamp />
-      <SectionSocialProof />
+      {/* content-visibility: auto skips layout+paint for off-screen sections */}
+      <Box style={{ contentVisibility: "auto", containIntrinsicSize: "0 700px" } as React.CSSProperties}>
+        <SectionBento />
+      </Box>
+      <Box style={{ contentVisibility: "auto", containIntrinsicSize: "0 700px" } as React.CSSProperties}>
+        <SectionOnRamp />
+      </Box>
+      <Box style={{ contentVisibility: "auto", containIntrinsicSize: "0 600px" } as React.CSSProperties}>
+        <SectionSocialProof />
+      </Box>
+      <Box style={{ contentVisibility: "auto", containIntrinsicSize: "0 600px" } as React.CSSProperties}>
+        <SectionBusiness />
+      </Box>
 
-      {/* ══ CTA + FOOTER ══ */}
+      {/* ══ FOOTER ══ */}
       <Box position="relative" overflow="hidden">
-        <Box position="absolute" inset={0} pointerEvents="none" aria-hidden="true">
-          <Box position="absolute" top="75%" left="50%" transform="translate(-50%, -50%)" w="100%" h="100%" display="flex" alignItems="center" justifyContent="center">
-            <Box position="absolute" top="0" left="50%" w="1600px" h="1600px" borderRadius="full"
-              border={`1.5px solid ${dark ? "rgba(255,255,255,0.2)" : "rgba(0,0,0,0.15)"}`}
-              style={{ transform: "translate(-50%, 0)", clipPath: "inset(0 0 50% 0)", boxShadow: dark ? "0 0 40px rgba(255,255,255,0.08)" : "0 0 40px rgba(0,0,0,0.06)" }}
-            />
-            <motion.div animate={{ opacity: [0.2, 0.8, 0.2] }} transition={{ duration: 2.6, repeat: Infinity, ease: "easeInOut" }}
-              style={{ position: "absolute", top: "0", left: "50%", width: "1600px", height: "1600px",
-                transform: "translate(-50%, 0)",
-                border: dark ? "1.5px solid rgba(34,109,255,0.5)" : "1.5px solid rgba(34,109,255,0.35)",
-                boxShadow: dark ? "0 0 90px rgba(34,109,255,0.2)" : "0 0 90px rgba(34,109,255,0.12)",
-                borderRadius: "50%", clipPath: "inset(0 0 50% 0)",
-                willChange: "opacity" }}
-            />
-          </Box>
-        </Box>
-        <Box className="snap-section" id="cta" position="relative" zIndex={1} py={{ base: 16, md: 28 }} px={{ base: 6, md: 12 }} minH="100vh" display="flex" alignItems="center" justifyContent="center">
-          {/* CTA box — inverted from page bg for max contrast */}
-          <Box maxW="1100px" mx="auto" borderRadius="40px" overflow="hidden" position="relative"
-            bg={dark ? "#ffffff" : "#000000"}
-            p={{ base: 10, md: 20 }} textAlign="center"
-            boxShadow={dark ? "0 40px 100px rgba(255,255,255,0.08)" : "0 40px 100px rgba(0,0,0,0.25)"}
+        {/* ── Thin waitlist end-bar ─────────────────────────────── */}
+        <Box px={{ base: 4, md: 10 }} py={{ base: 10, md: 14 }} position="relative" zIndex={1}>
+          <Box maxW="1100px" mx="auto"
+            borderRadius="20px"
+            border="1px solid" borderColor={dark ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.10)"}
+            bg={dark ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)"}
+            px={{ base: 6, md: 12 }} py={{ base: 6, md: 7 }}
           >
-            <Box position="absolute" inset={0} opacity={0.04}
-              backgroundImage="radial-gradient(circle at 2px 2px, currentColor 2px, transparent 0)"
-              backgroundSize="36px 36px" pointerEvents="none"
-              color={dark ? "black" : "white"}
-            />
-            <VStack spacing={7} position="relative" zIndex={2}>
-              <Heading fontSize={{ base: "36px", md: "64px" }} fontWeight="800"
-                color={dark ? "#000000" : "#ffffff"}
-                letterSpacing="-0.04em" fontFamily="'DM Sans', sans-serif"
-              >
-                {t("cta_title")}
-              </Heading>
-              <Text fontSize={{ base: "15px", md: "19px" }}
-                color={dark ? "rgba(0,0,0,0.7)" : "rgba(255,255,255,0.8)"}
-                maxW="520px"
-              >
-                {t("cta_sub")}
-              </Text>
-              {/* App store download badges */}
-              <HStack spacing={2.5} justify="center">
-                  {[
-                    { store: "App Store", icon: FaApple },
-                    { store: "Google Play", icon: FaGooglePlay },
-                  ].map((b) => (
-                    <HStack key={b.store}
-                      bg={dark ? "rgba(255,255,255,0.09)" : "rgba(0,0,0,0.06)"}
-                      border="1px solid"
-                      borderColor={dark ? "rgba(255,255,255,0.16)" : "rgba(0,0,0,0.10)"}
-                      borderRadius="12px" px={4} h="42px" spacing={2.5} cursor="pointer"
-                      _hover={{ bg: dark ? "rgba(255,255,255,0.14)" : "rgba(0,0,0,0.10)" }}
-                      transition="background 0.15s"
+            <Flex align="center" justify="space-between" gap={6} flexWrap="wrap">
+              <VStack align={{ base: "center", md: "start" }} spacing={1} flex={1} minW="200px" textAlign={{ base: "center", md: "left" }}>
+                <Text fontWeight="800" fontSize={{ base: "18px", md: "22px" }} color={dark ? "#fff" : "#0a0a0a"} letterSpacing="-0.02em">
+                  {t("cta_title")}
+                </Text>
+                <Text fontSize={{ base: "13px", md: "14px" }} color={dark ? "rgba(255,255,255,0.5)" : "rgba(0,0,0,0.5)"}>
+                  {t("cta_sub")}
+                </Text>
+              </VStack>
+              <HStack spacing={2.5} flexShrink={0} justify="center" flexWrap="wrap">
+                {/* ── Join Waitlist ── */}
+                <Button
+                  onClick={onWaitlistOpen}
+                  bg="#226dff" color="#fff"
+                  borderRadius="12px" px={5} h="40px"
+                  fontSize="13px" fontWeight="700"
+                  _hover={{ opacity: 0.85 }} transition="opacity 0.15s"
+                >
+                  {t("nav_join_waitlist")}
+                </Button>
+
+                {/* ── Download App — single button on mobile/iOS/Android,
+                      both store chips on desktop ── */}
+                {deviceOS === "ios" && (
+                  <HStack as="a" href={IOS_URL} target="_blank" rel="noopener"
+                    bg={dark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)"}
+                    border="1px solid" borderColor={dark ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.12)"}
+                    borderRadius="12px" px={4} h="40px" spacing={2} cursor="pointer"
+                    transition="opacity 0.15s" _hover={{ opacity: 0.75 } as any}
+                  >
+                    <Icon as={FaApple} boxSize="16px" color={dark ? "#fff" : "#0a0a0a"} />
+                    <Text fontSize="13px" fontWeight="700" color={dark ? "#fff" : "#0a0a0a"}>
+                      {t("cta_on_ios")}
+                    </Text>
+                  </HStack>
+                )}
+                {deviceOS === "android" && (
+                  <HStack as="a" href={ANDROID_URL} target="_blank" rel="noopener"
+                    bg={dark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)"}
+                    border="1px solid" borderColor={dark ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.12)"}
+                    borderRadius="12px" px={4} h="40px" spacing={2} cursor="pointer"
+                    transition="opacity 0.15s" _hover={{ opacity: 0.75 } as any}
+                  >
+                    <Icon as={FaGooglePlay} boxSize="14px" color={dark ? "#fff" : "#0a0a0a"} />
+                    <Text fontSize="13px" fontWeight="700" color={dark ? "#fff" : "#0a0a0a"}>
+                      {t("cta_on_android")}
+                    </Text>
+                  </HStack>
+                )}
+                {deviceOS === "other" && (
+                  <>
+                    <HStack as="a" href={IOS_URL} target="_blank" rel="noopener"
+                      bg={dark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)"}
+                      border="1px solid" borderColor={dark ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.12)"}
+                      borderRadius="12px" px={4} h="40px" spacing={2} cursor="pointer"
+                      transition="opacity 0.15s" _hover={{ opacity: 0.75 } as any}
                     >
-                      <Icon as={b.icon} boxSize="18px" color={dark ? "rgba(0,0,0,0.7)" : "rgba(255,255,255,0.8)"} flexShrink={0} />
-                      <VStack spacing={0} align="start">
-                        <Text fontSize="13px" color={dark ? "rgba(0,0,0,0.7)" : "rgba(255,255,255,0.8)"} fontWeight="800" letterSpacing="-0.01em">{b.store}</Text>
-                      </VStack>
+                      <Icon as={FaApple} boxSize="16px" color={dark ? "#fff" : "#0a0a0a"} />
+                      <Text fontSize="13px" fontWeight="700" color={dark ? "#fff" : "#0a0a0a"}>
+                        {t("cta_on_ios")}
+                      </Text>
                     </HStack>
-                  ))}
-                </HStack>
-            </VStack>
+                    <HStack as="a" href={ANDROID_URL} target="_blank" rel="noopener"
+                      bg={dark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)"}
+                      border="1px solid" borderColor={dark ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.12)"}
+                      borderRadius="12px" px={4} h="40px" spacing={2} cursor="pointer"
+                      transition="opacity 0.15s" _hover={{ opacity: 0.75 } as any}
+                    >
+                      <Icon as={FaGooglePlay} boxSize="14px" color={dark ? "#fff" : "#0a0a0a"} />
+                      <Text fontSize="13px" fontWeight="700" color={dark ? "#fff" : "#0a0a0a"}>
+                        {t("cta_on_android")}
+                      </Text>
+                    </HStack>
+                  </>
+                )}
+              </HStack>
+            </Flex>
           </Box>
         </Box>
-        {/* ── Fee Calculator section ───────────────────────────────── */}
-        <Box py={{ base: 20, md: 28 }} px={6} position="relative" zIndex={1}>
-          <VStack spacing={10} maxW="1100px" mx="auto">
-            <VStack spacing={3} textAlign="center">
-              <Heading
-                fontSize={{ base: "30px", md: "44px" }} fontWeight="900"
-                letterSpacing="-0.04em" color={dark ? "#ffffff" : "#000000"}
-              >
-                {t("calc_section_title")}
-              </Heading>
-              <Text fontSize={{ base: "15px", md: "17px" }} color={dark ? "rgba(255,255,255,0.55)" : "rgba(0,0,0,0.50)"} maxW="460px">
-                {t("calc_section_sub")}
-              </Text>
-            </VStack>
-            <FeeCalculator />
-          </VStack>
-        </Box>
-
-        {/* ── Waitlist section ─────────────────────────────────────── */}
-        <WaitlistSection />
 
         {/* ── JSON-LD structured data ──────────────────────────────── */}
         <script
@@ -2398,6 +2735,7 @@ export default function LandingPage() {
           }}
         />
 
+        <WaitlistModal isOpen={isWaitlistOpen} onClose={onWaitlistClose} />
         <Box position="relative" zIndex={1}><PublicFooter /></Box>
       </Box>
     </Box>

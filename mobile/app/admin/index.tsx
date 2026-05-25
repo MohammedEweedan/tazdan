@@ -150,6 +150,22 @@ export default function AdminScreen() {
     );
   }
 
+  if (dashQ.isError && !d) {
+    return (
+      <View style={{ flex: 1, backgroundColor: p.bg, alignItems: 'center', justifyContent: 'center', padding: 40 }}>
+        <StatusBar style={themeMode === 'dark' ? 'light' : 'dark'} />
+        <Ionicons name="cloud-offline-outline" size={48} color={p.fgFaint} />
+        <Text style={{ color: p.fg, fontSize: 16, fontWeight: '700', marginTop: 14, textAlign: 'center' }}>Could not load dashboard</Text>
+        <Text style={{ color: p.fgMuted, fontSize: 13, marginTop: 6, textAlign: 'center' }}>
+          {(dashQ.error as any)?.response?.data?.message ?? (dashQ.error as any)?.message ?? 'Check your connection or session.'}
+        </Text>
+        <Pressable onPress={() => dashQ.refetch()} style={{ marginTop: 24, paddingHorizontal: 20, paddingVertical: 12, borderRadius: 12, backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border }}>
+          <Text style={{ color: p.fg, fontWeight: '700' }}>Retry</Text>
+        </Pressable>
+      </View>
+    );
+  }
+
   return (
     <View style={{ flex: 1, backgroundColor: p.bg }}>
       <StatusBar style={themeMode === 'dark' ? 'light' : 'dark'} />

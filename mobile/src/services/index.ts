@@ -31,8 +31,10 @@ function isFallbackable(e: unknown): boolean {
   const ax = e as { code?: string; response?: { status?: number } };
   if (ax.code === 'ERR_NETWORK') return true;             // backend down
   const status = ax.response?.status;
-  // 404 — route missing; 401 — not logged in (demo mode); 5xx — server error.
-  if (status && (status === 404 || status === 401 || status >= 500)) return true;
+  // 404 — route missing; 5xx — server error. (401 is NOT fallbackable — let the
+  // refresh interceptor in api.ts handle it and retry. Falling back on 401 would
+  // silently hide auth failures and return empty data.)
+  if (status && (status === 404 || status >= 500)) return true;
   return false;
 }
 
@@ -671,13 +673,10 @@ export interface AdminDashboard {
 }
 
 export const adminService = {
-  dashboard: () => withFallback<AdminDashboard>(
-    async () => {
-      const { data } = await api.get<AdminDashboard>('/admin/dashboard');
-      return data;
-    },
-    {} as AdminDashboard,
-  ),
+  dashboard: async (): Promise<AdminDashboard> => {
+    const { data } = await api.get<AdminDashboard>('/admin/dashboard');
+    return data;
+  },
   users: (params?: { search?: string; status?: string; page?: number; limit?: number }) =>
     withFallback<{ users: any[]; total: number; page: number; totalPages: number }>(
       async () => {

@@ -38,7 +38,7 @@ async function upsertUser(opts: {
   lastName: string;
   username?: string;
   country?: string;
-  role?: 'USER' | 'ADMIN' | 'AGENT';
+  role?: 'USER' | 'ADMIN';
 }) {
   const existing = await prisma.user.findUnique({ where: { email: opts.email } });
   if (existing) return existing;

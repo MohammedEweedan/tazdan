@@ -7,7 +7,7 @@
  */
 
 import { useState } from 'react';
-import { Pressable, RefreshControl, ScrollView, View } from 'react-native';
+import { Image, Pressable, RefreshControl, ScrollView, View } from 'react-native';
 import { Text } from '@/components/ui/Text';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -188,7 +188,13 @@ export default function GroupsList() {
                   borderWidth: 1, borderColor: `${accent}44`,
                   alignItems: 'center', justifyContent: 'center',
                 }}>
-                  {g.avatarUrl ? null /* TODO image */ : (
+                  {g.avatarUrl ? (
+                    <Image
+                      source={{ uri: g.avatarUrl }}
+                      style={{ width: 48, height: 48, borderRadius: 24 }}
+                      resizeMode="cover"
+                    />
+                  ) : (
                     <Ionicons name="people" size={22} color={accent} />
                   )}
                 </View>
