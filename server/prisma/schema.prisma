@@ -13,6 +13,23 @@ enum UserRole {
   ADMIN
 }
 
+/// Distinguishes a personal user from a business customer.
+/// BUSINESS users get a 1:1 BusinessProfile, higher transaction
+/// limits, multi-seat dashboard, and access to /business APIs
+/// (bulk payouts, invoicing, mass card issuance, treasury).
+enum AccountType {
+  PERSONAL
+  BUSINESS
+}
+
+/// Lifecycle of a business KYB (Know-Your-Business) review.
+enum KYBStatus {
+  NOT_SUBMITTED
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 enum UserStatus {
   PENDING
   ACTIVE
@@ -142,6 +159,7 @@ model User {
   firstName                    String
   lastName                     String
   role                         UserRole                     @default(USER)
+  accountType                  AccountType                  @default(PERSONAL)
   status                       UserStatus                   @default(PENDING)
   kycStatus                    KYCStatus                    @default(NOT_SUBMITTED)
   kycTier                      KYCTier                      @default(TIER_0) // gates daily limits, card issuance, off-ramp
@@ -234,12 +252,55 @@ model User {
   cryptoOrders                 CryptoOrder[]
   onChainTxs                   OnChainTransaction[]
   withdrawalAddressWhitelist   WithdrawalAddressWhitelist[]
+  // 1:1 — only present when accountType = BUSINESS
+  businessProfile              BusinessProfile?
 
   @@index([email])
   @@index([referralCode])
   @@index([username])
   @@index([country])
   @@index([kycTier])
+  @@index([accountType])
+}
+
+/// One-to-one extension of User for BUSINESS accounts.
+/// Holds the company legal record, KYB state, and the small set of
+/// B2B fields the dashboard needs (billing email, support contact,
+/// industry segmentation for fee tiers, employee headcount for plan
+/// selection). PersonalProfile data lives directly on User; only
+/// the business-specific bits need this side-table.
+model BusinessProfile {
+  id              String    @id @default(uuid())
+  userId          String    @unique
+  companyName     String
+  legalName       String?
+  registrationNo  String? // company registration / commercial licence
+  taxId           String? // VAT, EIN, or local equivalent
+  /// ISO 3166-1 alpha-2 of company registration country.
+  country         String
+  /// Free-text industry tag (e.g. "fintech", "ecommerce", "remittances"). Drives fee tier.
+  industry        String?
+  /// Bucketed headcount: "1-10", "11-50", "51-200", "201-1000", "1000+"
+  employeeCount   String?
+  website         String?
+  /// Operations contact — defaults to User.email but split so finance
+  /// & ops can have different inboxes.
+  billingEmail    String?
+  supportEmail    String?
+  /// Free-text use case so sales can route demo requests.
+  useCase         String?
+  /// Estimated monthly USD volume — informs onboarding tier.
+  monthlyVolumeUsd Decimal? @db.Decimal(20, 2)
+  kybStatus       KYBStatus @default(NOT_SUBMITTED)
+  kybNotes        String?
+  kybReviewedAt   DateTime?
+  kybReviewedBy   String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([country])
+  @@index([kybStatus])
 }
 
 model Session {

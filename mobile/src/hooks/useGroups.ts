@@ -10,6 +10,7 @@
 
 import { useEffect } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { type Socket } from 'socket.io-client';
 import { getSocket } from '@/lib/socket';
 import { groupService, type CreateGroupInput } from '@/services/groups';
 import type { GroupChat, GroupMessage, LiquidityPool } from '@/types/groups';
@@ -140,8 +141,8 @@ export const usePoolClose = (id: string) => {
 export function useGroupRealtime() {
   const qc = useQueryClient();
   useEffect(() => {
-    const socket = getSocket();
-    if (!socket) return;
+    let sock: Socket | null = null;
+    let cancelled = false;
 
     const onMessage = (msg: GroupMessage) => {
       qc.setQueryData<GroupMessage[]>(QK.msgs(msg.groupId), (prev) => {
@@ -167,26 +168,34 @@ export function useGroupRealtime() {
     };
     const onGroupChanged = () => { qc.invalidateQueries({ queryKey: QK.list }); };
 
-    socket.on('group:message',          onMessage);
-    socket.on('group:message-edited',   onEdited);
-    socket.on('group:message-deleted',  onDeleted);
-    socket.on('group:pool-updated',     onPoolUpdated);
-    socket.on('group:created',          onGroupChanged);
-    socket.on('group:updated',          onGroupChanged);
-    socket.on('group:member-added',     onGroupChanged);
-    socket.on('group:member-removed',   onGroupChanged);
-    socket.on('group:dissolved',        onGroupChanged);
+    (async () => {
+      sock = await getSocket();
+      if (cancelled) return;
+
+      sock.on('group:message',         onMessage);
+      sock.on('group:message-edited',  onEdited);
+      sock.on('group:message-deleted', onDeleted);
+      sock.on('group:pool-updated',    onPoolUpdated);
+      sock.on('group:created',         onGroupChanged);
+      sock.on('group:updated',         onGroupChanged);
+      sock.on('group:member-added',    onGroupChanged);
+      sock.on('group:member-removed',  onGroupChanged);
+      sock.on('group:dissolved',       onGroupChanged);
+    })();
 
     return () => {
-      socket.off('group:message',         onMessage);
-      socket.off('group:message-edited',  onEdited);
-      socket.off('group:message-deleted', onDeleted);
-      socket.off('group:pool-updated',    onPoolUpdated);
-      socket.off('group:created',         onGroupChanged);
-      socket.off('group:updated',         onGroupChanged);
-      socket.off('group:member-added',    onGroupChanged);
-      socket.off('group:member-removed',  onGroupChanged);
-      socket.off('group:dissolved',       onGroupChanged);
+      cancelled = true;
+      if (sock) {
+        sock.off('group:message',         onMessage);
+        sock.off('group:message-edited',  onEdited);
+        sock.off('group:message-deleted', onDeleted);
+        sock.off('group:pool-updated',    onPoolUpdated);
+        sock.off('group:created',         onGroupChanged);
+        sock.off('group:updated',         onGroupChanged);
+        sock.off('group:member-added',    onGroupChanged);
+        sock.off('group:member-removed',  onGroupChanged);
+        sock.off('group:dissolved',       onGroupChanged);
+      }
     };
   }, [qc]);
 }

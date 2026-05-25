@@ -78,7 +78,10 @@ export async function deriveTronWallet(userIndex: number): Promise<DerivedWallet
 
   try {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const TronWeb = require('tronweb');
+    const tronweb = require('tronweb');
+    // tronweb exports { TronWeb, ... } — the class (with static address helpers)
+    // is under the .TronWeb key, not the module root.
+    const TronWeb = tronweb.TronWeb ?? tronweb.default ?? tronweb;
     const address = TronWeb.address.fromPrivateKey(pkHex);
     if (!address) throw new Error('Failed to derive TRON address');
     return { address, privateKey: pkHex };
@@ -98,42 +101,40 @@ export async function createUserWallets(userId: string) {
   const existing = await prisma.userWallet.findUnique({ where: { userId } });
   if (existing) return existing;
 
-  // Two-step create: first reserve the row to claim a walletIndex, then
-  // derive addresses for that index. We use a transaction to guarantee
-  // index→address consistency even if derivation fails (the reservation
-  // is rolled back).
-  return prisma.$transaction(async (tx) => {
-    // Placeholder row so Postgres assigns walletIndex. We back-fill the
-    // address columns once derivation succeeds. Using cuid() placeholders
-    // that satisfy the @unique constraints temporarily.
-    const placeholder = `pending-${userId}`;
-    const row = await tx.userWallet.create({
-      data: {
-        userId,
-        ethAddress: `${placeholder}-eth`,
-        btcAddress: `${placeholder}-btc`,
-        solAddress: `${placeholder}-sol`,
-        tronAddress: `${placeholder}-tron`,
-      },
-    });
+  // Step 1 — reserve a row to claim a walletIndex from Postgres.
+  // Placeholder addresses satisfy the @unique constraints temporarily.
+  // This is a plain fast write, no interactive transaction.
+  const placeholder = `pending-${userId}`;
+  const row = await prisma.userWallet.create({
+    data: {
+      userId,
+      ethAddress:  `${placeholder}-eth`,
+      btcAddress:  `${placeholder}-btc`,
+      solAddress:  `${placeholder}-sol`,
+      tronAddress: `${placeholder}-tron`,
+    },
+  });
 
-    const index = row.walletIndex;
-    const [eth, btc, sol, tron] = await Promise.all([
-      deriveEthWallet(index),
-      deriveBtcWallet(index),
-      deriveSolWallet(index),
-      deriveTronWallet(index),
-    ]);
+  // Step 2 — derive all addresses OUTSIDE any transaction. These are
+  // CPU-heavy (BIP-32 + crypto) and can take 200–500 ms each under load,
+  // which would exceed Prisma's 5 s interactive transaction timeout.
+  const index = row.walletIndex;
+  const [eth, btc, sol, tron] = await Promise.all([
+    deriveEthWallet(index),
+    deriveBtcWallet(index),
+    deriveSolWallet(index),
+    deriveTronWallet(index),
+  ]);
 
-    return tx.userWallet.update({
-      where: { id: row.id },
-      data: {
-        ethAddress: eth.address,
-        btcAddress: btc.address,
-        solAddress: sol.address,
-        tronAddress: tron.address,
-      },
-    });
+  // Step 3 — single fast update to write the real addresses.
+  return prisma.userWallet.update({
+    where: { id: row.id },
+    data: {
+      ethAddress:  eth.address,
+      btcAddress:  btc.address,
+      solAddress:  sol.address,
+      tronAddress: tron.address,
+    },
   });
 }
 

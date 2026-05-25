@@ -15,10 +15,45 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+let _refreshPromise: Promise<string | null> | null = null;
+
+async function tryRefresh(): Promise<string | null> {
+  if (_refreshPromise) return _refreshPromise;
+  _refreshPromise = (async () => {
+    try {
+      const rt = localStorage.getItem('refreshToken');
+      if (!rt) return null;
+      const res = await axios.post(
+        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'}/auth/refresh`,
+        { refreshToken: rt },
+      );
+      const newAccess: string = res.data.accessToken;
+      const newRefresh: string | undefined = res.data.refreshToken;
+      localStorage.setItem('accessToken', newAccess);
+      if (newRefresh) localStorage.setItem('refreshToken', newRefresh);
+      return newAccess;
+    } catch {
+      return null;
+    } finally {
+      _refreshPromise = null;
+    }
+  })();
+  return _refreshPromise;
+}
+
 api.interceptors.response.use(
   (response) => response,
-  (error) => {
-    if (error.response?.status === 401) {
+  async (error) => {
+    const original = error.config as any;
+    if (error.response?.status === 401 && !original._retry) {
+      original._retry = true;
+      const newToken = await tryRefresh();
+      if (newToken) {
+        original.headers = original.headers ?? {};
+        original.headers.Authorization = `Bearer ${newToken}`;
+        return api(original);
+      }
+      // Refresh failed — clear session and redirect
       localStorage.removeItem('accessToken');
       localStorage.removeItem('refreshToken');
       if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login') && !window.location.pathname.startsWith('/register') && !window.location.pathname.startsWith('/auth')) {

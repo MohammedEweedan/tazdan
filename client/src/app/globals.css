@@ -79,6 +79,23 @@ p:not([style*="text-align"]),
 
 @media print { .no-print { display: none !important; } }
 
+/* ── Compositor-only animations (no JS RAF cost) ─────────────────── */
+@keyframes halo-pulse {
+  0%, 100% { opacity: 0.08; }
+  50%       { opacity: 0.16; }
+}
+
+/* ── Reduced-motion: disable decorative animations ───────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
 /* Landing-page scroll snap (proximity so it doesn't fight sticky-scroll sections) */
 html.snap-landing { scroll-snap-type: y proximity; scroll-padding-top: 0; }
 .snap-section { scroll-snap-align: start; scroll-snap-stop: always; }

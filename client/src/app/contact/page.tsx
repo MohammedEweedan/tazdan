@@ -176,7 +176,7 @@ export default function ContactPage() {
 
           {/* Office + hours */}
           <VStack align="stretch" spacing={4}>
-            <Box bg={cardBg} border="1px solid" borderColor={cardBorder} borderRadius="24px" p={6}>
+            {/* <Box bg={cardBg} border="1px solid" borderColor={cardBorder} borderRadius="24px" p={6}>
               <Flex
                 w="42px" h="42px" borderRadius="12px"
                 bg={dark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)"}
@@ -191,7 +191,7 @@ export default function ContactPage() {
               <Text fontSize="15px" color={textMain} fontWeight="600" lineHeight="1.6" whiteSpace="pre-line">
                 {t('contact_hq_value')}
               </Text>
-            </Box>
+            </Box> */}
 
             <Box bg={cardBg} border="1px solid" borderColor={cardBorder} borderRadius="24px" p={6}>
               <Flex

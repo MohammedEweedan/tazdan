@@ -168,6 +168,14 @@ function baseTemplate(title: string, body: string): string {
 /* ─────────────────────────────────────────────────────────────
    Core send
 ───────────────────────────────────────────────────────────── */
+// Domains that must never receive real emails (simulation, load-test, CI).
+const SUPPRESSED_DOMAINS = ['fortuni.sim', 'fortuni.test', 'test.com', 'example.com', 'localhost'];
+
+function isSuppressed(address: string): boolean {
+  const domain = address.split('@')[1]?.toLowerCase() ?? '';
+  return SUPPRESSED_DOMAINS.some((d) => domain === d || domain.endsWith(`.${d}`));
+}
+
 export async function sendEmail({
   to,
   subject,
@@ -177,6 +185,9 @@ export async function sendEmail({
   subject: string;
   html: string;
 }) {
+  if (isSuppressed(to)) {
+    return; // silently drop — simulation/test address
+  }
   if (!transporter) {
     console.warn('[email] SMTP not configured — skipping send:', subject, 'to', to);
     return;

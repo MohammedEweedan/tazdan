@@ -365,6 +365,8 @@ async function start() {
     await ensureMasterSeed();
     await initRedis();
 
+    httpServer.keepAliveTimeout = 65_000;
+    httpServer.headersTimeout    = 66_000;
     httpServer.listen(PORT, () => {
       const workerTag = cluster.isWorker ? ` [worker ${process.pid}]` : '';
       logger.info(`Server running on port ${PORT}${workerTag}`);

@@ -3,12 +3,27 @@
 import { create } from 'zustand';
 import { authAPI } from '@/lib/api';
 
+export interface BusinessProfile {
+  id: string;
+  companyName: string;
+  legalName?: string | null;
+  country: string;
+  industry?: string | null;
+  employeeCount?: string | null;
+  website?: string | null;
+  billingEmail?: string | null;
+  supportEmail?: string | null;
+  kybStatus?: 'NOT_SUBMITTED' | 'PENDING' | 'APPROVED' | 'REJECTED';
+}
+
 interface User {
   id: string;
   email: string;
   firstName: string;
   lastName: string;
   role: string;
+  accountType?: 'PERSONAL' | 'BUSINESS';
+  businessProfile?: BusinessProfile | null;
   kycStatus: string;
   twoFactorEnabled?: boolean;
   referralCode?: string;

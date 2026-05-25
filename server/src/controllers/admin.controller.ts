@@ -1197,26 +1197,7 @@ export class AdminController {
         }
       }
 
-      // P2P trades with fee > 0
-      const p2pTrades = await (prisma as any).p2PTrade.findMany({
-        where: { platformFee: { gt: 0 } },
-        select: { id: true, platformFee: true, currency: true, buyerId: true, createdAt: true },
-        take: CHUNK,
-      });
-      for (const t of p2pTrades) {
-        const exists = await prisma.platformFee.findFirst({ where: { sourceId: t.id, source: 'P2P_TRADE' } });
-        if (!exists) {
-          await prisma.platformFee.create({
-            data: {
-              source: 'P2P_TRADE', sourceId: t.id, payerId: t.buyerId,
-              currency: (t.currency ?? 'USD') as any, amount: t.platformFee,
-              amountUsd: t.platformFee,
-              createdAt: t.createdAt,
-            },
-          });
-          imported.p2pTrades++;
-        }
-      }
+      // P2P trades — skipped: P2PTrade model does not carry a platformFee column
 
       const total = imported.orders + imported.withdrawals + imported.cryptoOrders + imported.p2pTrades;
       res.json({ message: `Backfill complete — imported ${total} records`, imported, total });

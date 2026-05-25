@@ -19,6 +19,8 @@ import { Panel, PanelRow } from '@/components/ui/ScreenShell';
 import { LocalePickerModal } from '@/components/ui/LocalePickerModal';
 import { profileAPI } from '@/lib/api';
 
+const ACCENT = '#226dff';
+
 interface Row {
   icon: keyof typeof Ionicons.glyphMap;
   label: string;
@@ -206,6 +208,24 @@ export default function Profile() {
         { icon: 'receipt-outline',     label: t('history.title'),       href: '/history' },
         { icon: 'add-circle-outline',  label: t('profile.row.deposits'), href: '/topup' },
         { icon: 'gift-outline',        label: t('home.referral'),        href: '/referral' },
+      ],
+    },
+    {
+      title: t('profile.section.business'),
+      rows: [
+        {
+          icon: 'business-outline',
+          label: t('profile.row.business'),
+          href: '/business',
+          right: (
+            <View style={{
+              paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6,
+              backgroundColor: `${ACCENT}18`, borderWidth: 1, borderColor: `${ACCENT}30`,
+            }}>
+              <Text style={{ color: ACCENT, fontSize: 10, fontWeight: '700', letterSpacing: 0.4 }}>B2B</Text>
+            </View>
+          ),
+        },
       ],
     },
     {
