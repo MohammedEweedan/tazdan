@@ -12,8 +12,22 @@ import { useThemedPalette } from '@/store/themeStore';
 import { useT } from '@/store/i18nStore';
 import { useHaptics, useWallets, extractErrorMessage, useStepUpAuth, StepUpDeniedError, useTransactionSound } from '@/hooks';
 import { useForexRates } from '@/hooks/useForexRates';
-import { profileService, messageService } from '@/services';
+import { profileService, messageService, claimLinkService } from '@/services';
 import type { Currency } from '@/types';
+import { useRouter } from 'expo-router';
+import * as Clipboard from 'expo-clipboard';
+import { Share, Alert } from 'react-native';
+
+// Match input that's clearly an off-platform identifier — the cue we use
+// to surface the "Send via claim link" CTA.
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const PHONE_RE = /^\+?[0-9 ()\-]{6,}$/;
+function looksOffPlatform(v: string): { kind: 'email'; value: string } | { kind: 'phone'; value: string } | null {
+  const trimmed = v.trim();
+  if (EMAIL_RE.test(trimmed)) return { kind: 'email', value: trimmed };
+  if (PHONE_RE.test(trimmed)) return { kind: 'phone', value: trimmed.replace(/[\s()\-]/g, '') };
+  return null;
+}
 
 const FIATS: Currency[] = ['USD', 'EUR', 'GBP', 'AED', 'SAR', 'EGP'];
 
@@ -67,7 +81,8 @@ export function SendWidget() {
   const p       = useThemedPalette();
   const t       = useT();
   const haptics = useHaptics();
-  const { playSuccess } = useTransactionSound();
+  const router  = useRouter();
+  const { playSuccess, playError } = useTransactionSound();
   const { data: wallets } = useWallets();
   const { data: fxRates } = useForexRates();
   const stepUp = useStepUpAuth();
@@ -139,7 +154,7 @@ export function SendWidget() {
         setTimeout(() => setCta('idle'), 2000);
         return;
       }
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      playError();
       setCtaErr(extractErrorMessage(e, t('send.failed')));
       setCta('error');
       setTimeout(() => setCta('idle'), 2000);
@@ -197,9 +212,102 @@ export function SendWidget() {
               <Text style={{ color: p.fgMuted, fontSize: 13 }}>{t('send.searching')}</Text>
             </View>
           ) : matches.length === 0 ? (
-            <View style={{ padding: 14 }}>
-              <Text style={{ color: p.fgMuted, fontSize: 13 }}>{t('send.noMatches')}</Text>
-            </View>
+            (() => {
+              const off = looksOffPlatform(recipient);
+              if (!off) {
+                return (
+                  <View style={{ padding: 14 }}>
+                    <Text style={{ color: p.fgMuted, fontSize: 13 }}>{t('send.noMatches')}</Text>
+                  </View>
+                );
+              }
+              // Off-platform identifier → offer the claim link. This is the
+              // headline path: type someone's email/phone, send anyway, the
+              // recipient gets a magical one-tap claim URL.
+              const amountNum = parseFloat(amount || '0');
+              const ready = amountNum > 0 && amountNum <= balance;
+              const createAndShare = async () => {
+                if (!ready) {
+                  Alert.alert(t('send.amountRequiredTitle') || 'Enter an amount first', t('send.amountRequiredBody') || 'Type how much you want to send, then we will generate a one-tap link the recipient can claim.');
+                  return;
+                }
+                try {
+                  haptics.light();
+                  const link = await claimLinkService.create({
+                    asset: currency,
+                    amount: amountNum,
+                    recipientEmail: off.kind === 'email' ? off.value : undefined,
+                    recipientPhone: off.kind === 'phone' ? off.value : undefined,
+                    note: note || undefined,
+                  });
+                  await Clipboard.setStringAsync(link.claimUrl ?? '');
+                  haptics.success();
+                  Alert.alert(
+                    t('send.claimReadyTitle') || 'Claim link ready',
+                    `${(t('send.claimReadyBody') || 'Funds reserved. Share this with')} ${off.value}.`,
+                    [
+                      { text: t('common.copyAgain') || 'Copy again', onPress: () => Clipboard.setStringAsync(link.claimUrl ?? '') },
+                      {
+                        text: t('common.share') || 'Share',
+                        onPress: () =>
+                          Share.share({
+                            message: `${(t('send.claimShareIntro') || "I sent you")} ${amount} ${currency} on Fortuni → ${link.claimUrl}`,
+                          }),
+                      },
+                      { text: t('common.done') || 'Done', style: 'cancel' },
+                    ],
+                  );
+                  // Clear the field so the next send is fresh.
+                  setRecipient('');
+                  setAmount('');
+                } catch (e: any) {
+                  haptics.error();
+                  Alert.alert(t('common.error') || 'Error', e?.response?.data?.error ?? (t('send.claimFailed') || 'Could not create claim link'));
+                }
+              };
+              return (
+                <View style={{ padding: 14, gap: 12 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10 }}>
+                    <View
+                      style={{
+                        width: 36, height: 36, borderRadius: 18,
+                        backgroundColor: p.fg,
+                        alignItems: 'center', justifyContent: 'center',
+                      }}
+                    >
+                      <Ionicons name="paper-plane" size={16} color={p.bg} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ color: p.fg, fontSize: 14, fontWeight: '700' }}>
+                        {t('send.noAccountYet') || 'No Fortuni account yet'}
+                      </Text>
+                      <Text style={{ color: p.fgMuted, fontSize: 12, marginTop: 2, lineHeight: 17 }}>
+                        {t('send.claimExplain') || 'Send anyway via a claim link. The recipient gets a one-tap URL that credits their wallet — even if they have to sign up first.'}
+                      </Text>
+                    </View>
+                  </View>
+                  <Pressable
+                    onPress={createAndShare}
+                    style={({ pressed }) => ({
+                      height: 46, borderRadius: 23,
+                      backgroundColor: ready ? p.ctaBg : p.bgRaised,
+                      alignItems: 'center', justifyContent: 'center',
+                      flexDirection: 'row', gap: 8,
+                      opacity: pressed ? 0.92 : 1,
+                      borderWidth: ready ? 0 : 1,
+                      borderColor: p.border,
+                    })}
+                  >
+                    <Ionicons name="link-outline" size={14} color={ready ? p.ctaFg : p.fgMuted} />
+                    <Text style={{ color: ready ? p.ctaFg : p.fgMuted, fontSize: 13, fontWeight: '700' }}>
+                      {ready
+                        ? `${(t('send.sendToOffPlatform') || 'Send via claim link')}`
+                        : (t('send.enterAmountFirst') || 'Enter an amount to enable claim link')}
+                    </Text>
+                  </Pressable>
+                </View>
+              );
+            })()
           ) : (
             matches.map((m: Profile, i: number) => (
               <Pressable
@@ -211,8 +319,13 @@ export function SendWidget() {
                   borderTopWidth: i === 0 ? 0 : 1, borderTopColor: p.border,
                 })}
               >
-                <View style={{ width: 38, height: 38, borderRadius: 19, backgroundColor: '#7c3aed', alignItems: 'center', justifyContent: 'center' }}>
-                  <Text style={{ color: '#fff', fontWeight: '600', fontSize: 15 }}>
+                <View style={{
+                  width: 38, height: 38, borderRadius: 19,
+                  backgroundColor: p.bgRaised,
+                  borderWidth: 1, borderColor: p.border,
+                  alignItems: 'center', justifyContent: 'center',
+                }}>
+                  <Text style={{ color: p.fg, fontWeight: '700', fontSize: 15 }}>
                     {m.firstName?.[0]?.toUpperCase() ?? m.username[0].toUpperCase()}
                   </Text>
                 </View>

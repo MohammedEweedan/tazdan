@@ -10,6 +10,8 @@ import { processDeposit } from '../services/wallet/onchainSettlement.service';
 import { logger } from '../utils/logger';
 import { Currency } from '@prisma/client';
 import type { RampPaymentMethod, RampProvider } from '@prisma/client';
+import { sendDepositConfirmed } from '../services/email';
+import { pushCopy, pushTxEvent } from '../services/push.service';
 
 const depositSchema = z.object({
   currency: z.enum(['USD', 'EUR', 'GBP', 'AED', 'SAR', 'EGP', 'USDT', 'LYD', 'BTC', 'ETH', 'BNB', 'SOL', 'XRP', 'ADA', 'DOGE', 'MATIC', 'DOT', 'AVAX']),
@@ -378,6 +380,33 @@ export class DepositController {
           });
         }
       });
+
+      // Transactional email + push (fiat card deposit). Fire-and-forget.
+      if (event.status === 'COMPLETED' && txn.status !== 'COMPLETED') {
+        (async () => {
+          try {
+            const u = await prisma.user.findUnique({
+              where: { id: txn.userId },
+              select: { email: true, firstName: true, notificationPrefs: true as any },
+            });
+            if (!u) return;
+            const prefs = (u as any).notificationPrefs ?? {};
+            const amt = txn.fiatAmount.toString().replace(/\.?0+$/, '');
+            if (prefs?.email?.deposits !== false) {
+              await sendDepositConfirmed({
+                to: u.email, firstName: u.firstName || 'there',
+                asset: txn.fiatCurrency, amount: amt,
+                txHash: txn.providerRef,
+              });
+            }
+            if (prefs?.push?.deposits !== false) {
+              await pushTxEvent(txn.userId, pushCopy.depositOn(amt, txn.fiatCurrency), txn.providerRef);
+            }
+          } catch (err) {
+            logger.warn('[deposit.webhookStripe] post-fill notify failed', { userId: txn.userId, err });
+          }
+        })();
+      }
 
       res.json({ ok: true });
     } catch (e) { next(e); }

@@ -26,7 +26,7 @@ import { TopGradient } from '@/components/ui/ScreenShell';
 
 type Filter = 'ALL' | 'UNREAD' | 'PAYMENTS' | 'SUPPORT';
 
-const BRAND_BLUE = '#0057B8';
+const BRAND_BLUE = '#737373'; // mono accent neutral
 
 export default function Messages() {
   const router = useRouter();

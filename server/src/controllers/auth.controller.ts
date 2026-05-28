@@ -414,8 +414,8 @@ export class AuthController {
   static async enable2FA(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const secret = speakeasy.generateSecret({
-        name: `fortuni:${req.user!.email}`,
-        issuer: 'fortuni',
+        name: `Fortuni:${req.user!.email}`,
+        issuer: 'Fortuni',
       });
 
       await prisma.user.update({

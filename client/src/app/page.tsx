@@ -44,7 +44,13 @@ import {
   MotionValue, AnimatePresence,
 } from "framer-motion";
 import { ContainerScroll } from "@/components/ui/container-scroll-animation";
-import { ShaderAnimation } from "@/components/ui/shader-lines";
+// Lazy-mount the shader so its WebGL setup runs AFTER LCP. Until it
+// hydrates the hero shows a static gradient (handled in CSS), keeping
+// LCP image-driven instead of canvas-driven.
+const ShaderAnimation = dynamic(
+  () => import("@/components/ui/shader-lines").then((m) => m.ShaderAnimation),
+  { ssr: false, loading: () => null },
+);
 import { IconLogo } from "@/components/ui/Logo";
 import PublicNav from "@/components/ui/PublicNav";
 import PublicFooter from "@/components/ui/PublicFooter";
@@ -217,7 +223,7 @@ const LockScreen = memo(function LockScreen({
         justify="space-between" zIndex={2}
       >
         <Text style={{ fontSize: s.statusFont }} color="white" fontWeight="700" letterSpacing="0.01em">
-          fortuni
+          Fortuni
         </Text>
         <HStack spacing="calc(var(--pw) * 0.025)">
           <HStack spacing="calc(var(--pw) * 0.008)" align="flex-end" h={s.diH11}>
@@ -283,7 +289,7 @@ const LockScreen = memo(function LockScreen({
             <VStack align="start" spacing={0} flex={1}>
               <HStack justify="space-between" w="100%">
                 <Text style={{ fontSize: s.statusFont }} color="rgba(255,255,255,0.6)" fontWeight="700" letterSpacing="0.04em" textTransform="uppercase">
-                  fortuni
+                  Fortuni
                 </Text>
                 <Text style={{ fontSize: s.statusFont }} color="rgba(255,255,255,0.4)">1m ago</Text>
               </HStack>
@@ -1762,7 +1768,7 @@ function SectionBento() {
           <VStack align="center" spacing={3} mb={{ base: 10, md: 16 }} textAlign="center">
             <Heading fontFamily="'DM Sans', sans-serif" fontWeight="800" fontSize={{ base: "32px", md: "56px", lg: "64px" }} letterSpacing="-0.04em" color={textMain} lineHeight={1.1}>
               {t("bento_title_1")}{" "}
-              <Box as="span" color={dark ? "#226dff" : "#226dff"}>{t("bento_title_2")}</Box>
+              <Box as="span">{t("bento_title_2")}</Box>
             </Heading>
           </VStack>
         </motion.div>
@@ -1949,7 +1955,7 @@ function SectionBusiness() {
                 {/* Eyebrow label */}
                 <Text
                   fontSize="11px" fontWeight="800" letterSpacing="0.14em"
-                  textTransform="uppercase" color={ACCENT}
+                  textTransform="uppercase"
                 >
                   Fortuni Business
                 </Text>
@@ -1960,7 +1966,7 @@ function SectionBusiness() {
                   letterSpacing="-0.04em" lineHeight={1.00} color={textMain}
                 >
                   {t("biz_headline_1")}{" "}
-                  <Box as="span" color={ACCENT}>{t("biz_headline_2")}</Box>
+                  <Box as="span">{t("biz_headline_2")}</Box>
                 </Heading>
 
                 <Text
@@ -2200,15 +2206,15 @@ function StageCopy({ op, title, desc, features, textMain, textMuted, hairline, t
       }}
     >
       <Heading as="h2" fontFamily="'DM Sans', sans-serif" fontWeight="800"
-        fontSize={{ base: "26px", sm: "34px", md: "56px", xl: "80px" }}
+        fontSize={{ base: "30px", sm: "40px", md: "68px", xl: "92px" }}
         letterSpacing="-0.05em" lineHeight={0.94} color={textMain}
         sx={{ fontFeatureSettings: '"ss01", "cv11", "kern"' }}
       >
         {title}
       </Heading>
       {desc && (
-        <Text fontSize={{ base: "15px", md: "18px" }} color={textMuted}
-          maxW="480px" lineHeight={1.5} fontWeight="400"
+        <Text fontSize={{ base: "16px", md: "20px" }} color={textMuted}
+          maxW="520px" lineHeight={1.5} fontWeight="400"
         >
           {desc}
         </Text>
@@ -2309,29 +2315,10 @@ function PhoneJourney() {
           }}
         >
           {/* Shader has transparent bg — normal blend works for both light & dark */}
-          <Box position="absolute" inset={0}
-            style={{
-              opacity: dark ? 1 : 0.55,
-            } as React.CSSProperties}
-          >
+          <Box position="absolute" inset={0}>
             <ShaderAnimation />
           </Box>
         </motion.div>
-
-        {/* ── Brand-colour halo — CSS animation so it's compositor-only ── */}
-        <div
-          aria-hidden
-          style={{
-            position: "absolute", top: "50%", left: "50%",
-            width: 560, height: 560,
-            transform: "translate(-50%,-50%)",
-            borderRadius: "50%",
-            background: ACCENT,
-            filter: "blur(180px)",
-            pointerEvents: "none", zIndex: 0,
-            animation: "halo-pulse 7s ease-in-out infinite",
-          }}
-        />
 
         {/* ── Layout grid ── */}
         <Container maxW="1300px" h="100%" position="relative" zIndex={1} px={{ base: 4, md: 10 }}>
@@ -2341,7 +2328,7 @@ function PhoneJourney() {
             {/* COPY column — sits LEFT on desktop, BELOW phone on mobile */}
             <Box position="relative" order={{ base: 2, lg: 1 }}
               h={{ base: "180px", sm: "220px", lg: "520px" }}
-              w="100%" maxW={{ base: "100%", lg: "560px" }}
+              w="100%" maxW={{ base: "100%", lg: "620px" }}
               textAlign={{ base: "center", lg: "left" } as any}
               pt={{ base: 0, lg: 0 }}
             >
@@ -2357,11 +2344,11 @@ function PhoneJourney() {
               />
               <StageCopy op={copyB} accent={ACCENT} textMain={textMain} textMuted={textMuted} hairline={hairline} tileBg={tileBg}
                 eyebrow={t("bento_countries_label")}
-                title={<>{t("bento_title_1")} <Box as="span" color={ACCENT}>{t("bento_title_2")}</Box></>}
+                title={<>{t("bento_title_1")} <Box as="span">{t("bento_title_2")}</Box></>}
               />
               <StageCopy op={copyC} accent={ACCENT} textMain={textMain} textMuted={textMuted} hairline={hairline} tileBg={tileBg}
                 eyebrow={t("sec_social_title_1")}
-                title={<>{t("sec_social_title_1")}<br /><Box as="span" color={ACCENT}>{t("sec_social_title_2")}</Box></>}
+                title={<>{t("sec_social_title_1")}<br /><Box as="span">{t("sec_social_title_2")}</Box></>}
                 desc={t("sec_social_desc")}
               />
               <StageCopy op={copyD} accent={ACCENT} textMain={textMain} textMuted={textMuted} hairline={hairline} tileBg={tileBg}
@@ -2486,8 +2473,8 @@ function PhoneJourney() {
                   position="relative"
                   style={{
                     ...phoneVars,
-                    /* Mobile: smaller phone height so it doesn't dominate the screen */
-                    ["--ph" as string]: "clamp(200px, 34vh, 560px)",
+                    /* Larger phone so it reads well on every viewport */
+                    ["--ph" as string]: "clamp(260px, 42vh, 640px)",
                     width: "var(--pw)", height: "var(--ph)",
                   } as React.CSSProperties}
                   mx="auto"
@@ -2547,8 +2534,8 @@ function PhoneJourney() {
 }
 
 /* ─── Device OS detection — runs once on mount ──────────────────── */
-const IOS_URL     = "https://apps.apple.com/app/fortuni/id0000000000";
-const ANDROID_URL = "https://play.google.com/store/apps/details?id=com.fortuni.app";
+const IOS_URL     = "https://apps.apple.com/app/Fortuni/id0000000000";
+const ANDROID_URL = "https://play.google.com/store/apps/details?id=com.Fortuni.app";
 
 function useDeviceOS(): "ios" | "android" | "other" {
   const [os, setOS] = useState<"ios" | "android" | "other">("other");
@@ -2643,17 +2630,6 @@ export default function LandingPage() {
                 </Text>
               </VStack>
               <HStack spacing={2.5} flexShrink={0} justify="center" flexWrap="wrap">
-                {/* ── Join Waitlist ── */}
-                <Button
-                  onClick={onWaitlistOpen}
-                  bg="#226dff" color="#fff"
-                  borderRadius="12px" px={5} h="40px"
-                  fontSize="13px" fontWeight="700"
-                  _hover={{ opacity: 0.85 }} transition="opacity 0.15s"
-                >
-                  {t("nav_join_waitlist")}
-                </Button>
-
                 {/* ── Download App — single button on mobile/iOS/Android,
                       both store chips on desktop ── */}
                 {deviceOS === "ios" && (
@@ -2720,16 +2696,16 @@ export default function LandingPage() {
             __html: JSON.stringify({
               '@context': 'https://schema.org',
               '@type': 'FinancialService',
-              name: 'fortuni',
+              name: 'Fortuni',
               description:
                 'Crypto exchange and money transfer platform for MENA — Libya, Egypt, UAE, Saudi Arabia.',
-              url: 'https://fortuni.com',
+              url: 'https://Fortuni.com',
               areaServed: ['LY', 'EG', 'AE', 'SA', 'GB', 'US', 'EU'],
               currenciesAccepted: 'USD, EUR, GBP, LYD, EGP, AED, SAR, BTC, ETH, USDT, SOL',
               serviceType: ['Cryptocurrency Exchange', 'Money Transfer', 'Virtual Card Issuance'],
               sameAs: [
-                'https://twitter.com/fortuni',
-                'https://t.me/fortuni',
+                'https://twitter.com/Fortuni',
+                'https://t.me/Fortuni',
               ],
             }),
           }}

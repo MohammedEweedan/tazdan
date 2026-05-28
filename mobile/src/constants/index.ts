@@ -16,7 +16,7 @@ import type { Currency, CurrencyMeta } from '@/types';
  *  3. On Android emulator, `10.0.2.2` reaches the host machine.
  *  4. Web + iOS Simulator can use `localhost` directly.
  */
-const API_PORT = 5000;
+const API_PORT = 5001;
 function resolveApiBase(): string {
   const fromEnv = process.env.EXPO_PUBLIC_API_BASE;
   if (fromEnv) return fromEnv;
@@ -32,9 +32,9 @@ function resolveApiBase(): string {
 }
 
 export const APP = {
-  name: 'fortuni',
+  name: 'Fortuni',
   tagline: 'Money. Crypto. One app.',
-  supportEmail: 'support@fortuni.app',
+  supportEmail: 'support@Fortuni.app',
   apiBaseUrl: resolveApiBase(),
 };
 
@@ -50,18 +50,18 @@ export const APP = {
  */
 export const STRIPE = {
   publishableKey: process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? '',
-  merchantIdentifier: process.env.EXPO_PUBLIC_APPLE_MERCHANT_ID ?? 'merchant.com.fortuni.app',
+  merchantIdentifier: process.env.EXPO_PUBLIC_APPLE_MERCHANT_ID ?? 'merchant.com.Fortuni.app',
   // Display name shown in the Apple Pay / Google Pay sheet
-  merchantDisplayName: 'fortuni',
+  merchantDisplayName: 'Fortuni',
   // Two-letter country for Apple Pay / Google Pay merchant locale
   merchantCountryCode: process.env.EXPO_PUBLIC_PAY_COUNTRY ?? 'US',
 };
 
 export const STORAGE_KEYS = {
-  accessToken:  'fortuni.accessToken',
-  refreshToken: 'fortuni.refreshToken',
-  onboarded:    'fortuni.onboarded',
-  lastUser:     'fortuni.lastUser',
+  accessToken:  'Fortuni.accessToken',
+  refreshToken: 'Fortuni.refreshToken',
+  onboarded:    'Fortuni.onboarded',
+  lastUser:     'Fortuni.lastUser',
 } as const;
 
 export const QUERY_KEYS = {

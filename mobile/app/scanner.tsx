@@ -17,7 +17,7 @@ export default function ScannerPage() {
   const router = useRouter();
   const h = useHaptics();
   const p = useThemedPalette();
-  const LOGO = require('../assets/logo-color.png');
+  const LOGO = require('../assets/logo-white.png');
   const themeMode = useTheme((s) => s.mode);
 
   const [permission, requestPermission] = useCameraPermissions();
@@ -43,11 +43,11 @@ export default function ScannerPage() {
 
     // Parse handle from QR data. Supports:
     //   @handle
-    //   fortuni://u/handle
-    //   https://fortuni.com/u/handle
+    //   Fortuni://u/handle
+    //   https://Fortuni.com/u/handle
     let handle = '';
     const atMatch = data.match(/@([a-zA-Z0-9._]+)/);
-    const urlMatch = data.match(/(?:fortuni:\/\/u\/|https?:\/\/(?:[^\/]+\.)?fortuni\.(?:com|app)\/u\/)([a-zA-Z0-9._]+)/);
+    const urlMatch = data.match(/(?:Fortuni:\/\/u\/|https?:\/\/(?:[^\/]+\.)?Fortuni\.(?:com|app)\/u\/)([a-zA-Z0-9._]+)/);
     if (atMatch) handle = atMatch[1];
     else if (urlMatch) handle = urlMatch[1];
     else handle = data.replace(/^@/, '').trim();
@@ -204,7 +204,7 @@ export default function ScannerPage() {
             fontWeight: '600',
           }}
         >
-          Point camera at a fortuni QR code
+          Point camera at a Fortuni QR code
         </Text>
       </View>
 

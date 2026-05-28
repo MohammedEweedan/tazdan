@@ -2,7 +2,7 @@
  * Profile tab — theme-aware, every Pressable is real.
  */
 
-import { Pressable, ScrollView, Switch, View, Modal, Alert } from 'react-native';
+import { Pressable, ScrollView, Switch, View, Modal, Alert, Image } from 'react-native';
 import { Text } from '@/components/ui/Text';
 import { useState } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -15,11 +15,12 @@ import { useAuthStore } from '@/store/authStore';
 import { useHaptics } from '@/hooks';
 import { useTheme, useThemedPalette } from '@/store/themeStore';
 import { useI18n, useT, LOCALE_META } from '@/store/i18nStore';
-import { Panel, PanelRow } from '@/components/ui/ScreenShell';
+import { Panel, PanelRow, TopGradient } from '@/components/ui/ScreenShell';
 import { LocalePickerModal } from '@/components/ui/LocalePickerModal';
 import { profileAPI } from '@/lib/api';
+import { realHandle, displayHandle, avatarMode } from '@/utils/displayUser';
 
-const ACCENT = '#226dff';
+const ACCENT = '#737373';
 
 interface Row {
   icon: keyof typeof Ionicons.glyphMap;
@@ -47,10 +48,14 @@ export default function Profile() {
   const [saving, setSaving] = useState(false);
   const [bioLoading, setBioLoading] = useState(false);
 
-  const initial = (user?.firstName?.[0] ?? user?.email?.[0] ?? 'P').toUpperCase();
-  const fullName = `${user?.firstName ?? ''} ${user?.lastName ?? ''}`.trim() || 'fortuni user';
-  const handle = user?.username ?? user?.email?.split('@')[0] ?? 'me';
-  const userEmoji = (user as any)?.avatarUrl;
+  // Display helpers — no email-derived handle (PII leak); use avatarMode()
+  // so the same field can hold either an image URL or an emoji char.
+  const fullName = `${user?.firstName ?? ''} ${user?.lastName ?? ''}`.trim() || 'Fortuni user';
+  const handleSlug = realHandle(user);
+  const handleLabel = displayHandle(user, t('home.setHandle') || 'Set @handle');
+  const av = avatarMode(user);
+  const initial = av.kind === 'initials' ? av.char : (user?.firstName?.[0] ?? '?').toUpperCase();
+  const userEmoji = av.kind === 'emoji' ? av.char : null;
   const baseCurrency = (user as any)?.baseCurrency || 'USD';
 
   const handleAvatarChange = async (emoji: string) => {
@@ -98,7 +103,7 @@ export default function Profile() {
           Alert.alert('Not available', 'Face ID / biometrics are not set up on this device.');
           return;
         }
-        const result = await LocalAuthentication.authenticateAsync({ promptMessage: 'Enable Face ID for fortuni' });
+        const result = await LocalAuthentication.authenticateAsync({ promptMessage: 'Enable Face ID for Fortuni' });
         if (result.success) { await enableBiometric(); h.success(); }
         else h.error();
       }
@@ -256,12 +261,10 @@ export default function Profile() {
   return (
     <View style={{ flex: 1, backgroundColor: p.bg }}>
       <StatusBar style={themeMode === 'dark' ? 'light' : 'dark'} />
+      <TopGradient />
       <SafeAreaView style={{ flex: 1 }} edges={['top']}>
-        <ScrollView
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ paddingBottom: 140 }}
-        >
-          {/* Title */}
+        <View style={{ flex: 1 }}>
+          {/* Title — sticky */}
           <View style={{
             flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
             paddingHorizontal: 24, paddingTop: 18, paddingBottom: 8,
@@ -271,7 +274,12 @@ export default function Profile() {
             </Text>
           </View>
 
-          {/* User panel */}
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            style={{ flex: 1 }}
+            contentContainerStyle={{ paddingBottom: 140 }}
+          >
+            {/* User panel */}
           <View style={{ paddingHorizontal: 24, marginTop: 18 }}>
             <Panel>
               <View style={{ flexDirection: 'row', alignItems: 'center', padding: 18, gap: 14 }}>
@@ -282,15 +290,17 @@ export default function Profile() {
                   }}
                   style={{
                     width: 56, height: 56, borderRadius: 28,
-                  backgroundColor: userEmoji ? (themeMode === 'dark' ? '#1a1d27' : '#f5f5f7') : (themeMode === 'dark' ? '#a78bfa' : '#7c3aed'),
-                  alignItems: 'center', justifyContent: 'center',
-                  borderWidth: userEmoji ? 1 : 0,
-                  borderColor: themeMode === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.09)',
-                }}>
-                  {userEmoji ? (
-                    <Text style={{ fontSize: 28 }}>{userEmoji}</Text>
+                    backgroundColor: p.bgElev,
+                    alignItems: 'center', justifyContent: 'center',
+                    borderWidth: 1, borderColor: p.border,
+                    overflow: 'hidden',
+                  }}>
+                  {av.kind === 'image' ? (
+                    <Image source={{ uri: av.uri }} style={{ width: 56, height: 56 }} />
+                  ) : av.kind === 'emoji' ? (
+                    <Text style={{ fontSize: 28 }}>{av.char}</Text>
                   ) : (
-                    <Text style={{ color: '#fff', fontWeight: '600', fontSize: 22 }}>{initial}</Text>
+                    <Text style={{ color: p.fg, fontWeight: '700', fontSize: 22 }}>{initial}</Text>
                   )}
                   {/* Small "edit" badge on the avatar to hint it's editable */}
                   <View style={{
@@ -307,8 +317,8 @@ export default function Profile() {
                 </Pressable>
                 <View style={{ flex: 1 }}>
                   <Text style={{ color: p.fg, fontSize: 16, fontWeight: '700' }}>{fullName}</Text>
-                  <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '500', marginTop: 2 }}>
-                    @{handle}
+                  <Text style={{ color: handleSlug ? p.fgMuted : p.fgFaint, fontSize: 13, fontWeight: '500', marginTop: 2 }}>
+                    {handleLabel}
                   </Text>
                 </View>
                 <View style={{
@@ -358,9 +368,10 @@ export default function Profile() {
             color: p.fgFaint, fontSize: 11, fontWeight: '500',
             textAlign: 'center', marginTop: 28,
           }}>
-            fortuni · v0.1.0
+            Fortuni · v0.1.0
           </Text>
         </ScrollView>
+        </View>
       </SafeAreaView>
 
       {/* Avatar Picker Modal */}

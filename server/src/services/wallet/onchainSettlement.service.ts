@@ -35,6 +35,9 @@ import {
 import { prisma } from '../../utils/prisma';
 import { AppError } from '../../middleware/errorHandler';
 import { logger } from '../../utils/logger';
+import { sendDepositConfirmed } from '../email';
+import { pushCopy, pushTxEvent } from '../push.service';
+import { logger } from '../../utils/logger';
 import { deriveKeyForChain } from './walletDerivation.service';
 
 bitcoin.initEccLib(ecc);
@@ -385,10 +388,36 @@ export async function processDeposit(opts: {
         where: { id: wallet.id },
         data: { [field]: { increment: new Prisma.Decimal(amount.toFixed(18)) } },
       });
-      return tx.onChainTransaction.update({
+      const confirmed = await tx.onChainTransaction.update({
         where: { id: row.id },
         data: { status: 'CONFIRMED', confirmedAt: new Date() },
       });
+
+      // Fire-and-forget email + push — deposit just landed.
+      (async () => {
+        try {
+          const u = await prisma.user.findUnique({
+            where: { id: wallet.userId },
+            select: { email: true, firstName: true, notificationPrefs: true as any },
+          });
+          if (!u) return;
+          const prefs = (u as any).notificationPrefs ?? {};
+          const amt = amount.toFixed(8).replace(/\.?0+$/, '');
+          if (prefs?.email?.deposits !== false) {
+            await sendDepositConfirmed({
+              to: u.email, firstName: u.firstName || 'there',
+              asset, amount: amt, txHash: opts.txHash,
+            });
+          }
+          if (prefs?.push?.deposits !== false) {
+            await pushTxEvent(wallet.userId, pushCopy.depositOn(amt, asset), opts.txHash);
+          }
+        } catch (err) {
+          logger.warn('[onchainSettlement.processDeposit] notify failed', { userId: wallet.userId, txHash: opts.txHash, err });
+        }
+      })();
+
+      return confirmed;
     }
     return row;
   });

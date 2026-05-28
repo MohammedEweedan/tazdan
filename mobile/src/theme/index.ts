@@ -1,69 +1,124 @@
 /**
- * fortuni design tokens.
- * Mirrors the Tailwind/NativeWind config in `tailwind.config.js`. Use this
- * file from any non-NW context (e.g. LinearGradient `colors`, ShadowOffset).
+ * Fortuni design tokens — monochrome v1.
+ *
+ * The visual language is pure grayscale + status (red/green/amber) only.
+ * No brand blue, no colored glow shadows, no rainbow card colorways. The
+ * mono palette uses an accent that is the inverse of the surface: white in
+ * dark mode, black in light mode, so CTAs always have maximum contrast.
+ *
+ * Mirrors the NativeWind config in `tailwind.config.js`. Use this file from
+ * any non-NW context (e.g. LinearGradient `colors`, ShadowOffset).
  */
 
 export const colors = {
+  /* ── Monochrome surfaces (dark mode primary) ─────────────────────── */
+  mono: {
+    // Dark mode — near-black with a faint warm tilt
+    bg:         '#0A0A0B',
+    bgElev:     '#141416',
+    bgRaised:   '#1C1C1F',
+    line:       'rgba(255,255,255,0.08)',
+    lineStrong: 'rgba(255,255,255,0.14)',
+    fg:         '#FAFAFA',
+    fgDim:      'rgba(250,250,250,0.72)',
+    fgMuted:    'rgba(250,250,250,0.46)',
+    fgFaint:    'rgba(250,250,250,0.28)',
+    accent:     '#FFFFFF',  // CTA + slide fill in dark mode
+    accentFg:   '#0A0A0B',  // text/icon on accent
+
+    // Light mode mirror
+    bgL:        '#FAFAF7',
+    bgElevL:    '#F1F0EB',
+    bgRaisedL:  '#FFFFFF',
+    lineL:      'rgba(0,0,0,0.08)',
+    lineStrongL:'rgba(0,0,0,0.14)',
+    fgL:        '#0A0A0B',
+    fgDimL:     'rgba(10,10,11,0.72)',
+    fgMutedL:   'rgba(10,10,11,0.46)',
+    fgFaintL:   'rgba(10,10,11,0.28)',
+    accentL:    '#0A0A0B',  // black CTAs in light mode
+    accentFgL:  '#FFFFFF',
+  },
+
+  /* ── Status (kept — confirmed by user) ──────────────────────────── */
+  status: {
+    success:   '#2BB36F',
+    successBg: 'rgba(43,179,111,0.14)',
+    danger:    '#E5484D',
+    dangerBg:  'rgba(229,72,77,0.14)',
+    warning:   '#E8A33A',
+    warningBg: 'rgba(232,163,58,0.14)',
+  },
+
+  /* ── Legacy aliases (delete once all imports updated) ───────────── */
+  // These let existing components keep building during the sweep. Each
+  // one points at its monochrome replacement so the visual is correct
+  // immediately. Migrate call-sites to `colors.mono.*` then delete this
+  // block.
   brand: {
-    50:  '#e8f0fc',
-    100: '#c4d8f7',
-    200: '#9cbef0',
-    300: '#73a4e9',
-    400: '#226dff',
-    500: '#2477d3',
-    600: '#1a52cc',
-    700: '#00408a',
-    800: '#002a5c',
-    900: '#00152e',
+    50:  '#F4F4F4',
+    100: '#E5E5E5',
+    200: '#D4D4D4',
+    300: '#A3A3A3',
+    400: '#737373',
+    500: '#525252',
+    600: '#404040',
+    700: '#262626',
+    800: '#171717',
+    900: '#0A0A0B',
   },
   surface: {
-    0:   '#000206',
-    50:  '#030818',
-    100: '#070d22',
-    200: '#0c1430',
-    300: '#121c44',
-    400: '#1a2658',
-    500: '#243366',
+    0:   '#000000',
+    50:  '#0A0A0B',
+    100: '#141416',
+    200: '#1C1C1F',
+    300: '#26262A',
+    400: '#2F2F33',
+    500: '#3A3A3F',
   },
   ink: {
-    primary:   '#ffffff',
-    secondary: 'rgba(255,255,255,0.72)',
-    tertiary:  'rgba(255,255,255,0.48)',
-    muted:     'rgba(255,255,255,0.32)',
+    primary:   '#FAFAFA',
+    secondary: 'rgba(250,250,250,0.72)',
+    tertiary:  'rgba(250,250,250,0.46)',
+    muted:     'rgba(250,250,250,0.28)',
   },
   semantic: {
-    success: '#22c55e',
-    danger:  '#ef4444',
-    warning: '#f59e0b',
+    success: '#2BB36F',
+    danger:  '#E5484D',
+    warning: '#E8A33A',
   },
   line: 'rgba(255,255,255,0.08)',
 } as const;
 
 /**
- * Pre-built linear gradients. Use:
+ * Pre-built linear gradients. All monochrome — no color. The "brand"
+ * gradient keys remain so existing imports compile, but they all resolve
+ * to subtle grayscale ramps that read as luxury, not flashy.
+ *
  *   <LinearGradient colors={gradients.brand} ... />
  */
 export const gradients = {
-  // Hero — luxury blue, top-to-bottom
-  brand:    ['#226dff', '#1a52cc'],
-  brandReverse: ['#1a52cc', '#226dff'],
-  // Background sweep — used behind the entire app
-  surface:  ['#030818', '#070d22', '#0c1430'],
-  // Card highlights — subtle inner sheen
-  cardSheen: ['rgba(255,255,255,0.08)', 'rgba(255,255,255,0.0)'],
+  // Primary CTA / slide fill — solid accent (white in dark, black in light).
+  // Kept as an array so LinearGradient consumers don't need to change shape.
+  brand:        ['#FFFFFF', '#E5E5E5'],
+  brandReverse: ['#E5E5E5', '#FFFFFF'],
+  // Background sweep — three-stop near-black ramp behind the app
+  surface:      ['#0A0A0B', '#141416', '#1C1C1F'],
+  // Card highlights — subtle inner sheen, white on translucent
+  cardSheen:    ['rgba(255,255,255,0.06)', 'rgba(255,255,255,0.0)'],
   // Glass — semi-transparent for blur cards
-  glass:    ['rgba(255,255,255,0.10)', 'rgba(255,255,255,0.04)'],
-  // Success / danger fills
-  success:  ['#16a34a', '#22c55e'],
-  danger:   ['#dc2626', '#ef4444'],
-  // Card slider — five distinct premium card colorways
+  glass:        ['rgba(255,255,255,0.08)', 'rgba(255,255,255,0.03)'],
+  // Status fills (kept colored — these are accessibility signals)
+  success:      ['#1F8F58', '#2BB36F'],
+  danger:       ['#B7373B', '#E5484D'],
+  // Card slider — monochrome colorways only. Each is a graphite-family ramp
+  // that reads as a metal finish rather than as a colored material.
   cards: {
-    sapphire:  ['#1a52cc', '#001f4f'],   // standard
-    obsidian:  ['#0a0a0a', '#1a1a1a'],   // black metal
-    rose:      ['#9b1d4d', '#3a0a1d'],   // rose gold
-    emerald:   ['#0a5d4a', '#022019'],   // green
-    platinum:  ['#5a6478', '#2a2f3a'],   // silver
+    sapphire:  ['#2A2A2D', '#0A0A0B'],   // graphite (was navy blue)
+    obsidian:  ['#0A0A0B', '#1A1A1D'],   // pure black metal
+    rose:      ['#3A3134', '#1A1416'],   // warm dark
+    emerald:   ['#1F2624', '#0A0F0D'],   // cool dark
+    platinum:  ['#5A5A5F', '#2A2A2F'],   // silver
   },
 } as const;
 
@@ -153,29 +208,42 @@ export function useFontFamily() {
   return locale === 'ar' ? FAR : F;
 }
 
-/** iOS-style soft shadows. Pass to RN `style={{ ...shadows.card }}`. */
+/**
+ * Elevation-only shadows. All black — no colored glow. `ring` replaces the
+ * old `glow` token: a soft white-alpha outline that lifts a surface without
+ * tinting it.
+ */
 export const shadows = {
   none:  { shadowOpacity: 0 },
   card:  {
-    shadowColor:   '#1a52cc',
-    shadowOffset:  { width: 0, height: 12 },
+    shadowColor:   '#000000',
+    shadowOffset:  { width: 0, height: 8 },
     shadowOpacity: 0.18,
-    shadowRadius:  20,
+    shadowRadius:  24,
     elevation:     8,
   },
   cardHigh: {
-    shadowColor:   '#1a52cc',
-    shadowOffset:  { width: 0, height: 24 },
-    shadowOpacity: 0.30,
+    shadowColor:   '#000000',
+    shadowOffset:  { width: 0, height: 16 },
+    shadowOpacity: 0.28,
     shadowRadius:  40,
     elevation:     16,
   },
-  glow: {
-    shadowColor:   '#226dff',
+  // Subtle outline-ring emphasis (replaces colored glow)
+  ring: {
+    shadowColor:   '#FFFFFF',
     shadowOffset:  { width: 0, height: 0 },
-    shadowOpacity: 0.45,
-    shadowRadius:  18,
-    elevation:     12,
+    shadowOpacity: 0.12,
+    shadowRadius:  10,
+    elevation:     6,
+  },
+  // Legacy alias — kept so existing imports compile. Points at `ring`.
+  glow: {
+    shadowColor:   '#FFFFFF',
+    shadowOffset:  { width: 0, height: 0 },
+    shadowOpacity: 0.12,
+    shadowRadius:  10,
+    elevation:     6,
   },
 } as const;
 

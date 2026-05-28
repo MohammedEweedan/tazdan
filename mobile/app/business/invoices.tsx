@@ -25,7 +25,7 @@ import { useHaptics } from '@/hooks';
 import { businessService } from '@/services/business';
 import type { BusinessPayout, PayoutStatus } from '@/types/business';
 
-const ACCENT = '#226dff';
+const ACCENT = '#737373';
 const PAGE_SIZE = 20;
 
 type StatusFilter = 'ALL' | PayoutStatus;

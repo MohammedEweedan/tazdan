@@ -84,7 +84,8 @@ function symbolColor(sym: string): string {
 }
 
 
-function assetMeta(symbol: string): { label: string; color: string; icon: string } {
+function assetMeta(symbol: string | undefined | null): { label: string; color: string; icon: string } {
+  if (!symbol) return { label: '?', color: '#888888', icon: '?' };
   return KNOWN[symbol.toUpperCase()] ?? {
     label: symbol.toUpperCase(),
     color: symbolColor(symbol),
@@ -131,7 +132,18 @@ function methodLabel(m: PayMethod) {
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
-export function BuyWidget() {
+interface BuyWidgetProps {
+  /**
+   * When provided, the widget initialises with this asset pre-selected
+   * AND (if `lockAsset` is also set) hides the change-asset chip and
+   * disables the asset picker — so a user landing on the BTC detail
+   * page can only buy BTC.
+   */
+  defaultAsset?: string;
+  lockAsset?:    boolean;
+}
+
+export function BuyWidget({ defaultAsset, lockAsset = false }: BuyWidgetProps = {}) {
   const { user } = useAuthStore();
   const p = useThemedPalette();
   const themeMode = useTheme((s) => s.mode);
@@ -139,11 +151,15 @@ export function BuyWidget() {
   const { data: wallets } = useWallets();
   const { data: cards } = useCards();
   const { data: tickers } = useMarkets();
-  const { playSuccess } = useTransactionSound();
+  const { playSuccess, playError } = useTransactionSound();
   const baseCurrency = (user as any)?.baseCurrency ?? 'USD';
 
   // ── Asset picker state ────────────────────────────────────────────
-  const [asset,          setAsset]          = useState('BTC');
+  // When the widget is opened from a specific asset's detail page we
+  // pre-select that asset. The `lockAsset` flag further prevents the
+  // user from switching away — you shouldn't be able to buy ETH from
+  // the BTC screen.
+  const [asset,          setAsset]          = useState((defaultAsset || 'BTC').toUpperCase());
   const [network,        setNetwork]        = useState('BTC');
   const [assetSheetOpen, setAssetSheetOpen] = useState(false);
   const [searchQuery,    setSearchQuery]    = useState('');
@@ -229,6 +245,26 @@ export function BuyWidget() {
     }
   }, [assetSheetOpen]);
 
+  // First mount on the main index (no explicit defaultAsset): prefer
+  // the user's most-recently-searched coin over the hard-coded BTC.
+  // Defaults still settle on BTC if there's nothing in AsyncStorage.
+  // We don't override when `defaultAsset` was passed — the caller is
+  // already telling us exactly which coin to land on (e.g. asset page).
+  useEffect(() => {
+    if (defaultAsset) return;
+    AsyncStorage.getItem(RECENT_KEY).then((v) => {
+      if (!v) return;
+      try {
+        const arr = JSON.parse(v);
+        if (Array.isArray(arr) && typeof arr[0] === 'string' && arr[0].length > 0) {
+          setAsset(arr[0].toUpperCase());
+        }
+      } catch { /* malformed cache, ignore */ }
+    });
+    // Run-once on mount; `defaultAsset` is a prop and doesn't change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Bumping this triggers a fresh quote without the user changing fiat/asset
   const [requoteKey, setRequoteKey] = useState(0);
 
@@ -282,7 +318,7 @@ export function BuyWidget() {
       setSuccess(`${fmt(quote.cryptoAmount, 8)} ${asset} ${intent === 'send' ? 'sent' : 'purchased'} ✓`);
       setQuote(null); setFiat(''); setSendAddr('');
     } catch (e: any) {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      playError();
       setError(e?.response?.data?.error ?? 'Order failed');
     } finally { setExec(false); }
   }
@@ -336,14 +372,18 @@ export function BuyWidget() {
   return (
     <View style={{ paddingHorizontal: 20, paddingBottom: 8 }}>
 
-      {/* ── Asset selector ── */}
+      {/* ── Asset selector ──
+          Locked when opened from a coin detail page. Switching the
+          asset there would conflict with the user's navigation
+          intent. */}
       <Pressable
-        onPress={() => { Haptics.selectionAsync(); setAssetSheetOpen(true); }}
+        disabled={lockAsset}
+        onPress={() => { if (lockAsset) return; Haptics.selectionAsync(); setAssetSheetOpen(true); }}
         style={({ pressed }) => ({
           flexDirection: 'row', alignItems: 'center',
           backgroundColor: p.bgElev, borderRadius: 20,
           borderWidth: 1, borderColor: p.border,
-          padding: 14, marginBottom: 18, opacity: pressed ? 0.85 : 1,
+          padding: 14, marginBottom: 18, opacity: pressed && !lockAsset ? 0.85 : 1,
         })}
       >
         <CoinAvatar sym={asset} size={48} color={meta.color} />
@@ -367,22 +407,41 @@ export function BuyWidget() {
             )}
           </View>
         </View>
-        <View style={{
-          paddingHorizontal: 10, paddingVertical: 7, borderRadius: 12,
-          backgroundColor: `${brandAccent}1f`,
-          borderWidth: 1, borderColor: `${brandAccent}3a`,
-          flexDirection: 'row', alignItems: 'center', gap: 4,
-        }}>
-          <Text style={{ color: brandAccent, fontSize: 11, fontWeight: '700', letterSpacing: 0.3 }}>CHANGE</Text>
-          <Ionicons name="chevron-down" size={13} color={brandAccent} />
-        </View>
+        {!lockAsset && (
+          <View style={{
+            paddingHorizontal: 10, paddingVertical: 7, borderRadius: 12,
+            backgroundColor: `${brandAccent}1f`,
+            borderWidth: 1, borderColor: `${brandAccent}3a`,
+            flexDirection: 'row', alignItems: 'center', gap: 4,
+          }}>
+            <Text style={{ color: brandAccent, fontSize: 11, fontWeight: '700', letterSpacing: 0.3 }}>CHANGE</Text>
+            <Ionicons name="chevron-down" size={13} color={brandAccent} />
+          </View>
+        )}
       </Pressable>
 
-      {/* ── Amount input ── */}
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-        <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '700', letterSpacing: 0.9 }}>YOU PAY</Text>
+      {/* ── Amount input ──
+          Label + price-estimate share a row. The estimate can be long
+          (e.g. "≈ 0.000034 BTC") and was pushing the YOU PAY label
+          out on small screens. flexShrink + ellipsize + numberOfLines
+          keep both visible. */}
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, gap: 10 }}>
+        <Text
+          numberOfLines={1}
+          style={{ color: p.fgMuted, fontSize: 11, fontWeight: '700', letterSpacing: 0.6, flexShrink: 0 }}
+        >
+          YOU PAY
+        </Text>
         {priceEstimate && !quote && livePrice > 0 && (
-          <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '600', letterSpacing: 0.3 }}>
+          <Text
+            numberOfLines={1}
+            ellipsizeMode="tail"
+            style={{
+              color: p.fgFaint, fontSize: 11, fontWeight: '600',
+              letterSpacing: 0.3, flexShrink: 1, minWidth: 0,
+              textAlign: 'right',
+            }}
+          >
             ≈ {fmt(priceEstimate, 6)} {asset}
           </Text>
         )}
@@ -554,7 +613,7 @@ export function BuyWidget() {
               shadowRadius: 10,
             }}
           >
-            <Text style={{ color: intent === v ? '#ffffff' : p.fgMuted, fontSize: 13, fontWeight: '700' }}>
+            <Text style={{ color: intent === v ? (themeMode === 'dark' ? '#000000' : '#ffffff') : p.fgMuted, fontSize: 13, fontWeight: '700' }}>
               {v === 'buy' ? 'To my wallet' : 'To address'}
             </Text>
           </Pressable>
@@ -607,7 +666,6 @@ export function BuyWidget() {
         seconds={canConfirm ? seconds : undefined}
         totalSeconds={30}
         accent={brandAccent}
-        accentEnd={brand.deep}
         accentFg="#ffffff"
         trackBg={p.bgElev}
         trackFg={p.fg}
@@ -778,7 +836,7 @@ export function BuyWidget() {
                           )}
                           <View style={{ paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, backgroundColor: p.greenBg }}>
                             <Text style={{ color: p.greenFg, fontSize: 10, fontWeight: '500' }}>
-                              +{item.change24h.toFixed(2)}%
+                              +{(item.change24h ?? 0).toFixed(2)}%
                             </Text>
                           </View>
                           {isSelected && <Ionicons name="checkmark-circle" size={18} color={m.color} />}

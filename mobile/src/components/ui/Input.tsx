@@ -7,6 +7,7 @@ import { ReactNode, useState } from 'react';
 import { View, type TextInputProps, Pressable } from 'react-native';
 import { Text, TextInput } from '@/components/ui/Text';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import { useThemedPalette } from '@/store/themeStore';
 
 interface Props extends Omit<TextInputProps, 'onChange'> {
   label: string;
@@ -17,6 +18,7 @@ interface Props extends Omit<TextInputProps, 'onChange'> {
 export function Input({ label, error, right, value, onFocus, onBlur, ...rest }: Props) {
   const [focused, setFocused] = useState(false);
   const lift = useSharedValue(value ? 1 : 0);
+  const p = useThemedPalette();
 
   const labelStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: -lift.value * 12 }, { scale: 1 - lift.value * 0.18 }],
@@ -31,8 +33,8 @@ export function Input({ label, error, right, value, onFocus, onBlur, ...rest }: 
           height: 64,
           borderRadius: 16,
           borderWidth: 1,
-          borderColor: error ? '#ef4444' : focused ? '#226dff' : 'rgba(255,255,255,0.10)',
-          backgroundColor: 'rgba(255,255,255,0.04)',
+          borderColor: error ? p.redFg : focused ? p.fg : p.border,
+          backgroundColor: p.pillBg,
           justifyContent: 'center',
           paddingTop: 18,
         }}
@@ -40,7 +42,7 @@ export function Input({ label, error, right, value, onFocus, onBlur, ...rest }: 
         <Animated.Text
           style={[labelStyle, {
             position: 'absolute', left: 16, top: 22,
-            color: 'rgba(255,255,255,0.55)', fontSize: 15, fontWeight: '500',
+            color: p.fgMuted, fontSize: 15, fontWeight: '500',
           }]}
         >
           {label}
@@ -54,9 +56,9 @@ export function Input({ label, error, right, value, onFocus, onBlur, ...rest }: 
             if (!value) lift.value = withTiming(0, { duration: 180 });
             onBlur?.(e);
           }}
-          placeholderTextColor="rgba(255,255,255,0.30)"
-          selectionColor="#226dff"
-          style={{ color: '#fff', fontSize: 16, fontWeight: '500', paddingTop: 6 }}
+          placeholderTextColor={p.fgFaint}
+          selectionColor={p.fg}
+          style={{ color: p.fg, fontSize: 16, fontWeight: '500', paddingTop: 6 }}
         />
         {right && (
           <View style={{ position: 'absolute', right: 14, top: 0, bottom: 0, justifyContent: 'center' }}>

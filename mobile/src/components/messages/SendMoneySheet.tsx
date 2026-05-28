@@ -22,7 +22,7 @@ import { useWallets } from '@/hooks';
 import { getCurrencyMeta } from '@/constants';
 import type { Currency, Wallet } from '@/types';
 
-const BRAND_BLUE = '#1a52cc';
+const BRAND_BLUE = '#737373'; // mono accent neutral
 
 export interface SendMoneySheetProps {
   visible: boolean;
@@ -38,29 +38,53 @@ export function SendMoneySheet({
 }: SendMoneySheetProps) {
   const { data: wallets } = useWallets();
 
-  // Funded wallets only, sorted by USD value descending (so the user's
-  // largest holding sits on the left of the chip row by default).
-  const funded = useMemo<Wallet[]>(() => {
-    return (wallets ?? [])
-      .filter((w) => availableOf(w) > 0)
-      .sort((a, b) => Number(b.fiatValueUsd ?? 0) - Number(a.fiatValueUsd ?? 0));
+  // Normalised wallet list: USDT_ERC20 / USDT_TRC20 merge into one USDT
+  // chip.  We still show every wallet (even 0-balance) so the user can
+  // see what's held, but chips with 0 avail are visually dimmed and
+  // non-selectable.
+  const displayWallets = useMemo<DisplayWallet[]>(() => {
+    const map = new Map<string, DisplayWallet>();
+    (wallets ?? []).forEach((w) => {
+      const cur = String(w.currency);
+      const isUsdtVariant = cur === 'USDT_ERC20' || cur === 'USDT_TRC20';
+      const displayCurrency = isUsdtVariant ? 'USDT' : cur;
+      const bal = availableOf(w);
+      const existing = map.get(displayCurrency);
+      if (existing) {
+        existing.balance += bal;
+        // Keep the wallet with the highest individual balance as the canonical one
+        if (bal > availableOf(existing.wallet)) {
+          existing.wallet = w;
+        }
+      } else {
+        map.set(displayCurrency, {
+          currency: displayCurrency,
+          wallet: w,
+          balance: bal,
+          chain: isUsdtVariant ? (cur === 'USDT_ERC20' ? 'ERC20' : 'TRC20') : undefined,
+        });
+      }
+    });
+    return Array.from(map.values())
+      .sort((a, b) => Number(b.wallet.fiatValueUsd ?? 0) - Number(a.wallet.fiatValueUsd ?? 0));
   }, [wallets]);
 
-  const [currency, setCurrency] = useState<Currency | null>(null);
+  const [currency, setCurrency] = useState<string | null>(null);
   const [amount,   setAmount]   = useState('');
   const [note,     setNote]     = useState('');
 
   // Reset form on every open; default to top-funded wallet.
   useEffect(() => {
     if (!visible) { setAmount(''); setNote(''); return; }
-    setCurrency(funded[0]?.currency ?? null);
-  }, [visible, funded]);
+    const firstFunded = displayWallets.find((d) => d.balance > 0);
+    setCurrency(firstFunded?.currency ?? displayWallets[0]?.currency ?? null);
+  }, [visible, displayWallets]);
 
-  const selectedWallet = funded.find((w) => w.currency === currency);
-  const available = selectedWallet ? availableOf(selectedWallet) : 0;
+  const selected = displayWallets.find((d) => d.currency === currency);
+  const available = selected?.balance ?? 0;
   const numAmount = parseFloat(amount);
   const overflow = numAmount > available;
-  const valid = !!selectedWallet && numAmount > 0 && !overflow;
+  const valid = !!selected && selected.balance > 0 && numAmount > 0 && !overflow;
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
@@ -97,7 +121,7 @@ export function SendMoneySheet({
               )}
             </View>
 
-            {funded.length === 0 ? (
+            {displayWallets.length === 0 ? (
               <View style={{
                 padding: 16, borderRadius: 14,
                 borderWidth: 1, borderColor: p.border,
@@ -105,7 +129,7 @@ export function SendMoneySheet({
                 gap: 6,
               }}>
                 <Text style={{ color: p.fg, fontSize: 14, fontWeight: '700' }}>
-                  No funded wallets
+                  No wallets
                 </Text>
                 <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '500' }}>
                   Top up a wallet first to send a payment in chat.
@@ -120,27 +144,33 @@ export function SendMoneySheet({
                   keyboardShouldPersistTaps="always"
                   contentContainerStyle={{ gap: 8, paddingVertical: 2 }}
                 >
-                  {funded.map((w) => {
-                    const meta = getCurrencyMeta(w.currency);
-                    const active = currency === w.currency;
+                  {displayWallets.map((d) => {
+                    const meta = getCurrencyMeta(d.currency);
+                    const active = currency === d.currency;
                     const decimals = meta?.decimals ?? 2;
+                    const hasBalance = d.balance > 0;
                     return (
                       <Pressable
-                        key={w.currency}
-                        onPress={() => setCurrency(w.currency)}
+                        key={d.currency}
+                        onPress={() => hasBalance && setCurrency(d.currency)}
                         style={({ pressed }) => ({
                           paddingHorizontal: 12, paddingVertical: 10,
                           borderRadius: 14, minWidth: 110,
                           backgroundColor: active ? p.fg : p.bgElev,
                           borderWidth: 1, borderColor: active ? p.fg : p.border,
-                          opacity: pressed ? 0.9 : 1,
+                          opacity: hasBalance ? (pressed ? 0.9 : 1) : 0.45,
                         })}
                       >
                         <Text style={{
                           color: active ? p.bg : p.fg,
                           fontSize: 13, fontWeight: '600', letterSpacing: 0.2,
                         }}>
-                          {meta?.flagOrIcon ?? w.currency.slice(0, 1)} {w.currency}
+                          {meta?.flagOrIcon ?? d.currency.slice(0, 1)} {d.currency}
+                          {d.chain && (
+                            <Text style={{ fontSize: 9, fontWeight: '700', opacity: 0.7 }}>
+                              {' '}{d.chain}
+                            </Text>
+                          )}
                         </Text>
                         <Text
                           numberOfLines={1}
@@ -151,7 +181,7 @@ export function SendMoneySheet({
                             opacity: active ? 0.8 : 1,
                           }}
                         >
-                          {formatBal(availableOf(w), decimals)} avail.
+                          {formatBal(d.balance, decimals)} avail.
                         </Text>
                       </Pressable>
                     );
@@ -169,7 +199,7 @@ export function SendMoneySheet({
                     <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '700', letterSpacing: 0.5 }}>
                       AMOUNT
                     </Text>
-                    {selectedWallet && (
+                    {selected && selected.balance > 0 && (
                       <Pressable
                         hitSlop={6}
                         onPress={() => setAmount(String(available))}
@@ -199,7 +229,7 @@ export function SendMoneySheet({
                       }}
                     />
                     <Text style={{ color: p.fgMuted, fontSize: 14, fontWeight: '600' }}>
-                      {currency}
+                      {currency}{selected?.chain ? ` (${selected.chain})` : ''}
                     </Text>
                   </View>
                   {overflow && (
@@ -230,7 +260,7 @@ export function SendMoneySheet({
             {/* Send CTA */}
             <Pressable
               disabled={!valid}
-              onPress={() => valid && onSubmit(numAmount, currency!, note.trim() || undefined)}
+              onPress={() => valid && onSubmit(numAmount, selected!.wallet.currency, note.trim() || undefined)}
               style={({ pressed }) => ({
                 height: 52, borderRadius: 16, marginTop: 4,
                 backgroundColor: valid ? BRAND_BLUE : p.border,
@@ -249,6 +279,13 @@ export function SendMoneySheet({
       </Pressable>
     </Modal>
   );
+}
+
+interface DisplayWallet {
+  currency: string;
+  wallet: Wallet;
+  balance: number;
+  chain?: string;
 }
 
 function availableOf(w: Wallet): number {

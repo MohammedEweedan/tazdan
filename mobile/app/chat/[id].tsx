@@ -36,7 +36,7 @@ import { QUERY_KEYS } from '@/constants';
 import type { P2PTrade } from '@/services';
 import type { ApiMessage } from '@/types/messages';
 
-const BRAND_BLUE = '#226dff';
+const BRAND_BLUE = '#737373'; // mono accent neutral
 
 /* ── Helpers ───────────────────────────────────────────────────── */
 

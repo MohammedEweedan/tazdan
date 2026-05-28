@@ -98,7 +98,7 @@ export default function RoleSelectScreen() {
                 <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
                   <View style={{
                     width: 48, height: 48, borderRadius: 14,
-                    backgroundColor: '#4a8fe0',
+                    backgroundColor: '#A3A3A3',
                     alignItems: 'center', justifyContent: 'center',
                   }}>
                     <Ionicons name="shield-checkmark" size={24} color="#fff" />

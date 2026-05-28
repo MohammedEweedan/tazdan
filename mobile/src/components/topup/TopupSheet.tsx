@@ -206,7 +206,7 @@ export function TopupBody({
       await depositService.createBankDeposit({
         currency,
         amount: numeric,
-        notes: method.id === 'LYD_AGENT' ? 'Cash via fortuni agent' : undefined,
+        notes: method.id === 'LYD_AGENT' ? 'Cash via Fortuni agent' : undefined,
       });
       h.success();
       setCtaState('success');

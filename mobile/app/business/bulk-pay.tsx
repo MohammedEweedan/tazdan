@@ -25,7 +25,7 @@ import { useHaptics } from '@/hooks';
 import { businessService } from '@/services/business';
 import type { BulkPayRecipient, BulkPayPreview, BusinessPayout } from '@/types/business';
 
-const ACCENT = '#226dff';
+const ACCENT = '#737373';
 
 const CURRENCIES = ['USD', 'EUR', 'GBP', 'USDT', 'AED', 'SAR', 'EGP'];
 

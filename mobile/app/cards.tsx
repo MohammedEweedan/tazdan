@@ -53,7 +53,7 @@ const TIER_CFG = {
   },
   PRO: {
     label:        'Pro',
-    gradient:     ['#4A8FE0', '#2B6BC8', '#1850A8'] as [string, string, string],
+    gradient:     ['#26262A', '#1C1C1F', '#0A0A0B'] as [string, string, string],
     shadowColor:  '#2B6BC8',
     dailyLimit:   '5,000',
     monthlyLimit: '50,000',
@@ -214,7 +214,7 @@ function VisaCard({
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <View>
           <Text style={{ color: '#fff', fontSize: Math.round(width * 0.035), fontWeight: '600', letterSpacing: 0.4, opacity: 0.9 }}>
-            fortuni
+            Fortuni
           </Text>
           <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: Math.round(width * 0.023), fontWeight: '700', letterSpacing: 1.5, marginTop: 1 }}>
             {cfg.label.toUpperCase()}
@@ -944,7 +944,7 @@ function IssueCardModal({
                     {/* Mini card preview */}
                     <View style={{ width: miniW * 0.42, height: Math.round(miniW * 0.42 * 0.628), borderRadius: 10, overflow: 'hidden' }}>
                       <LinearGradient colors={tc.gradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={{ flex: 1, padding: 10, justifyContent: 'space-between' }}>
-                        <Text style={{ color: '#fff', fontSize: 8, fontWeight: '600' }}>fortuni</Text>
+                        <Text style={{ color: '#fff', fontSize: 8, fontWeight: '600' }}>Fortuni</Text>
                         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' }}>
                           <Text style={{ color: '#fff', fontSize: 9, fontWeight: '600' }}>{tc.label}</Text>
                           <Text style={{ color: 'rgba(255,255,255,0.9)', fontSize: 13, fontWeight: '600', fontStyle: 'italic' }}>VISA</Text>
@@ -1076,7 +1076,7 @@ function IssueCardModal({
                 <View style={{ width: CARD_W, height: CARD_H, borderRadius: 20, overflow: 'hidden', shadowColor: cfg.shadowColor, shadowOffset: { width: 0, height: 16 }, shadowOpacity: 0.5, shadowRadius: 24, elevation: 16 }}>
                   <LinearGradient colors={cfg.gradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={{ flex: 1, padding: 24, justifyContent: 'space-between' }}>
                     <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                      <Text style={{ color: '#fff', fontSize: 13, fontWeight: '600' }}>fortuni</Text>
+                      <Text style={{ color: '#fff', fontSize: 13, fontWeight: '600' }}>Fortuni</Text>
                       <ContactlessSvg />
                     </View>
                     <ChipSvg />
@@ -1209,7 +1209,7 @@ export default function Cards() {
               <View style={{ width: CARD_W, height: CARD_H, borderRadius: 20, overflow: 'hidden', marginBottom: 32 }}>
                 <LinearGradient colors={TIER_CFG.PRO.gradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={{ flex: 1, padding: 24, justifyContent: 'space-between' }}>
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                    <Text style={{ color: '#fff', fontSize: 13, fontWeight: '600', opacity: 0.6 }}>fortuni</Text>
+                    <Text style={{ color: '#fff', fontSize: 13, fontWeight: '600', opacity: 0.6 }}>Fortuni</Text>
                     <ContactlessSvg />
                   </View>
                   <ChipSvg />

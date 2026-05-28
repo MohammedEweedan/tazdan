@@ -48,6 +48,7 @@ import { messageRouter } from './routes/messages';
 import { groupRouter } from './routes/groups';
 import { referralRouter } from './routes/referral';
 import { notificationRouter } from './routes/notification';
+import { claimLinkRouter } from './routes/claimLink';
 import { securityRouter } from './routes/security';
 import { apiKeyRouter } from './routes/apikey';
 import { exportRouter } from './routes/export';
@@ -109,9 +110,9 @@ const httpServer = createServer(app);
  * header) are always allowed.
  *
  * CLIENT_URL may be a comma-separated list (e.g.
- * "https://fortuni.com,https://app.fortuni.com").
+ * "https://Fortuni.com,https://app.Fortuni.com").
  */
-const PROD_ORIGINS = (process.env.CLIENT_URL ?? 'https://fortuni.com')
+const PROD_ORIGINS = (process.env.CLIENT_URL ?? 'https://Fortuni.com')
   .split(',')
   .map((o) => o.trim())
   .filter(Boolean);
@@ -248,6 +249,7 @@ app.use('/api/messages', messageRouter);
 app.use('/api/groups', groupRouter);
 app.use('/api/referrals', referralRouter);
 app.use('/api/notifications', notificationRouter);
+app.use('/api/claim-links',  claimLinkRouter);
 app.use('/api/security', securityRouter);
 app.use('/api/api-keys', apiKeyRouter);
 app.use('/api/export', exportRouter);

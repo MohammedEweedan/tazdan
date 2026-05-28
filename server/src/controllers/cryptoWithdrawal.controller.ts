@@ -17,6 +17,9 @@ import {
   estimateFee,
 } from '../services/wallet/onchainSettlement.service';
 import { detectChain, validateAddress } from '../utils/addressValidation';
+import { logger } from '../utils/logger';
+import { sendWithdrawalConfirmed } from '../services/email';
+import { pushCopy, pushTxEvent } from '../services/push.service';
 
 const initiateSchema = z.object({
   asset: z.enum(['ETH', 'BTC', 'SOL', 'USDT']),
@@ -131,6 +134,35 @@ export class CryptoWithdrawalController {
       io?.to(`user:${req.user!.id}`).emit('withdrawal:submitted', {
         id: tx.id, txHash: tx.txHash, status: tx.status,
       });
+
+      // Transactional email + push for the on-chain withdrawal. Fire-
+      // and-forget; the broadcast has already happened.
+      const userId = req.user!.id;
+      (async () => {
+        try {
+          const u = await prisma.user.findUnique({
+            where: { id: userId },
+            select: { email: true, firstName: true, notificationPrefs: true as any },
+          });
+          if (!u) return;
+          const prefs = (u as any).notificationPrefs ?? {};
+          const amt = String(body.amount).replace(/\.?0+$/, '');
+          if (prefs?.email?.withdrawals !== false) {
+            await sendWithdrawalConfirmed({
+              to: u.email, firstName: u.firstName || 'there',
+              asset: body.asset, amount: amt,
+              txHash: tx.txHash || tx.id,
+              toAddress: body.toAddress,
+              network: body.network,
+            });
+          }
+          if (prefs?.push?.withdrawals !== false) {
+            await pushTxEvent(userId, pushCopy.withdrawOn(amt, body.asset), tx.id);
+          }
+        } catch (err) {
+          logger.warn('[cryptoWithdrawal.initiate] notify failed', { userId, err });
+        }
+      })();
 
       res.status(201).json({ transaction: tx });
     } catch (e) {

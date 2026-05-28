@@ -146,7 +146,7 @@ function randomDOB(): string {
 
 async function registerUser(index: number): Promise<UserRecord | null> {
   const suffix    = `${uid()}`;
-  const email     = `sim_${suffix}@fortuni.sim`;
+  const email     = `sim_${suffix}@Fortuni.sim`;
   const username  = `sim_${suffix}`;
   const firstName = pick(FIRST_NAMES);
   const lastName  = pick(LAST_NAMES);

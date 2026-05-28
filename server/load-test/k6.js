@@ -115,7 +115,7 @@ export function setup() {
   const ts = Date.now();
 
   for (let i = 0; i < POOL_SIZE; i++) {
-    const email    = `lt_${ts}_${i}@fortuni.test`;
+    const email    = `lt_${ts}_${i}@Fortuni.test`;
     const username = `lt${ts}${i}`.slice(0, 30);
 
     const regRes = http.post(`${BASE}/auth/register`, JSON.stringify({

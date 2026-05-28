@@ -47,10 +47,11 @@ import { authService } from '@/services';
 import { secureStore } from '@/lib/secureStore';
 import { STORAGE_KEYS, STRIPE } from '@/constants';
 import { StripeProvider } from '@/lib/stripeShim';
+import { usePushDeepLink } from '@/lib/pushNotifications';
 
 // Match the dark palette bg exactly so the system chrome (keyboard toolbar,
 // nav bar on Android) never flashes a different shade of black.
-SystemUI.setBackgroundColorAsync('#141518').catch(() => {});
+SystemUI.setBackgroundColorAsync('#0A0A0B').catch(() => {});
 
 // Force LTR everywhere
 try { I18nManager.allowRTL(false); I18nManager.forceRTL(false); } catch { /* noop */ }
@@ -145,7 +146,7 @@ function SplashOverlay() {
     >
       {/* Base — inverts with system colour scheme */}
       <LinearGradient
-        colors={dark ? ['#000000', '#050810', '#000000'] : ['#ffffff', '#f5f7ff', '#ffffff']}
+        colors={dark ? ['#000000', '#0A0A0B', '#000000'] : ['#FFFFFF', '#FAFAF7', '#FFFFFF']}
         locations={[0, 0.5, 1]}
         style={StyleSheet.absoluteFillObject}
       />
@@ -168,7 +169,7 @@ function SplashOverlay() {
         pointerEvents="none"
       >
         <LinearGradient
-          colors={['transparent', 'rgba(34,109,255,0.08)', 'rgba(34,109,255,0.18)', 'rgba(34,109,255,0.08)', 'transparent']}
+          colors={['transparent', 'rgba(255,255,255,0.08)', 'rgba(255,255,255,0.18)', 'rgba(255,255,255,0.08)', 'transparent']}
           locations={[0, 0.3, 0.5, 0.7, 1]}
           style={{ flex: 1 }}
         />
@@ -212,17 +213,20 @@ export default function RootLayout() {
     IBMPlexSansArabic_700Bold,
   });
 
+  // Listen for push taps and route to the relevant receipt screen.
+  usePushDeepLink();
+
   // Block rendering until custom fonts are ready so no FOUT on first frame.
   if (!fontsLoaded) return null;
 
   return (
-    <GestureHandlerRootView style={{ flex: 1, backgroundColor: '#141518' }}>
+    <GestureHandlerRootView style={{ flex: 1, backgroundColor: '#0A0A0B' }}>
       <SafeAreaProvider>
         <QueryClientProvider client={queryClient}>
           <StripeProvider
             publishableKey={STRIPE.publishableKey}
             merchantIdentifier={STRIPE.merchantIdentifier}
-            urlScheme="fortuni"
+            urlScheme="Fortuni"
           >
           <StatusBar style="light" />
           <AuthGate />
@@ -230,7 +234,7 @@ export default function RootLayout() {
             screenOptions={{
               headerShown: false,
               animation: 'fade',
-              contentStyle: { backgroundColor: '#141518' },
+              contentStyle: { backgroundColor: '#0A0A0B' },
             }}
           >
             <Stack.Screen name="(auth)" options={{ animation: 'fade' }} />

@@ -5,7 +5,7 @@
  */
 
 import { useEffect, useMemo, useState } from 'react';
-import { Image, KeyboardAvoidingView, Linking, Modal, Platform, Pressable, ScrollView, View } from 'react-native';
+import { ActivityIndicator, Image, KeyboardAvoidingView, Linking, Modal, Platform, Pressable, ScrollView, View } from 'react-native';
 import { Text } from '@/components/ui/Text';
 import { LoadingPulse } from '@/components/ui/LoadingPulse';
 import { Ionicons } from '@expo/vector-icons';
@@ -19,7 +19,7 @@ import { SellWidget } from '@/components/exchange/SellWidget';
 
 import { ScreenShell, Panel } from '@/components/ui/ScreenShell';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import Animated, { useSharedValue, useAnimatedStyle, runOnJS, withTiming } from 'react-native-reanimated';
+import Animated, { useSharedValue, useAnimatedStyle, runOnJS, withTiming, withRepeat, withSequence, Easing } from 'react-native-reanimated';
 import { useThemedPalette, type Palette } from '@/store/themeStore';
 import { useHaptics, useWallets, useTransactions } from '@/hooks';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -31,6 +31,7 @@ import type { Currency, Wallet } from '@/types';
 import { CURRENCY_META } from '@/constants';
 import { formatMoney } from '@/utils/format';
 import { CurrencyBadge } from '@/components/ui/CurrencyBadge';
+import { AssetTxRow, txBelongsToAsset } from '@/components/transactions/AssetTxRow';
 
 type Range = '1H' | '24H' | '7D' | '30D';
 
@@ -231,7 +232,10 @@ export default function AssetDetail() {
               <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: p.border }} />
             </View>
             <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 24 }}>
-              <BuyWidget />
+              {/* Lock the asset to whichever coin the user is viewing.
+                  Switching from BTC → ETH inside the Buy sheet would
+                  contradict their navigation intent. */}
+              <BuyWidget defaultAsset={sym} lockAsset={!isFiat} />
             </ScrollView>
           </Pressable>
         </Pressable>
@@ -248,7 +252,9 @@ export default function AssetDetail() {
               <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: p.border }} />
             </View>
             <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 24 }}>
-              <SellWidget />
+              {/* Same lock as Buy — selling ETH from the BTC screen is
+                  a UX trap, not a feature. */}
+              <SellWidget defaultAsset={sym} lockAsset={!isFiat} />
             </ScrollView>
           </Pressable>
         </Pressable>
@@ -342,6 +348,7 @@ export default function AssetDetail() {
                     color={positive ? '#10b981' : '#ef4444'}
                     palette={p}
                     onHoverPrice={setHoverPrice}
+                    livePrice={isLive ? wsPrice : null}
                   />
                 )}
               </View>
@@ -478,6 +485,9 @@ export default function AssetDetail() {
             </View>
           </Panel>
 
+          {/* Recent transactions, filtered to this asset only */}
+          <AssetTransactions sym={sym} p={p} />
+
           {/* Deposit QR for crypto */}
           <CryptoDepositSection sym={sym} wallet={wallet} p={p} h={h} />
 
@@ -560,6 +570,79 @@ function CryptoDepositSection({ sym, wallet, p, h }: {
   );
 }
 
+/* ── Per-asset recent transactions ─────────────────────────────────
+   STRICT filter: a row is shown here only when `tx.currency` (or the
+   `asset` mirror) matches the page symbol — never description-based.
+   The previous loose match was the source of the
+   "500,000 USD spent → shown as 500,000 BTC" bug: a buy creates TWO
+   ledger rows (one in spent currency, one in received), and the
+   description on either side mentions both. Filtering by structured
+   `currency` is the only way to keep them separated.
+
+   Display is delegated to <AssetTxRow/>, which renders the amount
+   using `tx.currency` directly so the unit is always correct
+   regardless of which page is showing it.
+   ─────────────────────────────────────────────────────────────────── */
+
+function AssetTransactions({ sym, p }: { sym: string; p: Palette }) {
+  const router = useRouter();
+  const { data: txData, isLoading } = useTransactions(1);
+
+  const txs = useMemo(() => {
+    const all = (txData?.items ?? []) as any[];
+    return all.filter((t) => txBelongsToAsset(t, sym)).slice(0, 6);
+  }, [txData, sym]);
+
+  // Don't render an empty panel — looks like a layout bug on a fresh
+  // account. Loading state stays so the user sees something is
+  // happening while we hydrate.
+  if (!isLoading && txs.length === 0) return null;
+
+  return (
+    <Panel style={{ marginBottom: 16 }}>
+      <View style={{ padding: 16, paddingBottom: 4 }}>
+        <View style={{
+          flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+          marginBottom: 6,
+        }}>
+          <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '700', letterSpacing: 0.6 }}>
+            YOUR {sym} ACTIVITY
+          </Text>
+          <Pressable
+            onPress={() => router.push('/history')}
+            hitSlop={6}
+            style={({ pressed }) => ({
+              opacity: pressed ? 0.65 : 1,
+              flexDirection: 'row', alignItems: 'center', gap: 2,
+            })}
+          >
+            <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '700', letterSpacing: 0.4 }}>
+              VIEW ALL
+            </Text>
+            <Ionicons name="chevron-forward" size={11} color={p.fgMuted} />
+          </Pressable>
+        </View>
+      </View>
+
+      {isLoading ? (
+        <View style={{ paddingVertical: 18, alignItems: 'center' }}>
+          <ActivityIndicator color={p.fgMuted} />
+        </View>
+      ) : (
+        txs.map((t: any, i: number) => (
+          <AssetTxRow
+            key={t.id ?? `${t.reference ?? i}`}
+            tx={t}
+            palette={p}
+            last={i === txs.length - 1}
+            onPress={() => router.push('/history')}
+          />
+        ))
+      )}
+    </Panel>
+  );
+}
+
 /* ── News feed via CryptoCompare (free tier, no key) ─── */
 interface NewsItem {
   title: string;
@@ -599,51 +682,115 @@ function matchesSym(item: NewsItem, sym: string): boolean {
   return keywords.some((k) => hay.includes(k));
 }
 
+// Symbols CryptoCompare's `categories` filter accepts. Anything outside
+// this list still gets news via the keyword fallback below.
+const CC_CATEGORIES = new Set([
+  'BTC', 'ETH', 'XRP', 'LTC', 'BCH', 'ETC', 'ADA', 'DOGE', 'DOT', 'LINK',
+  'SOL', 'AVAX', 'MATIC', 'TRX', 'BNB', 'USDT', 'USDC', 'XLM', 'XMR',
+  'ATOM', 'NEAR', 'FIL', 'ALGO', 'VET', 'AAVE', 'ARB', 'OP', 'SUI', 'SHIB',
+]);
+
 function NewsSection({ p, sym }: { p: Palette; sym: string }) {
   const [news, setNews] = useState<NewsItem[]>([]);
   const [loading, setLoading] = useState(false);
+  // When we couldn't find asset-specific news and fell back to a
+  // top-crypto feed, we soften the heading so we don't promise
+  // something we didn't deliver.
+  const [isFallback, setIsFallback] = useState(false);
   const isFiat = FIAT_CODES.has(sym);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
+    setIsFallback(false);
+    setNews([]);
 
     if (isFiat) {
-      setNews([]);
       setLoading(false);
       return;
     }
 
-    fetch('https://min-api.cryptocompare.com/data/v2/news/?lang=EN')
-      .then((res) => res.json())
-      .then((json) => {
+    // Soft network ceiling — never let a stuck CDN keep the spinner
+    // spinning forever.
+    const ctrl = new AbortController();
+    const timeout = setTimeout(() => ctrl.abort(), 6000);
+
+    const mapItem = (n: any): NewsItem => ({
+      title:      n.title ?? 'Untitled',
+      source:     n.source_info?.name ?? n.source ?? 'CryptoCompare',
+      url:        n.url ?? '',
+      published:  n.published_on ?? 0,
+      imageUrl:   n.imageurl,
+      body:       n.body ?? '',
+      categories: n.categories ?? '',
+    });
+
+    async function load() {
+      try {
+        // 1) Try the server-side category filter when the symbol is
+        //    one CryptoCompare recognises. This gives us asset-specific
+        //    coverage AND beats client-side keyword filtering — the
+        //    free /news/?lang=EN feed only returns the latest 50-ish
+        //    items, so for less-busy coins the client filter would
+        //    almost always come up empty.
+        if (CC_CATEGORIES.has(sym)) {
+          const r = await fetch(
+            `https://min-api.cryptocompare.com/data/v2/news/?categories=${sym}&lang=EN`,
+            { signal: ctrl.signal },
+          );
+          const j = await r.json();
+          if (j?.Type === 100 && Array.isArray(j.Data) && j.Data.length > 0) {
+            if (cancelled) return;
+            setNews(j.Data.slice(0, 6).map(mapItem));
+            setIsFallback(false);
+            return;
+          }
+        }
+
+        // 2) Fall back to the general feed with client-side keyword
+        //    filtering (covers exotic symbols not in CC_CATEGORIES).
+        const r = await fetch(
+          'https://min-api.cryptocompare.com/data/v2/news/?lang=EN',
+          { signal: ctrl.signal },
+        );
+        const j = await r.json();
         if (cancelled) return;
-        if (json.Type !== 100 || !Array.isArray(json.Data)) {
+        if (j?.Type !== 100 || !Array.isArray(j.Data)) {
           setNews([]);
           return;
         }
-        const all = (json.Data as any[]).slice(0, 100).map((n: any) => ({
-          title: n.title ?? 'Untitled',
-          source: n.source_info?.name ?? n.source ?? 'CryptoCompare',
-          url: n.url ?? '',
-          published: n.published_on ?? 0,
-          imageUrl: n.imageurl,
-          body: n.body ?? '',
-          categories: n.categories ?? '',
-        }));
+        const all = j.Data.slice(0, 100).map(mapItem);
         const matched = all.filter((n: NewsItem) => matchesSym(n, sym));
-        setNews(matched.length > 0 ? matched.slice(0, 5) : []);
-      })
-      .catch(() => setNews([]))
-      .finally(() => setLoading(false));
-    return () => { cancelled = true; };
+        if (matched.length > 0) {
+          setNews(matched.slice(0, 6));
+          setIsFallback(false);
+          return;
+        }
+
+        // 3) Nothing matched — but DON'T return empty. Show the top
+        //    crypto news under a softened header. A blank panel is
+        //    worse UX than a relevant-adjacent panel.
+        setNews(all.slice(0, 5));
+        setIsFallback(true);
+      } catch {
+        // Network / abort — leave the empty state, the bottom branch
+        // renders a clean "couldn't load" message.
+        if (!cancelled) setNews([]);
+      } finally {
+        if (!cancelled) setLoading(false);
+        clearTimeout(timeout);
+      }
+    }
+
+    load();
+    return () => { cancelled = true; ctrl.abort(); clearTimeout(timeout); };
   }, [sym, isFiat]);
 
   return (
     <Panel style={{ marginBottom: 24 }}>
       <View style={{ padding: 16 }}>
         <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '700', letterSpacing: 0.6, marginBottom: 12 }}>
-          NEWS
+          {isFallback ? 'TOP CRYPTO NEWS' : `${sym} NEWS`}
         </Text>
         {loading ? (
           <View style={{ paddingVertical: 24, alignItems: 'center' }}>
@@ -688,17 +835,112 @@ function NewsSection({ p, sym }: { p: Palette; sym: string }) {
   );
 }
 
-/* ── Sparkline chart ─── */
-function SparklineChart({ points, color, palette: p, onHoverPrice }: {
+/* ── Sparkline chart ───────────────────────────────────────────
+   Pro-grade upgrades over the v1 polyline:
+     · Monotone-cubic interpolation (smooth, no overshoot).
+     · Live-edge breathing dot when a WebSocket price is provided —
+       the last historical point is replaced by the WS tick so the
+       line literally moves with the market.
+     · Crosshair price tag at the top of the chart on drag.
+     · Pulsing halo around the live tip while connected.
+     · Direction-aware glow color (green up / red down) but everything
+       else stays mono so the chart fits the new design language.
+   ─────────────────────────────────────────────────────────────── */
+
+/** Monotone-cubic interpolation — Fritsch–Carlson. No overshoot, exact
+ *  through every sample. Returns an SVG path string. */
+function monotoneCubicPath(
+  pts: { x: number; y: number }[],
+): string {
+  const n = pts.length;
+  if (n < 2) return '';
+  if (n === 2) return `M ${pts[0].x} ${pts[0].y} L ${pts[1].x} ${pts[1].y}`;
+
+  // Slopes between successive points
+  const dx: number[] = new Array(n - 1);
+  const dy: number[] = new Array(n - 1);
+  const m:  number[] = new Array(n - 1);
+  for (let i = 0; i < n - 1; i++) {
+    dx[i] = pts[i + 1].x - pts[i].x;
+    dy[i] = pts[i + 1].y - pts[i].y;
+    m[i]  = dx[i] === 0 ? 0 : dy[i] / dx[i];
+  }
+
+  // Tangents
+  const tangents: number[] = new Array(n);
+  tangents[0]     = m[0];
+  tangents[n - 1] = m[n - 2];
+  for (let i = 1; i < n - 1; i++) {
+    if (m[i - 1] * m[i] <= 0) tangents[i] = 0;
+    else tangents[i] = (m[i - 1] + m[i]) / 2;
+  }
+  for (let i = 0; i < n - 1; i++) {
+    if (m[i] === 0) { tangents[i] = 0; tangents[i + 1] = 0; continue; }
+    const a = tangents[i]     / m[i];
+    const b = tangents[i + 1] / m[i];
+    const s = a * a + b * b;
+    if (s > 9) {
+      const t = 3 / Math.sqrt(s);
+      tangents[i]     = t * a * m[i];
+      tangents[i + 1] = t * b * m[i];
+    }
+  }
+
+  // Build path
+  let d = `M ${pts[0].x} ${pts[0].y}`;
+  for (let i = 0; i < n - 1; i++) {
+    const h = dx[i];
+    const c1x = pts[i].x     + h / 3;
+    const c1y = pts[i].y     + (tangents[i]     * h) / 3;
+    const c2x = pts[i + 1].x - h / 3;
+    const c2y = pts[i + 1].y - (tangents[i + 1] * h) / 3;
+    d += ` C ${c1x} ${c1y} ${c2x} ${c2y} ${pts[i + 1].x} ${pts[i + 1].y}`;
+  }
+  return d;
+}
+
+function SparklineChart({ points, color, palette: p, onHoverPrice, livePrice }: {
   points: import('@/hooks/useOHLC').ChartPoint[];
-  color: string; palette: Palette; onHoverPrice?: (price: number | null) => void;
+  color: string;
+  palette: Palette;
+  onHoverPrice?: (price: number | null) => void;
+  /** Optional WebSocket price. When provided, the chart's last point
+   *  is REPLACED by this value so the line moves with the market in
+   *  real time. Pass `null` to indicate the WS feed isn't connected. */
+  livePrice?: number | null;
 }) {
   const W = 320;
   const H = 160;
   const PAD = 6;
-  const [hoverDate, setHoverDate] = useState<string | null>(null);
+  // Card chrome — `padding: 8` + `borderWidth: 1` on each side of the
+  // Animated.View. The SVG sits inside that, so screen-pixel x=0 of the
+  // gesture (outer wrapper) is screen-pixel x=9 of the SVG content.
+  const CARD_INSET = 9;
+  const [hoverDate,  setHoverDate]  = useState<string | null>(null);
+  const [hoverPriceLabel, setHoverPriceLabel] = useState<string | null>(null);
+  // Rendered SVG width in screen pixels — captured on first layout, used
+  // to convert both directions between gesture-pixel space and viewBox
+  // space (the chart geometry lives in viewBox space at 0..W). Without
+  // this, `e.x` from `Gesture.Pan` ended up off by a scale factor of
+  // (containerPx / W) and offset by the card's padding+border, which is
+  // what you see as the crosshair "sliding ahead" of your finger.
+  const [svgPxW, setSvgPxW] = useState(0);
 
-  const values = points.map((pt) => pt.price);
+  // Stitch live price onto the end of the historical series.
+  const series = useMemo(() => {
+    if (!livePrice || !Number.isFinite(livePrice) || points.length === 0) return points;
+    const last = points[points.length - 1];
+    // Within 2% — overwrite the trailing candle so we don't add a spike.
+    // Beyond — append a new sample so the line "moves forward" visibly.
+    const delta = Math.abs(last.price - livePrice) / (last.price || 1);
+    const next = { price: livePrice, timestamp: Date.now() };
+    if (delta < 0.02) {
+      return [...points.slice(0, -1), next];
+    }
+    return [...points, next];
+  }, [points, livePrice]);
+
+  const values = series.map((pt) => pt.price);
 
   if (!values || values.length < 2) {
     return (
@@ -722,44 +964,102 @@ function SparklineChart({ points, color, palette: p, onHoverPrice }: {
     x: PAD + i * step,
     y: PAD + (H - PAD * 2) * (1 - (v - min) / spread),
     val: v,
-    ts: points[i]?.timestamp ?? 0,
+    ts: series[i]?.timestamp ?? 0,
   }));
 
   const last = pts[pts.length - 1];
-  const linePath = pts.map((pt, i) => (i === 0 ? `M ${pt.x} ${pt.y}` : `L ${pt.x} ${pt.y}`)).join(' ');
-  const areaPath = `${linePath} L ${pts[pts.length - 1].x} ${H - PAD} L ${pts[0].x} ${H - PAD} Z`;
+  const linePath = monotoneCubicPath(pts);
+  const areaPath = `${linePath} L ${last.x} ${H - PAD} L ${pts[0].x} ${H - PAD} Z`;
   const grid = [0.25, 0.5, 0.75].map((f) => PAD + (H - PAD * 2) * f);
 
-  // Interaction
+  const isLive = livePrice != null && Number.isFinite(livePrice);
+
+  // ── Interaction ──
   const hoverX = useSharedValue(-1);
   const hoverY = useSharedValue(-1);
   const hoverOpacity = useSharedValue(0);
 
-  const handleHover = (x: number) => {
-    if (x < PAD || x > W - PAD) {
+  // Convert a screen-pixel x (in the gesture-detector view's coords) into
+  // viewBox-space x. The SVG sits CARD_INSET pixels in from the gesture
+  // view's left edge and renders at `svgPxW` pixels wide, mapping to the
+  // viewBox's 0..W range. Returns NaN until layout has happened.
+  const pxToVB = (px: number) => {
+    if (svgPxW <= 0) return NaN;
+    return ((px - CARD_INSET) * W) / svgPxW;
+  };
+
+  const handleHover = (px: number) => {
+    // Sentinel: the gesture passes -1 on release to hide the cursor.
+    if (px < 0) {
       if (onHoverPrice) onHoverPrice(null);
       setHoverDate(null);
+      setHoverPriceLabel(null);
       hoverOpacity.value = withTiming(0, { duration: 150 });
       return;
     }
-    const idx = Math.min(pts.length - 1, Math.max(0, Math.round((x - PAD) / step)));
+    const vbX = pxToVB(px);
+    if (!Number.isFinite(vbX) || vbX < PAD || vbX > W - PAD) {
+      if (onHoverPrice) onHoverPrice(null);
+      setHoverDate(null);
+      setHoverPriceLabel(null);
+      hoverOpacity.value = withTiming(0, { duration: 150 });
+      return;
+    }
+    const idx = Math.min(pts.length - 1, Math.max(0, Math.round((vbX - PAD) / step)));
     const pt = pts[idx];
+    // hoverX is stored in VIEWBOX space; the overlay styles below
+    // convert back to pixels using `svgPxW / W` + CARD_INSET so the
+    // cursor lands exactly on the SVG line under the user's finger.
     hoverX.value = pt.x;
     hoverY.value = pt.y;
     hoverOpacity.value = withTiming(1, { duration: 50 });
     if (onHoverPrice) onHoverPrice(pt.val);
     const d = new Date(pt.ts);
     setHoverDate(`${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`);
+    setHoverPriceLabel(formatPrice(pt.val));
   };
 
   const pan = Gesture.Pan()
-    .onBegin((e: any) => { runOnJS(handleHover)(e.x); })
+    .onBegin((e: any)  => { runOnJS(handleHover)(e.x); })
     .onChange((e: any) => { runOnJS(handleHover)(e.x); })
-    .onFinalize(() => { runOnJS(handleHover)(-1); });
+    .onFinalize(()     => { runOnJS(handleHover)(-1); });
 
+  // viewBox → pixel scale, captured for the overlay translateX
+  // worklets. When the chart hasn't laid out yet, fall back to 1:1 so
+  // we don't NaN any transforms.
+  const vbToPxScale = svgPxW > 0 ? svgPxW / W : 1;
+
+  // ── Pulsing live-edge halo ──
+  const pulse = useSharedValue(0);
+  useEffect(() => {
+    if (isLive) {
+      pulse.value = withRepeat(
+        withSequence(
+          withTiming(1, { duration: 900,  easing: Easing.inOut(Easing.quad) }),
+          withTiming(0, { duration: 900,  easing: Easing.inOut(Easing.quad) }),
+        ),
+        -1, false,
+      );
+    } else {
+      pulse.value = withTiming(0, { duration: 200 });
+    }
+  }, [isLive, pulse]);
+
+  const haloStyle = useAnimatedStyle(() => ({
+    opacity: 0.18 + pulse.value * 0.45,
+    transform: [{ scale: 1 + pulse.value * 1.6 }],
+  }));
+
+  // Overlays sit on the OUTER gesture-detector view (the same coord
+  // space as `e.x`), so their translateX must be in screen pixels.
+  // hoverX/hoverY are stored in viewBox units, so we apply the scale
+  // factor + the card's left inset to land exactly on the SVG line.
   const cursorStyle = useAnimatedStyle(() => ({
     opacity: hoverOpacity.value,
-    transform: [{ translateX: hoverX.value }, { translateY: hoverY.value }],
+    transform: [
+      { translateX: hoverX.value * vbToPxScale + CARD_INSET },
+      { translateY: hoverY.value + CARD_INSET },
+    ],
     position: 'absolute',
     left: -6,
     top: -6,
@@ -778,13 +1078,30 @@ function SparklineChart({ points, color, palette: p, onHoverPrice }: {
 
   const lineStyle = useAnimatedStyle(() => ({
     opacity: hoverOpacity.value,
-    transform: [{ translateX: hoverX.value }],
+    transform: [{ translateX: hoverX.value * vbToPxScale + CARD_INSET }],
     position: 'absolute',
     left: 0,
-    top: PAD,
+    top: PAD + CARD_INSET,
     width: 1,
     height: H - PAD * 2,
     backgroundColor: p.border,
+  }));
+
+  // Price-tag pill at the top of the crosshair. 28px = half the
+  // pill's min-width so it stays centered on the cursor.
+  const tagStyle = useAnimatedStyle(() => ({
+    opacity: hoverOpacity.value,
+    transform: [{ translateX: hoverX.value * vbToPxScale + CARD_INSET - 28 }],
+    position: 'absolute',
+    top: -2,
+    left: 0,
+    minWidth: 56,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    backgroundColor: p.fg,
+    alignItems: 'center',
+    justifyContent: 'center',
   }));
 
   return (
@@ -795,7 +1112,20 @@ function SparklineChart({ points, color, palette: p, onHoverPrice }: {
           borderWidth: 1, borderColor: p.border, padding: 8,
           overflow: 'hidden'
         }}>
-          <Svg width="100%" height={H} viewBox={`0 0 ${W} ${H}`}>
+          <Svg
+            width="100%"
+            height={H}
+            viewBox={`0 0 ${W} ${H}`}
+            // Capture the rendered pixel width so the gesture handler
+            // and overlay translateX worklets can convert between
+            // viewBox space and screen-pixel space. Without this, the
+            // crosshair drifts off the line by the (containerPx / W)
+            // scale factor under the user's finger.
+            onLayout={(e) => {
+              const w = e.nativeEvent.layout.width;
+              if (w > 0 && Math.abs(w - svgPxW) > 0.5) setSvgPxW(w);
+            }}
+          >
             <Defs>
               <LinearGradient id="grad" x1="0" y1="0" x2="0" y2="1">
                 <Stop offset="0" stopColor={color} stopOpacity="0.35" />
@@ -808,11 +1138,51 @@ function SparklineChart({ points, color, palette: p, onHoverPrice }: {
             ))}
             <Path d={areaPath} fill="url(#grad)" />
             <Path d={linePath} stroke={color} strokeWidth={2.2} fill="none" strokeLinejoin="round" strokeLinecap="round" />
-            <Circle cx={last.x} cy={last.y} r={8} fill={color} opacity={0.25} />
-            <Circle cx={last.x} cy={last.y} r={4} fill={color} />
+            {/* Soft halo behind the live edge */}
+            <Circle cx={last.x} cy={last.y} r={8} fill={color} opacity={isLive ? 0.25 : 0.18} />
+            <Circle cx={last.x} cy={last.y} r={isLive ? 4.5 : 4} fill={color} />
           </Svg>
+
+          {/* Pulsing halo (rendered outside SVG so we can drive it with
+              Reanimated's UI-thread values without re-rasterising the
+              SVG every frame). Positioned in screen pixels — the old
+              `% of parent` approach drifted off the line whenever the
+              SVG's content width differed from the card's width. */}
+          {isLive && svgPxW > 0 && (
+            <Animated.View
+              pointerEvents="none"
+              style={[
+                {
+                  position: 'absolute',
+                  left:       (last.x / W) * svgPxW - 10,
+                  top:         last.y                 - 10,
+                  width: 20, height: 20, borderRadius: 10,
+                  backgroundColor: color,
+                },
+                haloStyle,
+              ]}
+            />
+          )}
+
           <Animated.View style={lineStyle} />
           <Animated.View style={cursorStyle} />
+
+          {/* Top crosshair price tag */}
+          {hoverPriceLabel && (
+            <Animated.View style={tagStyle} pointerEvents="none">
+              <Text style={{
+                color: p.bg, fontSize: 10, fontWeight: '700',
+                fontVariant: ['tabular-nums'],
+              }}>
+                {hoverPriceLabel}
+              </Text>
+            </Animated.View>
+          )}
+
+          {/* LIVE state is already shown next to the headline price at
+              the top of the screen — surfacing it again in the chart
+              corner was a duplicate. The pulsing live edge dot on the
+              line already conveys "this is moving in real time". */}
         </Animated.View>
         {hoverDate && (
           <Text style={{

@@ -19,7 +19,7 @@ function resolveVariant(variant: LogoVariant, dark: boolean): "color" | "black" 
 }
 
 const LOGO_SRC: Record<"color" | "black" | "white", string> = {
-  color: "/logo-color.png",
+  color: "/logo-white.png",
   black: "/logo-black.png",
   white: "/logo-white.png",
 };
@@ -43,7 +43,7 @@ export function IconLogo({
   return (
     <Image
       src={ICON_SRC[resolved]}
-      alt="fortuni"
+      alt="Fortuni"
       boxSize={`${size}px`}
       objectFit="contain"
     />
@@ -63,7 +63,7 @@ export function TextLogo({
   return (
     <Image
       src={LOGO_SRC[resolved]}
-      alt="fortuni"
+      alt="Fortuni"
       height={`${h}px`}
       objectFit="contain"
     />

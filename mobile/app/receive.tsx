@@ -22,12 +22,19 @@ export default function Receive() {
   const p = useThemedPalette();
   const user = useAuthStore((s) => s.user);
   const [tab, setTab] = useState<Tab>('HANDLE');
-  const handle = user?.username ?? user?.email?.split('@')[0] ?? 'me';
+  // Never derive a handle from the email local-part — exposes PII and
+  // pretends the user picked a handle they didn't. When no handle is
+  // set, the link still works via the user's id but we surface a "Set
+  // @handle" call-to-action in the UI instead of a fake @handle.
+  const handle = user?.username?.trim();
+  const linkSlug = handle ?? user?.id ?? 'me';
   // Universal link a counterparty's app deep-links into when they scan
-  // the QR code — resolves to /u/[handle] in the fortuni app.
-  const profileLink = `https://fortuni.com/u/${handle}`;
-  // Real QR code via qrserver.com — white bg + black foreground for reliable scanning.
-  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&margin=12&data=${encodeURIComponent(profileLink)}&bgcolor=ffffff&color=000000`;
+  // the QR code — resolves to /u/[slug] in the Fortuni app.
+  const profileLink = `https://Fortuni.com/u/${linkSlug}`;
+  // Real QR code via qrserver.com — white bg + black foreground for
+  // reliable scanning. ecc=H lets us overlay our mark in the centre
+  // without breaking decode (up to ~30% of the symbol can be hidden).
+  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&margin=12&ecc=H&data=${encodeURIComponent(profileLink)}&bgcolor=ffffff&color=000000`;
 
   return (
     <ScreenShell title="Receive money">
@@ -62,23 +69,60 @@ export default function Receive() {
 
       {tab === 'HANDLE' ? (
         <View style={{ marginTop: 28, alignItems: 'center' }}>
-          {/* Real QR code */}
+          {/* Real QR code with a centered Fortuni mark. The white
+              card around the code is intentional — QR scanners need
+              the white quiet-zone to lock on, so we don't tint it.
+              The dark surrounding screen + soft shadow stops it from
+              floating awkwardly inside the mono UI. */}
           <View style={{
             width: 220, height: 220, borderRadius: 20,
             backgroundColor: '#ffffff', alignItems: 'center', justifyContent: 'center',
             padding: 10,
+            shadowColor: '#000', shadowOpacity: 0.18,
+            shadowRadius: 18, shadowOffset: { width: 0, height: 8 },
           }}>
             <Image
               source={{ uri: qrUrl }}
               style={{ width: 200, height: 200 }}
               resizeMode="contain"
             />
+            {/* Inline Fortuni mark — see ReceiveWidget for the
+                rationale. ecc=H QR + ~24% overlay = always scans, and
+                drawing the F in code means we never depend on a PNG
+                file that ships the wrong colour variant for the
+                white-background QR. */}
+            <View
+              pointerEvents="none"
+              style={{
+                position: 'absolute',
+                width: 48, height: 48, borderRadius: 14,
+                backgroundColor: '#0A0A0B',
+                alignItems: 'center', justifyContent: 'center',
+                borderWidth: 3, borderColor: '#ffffff',
+                shadowColor: '#000', shadowOpacity: 0.18,
+                shadowRadius: 4, shadowOffset: { width: 0, height: 1 },
+              }}
+            >
+              <Text
+                allowFontScaling={false}
+                style={{
+                  color: '#ffffff',
+                  fontSize: 24,
+                  fontWeight: '900',
+                  letterSpacing: -1,
+                  lineHeight: 26,
+                  includeFontPadding: false,
+                }}
+              >
+                F
+              </Text>
+            </View>
           </View>
           <Text style={{
-            color: p.fg, fontSize: 28, fontWeight: '600',
+            color: handle ? p.fg : p.fgMuted, fontSize: 28, fontWeight: '600',
             letterSpacing: -0.6, marginTop: 22,
           }}>
-            @{handle}
+            {handle ? `@${handle}` : 'Set @handle'}
           </Text>
           <Text
             selectable
@@ -92,7 +136,7 @@ export default function Receive() {
           </Text>
 
           <Pressable
-            onPress={() => { h.selection(); router.push(`/u/${handle}`); }}
+            onPress={() => { h.selection(); router.push(`/u/${linkSlug}`); }}
             hitSlop={6}
             style={({ pressed }) => ({
               marginTop: 14,
@@ -130,7 +174,9 @@ export default function Receive() {
               onPress={() => {
                 h.light();
                 Share.share({
-                  message: `Pay me on fortuni → @${handle}\n${profileLink}`,
+                  message: handle
+                    ? `Pay me on Fortuni → @${handle}\n${profileLink}`
+                    : `Pay me on Fortuni → ${profileLink}`,
                 });
               }}
               style={({ pressed }) => ({
@@ -150,10 +196,10 @@ export default function Receive() {
         <View style={{ marginTop: 22 }}>
           <Panel>
             <View style={{ padding: 16, gap: 14 }}>
-              <BankRow label="Account holder" value={user ? `${user.firstName} ${user.lastName}` : 'fortuni user'} palette={p} />
+              <BankRow label="Account holder" value={user ? `${user.firstName} ${user.lastName}` : 'Fortuni user'} palette={p} />
               <BankRow label="IBAN"            value="DE89 3704 0044 0532 0130 00" palette={p} />
               <BankRow label="BIC / SWIFT"     value="COBADEFFXXX" palette={p} />
-              <BankRow label="Reference"       value={`PRMK-${handle.toUpperCase()}`} palette={p} />
+              <BankRow label="Reference"       value={`PRMK-${linkSlug.toUpperCase()}`} palette={p} />
             </View>
           </Panel>
           <Pressable

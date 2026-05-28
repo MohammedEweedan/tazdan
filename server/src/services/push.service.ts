@@ -152,3 +152,56 @@ export async function pushKYCUpdate(userId: string, status: 'APPROVED' | 'REJECT
   };
   await sendPushToUser(userId, { ...msgs[status], data: { type: 'kyc_update', status } });
 }
+
+/**
+ * Push copy for every money-movement event. Centralised so the wording
+ * matches what the email subject lines say — users get a coherent story
+ * across email + push for the same event. `data.kind = 'tx'` + `data.id`
+ * lets the mobile push handler deep-link straight to the receipt screen.
+ */
+export const pushCopy = {
+  buy: (amt: string, asset: string): PushPayload => ({
+    title: 'Trade filled',
+    body:  `Bought ${amt} ${asset}`,
+  }),
+  sell: (amt: string, asset: string, fiat: string): PushPayload => ({
+    title: 'Trade filled',
+    body:  `Sold ${amt} ${asset} for ${fiat}`,
+  }),
+  swap: (fromAmt: string, fromAsset: string, toAmt: string, toAsset: string): PushPayload => ({
+    title: 'Swap complete',
+    body:  `${fromAmt} ${fromAsset} → ${toAmt} ${toAsset}`,
+  }),
+  sent: (amt: string, asset: string, who: string): PushPayload => ({
+    title: 'Sent',
+    body:  `${amt} ${asset} to @${who}`,
+  }),
+  received: (amt: string, asset: string, who: string): PushPayload => ({
+    title: 'Received',
+    body:  `${amt} ${asset} from @${who}`,
+  }),
+  depositOn: (amt: string, asset: string): PushPayload => ({
+    title: 'Deposit confirmed',
+    body:  `${amt} ${asset} arrived in your wallet`,
+  }),
+  withdrawOn: (amt: string, asset: string): PushPayload => ({
+    title: 'Withdrawal sent',
+    body:  `${amt} ${asset} broadcast to the network`,
+  }),
+};
+
+/**
+ * Convenience — send a tx notification with the deep-link payload.
+ * The mobile push handler reads `data.kind === 'tx'` and routes to
+ * the receipt screen at /history/{id}.
+ */
+export async function pushTxEvent(
+  userId: string,
+  copy: PushPayload,
+  id: string,
+) {
+  await sendPushToUser(userId, {
+    ...copy,
+    data: { kind: 'tx', id, ...copy.data },
+  });
+}

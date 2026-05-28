@@ -80,7 +80,7 @@ export async function seedAdmin() {
   // Seed the system "support" user — every user can DM this account
   // and escalation threads route to it. Idempotent: only created once,
   // identified by the reserved `username = 'support'`.
-  const supportEmail = process.env.SUPPORT_EMAIL || 'support@fortuni.com';
+  const supportEmail = process.env.SUPPORT_EMAIL || 'support@Fortuni.com';
   const supportExisting = await prisma.user.findFirst({
     where: { OR: [{ username: 'support' }, { email: supportEmail }] },
   });
@@ -90,7 +90,7 @@ export async function seedAdmin() {
       data: {
         email:         supportEmail,
         passwordHash,
-        firstName:     'fortuni',
+        firstName:     'Fortuni',
         lastName:      'Support',
         username:      'support',
         role:          'ADMIN',
@@ -107,7 +107,7 @@ export async function seedAdmin() {
   // Seed the platform "treasury" user — every collected fee is credited
   // to this account so admins can audit and withdraw revenue. Identified
   // by the reserved `username = 'platform'`.
-  const platformEmail = process.env.PLATFORM_EMAIL || 'platform@fortuni.app';
+  const platformEmail = process.env.PLATFORM_EMAIL || 'platform@Fortuni.app';
   const platformExisting = await prisma.user.findFirst({
     where: { OR: [{ username: 'platform' }, { email: platformEmail }] },
   });
@@ -138,13 +138,13 @@ export async function seedAdmin() {
   // exists. Idempotent: an existing row with the same currency is left
   // alone so admin edits aren't clobbered.
   const platformBanks = [
-    { currency: 'USD', country: 'US', bankName: 'JPMorgan Chase Bank',          accountName: 'fortuni Inc.',     accountNumber: '000123456789',                  swift: 'CHASUS33', routingNumber: '021000021' },
-    { currency: 'EUR', country: 'DE', bankName: 'Deutsche Bank AG',             accountName: 'fortuni GmbH',     iban: 'DE89370400440532013000',                 swift: 'DEUTDEFF' },
-    { currency: 'GBP', country: 'GB', bankName: 'Barclays Bank plc',            accountName: 'fortuni Ltd',      iban: 'GB82WEST12345698765432',                 swift: 'BARCGB22', sortCode: '20-00-00', accountNumber: '98765432' },
-    { currency: 'AED', country: 'AE', bankName: 'Emirates NBD',                 accountName: 'fortuni DMCC',     iban: 'AE070331234567890123456',                swift: 'EBILAEAD' },
-    { currency: 'SAR', country: 'SA', bankName: 'Saudi National Bank',          accountName: 'fortuni Arabia',   iban: 'SA0380000000608010167519',               swift: 'NCBASARI' },
-    { currency: 'EGP', country: 'EG', bankName: 'National Bank of Egypt',       accountName: 'fortuni Egypt',    iban: 'EG380002000000000012345678901',          swift: 'NBEGEGCX' },
-    { currency: 'LYD', country: 'LY', bankName: 'Bank of Commerce & Development', accountName: 'fortuni Libya', accountNumber: '001-123456-001',                swift: 'BCDLLYLT' },
+    { currency: 'USD', country: 'US', bankName: 'JPMorgan Chase Bank',          accountName: 'Fortuni Inc.',     accountNumber: '000123456789',                  swift: 'CHASUS33', routingNumber: '021000021' },
+    { currency: 'EUR', country: 'DE', bankName: 'Deutsche Bank AG',             accountName: 'Fortuni GmbH',     iban: 'DE89370400440532013000',                 swift: 'DEUTDEFF' },
+    { currency: 'GBP', country: 'GB', bankName: 'Barclays Bank plc',            accountName: 'Fortuni Ltd',      iban: 'GB82WEST12345698765432',                 swift: 'BARCGB22', sortCode: '20-00-00', accountNumber: '98765432' },
+    { currency: 'AED', country: 'AE', bankName: 'Emirates NBD',                 accountName: 'Fortuni DMCC',     iban: 'AE070331234567890123456',                swift: 'EBILAEAD' },
+    { currency: 'SAR', country: 'SA', bankName: 'Saudi National Bank',          accountName: 'Fortuni Arabia',   iban: 'SA0380000000608010167519',               swift: 'NCBASARI' },
+    { currency: 'EGP', country: 'EG', bankName: 'National Bank of Egypt',       accountName: 'Fortuni Egypt',    iban: 'EG380002000000000012345678901',          swift: 'NBEGEGCX' },
+    { currency: 'LYD', country: 'LY', bankName: 'Bank of Commerce & Development', accountName: 'Fortuni Libya', accountNumber: '001-123456-001',                swift: 'BCDLLYLT' },
   ];
   for (const b of platformBanks) {
     const existing = await (prisma as any).platformBankAccount.findFirst({

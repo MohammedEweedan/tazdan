@@ -12,6 +12,9 @@ import {
 } from '../services/exchange/priceEngine.service';
 import { executeQuote } from '../services/exchange/orderExecution.service';
 import { getDexQuote, SUPPORTED_CHAINS, type ChainId } from '../services/dex/oneinch';
+import { sendBuyConfirmed, sendSellConfirmed } from '../services/email';
+import { pushCopy, pushTxEvent } from '../services/push.service';
+import { logger } from '../utils/logger';
 
 const quoteSchema = z.object({
   asset: z.string().min(1).max(20).transform((s) => s.toUpperCase()),
@@ -141,6 +144,58 @@ export class ExchangeController {
         cryptoAmount: order.cryptoAmount.toString(),
         quotedPrice: order.quotedPrice.toString(),
       });
+
+      // Transactional email + push confirmation. Fire-and-forget — must
+      // never throw or block the response. Honors per-user notification
+      // preferences (defaults to true if the field is missing).
+      const userId = req.user!.id;
+      const side   = (order as any).type as 'BUY' | 'SELL';
+      const status = (order as any).status as string;
+      if (status === 'FILLED' || status === 'COMPLETED' || status === 'SETTLED') {
+        (async () => {
+          try {
+            const u = await prisma.user.findUnique({
+              where: { id: userId },
+              select: { email: true, firstName: true, notificationPrefs: true as any },
+            });
+            if (!u) return;
+            const prefs = (u as any).notificationPrefs ?? {};
+            const fiatCurrency = (order as any).fiatCurrency || (peek as any).fiatCurrency || 'USD';
+            const cryptoAmt = order.cryptoAmount.toString().replace(/\.?0+$/, '');
+            const fiatAmt   = ((order as any).fiatAmount ?? (peek as any).fiatAmount ?? '0').toString().replace(/\.?0+$/, '');
+            const rate      = order.quotedPrice.toString().replace(/\.?0+$/, '');
+            const fees      = ((order as any).fee ?? (peek as any).fee ?? '0').toString().replace(/\.?0+$/, '');
+
+            if (side === 'BUY') {
+              if (prefs?.email?.trades !== false) {
+                await sendBuyConfirmed({
+                  to: u.email, firstName: u.firstName || 'there',
+                  asset: order.asset, amount: cryptoAmt,
+                  fiatSpent: fiatAmt, fiatCurrency,
+                  rate, fees, orderId: order.id,
+                });
+              }
+              if (prefs?.push?.trades !== false) {
+                await pushTxEvent(userId, pushCopy.buy(cryptoAmt, order.asset), order.id);
+              }
+            } else if (side === 'SELL') {
+              if (prefs?.email?.trades !== false) {
+                await sendSellConfirmed({
+                  to: u.email, firstName: u.firstName || 'there',
+                  asset: order.asset, amount: cryptoAmt,
+                  fiatReceived: fiatAmt, fiatCurrency,
+                  rate, fees, orderId: order.id,
+                });
+              }
+              if (prefs?.push?.trades !== false) {
+                await pushTxEvent(userId, pushCopy.sell(cryptoAmt, order.asset, `${fiatAmt} ${fiatCurrency}`), order.id);
+              }
+            }
+          } catch (err) {
+            logger.warn('[exchange.execute] post-fill notify failed', { userId, orderId: order.id, err });
+          }
+        })();
+      }
 
       res.status(201).json({ order });
     } catch (error) {

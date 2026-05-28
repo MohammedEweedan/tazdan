@@ -60,7 +60,7 @@ const CARDS: CardConfig[] = [
     textColor: '#e8f0ff',
     mutedColor: 'rgba(160,190,255,0.55)',
     visaColor: 'rgba(160,190,255,0.70)',
-    logo: 'logo-color.png',
+    logo: 'logo-white.png',
     number: '4000 0000 0000 0002',
     name: 'CARD HOLDER',
     expiry: '12 / 27',

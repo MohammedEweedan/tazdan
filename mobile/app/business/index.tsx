@@ -28,7 +28,7 @@ import { businessService } from '@/services/business';
 import type { BusinessStats, BusinessPayout, BusinessProfile } from '@/types/business';
 import { TopGradient } from '@/components/ui/ScreenShell';
 
-const ACCENT = '#226dff';
+const ACCENT = '#737373';
 
 function StatCard({ label, value, sub, color }: { label: string; value: string; sub?: string; color?: string }) {
   const p = useThemedPalette();
@@ -313,7 +313,7 @@ export default function BusinessDashboard() {
 
               {/* API Docs link */}
               <Pressable
-                onPress={() => { h.selection(); /* Linking.openURL('https://docs.fortuni.com') */ }}
+                onPress={() => { h.selection(); /* Linking.openURL('https://docs.Fortuni.com') */ }}
                 style={({ pressed }) => ({
                   marginTop: 20, padding: 16, borderRadius: 16,
                   borderWidth: 1, borderColor: `${ACCENT}44`,
@@ -325,7 +325,7 @@ export default function BusinessDashboard() {
                 <Ionicons name="code-slash-outline" size={22} color={ACCENT} />
                 <View style={{ flex: 1 }}>
                   <Text style={{ color: p.fg, fontSize: 14, fontWeight: '700' }}>API Documentation</Text>
-                  <Text style={{ color: p.fgMuted, fontSize: 12, marginTop: 1 }}>docs.fortuni.com</Text>
+                  <Text style={{ color: p.fgMuted, fontSize: 12, marginTop: 1 }}>docs.Fortuni.com</Text>
                 </View>
                 <Ionicons name="arrow-forward" size={16} color={ACCENT} />
               </Pressable>

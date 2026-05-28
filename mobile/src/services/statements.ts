@@ -59,7 +59,7 @@ const css = `
   h1 { font-size: 22px; font-weight: 800; letter-spacing: -0.5px; margin: 0 0 4px; }
   h2 { font-size: 11px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase;
        color: #6b6b75; margin: 28px 0 10px; border-bottom: 1px solid #d8d6cf; padding-bottom: 6px; }
-  .brand { color: #1a52cc; }
+  .brand { color: #0A0A0B; }
   .meta { color: #6b6b75; font-size: 10.5px; }
   .summary { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 12px; }
   .stat { flex: 1; min-width: 22%; padding: 14px; border: 1px solid #d8d6cf; border-radius: 12px; background: #fbfaf6; }
@@ -140,11 +140,11 @@ export function renderStatementHtml(data: StatementJson, filter: StatementFilter
 
   return `<!doctype html>
 <html><head><meta charset="utf-8" />
-<title>fortuni Statement</title>
+<title>Fortuni Statement</title>
 <style>${css}</style>
 </head>
 <body>
-  <h1><span class="brand">fortuni</span> Account Statement</h1>
+  <h1><span class="brand">Fortuni</span> Account Statement</h1>
   <div class="meta">${escapeHtml(fullName)} · ${escapeHtml(data.user.email)}</div>
   <div class="meta">Period: ${escapeHtml(statementTitle(filter))} · Generated ${escapeHtml(generated)}</div>
 
@@ -177,9 +177,9 @@ export function renderStatementHtml(data: StatementJson, filter: StatementFilter
       </table>`}
 
   <div class="footer">
-    This statement was generated from fortuni records on the date shown above. All amounts
+    This statement was generated from Fortuni records on the date shown above. All amounts
     are settled in the corresponding wallet currency. For audit support, contact
-    support@fortuni.app referencing your account email.
+    support@Fortuni.app referencing your account email.
   </div>
 </body></html>`;
 }
@@ -197,7 +197,7 @@ export async function exportStatementPdf(filter: StatementFilter): Promise<strin
   // Rename to a sensible filename so the OS share sheet displays a
   // human-readable title and the resulting file is recognisable in
   // the user's downloads / mail attachments.
-  const filename = `fortuni-statement${filter.from ? `-${filter.from}` : ''}${filter.to ? `_to_${filter.to}` : ''}${filter.currency ? `-${filter.currency}` : ''}.pdf`;
+  const filename = `Fortuni-statement${filter.from ? `-${filter.from}` : ''}${filter.to ? `_to_${filter.to}` : ''}${filter.currency ? `-${filter.currency}` : ''}.pdf`;
   let outUri = uri;
   try {
     const src = new File(uri);

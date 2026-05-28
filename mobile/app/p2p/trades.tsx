@@ -27,7 +27,7 @@ import { QUERY_KEYS } from '@/constants';
 import type { Palette } from '@/store/themeStore';
 import type { P2PTrade } from '@/services';
 
-const BRAND_BLUE = '#0057B8';
+const BRAND_BLUE = '#737373'; // mono accent neutral
 type Filter = 'ACTIVE' | 'COMPLETED' | 'ALL';
 
 const ACTIVE_STATUSES = new Set<P2PTrade['status']>([

@@ -11,15 +11,18 @@
  */
 
 import { useMemo } from 'react';
-import { Alert, Pressable, ScrollView, View } from 'react-native';
+import { Alert, Pressable, Share, ScrollView, View } from 'react-native';
 import { Text } from '@/components/ui/Text';
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { ScreenShell, Panel } from '@/components/ui/ScreenShell';
 import { useThemedPalette, type Palette } from '@/store/themeStore';
 import { useT } from '@/store/i18nStore';
 import { useTransactions, useHaptics } from '@/hooks';
+import { claimLinkService, type ClaimLink } from '@/services';
+import { AssetTxRow } from '@/components/transactions/AssetTxRow';
 
 type Tx = {
   id: string;
@@ -38,8 +41,43 @@ export default function History() {
   const h = useHaptics();
   const t = useT();
   const p = useThemedPalette();
+  const qc = useQueryClient();
   const { data, isLoading, refetch, isFetching } = useTransactions(1);
   const items = (data?.items ?? []) as Tx[];
+
+  // Pending claim links sent by this user — surface them above the
+  // history list so the sender can cancel + reclaim if needed.
+  const pendingClaims = useQuery({
+    queryKey: ['claim-links', 'PENDING'],
+    queryFn:  () => claimLinkService.listMine({ status: 'PENDING' }),
+  });
+  const pending: ClaimLink[] = pendingClaims.data?.items ?? [];
+
+  async function cancelClaim(link: ClaimLink) {
+    h.warning?.() ?? h.light();
+    Alert.alert(
+      t('claim.cancelTitle') || 'Cancel claim link?',
+      `${(t('claim.cancelBody') || 'The funds will return to your wallet immediately.')}`,
+      [
+        { text: t('common.keep') || 'Keep it', style: 'cancel' },
+        {
+          text: t('common.cancelIt') || 'Cancel it',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await claimLinkService.cancel(link.id);
+              h.success();
+              qc.invalidateQueries({ queryKey: ['claim-links'] });
+              refetch();
+            } catch (e: any) {
+              h.error();
+              Alert.alert(t('common.error') || 'Error', e?.response?.data?.error ?? 'Could not cancel');
+            }
+          },
+        },
+      ],
+    );
+  }
 
   // Group by ISO date so the user gets MoonPay-style date headers.
   const groups = useMemo(() => {
@@ -73,6 +111,101 @@ export default function History() {
         </Pressable>
       </View>
 
+      {/* Pending claim links — surface above history so the sender can
+          recall funds before the recipient claims. */}
+      {pending.length > 0 && (
+        <View style={{ marginTop: 18 }}>
+          <Text style={{
+            color: p.fgFaint, fontSize: 11, fontWeight: '700', letterSpacing: 0.6,
+            marginLeft: 4, marginBottom: 8,
+          }}>
+            {(t('history.pendingClaims') || 'PENDING CLAIM LINKS').toUpperCase()}
+          </Text>
+          <Panel>
+            {pending.map((link, i) => {
+              const recipient = link.recipientEmail
+                ?? link.recipientPhone
+                ?? (link.recipientHandle ? `@${link.recipientHandle}` : 'recipient');
+              const expiresAt = new Date(link.expiresAt);
+              const ms = expiresAt.getTime() - Date.now();
+              const days = Math.floor(ms / (24 * 60 * 60 * 1000));
+              const expiryLabel = ms <= 0
+                ? (t('claim.expiringSoon') || 'expiring')
+                : days > 0
+                  ? `${days}d left`
+                  : `${Math.max(1, Math.floor(ms / (60 * 60 * 1000)))}h left`;
+              return (
+                <View
+                  key={link.id}
+                  style={{
+                    paddingHorizontal: 14, paddingVertical: 12,
+                    flexDirection: 'row', alignItems: 'center', gap: 12,
+                    borderTopWidth: i === 0 ? 0 : 1, borderTopColor: p.border,
+                  }}
+                >
+                  <View
+                    style={{
+                      width: 36, height: 36, borderRadius: 10,
+                      backgroundColor: p.pillBg, borderWidth: 1, borderColor: p.border,
+                      alignItems: 'center', justifyContent: 'center',
+                    }}
+                  >
+                    <Ionicons name="link-outline" size={16} color={p.fg} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ color: p.fg, fontSize: 13, fontWeight: '700' }} numberOfLines={1}>
+                      {`${link.amount} ${link.asset} → ${recipient}`}
+                    </Text>
+                    <Text style={{ color: p.fgMuted, fontSize: 11, marginTop: 2 }}>
+                      {expiryLabel}
+                    </Text>
+                  </View>
+                  <Pressable
+                    onPress={async () => {
+                      if (!link.claimToken) {
+                        Alert.alert(t('claim.linkUnavailable') || 'Share unavailable', 'Re-create this claim to get a fresh URL.');
+                        return;
+                      }
+                      const url = `https://Fortuni.com/claim/${link.claimToken}`;
+                      await Share.share({
+                        message: `${(t('send.claimShareIntro') || 'I sent you')} ${link.amount} ${link.asset} on Fortuni → ${url}`,
+                      });
+                    }}
+                    hitSlop={6}
+                    style={({ pressed }) => ({
+                      paddingHorizontal: 10, height: 30, borderRadius: 15,
+                      backgroundColor: pressed ? p.border : p.pillBg,
+                      borderWidth: 1, borderColor: p.border,
+                      alignItems: 'center', justifyContent: 'center',
+                      flexDirection: 'row', gap: 4,
+                    })}
+                  >
+                    <Ionicons name="share-outline" size={11} color={p.fg} />
+                    <Text style={{ color: p.fg, fontSize: 10, fontWeight: '700' }}>
+                      {t('common.share') || 'Share'}
+                    </Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={() => cancelClaim(link)}
+                    hitSlop={6}
+                    style={({ pressed }) => ({
+                      paddingHorizontal: 10, height: 30, borderRadius: 15,
+                      backgroundColor: pressed ? p.redBg : 'transparent',
+                      borderWidth: 1, borderColor: p.border,
+                      alignItems: 'center', justifyContent: 'center',
+                    })}
+                  >
+                    <Text style={{ color: p.redFg, fontSize: 10, fontWeight: '700' }}>
+                      {t('common.cancel') || 'Cancel'}
+                    </Text>
+                  </Pressable>
+                </View>
+              );
+            })}
+          </Panel>
+        </View>
+      )}
+
       {isLoading ? (
         <View style={{ paddingVertical: 64, alignItems: 'center' }}>
           <Text style={{ color: p.fgMuted }}>{t('history.loading')}</Text>
@@ -96,7 +229,7 @@ export default function History() {
               </Text>
               <Panel>
                 {txs.map((tx, i) => (
-                  <TxRow
+                  <AssetTxRow
                     key={tx.id}
                     tx={tx}
                     palette={p}
@@ -118,153 +251,8 @@ export default function History() {
   );
 }
 
-function TxRow({
-  tx, palette: p, last, onCopyHash,
-}: {
-  tx: Tx;
-  palette: Palette;
-  last: boolean;
-  onCopyHash: (hash: string) => void;
-}) {
-  const amt = Number(tx.amount);
-  const negative = amt < 0;
-  const abs = Math.abs(amt);
-  const date = new Date(tx.createdAt);
-  // ISO-ish to-the-second timestamp (locale aware).
-  const exact = date.toLocaleString(undefined, {
-    year: 'numeric', month: 'short', day: '2-digit',
-    hour: '2-digit', minute: '2-digit', second: '2-digit',
-    hour12: false,
-  });
-  const status = (tx.status ?? 'COMPLETED').toUpperCase();
-  const hash = tx.txHash ?? tx.reference ?? null;
-  const truncated = hash && hash.length > 14
-    ? `${hash.slice(0, 6)}…${hash.slice(-4)}`
-    : hash;
-
-  return (
-    <View style={{
-      padding: 14,
-      borderBottomWidth: last ? 0 : 1, borderBottomColor: p.border,
-      gap: 10,
-    }}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-        <View style={{
-          width: 40, height: 40, borderRadius: 12,
-          backgroundColor: typeBg(tx.type, p),
-          alignItems: 'center', justifyContent: 'center',
-        }}>
-          <Ionicons name={typeIcon(tx.type)} size={18} color={typeFg(tx.type, p)} />
-        </View>
-        <View style={{ flex: 1 }}>
-          <Text style={{ color: p.fg, fontSize: 14, fontWeight: '700' }} numberOfLines={1}>
-            {tx.description || prettyType(tx.type)}
-          </Text>
-          <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '500', marginTop: 2 }}>
-            {exact}
-          </Text>
-        </View>
-        <View style={{ alignItems: 'flex-end' }}>
-          <Text style={{
-            color: negative ? p.fg : p.greenFg,
-            fontSize: 15, fontWeight: '600', fontVariant: ['tabular-nums'],
-          }}>
-            {negative ? '-' : '+'}{abs.toLocaleString('en-US', { maximumFractionDigits: 8 })} {tx.currency}
-          </Text>
-          <StatusPill status={status} palette={p} />
-        </View>
-      </View>
-
-      {hash && (
-        <Pressable
-          hitSlop={4}
-          onPress={() => onCopyHash(hash)}
-          style={({ pressed }) => ({
-            flexDirection: 'row', alignItems: 'center', gap: 6,
-            alignSelf: 'flex-start',
-            paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10,
-            backgroundColor: pressed ? p.border : p.pillBg,
-            borderWidth: 1, borderColor: p.border,
-          })}
-        >
-          <Ionicons name="link-outline" size={11} color={p.fgMuted} />
-          <Text
-            style={{
-              color: p.fgMuted, fontSize: 11, fontWeight: '600',
-              fontFamily: 'Menlo' as any,
-            }}
-            numberOfLines={1}
-          >
-            {truncated}
-          </Text>
-          <Ionicons name="copy-outline" size={11} color={p.fgMuted} />
-        </Pressable>
-      )}
-    </View>
-  );
-}
-
-function StatusPill({ status, palette: p }: { status: string; palette: Palette }) {
-  const ok = status === 'COMPLETED' || status === 'FILLED' || status === 'CONFIRMED';
-  const bad = status === 'FAILED' || status === 'CANCELLED' || status === 'DECLINED';
-  const bg = ok ? p.greenBg : bad ? 'rgba(239,68,68,0.16)' : p.pillBg;
-  const fg = ok ? p.greenFg : bad ? p.redFg : p.fgMuted;
-  return (
-    <View style={{
-      paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6,
-      backgroundColor: bg, marginTop: 2,
-    }}>
-      <Text style={{ color: fg, fontSize: 9, fontWeight: '600', letterSpacing: 0.4 }}>
-        {status}
-      </Text>
-    </View>
-  );
-}
-
-function typeIcon(t: string): keyof typeof import('@expo/vector-icons').Ionicons.glyphMap {
-  switch (t) {
-    case 'SEND':
-    case 'TRANSFER_OUT': return 'arrow-up';
-    case 'RECEIVE':
-    case 'TRANSFER_IN':  return 'arrow-down';
-    case 'BUY':          return 'cart';
-    case 'SELL':         return 'cash';
-    case 'DEPOSIT':      return 'add-circle';
-    case 'WITHDRAW':     return 'remove-circle';
-    case 'CONVERT':
-    case 'SWAP':         return 'swap-horizontal';
-    default:             return 'ellipse';
-  }
-}
-
-function typeBg(t: string, p: Palette) {
-  switch (t) {
-    case 'BUY':
-    case 'RECEIVE':
-    case 'TRANSFER_IN':
-    case 'DEPOSIT':  return p.greenBg;
-    case 'SELL':
-    case 'WITHDRAW':
-    case 'SEND':
-    case 'TRANSFER_OUT': return 'rgba(239,68,68,0.16)';
-    default:         return p.pillBg;
-  }
-}
-
-function typeFg(t: string, p: Palette) {
-  switch (t) {
-    case 'BUY':
-    case 'RECEIVE':
-    case 'TRANSFER_IN':
-    case 'DEPOSIT':  return p.greenFg;
-    case 'SELL':
-    case 'WITHDRAW':
-    case 'SEND':
-    case 'TRANSFER_OUT': return p.redFg;
-    default:         return p.fg;
-  }
-}
-
-function prettyType(t: string): string {
-  return t.charAt(0) + t.slice(1).toLowerCase();
-}
+/* TxRow / StatusPill / typeIcon / typeBg / typeFg / prettyType were
+   inlined here before. They now live in `src/components/transactions/
+   AssetTxRow.tsx` so the format is shared with the per-asset history
+   panel on `/asset/[currency]` — fixes the "USD amount shown in BTC"
+   drift that came from each page rendering rows its own way. */

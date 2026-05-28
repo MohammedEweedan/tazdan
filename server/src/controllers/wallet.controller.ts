@@ -5,6 +5,9 @@ import axios from 'axios';
 import { prisma } from '../utils/prisma';
 import { AppError } from '../middleware/errorHandler';
 import { AuthRequest } from '../types';
+import { logger } from '../utils/logger';
+import { sendSwapConfirmed } from '../services/email';
+import { pushCopy, pushTxEvent } from '../services/push.service';
 
 interface WalletRecord {
   id: string;
@@ -236,8 +239,40 @@ export class WalletController {
           ],
         });
 
-        return { from, to, amount, credited, rate: fromPx / toPx };
+        return { from, to, amount, credited, rate: fromPx / toPx, reference };
       });
+
+      // Fire-and-forget: send confirmation email + push. Failures here
+      // never block the response — the swap has already settled.
+      const userId = req.user!.id;
+      (async () => {
+        try {
+          const user = await prisma.user.findUnique({
+            where: { id: userId },
+            select: { email: true, firstName: true, notificationPrefs: true as any },
+          });
+          if (!user) return;
+          const prefs = (user as any).notificationPrefs ?? {};
+          const fromAmt = amount.toFixed(8).replace(/\.?0+$/, '');
+          const toAmt   = result.credited.toFixed(8).replace(/\.?0+$/, '');
+          const rate    = result.rate.toFixed(8).replace(/\.?0+$/, '');
+          if (prefs?.email?.trades !== false) {
+            await sendSwapConfirmed({
+              to: user.email,
+              firstName: user.firstName || 'there',
+              fromAsset: from, fromAmount: fromAmt,
+              toAsset: to,     toAmount: toAmt,
+              rate, fees: '0',
+              orderId: result.reference,
+            });
+          }
+          if (prefs?.push?.trades !== false) {
+            await pushTxEvent(userId, pushCopy.swap(fromAmt, from, toAmt, to), result.reference);
+          }
+        } catch (err) {
+          logger.warn('[wallet.swap] post-commit notify failed', { userId, err });
+        }
+      })();
 
       res.status(201).json({ message: 'Swap complete', swap: result });
     } catch (error) {

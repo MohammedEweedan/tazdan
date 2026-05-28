@@ -11,19 +11,29 @@ import { Avatar } from '@/components/ui/Avatar';
 import { formatAmount, formatRelativeTime } from '@/utils/format';
 import type { Transaction, TxType } from '@/types';
 
+// Monochrome — direction signaled by red (out) / green (in) only.
+// Type-specific colors (blue for BUY, amber for SELL) are replaced with
+// a neutral gray so direction reads clearly without color noise.
+const NEUTRAL    = '#A3A3A3';
+const NEUTRAL_BG = 'rgba(163,163,163,0.16)';
+const IN_FG      = '#3FCF8E';
+const IN_BG      = 'rgba(63,207,142,0.14)';
+const OUT_FG     = '#F87171';
+const OUT_BG     = 'rgba(248,113,113,0.14)';
+
 const ICON_FOR: Record<TxType, { name: keyof typeof Ionicons.glyphMap; color: string; bg: string }> = {
-  RECEIVE:    { name: 'arrow-down',     color: '#22c55e', bg: 'rgba(34,197,94,0.16)' },
-  SEND:       { name: 'arrow-up',       color: '#ef4444', bg: 'rgba(239,68,68,0.16)' },
-  BUY:        { name: 'add',            color: '#226dff', bg: 'rgba(34,109,255,0.18)' },
-  SELL:       { name: 'remove',         color: '#f59e0b', bg: 'rgba(245,158,11,0.18)' },
-  DEPOSIT:    { name: 'arrow-down',     color: '#22c55e', bg: 'rgba(34,197,94,0.16)' },
-  WITHDRAWAL: { name: 'arrow-up',       color: '#ef4444', bg: 'rgba(239,68,68,0.16)' },
-  TOPUP:      { name: 'card',           color: '#226dff', bg: 'rgba(34,109,255,0.18)' },
-  P2P_BUY:    { name: 'people',         color: '#226dff', bg: 'rgba(34,109,255,0.18)' },
-  P2P_SELL:   { name: 'people',         color: '#f59e0b', bg: 'rgba(245,158,11,0.18)' },
-  CARD_SPEND: { name: 'card',           color: '#ef4444', bg: 'rgba(239,68,68,0.16)' },
-  CASHBACK:   { name: 'gift',           color: '#22c55e', bg: 'rgba(34,197,94,0.16)' },
-  FEE:        { name: 'receipt',        color: '#94a3b8', bg: 'rgba(148,163,184,0.16)' },
+  RECEIVE:    { name: 'arrow-down',     color: IN_FG,    bg: IN_BG },
+  SEND:       { name: 'arrow-up',       color: OUT_FG,   bg: OUT_BG },
+  BUY:        { name: 'add',            color: NEUTRAL,  bg: NEUTRAL_BG },
+  SELL:       { name: 'remove',         color: NEUTRAL,  bg: NEUTRAL_BG },
+  DEPOSIT:    { name: 'arrow-down',     color: IN_FG,    bg: IN_BG },
+  WITHDRAWAL: { name: 'arrow-up',       color: OUT_FG,   bg: OUT_BG },
+  TOPUP:      { name: 'card',           color: NEUTRAL,  bg: NEUTRAL_BG },
+  P2P_BUY:    { name: 'people',         color: NEUTRAL,  bg: NEUTRAL_BG },
+  P2P_SELL:   { name: 'people',         color: NEUTRAL,  bg: NEUTRAL_BG },
+  CARD_SPEND: { name: 'card',           color: OUT_FG,   bg: OUT_BG },
+  CASHBACK:   { name: 'gift',           color: IN_FG,    bg: IN_BG },
+  FEE:        { name: 'receipt',        color: NEUTRAL,  bg: NEUTRAL_BG },
 };
 
 interface Props {

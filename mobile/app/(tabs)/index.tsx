@@ -24,6 +24,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 
 import { useAuthStore } from '@/store/authStore';
+import { realHandle, displayHandle, avatarMode } from '@/utils/displayUser';
 import { useWallets, useHaptics, useTransactions, useActivities, useActivityRealtime, useNotificationRealtime, useUnreadCount, useMarkets, useDisplayCurrency } from '@/hooks';
 import { useTheme, useThemedPalette, type Palette } from '@/store/themeStore';
 import { useT } from '@/store/i18nStore';
@@ -202,9 +203,11 @@ export default function Home() {
   const [cryptoOpen, setCryptoOpen] = useState(true);
   const [fiatOpen, setFiatOpen] = useState(true);
 
-  const initial = (user?.firstName?.[0] ?? user?.email?.[0] ?? 'P').toUpperCase();
-  const handle = user?.username ?? user?.email?.split('@')[0] ?? 'me';
-  const userEmoji = user?.avatarUrl;
+  // Display helpers — NEVER use the email local-part as a handle (PII leak).
+  const handle = realHandle(user);                   // null when not set
+  const handleLabel = displayHandle(user, t('home.setHandle') || 'Set @handle');
+  const av = avatarMode(user);
+  const initial = av.kind === 'initials' ? av.char : (user?.firstName?.[0] ?? '?').toUpperCase();
 
   // Primary actions sit directly under the balance. Three pills —
   // Buy, Sell, Top up (deposit). Withdraw + everything else lives
@@ -248,22 +251,25 @@ export default function Home() {
               >
                 <View style={{
                   width: 36, height: 36, borderRadius: 18,
-                  backgroundColor: userEmoji ? p.bgElev : '#7c3aed',
+                  backgroundColor: p.bgElev,
                   alignItems: 'center', justifyContent: 'center',
                   borderWidth: 1,
                   borderColor: p.border,
                   flexShrink: 0,
+                  overflow: 'hidden',
                 }}>
-                  {userEmoji ? (
-                    <Text style={{ fontSize: 20 }}>{userEmoji}</Text>
+                  {av.kind === 'image' ? (
+                    <Image source={{ uri: av.uri }} style={{ width: 36, height: 36 }} />
+                  ) : av.kind === 'emoji' ? (
+                    <Text style={{ fontSize: 20 }}>{av.char}</Text>
                   ) : (
-                    <Text style={{ color: '#fff', fontWeight: '600', fontSize: 16 }}>{initial}</Text>
+                    <Text style={{ color: p.fg, fontWeight: '700', fontSize: 16 }}>{initial}</Text>
                   )}
                 </View>
                 <Text
                   style={{
-                    color: p.fg,
-                    fontSize: handle.length <= 8 ? 17 : handle.length <= 14 ? 15 : handle.length <= 20 ? 13 : 11,
+                    color: handle ? p.fg : p.fgMuted,
+                    fontSize: (handleLabel.length <= 8 ? 17 : handleLabel.length <= 14 ? 15 : handleLabel.length <= 20 ? 13 : 11),
                     fontWeight: '600',
                     letterSpacing: -0.3,
                     flexShrink: 1,
@@ -274,7 +280,7 @@ export default function Home() {
                   adjustsFontSizeToFit
                   minimumFontScale={0.7}
                 >
-                  @{handle}
+                  {handleLabel}
                 </Text>
               </Pressable>
               {(user?.role === 'ADMIN') && (
@@ -291,8 +297,8 @@ export default function Home() {
                     flexShrink: 0,
                   })}
                 >
-                  <Ionicons name="shield-checkmark" size={11} color="#4a8fe0" />
-                  <Text style={{ color: '#4a8fe0', fontSize: 10, fontWeight: '600', letterSpacing: 0.6 }}>
+                  <Ionicons name="shield-checkmark" size={11} color="#A3A3A3" />
+                  <Text style={{ color: '#A3A3A3', fontSize: 10, fontWeight: '600', letterSpacing: 0.6 }}>
                     ADMIN
                   </Text>
                 </Pressable>

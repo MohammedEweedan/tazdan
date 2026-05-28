@@ -3,14 +3,14 @@ import type { Metadata } from 'next';
 export const metadata: Metadata = {
   title: 'Careers',
   description:
-    'Join the fortuni team — engineers, product managers, compliance officers and more. Help us build the financial layer for the MENA region.',
+    'Join the Fortuni team — engineers, product managers, compliance officers and more. Help us build the financial layer for the MENA region.',
   openGraph: {
-    title: 'Careers at fortuni',
+    title: 'Careers at Fortuni',
     description:
       'We are hiring engineers, PMs, and compliance specialists. Build the future of money with us.',
-    url: 'https://fortuni.com/careers',
+    url: 'https://Fortuni.com/careers',
   },
-  alternates: { canonical: 'https://fortuni.com/careers' },
+  alternates: { canonical: 'https://Fortuni.com/careers' },
 };
 
 export default function CareersLayout({ children }: { children: React.ReactNode }) {

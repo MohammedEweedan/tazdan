@@ -1,8 +1,8 @@
 /**
  * useTransactionSound — Apple Pay-style success haptic + audible "ding".
  *
- * Plays a synthesized ascending-frequency "ding" WAV file via expo-av
- * alongside the iOS success haptic. This produces BOTH sound (speaker)
+ * Plays the real Apple Pay confirmation or decline MP3 via expo-av
+ * alongside the iOS haptic. This produces BOTH sound (speaker)
  * and vibration (Taptic Engine) — the full Apple Pay experience.
  */
 
@@ -11,7 +11,7 @@ import { Platform } from 'react-native';
 import { Audio } from 'expo-av';
 import * as Haptics from 'expo-haptics';
 import { TRANSACTION_SOUND, type TransactionType } from '@/constants';
-import { ensureSuccessSound } from '@/utils/soundGenerator';
+import { SUCCESS_SOUND_ASSET, DECLINE_SOUND_ASSET } from '@/utils/soundGenerator';
 
 const safe = (fn: () => Promise<unknown> | void) => {
   if (Platform.OS === 'web') return;
@@ -19,22 +19,31 @@ const safe = (fn: () => Promise<unknown> | void) => {
 };
 
 export function useTransactionSound() {
-  const soundRef = useRef<Audio.Sound | null>(null);
+  const successSoundRef = useRef<Audio.Sound | null>(null);
+  const declineSoundRef = useRef<Audio.Sound | null>(null);
 
-  const loadSound = useCallback(async (): Promise<Audio.Sound> => {
-    if (soundRef.current) return soundRef.current;
-
-    const uri = ensureSuccessSound();
+  const loadSuccessSound = useCallback(async (): Promise<Audio.Sound> => {
+    if (successSoundRef.current) return successSoundRef.current;
     const { sound } = await Audio.Sound.createAsync(
-      { uri },
+      SUCCESS_SOUND_ASSET,
       { shouldPlay: false, volume: 1.0 }
     );
-    soundRef.current = sound;
+    successSoundRef.current = sound;
+    return sound;
+  }, []);
+
+  const loadDeclineSound = useCallback(async (): Promise<Audio.Sound> => {
+    if (declineSoundRef.current) return declineSoundRef.current;
+    const { sound } = await Audio.Sound.createAsync(
+      DECLINE_SOUND_ASSET,
+      { shouldPlay: false, volume: 1.0 }
+    );
+    declineSoundRef.current = sound;
     return sound;
   }, []);
 
   /**
-   * Play the Apple Pay-style success ding + haptic.
+   * Play the Apple Pay confirmation sound + success haptic.
    * Call this when a transaction completes successfully.
    * Fire-and-forget: no need to await.
    */
@@ -45,18 +54,23 @@ export function useTransactionSound() {
     // Haptic vibration (Taptic Engine)
     safe(() => Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success));
 
-    // Actual audible "ding" from speaker (fire-and-forget)
-    loadSound()
+    // Apple Pay confirmation sound (fire-and-forget)
+    loadSuccessSound()
       .then((sound) => sound.setPositionAsync(0).then(() => sound.playAsync()))
       .catch(() => { /* haptic-only fallback */ });
-  }, [loadSound]);
+  }, [loadSuccessSound]);
 
   /**
-   * Play error haptic for failed transactions.
+   * Play the Apple Pay decline sound + error haptic for failed transactions.
    */
   const playError = useCallback(() => {
     safe(() => Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error));
-  }, []);
+
+    // Apple Pay decline sound (fire-and-forget)
+    loadDeclineSound()
+      .then((sound) => sound.setPositionAsync(0).then(() => sound.playAsync()))
+      .catch(() => { /* haptic-only fallback */ });
+  }, [loadDeclineSound]);
 
   /**
    * Play warning haptic for attention-needed states.

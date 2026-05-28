@@ -1,8 +1,8 @@
 /**
  * Premium fintech button. Three visual variants, three sizes.
- *  - primary  : luxury blue gradient (#226dff → #1a52cc) with subtle inner sheen
- *  - secondary: glassy white-on-dark (8% white) with hairline border
- *  - ghost    : transparent, brand-coloured label
+ *  - primary  : solid mono accent (white in dark, black in light) — reads as urgent
+ *  - secondary: glassy 6% surface with hairline border
+ *  - ghost    : transparent, mono.fg label
  *
  * Press ripple is implemented as an opacity scale dip via Reanimated, NOT
  * Pressable's `android_ripple` so behaviour is identical on iOS/Android/web.
@@ -14,6 +14,7 @@ import { Text } from '@/components/ui/Text';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { gradients, shadows } from '@/theme';
+import { useThemedPalette } from '@/store/themeStore';
 import { useHaptics } from '@/hooks/useHaptics';
 
 type Variant = 'primary' | 'secondary' | 'ghost';
@@ -44,6 +45,7 @@ export function Button({
   loading, disabled, iconLeft, iconRight, fullWidth, style, haptic = 'light',
 }: ButtonProps) {
   const h = useHaptics();
+  const p = useThemedPalette();
   const press = useSharedValue(0);
 
   const animStyle = useAnimatedStyle(() => ({
@@ -68,17 +70,17 @@ export function Button({
       style={{ height: dims.height, paddingHorizontal: dims.padX, gap: 8 }}
     >
       {loading ? (
-        <ActivityIndicator color={variant === 'primary' ? '#fff' : '#226dff'} />
+        <ActivityIndicator color={variant === 'primary' ? p.accentFg : p.fg} />
       ) : (
         <>
           {iconLeft}
           <Text
-            className={
-              variant === 'primary'   ? 'text-white font-bold'
-              : variant === 'secondary' ? 'text-ink-primary font-semibold'
-              : 'text-brand-400 font-semibold'
-            }
-            style={{ fontSize: dims.font, letterSpacing: -0.2 }}
+            style={{
+              fontSize: dims.font,
+              letterSpacing: -0.2,
+              fontWeight: variant === 'primary' ? '700' : '600',
+              color: variant === 'primary' ? p.accentFg : p.fg,
+            }}
           >
             {label}
           </Text>
@@ -108,25 +110,23 @@ export function Button({
         ]}
       >
         {variant === 'primary' && (
-          <LinearGradient
-            colors={[...gradients.brand]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={{ borderRadius: dims.radius }}
+          <View
+            style={{
+              backgroundColor: p.ctaBg,
+              borderRadius: dims.radius,
+            }}
           >
-            {/* inner sheen */}
-            <LinearGradient
-              colors={[...gradients.cardSheen]}
-              style={{ position: 'absolute', inset: 0 } as ViewStyle}
-              pointerEvents="none"
-            />
             {inner}
-          </LinearGradient>
+          </View>
         )}
         {variant === 'secondary' && (
           <View
-            className="bg-white/[0.06] border border-white/[0.08]"
-            style={{ borderRadius: dims.radius }}
+            style={{
+              backgroundColor: p.pillBg,
+              borderColor: p.border,
+              borderWidth: 1,
+              borderRadius: dims.radius,
+            }}
           >
             {inner}
           </View>
