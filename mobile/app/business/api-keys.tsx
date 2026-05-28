@@ -25,7 +25,7 @@ import { businessService } from '@/services/business';
 import type { BusinessApiKey, ApiKeyPermission, ApiKeyCreateResponse } from '@/types/business';
 import { TopGradient } from '@/components/ui/ScreenShell';
 
-const ACCENT = '#226dff';
+const ACCENT = '#737373';
 
 const PERM_META: Record<ApiKeyPermission, { label: string; desc: string; icon: any }> = {
   PAYOUTS:   { label: 'Payouts',    desc: 'Create and query payouts',       icon: 'send-outline' },
@@ -189,7 +189,7 @@ export default function ApiKeysScreen() {
                 <Text style={{ color: p.fgMuted, fontSize: 12, lineHeight: 17, flex: 1 }}>
                   Keys are shown once at creation. Use them in the{' '}
                   <Text style={{ color: ACCENT, fontWeight: '700' }}>Authorization: Bearer</Text>
-                  {' '}header. See docs.fortuni.com for the full API reference.
+                  {' '}header. See docs.Fortuni.com for the full API reference.
                 </Text>
               </View>
             </>

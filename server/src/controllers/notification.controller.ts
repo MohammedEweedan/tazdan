@@ -90,4 +90,90 @@ export class NotificationController {
       data: { userId, title, message, type, metadata },
     });
   }
+
+  /**
+   * POST /api/notifications/register-token
+   * Mobile registers its Expo push token here after login. Idempotent.
+   */
+  static async registerToken(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const { token } = req.body as { token?: string };
+      if (!token || typeof token !== 'string') {
+        throw new AppError('token is required', 400);
+      }
+      await prisma.user.update({
+        where: { id: req.user!.id },
+        data: { expoPushToken: token },
+      });
+      res.json({ ok: true });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * DELETE /api/notifications/register-token
+   * Mobile clears the push token on logout.
+   */
+  static async unregisterToken(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      await prisma.user.update({
+        where: { id: req.user!.id },
+        data: { expoPushToken: null },
+      });
+      res.json({ ok: true });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * GET /api/notifications/preferences
+   * Returns the user's current notificationPrefs. Missing fields default
+   * to true (opt-in). Shape:
+   * {
+   *   email: { trades, transfers, deposits, withdrawals, p2p, marketing },
+   *   push:  { trades, transfers, deposits, withdrawals, p2p, marketing }
+   * }
+   */
+  static async getPreferences(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const u = await prisma.user.findUnique({
+        where: { id: req.user!.id },
+        select: { notificationPrefs: true },
+      });
+      const prefs = (u?.notificationPrefs as any) ?? {};
+      const fill = (cat: 'email' | 'push') => ({
+        trades:      prefs?.[cat]?.trades      !== false,
+        transfers:   prefs?.[cat]?.transfers   !== false,
+        deposits:    prefs?.[cat]?.deposits    !== false,
+        withdrawals: prefs?.[cat]?.withdrawals !== false,
+        p2p:         prefs?.[cat]?.p2p         !== false,
+        marketing:   prefs?.[cat]?.marketing   === true, // marketing defaults OFF
+      });
+      res.json({ preferences: { email: fill('email'), push: fill('push') } });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * PUT /api/notifications/preferences
+   * Body: { preferences: { email: { ...flags }, push: { ...flags } } }
+   */
+  static async updatePreferences(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const body = req.body as { preferences?: any };
+      if (!body?.preferences || typeof body.preferences !== 'object') {
+        throw new AppError('preferences object is required', 400);
+      }
+      await prisma.user.update({
+        where: { id: req.user!.id },
+        data: { notificationPrefs: body.preferences },
+      });
+      res.json({ ok: true });
+    } catch (error) {
+      next(error);
+    }
+  }
 }

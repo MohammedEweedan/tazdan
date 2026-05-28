@@ -12,7 +12,7 @@ import { generateReferralCode } from '../src/utils/helpers';
 async function createAdmin() {
   try {
     const existing = await prisma.user.findUnique({
-      where: { email: 'admin@fortuni.com' }
+      where: { email: 'admin@Fortuni.com' }
     });
     
     if (existing) {
@@ -25,7 +25,7 @@ async function createAdmin() {
     
     const admin = await prisma.user.create({
       data: {
-        email: 'admin@fortuni.com',
+        email: 'admin@Fortuni.com',
         passwordHash,
         firstName: 'System',
         lastName: 'Administrator',
@@ -36,7 +36,7 @@ async function createAdmin() {
     });
     
     console.log('✓ Admin user created:');
-    console.log(`  Email: admin@fortuni.com`);
+    console.log(`  Email: admin@Fortuni.com`);
     console.log(`  Password: admin123`);
     console.log(`  ID: ${admin.id}`);
     

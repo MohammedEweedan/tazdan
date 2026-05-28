@@ -25,22 +25,41 @@ api.interceptors.request.use(async (config: InternalAxiosRequestConfig) => {
   return config;
 });
 
-let refreshing: Promise<string | null> | null = null;
+let refreshing: Promise<{ token: string | null; hardFail: boolean }> | null = null;
 
-async function tryRefresh(): Promise<string | null> {
+/**
+ * Tries to rotate the refresh token. Returns:
+ *  - { token: 'new-at', hardFail: false } on success
+ *  - { token: null,     hardFail: true }  when the server explicitly
+ *      says the refresh token is invalid (401/403/404) — sign out.
+ *  - { token: null,     hardFail: false } on network / timeout / 5xx —
+ *      keep the user signed in. We'll retry on the next request.
+ *
+ * The distinction matters: a flaky network must NOT log a user out the
+ * way an actually-expired session does.
+ */
+async function tryRefresh(): Promise<{ token: string | null; hardFail: boolean }> {
   if (refreshing) return refreshing;
   refreshing = (async () => {
     try {
       const refreshToken = await secureStore.get(STORAGE_KEYS.refreshToken);
-      if (!refreshToken) return null;
-      const { data } = await axios.post(`${APP.apiBaseUrl}/auth/refresh`, { refreshToken });
-      const next = data?.accessToken as string | undefined;
-      const newRt = data?.refreshToken as string | undefined;
-      if (next) await secureStore.set(STORAGE_KEYS.accessToken, next);
+      if (!refreshToken) return { token: null, hardFail: true };
+      const { data } = await axios.post(
+        `${APP.apiBaseUrl}/auth/refresh`,
+        { refreshToken },
+        { timeout: 8_000 },
+      );
+      const next  = (data?.accessToken  ?? data?.token) as string | undefined;
+      const newRt = (data?.refreshToken ?? data?.refresh_token) as string | undefined;
+      if (next)  await secureStore.set(STORAGE_KEYS.accessToken, next);
       if (newRt) await secureStore.set(STORAGE_KEYS.refreshToken, newRt);
-      return next ?? null;
-    } catch {
-      return null;
+      return { token: next ?? null, hardFail: false };
+    } catch (e: any) {
+      // Hard sign-out only when the server explicitly rejected the token.
+      // Network / timeout / 5xx are transient — keep the session.
+      const status = e?.response?.status;
+      const hardFail = status === 401 || status === 403 || status === 404;
+      return { token: null, hardFail };
     } finally {
       refreshing = null;
     }
@@ -54,17 +73,21 @@ api.interceptors.response.use(
     const original = error.config as InternalAxiosRequestConfig & { _retried?: boolean };
     if (error.response?.status === 401 && original && !original._retried) {
       original._retried = true;
-      const next = await tryRefresh();
-      if (next && original.headers) {
-        original.headers.Authorization = `Bearer ${next}`;
+      const { token, hardFail } = await tryRefresh();
+      if (token && original.headers) {
+        original.headers.Authorization = `Bearer ${token}`;
         return api.request(original);
       }
-      // refresh failed — wipe and notify
-      await Promise.all([
-        secureStore.remove(STORAGE_KEYS.accessToken),
-        secureStore.remove(STORAGE_KEYS.refreshToken),
-      ]);
-      onUnauthorized?.();
+      // Only wipe tokens + notify on a definitive sign-out signal.
+      // Transient failures (network drop, server hiccup) leave the
+      // tokens in place so the next foreground refresh can recover.
+      if (hardFail) {
+        await Promise.all([
+          secureStore.remove(STORAGE_KEYS.accessToken),
+          secureStore.remove(STORAGE_KEYS.refreshToken),
+        ]);
+        onUnauthorized?.();
+      }
     }
     return Promise.reject(error);
   },

@@ -25,7 +25,7 @@ import { businessService } from '@/services/business';
 import type { TeamMember, TeamRole } from '@/types/business';
 import { TopGradient } from '@/components/ui/ScreenShell';
 
-const ACCENT = '#226dff';
+const ACCENT = '#737373';
 
 const ROLE_META: Record<TeamRole, { label: string; desc: string; color: string }> = {
   OWNER:     { label: 'Owner',     desc: 'Full access including billing',   color: '#f59e0b' },

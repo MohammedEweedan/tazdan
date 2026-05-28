@@ -10,24 +10,28 @@ import { STORAGE_KEYS } from '@/constants';
 import { authService } from '@/services';
 import type { User } from '@/types';
 
-const BIOMETRIC_KEY  = 'fortuni.biometricEnabled';
-const VIEW_MODE_KEY  = 'fortuni.viewMode';
+const BIOMETRIC_KEY  = 'Fortuni.biometricEnabled';
+const VIEW_MODE_KEY  = 'Fortuni.viewMode';
 
 export type ViewMode = 'admin' | 'user';
 
-type LastUser = Pick<User, 'email' | 'firstName' | 'lastName'> & {
+type LastUser = Pick<User, 'email' | 'firstName' | 'lastName' | 'id' | 'role'> & {
   username?: string;
   avatarUrl?: string;
+  avatarEmoji?: string;
   passkeyEnabled?: boolean;
 };
 
 function toLastUser(user: User): LastUser {
   return {
+    id: user.id,
     email: user.email,
     firstName: user.firstName,
     lastName: user.lastName,
     username: user.username,
     avatarUrl: user.avatarUrl,
+    avatarEmoji: user.avatarEmoji,
+    role: user.role ?? 'USER',
     passkeyEnabled: Boolean((user as any).passkeyEnabled ?? (user as any).hasPasskey),
   };
 }
@@ -94,8 +98,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   hydrate: async () => {
     try {
-      const [at, bioEnabled, lastUserRaw, viewModeRaw] = await Promise.all([
+      const [at, rt, bioEnabled, lastUserRaw, viewModeRaw] = await Promise.all([
         secureStore.get(STORAGE_KEYS.accessToken),
+        secureStore.get(STORAGE_KEYS.refreshToken),
         secureStore.get(BIOMETRIC_KEY),
         secureStore.get(STORAGE_KEYS.lastUser),
         secureStore.get(VIEW_MODE_KEY),
@@ -103,21 +108,61 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const lastUser = parseLastUser(lastUserRaw);
       const viewMode = (viewModeRaw === 'admin' || viewModeRaw === 'user') ? viewModeRaw : null;
       set({ biometricEnabled: bioEnabled === 'true', lastUser, viewMode });
-      if (!at) return set({ user: null, isAuthenticated: false, isHydrating: false, lastUser });
-      const user = await authService.me().catch(() => null);
-      if (user) await cacheLastUser(user);
-      // If user is admin and hasn't chosen, force the selector.
-      const needsViewSelection = !!user && user.role === 'ADMIN' && viewMode === null;
+
+      // No tokens at all → definitely signed out.
+      if (!at && !rt) {
+        return set({ user: null, isAuthenticated: false, isHydrating: false, lastUser });
+      }
+
+      // We have tokens — try to fetch /me, but DO NOT sign the user out
+      // if it fails for transient reasons (network drop on cold-start,
+      // server warming up, etc.). The api.ts interceptor handles real
+      // sign-outs (401 → tryRefresh → hardFail → onUnauthorized).
+      // When /me fails, fall back to the cached lastUser profile so the
+      // app stays usable; the next foreground will retry.
+      let user: any = null;
+      try {
+        user = await authService.me();
+      } catch {
+        user = null;
+      }
+      if (user) {
+        await cacheLastUser(user);
+      } else if (lastUser) {
+        // Reconstruct a soft user object from the cached profile. This
+        // is enough for AuthGate to keep us inside the (tabs) group;
+        // the next /me call (on next foreground) will hydrate the real
+        // profile fields.
+        user = {
+          id:        lastUser.id        ?? '',
+          email:     lastUser.email     ?? '',
+          firstName: lastUser.firstName ?? '',
+          lastName:  lastUser.lastName  ?? '',
+          username:  lastUser.username,
+          avatarUrl: lastUser.avatarUrl,
+          avatarEmoji: lastUser.avatarEmoji,
+          role:      lastUser.role      ?? 'USER',
+        };
+      }
+
+      // Authenticated as long as we have *some* user object AND a refresh
+      // token still in secure store. The api interceptor will surface a
+      // real expiry by clearing both tokens + calling onUnauthorized.
+      const isAuthenticated = !!(user && rt);
+      const needsViewSelection = isAuthenticated && user.role === 'ADMIN' && viewMode === null;
+
       set({
-        user,
+        user: isAuthenticated ? user : null,
         lastUser: user ? toLastUser(user) : lastUser,
-        isAuthenticated: !!user,
+        isAuthenticated,
         isHydrating: false,
         needsViewSelection,
         viewMode,
       });
     } catch {
-      set({ user: null, isAuthenticated: false, isHydrating: false });
+      // Preserve session if tokens are still there — only mark hydrating
+      // false so the app can render. Real sign-out comes from api.ts.
+      set({ isHydrating: false });
     }
   },
 
@@ -169,7 +214,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       ]);
       if (!hasHardware || !isEnrolled) return false;
       const result = await LocalAuthentication.authenticateAsync({
-        promptMessage: 'Sign in to fortuni',
+        promptMessage: 'Sign in to Fortuni',
         cancelLabel: 'Cancel',
         disableDeviceFallback: false,
       });

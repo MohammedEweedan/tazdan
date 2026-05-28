@@ -33,7 +33,7 @@ import { PaymentReceiptBubble } from '@/components/messages/PaymentReceiptBubble
 import { REPORT_REASONS, type ApiMessage, type Conversation } from '@/types/messages';
 import { TopGradient } from '@/components/ui/ScreenShell';
 
-const BRAND_BLUE = '#0057B8';
+const BRAND_BLUE = '#737373'; // mono accent neutral
 
 export default function MessageThread() {
   const { id: partnerIdParam, openPay } = useLocalSearchParams<{ id: string; openPay?: string }>();
@@ -260,7 +260,7 @@ const { data: messages = [], isLoading } = useThread(partnerId);  const sendMut 
   const confirmEscalate = () => {
     Alert.alert(
       'Escalate to support?',
-      'A fortuni agent will join the conversation and review the trade. Both participants will be notified.',
+      'A Fortuni agent will join the conversation and review the trade. Both participants will be notified.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -394,7 +394,7 @@ const { data: messages = [], isLoading } = useThread(partnerId);  const sendMut 
               )}
             </View>
             <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '600', marginTop: 1 }}>
-              {isSupport ? 'fortuni agent · usually replies in minutes'
+              {isSupport ? 'Fortuni agent · usually replies in minutes'
                : partner?.username ? `@${partner.username}` : ' '}
             </Text>
           </View>
@@ -492,13 +492,13 @@ const { data: messages = [], isLoading } = useThread(partnerId);  const sendMut 
                   borderWidth: 1, borderColor: replyAsSupport ? 'rgba(74,143,224,0.40)' : p.border,
                 }}
               >
-                <Ionicons name={replyAsSupport ? 'shield-checkmark' : 'shield-outline'} size={14} color={replyAsSupport ? '#4a8fe0' : p.fgMuted} />
-                <Text style={{ color: replyAsSupport ? '#4a8fe0' : p.fgMuted, fontSize: 12, fontWeight: '700', flex: 1 }}>
+                <Ionicons name={replyAsSupport ? 'shield-checkmark' : 'shield-outline'} size={14} color={replyAsSupport ? '#A3A3A3' : p.fgMuted} />
+                <Text style={{ color: replyAsSupport ? '#A3A3A3' : p.fgMuted, fontSize: 12, fontWeight: '700', flex: 1 }}>
                   {replyAsSupport ? 'Replying as @support' : 'Reply as @support (admin)'}
                 </Text>
                 <View style={{
                   width: 32, height: 18, borderRadius: 9,
-                  backgroundColor: replyAsSupport ? '#4a8fe0' : p.border,
+                  backgroundColor: replyAsSupport ? '#A3A3A3' : p.border,
                   padding: 2, alignItems: replyAsSupport ? 'flex-end' : 'flex-start', justifyContent: 'center',
                 }}>
                   <View style={{ width: 14, height: 14, borderRadius: 7, backgroundColor: '#fff' }} />
@@ -841,7 +841,7 @@ function ReportSheet({
             Report
           </Text>
           <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '500' }}>
-            Reports are reviewed by fortuni trust &amp; safety. False reports may affect your account standing.
+            Reports are reviewed by Fortuni trust &amp; safety. False reports may affect your account standing.
           </Text>
 
           <View style={{ gap: 6 }}>

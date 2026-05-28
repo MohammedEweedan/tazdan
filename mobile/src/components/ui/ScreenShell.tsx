@@ -36,14 +36,14 @@ export function TopGradient({ height }: { height?: number }) {
       colors={
         themeMode === 'dark'
           ? [
-              'rgba(34, 109, 255, 0.15)', // subtle white top
-              'rgba(56, 121, 251, 0.05)', // soft grey middle
-              'rgba(0,0,0,0)',          // fade to transparent
+              'rgba(169, 169, 169, 0.58)', // subtle white top
+              'rgba(205, 220, 249, 0.29)', // soft grey middle
+              'rgba(111, 111, 111, 0)',          // fade to transparent
             ]
           : [
-              'rgba(34, 109, 255, 0.15)', // subtle white top
-              'rgba(56, 121, 251, 0.05)', // soft grey middle
-              'rgba(0,0,0,0)',    // fade to transparent
+             'rgba(169, 169, 169, 0.58)', // subtle white top
+              'rgba(205, 220, 249, 0.29)', // soft grey middle
+              'rgba(111, 111, 111, 0)',     // fade to transparent
             ]
       }
       locations={[0, 0.45, 1]}
@@ -83,9 +83,8 @@ export function ScreenShell({
   const p = useThemedPalette();
   const themeMode = useTheme((s) => s.mode);
 
-  const Body = scroll ? ScrollView : View;
   const bodyProps = scroll
-    ? { showsVerticalScrollIndicator: false, contentContainerStyle: [{ paddingHorizontal: 24, paddingBottom: 64 }, contentStyle] }
+    ? { showsVerticalScrollIndicator: false, style: { flex: 1 }, contentContainerStyle: [{ paddingHorizontal: 24, paddingBottom: 64 }, contentStyle] }
     : { style: [{ flex: 1, paddingHorizontal: 24 }, contentStyle] };
 
   return (
@@ -93,45 +92,51 @@ export function ScreenShell({
       <StatusBar style={themeMode === 'dark' ? 'light' : 'dark'} />
       <TopGradient />
       <SafeAreaView style={{ flex: 1 }} edges={['top']}>
-        {/* Header */}
-        <View style={{
-          flexDirection: 'row', alignItems: 'center',
-          paddingHorizontal: 24, paddingTop: 18, paddingBottom: 10,
-          gap: 12,
-        }}>
-          {back ? (
-            <Pressable
-              onPress={() => { h.selection(); router.back(); }}
-              hitSlop={10}
-              style={{
-                width: 38, height: 38, borderRadius: 19,
-                alignItems: 'center', justifyContent: 'center',
-                backgroundColor: p.pillBg,
-                borderWidth: 1, borderColor: p.border,
-              }}
-            >
-              <Ionicons name="chevron-back" size={20} color={p.fg} />
-            </Pressable>
-          ) : <View style={{ width: 38 }} />}
+        <View style={{ flex: 1 }}>
+          {/* Header — sticky, doesn't scroll */}
+          <View style={{
+            flexDirection: 'row', alignItems: 'center',
+            paddingHorizontal: 24, paddingTop: 18, paddingBottom: 10,
+            gap: 12,
+          }}>
+            {back ? (
+              <Pressable
+                onPress={() => { h.selection(); router.back(); }}
+                hitSlop={10}
+                style={{
+                  width: 38, height: 38, borderRadius: 19,
+                  alignItems: 'center', justifyContent: 'center',
+                  backgroundColor: p.pillBg,
+                  borderWidth: 1, borderColor: p.border,
+                }}
+              >
+                <Ionicons name="chevron-back" size={20} color={p.fg} />
+              </Pressable>
+            ) : <View style={{ width: 38 }} />}
 
-          <View style={{ flex: 1 }}>
-            {title && (
-              <Text style={{ color: p.fg, fontSize: 17, fontWeight: '500', letterSpacing: -0.3 }} numberOfLines={1}>
-                {title}
-              </Text>
-            )}
-            {subtitle && (
-              <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '500', marginTop: 1 }} numberOfLines={1}>
-                {subtitle}
-              </Text>
-            )}
+            <View style={{ flex: 1 }}>
+              {title && (
+                <Text style={{ color: p.fg, fontSize: 17, fontWeight: '500', letterSpacing: -0.3 }} numberOfLines={1}>
+                  {title}
+                </Text>
+              )}
+              {subtitle && (
+                <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '500', marginTop: 1 }} numberOfLines={1}>
+                  {subtitle}
+                </Text>
+              )}
+            </View>
+
+            {right ?? <View style={{ width: 38 }} />}
           </View>
 
-          {right ?? <View style={{ width: 38 }} />}
+          {/* Scrollable body */}
+          {scroll ? (
+            <ScrollView {...bodyProps}>{children}</ScrollView>
+          ) : (
+            <View {...bodyProps}>{children}</View>
+          )}
         </View>
-
-        {/* @ts-ignore - dynamic ScrollView/View — props are conditionally typed */}
-        <Body {...bodyProps}>{children}</Body>
       </SafeAreaView>
     </View>
   );

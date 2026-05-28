@@ -13,6 +13,7 @@ import { useAuthStore } from '@/store/authStore';
 import { useHaptics, useUpdateMyProfile } from '@/hooks';
 import { LocalePickerModal } from '@/components/ui/LocalePickerModal';
 import { authService, profileService } from '@/services';
+import { router } from 'expo-router';
 
 export default function Settings() {
   const h = useHaptics();
@@ -159,7 +160,7 @@ export default function Settings() {
             <Text style={{ color: p.fg, fontSize: 14, fontWeight: '700' }}>{t('settings.publicProfile')}</Text>
             <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '500', marginTop: 2 }}>
               {isPublic
-                ? `${t('settings.visibleAt')} fortuni.app/u/${user?.username ?? 'me'}`
+                ? `${t('settings.visibleAt')} Fortuni.app/u/${user?.username ?? 'me'}`
                 : t('settings.privateProfile')}
             </Text>
           </View>
@@ -178,6 +179,20 @@ export default function Settings() {
           last
           right={<Ionicons name="create-outline" size={16} color={p.fgFaint} />}
           onPress={openHandleModal}
+        />
+      </Panel>
+
+      {/* Notifications */}
+      <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '700', letterSpacing: 1.2, marginTop: 22, marginLeft: 4 }}>
+        {(t('settings.notifications') || 'NOTIFICATIONS').toUpperCase()}
+      </Text>
+      <Panel style={{ marginTop: 8 }}>
+        <PanelRow
+          icon="notifications-outline"
+          label={t('settings.manageNotifications') || 'Email + push preferences'}
+          last
+          onPress={() => { h.selection(); router.push('/notif-settings' as any); }}
+          right={<Ionicons name="chevron-forward" size={16} color={p.fgFaint} />}
         />
       </Panel>
 
@@ -252,7 +267,7 @@ export default function Settings() {
       </Panel>
 
       <View style={{ alignItems: 'center', marginTop: 28 }}>
-        <Text style={{ color: p.fgFaint, fontSize: 12, fontWeight: '500' }}>fortuni · v0.1.0</Text>
+        <Text style={{ color: p.fgFaint, fontSize: 12, fontWeight: '500' }}>Fortuni · v0.1.0</Text>
       </View>
 
       {/* ── Handle change modal ── */}

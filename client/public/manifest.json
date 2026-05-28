@@ -1,7 +1,7 @@
 {
-  "name": "fortuni - Crypto Exchange",
-  "short_name": "fortuni",
-  "description": "Buy & sell crypto on fortuni.",
+  "name": "Fortuni - Crypto Exchange",
+  "short_name": "Fortuni",
+  "description": "Buy & sell crypto on Fortuni.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0f172a",

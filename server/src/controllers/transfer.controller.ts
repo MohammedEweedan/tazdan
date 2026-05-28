@@ -5,6 +5,9 @@ import { prisma } from '../utils/prisma';
 import { AppError } from '../middleware/errorHandler';
 import { generateReference } from '../utils/helpers';
 import { AuthRequest } from '../types';
+import { logger } from '../utils/logger';
+import { sendTransferSent, sendTransferReceived } from '../services/email';
+import { pushCopy, pushTxEvent } from '../services/push.service';
 
 const SUPPORTED_CURRENCIES = [
   'USDT', 'USD', 'LYD', 'BTC', 'ETH', 'BNB', 'SOL',
@@ -133,6 +136,65 @@ export class TransferController {
           },
         });
       });
+
+      // Fire-and-forget transactional confirmations — never block the
+      // response, never throw. Sender gets a "sent" copy, recipient gets
+      // a "received" copy. Both go out by email + push in parallel.
+      const senderId  = req.user!.id;
+      // NEVER fall back to email.split('@')[0] for handles — that text
+      // ends up inside emails the counterparty receives, leaking the
+      // other side's address local-part. Prefer username, then first
+      // name, then a generic label.
+      const senderHandle    =
+        (req.user as any)?.username
+        || (req.user as any)?.firstName
+        || 'a Fortuni user';
+      const recipientHandle =
+        recipient.username
+        || recipient.firstName
+        || 'a Fortuni user';
+      const fmtAmt = data.amount.toFixed(8).replace(/\.?0+$/, '');
+      (async () => {
+        try {
+          const senderUser = await prisma.user.findUnique({
+            where: { id: senderId },
+            select: { email: true, firstName: true, notificationPrefs: true as any },
+          });
+          const senderPrefs = (senderUser as any)?.notificationPrefs ?? {};
+          const recipPrefs  = (recipient as any).notificationPrefs ?? {};
+
+          if (senderUser && senderPrefs?.email?.transfers !== false) {
+            await sendTransferSent({
+              to: senderUser.email,
+              firstName: senderUser.firstName || 'there',
+              recipientHandle,
+              asset: currency,
+              amount: fmtAmt,
+              note: data.note,
+              transferId: reference,
+            });
+          }
+          if (senderPrefs?.push?.transfers !== false) {
+            await pushTxEvent(senderId, pushCopy.sent(fmtAmt, currency, recipientHandle), reference);
+          }
+          if (recipient.email && recipPrefs?.email?.transfers !== false) {
+            await sendTransferReceived({
+              to: recipient.email,
+              firstName: recipient.firstName || 'there',
+              senderHandle,
+              asset: currency,
+              amount: fmtAmt,
+              note: data.note,
+              transferId: reference,
+            });
+          }
+          if (recipPrefs?.push?.transfers !== false) {
+            await pushTxEvent(recipient.id, pushCopy.received(fmtAmt, currency, senderHandle), reference);
+          }
+        } catch (err) {
+          logger.warn('[transfer.send] post-commit notify failed', { senderId, recipientId: recipient.id, err });
+        }
+      })();
 
       res.status(201).json({
         message: 'Transfer successful',

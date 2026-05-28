@@ -54,9 +54,15 @@ export default function WelcomeBack() {
 
   if (!lastUser) return null;
 
-  const handle = lastUser.username ?? lastUser.email.split('@')[0] ?? 'there';
-  const fullName = `${lastUser.firstName ?? ''} ${lastUser.lastName ?? ''}`.trim() || `@${handle}`;
-  const initial = (lastUser.firstName?.[0] ?? lastUser.email?.[0] ?? 'P').toUpperCase();
+  // Welcome-back greeting. We have a cached profile already, so prefer
+  // first name, then real @handle, then a generic "there" — but NEVER
+  // the email local-part (would expose PII on a sign-in screen anyone
+  // walking past the device can see).
+  const handle   = lastUser.username?.trim() || null;
+  const firstName= lastUser.firstName?.trim() || '';
+  const fullName = `${firstName} ${lastUser.lastName ?? ''}`.trim()
+    || (handle ? `@${handle}` : 'Welcome back');
+  const initial  = (firstName[0] ?? handle?.[0] ?? '?').toUpperCase();
 
   const submitPassword = async () => {
     if (!password) {
@@ -104,7 +110,7 @@ export default function WelcomeBack() {
           <Pressable
             onPress={() => { h.selection(); setLangPickerVisible(true); }}
             hitSlop={12}
-            style={{ position: 'absolute', top: 16, right: 20, zIndex: 10, padding: 6 }}
+            style={{ position: 'absolute', top: 48, right: 20, zIndex: 10, padding: 6 }}
           >
             <Ionicons name="globe-outline" size={22} color={p.fgMuted} />
           </Pressable>
@@ -115,7 +121,7 @@ export default function WelcomeBack() {
             contentContainerStyle={{ flexGrow: 1, paddingHorizontal: 24, paddingBottom: 32, justifyContent: 'center' }}
           >
             <View style={{ alignItems: 'center' }}>
-              <Image source={require('../../assets/icon-color.png')} style={{ width: 54, height: 54 }} resizeMode="contain" />
+              <Image source={require('../../assets/icon-black.png')} style={{ width: 54, height: 54 }} resizeMode="contain" />
               <View style={{
                 marginTop: 28, width: 104, height: 104, borderRadius: 52,
                 backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border,

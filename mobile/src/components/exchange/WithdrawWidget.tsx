@@ -232,7 +232,7 @@ export function WithdrawWidget() {
   const router = useRouter();
   const qc = useQueryClient();
   const { data: wallets } = useWallets();
-  const { playSuccess } = useTransactionSound();
+  const { playSuccess, playError } = useTransactionSound();
 
   const [screen, setScreen] = useState<Screen>('select');
   const [currency, setCurrency] = useState('USD');
@@ -285,7 +285,7 @@ export function WithdrawWidget() {
       qc.invalidateQueries({ queryKey: ['wallets'] });
     },
     onError: (err: any) => {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      playError();
       const msg = err?.response?.data?.error ?? err?.message ?? 'Withdrawal failed';
       Alert.alert('Withdrawal Failed', msg);
     },

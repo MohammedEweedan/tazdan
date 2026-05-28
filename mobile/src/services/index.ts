@@ -1021,3 +1021,98 @@ export const adminService = {
     return res.json() as Promise<{ url: string; mediaType: string; filename: string }>;
   },
 };
+
+/* ─────────────────────────────────────────────────────────────
+   Claim-link transfers — the differentiator. Lets users send to
+   anyone (email / phone / @handle) even if the recipient has no
+   Fortuni account yet.
+
+   Outgoing endpoints:
+     create()         — sender reserves funds, emits the URL
+     listMine(status) — sender's pending / claimed / expired list
+     cancel(id)       — sender cancels + reclaims funds
+
+   Incoming endpoints (recipient side):
+     previewByToken(token) — PUBLIC, no auth: read what's waiting
+     claimByToken(token, pin?) — AUTHED: accept the claim, credit wallet
+───────────────────────────────────────────────────────────── */
+export type ClaimLinkStatus = 'PENDING' | 'CLAIMED' | 'EXPIRED' | 'CANCELLED';
+
+export interface ClaimLink {
+  id:              string;
+  claimToken?:     string;          // only present on the create response (sender's copy)
+  shortId?:        string;
+  asset:           string;
+  amount:          string;
+  status:          ClaimLinkStatus;
+  expiresAt:       string;
+  claimUrl?:       string;          // sender copy only
+  recipientEmail:  string | null;
+  recipientPhone:  string | null;
+  recipientHandle: string | null;
+  note:            string | null;
+  hasPin?:         boolean;
+  createdAt?:      string;
+  claimedAt?:      string | null;
+  refundedAt?:     string | null;
+}
+
+export interface ClaimLinkPreview {
+  asset:     string;
+  amount:    string;
+  note:      string | null;
+  status:    ClaimLinkStatus;
+  expiresAt: string;
+  hasPin:    boolean;
+  sender: {
+    firstName: string;
+    handle:    string | null;
+    avatarUrl: string | null;
+  };
+}
+
+export const claimLinkService = {
+  create: async (input: {
+    asset:           string;
+    amount:          number;
+    recipientEmail?: string;
+    recipientPhone?: string;
+    recipientHandle?: string;
+    note?:           string;
+    expiresInDays?:  number;
+    pin?:            string;
+  }): Promise<ClaimLink> => {
+    const { data } = await api.post('/claim-links', input);
+    return data.link;
+  },
+
+  // PUBLIC — no auth required. Used by the claim screen on cold-tap
+  // from email before the recipient has signed in.
+  previewByToken: async (token: string): Promise<ClaimLinkPreview> => {
+    const { data } = await api.get(`/claim-links/by-token/${token}`);
+    return data.preview;
+  },
+
+  // Recipient claims — requires auth.
+  claimByToken: async (token: string, pin?: string): Promise<{
+    id: string; status: ClaimLinkStatus; asset: string; amount: string; claimedAt: string;
+  }> => {
+    const { data } = await api.post(`/claim-links/by-token/${token}/claim`, pin ? { pin } : {});
+    return data.link;
+  },
+
+  cancel: async (id: string, reason?: string): Promise<{ ok: true }> => {
+    const { data } = await api.post(`/claim-links/${id}/cancel`, reason ? { reason } : {});
+    return data;
+  },
+
+  listMine: async (opts?: { status?: ClaimLinkStatus; page?: number; limit?: number }):
+    Promise<{ items: ClaimLink[]; total: number; page: number; pages: number }> => {
+    const params: Record<string, string> = {};
+    if (opts?.status) params.status = opts.status;
+    if (opts?.page)   params.page   = String(opts.page);
+    if (opts?.limit)  params.limit  = String(opts.limit);
+    const { data } = await api.get('/claim-links/mine', { params });
+    return data;
+  },
+};

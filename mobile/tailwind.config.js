@@ -8,39 +8,57 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        // Primary brand — luxury blue
+        // ── Monochrome accent (white in dark, black in light) ──────
+        // `mono.fg` / `mono.accent` / `mono.bg` are the foundation. The
+        // `brand` ramp below is kept as an alias mapping to grayscale so
+        // existing `bg-brand-500` style classes still compile.
+        mono: {
+          bg:         '#0A0A0B',
+          bgElev:     '#141416',
+          bgRaised:   '#1C1C1F',
+          line:       'rgba(255,255,255,0.08)',
+          lineStrong: 'rgba(255,255,255,0.14)',
+          fg:         '#FAFAFA',
+          fgDim:      'rgba(250,250,250,0.72)',
+          fgMuted:    'rgba(250,250,250,0.46)',
+          fgFaint:    'rgba(250,250,250,0.28)',
+          accent:     '#FFFFFF',
+          accentFg:   '#0A0A0B',
+        },
+        // Legacy brand alias — points at grayscale so `bg-brand-500` etc.
+        // continue to read as the new mono accent during the migration.
         brand: {
-          50:  '#e8f0fc',
-          100: '#c4d8f7',
-          200: '#9cbef0',
-          300: '#73a4e9',
-          400: '#4A8FE0', // brand mid
-          500: '#2477d3',
-          600: '#0057B8', // brand deep
-          700: '#00408a',
-          800: '#002a5c',
-          900: '#00152e',
+          50:  '#F4F4F4',
+          100: '#E5E5E5',
+          200: '#D4D4D4',
+          300: '#A3A3A3',
+          400: '#FFFFFF', // primary CTA fill (was brand mid blue)
+          500: '#FAFAFA',
+          600: '#0A0A0B', // primary CTA dark variant (was deep blue)
+          700: '#262626',
+          800: '#171717',
+          900: '#0A0A0B',
         },
-        // Surface — almost-black with blue undertone
+        // Surface ramp — graphite, no blue undertone
         surface: {
-          0:   '#000206',
-          50:  '#030818',
-          100: '#070d22',
-          200: '#0c1430',
-          300: '#121c44',
-          400: '#1a2658',
-          500: '#243366',
+          0:   '#000000',
+          50:  '#0A0A0B',
+          100: '#141416',
+          200: '#1C1C1F',
+          300: '#26262A',
+          400: '#2F2F33',
+          500: '#3A3A3F',
         },
-        // Semantic
-        success: '#22c55e',
-        danger:  '#ef4444',
-        warning: '#f59e0b',
+        // Status (kept — accessibility signals)
+        success: '#2BB36F',
+        danger:  '#E5484D',
+        warning: '#E8A33A',
         // Text
         ink: {
-          primary:   '#ffffff',
-          secondary: 'rgba(255,255,255,0.72)',
-          tertiary:  'rgba(255,255,255,0.48)',
-          muted:     'rgba(255,255,255,0.32)',
+          primary:   '#FAFAFA',
+          secondary: 'rgba(250,250,250,0.72)',
+          tertiary:  'rgba(250,250,250,0.46)',
+          muted:     'rgba(250,250,250,0.28)',
         },
         line: 'rgba(255,255,255,0.08)',
       },

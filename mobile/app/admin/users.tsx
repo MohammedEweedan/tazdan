@@ -479,7 +479,7 @@ function UserCard({ u, p, onMessage, onFreeze, onUnfreeze, onKyc, onCredit, onSt
             )}
             {u.role === 'ADMIN' && (
               <View style={{ paddingHorizontal: 6, paddingVertical: 2, borderRadius: 5, backgroundColor: 'rgba(74,143,224,0.15)' }}>
-                <Text style={{ color: '#4a8fe0', fontSize: 9, fontWeight: '600', letterSpacing: 0.5 }}>ADMIN</Text>
+                <Text style={{ color: '#A3A3A3', fontSize: 9, fontWeight: '600', letterSpacing: 0.5 }}>ADMIN</Text>
               </View>
             )}
           </View>

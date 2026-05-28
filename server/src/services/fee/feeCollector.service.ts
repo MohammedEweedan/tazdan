@@ -33,7 +33,7 @@ import { getRate } from '../exchange/fxRateProvider.service';
 
 // ── Constants ──────────────────────────────────────────────────────
 const PLATFORM_USERNAME = 'platform';
-const PLATFORM_EMAIL    = process.env.PLATFORM_EMAIL || 'platform@fortuni.app';
+const PLATFORM_EMAIL    = process.env.PLATFORM_EMAIL || 'platform@Fortuni.app';
 
 // Memo the platform user id so we're not hitting the DB on every fee
 let _platformUserId: string | null = null;

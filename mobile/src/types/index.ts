@@ -26,10 +26,11 @@ export type UserRole = 'USER' | 'ADMIN';
 export interface User {
   id: string;
   email: string;
-  username?: string;        // public @handle
+  username?: string;        // public @handle (separate from email)
   firstName: string;
   lastName: string;
-  avatarUrl?: string;
+  avatarUrl?: string;       // image URL (uploaded photo)
+  avatarEmoji?: string;     // single-emoji avatar chosen by the user
   country?: string;
   status?: string;
   role?: UserRole;

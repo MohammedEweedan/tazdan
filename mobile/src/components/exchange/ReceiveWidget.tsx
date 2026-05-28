@@ -21,9 +21,18 @@ export function ReceiveWidget() {
   const user = useAuthStore((s) => s.user);
   const [tab, setTab] = useState<Tab>('HANDLE');
 
-  const handle = user?.username ?? user?.email?.split('@')[0] ?? 'me';
-  const profileLink = `https://fortuni.com/u/${handle}`;
-  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&margin=16&data=${encodeURIComponent(profileLink)}&bgcolor=ffffff&color=000000`;
+  // Receive link must point at a real handle, never the email-derived one.
+  // When no handle is set yet, we use the user's id so the QR still resolves
+  // server-side; the UI surfaces a "Set @handle" call-to-action so users
+  // know they should pick one for a friendlier link.
+  const handle = user?.username?.trim();
+  const linkSlug = handle ?? user?.id ?? 'me';
+  const profileLink = `https://Fortuni.com/u/${linkSlug}`;
+  // ecc=H = highest error-correction level. Up to ~30% of the QR can
+  // be obscured and it still scans. That's what makes the centered
+  // logo overlay safe; without it the QR would fail to decode when
+  // we punch a hole through the middle.
+  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&margin=16&ecc=H&data=${encodeURIComponent(profileLink)}&bgcolor=ffffff&color=000000`;
 
   const copyLink = async () => {
     haptics.success();
@@ -37,7 +46,7 @@ export function ReceiveWidget() {
   };
   const shareLink = () => {
     haptics.light();
-    Share.share({ message: t('receive.shareMessage', { handle, link: profileLink }) });
+    Share.share({ message: t('receive.shareMessage', { handle: handle ?? linkSlug, link: profileLink }) });
   };
 
   return (
@@ -79,15 +88,28 @@ export function ReceiveWidget() {
             marginBottom: 20,
           }}>
             <View style={{
-              width: 200, height: 200, borderRadius: 16, backgroundColor: '#ffffff',
+              width: 200, height: 200, borderRadius: 20, backgroundColor: '#ffffff',
               alignItems: 'center', justifyContent: 'center', padding: 8,
-              shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 12, shadowOffset: { width: 0, height: 4 },
+              shadowColor: '#000', shadowOpacity: 0.12, shadowRadius: 16, shadowOffset: { width: 0, height: 6 },
             }}>
               <Image source={{ uri: qrUrl }} style={{ width: 184, height: 184 }} resizeMode="contain" />
+              {/* Centered Fortuni badge — icon-dark.png per strict requirement */}
+              <View pointerEvents="none" style={{ position: 'absolute' }}>
+                <Image
+                  source={require('../../../assets/icon-white.png')}
+                  style={{
+                    width: 24, height: 24, borderRadius: 12,
+                    borderWidth: 3, borderColor: '#ffffff',
+                    shadowColor: '#000', shadowOpacity: 0.18,
+                    shadowRadius: 4, shadowOffset: { width: 0, height: 1 },
+                  }}
+                  resizeMode="contain"
+                />
+              </View>
             </View>
 
-            <Text style={{ color: p.fg, fontSize: 26, fontWeight: '600', letterSpacing: -0.5, marginTop: 20 }}>
-              @{handle}
+            <Text style={{ color: handle ? p.fg : p.fgMuted, fontSize: 26, fontWeight: '600', letterSpacing: -0.5, marginTop: 20 }}>
+              {handle ? `@${handle}` : (t('home.setHandle') || 'Set @handle')}
             </Text>
             <Text selectable style={{ color: p.fgMuted, fontSize: 12, fontWeight: '500', marginTop: 4 }}>
               {profileLink}
@@ -135,7 +157,17 @@ export function ReceiveWidget() {
             backgroundColor: p.bgElev, borderRadius: 20, borderWidth: 1, borderColor: p.border,
             overflow: 'hidden', marginBottom: 20,
           }}>
-            <BankRow label={t('receive.accountHolder')} value={user ? `${user.firstName ?? ''} ${user.lastName ?? ''}`.trim() || handle : handle} palette={p} first />
+            <BankRow
+              label={t('receive.accountHolder')}
+              value={
+                user
+                  ? (`${user.firstName ?? ''} ${user.lastName ?? ''}`.trim()
+                      || (handle ? `@${handle}` : 'Fortuni user'))
+                  : 'Fortuni user'
+              }
+              palette={p}
+              first
+            />
             <BankRow label="IBAN" value="DE89 3704 0044 0532 0130 00" palette={p} />
             <BankRow label="BIC / SWIFT" value="COBADEFFXXX" palette={p} />
             <BankRow label={t('receive.reference')} value={`PRMK-${handle.toUpperCase()}`} palette={p} />

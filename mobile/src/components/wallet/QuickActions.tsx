@@ -53,7 +53,7 @@ export function QuickActions() {
                   alignItems: 'center', justifyContent: 'center',
                 }}
               >
-                <Ionicons name={a.icon} size={18} color="#226dff" />
+                <Ionicons name={a.icon} size={18} color="#FAFAFA" />
               </View>
               <Text className="text-ink-primary text-xs font-semibold">{a.label}</Text>
             </View>

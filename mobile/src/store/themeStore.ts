@@ -18,7 +18,7 @@ import { create } from 'zustand';
 
 export type ThemeMode = 'dark' | 'light';
 
-const KEY = 'fortuni.theme';
+const KEY = 'Fortuni.theme';
 
 export interface Palette {
   // ── Surfaces (elevation tiers) ──────────────────────────────────
@@ -55,66 +55,74 @@ export interface Palette {
 
 export const palettes: Record<ThemeMode, Palette> = {
   dark: {
-    // Warm charcoal ramp — kept from your draft, refined slightly
-    bg:        '#141518',
-    bgElev:    '#1C1D22',
-    bgRaised:  '#24262D',
-    surface:   '#1C1D22',
-    fg:        '#F5F5F7',
-    fgMuted:   'rgba(245,245,247,0.62)',
-    fgFaint:   'rgba(245,245,247,0.36)',
+    // Monochrome graphite ramp — pure grayscale, no blue undertone.
+    // Step-up tiers stay legible even without color contrast cues.
+    bg:        '#0A0A0B',
+    bgElev:    '#141416',
+    bgRaised:  '#1C1C1F',
+    surface:   '#141416',
+    fg:        '#FAFAFA',
+    fgMuted:   'rgba(250,250,250,0.62)',
+    fgFaint:   'rgba(250,250,250,0.36)',
     border:    'rgba(255,255,255,0.08)',
-    divider:   'rgba(255,255,255,0.12)',
-    // CTA — invert to off-white so it doesn't glow
-    ctaBg:     '#F5F5F7',
-    ctaFg:     '#141518',
+    divider:   'rgba(255,255,255,0.14)',
+    // CTA — pure white inverse so primary actions read as urgent without color
+    ctaBg:     '#FAFAFA',
+    ctaFg:     '#0A0A0B',
     pillBg:    'rgba(255,255,255,0.08)',
-    // Semantic — bright on warm charcoal, AA on bg
-    greenFg:   '#4ADE80',
-    greenBg:   'rgba(74,222,128,0.16)',
+    // Semantic — kept (accessibility signals for confirm/decline/warn)
+    greenFg:   '#3FCF8E',
+    greenBg:   'rgba(63,207,142,0.14)',
     redFg:     '#F87171',
-    redBg:     'rgba(248,113,113,0.16)',
+    redBg:     'rgba(248,113,113,0.14)',
     amberFg:   '#FBBF24',
-    amberBg:   'rgba(251,191,36,0.16)',
-    // Brand — lifted periwinkle, AA on #141518
-    accent:    '#5b8cff',
-    accentFg:  '#0A0D1A',
-    shadow:    'rgba(0,0,0,0.45)',
+    amberBg:   'rgba(251,191,36,0.14)',
+    // Accent is the same off-white as CTA in mono mode — no brand color
+    accent:    '#FAFAFA',
+    accentFg:  '#0A0A0B',
+    shadow:    'rgba(0,0,0,0.55)',
   },
   light: {
-    // Paper off-white, cards step UP from page (more standard than recessed)
-    bg:        '#F5F4F0',
-    bgElev:    '#FBFAF6',
+    // Paper off-white, cards step UP from page
+    bg:        '#FAFAF7',
+    bgElev:    '#F1F0EB',
     bgRaised:  '#FFFFFF',
-    surface:   '#FBFAF6',
-    fg:        '#1A1A1F',
-    fgMuted:   'rgba(26,26,31,0.62)',
-    fgFaint:   'rgba(26,26,31,0.38)',
-    border:    'rgba(26,26,31,0.10)',
-    divider:   'rgba(26,26,31,0.14)',
-    ctaBg:     '#1A1A1F',
-    ctaFg:     '#FBFAF6',
-    pillBg:    'rgba(26,26,31,0.06)',
-    greenFg:   '#15803D',
-    greenBg:   'rgba(21,128,61,0.10)',
-    redFg:     '#DC2626',
-    redBg:     'rgba(220,38,38,0.10)',
-    amberFg:   '#B45309',
-    amberBg:   'rgba(180,83,9,0.10)',
-    // Brand — periwinkle, AAA on paper
-    accent:    '#226dff',
-    accentFg:  '#FFFFFF',
-    shadow:    'rgba(26,26,31,0.10)',
+    surface:   '#F1F0EB',
+    fg:        '#0A0A0B',
+    fgMuted:   'rgba(10,10,11,0.62)',
+    fgFaint:   'rgba(10,10,11,0.38)',
+    border:    'rgba(10,10,11,0.08)',
+    divider:   'rgba(10,10,11,0.14)',
+    // CTA — solid black for maximum mono contrast
+    ctaBg:     '#0A0A0B',
+    ctaFg:     '#FAFAFA',
+    pillBg:    'rgba(10,10,11,0.06)',
+    greenFg:   '#1F8F58',
+    greenBg:   'rgba(31,143,88,0.10)',
+    redFg:     '#C0272D',
+    redBg:     'rgba(192,39,45,0.10)',
+    amberFg:   '#A26B0B',
+    amberBg:   'rgba(162,107,11,0.10)',
+    // Accent — also black; mono mode has no separate brand color
+    accent:    '#0A0A0B',
+    accentFg:  '#FAFAFA',
+    shadow:    'rgba(10,10,11,0.10)',
   },
 };
 
+/**
+ * Legacy `brand` token export — kept so existing imports compile. All
+ * fields now resolve to monochrome (white in dark contexts, black in
+ * light contexts). Migrate call-sites to read from the active palette
+ * (`useThemedPalette().accent`) then delete this block.
+ */
 export const brand = {
-  primary:     '#226dff',   // use on light surfaces — periwinkle
-  primaryDark: '#5b8cff',   // use on dark surfaces
-  deep:        '#1a52cc',   // pressed / hover
-  softLight:   '#dde7ff',   // chip bg on light
-  softDark:    'rgba(34,109,255,0.14)',  // chip bg on dark
-  sand:        '#E8DDC7',   // warm secondary, MENA accent
+  primary:     '#0A0A0B',   // black on light surfaces
+  primaryDark: '#FAFAFA',   // white on dark surfaces
+  deep:        '#0A0A0B',   // pressed / hover
+  softLight:   'rgba(10,10,11,0.08)',
+  softDark:    'rgba(255,255,255,0.08)',
+  sand:        '#E8DDC7',
   sandDeep:    '#C7B894',
 } as const;
 

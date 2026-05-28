@@ -10,7 +10,7 @@
  *
  * Seeds:
  *   - Admin user                 (admin@exchange.ly  / Admin123!@#)
- *   - Demo user "Rayan Zahi"     (rayan@fortuni.app / Demo123!)
+ *   - Demo user "Rayan Zahi"     (rayan@Fortuni.app / Demo123!)
  *   - 4 fake P2P trader users    (so the marketplace has variety)
  *   - Wallets w/ realistic balances for the demo user
  *   - Recent transactions
@@ -26,7 +26,7 @@ import { PrismaClient, Currency, OrderSide } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
-const DEMO_EMAIL = 'rayan@fortuni.app';
+const DEMO_EMAIL = 'rayan@Fortuni.app';
 const DEMO_PASSWORD = 'Demo123!';
 
 /* ── Helpers ───────────────────────────────────────────────── */

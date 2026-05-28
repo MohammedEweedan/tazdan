@@ -21,7 +21,7 @@ This is an honest, prioritised list of what's between "today" and a public launc
 - **Action:**
   - Set `ONRAMP_PROVIDER=STRIPE`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` in production.
   - Set `EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY` + `EXPO_PUBLIC_APPLE_MERCHANT_ID` in the mobile EAS build profile.
-  - Register the webhook URL `https://api.fortuni.app/api/deposits/webhook/stripe` in the Stripe dashboard. Test with Stripe CLI.
+  - Register the webhook URL `https://api.Fortuni.app/api/deposits/webhook/stripe` in the Stripe dashboard. Test with Stripe CLI.
 
 ### 1.2 Apple Pay / Google Pay native install + Apple merchant cert
 
@@ -29,7 +29,7 @@ The mobile-side scaffolding I just added (`@stripe/stripe-react-native`, `Expres
 
 - `cd mobile && npx expo install @stripe/stripe-react-native` (the package is already in `package.json` but `node_modules` hasn't been refreshed).
 - Run a fresh native build via EAS (`eas build -p ios` + `eas build -p android`) — the Stripe plugin needs to apply at prebuild time.
-- In Apple Developer portal, create the merchant ID `merchant.com.fortuni.app` (or whatever you change `EXPO_PUBLIC_APPLE_MERCHANT_ID` to), then generate an Apple Pay payment-processing certificate using the CSR Stripe provides. Wire the cert in Stripe → Settings → Payments → Apple Pay.
+- In Apple Developer portal, create the merchant ID `merchant.com.Fortuni.app` (or whatever you change `EXPO_PUBLIC_APPLE_MERCHANT_ID` to), then generate an Apple Pay payment-processing certificate using the CSR Stripe provides. Wire the cert in Stripe → Settings → Payments → Apple Pay.
 - For Google Pay, configure the **Google Pay & Wallet Console** merchant profile (Stripe handles the rest).
 
 ### 1.3 KYC / AML provider is not wired
@@ -41,7 +41,7 @@ The mobile-side scaffolding I just added (`@stripe/stripe-react-native`, `Expres
 ### 1.4 Legal documents
 
 - Privacy policy, Terms of Service, AML/KYC policy, transfer agreement — required for both App Store + Play Store + Stripe onboarding.
-- Need to be hosted at stable URLs (e.g. `https://fortuni.app/privacy`) and linked from inside the app (Profile → Legal).
+- Need to be hosted at stable URLs (e.g. `https://Fortuni.app/privacy`) and linked from inside the app (Profile → Legal).
 - Crypto disclosures are jurisdiction-specific (US: SEC/MSB language; EU: MiCA; UK: FCA). Have a fintech lawyer review.
 
 ### 1.5 Production server hardening
@@ -141,7 +141,7 @@ The repo references on-chain webhook handlers (`webhookAlchemy`, `webhookTrongri
 
 1. **Day 1:** Run `npx expo install @stripe/stripe-react-native`, rebuild with EAS dev client, smoke-test the ExpressPay button against Stripe test keys. Confirm Apple Pay sheet appears in iOS simulator on real device.
 2. **Day 2:** Wire Sumsub (or chosen KYC vendor). Add a `kycStatus` gate in front of withdrawals + first deposit > $X.
-3. **Day 3:** Privacy policy, ToS, AML policy drafted with a lawyer. Hosted under `fortuni.app/legal/*`. Linked from Profile screen.
+3. **Day 3:** Privacy policy, ToS, AML policy drafted with a lawyer. Hosted under `Fortuni.app/legal/*`. Linked from Profile screen.
 4. **Day 4:** Sentry on both client + server. Pino structured logging. Basic Grafana dashboard for webhook success rate + p95 latency.
 5. **Day 5:** Apple Pay merchant cert generated + uploaded to Stripe. Real Stripe live keys provisioned. End-to-end production webhook test (small amount, real card).
 6. **Day 6:** App Store + Play Store metadata, screenshots (use the new animated onboarding), privacy nutrition labels, crypto licensing affidavit attached.

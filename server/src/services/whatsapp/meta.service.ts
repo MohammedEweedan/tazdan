@@ -235,6 +235,6 @@ export async function sendOtpFromMeta(opts: {
       userId:       opts.userId,
     });
   }
-  const body = `Your fortuni verification code is: *${opts.code}*\n\nThis code expires in 10 minutes. Do not share it with anyone.`;
+  const body = `Your Fortuni verification code is: *${opts.code}*\n\nThis code expires in 10 minutes. Do not share it with anyone.`;
   return sendWhatsAppText({ to: opts.to, body, userId: opts.userId });
 }

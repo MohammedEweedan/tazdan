@@ -67,7 +67,8 @@ function symbolColor(sym: string): string {
   return `hsl(${Math.abs(h) % 360}, 65%, 55%)`;
 }
 
-function assetMeta(symbol: string): { label: string; color: string; icon: string } {
+function assetMeta(symbol: string | undefined | null): { label: string; color: string; icon: string } {
+  if (!symbol) return { label: '?', color: '#888888', icon: '?' };
   return KNOWN[symbol.toUpperCase()] ?? {
     label: symbol.toUpperCase(),
     color: symbolColor(symbol),
@@ -101,14 +102,25 @@ function isCryptoKey(currency: string) {
   return CRYPTO_KEYS.has(currency.toUpperCase()) || !currency.match(/^(USD|EUR|GBP|AED|SAR|EGP|LYD|CAD|AUD|CHF|JPY|CNY)$/i);
 }
 
-export function SellWidget() {
+interface SellWidgetProps {
+  /**
+   * When provided, the widget initialises with this asset pre-selected
+   * AND (if `lockAsset` is also set) hides the change-asset chip and
+   * disables the asset bottom-sheet — so a user landing on the BTC
+   * detail page can only sell BTC.
+   */
+  defaultAsset?: string;
+  lockAsset?:    boolean;
+}
+
+export function SellWidget({ defaultAsset, lockAsset = false }: SellWidgetProps = {}) {
   const { user } = useAuthStore();
   const p = useThemedPalette();
   const themeMode = useTheme((s) => s.mode);
   const brandAccent = themeMode === 'dark' ? brand.primaryDark : brand.primary;
   const { data: wallets } = useWallets();
   const { data: tickers } = useMarkets();
-  const { playSuccess } = useTransactionSound();
+  const { playSuccess, playError } = useTransactionSound();
   const baseCurrency = (user as any)?.baseCurrency ?? 'USD';
 
   // ── Holdings with nonzero balance ────────────────────────────────
@@ -123,12 +135,19 @@ export function SellWidget() {
   }, [wallets]);
 
   // Default to first holding or BTC
-  const [asset, setAsset] = useState('BTC');
-  const [network, setNetwork] = useState('BTC');
+  // When the widget is opened from a specific asset's detail page we
+  // pre-select that asset. The `lockAsset` flag further prevents the
+  // user from switching away — you shouldn't be able to sell ETH from
+  // the BTC screen.
+  const [asset, setAsset] = useState((defaultAsset || 'BTC').toUpperCase());
+  const [network, setNetwork] = useState(defaultNetwork((defaultAsset || 'BTC').toUpperCase()));
   const [assetSheetOpen, setAssetSheetOpen] = useState(false);
+  // Sell only filters the user's own holdings — you can't sell what
+  // you don't own. The old code did a remote `cryptoExchangeAPI.search`
+  // here, which surfaced every coin in the universe; users could pick
+  // PEPE on the Sell screen having never bought any. Local filter
+  // over `holdings` only.
   const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState<AssetSearchResult[]>([]);
-  const [searchLoading, setSearchLoading] = useState(false);
   const searchRef = useRef<RNTextInput>(null);
 
   // ── Trade state ───────────────────────────────────────────────────
@@ -156,31 +175,12 @@ export function SellWidget() {
   [holdings, asset]);
   const balance = currentHolding?.balance ?? 0;
 
-  const livePrice = tickers?.find((t) => t.base === asset)?.price
-    ?? searchResults.find((r) => r.symbol === asset)?.price ?? 0;
-  const change24h = tickers?.find((t) => t.base === asset)?.changePct24h
-    ?? searchResults.find((r) => r.symbol === asset)?.change24h;
+  const livePrice  = tickers?.find((t) => t.base === asset)?.price ?? 0;
+  const change24h  = tickers?.find((t) => t.base === asset)?.changePct24h;
 
-  // ── Live search (for asset sheet) ────────────────────────────────
+  // Reset the search box every time the sheet opens.
   useEffect(() => {
-    if (!assetSheetOpen) return;
-    const q = searchQuery.trim();
-    const id = setTimeout(async () => {
-      setSearchLoading(true);
-      try {
-        const res = await cryptoExchangeAPI.search(q);
-        setSearchResults(res.data.results);
-      } catch {
-        setSearchResults([]);
-      } finally {
-        setSearchLoading(false);
-      }
-    }, 300);
-    return () => clearTimeout(id);
-  }, [searchQuery, assetSheetOpen]);
-
-  useEffect(() => {
-    if (assetSheetOpen) { setSearchQuery(''); setSearchResults([]); }
+    if (assetSheetOpen) setSearchQuery('');
   }, [assetSheetOpen]);
 
   // Bumping this triggers a fresh quote without the user changing cryptoAmt/asset
@@ -231,7 +231,7 @@ export function SellWidget() {
       setSuccess(`${fmt(quote.cryptoAmount, 8)} ${asset} sold for ${sym(baseCurrency)}${fmt(quote.fiatAmount, 2)} ✓`);
       setQuote(null); setCryptoAmt('');
     } catch (e: any) {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      playError();
       setError(e?.response?.data?.error ?? 'Order failed');
     } finally { setExec(false); }
   }
@@ -246,27 +246,39 @@ export function SellWidget() {
     ? `Slide to sell ${asset}`
     : overspend ? 'Insufficient balance' : 'Enter amount';
 
-  // Asset sheet: show holdings first, then search results
-  const displayList: AssetSearchResult[] = searchResults.length > 0
-    ? searchResults
-    : holdings.map((h) => ({
-        symbol: h.displaySymbol,
-        price: Number(tickers?.find((t) => t.base === h.displaySymbol)?.price ?? 0),
-        change24h: tickers?.find((t) => t.base === h.displaySymbol)?.changePct24h ?? 0,
-        volume24h: 0,
+  // Asset sheet shows *only* the user's holdings, filtered locally by
+  // the search box. Selling something you don't own is impossible, so
+  // listing the whole crypto universe (the old behaviour) was a UX
+  // trap that wasted real-estate AND let users tap into a dead-end
+  // "you have 0 PEPE" state.
+  const displayList: AssetSearchResult[] = useMemo(() => {
+    const q = searchQuery.trim().toUpperCase();
+    return holdings
+      .filter((h) => !q || h.displaySymbol.includes(q) || assetMeta(h.displaySymbol).label.toUpperCase().includes(q))
+      .map((h) => ({
+        symbol:     h.displaySymbol,
+        price:      Number(tickers?.find((t) => t.base === h.displaySymbol)?.price ?? 0),
+        change24h:  tickers?.find((t) => t.base === h.displaySymbol)?.changePct24h ?? 0,
+        volume24h:  0,
       }));
+  }, [holdings, tickers, searchQuery]);
 
   return (
     <View style={{ paddingHorizontal: 20, paddingBottom: 8 }}>
 
-      {/* ── Asset selector ── */}
+      {/* ── Asset selector ──
+          When `lockAsset` is on (opened from a coin detail page) the
+          tile is non-interactive — switching assets here would be
+          confusing when the user just navigated INTO a specific asset
+          view. The CHANGE chip is hidden in the same condition. */}
       <Pressable
-        onPress={() => { Haptics.selectionAsync(); setAssetSheetOpen(true); }}
+        disabled={lockAsset}
+        onPress={() => { if (lockAsset) return; Haptics.selectionAsync(); setAssetSheetOpen(true); }}
         style={({ pressed }) => ({
           flexDirection: 'row', alignItems: 'center',
           backgroundColor: p.bgElev, borderRadius: 20,
           borderWidth: 1, borderColor: p.border,
-          padding: 14, marginBottom: 18, opacity: pressed ? 0.85 : 1,
+          padding: 14, marginBottom: 18, opacity: pressed && !lockAsset ? 0.85 : 1,
         })}
       >
         <CoinAvatar sym={asset} color={meta.color} size={48} />
@@ -290,20 +302,40 @@ export function SellWidget() {
             )}
           </View>
         </View>
-        <View style={{
-          paddingHorizontal: 10, paddingVertical: 7, borderRadius: 12,
-          backgroundColor: `${brandAccent}1f`,
-          borderWidth: 1, borderColor: `${brandAccent}3a`,
-          flexDirection: 'row', alignItems: 'center', gap: 4,
-        }}>
-          <Text style={{ color: brandAccent, fontSize: 11, fontWeight: '700', letterSpacing: 0.3 }}>CHANGE</Text>
-          <Ionicons name="chevron-down" size={13} color={brandAccent} />
-        </View>
+        {!lockAsset && (
+          <View style={{
+            paddingHorizontal: 10, paddingVertical: 7, borderRadius: 12,
+            backgroundColor: `${brandAccent}1f`,
+            borderWidth: 1, borderColor: `${brandAccent}3a`,
+            flexDirection: 'row', alignItems: 'center', gap: 4,
+          }}>
+            <Text style={{ color: brandAccent, fontSize: 11, fontWeight: '700', letterSpacing: 0.3 }}>CHANGE</Text>
+            <Ionicons name="chevron-down" size={13} color={brandAccent} />
+          </View>
+        )}
       </Pressable>
 
-      {/* ── Amount input ── */}
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-        <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '700', letterSpacing: 0.9 }}>YOU SELL ({asset})</Text>
+      {/* ── Amount input ──
+          The label + USE MAX chip share a row; the label can grow
+          arbitrarily as the asset symbol gets longer (e.g. "POPCAT")
+          and was pushing the chip off-screen on narrow phones.
+          flexShrink + numberOfLines + tighter letter-spacing keeps the
+          chip pinned to the right and lets the label ellipsize. */}
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, gap: 12 }}>
+        <Text
+          numberOfLines={1}
+          ellipsizeMode="tail"
+          style={{
+            color: p.fgMuted,
+            fontSize: 11,
+            fontWeight: '700',
+            letterSpacing: 0.6,
+            flexShrink: 1,
+            minWidth: 0,
+          }}
+        >
+          YOU SELL ({asset})
+        </Text>
         <Pressable
           onPress={() => { Haptics.selectionAsync(); setCryptoAmt(String(balance)); setQuote(null); setError(null); }}
           hitSlop={8}
@@ -311,6 +343,7 @@ export function SellWidget() {
             paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10,
             backgroundColor: `${brandAccent}1f`,
             borderWidth: 1, borderColor: `${brandAccent}3a`,
+            flexShrink: 0,
           }}
         >
           <Text style={{ color: brandAccent, fontSize: 11, fontWeight: '700', letterSpacing: 0.5 }}>USE MAX</Text>
@@ -426,7 +459,6 @@ export function SellWidget() {
         seconds={canConfirm ? seconds : undefined}
         totalSeconds={30}
         accent={brandAccent}
-        accentEnd={brand.deep}
         accentFg="#ffffff"
         trackBg={p.bgElev}
         trackFg={p.fg}
@@ -445,24 +477,27 @@ export function SellWidget() {
               <Ionicons name="close" size={24} color={p.fg} />
             </Pressable>
           </View>
-          {/* Search bar */}
-          <View style={{ flexDirection: 'row', alignItems: 'center', margin: 16, backgroundColor: p.bgElev, borderRadius: 14, borderWidth: 1, borderColor: p.border, paddingHorizontal: 14, gap: 10 }}>
-            <Ionicons name="search" size={16} color={p.fgMuted} />
-            <TextInput
-              ref={searchRef}
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-              placeholder="Search any token…"
-              placeholderTextColor={p.fgFaint}
-              autoCapitalize="none"
-              autoCorrect={false}
-              style={{ flex: 1, color: p.fg, fontSize: 15, paddingVertical: 12 }}
-            />
-            {searchLoading && <ActivityIndicator size="small" color={p.fgMuted} />}
-          </View>
+          {/* Search bar — filters the holdings list locally. We don't
+              hit a global asset feed here because you can only sell
+              what you own. */}
+          {holdings.length > 3 && (
+            <View style={{ flexDirection: 'row', alignItems: 'center', margin: 16, backgroundColor: p.bgElev, borderRadius: 14, borderWidth: 1, borderColor: p.border, paddingHorizontal: 14, gap: 10 }}>
+              <Ionicons name="search" size={16} color={p.fgMuted} />
+              <TextInput
+                ref={searchRef}
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                placeholder="Filter your holdings…"
+                placeholderTextColor={p.fgFaint}
+                autoCapitalize="none"
+                autoCorrect={false}
+                style={{ flex: 1, color: p.fg, fontSize: 15, paddingVertical: 12 }}
+              />
+            </View>
+          )}
           {/* Section label */}
-          <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '500', letterSpacing: 0.5, marginHorizontal: 20, marginBottom: 8 }}>
-            {searchQuery.trim() ? 'SEARCH RESULTS' : 'YOUR HOLDINGS'}
+          <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '500', letterSpacing: 0.5, marginHorizontal: 20, marginTop: holdings.length > 3 ? 0 : 16, marginBottom: 8 }}>
+            YOUR HOLDINGS
           </Text>
           <ScrollView keyboardShouldPersistTaps="handled">
             {displayList.map((item) => {
@@ -512,10 +547,27 @@ export function SellWidget() {
                 </Pressable>
               );
             })}
-            {displayList.length === 0 && !searchLoading && (
-              <Text style={{ color: p.fgFaint, textAlign: 'center', marginTop: 40, fontSize: 14 }}>
-                {searchQuery.trim() ? 'No results found' : 'No holdings yet — buy some crypto first'}
-              </Text>
+            {displayList.length === 0 && (
+              <View style={{ paddingHorizontal: 24, paddingVertical: 48, alignItems: 'center', gap: 10 }}>
+                <View
+                  style={{
+                    width: 56, height: 56, borderRadius: 16,
+                    backgroundColor: p.bgElev,
+                    borderWidth: 1, borderColor: p.border,
+                    alignItems: 'center', justifyContent: 'center',
+                  }}
+                >
+                  <Ionicons name="wallet-outline" size={24} color={p.fgMuted} />
+                </View>
+                <Text style={{ color: p.fg, fontSize: 15, fontWeight: '700', textAlign: 'center' }}>
+                  {searchQuery.trim() ? 'No matching holdings' : 'Nothing to sell yet'}
+                </Text>
+                <Text style={{ color: p.fgMuted, fontSize: 13, textAlign: 'center', lineHeight: 18, maxWidth: 280 }}>
+                  {searchQuery.trim()
+                    ? `None of your holdings match "${searchQuery.trim()}". Try a different filter.`
+                    : 'You can only sell crypto you already own. Buy some first, or receive it from another wallet.'}
+                </Text>
+              </View>
             )}
           </ScrollView>
         </View>

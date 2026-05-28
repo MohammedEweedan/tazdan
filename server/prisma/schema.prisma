@@ -188,6 +188,12 @@ model User {
   failedLoginAttempts          Int                          @default(0)
   lockoutUntil                 DateTime?
   expoPushToken                String? // Expo push notification token (nullable — registered after login)
+  // Per-category opt-outs for transactional comms. Shape:
+  // { email: { trades, transfers, deposits, withdrawals, p2p, marketing },
+  //   push:  { trades, transfers, deposits, withdrawals, p2p, marketing } }
+  // A missing field defaults to `true` (opt-in). Required by App Store /
+  // Play Store policies that grant users granular notification controls.
+  notificationPrefs            Json?
   createdAt                    DateTime                     @default(now())
   updatedAt                    DateTime                     @updatedAt
   wallets                      Wallet[]
@@ -205,6 +211,8 @@ model User {
   whatsappMessages             WhatsAppMessage[]
   sentTransfers                Transfer[]                   @relation("TransferSender")
   receivedTransfers            Transfer[]                   @relation("TransferReceiver")
+  sentClaimLinks               ClaimLink[]                  @relation("ClaimLinkSender")
+  claimedClaimLinks            ClaimLink[]                  @relation("ClaimLinkClaimer")
   // Public profile
   username                     String?                      @unique
   bio                          String?
@@ -617,6 +625,75 @@ model Transfer {
   @@index([receiverId])
   @@index([reference])
   @@index([createdAt])
+}
+
+// ── Claim-link transfers ────────────────────────────────────────────
+//
+// Differentiator: send to anyone — even users without a Fortuni account.
+// The sender's wallet is debited immediately and the funds are held in
+// a reserved-balance bucket. The recipient receives an email / SMS / push
+// containing a one-tap claim URL. On claim:
+//   - if the recipient is signed in, the funds credit immediately
+//   - if not, the link routes through signup → KYC-lite → credit
+// If the link expires (default 7 days) or the sender cancels, the
+// reserved amount returns to the sender.
+//
+// This is the single most viral path in the app: every send is a signup
+// invite, every claim is a real-money "wow" moment.
+
+enum ClaimLinkStatus {
+  PENDING     // funds reserved, recipient hasn't claimed yet
+  CLAIMED     // recipient signed in and credited
+  EXPIRED     // expired before claim; sender auto-refunded
+  CANCELLED   // sender cancelled; sender auto-refunded
+}
+
+model ClaimLink {
+  id                String           @id @default(cuid())
+
+  senderId          String
+  sender            User             @relation("ClaimLinkSender", fields: [senderId], references: [id], onDelete: Cascade)
+
+  // One of these identifies the recipient before they claim. After claim,
+  // claimedById links to the actual User who claimed.
+  recipientEmail    String?
+  recipientPhone    String?          // E.164 ("+44…")
+  recipientHandle   String?          // pre-existing @handle (recipient has account)
+
+  asset             Currency         @default(USDT)
+  amount            Decimal          @db.Decimal(20, 8)
+  fee               Decimal          @default(0) @db.Decimal(20, 8)
+  note              String?
+
+  // Random URL token — safe to embed in plain links.
+  claimToken        String           @unique
+  // SHA256 of an optional sender-defined PIN. When set, recipient must
+  // enter the same PIN to claim — protects against forwarded SMS leaks.
+  pinHash           String?
+
+  status            ClaimLinkStatus  @default(PENDING)
+  reservedAt        DateTime         @default(now())
+  expiresAt         DateTime         // default = +7 days, sender-overridable up to 30
+  notifiedAt        DateTime?        // when we delivered email/SMS to recipient
+
+  // Claim outcome
+  claimedAt         DateTime?
+  claimedById       String?
+  claimedBy         User?            @relation("ClaimLinkClaimer", fields: [claimedById], references: [id])
+
+  // Refund outcome (set when status = EXPIRED or CANCELLED)
+  refundedAt        DateTime?
+  cancelReason      String?
+
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  @@index([senderId])
+  @@index([claimedById])
+  @@index([status])
+  @@index([recipientEmail])
+  @@index([recipientPhone])
+  @@index([expiresAt])
 }
 
 // ── P2P Marketplace ─────────────────────────────────────────────────

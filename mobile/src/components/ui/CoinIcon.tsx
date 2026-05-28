@@ -37,7 +37,10 @@ const COIN_COLOR: Record<string, string> = {
 };
 
 function coinColor(sym: string): string {
-  return COIN_COLOR[sym] ?? '#226dff';
+  // Coin-specific brand colors are kept (BTC orange, ETH purple) because
+  // they're identity markers, not app chrome. Fallback for unknown coins
+  // is neutral gray, not the old app brand blue.
+  return COIN_COLOR[sym] ?? '#737373';
 }
 
 interface Props {

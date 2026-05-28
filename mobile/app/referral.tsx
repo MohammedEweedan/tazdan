@@ -15,7 +15,7 @@ export default function Referral() {
   const h = useHaptics();
   const p = useThemedPalette();
   const user = useAuthStore((s) => s.user);
-  const code = user?.referralCode ?? 'fortuni';
+  const code = user?.referralCode ?? 'Fortuni';
 
   return (
     <ScreenShell title="Refer & earn">
@@ -110,7 +110,7 @@ export default function Referral() {
           icon="share-outline"
           onPress={() => {
             h.medium();
-            Share.share({ message: `Join me on fortuni — sign up with code ${code} and we both get $10. https://fortuni.app/r/${code}` });
+            Share.share({ message: `Join me on Fortuni — sign up with code ${code} and we both get $10. https://Fortuni.app/r/${code}` });
           }}
         />
       </View>

@@ -3,7 +3,7 @@
  * fiat pair. Wraps GET /api/exchange/fx/:base/:quote which resolves
  * server-side in this order:
  *
- *   1. Admin override   (fortuni dashboard manually set)
+ *   1. Admin override   (Fortuni dashboard manually set)
  *   2. External provider (exchangerate.host / openexchangerates)
  *   3. Stale fallback   (last good cached value)
  *

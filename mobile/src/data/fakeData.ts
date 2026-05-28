@@ -10,7 +10,7 @@ import type {
 
 export const MOCK_USER: User = {
   id: 'usr_demo',
-  email: 'rayan@fortuni.app',
+  email: 'rayan@Fortuni.app',
   username: 'rayofsunshine',
   firstName: 'Rayan',
   lastName: 'Zahi',

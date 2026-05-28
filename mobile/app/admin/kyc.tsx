@@ -239,7 +239,7 @@ export default function AdminKYC() {
                     <Ionicons name="document-text-outline" size={20} color={p.fgMuted} />
                     <View style={{ flex: 1 }}>
                       <Text style={{ color: p.fg, fontSize: 13, fontWeight: '600' }}>{doc.type ?? doc.documentType ?? 'Document'}</Text>
-                      {doc.url && <Text style={{ color: '#4a8fe0', fontSize: 11, marginTop: 2 }} numberOfLines={1}>{doc.url}</Text>}
+                      {doc.url && <Text style={{ color: '#A3A3A3', fontSize: 11, marginTop: 2 }} numberOfLines={1}>{doc.url}</Text>}
                       {doc.status && (
                         <View style={{ marginTop: 4, alignSelf: 'flex-start', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 5, backgroundColor: statusBg(doc.status) }}>
                           <Text style={{ color: statusColor(doc.status), fontSize: 9, fontWeight: '700' }}>{doc.status}</Text>
