@@ -49,6 +49,7 @@ html[lang='ar'] [class*="chakra-text"],
 html[lang='ar'] [class*="chakra-heading"] {
   direction: rtl !important;
   unicode-bidi: plaintext !important;
+  line-height: 1.75 !important;
 }
 
 

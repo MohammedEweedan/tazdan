@@ -53,6 +53,7 @@ import { IconLogo } from "@/components/ui/Logo";
 import PublicNav from "@/components/ui/PublicNav";
 import PublicFooter from "@/components/ui/PublicFooter";
 import WaitlistModal from "@/components/ui/WaitlistModal";
+import { useIsAr } from "@/hooks/useIsAr";
 
 /* ─────────────────────────────────────────────────────────────────
    RESPONSIVE PHONE SIZING SYSTEM
@@ -2708,9 +2709,10 @@ type StageCopyProps = {
   textMuted: string;
   hairline: string;
   tileBg: string;
+  isAr?: boolean;
 };
 
-function StageCopy({ op, title, desc, features, textMain, textMuted, hairline, tileBg }: StageCopyProps) {
+function StageCopy({ op, title, desc, features, textMain, textMuted, hairline, tileBg, isAr }: StageCopyProps) {
   const y = useTransform(op, [0, 1], [10, 0]);
   return (
     <motion.div
@@ -2724,14 +2726,14 @@ function StageCopy({ op, title, desc, features, textMain, textMuted, hairline, t
     >
       <Heading as="h2" fontFamily="'DM Sans', sans-serif" fontWeight="800"
         fontSize={{ base: "30px", sm: "40px", md: "68px", xl: "92px" }}
-        letterSpacing="-0.05em" lineHeight={0.94} color={textMain}
+        letterSpacing="-0.05em" lineHeight={isAr ? 1.15 : 0.94} color={textMain}
         sx={{ fontFeatureSettings: '"ss01", "cv11", "kern"' }}
       >
         {title}
       </Heading>
       {desc && (
         <Text fontSize={{ base: "16px", md: "20px" }} color={textMuted}
-          maxW="520px" lineHeight={1.5} fontWeight="400"
+          maxW="520px" lineHeight={isAr ? 1.75 : 1.5} fontWeight="400"
         >
           {desc}
         </Text>
@@ -2842,6 +2844,7 @@ function PhoneJourney() {
   const dark = colorMode === "dark";
   const phoneDark = usePhoneDark();
   const { t } = useTranslate();
+  const isAr = useIsAr();
 
   const ref = useRef<HTMLDivElement>(null);
   const { scrollYProgress } = useScroll({ target: ref, offset: ["start start", "end end"] });
@@ -2927,7 +2930,7 @@ function PhoneJourney() {
               textAlign={{ base: "center", lg: "left" } as any}
               pt={{ base: 0, lg: 0 }}
             >
-              <StageCopy op={copyA} accent={ACCENT} textMain={textMain} textMuted={textMuted} hairline={hairline} tileBg={tileBg}
+              <StageCopy op={copyA} accent={ACCENT} textMain={textMain} textMuted={textMuted} hairline={hairline} tileBg={tileBg} isAr={isAr}
                 eyebrow={t("coming_soon")}
                 title={
                   <>
@@ -2937,16 +2940,16 @@ function PhoneJourney() {
                 }
                 desc={t("hero_sub")}
               />
-              <StageCopy op={copyB} accent={ACCENT} textMain={textMain} textMuted={textMuted} hairline={hairline} tileBg={tileBg}
+              <StageCopy op={copyB} accent={ACCENT} textMain={textMain} textMuted={textMuted} hairline={hairline} tileBg={tileBg} isAr={isAr}
                 eyebrow={t("bento_countries_label")}
                 title={<>{t("bento_title_1")} <Box as="span"><EmphText text={t("bento_title_2")} /></Box></>}
               />
-              <StageCopy op={copyC} accent={ACCENT} textMain={textMain} textMuted={textMuted} hairline={hairline} tileBg={tileBg}
+              <StageCopy op={copyC} accent={ACCENT} textMain={textMain} textMuted={textMuted} hairline={hairline} tileBg={tileBg} isAr={isAr}
                 eyebrow={t("sec_social_title_1")}
                 title={<>{t("sec_social_title_1")}<br /><Box as="span">{t("sec_social_title_2")}</Box></>}
                 desc={t("sec_social_desc")}
               />
-              <StageCopy op={copyD} accent={ACCENT} textMain={textMain} textMuted={textMuted} hairline={hairline} tileBg={tileBg}
+              <StageCopy op={copyD} accent={ACCENT} textMain={textMain} textMuted={textMuted} hairline={hairline} tileBg={tileBg} isAr={isAr}
                 eyebrow={t("feat_buy_eyebrow")}
                 title={<Box as="span" color={textMain}>{t("feat_buy_title")}</Box>}
                 desc={t("feat_buy_desc")}
@@ -2957,7 +2960,7 @@ function PhoneJourney() {
                   { icon: FiGlobe, label: t("feat_buy_f4") },
                 ]}
               />
-              <StageCopy op={copyE} accent={ACCENT} textMain={textMain} textMuted={textMuted} hairline={hairline} tileBg={tileBg}
+              <StageCopy op={copyE} accent={ACCENT} textMain={textMain} textMuted={textMuted} hairline={hairline} tileBg={tileBg} isAr={isAr}
                 eyebrow={t("feat_search_eyebrow")}
                 title={<Box as="span" color={textMain}>{t("feat_search_title")}</Box>}
                 desc={t("feat_search_desc")}
@@ -2968,7 +2971,7 @@ function PhoneJourney() {
                   { icon: FiZap, label: t("feat_search_f4") },
                 ]}
               />
-              <StageCopy op={copyF} accent={ACCENT} textMain={textMain} textMuted={textMuted} hairline={hairline} tileBg={tileBg}
+              <StageCopy op={copyF} accent={ACCENT} textMain={textMain} textMuted={textMuted} hairline={hairline} tileBg={tileBg} isAr={isAr}
                 eyebrow={t("feat_pay_eyebrow")}
                 title={<Box as="span" color={textMain}>{t("feat_pay_title")}</Box>}
                 desc={t("feat_pay_desc")}
@@ -2979,7 +2982,7 @@ function PhoneJourney() {
                   { icon: FiCheck, label: t("feat_pay_f4") },
                 ]}
               />
-              <StageCopy op={copyG} accent={ACCENT} textMain={textMain} textMuted={textMuted} hairline={hairline} tileBg={tileBg}
+              <StageCopy op={copyG} accent={ACCENT} textMain={textMain} textMuted={textMuted} hairline={hairline} tileBg={tileBg} isAr={isAr}
                 eyebrow={t("feat_card_eyebrow")}
                 title={<Box as="span" color={textMain}>{t("card_title")}</Box>}
                 desc={t("card_desc")}
