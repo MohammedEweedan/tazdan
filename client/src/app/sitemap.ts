@@ -1,6 +1,6 @@
 import type { MetadataRoute } from 'next';
 
-const SITE_URL = 'https://Fortuni.com';
+const SITE_URL = 'https://promrkts.com';
 
 /**
  * Public sitemap. Generated at build time (zero runtime cost) and served

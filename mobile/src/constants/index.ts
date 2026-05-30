@@ -1,5 +1,4 @@
 // ── Design System ── Re-exports ──
-export * from './config';
 export * from './tokens';
 export * from './content';
 export * from './sounds';
@@ -16,7 +15,7 @@ import type { Currency, CurrencyMeta } from '@/types';
  *  3. On Android emulator, `10.0.2.2` reaches the host machine.
  *  4. Web + iOS Simulator can use `localhost` directly.
  */
-const API_PORT = 5001;
+const API_PORT = 5000;
 function resolveApiBase(): string {
   const fromEnv = process.env.EXPO_PUBLIC_API_BASE;
   if (fromEnv) {
@@ -55,9 +54,9 @@ function resolveApiBase(): string {
 }
 
 export const APP = {
-  name: 'Fortuni',
+  name: 'promrkts',
   tagline: 'Money. Crypto. One app.',
-  supportEmail: 'support@Fortuni.app',
+  supportEmail: 'support@promrkts.app',
   apiBaseUrl: resolveApiBase(),
 };
 
@@ -73,18 +72,18 @@ export const APP = {
  */
 export const STRIPE = {
   publishableKey: process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? '',
-  merchantIdentifier: process.env.EXPO_PUBLIC_APPLE_MERCHANT_ID ?? 'merchant.com.Fortuni.app',
+  merchantIdentifier: process.env.EXPO_PUBLIC_APPLE_MERCHANT_ID ?? 'merchant.com.promrkts.app',
   // Display name shown in the Apple Pay / Google Pay sheet
-  merchantDisplayName: 'Fortuni',
+  merchantDisplayName: 'promrkts',
   // Two-letter country for Apple Pay / Google Pay merchant locale
   merchantCountryCode: process.env.EXPO_PUBLIC_PAY_COUNTRY ?? 'US',
 };
 
 export const STORAGE_KEYS = {
-  accessToken:  'Fortuni.accessToken',
-  refreshToken: 'Fortuni.refreshToken',
-  onboarded:    'Fortuni.onboarded',
-  lastUser:     'Fortuni.lastUser',
+  accessToken:  'promrkts.accessToken',
+  refreshToken: 'promrkts.refreshToken',
+  onboarded:    'promrkts.onboarded',
+  lastUser:     'promrkts.lastUser',
 } as const;
 
 export const QUERY_KEYS = {

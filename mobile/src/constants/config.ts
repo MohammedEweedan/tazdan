@@ -9,7 +9,7 @@ import { Platform } from 'react-native';
  *  3. On Android emulator, `10.0.2.2` reaches the host machine.
  *  4. Web + iOS Simulator can use `localhost` directly.
  */
-const API_PORT = 5001;
+const API_PORT = 5000;
 function resolveApiBase(): string {
   const fromEnv = process.env.EXPO_PUBLIC_API_BASE;
   if (fromEnv) return fromEnv;

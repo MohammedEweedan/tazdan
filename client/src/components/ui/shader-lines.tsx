@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Fortuni background shader — raw WebGL port of the mobile splash shader
+ * promrkts background shader — raw WebGL port of the mobile splash shader
  * in mobile/src/components/ui/ShaderLines.tsx.
  *
  * Why raw WebGL (not three.js):
@@ -89,8 +89,12 @@ export function ShaderAnimation() {
 
     const canvas = document.createElement("canvas");
     canvas.style.cssText =
-      "position:absolute;inset:0;width:100%;height:100%;pointer-events:none;display:block;";
+      "position:absolute;inset:0;width:100%;height:100%;pointer-events:none;display:block;transition:filter 2s ease;";
     container.appendChild(canvas);
+
+    const blurTimer = setTimeout(() => {
+      canvas.style.filter = "blur(40px)";
+    }, 6000);
 
     // Antialias off — the shader is hand-tuned around aliased fill, not
     // smoothed geometry. preserveDrawingBuffer off — we never read back.
@@ -203,6 +207,7 @@ export function ShaderAnimation() {
     document.addEventListener("visibilitychange", onVisibility, { passive: true });
 
     return () => {
+      clearTimeout(blurTimer);
       if (rafId !== null) cancelAnimationFrame(rafId);
       window.removeEventListener("resize", onResize);
       document.removeEventListener("visibilitychange", onVisibility);

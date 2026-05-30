@@ -151,7 +151,7 @@ export default function LoginPage() {
 
   // Pre-fill demo credentials
   const fillDemo = () => {
-    setEmail("rayan@Fortuni.app");
+    setEmail("rayan@promrkts.app");
     setPassword("Demo123!");
   };
 

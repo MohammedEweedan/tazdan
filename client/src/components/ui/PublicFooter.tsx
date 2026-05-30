@@ -142,13 +142,13 @@ export default function PublicFooter() {
             </Text>
             <Box
               as="a"
-              href="mailto:support@Fortuni.com"
+              href="mailto:support@promrkts.com"
               fontSize="11px"
               color={dark ? "rgba(255,255,255,0.35)" : "rgba(0,0,0,0.38)"}
               _hover={{ color: textSub }}
               transition="color 0.15s"
             >
-              support@Fortuni.com
+              support@promrkts.com
             </Box>
           </VStack>
 

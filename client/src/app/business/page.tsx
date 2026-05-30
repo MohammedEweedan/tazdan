@@ -1,7 +1,7 @@
 "use client";
 
 /* ═══════════════════════════════════════════════════════════════════
-   /business — Fortuni Business marketing page
+   /business — promrkts Business marketing page
    Monochrome palette, #226dff as the only accent.
    All copy from Tolgee (biz_* namespace).
    ─────────────────────────────────────────────────────────────────── */
@@ -84,7 +84,7 @@ function Hero() {
                 fontSize="11.5px" fontWeight="800" letterSpacing="0.14em"
                 textTransform="uppercase" color={ACCENT}
               >
-                Fortuni Business
+                promrkts Business
               </Text>
 
               <Heading
@@ -193,11 +193,11 @@ function Comparison() {
   const surfBg   = dark ? "rgba(255,255,255,0.025)" : "rgba(0,0,0,0.02)";
 
   const rows = [
-    { feature: t("biz_cmp_r1"), bank: t("biz_cmp_r1_bank"), Fortuni: t("biz_cmp_r1_us") },
-    { feature: t("biz_cmp_r2"), bank: t("biz_cmp_r2_bank"), Fortuni: t("biz_cmp_r2_us") },
-    { feature: t("biz_cmp_r3"), bank: t("biz_cmp_r3_bank"), Fortuni: t("biz_cmp_r3_us") },
-    { feature: t("biz_cmp_r4"), bank: t("biz_cmp_r4_bank"), Fortuni: t("biz_cmp_r4_us") },
-    { feature: t("biz_cmp_r5"), bank: t("biz_cmp_r5_bank"), Fortuni: t("biz_cmp_r5_us") },
+    { feature: t("biz_cmp_r1"), bank: t("biz_cmp_r1_bank"), promrkts: t("biz_cmp_r1_us") },
+    { feature: t("biz_cmp_r2"), bank: t("biz_cmp_r2_bank"), promrkts: t("biz_cmp_r2_us") },
+    { feature: t("biz_cmp_r3"), bank: t("biz_cmp_r3_bank"), promrkts: t("biz_cmp_r3_us") },
+    { feature: t("biz_cmp_r4"), bank: t("biz_cmp_r4_bank"), promrkts: t("biz_cmp_r4_us") },
+    { feature: t("biz_cmp_r5"), bank: t("biz_cmp_r5_bank"), promrkts: t("biz_cmp_r5_us") },
   ];
 
   return (
@@ -251,7 +251,7 @@ function Comparison() {
                       <Icon as={FiCheck} color="#fff" boxSize="10px" />
                     </Flex>
                     <Text fontSize={{ base: "12.5px", md: "13.5px" }} color={textMain} fontWeight="700">
-                      {r.Fortuni}
+                      {r.promrkts}
                     </Text>
                   </HStack>
                 </SimpleGrid>
@@ -478,7 +478,7 @@ function CTASection() {
             <VStack spacing={7} position="relative" zIndex={1} align="start" maxW="640px">
               <Text fontSize="11.5px" fontWeight="800" letterSpacing="0.14em"
                 textTransform="uppercase" color="rgba(255,255,255,0.38)">
-                Fortuni Business
+                promrkts Business
               </Text>
               <Heading
                 fontSize={{ base: "28px", md: "48px" }} fontWeight="800"
@@ -501,14 +501,14 @@ function CTASection() {
                     <Icon as={FiArrowRight} boxSize="15px" />
                   </HStack>
                 </NextLink>
-                <NextLink href={`mailto:business@Fortuni.com`} passHref legacyBehavior>
+                <NextLink href={`mailto:business@promrkts.com`} passHref legacyBehavior>
                   <HStack as="a" spacing={2} px={5} h="50px" borderRadius="13px"
                     bg="rgba(255,255,255,0.07)" color="rgba(255,255,255,0.75)" cursor="pointer"
                     border="1px solid rgba(255,255,255,0.13)"
                     transition="all 0.2s ease"
                     _hover={{ bg: "rgba(255,255,255,0.12)", color: "#fff" } as any}
                   >
-                    <Text fontWeight="700" fontSize="14px">business@Fortuni.com</Text>
+                    <Text fontWeight="700" fontSize="14px">business@promrkts.com</Text>
                   </HStack>
                 </NextLink>
               </HStack>

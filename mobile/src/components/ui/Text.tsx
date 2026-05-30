@@ -1,71 +1,87 @@
 import React, { forwardRef } from 'react';
 import { Text as RNText, TextInput as RNTextInput, TextProps, TextInputProps, StyleSheet } from 'react-native';
+import { useI18n } from '@/store/i18nStore';
 
-function resolveFontFamily(style: any): any {
+const CAIRO_WEIGHT_MAP: Record<string, string> = {
+  '300': 'Cairo_300Light',
+  '400': 'Cairo_400Regular',
+  'normal': 'Cairo_400Regular',
+  '500': 'Cairo_500Medium',
+  '600': 'Cairo_600SemiBold',
+  '700': 'Cairo_700Bold',
+  'bold': 'Cairo_700Bold',
+  '800': 'Cairo_800ExtraBold',
+  '900': 'Cairo_800ExtraBold',
+};
+
+const OUTFIT_WEIGHT_MAP: Record<string, string> = {
+  '300': 'Outfit_300Light',
+  '400': 'Outfit_400Regular',
+  'normal': 'Outfit_400Regular',
+  '500': 'Outfit_500Medium',
+  '600': 'Outfit_600SemiBold',
+  '700': 'Outfit_700Bold',
+  'bold': 'Outfit_700Bold',
+  '800': 'Outfit_800ExtraBold',
+  '900': 'Outfit_900Black',
+};
+
+// Numbers, currency symbols, prices, and tickers should stay in the Latin
+// (Outfit) family even when the UI locale is Arabic — Cairo's tabular figures
+// differ in width/style and a balance like "$1,234.56" looks inconsistent
+// rendered in Cairo. We detect content that carries no Arabic letters and
+// is dominated by digits/symbols, and keep it in Outfit.
+const ARABIC_LETTER = /[؀-ۿݐ-ݿࢠ-ࣿ]/;
+const HAS_DIGIT = /[0-9٠-٩]/;
+const NON_NUMERIC_LATIN_WORD = /[A-Za-z]{3,}/; // 3+ Latin letters → treat as a word, allow font swap intent
+
+function flattenChildrenToString(children: React.ReactNode): string {
+  if (children == null || children === false || children === true) return '';
+  if (typeof children === 'string' || typeof children === 'number') return String(children);
+  if (Array.isArray(children)) return children.map(flattenChildrenToString).join('');
+  return ''; // nested elements — can't cheaply inspect; treat as non-numeric
+}
+
+/**
+ * Returns true when the text is "numeric-ish": contains at least one digit,
+ * no Arabic letters, and no long Latin words (so "BTC", "$", "1,234.56",
+ * "+2.4%" qualify but "Balance" does not). Such content stays in Outfit.
+ */
+function isNumericContent(children: React.ReactNode): boolean {
+  const s = flattenChildrenToString(children).trim();
+  if (!s) return false;
+  if (ARABIC_LETTER.test(s)) return false;
+  if (!HAS_DIGIT.test(s)) return false;
+  if (NON_NUMERIC_LATIN_WORD.test(s)) return false;
+  return true;
+}
+
+function resolveFontFamily(style: any, useCairo: boolean): any {
   const flattened = StyleSheet.flatten(style) || {};
-  let fontFamily = flattened.fontFamily || 'Outfit_400Regular';
-  let hasSpecificFontFamily = !!flattened.fontFamily;
-  
-  // If it's explicitly IBM Plex, preserve it but handle weights if needed
-  if (fontFamily.startsWith('IBMPlexSansArabic')) {
-    // Basic weight mapping for Arabic if needed
-    if (flattened.fontWeight) {
-      if (flattened.fontWeight === '700' || flattened.fontWeight === 'bold') fontFamily = 'IBMPlexSansArabic_700Bold';
-      else if (flattened.fontWeight === '600') fontFamily = 'IBMPlexSansArabic_600SemiBold';
-      else if (flattened.fontWeight === '500') fontFamily = 'IBMPlexSansArabic_500Medium';
-      else if (flattened.fontWeight === '300') fontFamily = 'IBMPlexSansArabic_300Light';
-    }
-    return { ...flattened, fontFamily, fontWeight: undefined };
+  const weight = String(flattened.fontWeight || '400');
+  const explicitFamily = String(flattened.fontFamily || '');
+
+  if (useCairo && !explicitFamily.startsWith('Outfit')) {
+    const mapped = CAIRO_WEIGHT_MAP[weight] ?? 'Cairo_400Regular';
+    return { ...flattened, fontFamily: mapped, fontWeight: undefined };
   }
 
-  // Handle Outfit
-  // If fontWeight is explicitly set, we map it to the correct Outfit family.
-  if (flattened.fontWeight) {
-    switch (String(flattened.fontWeight)) {
-      case 'normal':
-      case '400':
-        fontFamily = 'Outfit_400Regular';
-        break;
-      case '500':
-        fontFamily = 'Outfit_500Medium';
-        break;
-      case '600':
-        fontFamily = 'Outfit_600SemiBold';
-        break;
-      case 'bold':
-      case '700':
-        fontFamily = 'Outfit_700Bold';
-        break;
-      case '800':
-        fontFamily = 'Outfit_800ExtraBold';
-        break;
-      case '900':
-        fontFamily = 'Outfit_900Black';
-        break;
-      case '300':
-        fontFamily = 'Outfit_300Light';
-        break;
-      default:
-        // if no specific font family was requested, default to Outfit_400Regular
-        if (!hasSpecificFontFamily) {
-           fontFamily = 'Outfit_400Regular';
-        }
-    }
-  } else if (!hasSpecificFontFamily) {
-    // default to Outfit_400Regular if no font weight and no font family
-    fontFamily = 'Outfit_400Regular';
-  }
-
-  // Ensure fontWeight is removed because iOS/Android will attempt to double-bold or drop the font completely
-  return { ...flattened, fontFamily, fontWeight: undefined };
+  const mapped = OUTFIT_WEIGHT_MAP[weight] ?? (explicitFamily || 'Outfit_400Regular');
+  return { ...flattened, fontFamily: mapped, fontWeight: undefined };
 }
 
 export const Text = forwardRef<RNText, TextProps>((props, ref) => {
-  const resolvedStyle = resolveFontFamily(props.style);
+  const locale = useI18n((s) => s.locale);
+  // Arabic uses Cairo — except for numeric/currency content, which stays Outfit.
+  const useCairo = locale === 'ar' && !isNumericContent(props.children);
+  const resolvedStyle = resolveFontFamily(props.style, useCairo);
   return <RNText {...props} ref={ref} style={resolvedStyle} />;
 });
 
 export const TextInput = forwardRef<RNTextInput, TextInputProps>((props, ref) => {
-  const resolvedStyle = resolveFontFamily(props.style);
+  const locale = useI18n((s) => s.locale);
+  // For inputs we can't know the typed value's script ahead of time; keep the
+  // locale-driven family (Cairo in Arabic) so placeholders/labels read right.
+  const resolvedStyle = resolveFontFamily(props.style, locale === 'ar');
   return <RNTextInput {...props} ref={ref} style={resolvedStyle} />;
 });

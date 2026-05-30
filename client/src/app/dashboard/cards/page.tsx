@@ -127,7 +127,7 @@ export default function CardsPage() {
       <PageShell>
         <PageHeader
           eyebrow="Spend anywhere"
-          title="Fortuni Card"
+          title="promrkts Card"
           subtitle="Spend any coin anywhere Visa is accepted. Instant conversion, zero FX markup."
         />
 
@@ -313,7 +313,7 @@ export default function CardsPage() {
 
             <Flex justify="space-between" align="flex-start" position="relative">
               <Text fontSize="15px" fontWeight="900" letterSpacing="-0.02em" opacity={0.95}>
-                Fortuni
+                promrkts
               </Text>
               <HStack spacing={2} opacity={0.75}>
                 <Icon as={FiWifi} transform="rotate(90deg)" />

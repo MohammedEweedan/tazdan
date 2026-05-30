@@ -393,7 +393,7 @@ export default function TradeChat() {
             {/* System intro card */}
             <SystemCard palette={p} accent={accent}>
               Trade started · {new Date(trade.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-              {'\n'}Only communicate and transfer payment through Fortuni.
+              {'\n'}Only communicate and transfer payment through promrkts.
             </SystemCard>
 
             {msgLoading && (

@@ -21,7 +21,7 @@ const INTENTS: Array<{ pattern: RegExp; handler: IntentHandler }> = [
     // balance / my balance / check balance
     pattern: /\bbalance\b|\bmy\s+wallet\b|\bwallet\s+balance\b/i,
     handler: async (user) => {
-      if (!user) return '🔐 Please register at *Fortuni.com* to check your balance.';
+      if (!user) return '🔐 Please register at *promrkts.com* to check your balance.';
       const wallets = await prisma.wallet.findMany({
         where: { userId: user.id },
         select: { currency: true, balance: true },
@@ -40,7 +40,7 @@ const INTENTS: Array<{ pattern: RegExp; handler: IntentHandler }> = [
     // kyc / verification / identity
     pattern: /\bkyc\b|\bverif(y|ication)\b|\bidentit(y|ies)\b/i,
     handler: async (user) => {
-      if (!user) return '🔐 Please register at *Fortuni.com* to start KYC verification.';
+      if (!user) return '🔐 Please register at *promrkts.com* to start KYC verification.';
       const kycStatus = user.kycStatus ?? 'NOT_SUBMITTED';
       const statusMsg: Record<string, string> = {
         NOT_SUBMITTED: 'not submitted yet. Open the app to complete your KYC.',
@@ -55,7 +55,7 @@ const INTENTS: Array<{ pattern: RegExp; handler: IntentHandler }> = [
     // withdrawal status
     pattern: /\bwithdraw(al)?\b.*\b(status|update|pending|done)\b|\b(status|update)\b.*\bwithdraw/i,
     handler: async (user) => {
-      if (!user) return '🔐 Please log in to *Fortuni.com* to check your withdrawal status.';
+      if (!user) return '🔐 Please log in to *promrkts.com* to check your withdrawal status.';
       const recent = await (prisma as any).withdrawal.findFirst({
         where: { userId: user.id },
         orderBy: { createdAt: 'desc' },
@@ -70,7 +70,7 @@ const INTENTS: Array<{ pattern: RegExp; handler: IntentHandler }> = [
     // deposit status
     pattern: /\bdeposit\b.*\b(status|update|pending|done)\b|\b(status|update)\b.*\bdeposit/i,
     handler: async (user) => {
-      if (!user) return '🔐 Please log in to *Fortuni.com* to check your deposit status.';
+      if (!user) return '🔐 Please log in to *promrkts.com* to check your deposit status.';
       const recent = await (prisma as any).deposit.findFirst({
         where: { userId: user.id },
         orderBy: { createdAt: 'desc' },
@@ -109,20 +109,20 @@ const INTENTS: Array<{ pattern: RegExp; handler: IntentHandler }> = [
     // send code / resend code / otp / verification code
     pattern: /\b(send|resend|get)\s+(code|otp|pin|verification)\b|\bverif(y|ication)\s+code\b/i,
     handler: async (user) => {
-      if (!user) return '🔐 Please log in to the *Fortuni* app first, then request your code from the verification screen.';
+      if (!user) return '🔐 Please log in to the *promrkts* app first, then request your code from the verification screen.';
       if (user.phoneVerified) return `✅ *${user.firstName}*, your phone is already verified!`;
       // Trigger OTP send (uses self-hosted path — code comes from THIS number).
       const phone = `+${user.phoneCountryCode}${user.phone}`;
       if (phone === '+undefined') return '⚠️ No phone number found on your account. Please update it in the app.';
       await startVerification({ phone, channel: 'whatsapp', userId: user.id });
-      return `🔐 A new 6-digit verification code has been sent to this WhatsApp number. Enter it in the *Fortuni* app to verify your phone.`;
+      return `🔐 A new 6-digit verification code has been sent to this WhatsApp number. Enter it in the *promrkts* app to verify your phone.`;
     },
   },
   {
     // help / commands / what can you do
     pattern: /\bhelp\b|\bcommand(s)?\b|\bwhat can you\b|\bhi\b|\bhello\b|\bstart\b/i,
     handler: async (user) => {
-      const greeting = user ? `Hi *${user.firstName}*! ` : 'Welcome to *Fortuni*! ';
+      const greeting = user ? `Hi *${user.firstName}*! ` : 'Welcome to *promrkts*! ';
       return `${greeting}👋\n\nI can help you with:\n\n` +
         `  • *balance* — check your wallet balances\n` +
         `  • *kyc* — check your verification status\n` +
@@ -260,9 +260,9 @@ export class WhatsAppController {
       } else {
         // Unknown user.
         const reply =
-          `👋 Welcome to *Fortuni*!\n\n` +
+          `👋 Welcome to *promrkts*!\n\n` +
           `It looks like this number isn't linked to an account yet.\n\n` +
-          `📲 Download the app or visit *Fortuni.com* to register.\n\n` +
+          `📲 Download the app or visit *promrkts.com* to register.\n\n` +
           `Reply *help* to see what I can do.`;
         await sendWhatsAppText({ to: phone, body: reply });
       }
@@ -486,7 +486,7 @@ export class WhatsAppController {
             } else {
               await sendWhatsAppText({
                 to: phone,
-                body: `👋 Welcome to *Fortuni*!\n\nIt looks like this number isn't linked to an account yet.\n\n📲 Download the app or visit *Fortuni.com* to register.\n\nReply *help* to see what I can do.`,
+                body: `👋 Welcome to *promrkts*!\n\nIt looks like this number isn't linked to an account yet.\n\n📲 Download the app or visit *promrkts.com* to register.\n\nReply *help* to see what I can do.`,
               });
             }
           }

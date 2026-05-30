@@ -235,7 +235,7 @@ export default function ClaimPage() {
               {error === 'expired'
                 ? "The funds have been returned to the sender. Ask them to send a fresh link."
                 : error === 'claimed'
-                ? "These funds have already landed in a Fortuni wallet."
+                ? "These funds have already landed in a promrkts wallet."
                 : error === 'cancelled'
                 ? "The sender pulled this claim back before you could open it."
                 : error === 'not_found'
@@ -598,7 +598,7 @@ export default function ClaimPage() {
                 Claimed!
               </Heading>
               <Text color={p.fgMuted} fontSize="sm" textAlign="center">
-                {preview.amount} {preview.asset} is now in your Fortuni wallet.
+                {preview.amount} {preview.asset} is now in your promrkts wallet.
               </Text>
             </VStack>
 

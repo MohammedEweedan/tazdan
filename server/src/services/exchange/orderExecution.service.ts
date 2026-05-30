@@ -107,12 +107,36 @@ function setAltBalance(altBalances: unknown, asset: string, value: Decimal): Rec
   return obj;
 }
 
+/**
+ * Resolve how much of `fundingCurrency` equals the USDT-denominated
+ * `usdtAmount`. USDT/USD/USDC are treated 1:1; other fiats route through
+ * the FX provider. Returns the amount to debit from the funding wallet.
+ */
+async function usdtToFunding(fundingCurrency: string, usdtAmount: Decimal): Promise<Decimal> {
+  const fc = fundingCurrency.toUpperCase();
+  if (fc === 'USDT' || fc === 'USD' || fc === 'USDC') return usdtAmount;
+  const { getRate } = await import('./fxRateProvider.service');
+  // getRate(fc, 'USD') → USD per 1 unit of fc. To convert USD→fc we divide.
+  const pair = await getRate(fc, 'USD');
+  const usdPerUnit = new Decimal(pair.sellPrice || pair.buyPrice);
+  if (usdPerUnit.lte(0)) throw new AppError(`No FX rate for ${fc}`, 400);
+  return usdtAmount.div(usdPerUnit);
+}
+
 export async function executeQuote(opts: {
   userId: string;
   quoteId: string;
   idempotencyKey?: string;
+  /**
+   * Fiat wallet currency to fund a BUY from. When omitted (or USDT), the
+   * legacy behaviour applies: debit the USDT wallet. When a different fiat
+   * is given, that wallet is debited (FX-converted) instead. Ignored on SELL.
+   */
+  fundingCurrency?: string;
 }) {
   const { userId, quoteId, idempotencyKey } = opts;
+  const fundingCurrency = (opts.fundingCurrency || 'USDT').toUpperCase();
+  const fundFromUsdt = fundingCurrency === 'USDT' || fundingCurrency === 'USD' || fundingCurrency === 'USDC';
 
   if (idempotencyKey) {
     const prior = await prisma.cryptoOrder.findUnique({ where: { idempotencyKey } });
@@ -131,6 +155,12 @@ export async function executeQuote(opts: {
 
   const native = nativeField(quote.asset, quote.network);
 
+  // For a BUY funded from a non-USDT fiat wallet, resolve the debit amount
+  // in that currency up front (outside the tx — FX lookup may be network).
+  const fundingDebit = (quote.side === 'BUY' && !fundFromUsdt)
+    ? await usdtToFunding(fundingCurrency, fiat)
+    : fiat;
+
   const order = await prisma.$transaction(async (tx) => {
     const uw = await tx.userWallet.findUnique({ where: { userId } });
     if (!uw) throw new AppError('User wallet not provisioned', 400);
@@ -141,13 +171,29 @@ export async function executeQuote(opts: {
     if (!usdt) throw new AppError('USDT wallet missing', 400);
 
     if (quote.side === 'BUY') {
-      if (new Decimal(usdt.balance.toString()).lt(fiat)) {
-        throw new AppError('Insufficient USDT balance', 400);
+      // Debit the funding wallet the user chose. Default (USDT) preserves
+      // legacy behaviour; any other fiat debits that wallet (FX-converted).
+      if (fundFromUsdt) {
+        if (new Decimal(usdt.balance.toString()).lt(fiat)) {
+          throw new AppError('Insufficient USDT balance', 400);
+        }
+        await tx.wallet.update({
+          where: { id: usdt.id },
+          data: { balance: { decrement: new Prisma.Decimal(fiat.toFixed(8)) } },
+        });
+      } else {
+        const fundWallet = await tx.wallet.findUnique({
+          where: { userId_currency: { userId, currency: fundingCurrency as any } },
+        });
+        if (!fundWallet) throw new AppError(`${fundingCurrency} wallet missing`, 400);
+        if (new Decimal(fundWallet.balance.toString()).lt(fundingDebit)) {
+          throw new AppError(`Insufficient ${fundingCurrency} balance`, 400);
+        }
+        await tx.wallet.update({
+          where: { id: fundWallet.id },
+          data: { balance: { decrement: new Prisma.Decimal(fundingDebit.toFixed(8)) } },
+        });
       }
-      await tx.wallet.update({
-        where: { id: usdt.id },
-        data: { balance: { decrement: new Prisma.Decimal(fiat.toFixed(8)) } },
-      });
 
       if (native) {
         await tx.userWallet.update({
@@ -265,7 +311,15 @@ export async function executeQuote(opts: {
       if (!uw || !usdt) return;
 
       if (quote.side === 'BUY') {
-        await tx.wallet.update({ where: { id: usdt.id }, data: { balance: { increment: new Prisma.Decimal(fiat.toFixed(8)) } } });
+        // Refund the same wallet we debited.
+        if (fundFromUsdt) {
+          await tx.wallet.update({ where: { id: usdt.id }, data: { balance: { increment: new Prisma.Decimal(fiat.toFixed(8)) } } });
+        } else {
+          const fundWallet = await tx.wallet.findUnique({ where: { userId_currency: { userId, currency: fundingCurrency as any } } });
+          if (fundWallet) {
+            await tx.wallet.update({ where: { id: fundWallet.id }, data: { balance: { increment: new Prisma.Decimal(fundingDebit.toFixed(8)) } } });
+          }
+        }
         if (native) {
           await tx.userWallet.update({ where: { id: uw.id }, data: { [native]: { decrement: new Prisma.Decimal(crypto_.toFixed(18)) } } });
         } else {

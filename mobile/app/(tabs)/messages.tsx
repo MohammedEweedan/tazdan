@@ -12,6 +12,7 @@
  */
 
 import { useMemo, useState } from 'react';
+import { useShallow } from 'zustand/shallow';
 import { ActionSheetIOS, Alert, Platform, Pressable, RefreshControl, ScrollView, View } from 'react-native';
 import { Text, TextInput } from '@/components/ui/Text';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -47,7 +48,7 @@ export default function Messages() {
   // to the top regardless of `lastMessage.createdAt`.
   const pinnedSet  = useChatPrefs((s) => s.pinnedPartners);
   const togglePin  = useChatPrefs((s) => s.togglePin);
-  const contacts   = useChatPrefs((s) => Array.from(s.contacts.values()));
+  const contacts   = useChatPrefs(useShallow((s) => s.contactList()));
   const addContact = useChatPrefs((s) => s.addContact);
 
   const conversations = useMemo<Conversation[]>(() => {
@@ -139,7 +140,7 @@ export default function Messages() {
         }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             <Text style={{ color: p.fg, fontSize: 22, fontWeight: '600', letterSpacing: -0.4 }}>
-              Messages
+              {t('messages.title')}
             </Text>
             {totalUnread > 0 && (
               <View style={{
@@ -179,7 +180,7 @@ export default function Messages() {
           <TextInput
             value={query}
             onChangeText={setQuery}
-            placeholder="Search conversations"
+            placeholder={t('messages.search')}
             placeholderTextColor={p.fgFaint}
             autoCapitalize="none"
             autoCorrect={false}
@@ -207,7 +208,14 @@ export default function Messages() {
               gap: 18,
             }}
           >
-            {(['ALL', 'UNREAD', 'PAYMENTS', 'SUPPORT'] as Filter[]).map((f) => {
+            {(() => {
+              const filterLabel: Record<Filter, string> = {
+                ALL: t('messages.filter.all'),
+                UNREAD: t('messages.filter.unread'),
+                PAYMENTS: t('messages.filter.payments'),
+                SUPPORT: t('messages.filter.support'),
+              };
+              return (['ALL', 'UNREAD', 'PAYMENTS', 'SUPPORT'] as Filter[]).map((f) => {
               const active = filter === f;
 
               return (
@@ -238,7 +246,7 @@ export default function Messages() {
                             : '#666666',
                     }}
                   >
-                    {f}
+                    {filterLabel[f]}
                   </Text>
 
                   {active && (
@@ -254,7 +262,8 @@ export default function Messages() {
                   )}
                 </Pressable>
               );
-            })}
+            });
+            })()}
           </View>
         </View>
 
@@ -274,13 +283,13 @@ export default function Messages() {
         >
           {isLoading ? (
             <Text style={{ color: p.fgMuted, textAlign: 'center', marginTop: 48, fontSize: 13 }}>
-              Loading…
+              {t('messages.loading')}
             </Text>
           ) : conversations.length === 0 ? (
             <View style={{ alignItems: 'center', paddingVertical: 64, paddingHorizontal: 32 }}>
               <Ionicons name="chatbubbles-outline" size={36} color={p.fgFaint} />
               <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '600', marginTop: 12 }}>
-                {query.trim() || filter !== 'ALL' ? 'No conversations match.' : 'No conversations yet.'}
+                {query.trim() || filter !== 'ALL' ? t('messages.noMatch') : t('messages.empty')}
               </Text>
               {!query.trim() && filter === 'ALL' && (
                 <Pressable
@@ -291,7 +300,7 @@ export default function Messages() {
                   }}
                 >
                   <Text style={{ color: '#fff', fontSize: 13, fontWeight: '700' }}>
-                    Start a chat
+                    {t('messages.startChat')}
                   </Text>
                 </Pressable>
               )}
@@ -356,6 +365,7 @@ export default function Messages() {
                   pinned={pinnedSet.has(c.partner.id)}
                   onPress={() => { h.selection(); router.push(`/messages/${c.partner.id}`); }}
                   onLongPress={() => onLongPressConv(c)}
+                  translate={t}
                 />
               ))}
             </>
@@ -368,18 +378,19 @@ export default function Messages() {
 
 /* ── Row ─── */
 function Row({
-  conv: c, palette: p, pinned, onPress, onLongPress,
+  conv: c, palette: p, pinned, onPress, onLongPress, translate: t,
 }: {
   conv: Conversation;
   palette: Palette;
   pinned?: boolean;
   onPress: () => void;
   onLongPress?: () => void;
+  translate: (k: string) => string;
 }) {
   const isSupport = c.partner.username === 'support' || c.partner.role === 'AGENT';
   const fullName = `${c.partner.firstName ?? ''} ${c.partner.lastName ?? ''}`.trim()
     || (c.partner.username ? `@${c.partner.username}` : 'Unknown');
-  const previewLine = previewOf(c.lastMessage);
+  const previewLine = previewOf(c.lastMessage, t);
   return (
     <Pressable
       onPress={onPress}
@@ -440,7 +451,7 @@ function Row({
             <Ionicons name="checkmark-circle" size={13} color={BRAND_BLUE} />
           )}
           <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '600' }}>
-            {relTime(c.lastMessage.createdAt)}
+            {relTime(c.lastMessage.createdAt, t)}
           </Text>
         </View>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
@@ -484,15 +495,15 @@ function KindGlyph({ type, palette: p }: { type: string; palette: Palette }) {
   return <Ionicons name={cfg.name} size={11} color={cfg.color} />;
 }
 
-function previewOf(m: { type: string; content: string; deletedAt: string | null; metadata: any }): string {
-  if (m.deletedAt) return 'Message deleted';
+function previewOf(m: { type: string; content: string; deletedAt: string | null; metadata: any }, t: (k: string) => string): string {
+  if (m.deletedAt) return t('messages.preview.deleted');
   if (m.type === 'PAYMENT') {
     const amt = m.metadata?.amount;
     const cur = m.metadata?.currency;
     if (amt && cur) return `${formatAmount(amt)} ${cur}${m.content ? ` · ${m.content}` : ''}`;
-    return 'Payment';
+    return t('messages.preview.payment');
   }
-  if (m.type === 'ESCALATION') return 'Escalation opened';
+  if (m.type === 'ESCALATION') return t('messages.preview.escalation');
   if (m.type === 'SYSTEM')     return m.content;
   return m.content;
 }
@@ -502,10 +513,10 @@ function formatAmount(n: number): string {
 }
 
 /** Format an ISO timestamp as "5m" / "2h" / "Mon" / "Mar 4". */
-function relTime(iso: string): string {
+function relTime(iso: string, t: (k: string) => string): string {
   const ms = Date.now() - +new Date(iso);
   const m = Math.round(ms / 60_000);
-  if (m < 1)   return 'now';
+  if (m < 1)   return t('messages.relTime.now');
   if (m < 60)  return `${m}m`;
   const h = Math.round(m / 60);
   if (h < 24)  return `${h}h`;

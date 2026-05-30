@@ -1,5 +1,5 @@
 /**
- * Fortuni Business Dashboard
+ * promrkts Business Dashboard
  *
  * Overview of the business account: key stats, API health, quick actions,
  * and the last few payouts. All data from businessService.
@@ -173,7 +173,7 @@ export default function BusinessDashboard() {
             </Pressable>
             <View>
               <Text style={{ color: p.fg, fontSize: 18, fontWeight: '800', letterSpacing: -0.5 }}>
-                Fortuni Business
+                promrkts Business
               </Text>
               {profile && (
                 <Text style={{ color: p.fgMuted, fontSize: 11.5, fontWeight: '600' }}>
@@ -313,7 +313,7 @@ export default function BusinessDashboard() {
 
               {/* API Docs link */}
               <Pressable
-                onPress={() => { h.selection(); /* Linking.openURL('https://docs.Fortuni.com') */ }}
+                onPress={() => { h.selection(); /* Linking.openURL('https://docs.promrkts.com') */ }}
                 style={({ pressed }) => ({
                   marginTop: 20, padding: 16, borderRadius: 16,
                   borderWidth: 1, borderColor: `${ACCENT}44`,
@@ -325,7 +325,7 @@ export default function BusinessDashboard() {
                 <Ionicons name="code-slash-outline" size={22} color={ACCENT} />
                 <View style={{ flex: 1 }}>
                   <Text style={{ color: p.fg, fontSize: 14, fontWeight: '700' }}>API Documentation</Text>
-                  <Text style={{ color: p.fgMuted, fontSize: 12, marginTop: 1 }}>docs.Fortuni.com</Text>
+                  <Text style={{ color: p.fgMuted, fontSize: 12, marginTop: 1 }}>docs.promrkts.com</Text>
                 </View>
                 <Ionicons name="arrow-forward" size={16} color={ACCENT} />
               </Pressable>

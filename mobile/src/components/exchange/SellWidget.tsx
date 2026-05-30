@@ -9,6 +9,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useAuthStore } from '@/store/authStore';
 import { useThemedPalette, useTheme, brand } from '@/store/themeStore';
+import { useT } from '@/store/i18nStore';
 import { SlideToConfirm } from '@/components/ui/SlideToConfirm';
 import { useWallets, useMarkets, extractErrorMessage, useTransactionSound } from '@/hooks';
 import { CoinAvatar } from '@/components/ui/CoinAvatar';
@@ -115,6 +116,7 @@ interface SellWidgetProps {
 
 export function SellWidget({ defaultAsset, lockAsset = false }: SellWidgetProps = {}) {
   const { user } = useAuthStore();
+  const tr = useT();
   const p = useThemedPalette();
   const themeMode = useTheme((s) => s.mode);
   const brandAccent = themeMode === 'dark' ? brand.primaryDark : brand.primary;
@@ -197,7 +199,7 @@ export function SellWidget({ defaultAsset, lockAsset = false }: SellWidgetProps 
         setQuote(res.data.quote);
         idemRef.current = `ord_${Date.now()}`;
       } catch (e: any) {
-        setError(e?.response?.data?.error ?? 'Could not get quote');
+        setError(e?.response?.data?.error ?? tr('buy.errQuote'));
         setQuote(null);
       } finally { setLoading(false); }
     }, 500);
@@ -228,11 +230,11 @@ export function SellWidget({ defaultAsset, lockAsset = false }: SellWidgetProps 
     try {
       await cryptoExchangeAPI.execute({ quoteId: quote.id, confirmedByUser: true, idempotencyKey: idemRef.current });
       playSuccess('sell');
-      setSuccess(`${fmt(quote.cryptoAmount, 8)} ${asset} sold for ${sym(baseCurrency)}${fmt(quote.fiatAmount, 2)} ✓`);
+      setSuccess(`${fmt(quote.cryptoAmount, 8)} ${asset} ${tr('sell.soldFor')} ${sym(baseCurrency)}${fmt(quote.fiatAmount, 2)} ✓`);
       setQuote(null); setCryptoAmt('');
     } catch (e: any) {
       playError();
-      setError(e?.response?.data?.error ?? 'Order failed');
+      setError(e?.response?.data?.error ?? tr('buy.errOrder'));
     } finally { setExec(false); }
   }
 
@@ -243,8 +245,8 @@ export function SellWidget({ defaultAsset, lockAsset = false }: SellWidgetProps 
 
   // Slider label — clean, seconds badge handles the countdown display
   const slideLabel = canConfirm
-    ? `Slide to sell ${asset}`
-    : overspend ? 'Insufficient balance' : 'Enter amount';
+    ? tr('sell.slideToSell').replace('{asset}', asset)
+    : overspend ? tr('sell.insufficient') : tr('buy.enterAmount');
 
   // Asset sheet shows *only* the user's holdings, filtered locally by
   // the search box. Selling something you don't own is impossible, so
@@ -361,7 +363,7 @@ export function SellWidget({ defaultAsset, lockAsset = false }: SellWidgetProps 
             const clean = v.replace(/[^0-9.]/g, '').replace(/(\..*)\./g, '$1');
             setCryptoAmt(clean); setQuote(null); setError(null); setSuccess(null); setShowFees(false);
           }}
-          placeholder="0.00000000"
+          placeholder={tr('sell.amountPlaceholder')}
           placeholderTextColor={p.fgFaint}
           keyboardType="decimal-pad"
           returnKeyType="done"
@@ -394,7 +396,7 @@ export function SellWidget({ defaultAsset, lockAsset = false }: SellWidgetProps 
         {loading ? (
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
             <ActivityIndicator size="small" color={meta.color} />
-            <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '500' }}>Getting best price…</Text>
+            <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '500' }}>{tr('buy.gettingPrice')}</Text>
           </View>
         ) : quote ? (
           <>
@@ -428,10 +430,10 @@ export function SellWidget({ defaultAsset, lockAsset = false }: SellWidgetProps 
             {showFees && (
               <View style={{ marginTop: 10, gap: 6 }}>
                 {[
-                  ['Market price', `${sym(baseCurrency)}${fmtPrice(Number(quote.marketPrice))}`],
-                  ['Your price',   `${sym(baseCurrency)}${fmtPrice(Number(quote.quotedPrice))}`],
-                  ['Platform fee', `${sym(baseCurrency)}${fmt(quote.platformFee, 2)}`],
-                  ['Network fee',  `${sym(baseCurrency)}${fmt(quote.networkFee, 2)}`],
+                  [tr('sell.marketPrice'), `${sym(baseCurrency)}${fmtPrice(Number(quote.marketPrice))}`],
+                  [tr('sell.yourPrice'),   `${sym(baseCurrency)}${fmtPrice(Number(quote.quotedPrice))}`],
+                  [tr('buy.platformFee'),  `${sym(baseCurrency)}${fmt(quote.platformFee, 2)}`],
+                  [tr('buy.networkFee'),   `${sym(baseCurrency)}${fmt(quote.networkFee, 2)}`],
                 ].map(([k, v]) => (
                   <View key={k} style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
                     <Text style={{ color: p.fgMuted, fontSize: 12 }}>{k}</Text>
@@ -443,7 +445,7 @@ export function SellWidget({ defaultAsset, lockAsset = false }: SellWidgetProps 
           </>
         ) : (
           <Text style={{ color: p.fgFaint, fontSize: 14, textAlign: 'center' }}>
-            {parseFloat(cryptoAmt) > 0 && !overspend ? 'Fetching quote…' : 'Enter an amount to sell'}
+            {parseFloat(cryptoAmt) > 0 && !overspend ? tr('sell.fetchingQuote') : tr('sell.enterAmountToSell')}
           </Text>
         )}
       </View>
@@ -472,7 +474,7 @@ export function SellWidget({ defaultAsset, lockAsset = false }: SellWidgetProps 
         <View style={{ flex: 1, backgroundColor: p.bg }}>
           {/* Header */}
           <View style={{ flexDirection: 'row', alignItems: 'center', padding: 20, paddingTop: 24, borderBottomWidth: 1, borderBottomColor: p.border }}>
-            <Text style={{ flex: 1, color: p.fg, fontSize: 18, fontWeight: '500' }}>Select asset to sell</Text>
+            <Text style={{ flex: 1, color: p.fg, fontSize: 18, fontWeight: '500' }}>{tr('sell.selectAsset')}</Text>
             <Pressable onPress={() => setAssetSheetOpen(false)} hitSlop={12}>
               <Ionicons name="close" size={24} color={p.fg} />
             </Pressable>
@@ -487,7 +489,7 @@ export function SellWidget({ defaultAsset, lockAsset = false }: SellWidgetProps 
                 ref={searchRef}
                 value={searchQuery}
                 onChangeText={setSearchQuery}
-                placeholder="Filter your holdings…"
+                placeholder={tr('sell.filterHoldings')}
                 placeholderTextColor={p.fgFaint}
                 autoCapitalize="none"
                 autoCorrect={false}
@@ -560,12 +562,12 @@ export function SellWidget({ defaultAsset, lockAsset = false }: SellWidgetProps 
                   <Ionicons name="wallet-outline" size={24} color={p.fgMuted} />
                 </View>
                 <Text style={{ color: p.fg, fontSize: 15, fontWeight: '700', textAlign: 'center' }}>
-                  {searchQuery.trim() ? 'No matching holdings' : 'Nothing to sell yet'}
+                  {searchQuery.trim() ? tr('sell.noMatching') : tr('sell.nothingToSell')}
                 </Text>
                 <Text style={{ color: p.fgMuted, fontSize: 13, textAlign: 'center', lineHeight: 18, maxWidth: 280 }}>
                   {searchQuery.trim()
-                    ? `None of your holdings match "${searchQuery.trim()}". Try a different filter.`
-                    : 'You can only sell crypto you already own. Buy some first, or receive it from another wallet.'}
+                    ? tr('sell.noMatchHint').replace('{query}', searchQuery.trim())
+                    : tr('sell.nothingToSellHint')}
                 </Text>
               </View>
             )}

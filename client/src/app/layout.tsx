@@ -66,39 +66,39 @@ const SITE_URL = 'https://fortuni.com';
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: {
-    default: 'Fortuni — Crypto Exchange & Money Transfer for MENA',
-    template: '%s | Fortuni',
+    default: 'promrkts — Crypto Exchange & Money Transfer for MENA',
+    template: '%s | promrkts',
   },
   description:
     'Send money to Libya, Egypt & UAE instantly. Buy & sell crypto with a P2P marketplace. Get a virtual Visa card. No SWIFT fees, no bank queues.',
   keywords: [
     'Libya crypto', 'LYD USDT', 'send money Libya', 'Libya remittance',
     'MENA crypto exchange', 'P2P crypto marketplace', 'virtual Visa crypto card',
-    'Egypt crypto', 'UAE crypto', 'crypto to fiat MENA', 'Fortuni', 'claim link transfer',
+    'Egypt crypto', 'UAE crypto', 'crypto to fiat MENA', 'promrkts', 'claim link transfer',
     'send crypto to email', 'send crypto to phone',
   ],
   manifest: '/manifest.json',
-  applicationName: 'Fortuni',
-  authors: [{ name: 'Fortuni' }],
-  creator: 'Fortuni',
-  publisher: 'Fortuni',
+  applicationName: 'promrkts',
+  authors: [{ name: 'promrkts' }],
+  creator: 'promrkts',
+  publisher: 'promrkts',
   formatDetection: { email: false, address: false, telephone: false },
   openGraph: {
     type: 'website',
     locale: 'en_US',
     url: SITE_URL,
-    siteName: 'Fortuni',
-    title: 'Fortuni — Crypto Exchange & Money Transfer for MENA',
+    siteName: 'promrkts',
+    title: 'promrkts — Crypto Exchange & Money Transfer for MENA',
     description:
       'Send money to Libya, Egypt & UAE instantly. Buy & sell crypto. Get a virtual Visa card. No SWIFT fees.',
-    images: [{ url: '/og-image.png', width: 1200, height: 630, alt: 'Fortuni — Banking the MENA' }],
+    images: [{ url: '/og-image.png', width: 1200, height: 630, alt: 'promrkts — Banking the MENA' }],
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Fortuni — Crypto & Money Transfer for MENA',
+    title: 'promrkts — Crypto & Money Transfer for MENA',
     description: 'Send money to Libya instantly. Buy & sell crypto. Virtual Visa card.',
     images: ['/og-image.png'],
-    creator: '@Fortuni',
+    creator: '@promrkts',
   },
   robots: {
     index: true,
@@ -141,18 +141,18 @@ export const viewport: Viewport = {
  * the single highest-ROI SEO win for a site like this. Three blobs:
  *   1. Organization     → brand info + same-as URLs.
  *   2. WebSite           → enables sitelinks search box on SERPs.
- *   3. FinancialProduct → describes Fortuni for finance verticals. */
+ *   3. FinancialProduct → describes promrkts for finance verticals. */
 const jsonLd = {
   '@context': 'https://schema.org',
   '@graph': [
     {
       '@type': 'Organization',
       '@id': `${SITE_URL}#org`,
-      name: 'Fortuni',
+      name: 'promrkts',
       url: SITE_URL,
       logo: `${SITE_URL}/icon-black.png`,
       sameAs: [
-        'https://twitter.com/Fortuni',
+        'https://twitter.com/promrkts',
         'https://www.linkedin.com/company/fortuni',
       ],
     },
@@ -160,7 +160,7 @@ const jsonLd = {
       '@type': 'WebSite',
       '@id': `${SITE_URL}#site`,
       url: SITE_URL,
-      name: 'Fortuni',
+      name: 'promrkts',
       publisher: { '@id': `${SITE_URL}#org` },
       potentialAction: {
         '@type': 'SearchAction',
@@ -170,7 +170,7 @@ const jsonLd = {
     },
     {
       '@type': 'FinancialProduct',
-      name: 'Fortuni Wallet & Exchange',
+      name: 'promrkts Wallet & Exchange',
       description:
         'Multi-currency crypto wallet, P2P exchange, virtual Visa card, and claim-link transfers across MENA.',
       provider: { '@id': `${SITE_URL}#org` },
@@ -190,8 +190,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {/* Preconnect to the API origin — opens TCP + TLS in parallel
             with HTML parse, so the first /me / /markets call doesn't
             pay the full handshake cost. */}
-        <link rel="preconnect" href="https://api.Fortuni.com" />
-        <link rel="dns-prefetch" href="https://api.Fortuni.com" />
+        <link rel="preconnect" href="https://api.promrkts.com" />
+        <link rel="dns-prefetch" href="https://api.promrkts.com" />
 
         {/* Only preload the actual LCP image. Stacking 5+ image preloads
             (the old layout) burns the high-priority queue on assets
@@ -200,7 +200,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-        <meta name="apple-mobile-web-app-title" content="Fortuni" />
+        <meta name="apple-mobile-web-app-title" content="promrkts" />
         <meta name="format-detection" content="telephone=no" />
 
         {/* Structured data — JSON-LD, inlined so Googlebot sees it on

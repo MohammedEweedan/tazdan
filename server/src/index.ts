@@ -65,6 +65,8 @@ import { seedAdmin } from './utils/seed';
 import { ensureMasterSeed } from './services/wallet/masterSeed.service';
 import { cryptoWalletRouter } from './routes/cryptoWallet';
 import { cryptoWithdrawalRouter } from './routes/cryptoWithdrawal';
+import { recurringBuyRouter } from './routes/recurringBuy';
+import { startRecurringBuyScheduler } from './services/recurringBuy.service';
 import { globalLimiter, authLimiter, registerLimiter, withdrawalLimiter, webhookLimiter } from './middleware/rateLimiters';
 import { protectedUploadsRouter } from './middleware/protectedUploads';
 import { ipBanMiddleware } from './middleware/ipBan';
@@ -109,9 +111,9 @@ const httpServer = createServer(app);
  * header) are always allowed.
  *
  * CLIENT_URL may be a comma-separated list (e.g.
- * "https://Fortuni.com,https://app.Fortuni.com").
+ * "https://promrkts.com,https://app.promrkts.com").
  */
-const PROD_ORIGINS = (process.env.CLIENT_URL ?? 'https://Fortuni.com')
+const PROD_ORIGINS = (process.env.CLIENT_URL ?? 'https://promrkts.com')
   .split(',')
   .map((o) => o.trim())
   .filter(Boolean);
@@ -265,6 +267,7 @@ app.use('/api/platform-banks', platformBanksRouter);
 app.use('/api/wallet', cryptoWalletRouter);
 app.use('/api/withdrawal', cryptoWithdrawalRouter);
 app.use('/api/rates', ratesRouter);
+app.use('/api/recurring-buys', recurringBuyRouter);
 app.use('/api/waitlist', waitlistRouter);
 
 // Health check
@@ -376,6 +379,14 @@ async function start() {
       const workerTag = cluster.isWorker ? ` [worker ${process.pid}]` : '';
       logger.info(`Server running on port ${PORT}${workerTag}`);
     });
+
+    // Recurring-buy scheduler. In a clustered deploy only worker 1 runs it
+    // so due schedules aren't executed once per worker. The DB-level
+    // idempotency key (rb_<id>_<slot>) is the real safety net regardless.
+    const isSchedulerWorker = !cluster.isWorker || cluster.worker?.id === 1;
+    if (isSchedulerWorker && process.env.DISABLE_RECURRING_BUY_SCHEDULER !== '1') {
+      startRecurringBuyScheduler();
+    }
   } catch (error) {
     logger.error('Failed to start server:', { err: error });
     process.exit(1);

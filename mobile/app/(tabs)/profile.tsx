@@ -50,7 +50,7 @@ export default function Profile() {
 
   // Display helpers — no email-derived handle (PII leak); use avatarMode()
   // so the same field can hold either an image URL or an emoji char.
-  const fullName = `${user?.firstName ?? ''} ${user?.lastName ?? ''}`.trim() || 'Fortuni user';
+  const fullName = `${user?.firstName ?? ''} ${user?.lastName ?? ''}`.trim() || 'promrkts user';
   const handleSlug = realHandle(user);
   const handleLabel = displayHandle(user, t('home.setHandle') || 'Set @handle');
   const av = avatarMode(user);
@@ -103,7 +103,7 @@ export default function Profile() {
           Alert.alert('Not available', 'Face ID / biometrics are not set up on this device.');
           return;
         }
-        const result = await LocalAuthentication.authenticateAsync({ promptMessage: 'Enable Face ID for Fortuni' });
+        const result = await LocalAuthentication.authenticateAsync({ promptMessage: 'Enable Face ID for promrkts' });
         if (result.success) { await enableBiometric(); h.success(); }
         else h.error();
       }
@@ -361,7 +361,7 @@ export default function Profile() {
             color: p.fgFaint, fontSize: 11, fontWeight: '500',
             textAlign: 'center', marginTop: 28,
           }}>
-            Fortuni · v0.1.0
+            promrkts · v0.1.0
           </Text>
       </ScrollView>
 

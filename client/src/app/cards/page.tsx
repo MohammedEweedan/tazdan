@@ -84,7 +84,7 @@ export default function CardsPage() {
                 fontSize="11px" fontWeight="800" letterSpacing="0.14em"
                 textTransform="uppercase" color={textMain}
               >
-                Fortuni Card
+                promrkts Card
               </Box>
               <Heading
                 as="h1" fontWeight="900"
@@ -153,7 +153,7 @@ export default function CardsPage() {
                   color={dark ? '#0a0f1e' : '#ffffff'}
                   letterSpacing="-0.02em"
                 >
-                  Fortuni
+                  promrkts
                 </Text>
                 <Icon
                   as={FiWifi}

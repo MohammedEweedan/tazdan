@@ -1,5 +1,5 @@
 /**
- * Claim-link transfers — send to anyone, even users without a Fortuni
+ * Claim-link transfers — send to anyone, even users without a promrkts
  * account. The sender's wallet is debited immediately and held in a
  * reserved bucket; the recipient receives a one-tap claim URL.
  *
@@ -80,7 +80,7 @@ function resolvePublicBase(): string {
     const first = process.env.CLIENT_URL.split(',')[0].trim();
     return first;
   }
-  return 'https://Fortuni.com';
+  return 'https://promrkts.com';
 }
 
 const PUBLIC_BASE = resolvePublicBase();
@@ -344,7 +344,7 @@ export class ClaimLinkController {
               balanceBefore: recipientBefore,
               balanceAfter:  recipientBefore + parseFloat(link.amount.toString()),
               reference: ref,
-              description: `Claimed via Fortuni claim link`,
+              description: `Claimed via promrkts claim link`,
               metadata: { kind: 'claim_link', linkId: link.id } as any,
             },
           ],
@@ -381,7 +381,7 @@ export class ClaimLinkController {
           // claimer's email local-part is a PII leak.
           const claimerLabel = claimer.username
             ? `@${claimer.username}`
-            : (claimer.firstName || 'a Fortuni user');
+            : (claimer.firstName || 'a promrkts user');
           if (prefs?.email?.transfers !== false) {
             await sendClaimLinkClaimedSenderCopy({
               to: sender.email,

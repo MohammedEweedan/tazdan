@@ -274,7 +274,7 @@ function PhoneMockup({ isDark }: { isDark: boolean }) {
 }
 
 /* ═══════════════════════════════════════════════════════════════════
-   BRAND ICON — large Fortuni icon with breathing pulse
+   BRAND ICON — large promrkts icon with breathing pulse
    ═══════════════════════════════════════════════════════════════════ */
 
 function BrandIcon({ isDark }: { isDark: boolean }) {
@@ -400,7 +400,7 @@ export const OnboardingHero = memo(function OnboardingHero({ bg, variant = 1 }: 
             textShadowOffset: { width: 0, height: 2 },
             textShadowRadius: 8,
           }}>
-            Join Fortuni
+            Join promrkts
           </Text>
         </View>
 
