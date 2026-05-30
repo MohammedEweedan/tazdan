@@ -287,7 +287,7 @@ const { data: messages = [], isLoading } = useThread(partnerId);  const sendMut 
   const confirmEscalate = () => {
     Alert.alert(
       'Escalate to support?',
-      'A promrkts agent will join the conversation and review the trade. Both participants will be notified.',
+      'A tazdan agent will join the conversation and review the trade. Both participants will be notified.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -421,7 +421,7 @@ const { data: messages = [], isLoading } = useThread(partnerId);  const sendMut 
               )}
             </View>
             <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '600', marginTop: 1 }}>
-              {isSupport ? 'promrkts agent · usually replies in minutes'
+              {isSupport ? 'tazdan agent · usually replies in minutes'
                : partner?.username ? `@${partner.username}` : ' '}
             </Text>
           </View>
@@ -940,7 +940,7 @@ function ReportSheet({
             Report
           </Text>
           <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '500' }}>
-            Reports are reviewed by promrkts trust &amp; safety. False reports may affect your account standing.
+            Reports are reviewed by tazdan trust &amp; safety. False reports may affect your account standing.
           </Text>
 
           <View style={{ gap: 6 }}>

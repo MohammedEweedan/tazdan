@@ -42,8 +42,8 @@ export default function ScannerPage() {
     setScanned(true);
 
     // Check for claim link first:
-    //   https://promrkts.com/claim/TOKEN or https://promrkts.app/claim/TOKEN
-    //   promrkts://claim/TOKEN
+    //   https://tazdan.com/claim/TOKEN or https://tazdan.com/claim/TOKEN
+    //   tazdan://claim/TOKEN
     //   http://localhost:PORT/claim/TOKEN  (dev only — see below)
     //
     // SECURITY: the localhost branch is dev-only.  Shipping it in
@@ -53,8 +53,8 @@ export default function ScannerPage() {
     // port) and have the claim flow auto-credit whatever that local
     // server returned.  Gating behind __DEV__ closes that.
     const claimPattern = __DEV__
-      ? /(?:promrkts:\/\/claim\/|https?:\/\/(?:[^\/]+\.)?promrkts\.(?:com|app)\/claim\/|https?:\/\/localhost:\d+\/claim\/)([a-zA-Z0-9]+)/i
-      : /(?:promrkts:\/\/claim\/|https?:\/\/(?:[^\/]+\.)?promrkts\.(?:com|app)\/claim\/)([a-zA-Z0-9]+)/i;
+      ? /(?:tazdan:\/\/claim\/|https?:\/\/(?:[^\/]+\.)?tazdan\.(?:com|app)\/claim\/|https?:\/\/localhost:\d+\/claim\/)([a-zA-Z0-9]+)/i
+      : /(?:tazdan:\/\/claim\/|https?:\/\/(?:[^\/]+\.)?tazdan\.(?:com|app)\/claim\/)([a-zA-Z0-9]+)/i;
     const claimMatch = data.match(claimPattern);
     if (claimMatch) {
       const token = claimMatch[1];
@@ -68,14 +68,14 @@ export default function ScannerPage() {
 
     // Parse handle from QR data. Supports:
     //   @handle
-    //   promrkts://u/handle
-    //   https://promrkts.com/u/handle
+    //   tazdan://u/handle
+    //   https://tazdan.com/u/handle
     let handle = '';
     const atMatch = data.match(/@([a-zA-Z0-9._]+)/);
     // Case-insensitive — iOS lowercases custom URL schemes when the
-    // OS hands them back, so `promrkts://` and `fortuni://` both need
+    // OS hands them back, so `tazdan://` and `fortuni://` both need
     // to match the same handle regex.
-    const urlMatch = data.match(/(?:promrkts:\/\/u\/|https?:\/\/(?:[^\/]+\.)?promrkts\.(?:com|app)\/u\/)([a-zA-Z0-9._]+)/i);
+    const urlMatch = data.match(/(?:tazdan:\/\/u\/|https?:\/\/(?:[^\/]+\.)?tazdan\.(?:com|app)\/u\/)([a-zA-Z0-9._]+)/i);
     if (atMatch) handle = atMatch[1];
     else if (urlMatch) handle = urlMatch[1];
     else handle = data.replace(/^@/, '').trim();
@@ -232,7 +232,7 @@ export default function ScannerPage() {
             fontWeight: '600',
           }}
         >
-          Point camera at a promrkts QR code
+          Point camera at a tazdan QR code
         </Text>
       </View>
 

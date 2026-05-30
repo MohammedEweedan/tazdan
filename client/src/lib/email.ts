@@ -4,7 +4,7 @@ const SMTP_HOST = process.env.SMTP_HOST;
 const SMTP_PORT = parseInt(process.env.SMTP_PORT || '587', 10);
 const SMTP_USER = process.env.SMTP_USER;
 const SMTP_PASS = process.env.SMTP_PASS;
-const SMTP_FROM = process.env.SMTP_FROM || 'hi@promrkts.com';
+const SMTP_FROM = process.env.SMTP_FROM || 'hi@tazdan.com';
 
 const transporter =
   SMTP_HOST && SMTP_USER && SMTP_PASS
@@ -48,11 +48,11 @@ function base(title: string, body: string) {
 </style>
 </head>
 <body><div class="bg"><div class="wrap">
-<div class="logo">promrkts</div>
+<div class="logo">tazdan</div>
 <div class="card">${body}</div>
 <div class="footer">
-  <p>Need help? <a href="mailto:support@promrkts.com" style="color:inherit">support@promrkts.com</a></p>
-  <p>promrkts — money, simplified</p>
+  <p>Need help? <a href="mailto:support@tazdan.com" style="color:inherit">support@tazdan.com</a></p>
+  <p>tazdan — money, simplified</p>
 </div>
 </div></div></body></html>`;
 }
@@ -62,35 +62,35 @@ export async function sendMail(to: string, subject: string, html: string) {
     console.warn('[email] SMTP not configured — skipping:', subject, 'to', to);
     return;
   }
-  await transporter.sendMail({ from: `"promrkts" <${SMTP_FROM}>`, to, subject, html });
+  await transporter.sendMail({ from: `"tazdan" <${SMTP_FROM}>`, to, subject, html });
 }
 
 export function waitlistConfirmation(email: string) {
   const html = base(
-    'You\'re on the waitlist — promrkts',
+    'You\'re on the waitlist — tazdan',
     `<h1 class="main">You're on the list. 🎉</h1>
-    <p class="muted">Thanks for joining the promrkts early-access waitlist. You'll be among the first to know when we open your region — and you'll get <strong class="main">0% fees for your first 6 months</strong>.</p>
+    <p class="muted">Thanks for joining the tazdan early-access waitlist. You'll be among the first to know when we open your region — and you'll get <strong class="main">0% fees for your first 6 months</strong>.</p>
     <div class="divider"></div>
     <p class="main" style="font-weight:700;font-size:15px;margin-bottom:6px;">What happens next?</p>
     <p class="muted">We're onboarding users region by region. When your spot is ready you'll receive an invitation with a direct link to create your account.</p>
     <p class="muted">In the meantime, share your referral link with friends — each referral moves you up the list automatically.</p>
     <div class="divider"></div>
-    <p class="muted" style="font-size:13px;margin:0;">Questions? Reply to this email or visit <a href="https://promrkts.com/faq" style="color:inherit">promrkts.com/faq</a>.</p>`,
+    <p class="muted" style="font-size:13px;margin:0;">Questions? Reply to this email or visit <a href="https://tazdan.com/faq" style="color:inherit">tazdan.com/faq</a>.</p>`,
   );
-  return { to: email, subject: 'You\'re on the promrkts waitlist', html };
+  return { to: email, subject: 'You\'re on the tazdan waitlist', html };
 }
 
 export function contactConfirmation(name: string, email: string) {
   const html = base(
-    'We received your message — promrkts',
+    'We received your message — tazdan',
     `<h1 class="main">We got your message, ${name}.</h1>
-    <p class="muted">Thanks for reaching out to promrkts support. Our team will review your message and get back to you at <strong class="main">${email}</strong> within 4 hours on business days.</p>
+    <p class="muted">Thanks for reaching out to tazdan support. Our team will review your message and get back to you at <strong class="main">${email}</strong> within 4 hours on business days.</p>
     <div class="divider"></div>
     <p class="main" style="font-weight:700;font-size:15px;margin-bottom:6px;">Need a faster answer?</p>
-    <p class="muted">Browse our <a href="https://promrkts.com/faq" style="color:inherit">FAQ</a> — most common questions are answered there instantly. You can also reach us via the promrkts mobile app once you have an account.</p>
+    <p class="muted">Browse our <a href="https://tazdan.com/faq" style="color:inherit">FAQ</a> — most common questions are answered there instantly. You can also reach us via the tazdan mobile app once you have an account.</p>
     <div class="notice">
-      <p class="muted" style="margin:0;font-size:13px;">promrkts will never ask for your password, 2FA code, or seed phrase via email. If you receive a suspicious message, contact us at <a href="mailto:security@promrkts.com" style="color:inherit">security@promrkts.com</a>.</p>
+      <p class="muted" style="margin:0;font-size:13px;">tazdan will never ask for your password, 2FA code, or seed phrase via email. If you receive a suspicious message, contact us at <a href="mailto:security@tazdan.com" style="color:inherit">security@tazdan.com</a>.</p>
     </div>`,
   );
-  return { to: email, subject: 'We received your message — promrkts support', html };
+  return { to: email, subject: 'We received your message — tazdan support', html };
 }

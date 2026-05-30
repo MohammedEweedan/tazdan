@@ -143,7 +143,7 @@ async function sendOtpDirect(opts: {
     data: { phoneOtpCode: code, phoneOtpExpires: expires },
   });
 
-  const body = `Your promrkts verification code is: *${code}*\n\nThis code expires in 10 minutes. Do not share it with anyone.`;
+  const body = `Your tazdan verification code is: *${code}*\n\nThis code expires in 10 minutes. Do not share it with anyone.`;
 
   if (opts.channel === 'sms') {
     return sendSMS({ to: opts.phone, body });

@@ -1,5 +1,5 @@
 /**
- * promrkts design tokens — monochrome v1.
+ * tazdan design tokens — monochrome v1.
  *
  * The visual language is pure grayscale + status (red/green/amber) only.
  * No brand blue, no colored glow shadows, no rainbow card colorways. The

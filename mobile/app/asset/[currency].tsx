@@ -1317,7 +1317,7 @@ function FiatAssetView({ sym, wallet, p, h }: {
           <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '700', letterSpacing: 0.6, marginBottom: 12 }}>
             BANK DETAILS
           </Text>
-          <BankDetailRow label="Account Name" value="Promrkts Ltd" p={p} />
+          <BankDetailRow label="Account Name" value="Tazdan Ltd" p={p} />
           <BankDetailRow label="Bank Name" value="Emirates NBD" p={p} />
           <BankDetailRow label="IBAN" value="AE00 0000 0000 0000 0000 000" p={p} />
           <BankDetailRow label="SWIFT" value="EBILAEAD" p={p} />

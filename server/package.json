@@ -1,7 +1,7 @@
 {
-  "name": "promrkts-server",
+  "name": "tazdan-server",
   "version": "1.0.0",
-  "description": "Crypto exchange backend for promrkts",
+  "description": "Crypto exchange backend for tazdan",
   "main": "dist/index.js",
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only src/index.ts",

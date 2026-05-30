@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * promrkts background shader — raw WebGL port of the mobile splash shader
+ * tazdan background shader — raw WebGL port of the mobile splash shader
  * in mobile/src/components/ui/ShaderLines.tsx.
  *
  * Why raw WebGL (not three.js):

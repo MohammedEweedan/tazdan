@@ -14,9 +14,9 @@ jobs:
       postgres:
         image: postgres:16-alpine
         env:
-          POSTGRES_USER: promrkts
+          POSTGRES_USER: tazdan
           POSTGRES_PASSWORD: testpassword
-          POSTGRES_DB: promrkts_test
+          POSTGRES_DB: tazdan_test
         ports: ['5432:5432']
         options: >-
           --health-cmd pg_isready
@@ -36,7 +36,7 @@ jobs:
         working-directory: server
     env:
       NODE_ENV: test
-      DATABASE_URL: postgresql://promrkts:testpassword@localhost:5432/promrkts_test
+      DATABASE_URL: postgresql://tazdan:testpassword@localhost:5432/tazdan_test
       REDIS_URL: redis://localhost:6379
       JWT_SECRET: test_jwt_secret_min_32_chars_long_for_ci_testing_only
       JWT_REFRESH_SECRET: test_jwt_refresh_secret_min_32_chars_for_ci_only

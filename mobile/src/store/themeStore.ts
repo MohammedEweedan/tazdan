@@ -18,7 +18,7 @@ import { create } from 'zustand';
 
 export type ThemeMode = 'dark' | 'light';
 
-const KEY = 'promrkts.theme';
+const KEY = 'tazdan.theme';
 
 export interface Palette {
   // ── Surfaces (elevation tiers) ──────────────────────────────────

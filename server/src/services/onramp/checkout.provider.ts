@@ -97,7 +97,7 @@ export class CheckoutOnRamp implements OnRampProvider {
       amount: amountCents,
       currency: currency.toUpperCase(),
       payment_type: 'Regular',
-      description: 'promrkts onramp',
+      description: 'tazdan onramp',
       reference: req.providerRef,
       processing_channel_id: processingChannelId,
       '3ds': { enabled: true },

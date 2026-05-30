@@ -24,16 +24,16 @@ function resolveApiBase(): string {
 }
 
 export const APP = {
-  name: 'Promrkts',
+  name: 'Tazdan',
   tagline: 'Money. Crypto. One app.',
-  supportEmail: 'support@promrkts.app',
+  supportEmail: 'support@tazdan.com',
   apiBaseUrl: resolveApiBase(),
 } as const;
 
 export const STORAGE_KEYS = {
-  accessToken:  'promrkts.accessToken',
-  refreshToken: 'promrkts.refreshToken',
-  onboarded:    'promrkts.onboarded',
+  accessToken:  'tazdan.accessToken',
+  refreshToken: 'tazdan.refreshToken',
+  onboarded:    'tazdan.onboarded',
 } as const;
 
 export const QUERY_KEYS = {
@@ -64,10 +64,10 @@ export const FEATURES = {
 } as const;
 
 export const DEEP_LINKS = {
-  home:    'promrkts://home',
-  wallet:  'promrkts://wallet',
-  p2p:     'promrkts://p2p',
-  send:    'promrkts://send',
-  profile: (handle: string) => `promrkts://profile/${handle}`,
-  asset:   (currency: string) => `promrkts://asset/${currency}`,
+  home:    'tazdan://home',
+  wallet:  'tazdan://wallet',
+  p2p:     'tazdan://p2p',
+  send:    'tazdan://send',
+  profile: (handle: string) => `tazdan://profile/${handle}`,
+  asset:   (currency: string) => `tazdan://asset/${currency}`,
 } as const;

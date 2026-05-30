@@ -3,25 +3,25 @@ version: '3.8'
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: promrkts-db
+    container_name: tazdan-db
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-promrkts}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-promrkts_secret}
-      POSTGRES_DB: ${POSTGRES_DB:-promrkts}
+      POSTGRES_USER: ${POSTGRES_USER:-tazdan}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-tazdan_secret}
+      POSTGRES_DB: ${POSTGRES_DB:-tazdan}
     ports:
       - '5432:5432'
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-promrkts}']
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-tazdan}']
       interval: 5s
       timeout: 5s
       retries: 5
 
   redis:
     image: redis:7-alpine
-    container_name: promrkts-redis
+    container_name: tazdan-redis
     restart: unless-stopped
     ports:
       - '6379:6379'
@@ -37,7 +37,7 @@ services:
     build:
       context: ./server
       dockerfile: Dockerfile
-    container_name: promrkts-server
+    container_name: tazdan-server
     restart: unless-stopped
     depends_on:
       postgres:
@@ -47,7 +47,7 @@ services:
     environment:
       NODE_ENV: production
       PORT: 5000
-      DATABASE_URL: postgresql://${POSTGRES_USER:-promrkts}:${POSTGRES_PASSWORD:-promrkts_secret}@postgres:5432/${POSTGRES_DB:-promrkts}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-tazdan}:${POSTGRES_PASSWORD:-tazdan_secret}@postgres:5432/${POSTGRES_DB:-tazdan}
       REDIS_URL: redis://redis:6379
       JWT_SECRET: ${JWT_SECRET:-change_me_in_production}
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-change_me_refresh_in_production}
@@ -63,7 +63,7 @@ services:
     build:
       context: ./client
       dockerfile: Dockerfile
-    container_name: promrkts-client
+    container_name: tazdan-client
     restart: unless-stopped
     depends_on:
       - server

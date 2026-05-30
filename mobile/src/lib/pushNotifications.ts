@@ -42,7 +42,7 @@ export async function registerPushToken(): Promise<void> {
   // Android requires a notification channel
   if (Platform.OS === 'android') {
     await Notifications.setNotificationChannelAsync('default', {
-      name: 'promrkts',
+      name: 'tazdan',
       importance: Notifications.AndroidImportance.MAX,
       vibrationPattern: [0, 250, 250, 250],
       lightColor: '#FFFFFF',

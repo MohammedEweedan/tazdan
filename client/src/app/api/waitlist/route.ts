@@ -31,7 +31,7 @@ async function pushToMailchimp(email: string): Promise<void> {
 
 async function pushToBackend(email: string): Promise<void> {
   try {
-    await fetch('https://api.promrkts.com/waitlist', {
+    await fetch('https://api.tazdan.com/waitlist', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email }),

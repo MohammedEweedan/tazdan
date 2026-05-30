@@ -248,7 +248,7 @@ export default function CareersPage() {
                     </HStack>
                     <Button
                       as="a"
-                      href={`mailto:careers@promrkts.com?subject=Application — ${pos.title}`}
+                      href={`mailto:careers@tazdan.com?subject=Application — ${pos.title}`}
                       h="40px" px={5} w="100%"
                       bg={ctaBg} color={ctaFg}
                       borderRadius="full" fontWeight="700" fontSize="13px"
@@ -278,7 +278,7 @@ export default function CareersPage() {
               </Text>
               <Button
                 as="a"
-                href="mailto:careers@promrkts.com?subject=General Application"
+                href="mailto:careers@tazdan.com?subject=General Application"
                 h="46px" px={7}
                 bg={dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)'}
                 color={textMain}

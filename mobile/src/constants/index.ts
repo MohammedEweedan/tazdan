@@ -54,9 +54,9 @@ function resolveApiBase(): string {
 }
 
 export const APP = {
-  name: 'promrkts',
+  name: 'tazdan',
   tagline: 'Money. Crypto. One app.',
-  supportEmail: 'support@promrkts.app',
+  supportEmail: 'support@tazdan.com',
   apiBaseUrl: resolveApiBase(),
 };
 
@@ -72,18 +72,18 @@ export const APP = {
  */
 export const STRIPE = {
   publishableKey: process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? '',
-  merchantIdentifier: process.env.EXPO_PUBLIC_APPLE_MERCHANT_ID ?? 'merchant.com.promrkts.app',
+  merchantIdentifier: process.env.EXPO_PUBLIC_APPLE_MERCHANT_ID ?? 'merchant.com.tazdan.app',
   // Display name shown in the Apple Pay / Google Pay sheet
-  merchantDisplayName: 'promrkts',
+  merchantDisplayName: 'tazdan',
   // Two-letter country for Apple Pay / Google Pay merchant locale
   merchantCountryCode: process.env.EXPO_PUBLIC_PAY_COUNTRY ?? 'US',
 };
 
 export const STORAGE_KEYS = {
-  accessToken:  'promrkts.accessToken',
-  refreshToken: 'promrkts.refreshToken',
-  onboarded:    'promrkts.onboarded',
-  lastUser:     'promrkts.lastUser',
+  accessToken:  'tazdan.accessToken',
+  refreshToken: 'tazdan.refreshToken',
+  onboarded:    'tazdan.onboarded',
+  lastUser:     'tazdan.lastUser',
 } as const;
 
 export const QUERY_KEYS = {

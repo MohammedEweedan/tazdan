@@ -1,7 +1,7 @@
-# promrkts — App Store & Google Play Listing
+# tazdan — App Store & Google Play Listing
 
 ## App Name
-promrkts
+tazdan
 
 ## Subtitle (iOS, max 30 chars)
 Crypto & Fiat Exchange
@@ -18,7 +18,7 @@ Buy, sell & send crypto and fiat currencies — fast, secure, MENA-first.
 
 ## Full Description (max ~4,000 chars)
 
-**promrkts** is the all-in-one financial super-app built for the MENA region. Whether you want to buy Bitcoin, send money to family, or earn on your digital assets — promrkts puts everything in one place.
+**tazdan** is the all-in-one financial super-app built for the MENA region. Whether you want to buy Bitcoin, send money to family, or earn on your digital assets — tazdan puts everything in one place.
 
 **Buy & Sell Crypto**
 Trade Bitcoin, Ethereum, USDT, Solana, XRP and more with real-time prices powered by live market data. Instant buys via card or bank transfer. No hidden spreads.
@@ -30,7 +30,7 @@ Hold USD, EUR, GBP, AED, SAR, EGP and LYD in your account. Deposit by bank wire,
 Trade directly with other users at the rate you set. Our escrow system holds funds until both parties confirm — so every trade is safe.
 
 **Virtual Visa Card**
-Get a virtual Visa card in seconds, loaded directly from your promrkts wallet. Use it for online payments, subscriptions, and international purchases worldwide.
+Get a virtual Visa card in seconds, loaded directly from your tazdan wallet. Use it for online payments, subscriptions, and international purchases worldwide.
 
 **International Transfers**
 Send money across borders at competitive exchange rates. Track every transfer in real time.
@@ -53,7 +53,7 @@ crypto,bitcoin,exchange,fiat,USDT,MENA,P2P,wallet,send money,visa card
 ---
 
 ## What's New (first release)
-First public release of promrkts. Buy, sell, transfer and earn with crypto and fiat currencies — all in one app.
+First public release of tazdan. Buy, sell, transfer and earn with crypto and fiat currencies — all in one app.
 
 ---
 
@@ -81,13 +81,13 @@ Same 5 screens, 1080 × 1920 minimum (9:16).
 ---
 
 ## Privacy Policy URL
-https://promrkts.com/legal/privacy
+https://tazdan.com/legal/privacy
 
 ## Support URL
-https://promrkts.com/support
+https://tazdan.com/support
 
 ## Marketing URL
-https://promrkts.com
+https://tazdan.com
 
 ---
 
@@ -96,12 +96,12 @@ https://promrkts.com
 No objectionable content; financial app with identity verification.
 
 ## App Store Connect Info
-- Bundle ID: com.promrkts.app
-- SKU: promrkts-001
+- Bundle ID: com.tazdan.app
+- SKU: tazdan-001
 - Primary language: English (US)
 - Territories: Algeria, Bahrain, Egypt, Iraq, Jordan, Kuwait, Lebanon, Libya, Morocco, Oman, Qatar, Saudi Arabia, Tunisia, United Arab Emirates, United Kingdom, United States, and global
 
 ## Google Play Info
-- Package: com.promrkts.app
+- Package: com.tazdan.app
 - Default language: en-US
 - Countries: same as above + global

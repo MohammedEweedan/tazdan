@@ -30,8 +30,8 @@ export default function Receive() {
   const handle = user?.username?.trim();
   const linkSlug = handle ?? user?.id ?? 'me';
   // Universal link a counterparty's app deep-links into when they scan
-  // the QR code — resolves to /u/[slug] in the promrkts app.
-  const profileLink = `https://promrkts.com/u/${linkSlug}`;
+  // the QR code — resolves to /u/[slug] in the tazdan app.
+  const profileLink = `https://tazdan.com/u/${linkSlug}`;
 
   return (
     <ScreenShell title="Receive money">
@@ -66,7 +66,7 @@ export default function Receive() {
 
       {tab === 'HANDLE' ? (
         <View style={{ marginTop: 28, alignItems: 'center' }}>
-          {/* Real QR code with a centered promrkts mark. The white
+          {/* Real QR code with a centered tazdan mark. The white
               card around the code is intentional — QR scanners need
               the white quiet-zone to lock on, so we don't tint it.
               The dark surrounding screen + soft shadow stops it from
@@ -82,7 +82,7 @@ export default function Receive() {
                 no network round-trip means the code shows up even
                 offline / in regions where the previous qrserver.com
                 CDN was blocked.  ecc=H gives ~30% redundancy so the
-                centred promrkts mark below doesn't break decoding. */}
+                centred tazdan mark below doesn't break decoding. */}
             <QRCode
               value={profileLink}
               size={200}
@@ -153,8 +153,8 @@ export default function Receive() {
                 h.light();
                 Share.share({
                   message: handle
-                    ? `Pay me on promrkts → @${handle}\n${profileLink}`
-                    : `Pay me on promrkts → ${profileLink}`,
+                    ? `Pay me on tazdan → @${handle}\n${profileLink}`
+                    : `Pay me on tazdan → ${profileLink}`,
                 });
               }}
               style={({ pressed }) => ({
@@ -174,7 +174,7 @@ export default function Receive() {
         <View style={{ marginTop: 22 }}>
           <Panel>
             <View style={{ padding: 16, gap: 14 }}>
-              <BankRow label="Account holder" value={user ? `${user.firstName} ${user.lastName}` : 'promrkts user'} palette={p} />
+              <BankRow label="Account holder" value={user ? `${user.firstName} ${user.lastName}` : 'tazdan user'} palette={p} />
               <BankRow label="IBAN"            value="DE89 3704 0044 0532 0130 00" palette={p} />
               <BankRow label="BIC / SWIFT"     value="COBADEFFXXX" palette={p} />
               <BankRow label="Reference"       value={`PRMK-${linkSlug.toUpperCase()}`} palette={p} />
