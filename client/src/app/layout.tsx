@@ -61,7 +61,7 @@ const cairo = localFont({
   variable: '--font-cairo',
 });
 
-const SITE_URL = 'https://fortuni.com';
+const SITE_URL = 'https://tazdan.com';
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
@@ -149,7 +149,7 @@ const jsonLd = {
       logo: `${SITE_URL}/icon-black.png`,
       sameAs: [
         'https://twitter.com/tazdan',
-        'https://www.linkedin.com/company/fortuni',
+        'https://www.linkedin.com/company/tazdan',
       ],
     },
     {
