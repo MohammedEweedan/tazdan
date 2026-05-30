@@ -45,7 +45,7 @@ const theme = extendTheme({
         color: props.colorMode === 'dark' ? 'white' : 'gray.800',
       },
       "html[lang='ar'] *, html[dir='rtl'] *": {
-        fontFamily: `'Cairo', system-ui, sans-serif !important`,
+        fontFamily: `var(--font-cairo), system-ui, sans-serif !important`,
         letterSpacing: `0em !important`,
       },
       "html[lang='ar'] h1, html[lang='ar'] h2, html[lang='ar'] h3, html[lang='ar'] h4, html[lang='ar'] h5, html[lang='ar'] h6, html[dir='rtl'] h1, html[dir='rtl'] h2, html[dir='rtl'] h3, html[dir='rtl'] h4, html[dir='rtl'] h5, html[dir='rtl'] h6": {

@@ -229,11 +229,11 @@ export class TransferController {
       const senderHandle    =
         (req.user as any)?.username
         || (req.user as any)?.firstName
-        || 'a Fortuni user';
+        || 'a promrkts user';
       const recipientHandle =
         recipient.username
         || recipient.firstName
-        || 'a Fortuni user';
+        || 'a promrkts user';
       const fmtAmt = data.amount.toFixed(8).replace(/\.?0+$/, '');
       (async () => {
         try {

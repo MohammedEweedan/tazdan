@@ -36,6 +36,7 @@ import {
   FiBell, FiPlus, FiDownload, FiDollarSign, FiMessageCircle, FiUser,
   FiChevronLeft, FiChevronRight, FiMoreHorizontal, FiSmile, FiArrowUp,
   FiEye, FiSearch, FiChevronDown, FiMaximize2, FiClock,
+  FiLink,
 } from "react-icons/fi";
 import { FaApple, FaGooglePlay, FaApplePay, FaGooglePay, FaCcVisa, FaCcMastercard, FaPaypal } from "react-icons/fa";
 import { SiRevolut } from "react-icons/si";
@@ -223,7 +224,7 @@ const LockScreen = memo(function LockScreen({
         justify="space-between" zIndex={2}
       >
         <Text style={{ fontSize: s.statusFont }} color="white" fontWeight="700" letterSpacing="0.01em">
-          Fortuni
+          promrkts
         </Text>
         <HStack spacing="calc(var(--pw) * 0.025)">
           <HStack spacing="calc(var(--pw) * 0.008)" align="flex-end" h={s.diH11}>
@@ -289,7 +290,7 @@ const LockScreen = memo(function LockScreen({
             <VStack align="start" spacing={0} flex={1}>
               <HStack justify="space-between" w="100%">
                 <Text style={{ fontSize: s.statusFont }} color="rgba(255,255,255,0.6)" fontWeight="700" letterSpacing="0.04em" textTransform="uppercase">
-                  Fortuni
+                  promrkts
                 </Text>
                 <Text style={{ fontSize: s.statusFont }} color="rgba(255,255,255,0.4)">1m ago</Text>
               </HStack>
@@ -1768,7 +1769,7 @@ function SectionBento() {
           <VStack align="center" spacing={3} mb={{ base: 10, md: 16 }} textAlign="center">
             <Heading fontFamily="'DM Sans', sans-serif" fontWeight="800" fontSize={{ base: "32px", md: "56px", lg: "64px" }} letterSpacing="-0.04em" color={textMain} lineHeight={1.1}>
               {t("bento_title_1")}{" "}
-              <Box as="span">{t("bento_title_2")}</Box>
+              <Box as="span"><EmphText text={t("bento_title_2")} /></Box>
             </Heading>
           </VStack>
         </motion.div>
@@ -1847,7 +1848,7 @@ function SectionOnRamp() {
                 fontSize={{ base: "36px", md: "52px", lg: "64px" }}
                 letterSpacing="-0.04em" color={textMain} lineHeight={1.05} maxW="720px"
               >
-                {t("onramp_headline")}
+                <EmphText text={t("onramp_headline")} />
               </Heading>
               {/* Payment method pills */}
               <Flex gap={{ base: 2, md: 3 }} flexWrap="wrap" justify="center" maxW="700px" pt={2}>
@@ -1914,8 +1915,417 @@ function SectionOnRamp() {
   );
 }
 
+/* EmphText — renders a translated string where the word(s) wrapped in
+   *asterisks* become italic serif-ish emphasis. Keeps emphasis i18n-aware:
+   each locale marks its own word. e.g. "Invest on *autopilot*." */
+function EmphText({ text }: { text: string }) {
+  const parts = text.split(/(\*[^*]+\*)/g).filter(Boolean);
+  return (
+    <>
+      {parts.map((p, i) =>
+        p.startsWith("*") && p.endsWith("*") ? (
+          <Box as="span" key={i} fontStyle="italic" fontWeight="500">
+            {p.slice(1, -1)}
+          </Box>
+        ) : (
+          <Box as="span" key={i}>{p}</Box>
+        )
+      )}
+    </>
+  );
+}
+
+/* Scroll-driven fade — text gradually appears then disappears as the
+   element passes through the viewport. Monochrome, Apple-restrained. */
+function ScrollFade({ children, range = 0.5 }: { children: React.ReactNode; range?: number }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const { scrollYProgress } = useScroll({ target: ref, offset: ["start end", "end start"] });
+  const opacity = useTransform(scrollYProgress, [0, 0.3, 0.7, 1], [0, 1, 1, 0]);
+  const y = useTransform(scrollYProgress, [0, 0.3, 0.7, 1], [40 * range, 0, 0, -40 * range]);
+  return (
+    <motion.div ref={ref} style={{ opacity, y }}>
+      {children}
+    </motion.div>
+  );
+}
+
 /* ═════════════════════════════════════════════════════════════════
-   FORTUNI BUSINESS — B2B landing teaser linking to /business
+   CLAIMLINK — send crypto to anyone with a link. Monochrome, Apple-grade:
+   restrained type, scroll-driven fades, italic display line, one hero
+   interaction (a link "packet" gliding sender → recipient).
+   ═════════════════════════════════════════════════════════════════ */
+function SectionClaimLink() {
+  const { t } = useTranslate();
+  const { colorMode } = useColorMode();
+  const dark = colorMode === "dark";
+  const textMain = dark ? "#f5f5f7" : "#1d1d1f";
+  const textSub = dark ? "rgba(245,245,247,0.60)" : "rgba(29,29,31,0.58)";
+
+  const steps = [
+    { icon: FiLink,  title: t("cl_s1_title"), desc: t("cl_s1_desc") },
+    { icon: FiSend,  title: t("cl_s2_title"), desc: t("cl_s2_desc") },
+    { icon: FiCheck, title: t("cl_s3_title"), desc: t("cl_s3_desc") },
+  ];
+
+  return (
+    <Box py={{ base: 32, md: 48 }} px={{ base: 5, md: 10 }} position="relative" overflow="hidden">
+      {/* Monochrome ambient grid — subtle, no colour */}
+      <Box position="absolute" inset={0} pointerEvents="none" opacity={dark ? 0.4 : 0.28}
+        style={{
+          backgroundImage: dark
+            ? "linear-gradient(rgba(255,255,255,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.05) 1px, transparent 1px)"
+            : "linear-gradient(rgba(0,0,0,0.045) 1px, transparent 1px), linear-gradient(90deg, rgba(0,0,0,0.045) 1px, transparent 1px)",
+          backgroundSize: "54px 54px",
+          maskImage: "radial-gradient(ellipse 75% 55% at 50% 38%, #000 28%, transparent 72%)",
+          WebkitMaskImage: "radial-gradient(ellipse 75% 55% at 50% 38%, #000 28%, transparent 72%)",
+        }}
+      />
+
+      <Container maxW="1080px" position="relative" zIndex={1}>
+        <VStack spacing={{ base: 16, md: 24 }} align="center" textAlign="center">
+          <ScrollFade>
+            <VStack spacing={6}>
+              {/* Display line — one word set in italic, editorial register */}
+              <Heading fontFamily="'DM Sans', sans-serif" fontWeight="700"
+                fontSize={{ base: "42px", md: "68px", lg: "82px" }}
+                letterSpacing="-0.045em" color={textMain} lineHeight={1.0} maxW="900px"
+              >
+                <EmphText text={t("cl_title")} />
+              </Heading>
+              <Text fontSize={{ base: "17px", md: "21px" }} color={textSub} maxW="600px" lineHeight={1.5} fontWeight="400">
+                {t("cl_sub")}
+              </Text>
+            </VStack>
+          </ScrollFade>
+
+          {/* ── Centerpiece — a real claim-link object on a clean stage ──
+              A glassy, shareable link card lifts in; a subtle pulse ring
+              and a single travelling spark read as "money in motion."
+              No explainer boxes — the artifact itself does the talking. */}
+          <ClaimLinkStage dark={dark} textMain={textMain} textSub={textSub}
+            youLabel={t("cl_node_you")} claimedLabel={t("cl_node_claimed")}
+            amountLabel={t("cl_card_amount")} statusLabel={t("cl_card_status")} />
+
+          {/* Steps as an understated inline numbered line — editorial, not boxed */}
+          <ScrollFade>
+            <Flex direction={{ base: "column", md: "row" }} gap={{ base: 8, md: 0 }}
+              w="100%" maxW="940px" justify="space-between"
+            >
+              {steps.map((s, i) => (
+                <HStack key={i} align="start" spacing={4} flex={1}
+                  px={{ base: 0, md: 6 }}
+                  borderLeft={{ base: "none", md: i === 0 ? "none" : "1px solid" }}
+                  borderColor={dark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.07)"}
+                >
+                  <Text fontFamily="'DM Sans', sans-serif" fontWeight="700" fontStyle="italic"
+                    fontSize={{ base: "22px", md: "24px" }} color={textSub} lineHeight={1} mt="2px" sx={{ fontVariantNumeric: "tabular-nums" }}>
+                    0{i + 1}
+                  </Text>
+                  <VStack align="start" spacing={1.5} textAlign="left">
+                    <Text fontWeight="600" fontSize={{ base: "16px", md: "17px" }} color={textMain} letterSpacing="-0.01em">
+                      {s.title}
+                    </Text>
+                    <Text fontSize={{ base: "13.5px", md: "14px" }} color={textSub} lineHeight={1.55}>{s.desc}</Text>
+                  </VStack>
+                </HStack>
+              ))}
+            </Flex>
+          </ScrollFade>
+        </VStack>
+      </Container>
+    </Box>
+  );
+}
+
+/* ClaimLinkStage — the premium centerpiece. A glassy, shareable claim-link
+   card sits on a clean stage. It lifts in on scroll, a soft halo breathes
+   behind it, and a single spark travels the link bar (money → claimed).
+   This replaces the boxy "explainer cards" with one credible artifact. */
+function ClaimLinkStage({ dark, textMain, textSub, youLabel, claimedLabel, amountLabel, statusLabel }: {
+  dark: boolean; textMain: string; textSub: string;
+  youLabel: string; claimedLabel: string; amountLabel: string; statusLabel: string;
+}) {
+  const glass = dark ? "rgba(255,255,255,0.05)" : "rgba(255,255,255,0.82)";
+  const glassBorder = dark ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.08)";
+  const fg = dark ? "#f5f5f7" : "#0a0a0a";
+  const subtle = dark ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.08)";
+
+  return (
+    <Box position="relative" w="100%" maxW="560px" py={{ base: 4, md: 6 }}>
+      {/* Breathing halo behind the card — monochrome light */}
+      <motion.div
+        animate={{ opacity: [0.4, 0.75, 0.4], scale: [0.96, 1.02, 0.96] }}
+        transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
+        style={{ position: "absolute", inset: "-12% -6%", borderRadius: "40px",
+          background: dark
+            ? "radial-gradient(ellipse at 50% 40%, rgba(255,255,255,0.08), transparent 70%)"
+            : "radial-gradient(ellipse at 50% 40%, rgba(0,0,0,0.05), transparent 70%)",
+          pointerEvents: "none" }}
+      />
+      <motion.div
+        initial={{ opacity: 0, y: 32, rotateX: 8 }}
+        whileInView={{ opacity: 1, y: 0, rotateX: 0 }}
+        viewport={{ once: true, amount: 0.4 }}
+        transition={{ duration: 0.9, ease: [0.22, 1, 0.36, 1] }}
+        style={{ position: "relative", perspective: 1200 }}
+      >
+        <Box position="relative" borderRadius="28px" overflow="hidden"
+          bg={glass} border="1px solid" borderColor={glassBorder}
+          backdropFilter="blur(20px)"
+          boxShadow={dark ? "0 40px 100px rgba(0,0,0,0.55)" : "0 40px 100px rgba(0,0,0,0.12)"}
+          p={{ base: 6, md: 8 }}
+        >
+          {/* top hairline sheen */}
+          <Box position="absolute" top={0} left={0} right={0} h="1px"
+            bg={dark ? "rgba(255,255,255,0.18)" : "rgba(255,255,255,0.9)"} />
+
+          {/* Header — link glyph + monospace-ish link string */}
+          <Flex align="center" gap={3} mb={6}>
+            <Flex w="40px" h="40px" borderRadius="12px" align="center" justify="center" flexShrink={0}
+              bg={dark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.05)"}>
+              <Icon as={FiLink} boxSize="18px" color={fg} />
+            </Flex>
+            <Box flex={1} minW={0}>
+              <Text fontSize={{ base: "14px", md: "15px" }} fontWeight="600" color={fg} noOfLines={1}
+                sx={{ fontVariantNumeric: "tabular-nums" }}>
+                promrkts.com/claim/x7f2a9
+              </Text>
+              <Text fontSize="12px" color={textSub}>{statusLabel}</Text>
+            </Box>
+            <Flex w="28px" h="28px" borderRadius="full" align="center" justify="center"
+              bg={dark ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.06)"}>
+              <Icon as={FiCheck} boxSize="14px" color={fg} />
+            </Flex>
+          </Flex>
+
+          {/* Amount */}
+          <Text fontFamily="'DM Sans', sans-serif" fontWeight="700"
+            fontSize={{ base: "40px", md: "52px" }} letterSpacing="-0.04em" color={fg} lineHeight={1}
+            sx={{ fontVariantNumeric: "tabular-nums" }}>
+            {amountLabel}
+          </Text>
+
+          {/* Transit bar — you → spark → claimed */}
+          <Flex align="center" mt={7} gap={3}>
+            <Text fontSize="12px" fontWeight="600" color={textSub} flexShrink={0}>{youLabel}</Text>
+            <Box flex={1} h="2px" position="relative" borderRadius="full" bg={subtle}>
+              <motion.div
+                initial={{ left: "0%", opacity: 0 }}
+                whileInView={{ left: "100%", opacity: [0, 1, 1, 0] }}
+                viewport={{ once: false, amount: 0.5 }}
+                transition={{ duration: 2.6, repeat: Infinity, ease: "easeInOut", repeatDelay: 0.5 }}
+                style={{ position: "absolute", top: "50%", width: 8, height: 8, borderRadius: 999,
+                  transform: "translate(-50%,-50%)", background: fg,
+                  boxShadow: dark ? "0 0 14px rgba(255,255,255,0.7)" : "0 0 14px rgba(0,0,0,0.4)" }}
+              />
+            </Box>
+            <Text fontSize="12px" fontWeight="600" color={fg} flexShrink={0}>{claimedLabel}</Text>
+          </Flex>
+        </Box>
+      </motion.div>
+    </Box>
+  );
+}
+
+/* ═════════════════════════════════════════════════════════════════
+   RECURRING BUY — dollar-cost-average on autopilot. Editorial split:
+   restrained copy on one side, a clean "auto-buy" product card with
+   accumulating bars on the other.
+   ═════════════════════════════════════════════════════════════════ */
+function SectionRecurringBuy() {
+  const { t } = useTranslate();
+  const { colorMode } = useColorMode();
+  const dark = colorMode === "dark";
+  const textMain = dark ? "#f5f5f7" : "#1d1d1f";
+  const textSub = dark ? "rgba(245,245,247,0.60)" : "rgba(29,29,31,0.58)";
+  const cardBg = dark ? "rgba(255,255,255,0.035)" : "rgba(0,0,0,0.018)";
+  const cardBorder = dark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.07)";
+
+  const cadences = [t("rb_cad_daily"), t("rb_cad_weekly"), t("rb_cad_biweekly"), t("rb_cad_monthly")];
+  const bars = [40, 55, 48, 70, 62, 85, 78, 96];
+
+  return (
+    <Box py={{ base: 32, md: 48 }} px={{ base: 5, md: 10 }} position="relative" overflow="hidden">
+      <Container maxW="1080px" position="relative" zIndex={1}>
+        <SimpleGrid columns={{ base: 1, md: 2 }} spacing={{ base: 14, md: 20 }} alignItems="center">
+          {/* Copy */}
+          <ScrollFade>
+            <VStack spacing={6} align={{ base: "center", md: "start" }} textAlign={{ base: "center", md: "left" }}>
+              <Heading fontFamily="'DM Sans', sans-serif" fontWeight="700"
+                fontSize={{ base: "40px", md: "58px", lg: "66px" }}
+                letterSpacing="-0.045em" color={textMain} lineHeight={1.0} maxW="540px"
+              >
+                <EmphText text={t("rb_title")} />
+              </Heading>
+              <Text fontSize={{ base: "17px", md: "19px" }} color={textSub} maxW="500px" lineHeight={1.55} fontWeight="400">
+                {t("rb_sub")}
+              </Text>
+              <Flex gap={2.5} flexWrap="wrap" justify={{ base: "center", md: "start" }}>
+                {cadences.map((c, i) => (
+                  <HStack key={i} spacing={1.5} px={3.5} h="34px" borderRadius="full"
+                    bg={dark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.035)"}
+                    border="1px solid" borderColor={cardBorder}>
+                    <Icon as={FiClock} boxSize="12px" color={textSub} />
+                    <Text fontSize="13px" fontWeight="600" color={textMain}>{c}</Text>
+                  </HStack>
+                ))}
+              </Flex>
+            </VStack>
+          </ScrollFade>
+
+          {/* Product card — auto-buy with accumulating bars (monochrome) */}
+          <motion.div initial={{ opacity: 0, scale: 0.96 }} whileInView={{ opacity: 1, scale: 1 }} viewport={{ once: true, amount: 0.3 }} transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}>
+            <Box bg={cardBg} border="1px solid" borderColor={cardBorder} borderRadius="30px" p={{ base: 7, md: 9 }}
+              boxShadow={dark ? "0 30px 80px rgba(0,0,0,0.4)" : "0 30px 80px rgba(0,0,0,0.06)"}>
+              <Flex justify="space-between" align="center" mb={7}>
+                <VStack align="start" spacing={0.5}>
+                  <Text fontSize="13px" fontWeight="600" color={textSub}>{t("rb_card_label")}</Text>
+                  <Text fontSize={{ base: "24px", md: "28px" }} fontWeight="700" color={textMain} sx={{ fontVariantNumeric: "tabular-nums" }}>{t("rb_card_amount")}</Text>
+                </VStack>
+                <motion.div
+                  animate={{ rotate: 360 }}
+                  transition={{ duration: 8, repeat: Infinity, ease: "linear" }}
+                >
+                  <Flex w="46px" h="46px" borderRadius="14px" align="center" justify="center"
+                    bg={dark ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.05)"}>
+                    <Icon as={FiRepeat} boxSize="21px" color={textMain} />
+                  </Flex>
+                </motion.div>
+              </Flex>
+              <Flex align="flex-end" justify="space-between" gap={2.5} h={{ base: "130px", md: "160px" }}>
+                {bars.map((h, i) => (
+                  <motion.div key={i}
+                    initial={{ height: "8%" }}
+                    whileInView={{ height: `${h}%` }}
+                    viewport={{ once: true }}
+                    transition={{ duration: 0.8, delay: 0.07 * i, ease: [0.22, 1, 0.36, 1] }}
+                    style={{ flex: 1, borderRadius: 9,
+                      background: i === bars.length - 1
+                        ? (dark ? "#f5f5f7" : "#0a0a0a")
+                        : (dark ? "rgba(255,255,255,0.11)" : "rgba(0,0,0,0.09)") }}
+                  />
+                ))}
+              </Flex>
+              <Text mt={5} fontSize="13px" color={textSub} textAlign="center" lineHeight={1.5}>{t("rb_card_footer")}</Text>
+            </Box>
+          </motion.div>
+        </SimpleGrid>
+      </Container>
+    </Box>
+  );
+}
+
+/* ═════════════════════════════════════════════════════════════════
+   PATTERN BREAK — full-bleed inverted statement that sits right above
+   the footer. Breaks the card-grid rhythm: a black (or white) canvas,
+   one oversized line, a slow marquee of every feature, and a single
+   restrained CTA. Apple "Hello" closer energy.
+   ═════════════════════════════════════════════════════════════════ */
+function SectionPatternBreak({ onWaitlist }: { onWaitlist: () => void }) {
+  const { t } = useTranslate();
+  const tolgee = useTolgee(["language"]);
+  const isAr = tolgee.getLanguage() === "ar";
+  const { colorMode } = useColorMode();
+  const dark = colorMode === "dark";
+  // Inverted canvas vs. the rest of the page — this is the "break".
+  const canvas = dark ? "#0b0b0d" : "#0a0a0a";
+  const onCanvas = "#f5f5f7";
+  const onCanvasSub = "rgba(245,245,247,0.55)";
+
+  // Every shipped capability — one continuous marquee.
+  const features = [
+    t("pb_f_buy"), t("pb_f_sell"), t("pb_f_send"), t("pb_f_claimlink"),
+    t("pb_f_recurring"), t("pb_f_p2p"), t("pb_f_cards"), t("pb_f_multichain"),
+    t("pb_f_selfcustody"), t("pb_f_applepay"), t("pb_f_chat"), t("pb_f_global"),
+  ];
+  const loop = [...features, ...features];
+
+  return (
+    <Box position="relative" overflow="hidden" bg={canvas} py={{ base: 24, md: 36 }}>
+      {/* Monochrome light wash behind the statement — no colour */}
+      <motion.div
+        animate={{ opacity: [0.25, 0.5, 0.25] }}
+        transition={{ duration: 10, repeat: Infinity, ease: "easeInOut" }}
+        style={{ position: "absolute", top: "8%", left: "50%", width: 1100, height: 540,
+          transform: "translateX(-50%)", borderRadius: "50%",
+          background: "radial-gradient(ellipse, rgba(255,255,255,0.10) 0%, transparent 66%)",
+          pointerEvents: "none" }}
+      />
+      <Container maxW="1200px" position="relative" zIndex={1}>
+        <VStack spacing={{ base: 8, md: 12 }} align="center" textAlign="center">
+          <ScrollFade>
+            <VStack spacing={5}>
+              <Text fontSize={{ base: "12px", md: "13px" }} fontWeight="600" letterSpacing="0.18em" textTransform="uppercase" color="rgba(245,245,247,0.4)">
+                {t("pb_eyebrow")}
+              </Text>
+              <Heading fontFamily="'DM Sans', sans-serif" fontWeight="700"
+                fontSize={{ base: "48px", md: "88px", lg: "108px" }}
+                letterSpacing="-0.05em" color={onCanvas} lineHeight={0.95} maxW="1000px"
+              >
+                <EmphText text={t("pb_title")} />
+              </Heading>
+              <Text fontSize={{ base: "17px", md: "21px" }} color={onCanvasSub} maxW="560px" lineHeight={1.5} fontWeight="400">
+                {t("pb_sub")}
+              </Text>
+            </VStack>
+          </ScrollFade>
+        </VStack>
+      </Container>
+
+      {/* Full-bleed feature marquee — RTL-aware (animate the correct way so
+          Arabic doesn't scroll the wrong direction / stall). The track itself
+          is forced LTR so the duplicated halves tile predictably. */}
+      <Box position="relative" mt={{ base: 12, md: 16 }} py={{ base: 5, md: 7 }}
+        borderTop="1px solid" borderBottom="1px solid"
+        borderColor="rgba(255,255,255,0.08)"
+        dir="ltr"
+        style={{
+          maskImage: "linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent)",
+          WebkitMaskImage: "linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent)",
+        }}
+      >
+        <motion.div
+          animate={{ x: isAr ? ["-50%", "0%"] : ["0%", "-50%"] }}
+          transition={{ duration: 34, repeat: Infinity, ease: "linear" }}
+          style={{ display: "flex", width: "max-content", gap: 0 }}
+        >
+          {loop.map((f, i) => (
+            <HStack key={i} spacing={{ base: 6, md: 10 }} px={{ base: 4, md: 7 }} flexShrink={0}>
+              <Text fontFamily="'DM Sans', sans-serif" fontWeight="700"
+                fontSize={{ base: "26px", md: "40px" }} letterSpacing="-0.03em"
+                color={i % 2 === 0 ? onCanvas : "rgba(245,245,247,0.30)"}
+                whiteSpace="nowrap"
+              >
+                {f}
+              </Text>
+              <Box w="5px" h="5px" borderRadius="full" bg="rgba(245,245,247,0.35)" flexShrink={0} />
+            </HStack>
+          ))}
+        </motion.div>
+      </Box>
+
+      {/* CTA */}
+      <Container maxW="1200px" position="relative" zIndex={1}>
+        <VStack mt={{ base: 12, md: 16 }}>
+          <motion.div initial={{ opacity: 0, y: 16 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }} whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.98 }}>
+            <Button onClick={onWaitlist}
+              h={{ base: "52px", md: "58px" }} px={{ base: 8, md: 10 }}
+              borderRadius="full" bg={onCanvas} color={canvas}
+              fontSize={{ base: "16px", md: "17px" }} fontWeight="700"
+              rightIcon={<Icon as={FiArrowRight} boxSize="18px" />}
+              _hover={{ bg: "#fff" } as any} _active={{ bg: "#e8e8ea" } as any}
+            >
+              {t("pb_cta")}
+            </Button>
+          </motion.div>
+        </VStack>
+      </Container>
+    </Box>
+  );
+}
+
+/* ═════════════════════════════════════════════════════════════════
+   promrkts BUSINESS — B2B landing teaser linking to /business
    ═════════════════════════════════════════════════════════════════ */
 function SectionBusiness() {
   const { t } = useTranslate();
@@ -1957,7 +2367,7 @@ function SectionBusiness() {
                   fontSize="11px" fontWeight="800" letterSpacing="0.14em"
                   textTransform="uppercase"
                 >
-                  Fortuni Business
+                  promrkts Business
                 </Text>
 
                 <Heading
@@ -1966,7 +2376,7 @@ function SectionBusiness() {
                   letterSpacing="-0.04em" lineHeight={1.00} color={textMain}
                 >
                   {t("biz_headline_1")}{" "}
-                  <Box as="span">{t("biz_headline_2")}</Box>
+                  <Box as="span"><EmphText text={t("biz_headline_2")} /></Box>
                 </Heading>
 
                 <Text
@@ -2244,6 +2654,56 @@ function StageCopy({ op, title, desc, features, textMain, textMuted, hairline, t
 }
 
 /**
+ * useHeroSnap — gentle scroll-snap for the hero phone-screen journey.
+ *
+ * The journey is a tall (600vh) runway with a sticky frame; the OS scrolls
+ * `window`, so CSS scroll-snap (which needs a scroll *container*) can't be
+ * scoped here without snapping the whole page. Instead we listen for the
+ * scroll to settle and, only while the runway is the active region, smooth-
+ * scroll to the nearest of `stages` evenly-spaced anchors. It's proximity-
+ * style: it never fires mid-scroll, respects reduced-motion, and bails if
+ * the user is already moving away.
+ */
+function useHeroSnap(ref: React.RefObject<HTMLDivElement>, stages: number) {
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    if ("ontouchstart" in window) return; // leave touch scrolling untouched
+
+    let settleTimer: ReturnType<typeof setTimeout> | null = null;
+    let snapping = false;
+
+    const onScroll = () => {
+      if (snapping) return;
+      if (settleTimer) clearTimeout(settleTimer);
+      settleTimer = setTimeout(() => {
+        const rect = el.getBoundingClientRect();
+        const total = el.offsetHeight - window.innerHeight;
+        if (total <= 0) return;
+        // progress 0..1 through the runway
+        const scrolled = -rect.top;
+        if (scrolled < 0 || scrolled > total) return; // outside the hero
+        const seg = total / (stages - 1);
+        const idx = Math.round(scrolled / seg);
+        const targetScrolled = idx * seg;
+        const delta = targetScrolled - scrolled;
+        if (Math.abs(delta) < 4 || Math.abs(delta) > seg * 0.45) return; // close enough / too far → don't fight
+        snapping = true;
+        window.scrollTo({ top: window.scrollY + delta, behavior: "smooth" });
+        setTimeout(() => { snapping = false; }, 600);
+      }, 120);
+    };
+
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      if (settleTimer) clearTimeout(settleTimer);
+    };
+  }, [ref, stages]);
+}
+
+/**
  * fade(a,b,c,d): opacity is 0 outside [a,d], ramps 0→1 on [a,b], holds 1 on [b,c], ramps 1→0 on [c,d].
  * Returned MotionValue is wired to the journey's scrollYProgress.
  */
@@ -2301,6 +2761,12 @@ function PhoneJourney() {
   // ambient halo follows the phone, gently breathing
   const phoneScale = useTransform(scrollYProgress, [0, 0.16], [0.96, 1]);
 
+  // Snap-assist the hero phone screens. While the journey is the active
+  // scroll region, a settle after scrolling glides to the nearest stage so
+  // each screen lands cleanly. Proximity-style: only nudges when you're
+  // already close, never hijacks a deliberate scroll past the section.
+  useHeroSnap(ref, 7);
+
   return (
     <Box ref={ref} position="relative" h={{ base: "600vh", md: "600vh" }}>
       <Box position="sticky" top={0} h="100vh" w="100%" overflow="hidden"
@@ -2344,7 +2810,7 @@ function PhoneJourney() {
               />
               <StageCopy op={copyB} accent={ACCENT} textMain={textMain} textMuted={textMuted} hairline={hairline} tileBg={tileBg}
                 eyebrow={t("bento_countries_label")}
-                title={<>{t("bento_title_1")} <Box as="span">{t("bento_title_2")}</Box></>}
+                title={<>{t("bento_title_1")} <Box as="span"><EmphText text={t("bento_title_2")} /></Box></>}
               />
               <StageCopy op={copyC} accent={ACCENT} textMain={textMain} textMuted={textMuted} hairline={hairline} tileBg={tileBg}
                 eyebrow={t("sec_social_title_1")}
@@ -2431,7 +2897,7 @@ function PhoneJourney() {
                     style={{ aspectRatio: "1.586" }}
                   >
                     <NextImage
-                      src="/visa.png" alt="Fortuni Visa Card"
+                      src="/visa.png" alt="promrkts Visa Card"
                       fill style={{ objectFit: "contain" }}
                       sizes="420px"
                     />
@@ -2461,7 +2927,7 @@ function PhoneJourney() {
                     style={{ aspectRatio: "1.586" }}
                   >
                     <NextImage
-                      src="/visa.png" alt="Fortuni Visa Card"
+                      src="/visa.png" alt="promrkts Visa Card"
                       fill style={{ objectFit: "contain" }}
                       sizes="280px"
                     />
@@ -2534,8 +3000,8 @@ function PhoneJourney() {
 }
 
 /* ─── Device OS detection — runs once on mount ──────────────────── */
-const IOS_URL     = "https://apps.apple.com/app/Fortuni/id0000000000";
-const ANDROID_URL = "https://play.google.com/store/apps/details?id=com.Fortuni.app";
+const IOS_URL     = "https://apps.apple.com/app/promrkts/id0000000000";
+const ANDROID_URL = "https://play.google.com/store/apps/details?id=com.promrkts.app";
 
 function useDeviceOS(): "ios" | "android" | "other" {
   const [os, setOS] = useState<"ios" | "android" | "other">("other");
@@ -2603,11 +3069,22 @@ export default function LandingPage() {
       <Box style={{ contentVisibility: "auto", containIntrinsicSize: "0 700px" } as React.CSSProperties}>
         <SectionOnRamp />
       </Box>
+      <Box style={{ contentVisibility: "auto", containIntrinsicSize: "0 760px" } as React.CSSProperties}>
+        <SectionClaimLink />
+      </Box>
+      <Box style={{ contentVisibility: "auto", containIntrinsicSize: "0 700px" } as React.CSSProperties}>
+        <SectionRecurringBuy />
+      </Box>
       <Box style={{ contentVisibility: "auto", containIntrinsicSize: "0 600px" } as React.CSSProperties}>
         <SectionSocialProof />
       </Box>
       <Box style={{ contentVisibility: "auto", containIntrinsicSize: "0 600px" } as React.CSSProperties}>
         <SectionBusiness />
+      </Box>
+
+      {/* ── Pattern-break closer — sits right above the footer ── */}
+      <Box style={{ contentVisibility: "auto", containIntrinsicSize: "0 800px" } as React.CSSProperties}>
+        <SectionPatternBreak onWaitlist={onWaitlistOpen} />
       </Box>
 
       {/* ══ FOOTER ══ */}
@@ -2696,16 +3173,16 @@ export default function LandingPage() {
             __html: JSON.stringify({
               '@context': 'https://schema.org',
               '@type': 'FinancialService',
-              name: 'Fortuni',
+              name: 'promrkts',
               description:
                 'Crypto exchange and money transfer platform for MENA — Libya, Egypt, UAE, Saudi Arabia.',
-              url: 'https://Fortuni.com',
+              url: 'https://promrkts.com',
               areaServed: ['LY', 'EG', 'AE', 'SA', 'GB', 'US', 'EU'],
               currenciesAccepted: 'USD, EUR, GBP, LYD, EGP, AED, SAR, BTC, ETH, USDT, SOL',
               serviceType: ['Cryptocurrency Exchange', 'Money Transfer', 'Virtual Card Issuance'],
               sameAs: [
-                'https://twitter.com/Fortuni',
-                'https://t.me/Fortuni',
+                'https://twitter.com/promrkts',
+                'https://t.me/promrkts',
               ],
             }),
           }}

@@ -33,12 +33,13 @@ import {
   Outfit_900Black,
 } from '@expo-google-fonts/outfit';
 import {
-  IBMPlexSansArabic_300Light,
-  IBMPlexSansArabic_400Regular,
-  IBMPlexSansArabic_500Medium,
-  IBMPlexSansArabic_600SemiBold,
-  IBMPlexSansArabic_700Bold,
-} from '@expo-google-fonts/ibm-plex-sans-arabic';
+  Cairo_300Light,
+  Cairo_400Regular,
+  Cairo_500Medium,
+  Cairo_600SemiBold,
+  Cairo_700Bold,
+  Cairo_800ExtraBold,
+} from '@expo-google-fonts/cairo';
 
 import { queryClient } from '@/lib/queryClient';
 import { setUnauthorizedHandler } from '@/lib/api';
@@ -212,11 +213,12 @@ export default function RootLayout() {
     Outfit_700Bold,
     Outfit_800ExtraBold,
     Outfit_900Black,
-    IBMPlexSansArabic_300Light,
-    IBMPlexSansArabic_400Regular,
-    IBMPlexSansArabic_500Medium,
-    IBMPlexSansArabic_600SemiBold,
-    IBMPlexSansArabic_700Bold,
+    Cairo_300Light,
+    Cairo_400Regular,
+    Cairo_500Medium,
+    Cairo_600SemiBold,
+    Cairo_700Bold,
+    Cairo_800ExtraBold,
   });
 
   // Listen for push taps and route to the relevant receipt screen.
@@ -232,7 +234,7 @@ export default function RootLayout() {
           <StripeProvider
             publishableKey={STRIPE.publishableKey}
             merchantIdentifier={STRIPE.merchantIdentifier}
-            urlScheme="Fortuni"
+            urlScheme="promrkts"
           >
           <StatusBar style="light" />
           <AuthGate />

@@ -372,4 +372,4 @@ CUSTOM_API_KEY=your_key
 
 ## License
 
-Part of the Fortuni project.
+Part of the promrkts project.

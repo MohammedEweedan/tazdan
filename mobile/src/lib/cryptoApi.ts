@@ -104,6 +104,53 @@ export const cryptoWithdrawalAPI = {
     api.get(`/withdrawal/history?page=${page}&limit=${limit}`),
 };
 
+// ── Recurring (automated) buy ───────────────────────────────────────
+export type RecurringFrequency = 'DAILY' | 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY';
+export type RecurringSourceType = 'WALLET' | 'CARD';
+export type RecurringBuyStatus = 'ACTIVE' | 'PAUSED' | 'CANCELLED';
+
+export interface RecurringBuy {
+  id: string;
+  asset: string;
+  network: string;
+  fiatCurrency: string;
+  fiatAmount: string;
+  frequency: RecurringFrequency;
+  sourceType: RecurringSourceType;
+  sourceId: string | null;
+  status: RecurringBuyStatus;
+  nextRunAt: string;
+  lastRunAt: string | null;
+  lastError: string | null;
+  runCount: number;
+  createdAt: string;
+}
+
+export interface CreateRecurringBuyInput {
+  asset: string;
+  network?: string;
+  fiatCurrency: string;
+  fiatAmount: number;
+  frequency: RecurringFrequency;
+  sourceType: RecurringSourceType;
+  sourceId?: string;
+  startAt?: string;
+}
+
+export const recurringBuyAPI = {
+  list: () => api.get<{ recurringBuys: RecurringBuy[] }>('/recurring-buys'),
+  create: (data: CreateRecurringBuyInput) =>
+    api.post<{ recurringBuy: RecurringBuy }>('/recurring-buys', data),
+  update: (
+    id: string,
+    data: Partial<Pick<CreateRecurringBuyInput, 'fiatAmount' | 'frequency' | 'sourceType' | 'sourceId'>> & {
+      status?: 'ACTIVE' | 'PAUSED';
+    },
+  ) => api.put<{ recurringBuy: RecurringBuy }>(`/recurring-buys/${id}`, data),
+  remove: (id: string) => api.delete<{ success: boolean }>(`/recurring-buys/${id}`),
+  runNow: (id: string) => api.post<{ order: any }>(`/recurring-buys/${id}/run`, {}),
+};
+
 /**
  * Classify a withdrawal API error so the UI can show the right message
  * without leaking server internals.

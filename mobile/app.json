@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "Fortuni",
+    "name": "promrkts",
     "slug": "promrkts",
     "version": "0.1.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "scheme": "Fortuni",
+    "scheme": "promrkts",
     "userInterfaceStyle": "dark",
     "newArchEnabled": true,
     "splash": {
@@ -15,18 +15,18 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.Fortuni.app",
+      "bundleIdentifier": "com.promrkts.app",
       "associatedDomains": [
-        "applinks:Fortuni.com",
-        "applinks:Fortuni.app"
+        "applinks:promrkts.com",
+        "applinks:promrkts.app"
       ],
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
-        "NSFaceIDUsageDescription": "Fortuni uses Face ID to unlock your account and authorise sensitive actions."
+        "NSFaceIDUsageDescription": "promrkts uses Face ID to unlock your account and authorise sensitive actions."
       },
       "entitlements": {
         "com.apple.developer.in-app-payments": [
-          "merchant.com.Fortuni.app"
+          "merchant.com.promrkts.app"
         ]
       }
     },
@@ -35,7 +35,7 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#0A0A0B"
       },
-      "package": "com.Fortuni.app",
+      "package": "com.promrkts.app",
       "permissions": [
         "android.permission.USE_BIOMETRIC",
         "android.permission.USE_FINGERPRINT"
@@ -45,8 +45,8 @@
           "action": "VIEW",
           "autoVerify": true,
           "data": [
-            { "scheme": "https", "host": "Fortuni.com", "pathPrefix": "/claim" },
-            { "scheme": "https", "host": "Fortuni.app", "pathPrefix": "/claim" }
+            { "scheme": "https", "host": "promrkts.com", "pathPrefix": "/claim" },
+            { "scheme": "https", "host": "promrkts.app", "pathPrefix": "/claim" }
           ],
           "category": [
             "BROWSABLE",
@@ -68,13 +68,13 @@
       [
         "expo-local-authentication",
         {
-          "faceIDPermission": "Fortuni uses Face ID to unlock your account and authorise sensitive actions."
+          "faceIDPermission": "promrkts uses Face ID to unlock your account and authorise sensitive actions."
         }
       ],
       [
         "@stripe/stripe-react-native",
         {
-          "merchantIdentifier": "merchant.com.Fortuni.app",
+          "merchantIdentifier": "merchant.com.promrkts.app",
           "enableGooglePay": true
         }
       ]

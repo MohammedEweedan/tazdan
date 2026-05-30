@@ -43,7 +43,7 @@ export default function ReferralsPage() {
     if (navigator.share && data?.referralLink) {
       try {
         await navigator.share({
-          title: "Join me on Fortuni",
+          title: "Join me on promrkts",
           text: "Trade crypto with instant fiat on/off-ramps.",
           url: data.referralLink,
         });

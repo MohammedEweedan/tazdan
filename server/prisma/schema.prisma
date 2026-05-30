@@ -129,6 +129,59 @@ enum PaymentMethod {
   BANK_TRANSFER
 }
 
+// ── Recurring (automated) buy ─────────────────────────────────────
+// A user-defined standing order: buy a fixed fiat amount of an asset
+// on a fixed cadence, funded either from the in-app fiat wallet or a
+// saved card / payment method. The scheduler walks DUE rows and runs
+// each through the same quote→execute path a manual buy uses.
+enum RecurringFrequency {
+  DAILY
+  WEEKLY
+  BIWEEKLY
+  MONTHLY
+}
+
+enum RecurringSourceType {
+  WALLET // debit the user's fiat wallet balance
+  CARD   // charge a saved card / payment method
+}
+
+enum RecurringBuyStatus {
+  ACTIVE
+  PAUSED
+  CANCELLED
+}
+
+model RecurringBuy {
+  id            String              @id @default(uuid())
+  userId        String
+  // What to buy
+  asset         String // ticker, e.g. "BTC" — matches exchange engine asset
+  network       String // default network for the asset, e.g. "BTC", "ERC20"
+  // How much, in the user's preferred fiat currency
+  fiatCurrency  Currency
+  fiatAmount    Decimal             @db.Decimal(20, 8)
+  // Cadence
+  frequency     RecurringFrequency
+  // Funding
+  sourceType    RecurringSourceType
+  sourceId      String? // wallet currency or card id, depending on sourceType
+  // Lifecycle
+  status        RecurringBuyStatus  @default(ACTIVE)
+  nextRunAt     DateTime // when the scheduler should next execute this
+  lastRunAt     DateTime?
+  lastError     String? // last execution failure reason, if any
+  runCount      Int                 @default(0)
+  failureCount  Int                 @default(0)
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+
+  user          User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([status, nextRunAt])
+}
+
 enum CardTier {
   STARTER
   MASTER
@@ -260,6 +313,8 @@ model User {
   cryptoOrders                 CryptoOrder[]
   onChainTxs                   OnChainTransaction[]
   withdrawalAddressWhitelist   WithdrawalAddressWhitelist[]
+  // Recurring (automated) buys
+  recurringBuys                RecurringBuy[]
   // 1:1 — only present when accountType = BUSINESS
   businessProfile              BusinessProfile?
 

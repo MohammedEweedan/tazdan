@@ -143,7 +143,7 @@ export default function KYCPage() {
               Anti-money-laundering (AML) compliance
             </Text>
             <Text fontSize="12px" color={tok.textSub} lineHeight="1.6">
-              Fortuni is committed to preventing money laundering and terrorist financing. Unverified accounts are limited to{" "}
+              promrkts is committed to preventing money laundering and terrorist financing. Unverified accounts are limited to{" "}
               <Text as="span" fontWeight="800" color={tok.textMain}>$500/day</Text>{" "}
               in transactions. All activity is monitored by automated compliance systems.
             </Text>

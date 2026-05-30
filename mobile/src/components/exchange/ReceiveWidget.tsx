@@ -27,7 +27,7 @@ export function ReceiveWidget() {
   // know they should pick one for a friendlier link.
   const handle = user?.username?.trim();
   const linkSlug = handle ?? user?.id ?? 'me';
-  const profileLink = `https://Fortuni.com/u/${linkSlug}`;
+  const profileLink = `https://promrkts.com/u/${linkSlug}`;
   // ecc=H = highest error-correction level. Up to ~30% of the QR can
   // be obscured and it still scans. That's what makes the centered
   // logo overlay safe; without it the QR would fail to decode when
@@ -93,7 +93,7 @@ export function ReceiveWidget() {
               shadowColor: '#000', shadowOpacity: 0.12, shadowRadius: 16, shadowOffset: { width: 0, height: 6 },
             }}>
               <Image source={{ uri: qrUrl }} style={{ width: 184, height: 184 }} resizeMode="contain" />
-              {/* Centered Fortuni badge — the dark-coloured icon
+              {/* Centered promrkts badge — the dark-coloured icon
                   variant (icon-black.png = dark mark for use on white
                   surfaces). Wrapped in a small white-bordered tile so
                   there's a clean quiet-zone between the mark and the
@@ -174,8 +174,8 @@ export function ReceiveWidget() {
               value={
                 user
                   ? (`${user.firstName ?? ''} ${user.lastName ?? ''}`.trim()
-                      || (handle ? `@${handle}` : 'Fortuni user'))
-                  : 'Fortuni user'
+                      || (handle ? `@${handle}` : 'promrkts user'))
+                  : 'promrkts user'
               }
               palette={p}
               first

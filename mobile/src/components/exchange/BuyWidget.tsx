@@ -10,6 +10,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useAuthStore } from '@/store/authStore';
 import { useThemedPalette, useTheme, brand } from '@/store/themeStore';
+import { useT } from '@/store/i18nStore';
 import { SlideToConfirm } from '@/components/ui/SlideToConfirm';
 import { ExpressPayButton } from '@/components/ui/ExpressPayButton';
 import { useWallets, useCards, useMarkets, useTransactionSound } from '@/hooks';
@@ -145,6 +146,7 @@ interface BuyWidgetProps {
 
 export function BuyWidget({ defaultAsset, lockAsset = false }: BuyWidgetProps = {}) {
   const { user } = useAuthStore();
+  const tr = useT();
   const p = useThemedPalette();
   const themeMode = useTheme((s) => s.mode);
   const brandAccent = themeMode === 'dark' ? brand.primaryDark : brand.primary;
@@ -279,7 +281,7 @@ export function BuyWidget({ defaultAsset, lockAsset = false }: BuyWidgetProps = 
         setQuote(res.data.quote);
         idemRef.current = `ord_${Date.now()}`;
       } catch (e: any) {
-        setError(e?.response?.data?.error ?? 'Could not get quote');
+        setError(e?.response?.data?.error ?? tr('buy.errQuote'));
         setQuote(null);
       } finally { setLoading(false); }
     }, 500);
@@ -307,7 +309,7 @@ export function BuyWidget({ defaultAsset, lockAsset = false }: BuyWidgetProps = 
   // ── Confirm ───────────────────────────────────────────────────────
   async function onConfirm() {
     if (!quote) return;
-    if (intent === 'send' && !sendAddr.trim()) { setError('Enter a recipient address'); return; }
+    if (intent === 'send' && !sendAddr.trim()) { setError(tr('buy.enterRecipient')); return; }
     setExec(true); setError(null);
     try {
       await cryptoExchangeAPI.execute({
@@ -315,11 +317,11 @@ export function BuyWidget({ defaultAsset, lockAsset = false }: BuyWidgetProps = 
         ...(intent === 'send' ? { recipientAddress: sendAddr.trim() } : {}),
       } as any);
       playSuccess('buy');
-      setSuccess(`${fmt(quote.cryptoAmount, 8)} ${asset} ${intent === 'send' ? 'sent' : 'purchased'} ✓`);
+      setSuccess(`${fmt(quote.cryptoAmount, 8)} ${asset} ${intent === 'send' ? tr('buy.sent') : tr('buy.purchased')} ✓`);
       setQuote(null); setFiat(''); setSendAddr('');
     } catch (e: any) {
       playError();
-      setError(e?.response?.data?.error ?? 'Order failed');
+      setError(e?.response?.data?.error ?? tr('buy.errOrder'));
     } finally { setExec(false); }
   }
 
@@ -337,8 +339,8 @@ export function BuyWidget({ defaultAsset, lockAsset = false }: BuyWidgetProps = 
 
   // Slider label — clean, no embedded seconds (badge handles that)
   const slideLabel = canConfirm
-    ? (intent === 'send' ? `Slide to send ${asset}` : `Slide to buy ${asset}`)
-    : 'Enter amount';
+    ? (intent === 'send' ? tr('buy.slideToSend').replace('{asset}', asset) : tr('buy.slideToBuy').replace('{asset}', asset))
+    : tr('buy.enterAmount');
 
   // Top gainers: top 5 by 24h change from tickers
   const topGainers = useMemo(() => {
@@ -414,7 +416,7 @@ export function BuyWidget({ defaultAsset, lockAsset = false }: BuyWidgetProps = 
             borderWidth: 1, borderColor: `${brandAccent}3a`,
             flexDirection: 'row', alignItems: 'center', gap: 4,
           }}>
-            <Text style={{ color: brandAccent, fontSize: 11, fontWeight: '700', letterSpacing: 0.3 }}>CHANGE</Text>
+            <Text style={{ color: brandAccent, fontSize: 11, fontWeight: '700', letterSpacing: 0.3 }}>{tr('buy.change')}</Text>
             <Ionicons name="chevron-down" size={13} color={brandAccent} />
           </View>
         )}
@@ -430,7 +432,7 @@ export function BuyWidget({ defaultAsset, lockAsset = false }: BuyWidgetProps = 
           numberOfLines={1}
           style={{ color: p.fgMuted, fontSize: 11, fontWeight: '700', letterSpacing: 0.6, flexShrink: 0 }}
         >
-          YOU PAY
+          {tr('buy.youPay')}
         </Text>
         {priceEstimate && !quote && livePrice > 0 && (
           <Text
@@ -505,14 +507,14 @@ export function BuyWidget({ defaultAsset, lockAsset = false }: BuyWidgetProps = 
         {loading ? (
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
             <ActivityIndicator size="small" color={meta.color} />
-            <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '500' }}>Getting best price…</Text>
+            <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '500' }}>{tr('buy.gettingPrice')}</Text>
           </View>
         ) : quote ? (
           <>
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
               <View>
                 <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '500', letterSpacing: 0.5, marginBottom: 4 }}>
-                  {intent === 'send' ? 'RECIPIENT RECEIVES' : 'YOU RECEIVE'}
+                  {intent === 'send' ? tr('buy.recipientReceives') : tr('buy.youReceive')}
                 </Text>
                 <Text style={{ color: p.fg, fontSize: 26, fontWeight: '500', letterSpacing: 0 }}>
                   {fmt(quote.cryptoAmount, 8)}{' '}
@@ -541,10 +543,10 @@ export function BuyWidget({ defaultAsset, lockAsset = false }: BuyWidgetProps = 
             {showFees && (
               <View style={{ marginTop: 8, gap: 5 }}>
                 {[
-                  { label: 'Platform fee (0.5%)', value: fmt(quote.platformFee, 2) },
-                  { label: 'Network fee',          value: fmt(quote.networkFee, 2) },
-                  { label: 'Exchange rate',        value: `1 ${asset} = ${sym(baseCurrency)}${fmtPrice(Number(quote.quotedPrice))}` },
-                  { label: 'Total you pay',        value: fmt(quote.totalUserPays, 2), bold: true },
+                  { label: tr('buy.platformFee'), value: fmt(quote.platformFee, 2) },
+                  { label: tr('buy.networkFee'),  value: fmt(quote.networkFee, 2) },
+                  { label: tr('buy.exchangeRate'), value: `1 ${asset} = ${sym(baseCurrency)}${fmtPrice(Number(quote.quotedPrice))}` },
+                  { label: tr('buy.totalYouPay'), value: fmt(quote.totalUserPays, 2), bold: true },
                 ].map(({ label, value, bold }) => (
                   <View key={label} style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
                     <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: bold ? '700' : '500' }}>{label}</Text>
@@ -560,19 +562,19 @@ export function BuyWidget({ defaultAsset, lockAsset = false }: BuyWidgetProps = 
           // Instant price estimate from live ticker — before full quote arrives
           <View>
             <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '500', letterSpacing: 0.5, marginBottom: 4 }}>
-              {intent === 'send' ? 'RECIPIENT RECEIVES (EST.)' : 'YOU RECEIVE (EST.)'}
+              {intent === 'send' ? tr('buy.recipientReceivesEst') : tr('buy.youReceiveEst')}
             </Text>
             <Text style={{ color: p.fgFaint, fontSize: 24, fontWeight: '500' }}>
               ≈ {fmt(priceEstimate, 8)}{' '}
               <Text style={{ color: meta.color, fontSize: 16 }}>{asset}</Text>
             </Text>
             <Text style={{ color: p.fgFaint, fontSize: 11, marginTop: 6 }}>
-              {loading ? 'Getting exact quote…' : 'Live estimate · quote loading'}
+              {loading ? tr('buy.gettingExactQuote') : tr('buy.liveEstimate')}
             </Text>
           </View>
         ) : (
           <Text style={{ color: p.fgFaint, fontSize: 13, fontWeight: '500', textAlign: 'center' }}>
-            Enter an amount to see a live quote
+            {tr('buy.enterAmountQuote')}
           </Text>
         )}
       </View>
@@ -587,7 +589,7 @@ export function BuyWidget({ defaultAsset, lockAsset = false }: BuyWidgetProps = 
           padding: 14, marginBottom: 14, opacity: pressed ? 0.8 : 1,
         })}
       >
-        <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '500', flex: 1 }}>Pay with</Text>
+        <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '500', flex: 1 }}>{tr('buy.payWith')}</Text>
         {payMethod && (
           <Text style={{ color: p.fg, fontSize: 13, fontWeight: '500' }} numberOfLines={1}>{methodLabel(payMethod)}</Text>
         )}
@@ -622,7 +624,7 @@ export function BuyWidget({ defaultAsset, lockAsset = false }: BuyWidgetProps = 
               color: intent === v ? p.accentFg : p.fgMuted,
               fontSize: 13, fontWeight: '700',
             }}>
-              {v === 'buy' ? 'To my wallet' : 'To address'}
+              {v === 'buy' ? tr('buy.toMyWallet') : tr('buy.toAddress')}
             </Text>
           </Pressable>
         ))}
@@ -634,7 +636,7 @@ export function BuyWidget({ defaultAsset, lockAsset = false }: BuyWidgetProps = 
           <Ionicons name="wallet-outline" size={16} color={p.fgMuted} />
           <TextInput
             value={sendAddr} onChangeText={setSendAddr}
-            placeholder={`${asset} address`} placeholderTextColor={p.fgFaint}
+            placeholder={tr('buy.addressPlaceholder').replace('{asset}', asset)} placeholderTextColor={p.fgFaint}
             style={{ flex: 1, color: p.fg, fontSize: 13, marginLeft: 10 }}
             autoCapitalize="none" autoCorrect={false}
           />
@@ -650,14 +652,14 @@ export function BuyWidget({ defaultAsset, lockAsset = false }: BuyWidgetProps = 
             cryptoCurrency={serverAsset(asset)}
             enabled={!exec && !success}
             onSuccess={() => {
-              setSuccess(`${fmt(quote?.cryptoAmount ?? priceEstimate ?? 0, 8)} ${asset} purchased ✓`);
+              setSuccess(`${fmt(quote?.cryptoAmount ?? priceEstimate ?? 0, 8)} ${asset} ${tr('buy.purchased')} ✓`);
               setQuote(null); setFiat('');
             }}
             onError={(m) => setError(m)}
           />
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 12, marginBottom: 2 }}>
             <View style={{ flex: 1, height: 1, backgroundColor: p.border }} />
-            <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '600', letterSpacing: 0.8 }}>OR</Text>
+            <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '600', letterSpacing: 0.8 }}>{tr('buy.or')}</Text>
             <View style={{ flex: 1, height: 1, backgroundColor: p.border }} />
           </View>
         </View>
@@ -707,7 +709,7 @@ export function BuyWidget({ defaultAsset, lockAsset = false }: BuyWidgetProps = 
                 ref={searchRef}
                 value={searchQuery}
                 onChangeText={setSearchQuery}
-                placeholder="Bitcoin, ETH, SHIB, PEPE…"
+                placeholder={tr('buy.searchPlaceholder')}
                 placeholderTextColor={p.fgFaint}
                 style={{ flex: 1, color: p.fg, fontSize: 16, fontWeight: '500' }}
                 autoCapitalize="none"
@@ -857,8 +859,8 @@ export function BuyWidget({ defaultAsset, lockAsset = false }: BuyWidgetProps = 
 
               {searchQuery.length > 0 && displayList.length === 0 && !searchLoading && (
                 <View style={{ alignItems: 'center', paddingVertical: 48 }}>
-                  <Text style={{ color: p.fgMuted, fontSize: 15, fontWeight: '500' }}>No results for "{searchQuery}"</Text>
-                  <Text style={{ color: p.fgFaint, fontSize: 13, marginTop: 6 }}>Try BTC, ETH, DOGE…</Text>
+                  <Text style={{ color: p.fgMuted, fontSize: 15, fontWeight: '500' }}>{tr('buy.noResults').replace('{query}', searchQuery)}</Text>
+                  <Text style={{ color: p.fgFaint, fontSize: 13, marginTop: 6 }}>{tr('buy.tryExamples')}</Text>
                 </View>
               )}
             </ScrollView>
@@ -875,7 +877,7 @@ export function BuyWidget({ defaultAsset, lockAsset = false }: BuyWidgetProps = 
             <View style={{ alignItems: 'center', marginBottom: 12 }}>
               <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: p.border }} />
             </View>
-            <Text style={{ color: p.fg, fontSize: 20, fontWeight: '500', paddingHorizontal: 20, marginBottom: 16 }}>Pay with</Text>
+            <Text style={{ color: p.fg, fontSize: 20, fontWeight: '500', paddingHorizontal: 20, marginBottom: 16 }}>{tr('buy.payWith')}</Text>
             <ScrollView style={{ maxHeight: 400 }} contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 8 }}>
               {payMethods.map((m) => {
                 const selected = payMethod ? methodId(m) === methodId(payMethod) : false;
@@ -899,7 +901,7 @@ export function BuyWidget({ defaultAsset, lockAsset = false }: BuyWidgetProps = 
                     <View style={{ flex: 1 }}>
                       <Text style={{ color: p.fg, fontSize: 14, fontWeight: '500' }}>{methodLabel(m)}</Text>
                       <Text style={{ color: p.fgMuted, fontSize: 11, marginTop: 2 }}>
-                        {m.type === 'card' ? 'Debit / Credit card' : m.type === 'fiat' ? 'Fiat wallet' : 'Crypto balance'}
+                        {m.type === 'card' ? tr('buy.methodCard') : m.type === 'fiat' ? tr('buy.methodFiat') : tr('buy.methodCrypto')}
                       </Text>
                     </View>
                     {selected && <Ionicons name="checkmark-circle" size={22} color={mc} />}

@@ -1,7 +1,7 @@
 /**
  * Claim screen — subtle lottery ticket aesthetic.
  *
- * Universal URL: https://Fortuni.com/claim/:token
+ * Universal URL: https://promrkts.com/claim/:token
  * Expo Router:  /claim/[token]
  */
 
@@ -24,7 +24,7 @@ import { CoinIcon } from '@/components/ui/CoinIcon';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 const TICKET_W = Math.min(SCREEN_W - 48, 380);
-const LANDING_URL = 'https://Fortuni.com';
+const LANDING_URL = 'https://promrkts.com';
 
 type Phase = 'loading' | 'preview' | 'pin' | 'claiming' | 'claimed' | 'expired' | 'cancelled' | 'already_claimed' | 'not_found';
 
@@ -403,7 +403,7 @@ export default function ClaimScreen() {
                 {t('claim.fineprint') || 'Funds settle instantly. Claim links cannot be claimed twice.'}
               </Text>
 
-              {/* ── What is Fortuni? ── */}
+              {/* ── What is promrkts? ── */}
               <Pressable
                 onPress={() => Linking.openURL(LANDING_URL)}
                 style={({ pressed }) => ({
@@ -416,7 +416,7 @@ export default function ClaimScreen() {
                 })}
               >
                 <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '600' }}>
-                  {t('claim.whatIsFortuni') || 'What is Fortuni?'}
+                  {t('claim.whatIspromrkts') || 'What is promrkts?'}
                 </Text>
               </Pressable>
             </Animated.View>
@@ -455,7 +455,7 @@ export default function ClaimScreen() {
                   {(t('claim.success') || 'Claimed!')}
                 </Text>
                 <Text style={{ color: p.fgMuted, fontSize: 14, fontWeight: '500', marginTop: 8, textAlign: 'center', lineHeight: 20 }}>
-                  {`${preview.amount} ${preview.asset} ${(t('claim.successBody') || 'is now in your Fortuni wallet.')}`}
+                  {`${preview.amount} ${preview.asset} ${(t('claim.successBody') || 'is now in your promrkts wallet.')}`}
                 </Text>
               </View>
 
@@ -532,7 +532,7 @@ export default function ClaimScreen() {
                 <Text style={{ color: p.fgMuted, fontSize: 14, marginTop: 8, textAlign: 'center', paddingHorizontal: 20, lineHeight: 20 }}>
                   {phase === 'expired'         && (t('claim.expiredBody')        || 'The funds have been returned to the sender. Ask them to send a fresh link.')}
                   {phase === 'cancelled'       && (t('claim.cancelledBody')      || 'The sender pulled this claim back before you could open it.')}
-                  {phase === 'already_claimed' && (t('claim.alreadyBody')        || 'These funds have already landed in another Fortuni wallet.')}
+                  {phase === 'already_claimed' && (t('claim.alreadyBody')        || 'These funds have already landed in another promrkts wallet.')}
                   {phase === 'not_found'       && (t('claim.notFoundBody')       || 'The link may be malformed. Double-check the URL from your email.')}
                 </Text>
               </View>

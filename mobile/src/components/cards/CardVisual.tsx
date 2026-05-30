@@ -312,7 +312,7 @@ function CardFront({
               <Text style={{ color: '#fff', fontSize: 10, fontWeight: '600' }}>FROZEN</Text>
             </View>
           )}
-          {/* Fortuni mark — icon-white on every tier because the
+          {/* promrkts mark — icon-white on every tier because the
               monochrome cards are always dark. Placed in the upper
               right corner per the design spec. */}
           <Image

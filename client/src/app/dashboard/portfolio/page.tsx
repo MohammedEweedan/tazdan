@@ -69,7 +69,7 @@ export default function PortfolioPage() {
       const url = window.URL.createObjectURL(new Blob([r.data]));
       const a = document.createElement("a");
       a.href = url;
-      a.download = `Fortuni-transactions-${new Date().toISOString().slice(0, 10)}.csv`;
+      a.download = `promrkts-transactions-${new Date().toISOString().slice(0, 10)}.csv`;
       a.click();
       window.URL.revokeObjectURL(url);
     } catch {}

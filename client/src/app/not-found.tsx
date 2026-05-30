@@ -41,7 +41,7 @@ type StatusKind = "live" | "degraded" | "down" | "unknown";
 const STATUS_ENDPOINT =
   process.env.NEXT_PUBLIC_STATUS_URL ??
   `${process.env.NEXT_PUBLIC_API_URL ?? ""}/healthz`;
-const SUPPORT_EMAIL = "support@Fortuni.com";
+const SUPPORT_EMAIL = "support@promrkts.com";
 
 function useServerStatus() {
   const [status, setStatus] = useState<StatusKind>("unknown");
@@ -217,7 +217,7 @@ export default function NotFound() {
             <Box position="relative" zIndex={1}>
               <Image
                 src={dark ? "/icon-black.png" : "/icon-white.png"}
-                alt="Fortuni"
+                alt="promrkts"
                 width={64}
                 height={64}
                 style={{ borderRadius: 16 }}

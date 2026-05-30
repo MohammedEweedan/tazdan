@@ -40,6 +40,7 @@ import { SendWidget } from '@/components/exchange/SendWidget';
 import { ReceiveWidget } from '@/components/exchange/ReceiveWidget';
 import { WithdrawWidget } from '@/components/exchange/WithdrawWidget';
 import { DepositWidget } from '@/components/exchange/DepositWidget';
+import { RecurringBuyWidget } from '@/components/exchange/RecurringBuyWidget';
 import { PressableScale } from '@/components/ui/Motion';
 import { AnnouncementBanner } from '@/components/ui/AnnouncementBanner';
 import type { Wallet } from '@/types';
@@ -91,6 +92,7 @@ export default function Home() {
   const [sellModalVisible, setSellModalVisible] = useState(false);
   const [sendModalVisible, setSendModalVisible] = useState(false);
   const [receiveModalVisible, setReceiveModalVisible] = useState(false);
+  const [recurringModalVisible, setRecurringModalVisible] = useState(false);
   const [depositModalVisible, setDepositModalVisible] = useState(false);
   const [swapModalVisible, setSwapModalVisible] = useState(false);
   const [withdrawModalVisible, setWithdrawModalVisible] = useState(false);
@@ -343,9 +345,15 @@ export default function Home() {
             gap: 10,
           }}>
             <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10, minWidth: 0 }}>
+              {/* Tapping the avatar + @handle opens the receive / QR-code
+                  sheet (the QR trigger). Long-press still jumps to the
+                  full profile. */}
               <Pressable
-                onPress={() => { h.selection(); router.push('/profile'); }}
+                onPress={() => { h.selection(); setReceiveModalVisible(true); }}
+                onLongPress={() => { h.selection(); router.push('/profile'); }}
                 hitSlop={6}
+                accessibilityRole="button"
+                accessibilityLabel={t('action.receive')}
                 style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flexShrink: 1, minWidth: 0 }}
               >
                 <View style={{
@@ -405,10 +413,10 @@ export default function Home() {
             </View>
             <View style={{ flexDirection: 'row', gap: 7, flexShrink: 0 }}>
               <HeaderIconButton
-                icon="qr-code-outline"
-                onPress={() => { h.selection(); setReceiveModalVisible(true); }}
+                icon="repeat-outline"
+                onPress={() => { h.selection(); setRecurringModalVisible(true); }}
                 palette={p}
-                a11y={t('action.receive')}
+                a11y={t('recurring.title')}
               />
               <HeaderIconButton
                 icon="notifications-outline"
@@ -438,7 +446,7 @@ export default function Home() {
           {/* 24h delta — smaller, directly under balance */}
           <View style={{
             flexDirection: 'row', alignItems: 'center', gap: 6,
-            justifyContent: 'flex-start',
+            justifyContent: 'center',
             paddingHorizontal: 24, marginTop: 2,
           }}>
             <Text style={{
@@ -473,7 +481,7 @@ export default function Home() {
           </View>
 
           {/* ── PRIMARY ACTIONS ── */}
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, paddingHorizontal: 24, marginTop: 28 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingHorizontal: 24, marginTop: 28 }}>
             {ACTIONS.map((a) => (
               <ActionButton key={a.key} label={a.label} to={a.to} onPress={a.onPress} palette={p} />
             ))}
@@ -717,6 +725,26 @@ export default function Home() {
               <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: insets.bottom + 8 }}>
                 <ReceiveWidget />
               </ScrollView>
+            </Pressable>
+          </Pressable>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* Recurring Buy Widget Modal */}
+      <Modal visible={recurringModalVisible} transparent animationType="slide" onRequestClose={() => setRecurringModalVisible(false)}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+          <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' }} onPress={() => setRecurringModalVisible(false)}>
+            <Pressable style={{ backgroundColor: p.bg, borderTopLeftRadius: 28, borderTopRightRadius: 28, maxHeight: '90%' }} onPress={(e) => e.stopPropagation()}>
+              <View style={{ alignItems: 'center', paddingTop: 10, paddingBottom: 2 }}>
+                <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: p.border }} />
+              </View>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 24, paddingTop: 8, paddingBottom: 4 }}>
+                <Text style={{ color: p.fg, fontSize: 20, fontWeight: '600', letterSpacing: -0.4 }}>{t('recurring.title')}</Text>
+                <Pressable onPress={() => setRecurringModalVisible(false)} hitSlop={8} style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border, alignItems: 'center', justifyContent: 'center' }}>
+                  <Ionicons name="close" size={16} color={p.fg} />
+                </Pressable>
+              </View>
+              <RecurringBuyWidget onDone={() => setRecurringModalVisible(false)} />
             </Pressable>
           </Pressable>
         </KeyboardAvoidingView>
@@ -1159,9 +1187,6 @@ function AnimatedTotal({
   const targetRef = useRef(value);
   const startTsRef = useRef<number | null>(null);
 
-  const flashOpacity = useRef(new Animated.Value(0)).current;
-  const flashTranslateY = useRef(new Animated.Value(6)).current;
-  const [flash, setFlash] = useState<{ dir: 'up' | 'down'; delta: number } | null>(null);
   const prevValueRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -1195,36 +1220,6 @@ function AnimatedTotal({
     return () => cancelAnimationFrame(raf);
   }, [value]);
 
-  // Detect transactions: when the value changes by a non-trivial amount,
-  // pop the green/red flash pill.
-  useEffect(() => {
-    if (prevValueRef.current === null) {
-      prevValueRef.current = value;
-      return;
-    }
-    const diff = value - prevValueRef.current;
-    prevValueRef.current = value;
-    // Ignore tiny price-tick noise (< $0.50). Real txs move balances by
-    // dollars or more so this still catches a deposit / send / fill.
-    if (Math.abs(diff) < 0.5) return;
-    setFlash({ dir: diff > 0 ? 'up' : 'down', delta: diff });
-    flashOpacity.setValue(0);
-    flashTranslateY.setValue(6);
-    Animated.sequence([
-      Animated.parallel([
-        Animated.timing(flashOpacity,    { toValue: 1, duration: 220, useNativeDriver: true }),
-        Animated.timing(flashTranslateY, { toValue: 0, duration: 220, useNativeDriver: true }),
-      ]),
-      Animated.delay(1300),
-      Animated.parallel([
-        Animated.timing(flashOpacity,    { toValue: 0, duration: 350, useNativeDriver: true }),
-        Animated.timing(flashTranslateY, { toValue: -6, duration: 350, useNativeDriver: true }),
-      ]),
-    ]).start(() => setFlash(null));
-  }, [value]);
-
-  // Tint the main text briefly while a flash is active.
-  const flashColor = flash?.dir === 'up' ? p.greenFg : flash?.dir === 'down' ? p.redFg : p.fg;
 
   const converted = dc.convert(displayed);
   const totalStr = converted.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: dc.isCrypto ? 6 : 2 });
@@ -1236,53 +1231,30 @@ function AnimatedTotal({
   const maskedStr = totalStr.replace(/[0-9]/g, '*');
 
   return (
-    <View style={{ alignItems: 'flex-start', paddingHorizontal: 24, paddingTop: 10, paddingBottom: 2 }}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+    <View style={{ alignItems: 'center', paddingHorizontal: 24, paddingTop: 10, paddingBottom: 2 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
         <Pressable onPress={onPress} hitSlop={12}>
           <Text style={{
             color: p.fg,
-            fontSize, fontWeight: '600', letterSpacing: -1.6,
-            textAlign: 'left',
+            // Slightly larger, with a hair of positive letter-spacing so the
+            // digits breathe and read cleanly at a glance.
+            fontSize: fontSize + 4, fontWeight: '600', letterSpacing: 0.5,
+            textAlign: 'center',
             fontVariant: ['tabular-nums'],
           }}>
             {dc.symbol}{showBalance ? totalStr : maskedStr}
           </Text>
         </Pressable>
+        {/* Eye toggle sits at the top-right of the balance — replaces the
+            former green/red 24h flash arrow. */}
         <Pressable onPress={onToggle} hitSlop={10} style={{ padding: 4 }}>
           <Ionicons
             name={showBalance ? 'eye-outline' : 'eye-off-outline'}
-            size={18}
+            size={20}
             color={p.fgFaint}
           />
         </Pressable>
       </View>
-
-      {flash && (
-        <Animated.View
-          style={{
-            position: 'absolute', top: -6, right: '8%',
-            opacity: flashOpacity,
-            transform: [{ translateY: flashTranslateY }],
-            flexDirection: 'row', alignItems: 'center', gap: 4,
-            paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8,
-            backgroundColor: flash.dir === 'up' ? 'rgba(34,197,94,0.3)' : 'rgba(239,68,68,0.3)',
-            borderWidth: 1,
-            borderColor: flash.dir === 'up' ? '#22c55e' : '#ef4444',
-          }}
-        >
-          <Ionicons
-            name={flash.dir === 'up' ? 'arrow-up' : 'arrow-down'}
-            size={10}
-            color={flash.dir === 'up' ? '#22c55e' : '#ef4444'}
-          />
-          {/* <Text style={{
-            color: flash.dir === 'up' ? p.greenFg : p.redFg,
-            fontSize: 11, fontWeight: '600', fontVariant: ['tabular-nums'],
-          }}>
-            {flash.dir === 'up' ? '+' : '-'}${formatFiat(Math.abs(flash.delta))}
-          </Text> */}
-        </Animated.View>
-      )}
     </View>
   );
 }
@@ -1316,7 +1288,7 @@ function ActionButton({
         height: 44,
         borderRadius: 22,
         backgroundColor: isDark ? '#ffffff' : '#111111',
-        paddingHorizontal: 22,
+        paddingHorizontal: 18,
         alignItems: 'center',
         justifyContent: 'center',
         shadowColor: isDark ? '#ffffff' : '#000000',

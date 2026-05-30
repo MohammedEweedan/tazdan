@@ -254,7 +254,7 @@ export default function PublicPayPage() {
             <HStack spacing={2}>
               <Icon as={FiShield} color={brand} boxSize={4} flexShrink={0} />
               <Text fontSize="11px" color="#94a3b8">
-                Payments are processed instantly on the Fortuni platform. Currently, internal transfers are supported for USDT.
+                Payments are processed instantly on the promrkts platform. Currently, internal transfers are supported for USDT.
                 External blockchain payments coming soon.
               </Text>
             </HStack>

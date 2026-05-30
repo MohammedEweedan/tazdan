@@ -254,7 +254,7 @@ export function SendWidget() {
                         text: t('common.share') || 'Share',
                         onPress: () =>
                           Share.share({
-                            message: `${(t('send.claimShareIntro') || "I sent you")} ${amount} ${currency} on Fortuni → ${link.claimUrl}`,
+                            message: `${(t('send.claimShareIntro') || "I sent you")} ${amount} ${currency} on promrkts → ${link.claimUrl}`,
                           }),
                       },
                       {
@@ -286,7 +286,7 @@ export function SendWidget() {
                     </View>
                     <View style={{ flex: 1 }}>
                       <Text style={{ color: p.fg, fontSize: 14, fontWeight: '700' }}>
-                        {t('send.noAccountYet') || 'No Fortuni account yet'}
+                        {t('send.noAccountYet') || 'No promrkts account yet'}
                       </Text>
                       <Text style={{ color: p.fgMuted, fontSize: 12, marginTop: 2, lineHeight: 17 }}>
                         {t('send.claimExplain') || 'Send anyway via a claim link. The recipient gets a one-tap URL that credits their wallet — even if they have to sign up first.'}
@@ -506,7 +506,7 @@ export function SendWidget() {
               </View>
             )}
             <Text style={{ color: p.fgMuted, fontSize: 12, textAlign: 'center', maxWidth: 220 }}>
-              Any QR scanner or the Fortuni app will open this claim link.
+              Any QR scanner or the promrkts app will open this claim link.
             </Text>
             <Pressable
               onPress={() => setQrUrl(null)}

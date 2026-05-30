@@ -18,7 +18,7 @@ import { create } from 'zustand';
 
 export type ThemeMode = 'dark' | 'light';
 
-const KEY = 'Fortuni.theme';
+const KEY = 'promrkts.theme';
 
 export interface Palette {
   // ── Surfaces (elevation tiers) ──────────────────────────────────
