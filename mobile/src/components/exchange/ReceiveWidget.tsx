@@ -93,16 +93,28 @@ export function ReceiveWidget() {
               shadowColor: '#000', shadowOpacity: 0.12, shadowRadius: 16, shadowOffset: { width: 0, height: 6 },
             }}>
               <Image source={{ uri: qrUrl }} style={{ width: 184, height: 184 }} resizeMode="contain" />
-              {/* Centered Fortuni badge — icon-dark.png per strict requirement */}
-              <View pointerEvents="none" style={{ position: 'absolute' }}>
+              {/* Centered Fortuni badge — the dark-coloured icon
+                  variant (icon-black.png = dark mark for use on white
+                  surfaces). Wrapped in a small white-bordered tile so
+                  there's a clean quiet-zone between the mark and the
+                  surrounding QR modules; without that ring the icon
+                  edges blur into the code's black pixels and the
+                  result looks like a smudge. */}
+              <View
+                pointerEvents="none"
+                style={{
+                  position: 'absolute',
+                  width: 44, height: 44, borderRadius: 12,
+                  backgroundColor: '#ffffff',
+                  borderWidth: 3, borderColor: '#ffffff',
+                  alignItems: 'center', justifyContent: 'center',
+                  shadowColor: '#000', shadowOpacity: 0.18,
+                  shadowRadius: 4, shadowOffset: { width: 0, height: 1 },
+                }}
+              >
                 <Image
-                  source={require('../../../assets/icon-white.png')}
-                  style={{
-                    width: 24, height: 24, borderRadius: 12,
-                    borderWidth: 3, borderColor: '#ffffff',
-                    shadowColor: '#000', shadowOpacity: 0.18,
-                    shadowRadius: 4, shadowOffset: { width: 0, height: 1 },
-                  }}
+                  source={require('../../../assets/icon-black.png')}
+                  style={{ width: 32, height: 32 }}
                   resizeMode="contain"
                 />
               </View>

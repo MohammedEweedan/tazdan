@@ -46,13 +46,22 @@ export const suspiciousLimiter = rateLimit({
 
 /**
  * Auth limiter (login / password reset / 2FA)
+ *
+ * `skipSuccessfulRequests` is intentionally false.  Setting it to
+ * true would let an attacker who has a stolen password brute-force
+ * the 6-digit TOTP code unbounded — the per-account password check
+ * succeeds, the server returns `requires2FA: true` with status 200,
+ * the limiter skips the request, and they get another free guess.
+ * Counting every request closes that amplification, at the cost of
+ * a legit user hitting the limit faster if they spam login (10 in
+ * 15min is still very generous for human use).
  */
 export const authLimiter = rateLimit({
   windowMs: minutes(15),
   max: 10,
   standardHeaders: true,
   legacyHeaders: false,
-  skipSuccessfulRequests: true,
+  skipSuccessfulRequests: false,
   skip: skipRateLimit,
   message: { error: 'Too many auth attempts. Try again in 15 minutes.' },
   handler: (req, res) => {

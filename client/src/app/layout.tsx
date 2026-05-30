@@ -1,39 +1,63 @@
 import type { Metadata, Viewport } from 'next';
-import { DM_Sans, Cairo, Inter } from 'next/font/google';
+import localFont from 'next/font/local';
 import AppProviders from '@/providers/AppProviders';
 import PageTitle from '@/components/PageTitle';
 
 /* ─────────────────────────────────────────────────────────────────
-   Fonts — self-hosted via next/font.
+   Fonts — TRULY self-hosted via next/font/local.
 
-   Why this matters for Lighthouse:
-   - One fewer DNS lookup + TLS handshake (no fonts.googleapis.com).
-   - Removes the render-blocking <link rel="stylesheet"> for fonts.
-   - Automatic subsetting (latin) cuts file size ~80%.
-   - `display: 'swap'` prevents invisible-text FOIT during load.
-   - Per-font variable lets us drop weights/styles we don't actually use.
+   The previous next/font/google config still hit Google's CDN at
+   build time, so a flaky network surfaced the
+   "Failed to fetch `Inter` from Google Fonts" warning and forced
+   Next to fall back to system fonts.  We now bundle the WOFF2 files
+   under client/public/fonts/, copied from the @fontsource packages.
+   No DNS, no TLS, no fetch — the build is fully offline.
 
-   Cairo carries the Arabic glyphs. DM Sans is the display family.
-   Inter is the body fallback in case the page renders bare HTML.
+   Cairo carries the Arabic glyphs (`arabic` + `latin` ranges).
+   DM Sans is the display family.  Inter is the body fallback in
+   case the page renders bare HTML.
    ───────────────────────────────────────────────────────────── */
-const dmSans = DM_Sans({
-  subsets: ['latin'],
+const dmSans = localFont({
+  src: [
+    { path: '../../public/fonts/DMSans-400.woff2', weight: '400', style: 'normal' },
+    { path: '../../public/fonts/DMSans-500.woff2', weight: '500', style: 'normal' },
+    { path: '../../public/fonts/DMSans-600.woff2', weight: '600', style: 'normal' },
+    { path: '../../public/fonts/DMSans-700.woff2', weight: '700', style: 'normal' },
+    { path: '../../public/fonts/DMSans-800.woff2', weight: '800', style: 'normal' },
+  ],
   display: 'swap',
-  weight: ['400', '500', '600', '700', '800'],
   variable: '--font-dm-sans',
 });
 
-const inter = Inter({
-  subsets: ['latin'],
+const inter = localFont({
+  src: [
+    { path: '../../public/fonts/Inter-400.woff2', weight: '400', style: 'normal' },
+    { path: '../../public/fonts/Inter-500.woff2', weight: '500', style: 'normal' },
+    { path: '../../public/fonts/Inter-600.woff2', weight: '600', style: 'normal' },
+    { path: '../../public/fonts/Inter-700.woff2', weight: '700', style: 'normal' },
+  ],
   display: 'swap',
-  weight: ['400', '500', '600', '700'],
   variable: '--font-inter',
 });
 
-const cairo = Cairo({
-  subsets: ['arabic', 'latin'],
+// Cairo includes both Arabic and Latin ranges so a single family
+// covers the bilingual UI.  Order matters: Arabic first lets the
+// glyph-runs system pick Arabic for RTL strings without an extra
+// font swap.
+const cairo = localFont({
+  src: [
+    { path: '../../public/fonts/Cairo-arabic-400.woff2', weight: '400', style: 'normal' },
+    { path: '../../public/fonts/Cairo-arabic-500.woff2', weight: '500', style: 'normal' },
+    { path: '../../public/fonts/Cairo-arabic-600.woff2', weight: '600', style: 'normal' },
+    { path: '../../public/fonts/Cairo-arabic-700.woff2', weight: '700', style: 'normal' },
+    { path: '../../public/fonts/Cairo-arabic-800.woff2', weight: '800', style: 'normal' },
+    { path: '../../public/fonts/Cairo-latin-400.woff2',  weight: '400', style: 'normal' },
+    { path: '../../public/fonts/Cairo-latin-500.woff2',  weight: '500', style: 'normal' },
+    { path: '../../public/fonts/Cairo-latin-600.woff2',  weight: '600', style: 'normal' },
+    { path: '../../public/fonts/Cairo-latin-700.woff2',  weight: '700', style: 'normal' },
+    { path: '../../public/fonts/Cairo-latin-800.woff2',  weight: '800', style: 'normal' },
+  ],
   display: 'swap',
-  weight: ['400', '500', '600', '700', '800'],
   variable: '--font-cairo',
 });
 

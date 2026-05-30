@@ -166,8 +166,16 @@ export class WalletController {
       if (!fromPx || !toPx) {
         throw new AppError(`Unsupported currency pair ${from}->${to}`, 400);
       }
-      const usdValue = amount * fromPx;
-      const credited = usdValue / toPx;
+      // Pricing in Decimal so we don't lose precision on large
+      // amounts.  The old code did `usdValue = amount * fromPx`
+      // (number × number) — a 1e16 USDT swap collapsed the mantissa
+      // and produced free extra `credited` units.
+      const amountD   = new Decimal(amount);
+      const fromPxD   = new Decimal(fromPx);
+      const toPxD     = new Decimal(toPx);
+      const usdValueD = amountD.mul(fromPxD);
+      const creditedD = usdValueD.div(toPxD);
+      const credited  = creditedD.toNumber(); // for the response only
 
       const result = await prisma.$transaction(async (tx) => {
         // Make sure both wallets exist for this user (auto-create the
@@ -182,26 +190,31 @@ export class WalletController {
           }),
         ]);
         if (!fromWallet) throw new AppError(`No ${from} wallet`, 404);
-        const fromBalance = parseFloat(fromWallet.balance.toString());
-        const fromFrozen  = parseFloat(fromWallet.frozen.toString());
-        if (fromBalance - fromFrozen < amount) {
-          throw new AppError(`Insufficient ${from}. Need ${amount}, have ${(fromBalance - fromFrozen).toFixed(8)}`, 400);
+        // Balance check uses Decimal arithmetic — float subtraction
+        // was the second half of the rounding bug.
+        const fromBalanceD = new Decimal(fromWallet.balance.toString());
+        const fromFrozenD  = new Decimal(fromWallet.frozen.toString());
+        const availableD   = fromBalanceD.sub(fromFrozenD);
+        if (availableD.lt(amountD)) {
+          throw new AppError(`Insufficient ${from}. Need ${amount}, have ${availableD.toFixed(8)}`, 400);
         }
 
         const toWallet = toWalletExisting ?? await tx.wallet.create({
           data: { userId: req.user!.id, currency: to as any, balance: 0, frozen: 0 },
         });
-        const toBalance = parseFloat(toWallet.balance.toString());
+        const toBalanceD = new Decimal(toWallet.balance.toString());
 
         // Apply balance changes
         await tx.wallet.update({
           where: { id: fromWallet.id },
-          data: { balance: { decrement: new Decimal(amount) } },
+          data: { balance: { decrement: amountD } },
         });
         await tx.wallet.update({
           where: { id: toWallet.id },
-          data: { balance: { increment: new Decimal(credited) } },
+          data: { balance: { increment: creditedD } },
         });
+        const fromBalance = fromBalanceD.toNumber();
+        const toBalance   = toBalanceD.toNumber();
 
         // Generate a faux on-chain hash so the receipt has something to
         // display in the activity feed. In a real system this would be set
@@ -240,6 +253,10 @@ export class WalletController {
         });
 
         return { from, to, amount, credited, rate: fromPx / toPx, reference };
+      }, {
+        // SERIALIZABLE so two concurrent swaps on the same `from`
+        // wallet can't both pass the balance check off a stale read.
+        isolationLevel: 'Serializable',
       });
 
       // Fire-and-forget: send confirmation email + push. Failures here

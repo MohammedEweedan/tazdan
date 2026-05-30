@@ -3,7 +3,8 @@
  */
 
 import { useState } from 'react';
-import { Alert, Image, Pressable, Share, View } from 'react-native';
+import { Alert, Pressable, Share, View } from 'react-native';
+import QRCode from 'react-native-qrcode-svg';
 import { Text } from '@/components/ui/Text';
 import * as Clipboard from 'expo-clipboard';
 import { Ionicons } from '@expo/vector-icons';
@@ -31,10 +32,6 @@ export default function Receive() {
   // Universal link a counterparty's app deep-links into when they scan
   // the QR code — resolves to /u/[slug] in the Fortuni app.
   const profileLink = `https://Fortuni.com/u/${linkSlug}`;
-  // Real QR code via qrserver.com — white bg + black foreground for
-  // reliable scanning. ecc=H lets us overlay our mark in the centre
-  // without breaking decode (up to ~30% of the symbol can be hidden).
-  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&margin=12&ecc=H&data=${encodeURIComponent(profileLink)}&bgcolor=ffffff&color=000000`;
 
   return (
     <ScreenShell title="Receive money">
@@ -81,42 +78,23 @@ export default function Receive() {
             shadowColor: '#000', shadowOpacity: 0.18,
             shadowRadius: 18, shadowOffset: { width: 0, height: 8 },
           }}>
-            <Image
-              source={{ uri: qrUrl }}
-              style={{ width: 200, height: 200 }}
-              resizeMode="contain"
+            {/* QR renders locally via react-native-qrcode-svg —
+                no network round-trip means the code shows up even
+                offline / in regions where the previous qrserver.com
+                CDN was blocked.  ecc=H gives ~30% redundancy so the
+                centred Fortuni mark below doesn't break decoding. */}
+            <QRCode
+              value={profileLink}
+              size={200}
+              backgroundColor="#ffffff"
+              color="#000000"
+              ecl="H"
+              logo={require('../assets/icon-white.png')}
+              logoSize={40}
+              logoBackgroundColor="#ffffff"
+              logoMargin={4}
+              logoBorderRadius={10}
             />
-            {/* Inline Fortuni mark — see ReceiveWidget for the
-                rationale. ecc=H QR + ~24% overlay = always scans, and
-                drawing the F in code means we never depend on a PNG
-                file that ships the wrong colour variant for the
-                white-background QR. */}
-            <View
-              pointerEvents="none"
-              style={{
-                position: 'absolute',
-                width: 48, height: 48, borderRadius: 14,
-                backgroundColor: '#0A0A0B',
-                alignItems: 'center', justifyContent: 'center',
-                borderWidth: 3, borderColor: '#ffffff',
-                shadowColor: '#000', shadowOpacity: 0.18,
-                shadowRadius: 4, shadowOffset: { width: 0, height: 1 },
-              }}
-            >
-              <Text
-                allowFontScaling={false}
-                style={{
-                  color: '#ffffff',
-                  fontSize: 24,
-                  fontWeight: '900',
-                  letterSpacing: -1,
-                  lineHeight: 26,
-                  includeFontPadding: false,
-                }}
-              >
-                F
-              </Text>
-            </View>
           </View>
           <Text style={{
             color: handle ? p.fg : p.fgMuted, fontSize: 28, fontWeight: '600',

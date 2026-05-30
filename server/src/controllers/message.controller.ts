@@ -132,19 +132,41 @@ export class MessageController {
         }
 
         // Execute the transfer atomically.
-        // Enum currencies (BTC, ETH, SOL …) use the Wallet table.
-        // Altcoins (PEPE, SHIB, SKY …) use UserWallet.altBalances JSON.
+        //
+        // Balance storage in this codebase is split across TWO tables:
+        //   1. `UserWallet`   — has dedicated decimal columns for the
+        //      on-chain crypto we self-custody: ethBalance, btcBalance,
+        //      solBalance, usdtErc20Bal, usdtTrc20Bal.  Anything else
+        //      crypto sits in `altBalances` (JSON map).
+        //   2. `Wallet`       — generic per-(userId, currency) row used
+        //      for fiat (USD, EUR, …) and as a ledger view of USDT.
+        //
+        // The mobile `/wallet/balances` endpoint reads from UserWallet
+        // for crypto, so users see e.g. "8990 BTC" — but the legacy
+        // chat-payment path was reading Wallet.balance for BTC, which
+        // was always 0, hence "Insufficient BTC balance, Available: 0"
+        // even though the user had thousands.  We now route each
+        // currency to the table it actually lives in.
         const amountNum = m.amount;
         const currency: string = m.currency;
         const feeNum = 0;
         const totalDeduction = amountNum + feeNum;
 
-        // Currencies that exist in the Prisma Currency enum
-        const ENUM_CURRENCIES = new Set([
-          'USDT','BTC','ETH','BNB','SOL','XRP','ADA','DOGE','MATIC','DOT','AVAX',
-          'USD','EUR','GBP','AED','SAR','EGP','LYD',
+        // Fiat (and bare-USDT) live in the `Wallet` table.
+        const WALLET_TABLE_CURRENCIES = new Set([
+          'USD', 'EUR', 'GBP', 'AED', 'SAR', 'EGP', 'LYD', 'USDT',
         ]);
-        const isEnumCurrency = ENUM_CURRENCIES.has(currency);
+        // Crypto with dedicated UserWallet columns.  Map currency to
+        // column name so we can decrement the right field.
+        const UW_COLUMN: Record<string, string> = {
+          ETH: 'ethBalance',
+          BTC: 'btcBalance',
+          SOL: 'solBalance',
+          USDT_ERC20: 'usdtErc20Bal',
+          USDT_TRC20: 'usdtTrc20Bal',
+        };
+        const isWalletTable = WALLET_TABLE_CURRENCIES.has(currency);
+        const uwColumn      = UW_COLUMN[currency];
 
         const result = await prisma.$transaction(async (tx) => {
           const reference = `TRF-${require('uuid').v4().slice(0, 8).toUpperCase()}`;
@@ -154,8 +176,8 @@ export class MessageController {
           let receiverBalBefore = 0;
           let receiverBalAfter  = 0;
 
-          if (isEnumCurrency) {
-            // ── Enum path: use Wallet table ────────────────────────────
+          if (isWalletTable) {
+            // ── Wallet-table path: USDT + fiat ────────────────────────
             const [senderWallet, receiverWallet] = await Promise.all([
               tx.wallet.upsert({
                 where: { userId_currency: { userId: senderId, currency: currency as any } },
@@ -184,8 +206,41 @@ export class MessageController {
               tx.wallet.update({ where: { id: senderWallet.id },   data: { balance: senderBalAfter } }),
               tx.wallet.update({ where: { id: receiverWallet.id }, data: { balance: receiverBalAfter } }),
             ]);
+          } else if (uwColumn) {
+            // ── Crypto with dedicated UserWallet column ──────────────
+            // BTC, ETH, SOL, USDT_ERC20, USDT_TRC20.  This is where
+            // the on-chain custody balance actually lives and is the
+            // figure the mobile shows the user.
+            const [senderUW, receiverUW] = await Promise.all([
+              tx.userWallet.findUnique({ where: { userId: senderId } }),
+              tx.userWallet.findUnique({ where: { userId: data.receiverId } }),
+            ]);
+            if (!senderUW)   throw new AppError('Sender crypto wallet not provisioned', 404);
+            if (!receiverUW) throw new AppError('Recipient crypto wallet not provisioned', 404);
+
+            senderBalBefore   = parseFloat(((senderUW as any)[uwColumn] ?? '0').toString());
+            receiverBalBefore = parseFloat(((receiverUW as any)[uwColumn] ?? '0').toString());
+
+            if (senderBalBefore < totalDeduction) {
+              throw new AppError(`Insufficient ${currency} balance. Available: ${senderBalBefore}`, 400);
+            }
+
+            senderBalAfter   = senderBalBefore - totalDeduction;
+            receiverBalAfter = receiverBalBefore + amountNum;
+
+            await Promise.all([
+              tx.userWallet.update({
+                where: { userId: senderId },
+                data:  { [uwColumn]: senderBalAfter.toFixed(uwColumn === 'ethBalance' ? 18 : 8) } as any,
+              }),
+              tx.userWallet.update({
+                where: { userId: data.receiverId },
+                data:  { [uwColumn]: receiverBalAfter.toFixed(uwColumn === 'ethBalance' ? 18 : 8) } as any,
+              }),
+            ]);
           } else {
-            // ── Altcoin path: use UserWallet.altBalances JSON ──────────
+            // ── Altcoin path: UserWallet.altBalances JSON ────────────
+            // Everything else crypto (BNB, XRP, DOGE, MATIC, …).
             const [senderUW, receiverUW] = await Promise.all([
               tx.userWallet.findUnique({ where: { userId: senderId } }),
               tx.userWallet.findUnique({ where: { userId: data.receiverId } }),
@@ -196,10 +251,9 @@ export class MessageController {
 
             senderBalBefore   = parseFloat(senderAlts[currency]   ?? '0');
             receiverBalBefore = parseFloat(receiverAlts[currency] ?? '0');
-            const available   = senderBalBefore;
 
-            if (available < totalDeduction) {
-              throw new AppError(`Insufficient ${currency} balance. Available: ${available}`, 400);
+            if (senderBalBefore < totalDeduction) {
+              throw new AppError(`Insufficient ${currency} balance. Available: ${senderBalBefore}`, 400);
             }
 
             senderBalAfter   = senderBalBefore - totalDeduction;
@@ -217,12 +271,26 @@ export class MessageController {
             ]);
           }
 
-          // Transfer record — always uses USDT as the ledger currency for altcoins
+          // Pick the ledger-currency value safely.  Anything in the
+          // Prisma Currency enum can be stored directly; off-enum
+          // values (chain variants like USDT_TRC20, exotic alts)
+          // collapse to the closest base — USDT for USDT_*, USDT for
+          // altcoins (since they have no enum slot but we need
+          // *something* to satisfy the column).  The true asset is
+          // always preserved in `metadata.asset` for accurate audit.
+          const PRISMA_CURRENCIES = new Set([
+            'USDT','BTC','ETH','BNB','SOL','XRP','ADA','DOGE','MATIC','DOT','AVAX',
+            'USD','EUR','GBP','AED','SAR','EGP','LYD',
+          ]);
+          const ledgerCurrency = PRISMA_CURRENCIES.has(currency)
+            ? currency
+            : (currency === 'USDT_ERC20' || currency === 'USDT_TRC20' ? 'USDT' : 'USDT');
+
           const transfer = await tx.transfer.create({
             data: {
               senderId,
               receiverId: data.receiverId,
-              currency: isEnumCurrency ? (currency as any) : 'USDT',
+              currency: ledgerCurrency as any,
               amount: amountNum,
               fee: feeNum,
               reference,
@@ -230,12 +298,11 @@ export class MessageController {
             },
           });
 
-          // Transactions — currency field uses USDT for altcoins; asset stored in metadata
           const senderTx = await tx.transaction.create({
             data: {
               userId: senderId,
               type: 'TRANSFER_OUT',
-              currency: isEnumCurrency ? (currency as any) : 'USDT',
+              currency: ledgerCurrency as any,
               amount: amountNum,
               fee: feeNum,
               balanceBefore: senderBalBefore,
@@ -250,7 +317,7 @@ export class MessageController {
             data: {
               userId: data.receiverId,
               type: 'TRANSFER_IN',
-              currency: isEnumCurrency ? (currency as any) : 'USDT',
+              currency: ledgerCurrency as any,
               amount: amountNum,
               fee: 0,
               balanceBefore: receiverBalBefore,

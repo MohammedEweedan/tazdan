@@ -77,38 +77,61 @@ export class DepositController {
     }
   }
 
+  // Admin-only — see routes/deposit.ts. The depositor must NEVER call
+  // this themselves; an admin verifies the wire actually landed in our
+  // bank account before releasing the credit.
   static async confirm(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const { id } = req.params;
-      const deposit = await prisma.deposit.findFirst({
-        where: { id, userId: req.user!.id },
-      });
+      // Look up by id alone; the admin is confirming someone else's
+      // pending deposit.  Scoping to req.user.id (the old behaviour)
+      // was the original bug — it made the route safe ONLY for the
+      // depositor, who was also the attacker.
+      const deposit = await prisma.deposit.findUnique({ where: { id } });
 
       if (!deposit) throw new AppError('Deposit not found', 404);
-      if (deposit.status !== 'WAITING_CONFIRMATION') throw new AppError('Deposit is not waiting for confirmation', 400);
+      if (deposit.status !== 'WAITING_CONFIRMATION') {
+        throw new AppError('Deposit is not waiting for confirmation', 400);
+      }
+
+      const depositorId = deposit.userId;
+      const adminId     = req.user!.id;
 
       await prisma.$transaction(async (tx) => {
-        // Update deposit status to CONFIRMED
+        // Idempotency guard inside the tx — re-check status under the
+        // row lock so two admins clicking confirm at the same time
+        // can't double-credit.
+        const fresh = await tx.deposit.findUnique({ where: { id: deposit.id } });
+        if (!fresh || fresh.status !== 'WAITING_CONFIRMATION') {
+          throw new AppError('Deposit already processed', 409);
+        }
+
         await tx.deposit.update({
           where: { id: deposit.id },
-          data: { status: 'CONFIRMED', confirmedAt: new Date() },
+          data: {
+            status: 'CONFIRMED',
+            confirmedAt: new Date(),
+            adminNotes: fresh.adminNotes
+              ? `${fresh.adminNotes}\nConfirmed by admin ${adminId} at ${new Date().toISOString()}`
+              : `Confirmed by admin ${adminId} at ${new Date().toISOString()}`,
+          },
         });
 
-        // Credit the user's wallet
+        // Credit the DEPOSITOR's wallet, not the admin's.
         const wallet = await tx.wallet.findUnique({
-          where: { userId_currency: { userId: req.user!.id, currency: deposit.currency } },
+          where: { userId_currency: { userId: depositorId, currency: deposit.currency } },
         });
         const balanceBefore = parseFloat(wallet?.balance.toString() || '0');
 
-        await tx.wallet.update({
-          where: { userId_currency: { userId: req.user!.id, currency: deposit.currency } },
-          data: { balance: { increment: deposit.amount } },
+        await tx.wallet.upsert({
+          where:  { userId_currency: { userId: depositorId, currency: deposit.currency } },
+          update: { balance: { increment: deposit.amount } },
+          create: { userId: depositorId, currency: deposit.currency, balance: deposit.amount },
         });
 
-        // Create transaction record
         await tx.transaction.create({
           data: {
-            userId: req.user!.id,
+            userId: depositorId,
             type: 'DEPOSIT',
             currency: deposit.currency,
             amount: deposit.amount,
@@ -119,10 +142,9 @@ export class DepositController {
           },
         });
 
-        // Send notification
         await tx.notification.create({
           data: {
-            userId: req.user!.id,
+            userId: depositorId,
             title: 'Deposit Confirmed',
             message: `Your deposit of ${deposit.amount} ${deposit.currency} has been confirmed and credited to your account.`,
             type: 'deposit',

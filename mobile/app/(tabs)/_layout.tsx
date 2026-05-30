@@ -1,8 +1,7 @@
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Image, Platform, Pressable, Text, View, ActionSheetIOS, Alert } from 'react-native';
-import { useThemedPalette, useTheme, brand } from '@/store/themeStore';
-import { LinearGradient } from 'expo-linear-gradient';
+import { useThemedPalette, useTheme } from '@/store/themeStore';
 import { useAuthStore } from '@/store/authStore';
 import { useT } from '@/store/i18nStore';
 import { useMessageRealtime } from '@/hooks';
@@ -14,14 +13,19 @@ const ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   messages: 'chatbubble-ellipses',
 };
 
-const FAB_SIZE = 62;
+const FAB_SIZE = 66;
 
 export default function TabsLayout() {
   const p = useThemedPalette();
   const t = useT();
   const userId = useAuthStore((s) => s.user?.id);
   const themeMode = useTheme((s) => s.mode);
-  const brandAccent = themeMode === 'dark' ? brand.primaryDark : brand.primary;
+  // FAB is a clean mono disc; the "active" feel comes from a soft
+  // halo ring behind it, not a gradient fill. Halo colour matches the
+  // primary foreground so it reads on either theme.
+  const fabFill = p.fg;
+  const fabFg   = p.bg;
+  const haloColor = themeMode === 'dark' ? '#FAFAFA' : '#0A0A0B';
 
   useMessageRealtime(userId);
 
@@ -44,7 +48,7 @@ export default function TabsLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: brandAccent,
+        tabBarActiveTintColor: p.fg,
         tabBarInactiveTintColor: p.fgFaint,
         tabBarShowLabel: false,
         tabBarStyle: {
@@ -96,6 +100,11 @@ export default function TabsLayout() {
                 marginTop: -10,
               }}
             >
+              {/* Clean mono disc — no gradient, no concentric rings.
+                  The "halo" is a soft shadow glow in the FAB's own
+                  colour, picked up by the shadowColor below.  This
+                  preserves the lifted feel without painting any
+                  visible rings around the button. */}
               <View
                 style={{
                   width: FAB_SIZE,
@@ -103,28 +112,19 @@ export default function TabsLayout() {
                   borderRadius: FAB_SIZE / 2,
                   alignItems: 'center',
                   justifyContent: 'center',
-                  shadowColor: brandAccent,
-                  shadowOpacity: 0.55,
-                  shadowRadius: 18,
-                  shadowOffset: { width: 0, height: 8 },
-                  elevation: 10,
+                  backgroundColor: fabFill,
                   borderWidth: 3,
                   borderColor: p.bg,
-                  overflow: 'hidden',
+                  shadowColor: haloColor,
+                  shadowOpacity: 0.35,
+                  shadowRadius: 14,
+                  shadowOffset: { width: 0, height: 0 },
+                  elevation: 10,
                 }}
               >
-                <LinearGradient
-                  colors={[brand.primaryDark, brand.primary, brand.deep]}
-                  start={{ x: 0.1, y: 0 }}
-                  end={{ x: 0.9, y: 1 }}
-                  style={{
-                    position: 'absolute', left: 0, right: 0, top: 0, bottom: 0,
-                    borderRadius: FAB_SIZE / 2,
-                  }}
-                />
                 <Image
                   source={require('../../assets/icon-color.png')}
-                  style={{ width: FAB_SIZE - 18, height: FAB_SIZE - 18, tintColor: '#ffffff' }}
+                  style={{ width: FAB_SIZE - 22, height: FAB_SIZE - 22, tintColor: fabFg }}
                   resizeMode="contain"
                 />
               </View>

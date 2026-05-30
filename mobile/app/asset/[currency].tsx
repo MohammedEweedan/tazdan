@@ -22,6 +22,7 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, { useSharedValue, useAnimatedStyle, runOnJS, withTiming, withRepeat, withSequence, Easing } from 'react-native-reanimated';
 import { useThemedPalette, type Palette } from '@/store/themeStore';
 import { useHaptics, useWallets, useTransactions } from '@/hooks';
+import { api } from '@/lib/api';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useMarkets, ID_TO_SYM, type CoinGeckoMarket } from '@/hooks/useMarkets';
 import { useLivePrice } from '@/hooks/useLivePrice';
@@ -697,12 +698,18 @@ function NewsSection({ p, sym }: { p: Palette; sym: string }) {
   // top-crypto feed, we soften the heading so we don't promise
   // something we didn't deliver.
   const [isFallback, setIsFallback] = useState(false);
+  // Distinguish "fetch failed" from "fetch succeeded but empty" so the
+  // empty state can offer a retry instead of misleading the user with
+  // "no news found" when the request never landed.
+  const [fetchFailed, setFetchFailed] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
   const isFiat = FIAT_CODES.has(sym);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setIsFallback(false);
+    setFetchFailed(false);
     setNews([]);
 
     if (isFiat) {
@@ -710,81 +717,38 @@ function NewsSection({ p, sym }: { p: Palette; sym: string }) {
       return;
     }
 
-    // Soft network ceiling — never let a stuck CDN keep the spinner
-    // spinning forever.
-    const ctrl = new AbortController();
-    const timeout = setTimeout(() => ctrl.abort(), 6000);
-
-    const mapItem = (n: any): NewsItem => ({
-      title:      n.title ?? 'Untitled',
-      source:     n.source_info?.name ?? n.source ?? 'CryptoCompare',
-      url:        n.url ?? '',
-      published:  n.published_on ?? 0,
-      imageUrl:   n.imageurl,
-      body:       n.body ?? '',
-      categories: n.categories ?? '',
-    });
-
+    // Hit the server proxy instead of a public CDN.  Previously the
+    // client fetched CryptoCompare directly, which failed silently on
+    // any user network where that CDN was throttled / blocked — the
+    // user just saw "No news found for BTC" on every coin.  The
+    // proxy uses one outbound IP (the server), caches for 60s, and
+    // returns 503 on upstream failure so we can distinguish "no
+    // news" from "couldn't reach".
     async function load() {
       try {
-        // 1) Try the server-side category filter when the symbol is
-        //    one CryptoCompare recognises. This gives us asset-specific
-        //    coverage AND beats client-side keyword filtering — the
-        //    free /news/?lang=EN feed only returns the latest 50-ish
-        //    items, so for less-busy coins the client filter would
-        //    almost always come up empty.
-        if (CC_CATEGORIES.has(sym)) {
-          const r = await fetch(
-            `https://min-api.cryptocompare.com/data/v2/news/?categories=${sym}&lang=EN`,
-            { signal: ctrl.signal },
-          );
-          const j = await r.json();
-          if (j?.Type === 100 && Array.isArray(j.Data) && j.Data.length > 0) {
-            if (cancelled) return;
-            setNews(j.Data.slice(0, 6).map(mapItem));
-            setIsFallback(false);
-            return;
-          }
-        }
-
-        // 2) Fall back to the general feed with client-side keyword
-        //    filtering (covers exotic symbols not in CC_CATEGORIES).
-        const r = await fetch(
-          'https://min-api.cryptocompare.com/data/v2/news/?lang=EN',
-          { signal: ctrl.signal },
-        );
-        const j = await r.json();
+        const { data } = await api.get('/news', { params: { sym } });
         if (cancelled) return;
-        if (j?.Type !== 100 || !Array.isArray(j.Data)) {
-          setNews([]);
-          return;
-        }
-        const all = j.Data.slice(0, 100).map(mapItem);
-        const matched = all.filter((n: NewsItem) => matchesSym(n, sym));
-        if (matched.length > 0) {
-          setNews(matched.slice(0, 6));
-          setIsFallback(false);
-          return;
-        }
-
-        // 3) Nothing matched — but DON'T return empty. Show the top
-        //    crypto news under a softened header. A blank panel is
-        //    worse UX than a relevant-adjacent panel.
-        setNews(all.slice(0, 5));
-        setIsFallback(true);
-      } catch {
-        // Network / abort — leave the empty state, the bottom branch
-        // renders a clean "couldn't load" message.
-        if (!cancelled) setNews([]);
+        const items = Array.isArray(data?.items) ? (data.items as NewsItem[]) : [];
+        setNews(items);
+        setIsFallback(!!data?.fallback);
+      } catch (e: any) {
+        if (cancelled) return;
+        // 503 from the proxy means every upstream failed.  Anything
+        // else (timeout, network) ends up here too — both should
+        // surface the retry state, not a misleading "no news" state.
+        setFetchFailed(true);
+        setNews([]);
       } finally {
         if (!cancelled) setLoading(false);
-        clearTimeout(timeout);
       }
     }
 
     load();
-    return () => { cancelled = true; ctrl.abort(); clearTimeout(timeout); };
-  }, [sym, isFiat]);
+    return () => { cancelled = true; };
+    // reloadKey is intentional — bumping it re-runs the effect from
+    // the retry button without re-mounting the whole panel.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sym, isFiat, reloadKey]);
 
   return (
     <Panel style={{ marginBottom: 24 }}>
@@ -822,11 +786,35 @@ function NewsSection({ p, sym }: { p: Palette; sym: string }) {
               Market news is not available for fiat currencies.
             </Text>
           </View>
+        ) : fetchFailed ? (
+          // Distinct state: the request didn't land at all.  Offer a
+          // retry instead of showing "no news found" (which led the
+          // user to think their coin was newsless when in fact the
+          // CDN was blocked).
+          <View style={{ paddingVertical: 22, alignItems: 'center' }}>
+            <Ionicons name="cloud-offline-outline" size={28} color={p.fgFaint} />
+            <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '500', marginTop: 10, textAlign: 'center' }}>
+              Couldn't reach the news feed.
+            </Text>
+            <Pressable
+              onPress={() => setReloadKey((n) => n + 1)}
+              style={({ pressed }) => ({
+                marginTop: 12,
+                paddingHorizontal: 14, paddingVertical: 8, borderRadius: 12,
+                backgroundColor: pressed ? p.border : p.pillBg,
+                borderWidth: 1, borderColor: p.border,
+                flexDirection: 'row', alignItems: 'center', gap: 6,
+              })}
+            >
+              <Ionicons name="refresh" size={13} color={p.fg} />
+              <Text style={{ color: p.fg, fontSize: 12, fontWeight: '700' }}>Try again</Text>
+            </Pressable>
+          </View>
         ) : (
           <View style={{ paddingVertical: 24, alignItems: 'center' }}>
             <Ionicons name="newspaper-outline" size={28} color={p.fgFaint} />
             <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '500', marginTop: 10, textAlign: 'center' }}>
-              No news found for {sym}.
+              No recent {sym} news.
             </Text>
           </View>
         )}

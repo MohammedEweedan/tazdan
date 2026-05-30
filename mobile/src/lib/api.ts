@@ -67,6 +67,52 @@ async function tryRefresh(): Promise<{ token: string | null; hardFail: boolean }
   return refreshing;
 }
 
+/** Strip every credential-bearing field from an AxiosError object
+ *  before it propagates upward.  Axios attaches `config.headers` and
+ *  `config.data` to the error it throws, so any future `console.error`,
+ *  Sentry breadcrumb, or unhandled-rejection log would otherwise
+ *  exfiltrate bearer tokens, passwords, 2FA codes, refresh tokens, etc.
+ *  We mutate the error in-place because rethrowing a different object
+ *  loses the prototype chain that callers rely on (`err.isAxiosError`,
+ *  `err.response.status`, etc.). */
+const SENSITIVE_BODY_KEYS = ['password', 'twoFactorCode', 'pin', 'refreshToken', 'token', 'code'];
+function scrubAxiosError(error: AxiosError): AxiosError {
+  try {
+    if (error.config?.headers) {
+      // Bearer token in the request header.
+      delete (error.config.headers as any).Authorization;
+      delete (error.config.headers as any).authorization;
+    }
+    if (error.config?.data) {
+      // Body fields tend to be JSON-stringified by the time the error
+      // is observed; try to parse, redact, restringify.  If anything
+      // throws, drop the body entirely — better blank than leaky.
+      try {
+        const parsed = typeof error.config.data === 'string'
+          ? JSON.parse(error.config.data)
+          : error.config.data;
+        if (parsed && typeof parsed === 'object') {
+          for (const k of SENSITIVE_BODY_KEYS) if (k in parsed) parsed[k] = '[redacted]';
+          error.config.data = typeof error.config.data === 'string'
+            ? JSON.stringify(parsed)
+            : parsed;
+        }
+      } catch {
+        error.config.data = '[redacted]';
+      }
+    }
+    // Response config (axios duplicates here).
+    if (error.response?.config?.headers) {
+      delete (error.response.config.headers as any).Authorization;
+      delete (error.response.config.headers as any).authorization;
+    }
+  } catch {
+    // never let the scrubber itself throw — it'd convert a refusable
+    // error into an unhandled rejection.
+  }
+  return error;
+}
+
 api.interceptors.response.use(
   (r) => r,
   async (error: AxiosError) => {
@@ -89,7 +135,7 @@ api.interceptors.response.use(
         onUnauthorized?.();
       }
     }
-    return Promise.reject(error);
+    return Promise.reject(scrubAxiosError(error));
   },
 );
 

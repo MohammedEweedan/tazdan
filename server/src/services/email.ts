@@ -1,5 +1,6 @@
 import nodemailer from 'nodemailer';
 import path from 'path';
+import QRCode from 'qrcode';
 
 const SMTP_HOST = process.env.SMTP_HOST;
 const SMTP_PORT = parseInt(process.env.SMTP_PORT || '587', 10);
@@ -7,7 +8,18 @@ const SMTP_USER = process.env.SMTP_USER;
 const SMTP_PASS = process.env.SMTP_PASS;
 // From address — defaults to the branded sender. Override in .env with SMTP_FROM.
 const SMTP_FROM = process.env.SMTP_FROM || process.env.MAIL_FROM || 'hi@Fortuni.com';
-const CLIENT_URL = process.env.CLIENT_URL || process.env.FRONTEND_URL || 'https://Fortuni.com';
+
+function resolveClientUrl(): string {
+  if (process.env.FRONTEND_URL) return process.env.FRONTEND_URL.trim();
+  if (process.env.CLIENT_URL) {
+    // CLIENT_URL may be a comma-separated CORS list — take the first origin.
+    const first = process.env.CLIENT_URL.split(',')[0].trim();
+    return first;
+  }
+  return 'https://Fortuni.com';
+}
+
+const CLIENT_URL = resolveClientUrl();
 
 // Logos are embedded inline as CID attachments so they render in every email
 // client (Gmail, Outlook, Apple Mail) without needing a public CDN URL.
@@ -695,10 +707,18 @@ export async function sendClaimLinkPending({
 }) {
   const who = senderHandle ? `@${senderHandle}` : (senderFirst || 'A Fortuni user');
   const subject = `${who} sent you ${amount} ${asset}`;
+
+  // Generate QR code as data URI for inline embedding
+  const qrDataUri = await QRCode.toDataURL(claimUrl, {
+    width: 220,
+    margin: 2,
+    color: { dark: '#0b0f19', light: '#ffffff' },
+  });
+
   const html = baseTemplate(
     subject,
     `<h1 class="text-main">You have ${amount} ${asset} waiting.</h1>
-    <p class="text-muted">${who} just sent you crypto on Fortuni. Tap the button below to claim it — you can sign up in seconds if you don't have an account yet, and the funds land in your wallet instantly.</p>
+    <p class="text-muted">${who} just sent you money on Fortuni. Tap the button below to claim it — you can sign up in seconds if you don't have an account yet, and the funds land in your wallet instantly.</p>
 
     <div class="divider"></div>
 
@@ -712,6 +732,12 @@ export async function sendClaimLinkPending({
 
     <div class="btn-wrap" style="margin-top:24px;">
       <a href="${claimUrl}" class="btn">Claim ${amount} ${asset}</a>
+    </div>
+
+    <div style="text-align:center; margin:28px 0;">
+      <p class="text-muted" style="font-size:12px; font-weight:600; margin-bottom:12px; text-transform:uppercase; letter-spacing:1px;">Or scan with your camera</p>
+      <img src="${qrDataUri}" alt="Scan to claim" width="220" height="220" style="border-radius:16px; border:1px solid #e5e5e5;" />
+      <p class="text-muted" style="font-size:11px; margin-top:8px;">Scan with the Fortuni app or any QR scanner</p>
     </div>
 
     <div class="notice">

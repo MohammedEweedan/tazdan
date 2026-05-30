@@ -125,16 +125,20 @@ export class AuthController {
       // Normalise phone to E.164: + + countryCode + nationalNumber, digits only.
       const normalisedPhone = `+${data.phoneCountryCode}${data.phone.replace(/\D/g, '')}`;
 
-      const existing = await prisma.user.findUnique({ where: { email: data.email } });
-      if (existing) throw new AppError('Email already registered', 400);
-
-      const existingPhone = await prisma.user.findUnique({ where: { phone: normalisedPhone } });
-      if (existingPhone) throw new AppError('Phone number already registered', 400);
-
-      const existingHandle = await prisma.user.findFirst({
-        where: { username: data.username.toLowerCase() },
-      });
-      if (existingHandle) throw new AppError('Handle already taken', 400);
+      // Generic message on collisions so an attacker can't enumerate
+      // which emails / phones / handles are registered.  Surfacing the
+      // specific conflicting field (the old behaviour) gave them a
+      // free user-existence oracle for credential-stuffing list
+      // priming and phishing-target qualification.
+      const ENUM_GENERIC = 'Registration failed — those credentials are already in use.';
+      const [existing, existingPhone, existingHandle] = await Promise.all([
+        prisma.user.findUnique({ where: { email: data.email } }),
+        prisma.user.findUnique({ where: { phone: normalisedPhone } }),
+        prisma.user.findFirst({ where: { username: data.username.toLowerCase() } }),
+      ]);
+      if (existing || existingPhone || existingHandle) {
+        throw new AppError(ENUM_GENERIC, 400);
+      }
 
       let referrerId: string | undefined;
       if (data.referralCode) {
@@ -212,8 +216,11 @@ export class AuthController {
         userAgent: req.headers['user-agent']?.toString(),
       });
 
-      // Generate 6-digit email verification code
-      const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
+      // Generate 6-digit email verification code via CSPRNG.
+      // Math.random() is predictable from a single observed output
+      // (Mersenne Twister state recovery) and is not safe for any
+      // value that gates auth flow.  randomInt draws from /dev/urandom.
+      const verificationCode = crypto.randomInt(100000, 1000000).toString();
       await prisma.user.update({
         where: { id: user.id },
         data: {
@@ -278,9 +285,14 @@ export class AuthController {
         throw new AppError('Too many failed attempts. Try again later.', 429);
       }
 
-      // In non-production, simulator traffic bypasses bcrypt to prevent threadpool saturation.
-      const isSimulator = process.env.NODE_ENV !== 'production' && req.headers['x-simulator'] === 'true';
-      const validPassword = isSimulator ? true : await bcrypt.compare(data.password, user.passwordHash);
+      // CRITICAL: never short-circuit bcrypt. The previous
+      // `x-simulator: true` header bypass meant any staging /
+      // preview / QA environment (which often carries real prod
+      // data) accepted ANY password, and a single `NODE_ENV`
+      // misconfiguration in prod was full auth bypass. If load
+      // testing needs to skip bcrypt, do it via a build-time flag
+      // tied to a non-prod database, not a request header.
+      const validPassword = await bcrypt.compare(data.password, user.passwordHash);
       if (!validPassword) {
         await recordFailedLogin(user.id);
         throw new AppError(GENERIC, 401);
@@ -450,9 +462,20 @@ export class AuthController {
 
   static async disable2FA(req: AuthRequest, res: Response, next: NextFunction) {
     try {
-      const { code } = req.body;
+      // Require BOTH password and current TOTP code.  Previously
+      // only the TOTP was required, so a stolen unlocked phone (the
+      // TOTP app + a session) could disable 2FA in one tap, then go
+      // change the withdrawal address (which only requires 2FA).
+      // Forcing a password re-prompt breaks that chain.
+      const { code, password } = z.object({
+        code: z.string().min(6),
+        password: z.string().min(1),
+      }).parse(req.body);
       const user = await prisma.user.findUnique({ where: { id: req.user!.id } });
       if (!user?.twoFactorSecret || !user.twoFactorEnabled) throw new AppError('2FA is not enabled', 400);
+
+      const validPw = await bcrypt.compare(password, user.passwordHash);
+      if (!validPw) throw new AppError('Invalid password', 401);
 
       const verified = speakeasy.totp.verify({
         secret: user.twoFactorSecret, encoding: 'base32', token: code, window: 2,
@@ -550,12 +573,19 @@ export class AuthController {
       if (!dbUser) throw new AppError('User not found', 404);
       if (dbUser.emailVerified) throw new AppError('Email already verified', 400);
 
-      const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
+      // CSPRNG, not Math.random — see register() above.
+      const verificationCode = crypto.randomInt(100000, 1000000).toString();
+      // Write to the SAME field pair `verifyEmailCode()` reads from
+      // (`emailVerificationToken` / `emailVerificationExpires`).  The
+      // previous code wrote to `emailVerificationCode` / `…Expires`,
+      // which `verifyEmailCode()` never reads — so after a resend the
+      // user could no longer verify with any code.  Pre-existing
+      // breakage, fixed in passing.
       await prisma.user.update({
         where: { id: dbUser.id },
         data: {
-          emailVerificationCode: verificationCode,
-          emailVerificationCodeExpires: new Date(Date.now() + 24 * 60 * 60 * 1000),
+          emailVerificationToken: verificationCode,
+          emailVerificationExpires: new Date(Date.now() + 24 * 60 * 60 * 1000),
         },
       });
 
@@ -582,11 +612,17 @@ export class AuthController {
         return res.json({ message: 'If an account exists, a reset email has been sent.' });
       }
 
-      const token = crypto.randomBytes(32).toString('hex');
+      // Generate the raw token (high-entropy, 256 bits) for the email
+      // link, but persist only the SHA-256 hash.  A read-only DB
+      // compromise (backup leak, replica access, slow-query log)
+      // would otherwise yield every live reset token → instant
+      // takeover.  Same pattern refreshTokens already uses.
+      const token     = crypto.randomBytes(32).toString('hex');
+      const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
       await prisma.user.update({
         where: { id: user.id },
         data: {
-          passwordResetToken: token,
+          passwordResetToken: tokenHash,
           passwordResetExpires: new Date(Date.now() + 60 * 60 * 1000),
         },
       });
@@ -610,9 +646,12 @@ export class AuthController {
         password: z.string().min(8).max(128),
       }).parse(req.body);
 
+      // Hash the supplied token and compare against the stored hash —
+      // mirrors the forgotPassword storage change above.
+      const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
       const user = await prisma.user.findFirst({
         where: {
-          passwordResetToken: token,
+          passwordResetToken: tokenHash,
           passwordResetExpires: { gt: new Date() },
         },
       });

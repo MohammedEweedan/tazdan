@@ -19,7 +19,30 @@ import type { Currency, CurrencyMeta } from '@/types';
 const API_PORT = 5001;
 function resolveApiBase(): string {
   const fromEnv = process.env.EXPO_PUBLIC_API_BASE;
-  if (fromEnv) return fromEnv;
+  if (fromEnv) {
+    // CRITICAL in release builds: refuse to talk cleartext.  Bearer
+    // tokens, passwords, 2FA codes, withdrawal addresses must NEVER
+    // travel over plaintext HTTP — passive Wi-Fi sniffing yields
+    // total account takeover otherwise.  Dev/Expo Go can still hit
+    // http://LAN_HOST:5001 because __DEV__ is true there.
+    if (!__DEV__ && !fromEnv.startsWith('https://')) {
+      throw new Error(
+        `[security] Refusing cleartext API base "${fromEnv}" in a release build. ` +
+        `Set EXPO_PUBLIC_API_BASE to an https:// URL at build time.`,
+      );
+    }
+    return fromEnv;
+  }
+
+  // Release builds with no env override are misconfigured — there is
+  // no sane http://… fallback that wouldn't leak credentials.  Force
+  // the build to fail loudly rather than silently shipping a LAN
+  // dev URL to production users.
+  if (!__DEV__) {
+    throw new Error(
+      '[security] EXPO_PUBLIC_API_BASE is required in release builds and must use https://.',
+    );
+  }
 
   // hostUri looks like "192.168.1.42:8081" when launched from `expo start`
   const hostUri = (Constants.expoConfig?.hostUri ?? Constants.expoGoConfig?.debuggerHost) as string | undefined;

@@ -16,7 +16,8 @@ import { profileService, messageService, claimLinkService } from '@/services';
 import type { Currency } from '@/types';
 import { useRouter } from 'expo-router';
 import * as Clipboard from 'expo-clipboard';
-import { Share, Alert } from 'react-native';
+import { Share, Alert, Modal } from 'react-native';
+import QRCode from 'react-native-qrcode-svg';
 
 // Match input that's clearly an off-platform identifier — the cue we use
 // to surface the "Send via claim link" CTA.
@@ -95,6 +96,7 @@ export function SendWidget() {
   const [note,      setNote]      = useState('');
   const [ctaState,  setCta]       = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [ctaError,  setCtaErr]    = useState<string | null>(null);
+  const [qrUrl,     setQrUrl]     = useState<string | null>(null);
 
   // Build crypto list from actual held balances > 0
   const cryptoCurrencies = useMemo(
@@ -242,6 +244,7 @@ export function SendWidget() {
                   });
                   await Clipboard.setStringAsync(link.claimUrl ?? '');
                   haptics.success();
+                  setQrUrl(link.claimUrl ?? null);
                   Alert.alert(
                     t('send.claimReadyTitle') || 'Claim link ready',
                     `${(t('send.claimReadyBody') || 'Funds reserved. Share this with')} ${off.value}.`,
@@ -253,6 +256,10 @@ export function SendWidget() {
                           Share.share({
                             message: `${(t('send.claimShareIntro') || "I sent you")} ${amount} ${currency} on Fortuni → ${link.claimUrl}`,
                           }),
+                      },
+                      {
+                        text: 'Show QR',
+                        onPress: () => setQrUrl(link.claimUrl ?? null),
                       },
                       { text: t('common.done') || 'Done', style: 'cancel' },
                     ],
@@ -477,6 +484,39 @@ export function SendWidget() {
           </>
         )}
       </Pressable>
+
+      {/* ── QR Code Modal ── */}
+      <Modal
+        visible={!!qrUrl}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setQrUrl(null)}
+      >
+        <Pressable
+          style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', alignItems: 'center', justifyContent: 'center' }}
+          onPress={() => setQrUrl(null)}
+        >
+          <View style={{ backgroundColor: p.bgElev, borderRadius: 24, padding: 28, alignItems: 'center', gap: 16, borderWidth: 1, borderColor: p.border }}>
+            <Text style={{ color: p.fg, fontSize: 17, fontWeight: '700' }}>
+              Scan to claim
+            </Text>
+            {qrUrl && (
+              <View style={{ backgroundColor: '#ffffff', borderRadius: 16, padding: 12 }}>
+                <QRCode value={qrUrl} size={220} />
+              </View>
+            )}
+            <Text style={{ color: p.fgMuted, fontSize: 12, textAlign: 'center', maxWidth: 220 }}>
+              Any QR scanner or the Fortuni app will open this claim link.
+            </Text>
+            <Pressable
+              onPress={() => setQrUrl(null)}
+              style={{ marginTop: 4, paddingHorizontal: 20, paddingVertical: 10, borderRadius: 12, backgroundColor: p.bgRaised }}
+            >
+              <Text style={{ color: p.fg, fontSize: 14, fontWeight: '600' }}>Close</Text>
+            </Pressable>
+          </View>
+        </Pressable>
+      </Modal>
     </View>
   );
 }

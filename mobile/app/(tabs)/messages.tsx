@@ -12,7 +12,7 @@
  */
 
 import { useMemo, useState } from 'react';
-import { Pressable, RefreshControl, ScrollView, View } from 'react-native';
+import { ActionSheetIOS, Alert, Platform, Pressable, RefreshControl, ScrollView, View } from 'react-native';
 import { Text, TextInput } from '@/components/ui/Text';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -20,7 +20,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 
 import { useTheme, useThemedPalette, type Palette } from '@/store/themeStore';
+import { useT } from '@/store/i18nStore';
 import { useConversations, useHaptics } from '@/hooks';
+import { useChatPrefs } from '@/store/chatPrefsStore';
 import type { Conversation } from '@/types/messages';
 import { TopGradient } from '@/components/ui/ScreenShell';
 
@@ -33,11 +35,20 @@ export default function Messages() {
   const h = useHaptics();
   const p = useThemedPalette();
   const themeMode = useTheme((s) => s.mode);
+  const t = useT();
 
   const { data, isLoading, refetch } = useConversations();
   const [filter, setFilter] = useState<Filter>('ALL');
   const [query, setQuery]   = useState('');
   const [refreshing, setRefreshing] = useState(false);
+
+  // Pinned + contacts from the client-persisted chat prefs store.
+  // Pin state participates in the sort below so pinned chats float
+  // to the top regardless of `lastMessage.createdAt`.
+  const pinnedSet  = useChatPrefs((s) => s.pinnedPartners);
+  const togglePin  = useChatPrefs((s) => s.togglePin);
+  const contacts   = useChatPrefs((s) => Array.from(s.contacts.values()));
+  const addContact = useChatPrefs((s) => s.addContact);
 
   const conversations = useMemo<Conversation[]>(() => {
     let list = (data ?? []).slice();
@@ -53,8 +64,59 @@ export default function Messages() {
           || c.lastMessage.content.toLowerCase().includes(q);
       });
     }
+    // Pinned chats float to the top, retaining their relative recency
+    // order.  Everything else keeps the original API order (which is
+    // already recency-sorted server-side).
+    list.sort((a, b) => {
+      const ap = pinnedSet.has(a.partner.id) ? 1 : 0;
+      const bp = pinnedSet.has(b.partner.id) ? 1 : 0;
+      if (ap !== bp) return bp - ap;
+      return +new Date(b.lastMessage.createdAt) - +new Date(a.lastMessage.createdAt);
+    });
     return list;
-  }, [data, filter, query]);
+  }, [data, filter, query, pinnedSet]);
+
+  const onLongPressConv = (c: Conversation) => {
+    h.medium();
+    const isPinned   = pinnedSet.has(c.partner.id);
+    const isContact  = contacts.some((k) => k.id === c.partner.id);
+    const pinLabel   = isPinned    ? t('chat.unpin')         : t('chat.pin');
+    const contactLbl = isContact   ? t('chat.removeContact') : t('chat.addContact');
+    const opts = [pinLabel, contactLbl, t('common.cancel') || 'Cancel'];
+    const run = async (idx: number) => {
+      if (idx === 0) {
+        await togglePin(c.partner.id);
+      } else if (idx === 1) {
+        if (isContact) {
+          await useChatPrefs.getState().removeContact(c.partner.id);
+        } else {
+          await addContact({
+            id: c.partner.id,
+            handle: c.partner.username ?? undefined,
+            name: `${c.partner.firstName ?? ''} ${c.partner.lastName ?? ''}`.trim() || undefined,
+            avatarUrl: c.partner.avatarUrl ?? null,
+            addedAt: Date.now(),
+          });
+        }
+      }
+    };
+    if (Platform.OS === 'ios') {
+      ActionSheetIOS.showActionSheetWithOptions(
+        { options: opts, cancelButtonIndex: opts.length - 1 },
+        run,
+      );
+    } else {
+      Alert.alert(
+        c.partner.firstName ?? '',
+        undefined,
+        [
+          { text: pinLabel, onPress: () => run(0) },
+          { text: contactLbl, onPress: () => run(1) },
+          { text: t('common.cancel') || 'Cancel', style: 'cancel' },
+        ],
+      );
+    }
+  };
 
   const totalUnread = (data ?? []).reduce((s, c) => s + c.unread, 0);
 
@@ -235,14 +297,68 @@ export default function Messages() {
               )}
             </View>
           ) : (
-            conversations.map((c) => (
-              <Row
-                key={c.partner.id}
-                conv={c}
-                palette={p}
-                onPress={() => { h.selection(); router.push(`/messages/${c.partner.id}`); }}
-              />
-            ))
+            <>
+              {/* Contacts strip — visible only when at least one
+                  contact exists, and only on the "ALL" filter so it
+                  doesn't fight with Unread/Payments/Support. */}
+              {filter === 'ALL' && contacts.length > 0 && !query.trim() && (
+                <View style={{ paddingTop: 6, paddingBottom: 6 }}>
+                  <Text style={{
+                    color: p.fgFaint, fontSize: 10, fontWeight: '700',
+                    letterSpacing: 0.8, paddingHorizontal: 24, marginBottom: 8,
+                  }}>
+                    {(t('chat.contacts') || 'CONTACTS').toUpperCase()}
+                  </Text>
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={{ paddingHorizontal: 18, gap: 14 }}
+                  >
+                    {contacts.map((c) => (
+                      <Pressable
+                        key={c.id}
+                        onPress={() => { h.selection(); router.push(`/messages/${c.id}`); }}
+                        style={({ pressed }) => ({
+                          alignItems: 'center', gap: 6, width: 64,
+                          opacity: pressed ? 0.7 : 1,
+                        })}
+                      >
+                        <View style={{
+                          width: 52, height: 52, borderRadius: 26,
+                          backgroundColor: '#7c3aed',
+                          alignItems: 'center', justifyContent: 'center',
+                        }}>
+                          {c.avatarUrl
+                            ? <Text style={{ fontSize: 24 }}>{c.avatarUrl}</Text>
+                            : <Text style={{ color: '#fff', fontSize: 18, fontWeight: '700' }}>
+                                {(c.name?.[0] ?? c.handle?.[0] ?? '?').toUpperCase()}
+                              </Text>
+                          }
+                        </View>
+                        <Text numberOfLines={1} style={{
+                          color: p.fg, fontSize: 11, fontWeight: '600',
+                          maxWidth: 64,
+                        }}>
+                          {c.name ?? (c.handle ? `@${c.handle}` : '—')}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </ScrollView>
+                  <View style={{ height: 1, backgroundColor: p.border, marginTop: 12, marginHorizontal: 24 }} />
+                </View>
+              )}
+
+              {conversations.map((c) => (
+                <Row
+                  key={c.partner.id}
+                  conv={c}
+                  palette={p}
+                  pinned={pinnedSet.has(c.partner.id)}
+                  onPress={() => { h.selection(); router.push(`/messages/${c.partner.id}`); }}
+                  onLongPress={() => onLongPressConv(c)}
+                />
+              ))}
+            </>
           )}
         </ScrollView>
       </SafeAreaView>
@@ -252,11 +368,13 @@ export default function Messages() {
 
 /* ── Row ─── */
 function Row({
-  conv: c, palette: p, onPress,
+  conv: c, palette: p, pinned, onPress, onLongPress,
 }: {
   conv: Conversation;
   palette: Palette;
+  pinned?: boolean;
   onPress: () => void;
+  onLongPress?: () => void;
 }) {
   const isSupport = c.partner.username === 'support' || c.partner.role === 'AGENT';
   const fullName = `${c.partner.firstName ?? ''} ${c.partner.lastName ?? ''}`.trim()
@@ -265,10 +383,16 @@ function Row({
   return (
     <Pressable
       onPress={onPress}
+      onLongPress={onLongPress}
+      delayLongPress={350}
       style={({ pressed }) => ({
         flexDirection: 'row', alignItems: 'center',
         paddingHorizontal: 24, paddingVertical: 14,
-        backgroundColor: pressed ? p.bgElev : 'transparent',
+        // Subtle wash on pinned rows so the user can scan which chats
+        // they've pinned without staring at a tiny corner icon.
+        backgroundColor: pressed
+          ? p.bgElev
+          : (pinned ? p.pillBg : 'transparent'),
         gap: 14,
       })}
     >
@@ -291,6 +415,9 @@ function Row({
       </View>
       <View style={{ flex: 1, gap: 3 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          {pinned && (
+            <Ionicons name="pin" size={11} color={p.fgMuted} style={{ transform: [{ rotate: '35deg' }] }} />
+          )}
           <Text
             numberOfLines={1}
             style={{

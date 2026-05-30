@@ -1,5 +1,5 @@
 import { Router, raw } from 'express';
-import { authenticate } from '../middleware/auth';
+import { authenticate, requireAdmin } from '../middleware/auth';
 import { upload } from '../middleware/upload';
 import { DepositController } from '../controllers/deposit.controller';
 
@@ -22,4 +22,9 @@ depositRouter.post('/', authenticate, upload.single('proof'), DepositController.
 depositRouter.get('/', authenticate, DepositController.getAll);
 depositRouter.get('/:id', authenticate, DepositController.getById);
 depositRouter.put('/:id/cancel', authenticate, DepositController.cancel);
-depositRouter.put('/:id/confirm', authenticate, DepositController.confirm);
+
+// CRITICAL: confirm credits the wallet. NEVER let the depositor confirm
+// their own pending deposit — that's a money printer (no funds need to
+// have actually been wired). Ops/admin verifies the wire landed in our
+// bank account, *then* hits this endpoint to release the credit.
+depositRouter.put('/:id/confirm', authenticate, requireAdmin, DepositController.confirm);

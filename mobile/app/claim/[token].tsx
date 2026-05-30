@@ -1,52 +1,53 @@
 /**
- * Claim screen — the headline feature.
+ * Claim screen — subtle lottery ticket aesthetic.
  *
  * Universal URL: https://Fortuni.com/claim/:token
  * Expo Router:  /claim/[token]
- *
- * Flow:
- *  1. PUBLIC preview — we fetch /claim-links/by-token/:token WITHOUT
- *     auth. This works even on cold-tap from an email when the user
- *     hasn't signed in (or has never used the app).
- *  2. Reveal animation — a sealed envelope (mono icon) bursts open into
- *     the amount + asset, framed by the sender's name/avatar. The first
- *     impression is what makes this magical, not the network call.
- *  3. Big CTA — "Claim {amount}". If unauthed, route to sign-up /
- *     sign-in with `?next=/claim/{token}`. If authed, POST the claim
- *     endpoint and animate the amount into the user's balance.
- *  4. After-state — confetti tick + receipt, with a "Open my wallet"
- *     CTA. Failure states (expired / already claimed / wrong PIN) get
- *     specific copy, not a generic error.
  */
 
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, View } from 'react-native';
+import { ActivityIndicator, Dimensions, Image, Linking, Pressable, ScrollView, View } from 'react-native';
 import { Text, TextInput } from '@/components/ui/Text';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import Animated, {
-  Easing,
-  FadeIn,
-  FadeOut,
-  useAnimatedStyle,
-  useSharedValue,
-  withDelay,
-  withRepeat,
-  withSequence,
-  withSpring,
-  withTiming,
-} from 'react-native-reanimated';
+import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-
-import { useThemedPalette } from '@/store/themeStore';
+import { TopGradient } from '@/components/ui/ScreenShell';
+import { useTheme, useThemedPalette } from '@/store/themeStore';
 import { useAuthStore } from '@/store/authStore';
 import { useT } from '@/store/i18nStore';
 import { useHaptics } from '@/hooks';
+import { useTransactionSound } from '@/hooks/useTransactionSound';
 import { claimLinkService, type ClaimLinkPreview } from '@/services';
 import { CoinIcon } from '@/components/ui/CoinIcon';
 
+const { width: SCREEN_W } = Dimensions.get('window');
+const TICKET_W = Math.min(SCREEN_W - 48, 380);
+const LANDING_URL = 'https://Fortuni.com';
+
 type Phase = 'loading' | 'preview' | 'pin' | 'claiming' | 'claimed' | 'expired' | 'cancelled' | 'already_claimed' | 'not_found';
+
+/** Resolve sender avatar: image URL, emoji, or initials fallback */
+function senderAvatar(preview: ClaimLinkPreview): { kind: 'image'; uri: string } | { kind: 'emoji'; char: string } | { kind: 'initials'; char: string } {
+  const url = preview.sender.avatarUrl?.trim();
+  if (url && (/^https?:\/\//i.test(url) || url.startsWith('/'))) {
+    return { kind: 'image', uri: url };
+  }
+  // Legacy: avatarUrl may hold an emoji
+  if (url && url.length <= 4) {
+    const stripped = url.replace(/[\uFE0E\uFE0F\u200D]/g, '');
+    if (stripped.length > 0 && stripped.length <= 4) {
+      let hasEmoji = false;
+      for (const ch of stripped) {
+        const cp = ch.codePointAt(0)!;
+        if (cp < 0x20 || cp > 0x7E) { hasEmoji = true; break; }
+      }
+      if (hasEmoji) return { kind: 'emoji', char: url };
+    }
+  }
+  return { kind: 'initials', char: (preview.sender.firstName?.[0] ?? '?').toUpperCase() };
+}
 
 function formatTimeLeft(expiresAt?: string): string {
   if (!expiresAt) return '';
@@ -60,60 +61,53 @@ function formatTimeLeft(expiresAt?: string): string {
   return `${mins}m left`;
 }
 
+/** Perforated edge dots (subtle ticket feel) */
+function TicketEdge({ top = false }: { top?: boolean }) {
+  const p = useThemedPalette();
+  const dots = [];
+  const count = 12;
+  for (let i = 0; i < count; i++) {
+    dots.push(
+      <View
+        key={i}
+        style={{
+          width: 6, height: 6, borderRadius: 3,
+          backgroundColor: p.bg,
+        }}
+      />
+    );
+  }
+  return (
+    <View
+      style={{
+        position: 'absolute',
+        left: 0, right: 0,
+        [top ? 'top' : 'bottom']: -3,
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        paddingHorizontal: 12,
+      }}
+    >
+      {dots}
+    </View>
+  );
+}
+
 export default function ClaimScreen() {
   const { token } = useLocalSearchParams<{ token: string }>();
   const router = useRouter();
   const p = useThemedPalette();
   const t = useT();
   const h = useHaptics();
+  const { playSuccess: playApplePay } = useTransactionSound();
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const themeMode = useTheme((s) => s.mode);
+  const isDark = themeMode === 'dark';
 
   const [phase, setPhase] = useState<Phase>('loading');
   const [preview, setPreview] = useState<ClaimLinkPreview | null>(null);
   const [pin, setPin] = useState('');
   const [error, setError] = useState<string | null>(null);
-
-  // ── Reveal animation shared values ──────────────────────────────
-  const envelope = useSharedValue(1);   // 1 = sealed, 0 = open
-  const amountY  = useSharedValue(40);
-  const amountO  = useSharedValue(0);
-  const senderO  = useSharedValue(0);
-  const glow     = useSharedValue(0);
-
-  const envelopeStyle = useAnimatedStyle(() => ({
-    opacity: envelope.value,
-    transform: [
-      { scale: 0.8 + envelope.value * 0.2 },
-      { rotate: `${(1 - envelope.value) * -8}deg` },
-    ],
-  }));
-  const amountStyle = useAnimatedStyle(() => ({
-    opacity: amountO.value,
-    transform: [{ translateY: amountY.value }, { scale: 0.94 + amountO.value * 0.06 }],
-  }));
-  const senderStyle = useAnimatedStyle(() => ({
-    opacity: senderO.value,
-    transform: [{ translateY: (1 - senderO.value) * 10 }],
-  }));
-  const glowStyle = useAnimatedStyle(() => ({
-    opacity: glow.value,
-    transform: [{ scale: 0.8 + glow.value * 0.5 }],
-  }));
-
-  function playReveal() {
-    h.success();
-    envelope.value = withTiming(0, { duration: 600, easing: Easing.out(Easing.cubic) });
-    amountY.value  = withDelay(220, withSpring(0, { damping: 14, stiffness: 180 }));
-    amountO.value  = withDelay(220, withTiming(1, { duration: 500 }));
-    senderO.value  = withDelay(420, withTiming(1, { duration: 400 }));
-    glow.value     = withRepeat(
-      withSequence(
-        withTiming(0.7, { duration: 1400, easing: Easing.inOut(Easing.quad) }),
-        withTiming(0.3, { duration: 1400, easing: Easing.inOut(Easing.quad) }),
-      ),
-      -1, true,
-    );
-  }
 
   /* ── Load preview ──────────────────────────────────────────── */
   useEffect(() => {
@@ -126,7 +120,7 @@ export default function ClaimScreen() {
         if      (data.status === 'EXPIRED')   setPhase('expired');
         else if (data.status === 'CANCELLED') setPhase('cancelled');
         else if (data.status === 'CLAIMED')   setPhase('already_claimed');
-        else                                  { setPhase('preview'); playReveal(); }
+        else                                  setPhase('preview');
       })
       .catch((e: any) => {
         if (cancelled) return;
@@ -141,7 +135,6 @@ export default function ClaimScreen() {
   async function doClaim() {
     if (!preview) return;
     if (!isAuthenticated) {
-      // Take the user through sign-up / sign-in, return to this screen.
       router.push({ pathname: '/(auth)/login', params: { next: `/claim/${token}` } } as any);
       return;
     }
@@ -153,12 +146,12 @@ export default function ClaimScreen() {
     try {
       await claimLinkService.claimByToken(token!, preview.hasPin ? pin : undefined);
       h.success();
+      playApplePay('transfer');
       setPhase('claimed');
     } catch (e: any) {
       const msg = e?.response?.data?.error ?? 'Could not claim';
       setError(msg);
       h.error();
-      // Specific error mapping so the UI never shows a raw 500.
       if (/expired/i.test(msg))            setPhase('expired');
       else if (/cancelled/i.test(msg))     setPhase('cancelled');
       else if (/already claimed/i.test(msg) || /claimed/i.test(msg)) setPhase('already_claimed');
@@ -170,10 +163,15 @@ export default function ClaimScreen() {
   /* ── Render ────────────────────────────────────────────────── */
   return (
     <View style={{ flex: 1, backgroundColor: p.bg }}>
-      <StatusBar style="light" />
+      <StatusBar style={themeMode === 'dark' ? 'light' : 'dark'} />
+      <TopGradient />
+
       <SafeAreaView style={{ flex: 1 }} edges={['top']}>
-        {/* Close button */}
-        <View style={{ flexDirection: 'row', justifyContent: 'flex-end', paddingHorizontal: 18, paddingTop: 8 }}>
+        {/* Header */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 24, paddingTop: 12, paddingBottom: 8 }}>
+          <Text style={{ color: p.fg, fontSize: 17, fontWeight: '700', letterSpacing: -0.3 }}>
+            {t('claim.title') || 'Claim'}
+          </Text>
           <Pressable
             onPress={() => router.replace('/(tabs)' as any)}
             hitSlop={10}
@@ -181,157 +179,155 @@ export default function ClaimScreen() {
             style={({ pressed }) => ({
               width: 36, height: 36, borderRadius: 18,
               alignItems: 'center', justifyContent: 'center',
-              backgroundColor: pressed ? p.bgRaised : p.bgElev,
+              backgroundColor: pressed ? p.border : p.bgElev,
               borderWidth: 1, borderColor: p.border,
+              opacity: pressed ? 0.8 : 1,
             })}
           >
             <Ionicons name="close" size={18} color={p.fg} />
           </Pressable>
         </View>
 
-        <View style={{ flex: 1, paddingHorizontal: 24, paddingTop: 20 }}>
+        <ScrollView
+          contentContainerStyle={{ flexGrow: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24, paddingBottom: 32 }}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
           {phase === 'loading' && (
-            <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+            <View style={{ alignItems: 'center', justifyContent: 'center' }}>
               <ActivityIndicator color={p.fg} />
-              <Text style={{ color: p.fgMuted, fontSize: 13, marginTop: 12 }}>
+              <Text style={{ color: p.fgMuted, fontSize: 14, marginTop: 14, fontWeight: '500' }}>
                 {t('claim.loading') || 'Opening your claim…'}
               </Text>
             </View>
           )}
 
           {(phase === 'preview' || phase === 'pin' || phase === 'claiming') && preview && (
-            <View style={{ flex: 1 }}>
-              {/* ── Sealed envelope (fades out) ── */}
-              <View style={{ alignItems: 'center', justifyContent: 'center', marginTop: 24, height: 130 }}>
-                {/* Soft halo */}
-                <Animated.View
-                  style={[
-                    {
-                      position: 'absolute',
-                      width: 220, height: 220, borderRadius: 110,
-                      backgroundColor: p.fg,
-                      opacity: 0.06,
-                    },
-                    glowStyle,
-                  ]}
-                />
-                <Animated.View style={[envelopeStyle, { position: 'absolute' }]}>
-                  <Ionicons name="mail" size={84} color={p.fg} />
-                </Animated.View>
-                {/* Sparkle dots that ride along the reveal */}
-                <Animated.View
-                  entering={FadeIn.delay(350).duration(400)}
-                  style={{ flexDirection: 'row', gap: 6, position: 'absolute', top: 4 }}
-                >
-                  <Ionicons name="sparkles" size={14} color={p.fg} />
-                  <Ionicons name="sparkles" size={10} color={p.fgMuted} />
-                </Animated.View>
-              </View>
-
-              {/* ── Big amount + asset ── */}
-              <Animated.View style={[amountStyle, { alignItems: 'center', marginTop: 20 }]}>
-                <Text
-                  style={{
-                    color: p.fgMuted, fontSize: 12, fontWeight: '700',
-                    letterSpacing: 1.6, textTransform: 'uppercase',
-                  }}
-                >
-                  {t('claim.youReceived') || 'You received'}
-                </Text>
-                <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8, gap: 12 }}>
-                  <CoinIcon symbol={preview.asset} size={36} />
-                  <Text
-                    style={{
-                      color: p.fg, fontSize: 56, fontWeight: '800',
-                      letterSpacing: -2,
-                      fontVariant: ['tabular-nums'],
-                    }}
-                  >
-                    {preview.amount}
-                  </Text>
-                </View>
-                <Text style={{ color: p.fgMuted, fontSize: 18, fontWeight: '600', marginTop: 4, letterSpacing: 1.2 }}>
-                  {preview.asset}
-                </Text>
-              </Animated.View>
-
-              {/* ── Sender chip ── */}
-              <Animated.View
-                style={[
-                  senderStyle,
-                  {
-                    marginTop: 28,
-                    alignSelf: 'center',
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    gap: 10,
-                    backgroundColor: p.bgElev,
-                    borderColor: p.border, borderWidth: 1,
-                    paddingLeft: 6, paddingRight: 14,
-                    paddingVertical: 6,
-                    borderRadius: 100,
-                  },
-                ]}
+            <Animated.View entering={FadeIn.duration(280)} style={{ width: TICKET_W, alignItems: 'center' }}>
+              {/* ── Ticket card ── */}
+              <View
+                style={{
+                  width: TICKET_W,
+                  backgroundColor: p.bgElev,
+                  borderWidth: 1, borderColor: p.border,
+                  borderRadius: 16,
+                  paddingTop: 18,
+                  paddingBottom: 18,
+                  position: 'relative',
+                  overflow: 'hidden',
+                }}
               >
-                <View
-                  style={{
-                    width: 26, height: 26, borderRadius: 13,
-                    backgroundColor: p.bgRaised,
-                    alignItems: 'center', justifyContent: 'center',
-                    borderWidth: 1, borderColor: p.border,
-                  }}
-                >
-                  <Text style={{ color: p.fg, fontWeight: '700', fontSize: 12 }}>
-                    {(preview.sender.firstName?.[0] ?? '?').toUpperCase()}
-                  </Text>
+                <TicketEdge top />
+                <TicketEdge />
+
+                {/* Dashed divider line (perforation feel) */}
+                <View style={{ paddingHorizontal: 20, marginBottom: 18 }}>
+                  <View style={{ borderStyle: 'dashed', borderWidth: 0.8, borderColor: p.border, borderRadius: 1 }} />
                 </View>
-                <Text style={{ color: p.fg, fontSize: 13, fontWeight: '600' }}>
-                  {(t('claim.from') || 'from')} {preview.sender.handle ? `@${preview.sender.handle}` : (preview.sender.firstName || 'someone')}
-                </Text>
-              </Animated.View>
+
+                {/* Centered content */}
+                <View style={{ alignItems: 'center', paddingHorizontal: 20, gap: 14 }}>
+                  {/* Small label */}
+                  <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '700', letterSpacing: 2, textTransform: 'uppercase' }}>
+                    {t('claim.youReceived') || 'You received'}
+                  </Text>
+
+                  {/* Big amount */}
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                    <CoinIcon symbol={preview.asset} size={44} />
+                    <Text
+                      style={{
+                        color: p.fg, fontSize: 44, fontWeight: '800',
+                        letterSpacing: -1.5,
+                        fontVariant: ['tabular-nums'],
+                      }}
+                    >
+                      {preview.amount}
+                    </Text>
+                  </View>
+                  <Text style={{ color: p.fgMuted, fontSize: 16, fontWeight: '600', letterSpacing: 0.5 }}>
+                    {preview.asset}
+                  </Text>
+
+                  {/* Sender */}
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 }}>
+                    {(() => {
+                      const av = senderAvatar(preview);
+                      return (
+                        <View
+                          style={{
+                            width: 26, height: 26, borderRadius: 13,
+                            backgroundColor: 'transparent',
+                            alignItems: 'center', justifyContent: 'center',
+                            overflow: 'hidden',
+                          }}
+                        >
+                          {av.kind === 'image' ? (
+                            <Image source={{ uri: av.uri }} style={{ width: 26, height: 26 }} />
+                          ) : av.kind === 'emoji' ? (
+                            <Text style={{ fontSize: 14 }}>{av.char}</Text>
+                          ) : (
+                            <Text style={{ color: p.ctaFg, fontWeight: '500', fontSize: 13 }}>{av.char}</Text>
+                          )}
+                        </View>
+                      );
+                    })()}
+                    <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '500' }}>
+                      {t('claim.from') || 'from'} {preview.sender.handle ? `@${preview.sender.handle}` : (preview.sender.firstName || 'someone')}
+                    </Text>
+                  </View>
+                </View>
+
+                {/* Dashed divider */}
+                <View style={{ paddingHorizontal: 20, marginTop: 18, marginBottom: 14 }}>
+                  <View style={{ borderStyle: 'dashed', borderWidth: 0.8, borderColor: p.border, borderRadius: 1 }} />
+                </View>
+
+                {/* Meta row */}
+                <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 10, paddingHorizontal: 20 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: p.bgRaised, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 100 }}>
+                    <Ionicons name="time-outline" size={12} color={p.fgMuted} />
+                    <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '600' }}>
+                      {formatTimeLeft(preview.expiresAt)}
+                    </Text>
+                  </View>
+                  {preview.hasPin && (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: p.bgRaised, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 100 }}>
+                      <Ionicons name="lock-closed" size={12} color={p.fgMuted} />
+                      <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '600' }}>
+                        {t('claim.pinRequired') || 'PIN required'}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              </View>
 
               {/* ── Optional note ── */}
               {preview.note ? (
                 <Animated.View
-                  entering={FadeIn.delay(700).duration(400)}
+                  entering={FadeIn.delay(200).duration(300)}
                   style={{
-                    marginTop: 16, marginHorizontal: 12,
-                    paddingHorizontal: 16, paddingVertical: 12,
-                    backgroundColor: p.bgElev, borderColor: p.border, borderWidth: 1,
-                    borderRadius: 16,
+                    marginTop: 14,
+                    width: TICKET_W,
+                    padding: 18,
+                    backgroundColor: p.bgElev,
+                    borderWidth: 1, borderColor: p.border,
+                    borderRadius: 14,
                   }}
                 >
-                  <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '700', letterSpacing: 1, textTransform: 'uppercase' }}>
+                  <Text style={{ color: p.fgMuted, fontSize: 10, fontWeight: '700', letterSpacing: 1, textTransform: 'uppercase' }}>
                     {t('claim.note') || 'Note'}
                   </Text>
-                  <Text style={{ color: p.fg, fontSize: 14, marginTop: 4, lineHeight: 20 }}>
-                    “{preview.note}”
+                  <Text style={{ color: p.fg, fontSize: 14, marginTop: 6, lineHeight: 21 }}>
+                    {preview.note}
                   </Text>
                 </Animated.View>
               ) : null}
 
-              {/* ── Time-left + secured indicator ── */}
-              <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 14, marginTop: 18 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                  <Ionicons name="time-outline" size={12} color={p.fgMuted} />
-                  <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '600' }}>
-                    {formatTimeLeft(preview.expiresAt)}
-                  </Text>
-                </View>
-                {preview.hasPin && (
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                    <Ionicons name="lock-closed" size={12} color={p.fgMuted} />
-                    <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '600' }}>
-                      {t('claim.pinRequired') || 'PIN required'}
-                    </Text>
-                  </View>
-                )}
-              </View>
-
-              {/* ── PIN input (when applicable) ── */}
+              {/* ── PIN input ── */}
               {phase === 'pin' && (
-                <Animated.View entering={FadeIn.duration(220)} exiting={FadeOut.duration(160)} style={{ marginTop: 22 }}>
-                  <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '600', textAlign: 'center', marginBottom: 8 }}>
+                <Animated.View entering={FadeIn.duration(200)} exiting={FadeOut.duration(160)} style={{ marginTop: 18, gap: 8, width: TICKET_W, alignItems: 'center' }}>
+                  <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '600', textAlign: 'center' }}>
                     {t('claim.enterPin') || 'Enter the PIN the sender gave you'}
                   </Text>
                   <TextInput
@@ -344,139 +340,212 @@ export default function ClaimScreen() {
                     placeholder="••••"
                     placeholderTextColor={p.fgFaint}
                     style={{
-                      alignSelf: 'center',
-                      width: 200, height: 56,
-                      borderRadius: 16,
+                      width: 160, height: 48,
+                      borderRadius: 14,
                       backgroundColor: p.bgElev,
                       borderWidth: 1, borderColor: p.border,
-                      color: p.fg, fontSize: 24, fontWeight: '700',
-                      textAlign: 'center', letterSpacing: 16,
+                      color: p.fg, fontSize: 20, fontWeight: '700',
+                      textAlign: 'center', letterSpacing: 12,
                       fontVariant: ['tabular-nums'],
                     }}
                   />
                 </Animated.View>
               )}
 
+              {/* Error */}
               {error ? (
-                <Text style={{ color: p.redFg, fontSize: 13, textAlign: 'center', marginTop: 14 }}>
-                  {error}
-                </Text>
+                <Animated.View entering={FadeIn.duration(200)} style={{ marginTop: 14, width: TICKET_W, alignItems: 'center' }}>
+                  <View style={{ paddingHorizontal: 16, paddingVertical: 10, backgroundColor: p.redBg, borderRadius: 12 }}>
+                    <Text style={{ color: p.redFg, fontSize: 13, textAlign: 'center', fontWeight: '600' }}>
+                      {error}
+                    </Text>
+                  </View>
+                </Animated.View>
               ) : null}
 
               {/* ── CTA ── */}
-              <View style={{ flex: 1 }} />
-              <Pressable
-                onPress={doClaim}
-                disabled={phase === 'claiming' || (phase === 'pin' && pin.length < 4)}
-                style={({ pressed }) => ({
-                  marginBottom: 14, marginTop: 24,
-                  height: 60, borderRadius: 30,
-                  backgroundColor: p.ctaBg,
-                  alignItems: 'center', justifyContent: 'center',
-                  flexDirection: 'row',
-                  gap: 10,
-                  opacity: (phase === 'pin' && pin.length < 4) ? 0.5 : pressed ? 0.92 : 1,
-                  shadowColor: '#000',
-                  shadowOpacity: 0.18,
-                  shadowOffset: { width: 0, height: 6 },
-                  shadowRadius: 16,
-                  elevation: 6,
-                })}
-              >
-                {phase === 'claiming' ? (
-                  <ActivityIndicator color={p.ctaFg} />
-                ) : (
-                  <>
-                    <Ionicons name="arrow-down-circle" size={20} color={p.ctaFg} />
-                    <Text style={{ color: p.ctaFg, fontSize: 16, fontWeight: '800', letterSpacing: -0.2 }}>
-                      {isAuthenticated
-                        ? `${t('claim.cta') || 'Claim'} ${preview.amount} ${preview.asset}`
-                        : (t('claim.signInToClaim') || 'Sign in to claim')}
-                    </Text>
-                  </>
-                )}
-              </Pressable>
-              <Text style={{ color: p.fgFaint, fontSize: 11, textAlign: 'center', marginBottom: 8 }}>
+              <View style={{ marginTop: 28, width: TICKET_W }}>
+                <Pressable
+                  onPress={doClaim}
+                  disabled={phase === 'claiming' || (phase === 'pin' && pin.length < 4)}
+                  style={({ pressed }) => ({
+                    height: 52,
+                    borderRadius: 26,
+                    backgroundColor: isDark ? '#ffffff' : '#111111',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexDirection: 'row',
+                    gap: 8,
+                    opacity: (phase === 'pin' && pin.length < 4) ? 0.45 : pressed ? 0.92 : 1,
+                    shadowColor: isDark ? '#ffffff' : '#000000',
+                    shadowOffset: { width: 0, height: 6 },
+                    shadowOpacity: 0.14,
+                    shadowRadius: 14,
+                    elevation: 4,
+                  })}
+                >
+                  {phase === 'claiming' ? (
+                    <ActivityIndicator color={isDark ? '#111111' : '#ffffff'} />
+                  ) : (
+                    <>
+                      <Ionicons name="arrow-down-circle" size={20} color={isDark ? '#111111' : '#ffffff'} />
+                      <Text style={{ color: isDark ? '#111111' : '#ffffff', fontSize: 16, fontWeight: '700', letterSpacing: -0.2 }}>
+                        {isAuthenticated
+                          ? `${t('claim.cta') || 'Claim'} ${preview.amount} ${preview.asset}`
+                          : (t('claim.signInToClaim') || 'Sign in to claim')}
+                      </Text>
+                    </>
+                  )}
+                </Pressable>
+              </View>
+
+              <Text style={{ color: p.fgFaint, fontSize: 11, textAlign: 'center', marginTop: 14, lineHeight: 16 }}>
                 {t('claim.fineprint') || 'Funds settle instantly. Claim links cannot be claimed twice.'}
               </Text>
-            </View>
-          )}
 
-          {/* ── Final states ────────────────────────────────────── */}
-          {phase === 'claimed' && preview && (
-            <Animated.View entering={FadeIn.duration(300)} style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-              <View
-                style={{
-                  width: 100, height: 100, borderRadius: 50,
-                  backgroundColor: p.greenBg, borderWidth: 2, borderColor: p.greenFg,
-                  alignItems: 'center', justifyContent: 'center',
-                  marginBottom: 24,
-                }}
-              >
-                <Ionicons name="checkmark" size={56} color={p.greenFg} />
-              </View>
-              <Text style={{ color: p.fg, fontSize: 24, fontWeight: '800', letterSpacing: -0.6 }}>
-                {(t('claim.success') || 'Claimed!')}
-              </Text>
-              <Text style={{ color: p.fgMuted, fontSize: 14, fontWeight: '500', marginTop: 8, textAlign: 'center' }}>
-                {`${preview.amount} ${preview.asset} ${(t('claim.successBody') || 'is now in your Fortuni wallet.')}`}
-              </Text>
+              {/* ── What is Fortuni? ── */}
               <Pressable
-                onPress={() => router.replace('/(tabs)/wallet' as any)}
+                onPress={() => Linking.openURL(LANDING_URL)}
                 style={({ pressed }) => ({
-                  marginTop: 40,
-                  paddingHorizontal: 28, height: 52, borderRadius: 26,
-                  backgroundColor: p.ctaBg,
-                  alignItems: 'center', justifyContent: 'center',
-                  flexDirection: 'row', gap: 8,
-                  opacity: pressed ? 0.92 : 1,
+                  marginTop: 10,
+                  alignSelf: 'center',
+                  paddingHorizontal: 16, paddingVertical: 8,
+                  borderRadius: 100,
+                  backgroundColor: pressed ? p.bgRaised : 'transparent',
+                  borderWidth: 1, borderColor: p.border,
                 })}
               >
-                <Text style={{ color: p.ctaFg, fontSize: 15, fontWeight: '800' }}>
-                  {t('claim.openWallet') || 'Open my wallet'}
+                <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '600' }}>
+                  {t('claim.whatIsFortuni') || 'What is Fortuni?'}
                 </Text>
-                <Ionicons name="arrow-forward" size={16} color={p.ctaFg} />
               </Pressable>
             </Animated.View>
           )}
 
-          {(phase === 'expired' || phase === 'cancelled' || phase === 'already_claimed' || phase === 'not_found') && (
-            <Animated.View entering={FadeIn.duration(240)} style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+          {/* ── Claimed ── */}
+          {phase === 'claimed' && preview && (
+            <Animated.View entering={FadeIn.duration(300)} style={{ alignItems: 'center', justifyContent: 'center', width: TICKET_W }}>
               <View
                 style={{
-                  width: 96, height: 96, borderRadius: 48,
-                  backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border,
-                  alignItems: 'center', justifyContent: 'center', marginBottom: 24,
+                  width: TICKET_W,
+                  backgroundColor: p.bgElev,
+                  borderWidth: 1, borderColor: p.border,
+                  borderRadius: 16,
+                  paddingTop: 36, paddingBottom: 28,
+                  alignItems: 'center',
+                  position: 'relative',
+                  overflow: 'hidden',
                 }}
               >
-                <Ionicons
-                  name={
-                    phase === 'already_claimed' ? 'checkmark-circle-outline'
-                    : phase === 'cancelled'      ? 'close-circle-outline'
-                    : 'time-outline'
-                  }
-                  size={48} color={p.fgMuted}
-                />
+                <TicketEdge top />
+                <TicketEdge />
+
+                <View
+                  style={{
+                    width: 64, height: 64, borderRadius: 32,
+                    backgroundColor: p.greenBg,
+                    borderWidth: 1, borderColor: p.greenFg,
+                    alignItems: 'center', justifyContent: 'center',
+                    marginBottom: 18,
+                  }}
+                >
+                  <Ionicons name="checkmark" size={32} color={p.greenFg} />
+                </View>
+                <Text style={{ color: p.fg, fontSize: 24, fontWeight: '800', letterSpacing: -0.5 }}>
+                  {(t('claim.success') || 'Claimed!')}
+                </Text>
+                <Text style={{ color: p.fgMuted, fontSize: 14, fontWeight: '500', marginTop: 8, textAlign: 'center', lineHeight: 20 }}>
+                  {`${preview.amount} ${preview.asset} ${(t('claim.successBody') || 'is now in your Fortuni wallet.')}`}
+                </Text>
               </View>
-              <Text style={{ color: p.fg, fontSize: 22, fontWeight: '700', letterSpacing: -0.4, textAlign: 'center' }}>
-                {phase === 'expired'         && (t('claim.expiredTitle')      || 'This claim has expired')}
-                {phase === 'cancelled'       && (t('claim.cancelledTitle')    || 'This claim was cancelled')}
-                {phase === 'already_claimed' && (t('claim.alreadyTitle')      || 'Already claimed')}
-                {phase === 'not_found'       && (t('claim.notFoundTitle')     || 'Claim link not found')}
-              </Text>
-              <Text style={{ color: p.fgMuted, fontSize: 14, marginTop: 8, textAlign: 'center', paddingHorizontal: 20, lineHeight: 20 }}>
-                {phase === 'expired'         && (t('claim.expiredBody')        || 'The funds have been returned to the sender. Ask them to send a fresh link.')}
-                {phase === 'cancelled'       && (t('claim.cancelledBody')      || 'The sender pulled this claim back before you could open it.')}
-                {phase === 'already_claimed' && (t('claim.alreadyBody')        || 'These funds have already landed in another Fortuni wallet.')}
-                {phase === 'not_found'       && (t('claim.notFoundBody')       || 'The link may be malformed. Double-check the URL from your email.')}
-              </Text>
+
+              <Pressable
+                onPress={() => router.replace('/(tabs)/wallet' as any)}
+                style={({ pressed }) => ({
+                  marginTop: 24,
+                  height: 48,
+                  borderRadius: 24,
+                  backgroundColor: isDark ? '#ffffff' : '#111111',
+                  paddingHorizontal: 28,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexDirection: 'row',
+                  gap: 6,
+                  opacity: pressed ? 0.92 : 1,
+                  shadowColor: isDark ? '#ffffff' : '#000000',
+                  shadowOffset: { width: 0, height: 4 },
+                  shadowOpacity: 0.12,
+                  shadowRadius: 10,
+                  elevation: 3,
+                })}
+              >
+                <Text style={{ color: isDark ? '#111111' : '#ffffff', fontSize: 15, fontWeight: '700' }}>
+                  {t('claim.openWallet') || 'Open my wallet'}
+                </Text>
+                <Ionicons name="arrow-forward" size={15} color={isDark ? '#111111' : '#ffffff'} />
+              </Pressable>
+            </Animated.View>
+          )}
+
+          {/* ── Error states ── */}
+          {(phase === 'expired' || phase === 'cancelled' || phase === 'already_claimed' || phase === 'not_found') && (
+            <Animated.View entering={FadeIn.duration(240)} style={{ alignItems: 'center', justifyContent: 'center', width: TICKET_W }}>
+              <View
+                style={{
+                  width: TICKET_W,
+                  backgroundColor: p.bgElev,
+                  borderWidth: 1, borderColor: p.border,
+                  borderRadius: 16,
+                  paddingTop: 36, paddingBottom: 28,
+                  alignItems: 'center',
+                  position: 'relative',
+                  overflow: 'hidden',
+                }}
+              >
+                <TicketEdge top />
+                <TicketEdge />
+
+                <View
+                  style={{
+                    width: 64, height: 64, borderRadius: 32,
+                    backgroundColor: p.bgRaised,
+                    borderWidth: 1, borderColor: p.border,
+                    alignItems: 'center', justifyContent: 'center',
+                    marginBottom: 18,
+                  }}
+                >
+                  <Ionicons
+                    name={
+                      phase === 'already_claimed' ? 'checkmark-circle-outline'
+                      : phase === 'cancelled'      ? 'close-circle-outline'
+                      : 'time-outline'
+                    }
+                    size={28} color={p.fgMuted}
+                  />
+                </View>
+                <Text style={{ color: p.fg, fontSize: 20, fontWeight: '700', letterSpacing: -0.3, textAlign: 'center' }}>
+                  {phase === 'expired'         && (t('claim.expiredTitle')      || 'This claim has expired')}
+                  {phase === 'cancelled'       && (t('claim.cancelledTitle')    || 'This claim was cancelled')}
+                  {phase === 'already_claimed' && (t('claim.alreadyTitle')      || 'Already claimed')}
+                  {phase === 'not_found'       && (t('claim.notFoundTitle')     || 'Claim link not found')}
+                </Text>
+                <Text style={{ color: p.fgMuted, fontSize: 14, marginTop: 8, textAlign: 'center', paddingHorizontal: 20, lineHeight: 20 }}>
+                  {phase === 'expired'         && (t('claim.expiredBody')        || 'The funds have been returned to the sender. Ask them to send a fresh link.')}
+                  {phase === 'cancelled'       && (t('claim.cancelledBody')      || 'The sender pulled this claim back before you could open it.')}
+                  {phase === 'already_claimed' && (t('claim.alreadyBody')        || 'These funds have already landed in another Fortuni wallet.')}
+                  {phase === 'not_found'       && (t('claim.notFoundBody')       || 'The link may be malformed. Double-check the URL from your email.')}
+                </Text>
+              </View>
+
               <Pressable
                 onPress={() => router.replace('/(tabs)' as any)}
                 style={({ pressed }) => ({
-                  marginTop: 36,
-                  paddingHorizontal: 26, height: 48, borderRadius: 24,
+                  marginTop: 24,
+                  height: 44,
+                  borderRadius: 22,
                   backgroundColor: pressed ? p.bgRaised : p.bgElev,
                   borderWidth: 1, borderColor: p.border,
+                  paddingHorizontal: 24,
                   alignItems: 'center', justifyContent: 'center',
                 })}
               >
@@ -486,7 +555,7 @@ export default function ClaimScreen() {
               </Pressable>
             </Animated.View>
           )}
-        </View>
+        </ScrollView>
       </SafeAreaView>
     </View>
   );

@@ -73,7 +73,17 @@ function shortPublicId(token: string): string {
   return token.slice(0, 10);
 }
 
-const PUBLIC_BASE = process.env.CLIENT_URL || process.env.FRONTEND_URL || 'https://Fortuni.com';
+function resolvePublicBase(): string {
+  if (process.env.FRONTEND_URL) return process.env.FRONTEND_URL.trim();
+  if (process.env.CLIENT_URL) {
+    // CLIENT_URL may be a comma-separated CORS list — take the first origin.
+    const first = process.env.CLIENT_URL.split(',')[0].trim();
+    return first;
+  }
+  return 'https://Fortuni.com';
+}
+
+const PUBLIC_BASE = resolvePublicBase();
 
 export class ClaimLinkController {
   /* ─────────────────────────────────────────────────────────────
@@ -242,6 +252,7 @@ export class ClaimLinkController {
         select: {
           id: true, senderId: true, asset: true, amount: true,
           status: true, expiresAt: true, pinHash: true, claimToken: true,
+          recipientEmail: true, recipientPhone: true, recipientHandle: true,
         },
       });
       if (!link) throw new AppError('Claim link not found', 404);
@@ -251,6 +262,29 @@ export class ClaimLinkController {
         // Auto-flip to EXPIRED + refund sender atomically.
         await ClaimLinkController._refundExpired(link.id);
         throw new AppError('Claim link has expired', 400);
+      }
+
+      // RECIPIENT BINDING.  If the sender specified an intended
+      // recipient (email / phone / handle), only that user may claim.
+      // Previously *any* signed-in user could redeem any link they
+      // got hold of — phishing the URL was enough to drain the gift.
+      // When no recipient is specified the link is treated as
+      // "first-to-claim wins" (the original behaviour, used for
+      // public QR-handout flows).
+      const hasBinding = !!(link.recipientEmail || link.recipientPhone || link.recipientHandle);
+      if (hasBinding) {
+        const claimer = await prisma.user.findUnique({
+          where: { id: claimerId },
+          select: { email: true, phone: true, username: true },
+        });
+        const emailMatch  = link.recipientEmail && claimer?.email && claimer.email.toLowerCase() === link.recipientEmail.toLowerCase();
+        const phoneMatch  = link.recipientPhone && claimer?.phone && claimer.phone === link.recipientPhone;
+        const handleMatch = link.recipientHandle && claimer?.username && claimer.username.toLowerCase() === link.recipientHandle.toLowerCase().replace(/^@/, '');
+        if (!emailMatch && !phoneMatch && !handleMatch) {
+          // Generic 403 so an attacker can't enumerate which field was
+          // set on the link.
+          throw new AppError('This claim link is for a different account', 403);
+        }
       }
 
       if (link.pinHash) {

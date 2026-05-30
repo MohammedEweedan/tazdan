@@ -21,7 +21,9 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { useTheme, useThemedPalette, type Palette } from '@/store/themeStore';
+import { useT } from '@/store/i18nStore';
 import { useAuthStore } from '@/store/authStore';
+import { useChatPrefs } from '@/store/chatPrefsStore';
 import {
   useThread, useSendMessage, useEditMessage, useDeleteMessage,
   useBlockUser, useReportMessage, useEscalateP2P, useHaptics,
@@ -42,7 +44,12 @@ export default function MessageThread() {
   const h = useHaptics();
   const p = useThemedPalette();
   const themeMode = useTheme((s) => s.mode);
+  const t = useT();
   const me = useAuthStore((s) => s.user);
+  // Reactive read so the star icon flips immediately when the user
+  // toggles their contact list.
+  const isContact = useChatPrefs((s) => s.contacts.has(partnerId));
+  const readReceiptsOn = useChatPrefs((s) => s.readReceiptsOn);
   const qc = useQueryClient();
   const scrollRef = useRef<ScrollView>(null);
 
@@ -183,13 +190,33 @@ const { data: messages = [], isLoading } = useThread(partnerId);  const sendMut 
   };
 
   const sendPayment = (amount: number, currency: string, note?: string) => {
-    sendMut.mutate({
-      receiverId: partnerId,
-      content: note || `${amount} ${currency}`,
-      type: 'PAYMENT',
-      metadata: { amount, currency, note, status: 'COMPLETED' },
-    });
-    setPaymentSheet(false);
+    sendMut.mutate(
+      {
+        receiverId: partnerId,
+        content: note || `${amount} ${currency}`,
+        type: 'PAYMENT',
+        metadata: { amount, currency, note, status: 'COMPLETED' },
+      },
+      {
+        onSuccess: () => {
+          h.success();
+          setPaymentSheet(false);
+        },
+        onError: (e: any) => {
+          // Surface the server's actual reason for the rejection — a
+          // silent failure (the old behaviour) made the user think
+          // "non-USDT crypto doesn't work in chat" when in fact the
+          // back-end was returning, e.g., "Insufficient ETH balance"
+          // and nobody ever saw it.
+          h.error();
+          const msg = e?.response?.data?.error
+            ?? e?.response?.data?.message
+            ?? e?.message
+            ?? 'Could not send payment.';
+          Alert.alert('Payment failed', msg);
+        },
+      },
+    );
   };
 
   const sendSticker = (sticker: string) => {
@@ -398,6 +425,48 @@ const { data: messages = [], isLoading } = useThread(partnerId);  const sendMut 
                : partner?.username ? `@${partner.username}` : ' '}
             </Text>
           </View>
+          {/* Contact / favourite toggle.  Tap = add to (or remove
+              from) your saved contacts; the row then surfaces in the
+              messages tab's horizontal contacts strip.  Long-press
+              pins this chat to the top instead. */}
+          {!isSupport && !!partner && (
+            <Pressable
+              hitSlop={6}
+              onPress={async () => {
+                h.selection();
+                const prefs = useChatPrefs.getState();
+                if (prefs.isContact(partner.id)) {
+                  await prefs.removeContact(partner.id);
+                } else {
+                  await prefs.addContact({
+                    id: partner.id,
+                    handle: partner.username ?? undefined,
+                    name: `${partner.firstName ?? ''} ${partner.lastName ?? ''}`.trim() || undefined,
+                    avatarUrl: partner.avatarUrl ?? null,
+                    addedAt: Date.now(),
+                  });
+                }
+              }}
+              onLongPress={async () => {
+                h.medium();
+                await useChatPrefs.getState().togglePin(partner.id);
+              }}
+              delayLongPress={400}
+              accessibilityLabel="Add to contacts / pin"
+              style={{
+                width: 36, height: 36, borderRadius: 18,
+                backgroundColor: p.pillBg, borderWidth: 1, borderColor: p.border,
+                alignItems: 'center', justifyContent: 'center',
+                marginRight: 6,
+              }}
+            >
+              <Ionicons
+                name={isContact ? 'star' : 'star-outline'}
+                size={16}
+                color={isContact ? '#f59e0b' : p.fg}
+              />
+            </Pressable>
+          )}
           <Pressable
             hitSlop={6}
             onPress={openHeaderMenu}
@@ -423,6 +492,31 @@ const { data: messages = [], isLoading } = useThread(partnerId);  const sendMut 
             showsVerticalScrollIndicator={false}
             onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: false })}
           >
+            {/* Privacy banner.
+                WARNING — current implementation is NOT end-to-end
+                encrypted.  Messages traverse the server in plaintext
+                (see server/src/controllers/message.controller.ts).
+                The user explicitly requested this copy; until a
+                Signal-protocol / libsignal layer is wired in, this
+                label is aspirational and must be replaced with
+                "Secured in transit" (or implemented for real) before
+                any public launch. */}
+            <View style={{
+              alignSelf: 'center',
+              flexDirection: 'row', alignItems: 'center', gap: 6,
+              paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12,
+              backgroundColor: p.pillBg,
+              borderWidth: 1, borderColor: p.border,
+              marginBottom: 8,
+            }}>
+              <Ionicons name="lock-closed" size={11} color={p.fgMuted} />
+              <Text style={{
+                color: p.fgMuted, fontSize: 11, fontWeight: '600', letterSpacing: 0.2,
+              }}>
+                {t('chat.e2eBanner')}
+              </Text>
+            </View>
+
             {isLoading && !messages?.length ? (
               <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '500', textAlign: 'center', marginTop: 48 }}>
                 Loading…
@@ -449,6 +543,7 @@ const { data: messages = [], isLoading } = useThread(partnerId);  const sendMut 
                         meId={me?.id ?? ''}
                         palette={p}
                         onLongPress={() => onBubbleLongPress(m)}
+                        showReadReceipt={readReceiptsOn}
                       />
                     );
                   })}
@@ -554,10 +649,10 @@ const { data: messages = [], isLoading } = useThread(partnerId);  const sendMut 
               </Pressable>
               <TextInput
                 value={draft}
-                onChangeText={(t) => {
-                  setDraft(t);
+                onChangeText={(text) => {
+                  setDraft(text);
                   if (showStickers) setShowStickers(false);
-                  if (t.trim()) {
+                  if (text.trim()) {
                     getSocket().then((sock) => {
                       if (!isEmittingTypingRef.current) {
                         isEmittingTypingRef.current = true;
@@ -655,13 +750,17 @@ const { data: messages = [], isLoading } = useThread(partnerId);  const sendMut 
 
 /* ── Bubble ─── */
 function Bubble({
-  message: m, isLastInRun, meId, palette: p, onLongPress,
+  message: m, isLastInRun, meId, palette: p, onLongPress, showReadReceipt,
 }: {
   message: ApiMessage;
   isLastInRun: boolean;
   meId: string;
   palette: Palette;
   onLongPress: () => void;
+  /** When false, the bubble shows a generic delivered tick instead
+   *  of the "read" double-check, reflecting the local user's
+   *  read-receipts preference. */
+  showReadReceipt: boolean;
 }) {
   const isMe = m.senderId === meId;
   const time = new Date(m.createdAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
@@ -782,9 +881,9 @@ function Bubble({
           {isMe && !deleted && (
             <Ionicons
               name={m.id.startsWith('local_') ? 'time-outline'
-                  : m.isRead ? 'checkmark-done' : 'checkmark'}
-              size={11}
-              color={m.isRead ? BRAND_BLUE : p.fgFaint}
+                  : (showReadReceipt && m.isRead) ? 'checkmark-done' : 'checkmark'}
+              size={14}
+              color={(showReadReceipt && m.isRead) ? p.greenFg : p.fgMuted}
             />
           )}
         </View>
