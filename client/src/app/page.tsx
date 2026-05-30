@@ -28,17 +28,14 @@ const AuthenticatedHome = dynamic(() => import("@/components/ui/AuthenticatedHom
 import { useAuthStore } from "@/stores/authStore";
 import {
   FiArrowRight, FiZap, FiGlobe, FiShield, FiCheck,
-  FiTrendingUp, FiTrendingDown, FiBarChart2, FiUsers,
-  FiCode, FiLayers, FiActivity, FiLock, FiCpu, FiBox,
-  FiFeather, FiSend, FiArrowDownLeft, FiArrowUpRight,
-  FiWifi, FiRepeat, FiPieChart, FiHome, FiCreditCard,
-  FiStar, FiMapPin, FiAtSign, FiSettings,
-  FiBell, FiPlus, FiDownload, FiDollarSign, FiMessageCircle, FiUser,
+  FiBarChart2, FiActivity, FiLock,
+  FiSend, FiWifi, FiRepeat, FiCreditCard,
+  FiStar, FiBell, FiDollarSign, FiMessageCircle, FiUser,
   FiChevronLeft, FiChevronRight, FiMoreHorizontal, FiSmile, FiArrowUp,
   FiEye, FiSearch, FiChevronDown, FiMaximize2, FiClock,
   FiLink,
 } from "react-icons/fi";
-import { FaApple, FaGooglePlay, FaApplePay, FaGooglePay, FaCcVisa, FaCcMastercard, FaPaypal } from "react-icons/fa";
+import { FaApple, FaGooglePlay, FaApplePay, FaGooglePay, FaCcVisa, FaCcMastercard } from "react-icons/fa";
 import { SiRevolut } from "react-icons/si";
 import {
   motion, useTransform, useMotionValue, useScroll,
@@ -1948,15 +1945,17 @@ function EmphText({ text }: { text: string }) {
   );
 }
 
-/* Scroll-driven fade — text gradually appears then disappears as the
-   element passes through the viewport. Monochrome, Apple-restrained. */
+/* Viewport-driven fade — text appears / disappears as the element enters
+   or leaves the viewport. Uses IntersectionObserver (via whileInView)
+   instead of scroll listeners for much lower runtime cost. */
 function ScrollFade({ children, range = 0.5 }: { children: React.ReactNode; range?: number }) {
-  const ref = useRef<HTMLDivElement>(null);
-  const { scrollYProgress } = useScroll({ target: ref, offset: ["start end", "end start"] });
-  const opacity = useTransform(scrollYProgress, [0, 0.3, 0.7, 1], [0, 1, 1, 0]);
-  const y = useTransform(scrollYProgress, [0, 0.3, 0.7, 1], [40 * range, 0, 0, -40 * range]);
   return (
-    <motion.div ref={ref} style={{ opacity, y }}>
+    <motion.div
+      initial={{ opacity: 0, y: 40 * range }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: false, amount: 0.3 }}
+      transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+    >
       {children}
     </motion.div>
   );
@@ -2241,7 +2240,6 @@ function SectionPatternBreak({ onWaitlist }: { onWaitlist: () => void }) {
   const { colorMode } = useColorMode();
   const dark = colorMode === "dark";
   // Inverted canvas vs. the rest of the page — this is the "break".
-  const canvas = dark ? "#0b0b0d" : "#0a0a0a";
   const onCanvas = "#f5f5f7";
   const onCanvasSub = "rgba(245,245,247,0.55)";
 
@@ -2254,7 +2252,7 @@ function SectionPatternBreak({ onWaitlist }: { onWaitlist: () => void }) {
   const loop = [...features, ...features];
 
   return (
-    <Box position="relative" overflow="hidden" bg={canvas} py={{ base: 24, md: 36 }}>
+    <Box position="relative" overflow="hidden" py={{ base: 24, md: 36 }}>
       {/* Monochrome light wash behind the statement — no colour */}
       <motion.div
         animate={{ opacity: [0.25, 0.5, 0.25] }}
@@ -2269,11 +2267,11 @@ function SectionPatternBreak({ onWaitlist }: { onWaitlist: () => void }) {
             <VStack spacing={5}>
               <Heading fontFamily="'DM Sans', sans-serif" fontWeight="700"
                 fontSize={{ base: "48px", md: "88px", lg: "108px" }}
-                letterSpacing="-0.05em" color={onCanvas} lineHeight={0.95} maxW="1000px"
+                letterSpacing="-0.05em" lineHeight={0.95} maxW="1000px"
               >
                 <EmphText text={t("pb_title")} />
               </Heading>
-              <Text fontSize={{ base: "17px", md: "21px" }} color={onCanvasSub} maxW="560px" lineHeight={1.5} fontWeight="400">
+              <Text fontSize={{ base: "17px", md: "21px" }} maxW="560px" lineHeight={1.5} fontWeight="400">
                 {t("pb_sub")}
               </Text>
             </VStack>
@@ -2302,12 +2300,11 @@ function SectionPatternBreak({ onWaitlist }: { onWaitlist: () => void }) {
             <HStack key={i} spacing={{ base: 6, md: 10 }} px={{ base: 4, md: 7 }} flexShrink={0}>
               <Text fontFamily="'DM Sans', sans-serif" fontWeight="700"
                 fontSize={{ base: "26px", md: "40px" }} letterSpacing="-0.03em"
-                color={i % 2 === 0 ? onCanvas : "rgba(245,245,247,0.30)"}
                 whiteSpace="nowrap"
               >
                 {f}
               </Text>
-              <Box w="5px" h="5px" borderRadius="full" bg="rgba(245,245,247,0.35)" flexShrink={0} />
+              <Box w="5px" h="5px" borderRadius="full" flexShrink={0} />
             </HStack>
           ))}
         </motion.div>
@@ -2439,6 +2436,124 @@ function SectionBusiness() {
               </motion.div>
             ))}
           </VStack>
+
+        </SimpleGrid>
+      </Container>
+    </Box>
+  );
+}
+
+/* ═════════════════════════════════════════════════════════════════
+   PREPAID CARDS — virtual & physical Visa cards.
+   Monochrome, editorial: one line, one paragraph, one CTA. The image
+   and the wallet sketch do the rest.
+   ═════════════════════════════════════════════════════════════════ */
+function SectionPrepaidCards() {
+  const { t } = useTranslate();
+  const { colorMode } = useColorMode();
+  const dark = colorMode === "dark";
+  const textMain = dark ? "#f5f5f7" : "#1d1d1f";
+  const textSub  = dark ? "rgba(245,245,247,0.60)" : "rgba(29,29,31,0.58)";
+  const hairline = dark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.07)";
+
+  return (
+    <Box py={{ base: 32, md: 48 }} px={{ base: 5, md: 10 }} position="relative" overflow="hidden">
+      {/* Monochrome ambient grid */}
+      <Box position="absolute" inset={0} pointerEvents="none" opacity={dark ? 0.4 : 0.28}
+        style={{
+          backgroundImage: dark
+            ? "linear-gradient(rgba(255,255,255,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.05) 1px, transparent 1px)"
+            : "linear-gradient(rgba(0,0,0,0.045) 1px, transparent 1px), linear-gradient(90deg, rgba(0,0,0,0.045) 1px, transparent 1px)",
+          backgroundSize: "54px 54px",
+          maskImage: "radial-gradient(ellipse 75% 55% at 50% 38%, #000 28%, transparent 72%)",
+          WebkitMaskImage: "radial-gradient(ellipse 75% 55% at 50% 38%, #000 28%, transparent 72%)",
+        }}
+      />
+
+      <Container maxW="1080px" position="relative" zIndex={1}>
+        <SimpleGrid columns={{ base: 1, md: 2 }} spacing={{ base: 14, md: 20 }} alignItems="center">
+
+          {/* LEFT — copy */}
+          <ScrollFade>
+            <VStack spacing={6} align={{ base: "center", md: "start" }} textAlign={{ base: "center", md: "left" }}>
+              <Text
+                fontSize="11px" fontWeight="800" letterSpacing="0.14em"
+                textTransform="uppercase" color={textSub}
+              >
+                {t("cards_eyebrow")}
+              </Text>
+
+              <Heading fontFamily="'DM Sans', sans-serif" fontWeight="700"
+                fontSize={{ base: "40px", md: "58px", lg: "66px" }}
+                letterSpacing="-0.045em" color={textMain} lineHeight={1.0} maxW="540px"
+              >
+                {t("cards_title_1")}{" "}
+                <Box as="span"><EmphText text={t("cards_title_2")} /></Box>
+              </Heading>
+
+              <Text fontSize={{ base: "17px", md: "19px" }} color={textSub} maxW="500px" lineHeight={1.55} fontWeight="400">
+                {t("cards_desc")}
+              </Text>
+
+              {/* Inline features — editorial, not boxed */}
+              <Flex gap={2.5} flexWrap="wrap" justify={{ base: "center", md: "start" }}>
+                {[t("cards_b1"), t("cards_b2"), t("cards_b3"), t("cards_b4")].map((label, i) => (
+                  <HStack key={i} spacing={1.5} px={3.5} h="34px" borderRadius="full"
+                    bg={dark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.035)"}
+                    border="1px solid" borderColor={hairline}>
+                    <Box w="5px" h="5px" borderRadius="full" bg={textMain} opacity={0.5} />
+                    <Text fontSize="13px" fontWeight="600" color={textMain}>{label}</Text>
+                  </HStack>
+                ))}
+              </Flex>
+
+              {/* CTA — monochrome, not blue */}
+              <HStack spacing={3} pt={2}>
+                <NextLink href="/dashboard/cards" passHref legacyBehavior>
+                  <HStack as="a" spacing={2} px={5} h="44px" borderRadius="full"
+                    bg={dark ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.06)"}
+                    border="1px solid" borderColor={hairline}
+                    color={textMain} cursor="pointer"
+                    transition="all 0.22s ease"
+                    _hover={{ bg: dark ? "rgba(255,255,255,0.14)" : "rgba(0,0,0,0.10)" }}
+                  >
+                    <Text fontWeight="700" fontSize="14px">{t("cards_cta")}</Text>
+                    <Icon as={FiArrowRight} boxSize="14px" />
+                  </HStack>
+                </NextLink>
+              </HStack>
+            </VStack>
+          </ScrollFade>
+
+          {/* RIGHT — card image + wallet sketch */}
+          <motion.div
+            initial={{ opacity: 0, scale: 0.96 }}
+            whileInView={{ opacity: 1, scale: 1 }}
+            viewport={{ once: true, amount: 0.3 }}
+            transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
+          >
+            <Box position="relative" w="100%" maxW="420px" mx="auto">
+              <Box
+                position="relative"
+                w="100%"
+                style={{ aspectRatio: "843 / 1264" }}
+                borderRadius="28px"
+                overflow="hidden"
+                boxShadow={dark
+                  ? "0 50px 100px rgba(0,0,0,0.50), 0 0 0 1px rgba(255,255,255,0.06)"
+                  : "0 50px 100px rgba(0,0,0,0.10), 0 0 0 1px rgba(0,0,0,0.05)"
+                }
+              >
+                <NextImage
+                  src="/visa-hand.png"
+                  alt={t("cards_alt")}
+                  fill
+                  style={{ objectFit: "cover" }}
+                  sizes="(max-width: 768px) 80vw, 420px"
+                />
+              </Box>
+            </Box>
+          </motion.div>
 
         </SimpleGrid>
       </Container>
@@ -2663,6 +2778,7 @@ function useHeroSnap(ref: React.RefObject<HTMLDivElement>, stages: number) {
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
 
     let settleTimer: ReturnType<typeof setTimeout> | null = null;
+    let snapEndTimer: ReturnType<typeof setTimeout> | null = null;
     let snapping = false;
     let touching = false;
     let lastY = window.scrollY;
@@ -2698,7 +2814,8 @@ function useHeroSnap(ref: React.RefObject<HTMLDivElement>, stages: number) {
         snapping = true;
         window.scrollTo({ top: window.scrollY + delta, behavior: "smooth" });
         const estDuration = Math.min(500, Math.max(150, Math.abs(delta) * 1.5));
-        setTimeout(() => { snapping = false; }, estDuration);
+        if (snapEndTimer) clearTimeout(snapEndTimer);
+        snapEndTimer = setTimeout(() => { snapping = false; }, estDuration);
       }, 180);
     };
 
@@ -2710,6 +2827,7 @@ function useHeroSnap(ref: React.RefObject<HTMLDivElement>, stages: number) {
       window.removeEventListener("touchstart", onTouchStart);
       window.removeEventListener("touchend", onTouchEnd);
       if (settleTimer) clearTimeout(settleTimer);
+      if (snapEndTimer) clearTimeout(snapEndTimer);
     };
   }, [ref, stages]);
 }
@@ -2907,7 +3025,7 @@ function PhoneJourney() {
                     style={{ aspectRatio: "1.586" }}
                   >
                     <NextImage
-                      src="/visa.png" alt="tazdan Visa Card"
+                      src="/wallet.svg" alt="tazdan Wallet"
                       fill style={{ objectFit: "contain" }}
                       sizes="420px"
                     />
@@ -2936,7 +3054,7 @@ function PhoneJourney() {
                     style={{ aspectRatio: "1.586" }}
                   >
                     <NextImage
-                      src="/visa.png" alt="tazdan Visa Card"
+                      src="/wallet.svg" alt="tazdan Wallet"
                       fill style={{ objectFit: "contain" }}
                       sizes="280px"
                     />
@@ -3077,6 +3195,9 @@ export default function LandingPage() {
       </Box>
       <Box style={{ contentVisibility: "auto", containIntrinsicSize: "0 700px" } as React.CSSProperties}>
         <SectionOnRamp />
+      </Box>
+      <Box style={{ contentVisibility: "auto", containIntrinsicSize: "0 800px" } as React.CSSProperties}>
+        <SectionPrepaidCards />
       </Box>
       <Box style={{ contentVisibility: "auto", containIntrinsicSize: "0 760px" } as React.CSSProperties}>
         <SectionClaimLink />
