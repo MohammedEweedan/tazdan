@@ -140,7 +140,7 @@ export default function SendPage() {
       <PageHeader
         eyebrow="Move money"
         title="Send"
-        subtitle="Transfer fiat or crypto instantly to anyone on promrkts — by email, phone or username."
+        subtitle="Transfer fiat or crypto instantly to anyone on tazdan — by email, phone or username."
       />
 
       {/* KPIs */}

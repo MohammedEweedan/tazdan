@@ -65,40 +65,36 @@ const SITE_URL = 'https://fortuni.com';
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
-  title: {
-    default: 'promrkts — Crypto Exchange & Money Transfer for MENA',
-    template: '%s | promrkts',
-  },
   description:
     'Send money to Libya, Egypt & UAE instantly. Buy & sell crypto with a P2P marketplace. Get a virtual Visa card. No SWIFT fees, no bank queues.',
   keywords: [
     'Libya crypto', 'LYD USDT', 'send money Libya', 'Libya remittance',
     'MENA crypto exchange', 'P2P crypto marketplace', 'virtual Visa crypto card',
-    'Egypt crypto', 'UAE crypto', 'crypto to fiat MENA', 'promrkts', 'claim link transfer',
+    'Egypt crypto', 'UAE crypto', 'crypto to fiat MENA', 'tazdan', 'claim link transfer',
     'send crypto to email', 'send crypto to phone',
   ],
   manifest: '/manifest.json',
-  applicationName: 'promrkts',
-  authors: [{ name: 'promrkts' }],
-  creator: 'promrkts',
-  publisher: 'promrkts',
+  applicationName: 'tazdan',
+  authors: [{ name: 'tazdan' }],
+  creator: 'tazdan',
+  publisher: 'tazdan',
   formatDetection: { email: false, address: false, telephone: false },
   openGraph: {
     type: 'website',
     locale: 'en_US',
     url: SITE_URL,
-    siteName: 'promrkts',
-    title: 'promrkts — Crypto Exchange & Money Transfer for MENA',
+    siteName: 'tazdan',
+    title: 'tazdan — Crypto Exchange & Money Transfer for MENA',
     description:
       'Send money to Libya, Egypt & UAE instantly. Buy & sell crypto. Get a virtual Visa card. No SWIFT fees.',
-    images: [{ url: '/og-image.png', width: 1200, height: 630, alt: 'promrkts — Banking the MENA' }],
+    images: [{ url: '/og-image.png', width: 1200, height: 630, alt: 'tazdan — Banking the MENA' }],
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'promrkts — Crypto & Money Transfer for MENA',
+    title: 'tazdan — Crypto & Money Transfer for MENA',
     description: 'Send money to Libya instantly. Buy & sell crypto. Virtual Visa card.',
     images: ['/og-image.png'],
-    creator: '@promrkts',
+    creator: '@tazdan',
   },
   robots: {
     index: true,
@@ -141,18 +137,18 @@ export const viewport: Viewport = {
  * the single highest-ROI SEO win for a site like this. Three blobs:
  *   1. Organization     → brand info + same-as URLs.
  *   2. WebSite           → enables sitelinks search box on SERPs.
- *   3. FinancialProduct → describes promrkts for finance verticals. */
+ *   3. FinancialProduct → describes tazdan for finance verticals. */
 const jsonLd = {
   '@context': 'https://schema.org',
   '@graph': [
     {
       '@type': 'Organization',
       '@id': `${SITE_URL}#org`,
-      name: 'promrkts',
+      name: 'tazdan',
       url: SITE_URL,
       logo: `${SITE_URL}/icon-black.png`,
       sameAs: [
-        'https://twitter.com/promrkts',
+        'https://twitter.com/tazdan',
         'https://www.linkedin.com/company/fortuni',
       ],
     },
@@ -160,7 +156,7 @@ const jsonLd = {
       '@type': 'WebSite',
       '@id': `${SITE_URL}#site`,
       url: SITE_URL,
-      name: 'promrkts',
+      name: 'tazdan',
       publisher: { '@id': `${SITE_URL}#org` },
       potentialAction: {
         '@type': 'SearchAction',
@@ -170,7 +166,7 @@ const jsonLd = {
     },
     {
       '@type': 'FinancialProduct',
-      name: 'promrkts Wallet & Exchange',
+      name: 'tazdan Wallet & Exchange',
       description:
         'Multi-currency crypto wallet, P2P exchange, virtual Visa card, and claim-link transfers across MENA.',
       provider: { '@id': `${SITE_URL}#org` },
@@ -190,8 +186,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {/* Preconnect to the API origin — opens TCP + TLS in parallel
             with HTML parse, so the first /me / /markets call doesn't
             pay the full handshake cost. */}
-        <link rel="preconnect" href="https://api.promrkts.com" />
-        <link rel="dns-prefetch" href="https://api.promrkts.com" />
+        <link rel="preconnect" href="https://api.tazdan.com" />
+        <link rel="dns-prefetch" href="https://api.tazdan.com" />
 
         {/* Only preload the actual LCP image. Stacking 5+ image preloads
             (the old layout) burns the high-priority queue on assets
@@ -200,7 +196,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-        <meta name="apple-mobile-web-app-title" content="promrkts" />
+        <meta name="apple-mobile-web-app-title" content="tazdan" />
         <meta name="format-detection" content="telephone=no" />
 
         {/* Structured data — JSON-LD, inlined so Googlebot sees it on

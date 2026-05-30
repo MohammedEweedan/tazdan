@@ -68,7 +68,7 @@ export default function Login() {
   // Pre-fill the demo account so the user can tap straight through.
   const fillDemo = () => {
     h.selection();
-    setValue('email', 'rayan@promrkts.app');
+    setValue('email', 'rayan@tazdan.com');
     setValue('password', 'Demo123!');
   };
 
@@ -244,7 +244,7 @@ export default function Login() {
               <Pressable
                 hitSlop={6}
                 style={{ alignSelf: 'flex-end', marginTop: 2 }}
-                onPress={() => Alert.alert('Forgot password?', 'Password reset is coming soon. Contact support@promrkts.app for now.')}
+                onPress={() => Alert.alert('Forgot password?', 'Password reset is coming soon. Contact support@tazdan.com for now.')}
               >
                 <Text style={{ color: p.fg, fontSize: 13, fontWeight: '700' }}>
                   {t('login.forgot')}

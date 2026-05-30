@@ -166,9 +166,9 @@ export default function History() {
                         Alert.alert(t('claim.linkUnavailable') || 'Share unavailable', 'Re-create this claim to get a fresh URL.');
                         return;
                       }
-                      const url = `https://promrkts.com/claim/${link.claimToken}`;
+                      const url = `https://tazdan.com/claim/${link.claimToken}`;
                       await Share.share({
-                        message: `${(t('send.claimShareIntro') || 'I sent you')} ${link.amount} ${link.asset} on promrkts → ${url}`,
+                        message: `${(t('send.claimShareIntro') || 'I sent you')} ${link.amount} ${link.asset} on tazdan → ${url}`,
                       });
                     }}
                     hitSlop={6}

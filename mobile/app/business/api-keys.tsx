@@ -154,7 +154,7 @@ export default function ApiKeysScreen() {
                   <Ionicons name="key-outline" size={32} color={p.fgFaint} />
                   <Text style={{ color: p.fgMuted, fontSize: 14, fontWeight: '600', marginTop: 12 }}>No active keys</Text>
                   <Text style={{ color: p.fgFaint, fontSize: 12, marginTop: 4, textAlign: 'center' }}>
-                    Create an API key to start integrating promrkts payouts.
+                    Create an API key to start integrating tazdan payouts.
                   </Text>
                 </View>
               )}
@@ -189,7 +189,7 @@ export default function ApiKeysScreen() {
                 <Text style={{ color: p.fgMuted, fontSize: 12, lineHeight: 17, flex: 1 }}>
                   Keys are shown once at creation. Use them in the{' '}
                   <Text style={{ color: ACCENT, fontWeight: '700' }}>Authorization: Bearer</Text>
-                  {' '}header. See docs.promrkts.com for the full API reference.
+                  {' '}header. See docs.tazdan.com for the full API reference.
                 </Text>
               </View>
             </>

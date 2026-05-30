@@ -1,4 +1,4 @@
-# promrkts Platform — Revenue Estimate
+# tazdan Platform — Revenue Estimate
 
 ## Executive Summary
 

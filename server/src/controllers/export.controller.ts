@@ -40,7 +40,7 @@ export class ExportController {
       ).join('\n');
 
       res.setHeader('Content-Type', 'text/csv');
-      const filename = `promrkts-transactions-${new Date().toISOString().split('T')[0]}.csv`;
+      const filename = `tazdan-transactions-${new Date().toISOString().split('T')[0]}.csv`;
       res.setHeader('Content-Disposition', `attachment; filename=${filename}`);
       res.send(header + rows);
     } catch (error) {

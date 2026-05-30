@@ -151,7 +151,7 @@ export default function LoginPage() {
 
   // Pre-fill demo credentials
   const fillDemo = () => {
-    setEmail("rayan@promrkts.app");
+    setEmail("rayan@tazdan.com");
     setPassword("Demo123!");
   };
 

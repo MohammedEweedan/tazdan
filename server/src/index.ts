@@ -111,9 +111,9 @@ const httpServer = createServer(app);
  * header) are always allowed.
  *
  * CLIENT_URL may be a comma-separated list (e.g.
- * "https://promrkts.com,https://app.promrkts.com").
+ * "https://tazdan.com,https://app.tazdan.com").
  */
-const PROD_ORIGINS = (process.env.CLIENT_URL ?? 'https://promrkts.com')
+const PROD_ORIGINS = (process.env.CLIENT_URL ?? 'https://tazdan.com')
   .split(',')
   .map((o) => o.trim())
   .filter(Boolean);

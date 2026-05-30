@@ -234,7 +234,7 @@ export default function RootLayout() {
           <StripeProvider
             publishableKey={STRIPE.publishableKey}
             merchantIdentifier={STRIPE.merchantIdentifier}
-            urlScheme="promrkts"
+            urlScheme="tazdan"
           >
           <StatusBar style="light" />
           <AuthGate />

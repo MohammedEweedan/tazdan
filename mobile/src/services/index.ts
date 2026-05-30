@@ -1025,7 +1025,7 @@ export const adminService = {
 /* ─────────────────────────────────────────────────────────────
    Claim-link transfers — the differentiator. Lets users send to
    anyone (email / phone / @handle) even if the recipient has no
-   promrkts account yet.
+   tazdan account yet.
 
    Outgoing endpoints:
      create()         — sender reserves funds, emits the URL

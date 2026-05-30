@@ -224,7 +224,7 @@ const LockScreen = memo(function LockScreen({
         justify="space-between" zIndex={2}
       >
         <Text style={{ fontSize: s.statusFont }} color="white" fontWeight="700" letterSpacing="0.01em">
-          promrkts
+          tazdan
         </Text>
         <HStack spacing="calc(var(--pw) * 0.025)">
           <HStack spacing="calc(var(--pw) * 0.008)" align="flex-end" h={s.diH11}>
@@ -290,7 +290,7 @@ const LockScreen = memo(function LockScreen({
             <VStack align="start" spacing={0} flex={1}>
               <HStack justify="space-between" w="100%">
                 <Text style={{ fontSize: s.statusFont }} color="rgba(255,255,255,0.6)" fontWeight="700" letterSpacing="0.04em" textTransform="uppercase">
-                  promrkts
+                  tazdan
                 </Text>
                 <Text style={{ fontSize: s.statusFont }} color="rgba(255,255,255,0.4)">1m ago</Text>
               </HStack>
@@ -1817,12 +1817,12 @@ function SectionOnRamp() {
   const textSub = dark ? "rgba(255,255,255,0.5)" : "#64748b";
   const cardBg = dark ? "rgba(255,255,255,0.04)" : "#f8f8f8";
   const cardBorder = dark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.07)";
-  const methods: { label: string; icon?: React.ElementType; iconSize?: number; showLabel?: boolean }[] = [
-    { label: "Apple Pay",  icon: FaApplePay,     iconSize: 36 },
-    { label: "Google Pay", icon: FaGooglePay,    iconSize: 34 },
-    { label: "Visa",       icon: FaCcVisa,       iconSize: 30 },
-    { label: "Mastercard", icon: FaCcMastercard, iconSize: 30 },
-    { label: "Revolut",    icon: SiRevolut,      iconSize: 22, showLabel: true },
+  const methods: { label: string; icon?: React.ElementType; iconSize?: number; showLabel?: boolean; color: string; gradient?: [string, string] }[] = [
+    { label: "Apple Pay",  icon: FaApplePay,     iconSize: 36, color: "#000000" },
+    { label: "Google Pay", icon: FaGooglePay,    iconSize: 34, color: "#4285F4" },
+    { label: "Visa",       icon: FaCcVisa,       iconSize: 30, color: "#1A1F71" },
+    { label: "Mastercard", icon: FaCcMastercard, iconSize: 30, color: "#F79E1B", gradient: ["#EB001B", "#F79E1B"] },
+    { label: "Revolut",    icon: SiRevolut,      iconSize: 22, showLabel: true, color: "#0075EB" },
   ];
   const cards = [
     { title: t("onramp_buy_title"), desc: t("onramp_buy_desc"), video: "/videos/Consumer_UIAnims_Desktop-Buy.mp4" },
@@ -1861,12 +1861,15 @@ function SectionOnRamp() {
                     whileHover={{ y: -3, scale: 1.04 }}
                   >
                     <HStack spacing={2} px={{ base: 3, md: 4 }} h={{ base: "36px", md: "40px" }} borderRadius="full"
-                      bg={dark ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.05)"}
-                      color={dark ? "white" : "#0a0f1e"}
-                      border="1px solid" borderColor={dark ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.09)"}
+                      style={m.gradient ? {
+                        background: `linear-gradient(135deg, ${m.gradient[0]}${dark ? "38" : "22"}, ${m.gradient[1]}${dark ? "38" : "22"})`,
+                      } : undefined}
+                      bg={m.gradient ? undefined : (dark ? `${m.color}28` : `${m.color}18`)}
+                      color={dark && m.color === "#000000" ? "white" : m.color}
+                      border="1px solid" borderColor={m.gradient ? (dark ? "rgba(255,255,255,0.15)" : "rgba(0,0,0,0.12)") : (dark ? `${m.color}55` : `${m.color}40`)}
                       boxShadow={dark ? "0 2px 12px rgba(0,0,0,0.3)" : "0 2px 12px rgba(0,0,0,0.04)"}
                       transition="all 0.2s ease"
-                      _hover={{ borderColor: dark ? "rgba(255,255,255,0.25)" : "rgba(0,0,0,0.20)",
+                      _hover={{ borderColor: m.gradient ? (dark ? "rgba(255,255,255,0.35)" : "rgba(0,0,0,0.25)") : (dark ? `${m.color}85` : `${m.color}65`),
                         boxShadow: dark ? "0 8px 24px rgba(0,0,0,0.4)" : "0 8px 24px rgba(0,0,0,0.08)" }}
                     >
                       {m.icon && <Icon as={m.icon} boxSize={`${m.iconSize ?? 24}px`} />}
@@ -1895,9 +1898,19 @@ function SectionOnRamp() {
                   _hover={{ boxShadow: dark ? "0 28px 70px rgba(0,0,0,0.5)" : "0 28px 70px rgba(0,0,0,0.10)" }}
                 >
                   <Box position="relative" w="100%" style={{ aspectRatio: "4 / 3" }} overflow="hidden">
-                    <LazyBackgroundVideo src={c.video} objectFit="cover" />
+                    {/* Subtle brand glow behind the video */}
+                    <Box position="absolute" inset={0} zIndex={0} pointerEvents="none"
+                      style={{
+                        background: dark
+                          ? "radial-gradient(circle at 50% 60%, rgba(34,109,255,0.12) 0%, transparent 70%)"
+                          : "radial-gradient(circle at 50% 60%, rgba(34,109,255,0.08) 0%, transparent 70%)",
+                      }}
+                    />
+                    <Box position="relative" zIndex={1} w="100%" h="100%">
+                      <LazyBackgroundVideo src={c.video} objectFit="cover" />
+                    </Box>
                     {/* Fade bottom of video into card */}
-                    <Box position="absolute" bottom={0} left={0} right={0} h="60px"
+                    <Box position="absolute" bottom={0} left={0} right={0} h="60px" zIndex={2}
                       bgGradient={dark ? "linear(to-t, rgba(20,20,20,1), transparent)" : "linear(to-t, rgba(248,248,248,1), transparent)"}
                     />
                   </Box>
@@ -2088,7 +2101,7 @@ function ClaimLinkStage({ dark, textMain, textSub, youLabel, claimedLabel, amoun
             <Box flex={1} minW={0}>
               <Text fontSize={{ base: "14px", md: "15px" }} fontWeight="600" color={fg} noOfLines={1}
                 sx={{ fontVariantNumeric: "tabular-nums" }}>
-                promrkts.com/claim/x7f2a9
+                tazdan.com/claim/x7f2a9
               </Text>
               <Text fontSize="12px" color={textSub}>{statusLabel}</Text>
             </Box>
@@ -2248,16 +2261,12 @@ function SectionPatternBreak({ onWaitlist }: { onWaitlist: () => void }) {
         transition={{ duration: 10, repeat: Infinity, ease: "easeInOut" }}
         style={{ position: "absolute", top: "8%", left: "50%", width: 1100, height: 540,
           transform: "translateX(-50%)", borderRadius: "50%",
-          background: "radial-gradient(ellipse, rgba(255,255,255,0.10) 0%, transparent 66%)",
           pointerEvents: "none" }}
       />
       <Container maxW="1200px" position="relative" zIndex={1}>
         <VStack spacing={{ base: 8, md: 12 }} align="center" textAlign="center">
           <ScrollFade>
             <VStack spacing={5}>
-              <Text fontSize={{ base: "12px", md: "13px" }} fontWeight="600" letterSpacing="0.18em" textTransform="uppercase" color="rgba(245,245,247,0.4)">
-                {t("pb_eyebrow")}
-              </Text>
               <Heading fontFamily="'DM Sans', sans-serif" fontWeight="700"
                 fontSize={{ base: "48px", md: "88px", lg: "108px" }}
                 letterSpacing="-0.05em" color={onCanvas} lineHeight={0.95} maxW="1000px"
@@ -2303,29 +2312,12 @@ function SectionPatternBreak({ onWaitlist }: { onWaitlist: () => void }) {
           ))}
         </motion.div>
       </Box>
-
-      {/* CTA */}
-      <Container maxW="1200px" position="relative" zIndex={1}>
-        <VStack mt={{ base: 12, md: 16 }}>
-          <motion.div initial={{ opacity: 0, y: 16 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }} whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.98 }}>
-            <Button onClick={onWaitlist}
-              h={{ base: "52px", md: "58px" }} px={{ base: 8, md: 10 }}
-              borderRadius="full" bg={onCanvas} color={canvas}
-              fontSize={{ base: "16px", md: "17px" }} fontWeight="700"
-              rightIcon={<Icon as={FiArrowRight} boxSize="18px" />}
-              _hover={{ bg: "#fff" } as any} _active={{ bg: "#e8e8ea" } as any}
-            >
-              {t("pb_cta")}
-            </Button>
-          </motion.div>
-        </VStack>
-      </Container>
     </Box>
   );
 }
 
 /* ═════════════════════════════════════════════════════════════════
-   promrkts BUSINESS — B2B landing teaser linking to /business
+   tazdan BUSINESS — B2B landing teaser linking to /business
    ═════════════════════════════════════════════════════════════════ */
 function SectionBusiness() {
   const { t } = useTranslate();
@@ -2367,7 +2359,7 @@ function SectionBusiness() {
                   fontSize="11px" fontWeight="800" letterSpacing="0.14em"
                   textTransform="uppercase"
                 >
-                  promrkts Business
+                  tazdan Business
                 </Text>
 
                 <Heading
@@ -2611,7 +2603,7 @@ function StageCopy({ op, title, desc, features, textMain, textMuted, hairline, t
         opacity: op, y,
         position: "absolute", inset: 0,
         display: "flex", flexDirection: "column", justifyContent: "center",
-        gap: 20, willChange: "opacity, transform",
+        gap: 20,
         pointerEvents: "none",
       }}
     >
@@ -2669,35 +2661,54 @@ function useHeroSnap(ref: React.RefObject<HTMLDivElement>, stages: number) {
     const el = ref.current;
     if (!el) return;
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    if ("ontouchstart" in window) return; // leave touch scrolling untouched
 
     let settleTimer: ReturnType<typeof setTimeout> | null = null;
     let snapping = false;
+    let touching = false;
+    let lastY = window.scrollY;
+    let lastTime = performance.now();
+
+    const onTouchStart = () => { touching = true; };
+    const onTouchEnd = () => { touching = false; };
 
     const onScroll = () => {
       if (snapping) return;
+
+      const now = performance.now();
+      const currentY = window.scrollY;
+      const velocity = Math.abs((currentY - lastY) / Math.max(1, now - lastTime));
+      lastY = currentY;
+      lastTime = now;
+
       if (settleTimer) clearTimeout(settleTimer);
       settleTimer = setTimeout(() => {
+        if (touching) return;
         const rect = el.getBoundingClientRect();
         const total = el.offsetHeight - window.innerHeight;
         if (total <= 0) return;
-        // progress 0..1 through the runway
         const scrolled = -rect.top;
-        if (scrolled < 0 || scrolled > total) return; // outside the hero
+        if (scrolled < 0 || scrolled > total) return;
         const seg = total / (stages - 1);
         const idx = Math.round(scrolled / seg);
         const targetScrolled = idx * seg;
         const delta = targetScrolled - scrolled;
-        if (Math.abs(delta) < 4 || Math.abs(delta) > seg * 0.45) return; // close enough / too far → don't fight
+        if (Math.abs(delta) < 6 || Math.abs(delta) > seg * 0.4) return;
+        // Don't snap if we're still coasting fast (inertia)
+        if (velocity > 0.8) return;
         snapping = true;
         window.scrollTo({ top: window.scrollY + delta, behavior: "smooth" });
-        setTimeout(() => { snapping = false; }, 600);
-      }, 120);
+        const estDuration = Math.min(500, Math.max(150, Math.abs(delta) * 1.5));
+        setTimeout(() => { snapping = false; }, estDuration);
+      }, 180);
     };
 
     window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("touchstart", onTouchStart, { passive: true });
+    window.addEventListener("touchend", onTouchEnd, { passive: true });
     return () => {
       window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("touchstart", onTouchStart);
+      window.removeEventListener("touchend", onTouchEnd);
       if (settleTimer) clearTimeout(settleTimer);
     };
   }, [ref, stages]);
@@ -2770,7 +2781,7 @@ function PhoneJourney() {
   return (
     <Box ref={ref} position="relative" h={{ base: "600vh", md: "600vh" }}>
       <Box position="sticky" top={0} h="100vh" w="100%" overflow="hidden"
-        style={{ transform: "translateZ(0)", willChange: "transform" } as React.CSSProperties}
+        style={{ contain: "layout" } as React.CSSProperties}
       >
         {/* ── Shader background — centered, fills viewport ── */}
         <motion.div
@@ -2886,7 +2897,6 @@ function PhoneJourney() {
                     rotate: cardRot,
                     zIndex: 5,
                     pointerEvents: "none",
-                    willChange: "opacity, transform",
                   }}
                 >
                   {/* Desktop: large card beside phone */}
@@ -2897,7 +2907,7 @@ function PhoneJourney() {
                     style={{ aspectRatio: "1.586" }}
                   >
                     <NextImage
-                      src="/visa.png" alt="promrkts Visa Card"
+                      src="/visa.png" alt="tazdan Visa Card"
                       fill style={{ objectFit: "contain" }}
                       sizes="420px"
                     />
@@ -2917,7 +2927,6 @@ function PhoneJourney() {
                     rotate: cardRot,
                     zIndex: 5,
                     pointerEvents: "none",
-                    willChange: "opacity, transform",
                   }}
                 >
                   <Box
@@ -2927,14 +2936,14 @@ function PhoneJourney() {
                     style={{ aspectRatio: "1.586" }}
                   >
                     <NextImage
-                      src="/visa.png" alt="promrkts Visa Card"
+                      src="/visa.png" alt="tazdan Visa Card"
                       fill style={{ objectFit: "contain" }}
                       sizes="280px"
                     />
                   </Box>
                 </motion.div>
 
-                <motion.div style={{ rotateX: tiltX, scale: phoneScale, transformOrigin: "50% 60%", willChange: "transform" }}>
+                <motion.div style={{ rotateX: tiltX, scale: phoneScale, transformOrigin: "50% 60%" }}>
                 <Box
                   position="relative"
                   style={{
@@ -3000,8 +3009,8 @@ function PhoneJourney() {
 }
 
 /* ─── Device OS detection — runs once on mount ──────────────────── */
-const IOS_URL     = "https://apps.apple.com/app/promrkts/id0000000000";
-const ANDROID_URL = "https://play.google.com/store/apps/details?id=com.promrkts.app";
+const IOS_URL     = "https://apps.apple.com/app/tazdan/id0000000000";
+const ANDROID_URL = "https://play.google.com/store/apps/details?id=com.tazdan.app";
 
 function useDeviceOS(): "ios" | "android" | "other" {
   const [os, setOS] = useState<"ios" | "android" | "other">("other");
@@ -3173,16 +3182,16 @@ export default function LandingPage() {
             __html: JSON.stringify({
               '@context': 'https://schema.org',
               '@type': 'FinancialService',
-              name: 'promrkts',
+              name: 'tazdan',
               description:
                 'Crypto exchange and money transfer platform for MENA — Libya, Egypt, UAE, Saudi Arabia.',
-              url: 'https://promrkts.com',
+              url: 'https://tazdan.com',
               areaServed: ['LY', 'EG', 'AE', 'SA', 'GB', 'US', 'EU'],
               currenciesAccepted: 'USD, EUR, GBP, LYD, EGP, AED, SAR, BTC, ETH, USDT, SOL',
               serviceType: ['Cryptocurrency Exchange', 'Money Transfer', 'Virtual Card Issuance'],
               sameAs: [
-                'https://twitter.com/promrkts',
-                'https://t.me/promrkts',
+                'https://twitter.com/tazdan',
+                'https://t.me/tazdan',
               ],
             }),
           }}

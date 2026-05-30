@@ -140,11 +140,11 @@ export function renderStatementHtml(data: StatementJson, filter: StatementFilter
 
   return `<!doctype html>
 <html><head><meta charset="utf-8" />
-<title>promrkts Statement</title>
+<title>tazdan Statement</title>
 <style>${css}</style>
 </head>
 <body>
-  <h1><span class="brand">promrkts</span> Account Statement</h1>
+  <h1><span class="brand">tazdan</span> Account Statement</h1>
   <div class="meta">${escapeHtml(fullName)} · ${escapeHtml(data.user.email)}</div>
   <div class="meta">Period: ${escapeHtml(statementTitle(filter))} · Generated ${escapeHtml(generated)}</div>
 
@@ -177,9 +177,9 @@ export function renderStatementHtml(data: StatementJson, filter: StatementFilter
       </table>`}
 
   <div class="footer">
-    This statement was generated from promrkts records on the date shown above. All amounts
+    This statement was generated from tazdan records on the date shown above. All amounts
     are settled in the corresponding wallet currency. For audit support, contact
-    support@promrkts.app referencing your account email.
+    support@tazdan.com referencing your account email.
   </div>
 </body></html>`;
 }
@@ -197,7 +197,7 @@ export async function exportStatementPdf(filter: StatementFilter): Promise<strin
   // Rename to a sensible filename so the OS share sheet displays a
   // human-readable title and the resulting file is recognisable in
   // the user's downloads / mail attachments.
-  const filename = `promrkts-statement${filter.from ? `-${filter.from}` : ''}${filter.to ? `_to_${filter.to}` : ''}${filter.currency ? `-${filter.currency}` : ''}.pdf`;
+  const filename = `tazdan-statement${filter.from ? `-${filter.from}` : ''}${filter.to ? `_to_${filter.to}` : ''}${filter.currency ? `-${filter.currency}` : ''}.pdf`;
   let outUri = uri;
   try {
     const src = new File(uri);

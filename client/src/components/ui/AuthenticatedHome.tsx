@@ -215,7 +215,7 @@ function Sidebar({ p, handle, initial, emoji, onLogout }: {
       {/* Wordmark */}
       <Box px={6} pt={7} pb={7}>
         <Text fontSize="19px" fontWeight="900" letterSpacing="-0.04em" color={p.fg}>
-          promrkts
+          tazdan
         </Text>
       </Box>
 

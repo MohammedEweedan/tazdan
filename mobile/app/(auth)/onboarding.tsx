@@ -4,7 +4,7 @@
  *   Slide 1: Four-row drifting crypto carousel + "One wallet for the world."
  *   Slide 2: Dynamic phone mockup (animated chat, typing, payment card)
  *            + "Send to anyone, anywhere."
- *   Slide 3: Minimal glow + "Join promrkts" CTA.
+ *   Slide 3: Minimal glow + "Join tazdan" CTA.
  *
  *   Layout: hero pinned to top 58%, title + CTAs in bottom 42%.
  *   Background: single solid colour — pure black or pure white.
@@ -143,7 +143,7 @@ export default function Onboarding() {
           renderItem={({ item, index }) => {
             const active = index === page;
             const isLast = index === SLIDES.length - 1;
-            const title = isLast ? 'Join promrkts' : t(item.titleKey);
+            const title = isLast ? 'Join tazdan' : t(item.titleKey);
             return (
               <View
                 style={{
@@ -214,7 +214,7 @@ export default function Onboarding() {
             })}
           >
             <Text style={{ color: ctaFg, fontSize: 16, fontWeight: '700', letterSpacing: -0.2 }}>
-              {last ? 'Join promrkts' : t('onboard.continue')}
+              {last ? 'Join tazdan' : t('onboard.continue')}
             </Text>
           </Pressable>
 
