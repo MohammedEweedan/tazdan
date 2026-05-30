@@ -613,7 +613,15 @@ export function BuyWidget({ defaultAsset, lockAsset = false }: BuyWidgetProps = 
               shadowRadius: 10,
             }}
           >
-            <Text style={{ color: intent === v ? (themeMode === 'dark' ? '#000000' : '#ffffff') : p.fgMuted, fontSize: 13, fontWeight: '700' }}>
+            <Text style={{
+              // p.accentFg is the palette's "text on accent" colour —
+              // in dark mode the accent is white so accentFg is black;
+              // in light mode the accent is black so accentFg is white.
+              // Using the token instead of an inline ternary keeps this
+              // in sync if the brand palette ever shifts.
+              color: intent === v ? p.accentFg : p.fgMuted,
+              fontSize: 13, fontWeight: '700',
+            }}>
               {v === 'buy' ? 'To my wallet' : 'To address'}
             </Text>
           </Pressable>

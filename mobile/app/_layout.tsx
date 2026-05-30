@@ -43,6 +43,7 @@ import {
 import { queryClient } from '@/lib/queryClient';
 import { setUnauthorizedHandler } from '@/lib/api';
 import { useAuthStore } from '@/store/authStore';
+import { useChatPrefs } from '@/store/chatPrefsStore';
 import { authService } from '@/services';
 import { secureStore } from '@/lib/secureStore';
 import { STORAGE_KEYS, STRIPE } from '@/constants';
@@ -63,6 +64,11 @@ function AuthGate() {
   const [hasOnboarded, setHasOnboarded] = useState<boolean | null>(null);
 
   useEffect(() => { hydrate(); }, [hydrate]);
+  // Pull persisted chat prefs (pins, contacts, read-receipts) once
+  // per cold start so the conversation list paints in the user's
+  // preferred order on first render.
+  const hydrateChatPrefs = useChatPrefs((s) => s.hydrate);
+  useEffect(() => { hydrateChatPrefs(); }, [hydrateChatPrefs]);
   useEffect(() => { setUnauthorizedHandler(() => { logout(); }); }, [logout]);
   useEffect(() => {
     secureStore.get(STORAGE_KEYS.onboarded).then((v) => setHasOnboarded(!!v));

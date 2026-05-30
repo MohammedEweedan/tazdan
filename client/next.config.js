@@ -9,6 +9,10 @@ const API_ORIGIN = process.env.NEXT_PUBLIC_API_URL
   ? new URL(process.env.NEXT_PUBLIC_API_URL).origin
   : 'https://api.Fortuni.com';
 
+// Dev API origin for local server (used in CSP connect-src)
+const DEV_API_ORIGIN = 'http://localhost:5001';
+const isDev = process.env.NODE_ENV !== 'production';
+
 // Fonts now ship from /_next/static/media/* via next/font (self-hosted),
 // so fonts.googleapis.com / fonts.gstatic.com are removed from CSP.
 // Tighter origin set = fewer DNS lookups + better Lighthouse "best
@@ -19,7 +23,7 @@ const ContentSecurityPolicy = `
   style-src 'self' 'unsafe-inline';
   font-src 'self' data:;
   img-src 'self' data: blob: https: ${API_ORIGIN};
-  connect-src 'self' ${API_ORIGIN} wss://${new URL(API_ORIGIN).host} https://api.stripe.com https://cryptocompare.com;
+  connect-src 'self' ${API_ORIGIN} wss://${new URL(API_ORIGIN).host} https://api.stripe.com https://cryptocompare.com${isDev ? ` ${DEV_API_ORIGIN}` : ''};
   frame-src https://js.stripe.com https://checkout.com;
   object-src 'none';
   base-uri 'self';

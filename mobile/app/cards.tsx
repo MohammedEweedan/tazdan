@@ -9,7 +9,7 @@
  */
 
 import { useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Animated, Dimensions, Modal, Platform, Pressable, ScrollView, View } from 'react-native';
+import { ActivityIndicator, Alert, Animated, Dimensions, Image, Modal, Platform, Pressable, ScrollView, View } from 'react-native';
 import { Text, TextInput } from '@/components/ui/Text';
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Circle, Path, Rect } from 'react-native-svg';
@@ -36,11 +36,13 @@ const CARD_GAP = 16;
 /* ─────────────────────────────────────────────────────────────────
    TIER CONFIG — colors sampled from visa.png
    ───────────────────────────────────────────────────────────────── */
+// Mono ramps — graphite → obsidian, no brand blues. Tier
+// differentiation comes from depth + cashback / limits, not colour.
 const TIER_CFG = {
   STARTER: {
     label:        'Starter',
-    gradient:     ['#93BEE8', '#5F99D8', '#3A74B5'] as [string, string, string],
-    shadowColor:  '#3A74B5',
+    gradient:     ['#3A3A3D', '#26262A', '#1A1A1D'] as [string, string, string],
+    shadowColor:  '#000000',
     dailyLimit:   '2,500',
     monthlyLimit: '25,000',
     cashback:     '0.5%',
@@ -53,8 +55,8 @@ const TIER_CFG = {
   },
   PRO: {
     label:        'Pro',
-    gradient:     ['#26262A', '#1C1C1F', '#0A0A0B'] as [string, string, string],
-    shadowColor:  '#2B6BC8',
+    gradient:     ['#26262A', '#16161A', '#0A0A0B'] as [string, string, string],
+    shadowColor:  '#000000',
     dailyLimit:   '5,000',
     monthlyLimit: '50,000',
     cashback:     '1%',
@@ -68,8 +70,8 @@ const TIER_CFG = {
   },
   MASTER: {
     label:        'Master',
-    gradient:     ['#253F7A', '#122050', '#060D22'] as [string, string, string],
-    shadowColor:  '#122050',
+    gradient:     ['#1A1A1D', '#0E0E11', '#040405'] as [string, string, string],
+    shadowColor:  '#000000',
     dailyLimit:   '15,000',
     monthlyLimit: '150,000',
     cashback:     '2%',
@@ -190,9 +192,19 @@ function VisaCard({
   const isFrozen = card.status === 'FROZEN';
   const height   = Math.round(width * 0.628);
   const expiry   = fmtExpiry(card.expiryMonth, card.expiryYear);
+  // Authoritative holder name — derive from the signed-in user so
+  // legacy mock cards (e.g. seeded "RAYAN ZAHI") still render as the
+  // real account holder.
+  const user       = useAuthStore((s) => s.user);
+  const liveHolder =
+    [user?.firstName, user?.lastName].filter(Boolean).join(' ').trim().toUpperCase()
+    || card.cardHolder
+    || 'CARD HOLDER';
 
+  // Frozen state keeps the mono ramp — just shifts a half-step
+  // lighter so the FROZEN badge has somewhere to sit.
   const gradColors: [string, string, string] = isFrozen
-    ? ['#4a5568', '#2d3748', '#1a202c']
+    ? ['#3F3F44', '#2A2A2E', '#1B1B1F']
     : cfg.gradient;
 
   const inner = (
@@ -210,13 +222,10 @@ function VisaCard({
         backgroundColor: 'rgba(255,255,255,0.06)',
       }} />
 
-      {/* Top row: brand + frozen badge + contactless */}
+      {/* Top row: tier label (left) + frozen badge + Fortuni mark (right) */}
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <View>
-          <Text style={{ color: '#fff', fontSize: Math.round(width * 0.035), fontWeight: '600', letterSpacing: 0.4, opacity: 0.9 }}>
-            Fortuni
-          </Text>
-          <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: Math.round(width * 0.023), fontWeight: '700', letterSpacing: 1.5, marginTop: 1 }}>
+          <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: Math.round(width * 0.023), fontWeight: '700', letterSpacing: 1.5 }}>
             {cfg.label.toUpperCase()}
           </Text>
         </View>
@@ -227,13 +236,21 @@ function VisaCard({
               <Text style={{ color: '#fff', fontSize: 8, fontWeight: '600', letterSpacing: 0.6 }}>FROZEN</Text>
             </View>
           )}
-          <ContactlessSvg size={Math.round(width * 0.065)} />
+          {/* Fortuni mark — icon-white sits on the dark mono card.
+              Replaces the contactless glyph in the top-right per
+              design spec; contactless moves next to the chip below. */}
+          <Image
+            source={require('../assets/icon-white.png')}
+            style={{ width: Math.round(width * 0.085), height: Math.round(width * 0.085), opacity: 0.95 }}
+            resizeMode="contain"
+          />
         </View>
       </View>
 
-      {/* EMV Chip */}
-      <View style={{ marginTop: height * 0.08 }}>
+      {/* EMV Chip + contactless (moved from top-right) */}
+      <View style={{ marginTop: height * 0.08, flexDirection: 'row', alignItems: 'center', gap: 10 }}>
         <ChipSvg />
+        <ContactlessSvg size={Math.round(width * 0.058)} />
       </View>
 
       {/* Card number */}
@@ -255,7 +272,7 @@ function VisaCard({
             CARD HOLDER
           </Text>
           <Text style={{ color: '#fff', fontSize: Math.round(width * 0.036), fontWeight: '700', letterSpacing: 0.4 }}>
-            {card.cardHolder}
+            {liveHolder}
           </Text>
         </View>
         <View style={{ alignItems: 'center' }}>

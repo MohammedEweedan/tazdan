@@ -38,30 +38,45 @@ export function SendMoneySheet({
 }: SendMoneySheetProps) {
   const { data: wallets } = useWallets();
 
-  // Normalised wallet list: USDT_ERC20 / USDT_TRC20 merge into one USDT
-  // chip.  We still show every wallet (even 0-balance) so the user can
-  // see what's held, but chips with 0 avail are visually dimmed and
+  // Normalised wallet list: any chain variant (USDT_ERC20, USDT_TRC20,
+  // ETH_ERC20 if/when introduced, etc.) collapses into a single chip
+  // for the base symbol.  Mirrors the home-tab merge logic so the
+  // user sees the same "one logical asset" view everywhere.  We still
+  // show every base symbol (even 0-balance) so the user can see what
+  // they hold; chips with 0 avail are visually dimmed and
   // non-selectable.
   const displayWallets = useMemo<DisplayWallet[]>(() => {
+    // Base = the part of the currency code before the first `_`.
+    //   USDT_TRC20 → USDT.  BTC → BTC.  No special-cases.
+    const baseOf = (c: string) => {
+      const i = c.indexOf('_');
+      return i >= 0 ? c.slice(0, i) : c;
+    };
+    const chainOf = (c: string) => {
+      const i = c.indexOf('_');
+      return i >= 0 ? c.slice(i + 1) : undefined;
+    };
     const map = new Map<string, DisplayWallet>();
     (wallets ?? []).forEach((w) => {
       const cur = String(w.currency);
-      const isUsdtVariant = cur === 'USDT_ERC20' || cur === 'USDT_TRC20';
-      const displayCurrency = isUsdtVariant ? 'USDT' : cur;
+      const base = baseOf(cur);
       const bal = availableOf(w);
-      const existing = map.get(displayCurrency);
+      const existing = map.get(base);
       if (existing) {
         existing.balance += bal;
-        // Keep the wallet with the highest individual balance as the canonical one
+        // Keep the variant with the highest balance as canonical so
+        // the metadata (icon, decimals) prefers what the user
+        // actually holds the most of.
         if (bal > availableOf(existing.wallet)) {
           existing.wallet = w;
+          existing.chain = chainOf(cur);
         }
       } else {
-        map.set(displayCurrency, {
-          currency: displayCurrency,
+        map.set(base, {
+          currency: base,
           wallet: w,
           balance: bal,
-          chain: isUsdtVariant ? (cur === 'USDT_ERC20' ? 'ERC20' : 'TRC20') : undefined,
+          chain: chainOf(cur),
         });
       }
     });
@@ -260,7 +275,13 @@ export function SendMoneySheet({
             {/* Send CTA */}
             <Pressable
               disabled={!valid}
-              onPress={() => valid && onSubmit(numAmount, selected!.wallet.currency, note.trim() || undefined)}
+              // Send the LOGICAL currency (USDT, BTC, ETH…) rather than
+              // the underlying wallet currency (USDT_TRC20, etc). The
+              // server's transfer controller now collapses USDT
+              // variants to a single logical balance and picks the
+              // right underlying wallet to debit; the client just has
+              // to ask in human terms.
+              onPress={() => valid && onSubmit(numAmount, selected!.currency, note.trim() || undefined)}
               style={({ pressed }) => ({
                 height: 52, borderRadius: 16, marginTop: 4,
                 backgroundColor: valid ? BRAND_BLUE : p.border,

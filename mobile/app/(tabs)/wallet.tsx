@@ -642,7 +642,7 @@ function AssetRow({
         {isCrypto ? (
           <CoinIcon symbol={w.currency} size={42} />
         ) : (
-          <Text style={{ fontSize: 28, lineHeight: 42, width: 42, textAlign: 'center' }}>
+          <Text style={{ color: p.fg, fontSize: 28, lineHeight: 42, width: 42, textAlign: 'center' }}>
             {meta.flagOrIcon}
           </Text>
         )}

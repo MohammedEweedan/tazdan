@@ -41,13 +41,41 @@ export default function ScannerPage() {
     if (scanned) return;
     setScanned(true);
 
+    // Check for claim link first:
+    //   https://Fortuni.com/claim/TOKEN or https://Fortuni.app/claim/TOKEN
+    //   Fortuni://claim/TOKEN
+    //   http://localhost:PORT/claim/TOKEN  (dev only — see below)
+    //
+    // SECURITY: the localhost branch is dev-only.  Shipping it in
+    // release builds let an attacker print a QR encoding a localhost
+    // URL pointing at any process they could trick the victim into
+    // running (e.g. a malicious dev tool / fake proxy on a known
+    // port) and have the claim flow auto-credit whatever that local
+    // server returned.  Gating behind __DEV__ closes that.
+    const claimPattern = __DEV__
+      ? /(?:Fortuni:\/\/claim\/|https?:\/\/(?:[^\/]+\.)?Fortuni\.(?:com|app)\/claim\/|https?:\/\/localhost:\d+\/claim\/)([a-zA-Z0-9]+)/i
+      : /(?:Fortuni:\/\/claim\/|https?:\/\/(?:[^\/]+\.)?Fortuni\.(?:com|app)\/claim\/)([a-zA-Z0-9]+)/i;
+    const claimMatch = data.match(claimPattern);
+    if (claimMatch) {
+      const token = claimMatch[1];
+      setScannedHandle(`Claim link`);
+      playSuccess();
+      setTimeout(() => {
+        router.replace(`/claim/${token}`);
+      }, 900);
+      return;
+    }
+
     // Parse handle from QR data. Supports:
     //   @handle
     //   Fortuni://u/handle
     //   https://Fortuni.com/u/handle
     let handle = '';
     const atMatch = data.match(/@([a-zA-Z0-9._]+)/);
-    const urlMatch = data.match(/(?:Fortuni:\/\/u\/|https?:\/\/(?:[^\/]+\.)?Fortuni\.(?:com|app)\/u\/)([a-zA-Z0-9._]+)/);
+    // Case-insensitive — iOS lowercases custom URL schemes when the
+    // OS hands them back, so `Fortuni://` and `fortuni://` both need
+    // to match the same handle regex.
+    const urlMatch = data.match(/(?:Fortuni:\/\/u\/|https?:\/\/(?:[^\/]+\.)?Fortuni\.(?:com|app)\/u\/)([a-zA-Z0-9._]+)/i);
     if (atMatch) handle = atMatch[1];
     else if (urlMatch) handle = urlMatch[1];
     else handle = data.replace(/^@/, '').trim();

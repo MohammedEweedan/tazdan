@@ -261,7 +261,26 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     // into a dead user room and a fresh JWT is picked up on next login.
     const { disconnectSocket } = await import('@/lib/socket');
     disconnectSocket();
-    await secureStore.remove(VIEW_MODE_KEY).catch(() => {});
-    set({ user: null, isAuthenticated: false, viewMode: null, needsViewSelection: false });
+    // CRITICAL: wipe every persisted credential.  Previously only
+    // VIEW_MODE_KEY was removed, so access + refresh tokens stayed
+    // in SecureStore — the next person to open the app rehydrated
+    // straight into the previous user's account.  Clear every
+    // identity-bound key so logout actually logs out.
+    await Promise.all([
+      secureStore.remove(STORAGE_KEYS.accessToken).catch(() => {}),
+      secureStore.remove(STORAGE_KEYS.refreshToken).catch(() => {}),
+      secureStore.remove(STORAGE_KEYS.lastUser).catch(() => {}),
+      secureStore.remove(VIEW_MODE_KEY).catch(() => {}),
+    ]);
+    set({
+      user: null,
+      isAuthenticated: false,
+      viewMode: null,
+      needsViewSelection: false,
+      // Also wipe the in-memory lastUser hint so the lock-screen
+      // doesn't render the previous user's name / avatar after
+      // logout.
+      lastUser: null,
+    });
   },
 }));

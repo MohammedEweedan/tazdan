@@ -45,7 +45,6 @@ import whatsappRouter from './routes/whatsapp';
 import { profileRouter } from './routes/profile';
 import { p2pRouter } from './routes/p2p';
 import { messageRouter } from './routes/messages';
-import { groupRouter } from './routes/groups';
 import { referralRouter } from './routes/referral';
 import { notificationRouter } from './routes/notification';
 import { claimLinkRouter } from './routes/claimLink';
@@ -246,9 +245,13 @@ app.use('/api/whatsapp', whatsappRouter);
 app.use('/api/profile', profileRouter);
 app.use('/api/p2p', p2pRouter);
 app.use('/api/messages', messageRouter);
-app.use('/api/groups', groupRouter);
 app.use('/api/referrals', referralRouter);
 app.use('/api/notifications', notificationRouter);
+// News proxy/cache — wraps CryptoCompare (and future feeds) so the
+// mobile asset detail page doesn't hit a public CDN directly.  See
+// controllers/news.controller.ts for the rationale.
+import { newsRouter } from './routes/news';
+app.use('/api/news', newsRouter);
 app.use('/api/claim-links',  claimLinkRouter);
 app.use('/api/security', securityRouter);
 app.use('/api/api-keys', apiKeyRouter);

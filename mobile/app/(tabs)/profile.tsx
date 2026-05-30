@@ -5,7 +5,7 @@
 import { Pressable, ScrollView, Switch, View, Modal, Alert, Image } from 'react-native';
 import { Text } from '@/components/ui/Text';
 import { useState } from 'react';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -15,7 +15,7 @@ import { useAuthStore } from '@/store/authStore';
 import { useHaptics } from '@/hooks';
 import { useTheme, useThemedPalette } from '@/store/themeStore';
 import { useI18n, useT, LOCALE_META } from '@/store/i18nStore';
-import { Panel, PanelRow, TopGradient } from '@/components/ui/ScreenShell';
+import { Panel, PanelRow, StickyTopBar } from '@/components/ui/ScreenShell';
 import { LocalePickerModal } from '@/components/ui/LocalePickerModal';
 import { profileAPI } from '@/lib/api';
 import { realHandle, displayHandle, avatarMode } from '@/utils/displayUser';
@@ -258,27 +258,20 @@ export default function Profile() {
     },
   ];
 
+  const insets = useSafeAreaInsets();
+  // Same offset math ScreenShell uses internally — keeps the first
+  // panel from being hidden under the sticky bar on first paint.
+  const stickyH = insets.top + 18 + 38 + 10;
+
   return (
     <View style={{ flex: 1, backgroundColor: p.bg }}>
       <StatusBar style={themeMode === 'dark' ? 'light' : 'dark'} />
-      <TopGradient />
-      <SafeAreaView style={{ flex: 1 }} edges={['top']}>
-        <View style={{ flex: 1 }}>
-          {/* Title — sticky */}
-          <View style={{
-            flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-            paddingHorizontal: 24, paddingTop: 18, paddingBottom: 8,
-          }}>
-            <Text style={{ color: p.fg, fontSize: 22, fontWeight: '700', letterSpacing: -0.4 }}>
-              {t('nav.profile')}
-            </Text>
-          </View>
 
-          <ScrollView
-            showsVerticalScrollIndicator={false}
-            style={{ flex: 1 }}
-            contentContainerStyle={{ paddingBottom: 140 }}
-          >
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        style={{ flex: 1 }}
+        contentContainerStyle={{ paddingTop: stickyH, paddingBottom: 140 }}
+      >
             {/* User panel */}
           <View style={{ paddingHorizontal: 24, marginTop: 18 }}>
             <Panel>
@@ -370,9 +363,22 @@ export default function Profile() {
           }}>
             Fortuni · v0.1.0
           </Text>
-        </ScrollView>
+      </ScrollView>
+
+      {/* Sticky top bar — same blur + gradient that ScreenShell renders
+          on the rest of the app. Profile is the only tab with a custom
+          title style, so we hand-build the header content but reuse
+          the StickyTopBar shell. */}
+      <StickyTopBar>
+        <View style={{
+          flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+          paddingHorizontal: 24, paddingTop: 18, paddingBottom: 10,
+        }}>
+          <Text style={{ color: p.fg, fontSize: 22, fontWeight: '700', letterSpacing: -0.4 }}>
+            {t('nav.profile')}
+          </Text>
         </View>
-      </SafeAreaView>
+      </StickyTopBar>
 
       {/* Avatar Picker Modal */}
       <Modal

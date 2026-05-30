@@ -10,6 +10,7 @@ import { ScreenShell, Panel, PanelRow } from '@/components/ui/ScreenShell';
 import { useTheme, useThemedPalette } from '@/store/themeStore';
 import { useI18n, useT, LOCALE_META } from '@/store/i18nStore';
 import { useAuthStore } from '@/store/authStore';
+import { useChatPrefs } from '@/store/chatPrefsStore';
 import { useHaptics, useUpdateMyProfile } from '@/hooks';
 import { LocalePickerModal } from '@/components/ui/LocalePickerModal';
 import { authService, profileService } from '@/services';
@@ -28,6 +29,7 @@ export default function Settings() {
   const updateProfile = useUpdateMyProfile();
 
   const [isPublic, setIsPublic] = useState<boolean>(user?.profilePublic ?? true);
+  const readReceiptsOn = useChatPrefs((s) => s.readReceiptsOn);
   const togglePublic = (v: boolean) => {
     h.selection();
     setIsPublic(v);
@@ -176,10 +178,37 @@ export default function Settings() {
         <PanelRow
           icon="at-outline"
           label={user?.username ? `@${user.username}` : t('settings.setHandle')}
-          last
           right={<Ionicons name="create-outline" size={16} color={p.fgFaint} />}
           onPress={openHandleModal}
         />
+        {/* Read receipts toggle.  When off, we suppress the "read"
+            double-check on outbound bubbles so the local UI doesn't
+            leak read state.  Server-side suppression is a follow-up
+            (next step would be propagating this flag to message-read
+            broadcasting). */}
+        <View style={{
+          flexDirection: 'row', alignItems: 'center', gap: 12,
+          padding: 14,
+        }}>
+          <View style={{ width: 32, height: 32, borderRadius: 10, backgroundColor: p.pillBg, alignItems: 'center', justifyContent: 'center' }}>
+            <Ionicons name={readReceiptsOn ? 'checkmark-done-outline' : 'eye-off-outline'} size={16} color={p.fg} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={{ color: p.fg, fontSize: 14, fontWeight: '700' }}>
+              {t('chat.readReceipts')}
+            </Text>
+            <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '500', marginTop: 2 }}>
+              {t('chat.readReceiptsDesc')}
+            </Text>
+          </View>
+          <Switch
+            value={readReceiptsOn}
+            onValueChange={(on) => useChatPrefs.getState().setReadReceiptsOn(on)}
+            trackColor={{ false: p.border, true: p.ctaBg }}
+            thumbColor="#fff"
+            style={{ transform: [{ scaleX: 0.85 }, { scaleY: 0.85 }] }}
+          />
+        </View>
       </Panel>
 
       {/* Notifications */}

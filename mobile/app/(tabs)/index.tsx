@@ -15,9 +15,12 @@ import { useQuery } from '@tanstack/react-query';
 import { cryptoWalletAPI } from '@/lib/cryptoApi';
 import { TopGradient } from '@/components/ui/ScreenShell';
 import { ActivityIndicator, Animated, Dimensions, Image, KeyboardAvoidingView, Modal, PanResponder, Platform, Pressable, RefreshControl, ScrollView, Share, StyleSheet, View } from 'react-native';
+import { BlurView } from 'expo-blur';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Text, TextInput } from '@/components/ui/Text';
 import BalanceSvg, { Path as SvgPath, Defs as SvgDefs, LinearGradient as SvgLinearGradient, Stop as SvgStop, Line as SvgLine, Circle as SvgCircle } from 'react-native-svg';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import QRCode from 'react-native-qrcode-svg';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -105,6 +108,27 @@ export default function Home() {
   // Pull-to-refresh — refetches every live data source the home screen
   // depends on. Triggers a haptic tap on release for that polished feel.
   const [refreshing, setRefreshing] = useState(false);
+
+  // Scroll-driven glass for the sticky top block. At rest the
+  // gradient is already visible at a soft baseline so the safe-area
+  // (Dynamic Island / status bar) sits on the brand glass instead of
+  // raw bg.  Once the user starts scrolling, the BlurView + gradient
+  // ramp up to full opacity so pinned content reads cleanly over the
+  // feed that's sliding underneath.
+  const scrollY = useRef(new Animated.Value(0)).current;
+  // Two interpolations: blur ramps from 0→1, gradient ramps from a
+  // visible 0.55 baseline → 1.  Keeping them separate means the
+  // gradient never disappears, even at scrollY=0.
+  const blurOpacity = scrollY.interpolate({
+    inputRange: [0, 30, 110],
+    outputRange: [0.92, 0.96, 1],
+    extrapolate: 'clamp',
+  });
+  const gradientOpacity = scrollY.interpolate({
+    inputRange: [0, 110],
+    outputRange: [1, 1],
+    extrapolate: 'clamp',
+  });
   const onRefresh = async () => {
     setRefreshing(true);
     h.light();
@@ -221,12 +245,17 @@ export default function Home() {
   return (
     <View style={{ flex: 1, backgroundColor: p.bg }}>
       <StatusBar style={themeMode === 'dark' ? 'light' : 'dark'} />
-      <TopGradient height={440} />
-      <SafeAreaView style={{ flex: 1, backgroundColor: 'transparent' }} edges={['top']}>
-        <ScrollView
+      <TopGradient />
+        <Animated.ScrollView
           showsVerticalScrollIndicator={false}
           style={{ backgroundColor: 'transparent' }}
           contentContainerStyle={{ paddingBottom: 140 }}
+          stickyHeaderIndices={[0]}
+          scrollEventThrottle={16}
+          onScroll={Animated.event(
+            [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+            { useNativeDriver: true },
+          )}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -237,10 +266,80 @@ export default function Home() {
             />
           }
         >
+          {/* Index 0 — sticky TOP block.  Contains header + balance
+              + 24h delta + primary actions + Assets/Activity tabs so
+              the entire top of the screen pins as a single unit
+              while feed rows scroll underneath it.  Glass-morphism
+              (BlurView + soft gradient) fades in only after the
+              user starts scrolling; at rest the block reads naked
+              on the page bg.  No hairline — the glass does the
+              separation. The block carries its own `paddingTop:
+              insets.top` so the avatar / icon row never tucks under
+              the Dynamic Island while the block is pinned. */}
+          <View>
+          {/* Gradient layer — covers the full block including safe-area.
+              The BlurView + gradient now extend all the way to the top
+              of the screen so the battery / Dynamic Island / clock sit
+              on the glass, not on raw bg. */}
+          <Animated.View
+            pointerEvents="none"
+            style={{
+              position: 'absolute',
+              top: 0, left: 0, right: 0, bottom: 0,
+              opacity: gradientOpacity,
+            }}
+          >
+            <LinearGradient
+              colors={
+                themeMode === 'dark'
+                  ? [
+                      'rgba(180, 180, 180, 0.62)',
+                      'rgba(205, 220, 249, 0.34)',
+                      'rgba(10, 10, 11, 1)',
+                    ]
+                  : [
+                      'rgba(169, 169, 169, 0.68)',
+                      'rgba(205, 220, 249, 0.36)',
+                      'rgba(250, 250, 247, 1)',
+                    ]
+              }
+              locations={[0, 0.55, 1]}
+              start={{ x: 0.5, y: 0 }}
+              end={{ x: 0.5, y: 1 }}
+              style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
+            />
+          </Animated.View>
+
+          {/* Blur layer — only fades in once scrolling so the at-rest
+              state stays "open" (gradient-only) and the scrolled
+              state reads as proper frosted glass. */}
+          <Animated.View
+            pointerEvents="none"
+            style={{
+              position: 'absolute',
+              top: 0, left: 0, right: 0, bottom: 0,
+              opacity: blurOpacity,
+            }}
+          >
+            <BlurView
+              intensity={Platform.OS === 'ios' ? 48 : 0}
+              tint={themeMode === 'dark' ? 'dark' : 'light'}
+              style={{
+                position: 'absolute',
+                top: 0, left: 0, right: 0, bottom: 0,
+                backgroundColor: Platform.OS === 'ios'
+                  ? 'transparent'
+                  : (themeMode === 'dark'
+                      ? 'rgba(10,10,11,0.78)'
+                      : 'rgba(250,250,247,0.82)'),
+              }}
+            />
+          </Animated.View>
+
           {/* Header */}
           <View style={{
             flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-            paddingHorizontal: 24, paddingTop: 18, paddingBottom: 8,
+            paddingHorizontal: 24, paddingTop: insets.top + 18, paddingBottom: 8,
             gap: 10,
           }}>
             <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10, minWidth: 0 }}>
@@ -326,6 +425,7 @@ export default function Home() {
               />
             </View>
           </View>
+
           <AnimatedTotal
             value={totalUsd}
             palette={p}
@@ -335,23 +435,23 @@ export default function Home() {
             onPress={() => { h.selection(); setBalanceChartVisible(true); }}
           />
 
-          {/* 24h delta — masked + greyed when balance is hidden */}
+          {/* 24h delta — smaller, directly under balance */}
           <View style={{
-            flexDirection: 'row', alignItems: 'center', gap: 10,
+            flexDirection: 'row', alignItems: 'center', gap: 6,
             justifyContent: 'flex-start',
-            paddingHorizontal: 24, marginTop: 6,
+            paddingHorizontal: 24, marginTop: 2,
           }}>
             <Text style={{
               color: p.fgMuted,
-              fontSize: 14, fontWeight: '600', fontVariant: ['tabular-nums'],
+              fontSize: 11, fontWeight: '500', fontVariant: ['tabular-nums'],
             }}>
               {showBalance
                 ? `${positive ? '+' : '-'}${dc.fmt(Math.abs(deltaUsd))}`
                 : `${dc.symbol}****`}
             </Text>
             <View style={{
-              flexDirection: 'row', alignItems: 'center', gap: 4,
-              paddingHorizontal: 8, paddingVertical: 3, borderRadius: 7,
+              flexDirection: 'row', alignItems: 'center', gap: 3,
+              paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6,
               backgroundColor: showBalance
                 ? (positive ? 'rgba(34,197,94,0.12)' : 'rgba(239,68,68,0.12)')
                 : p.pillBg,
@@ -361,11 +461,11 @@ export default function Home() {
                 : p.border,
             }}>
               {showBalance && (
-                <Ionicons name={positive ? 'caret-up' : 'caret-down'} size={9} color={positive ? p.greenFg : p.redFg} />
+                <Ionicons name={positive ? 'caret-up' : 'caret-down'} size={8} color={positive ? p.greenFg : p.redFg} />
               )}
               <Text style={{
                 color: showBalance ? (positive ? p.greenFg : p.redFg) : p.fgFaint,
-                fontSize: 12, fontWeight: '600',
+                fontSize: 10, fontWeight: '600',
               }}>
                 {showBalance ? `${Math.abs(deltaPct).toFixed(2)}%` : '**.**%'}
               </Text>
@@ -379,22 +479,29 @@ export default function Home() {
             ))}
             <MoreActionButton palette={p} onPress={() => { h.selection(); setMoreMenuVisible(true); }} />
           </View>
-          {/* Invisible spacer so the row always touches the container edges */}
 
-          {/* Announcement Banner */}
-          <AnnouncementBanner />
+          {/* Spacer between the action pills and the Assets/Activity
+              switcher so the pinned hero block has breathing room. */}
+          <View style={{ height: 22 }} />
 
-          {/* Tabs - center-aligned */}
+          {/* Assets / Activity tabs — part of the sticky region so
+              the switcher is always reachable while scrolling. */}
           <View style={{
             flexDirection: 'row', gap: 32,
-            paddingHorizontal: 24, marginTop: 20,
+            paddingHorizontal: 24,
             justifyContent: 'center',
           }}>
             <TabBtn label={t('home.assets')}   active={tab === 'ASSETS'}   palette={p} onPress={() => { h.selection(); setTab('ASSETS'); }} />
             <TabBtn label={t('home.activity')} active={tab === 'ACTIVITY'} palette={p} onPress={() => { h.selection(); setTab('ACTIVITY'); }} />
           </View>
 
-          <View style={{ height: 1, backgroundColor: p.border, marginTop: 14 }} />
+          <View style={{ height: 14 }} />
+          </View>
+          {/* /sticky top block */}
+
+          {/* Announcement Banner — out of the sticky region; lives
+              between the pinned hero and the scrolling feed. */}
+          <AnnouncementBanner />
 
           {/* Rows */}
           {tab === 'ACTIVITY' ? (
@@ -516,8 +623,8 @@ export default function Home() {
               </View>
             </View>
           )}
-        </ScrollView>
-      </SafeAreaView>
+        </Animated.ScrollView>
+
 
       {/* Buy Widget Modal */}
       <Modal visible={buyModalVisible} transparent animationType="slide" onRequestClose={() => setBuyModalVisible(false)}>
@@ -1129,7 +1236,7 @@ function AnimatedTotal({
   const maskedStr = totalStr.replace(/[0-9]/g, '*');
 
   return (
-    <View style={{ alignItems: 'flex-start', paddingHorizontal: 24, paddingVertical: 14 }}>
+    <View style={{ alignItems: 'flex-start', paddingHorizontal: 24, paddingTop: 10, paddingBottom: 2 }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
         <Pressable onPress={onPress} hitSlop={12}>
           <Text style={{
@@ -1805,16 +1912,26 @@ function WalletAddressList({
     );
   }
   const FIAT_SET = new Set(['USD','EUR','GBP','AED','SAR','EGP','LYD','CAD','AUD','CHF','JPY','CNY']);
+
+  // Collapse every BASE / BASE_CHAIN cluster into a single row.
+  // USDT_ERC20 + USDT_TRC20 fold into "USDT"; if ETH ever picks up
+  // an ETH_ERC20 variant the same code rolls it up automatically.
+  // The combined balance aggregates funds; switching chain just
+  // swaps which deposit address + QR we surface.
+  const rows = mergeChainVariants(wallets);
+
   return (
     <View>
-      {wallets.map((w) => (
+      {rows.map((row) => (
         <WalletRow
-          key={w.id}
-          wallet={w}
+          key={row.key}
+          wallet={row.wallet}
+          variants={row.variants}
+          combinedBalance={row.combinedBalance}
           palette={p}
-          isCrypto={!FIAT_SET.has(w.currency)}
+          isCrypto={!FIAT_SET.has(row.wallet.currency)}
           onCopy={onCopy}
-          onShowQr={(address, chain) => setQrFor({ wallet: w, address, chain })}
+          onShowQr={(address, chain) => setQrFor({ wallet: row.wallet, address, chain })}
         />
       ))}
       <QrModal palette={p} info={qrFor} onClose={() => setQrFor(null)} />
@@ -1822,8 +1939,92 @@ function WalletAddressList({
   );
 }
 
-function WalletRow({ wallet: w, palette: p, isCrypto, onCopy, onShowQr }: {
+interface VariantOption {
+  currency: string;
+  label: string; // short pill label, e.g. "ERC20", "TRC20"
+}
+
+interface MergedRow {
+  key: string;
+  wallet: Wallet; // representative wallet (highest balance variant)
+  variants?: VariantOption[];
+  combinedBalance: number;
+}
+
+/** Base symbol of a currency string. e.g. `USDT_TRC20` → `USDT`,
+ *  `ETH_ERC20` → `ETH`, `BTC` → `BTC`.  Chained variants of the same
+ *  base are treated as a single logical asset. */
+function baseSymbol(currency: string): string {
+  const i = currency.indexOf('_');
+  return i >= 0 ? currency.slice(0, i) : currency;
+}
+
+/** Human-friendly chain label derived from a `BASE_CHAIN` currency.
+ *  `USDT_TRC20` → `TRC20`. Used as the chain selector pill label. */
+function chainLabel(currency: string): string {
+  const i = currency.indexOf('_');
+  return i >= 0 ? currency.slice(i + 1) : '';
+}
+
+/** Group wallets by base symbol so all chain variants of the same
+ *  logical asset render as one row.  The row exposes a chain
+ *  switcher when more than one variant exists; the balance is the
+ *  sum across every variant in the cluster.
+ *
+ *  Generalises the previous USDT-only carveout — any future
+ *  BASE/BASE_CHAIN pair (USDC + USDC_ERC20, ETH + ETH_ARBITRUM,
+ *  …) collapses automatically. */
+function mergeChainVariants(wallets: Wallet[]): MergedRow[] {
+  // Stable key per base; preserves input order on first occurrence.
+  const groups = new Map<string, { wallets: Wallet[]; balance: number; order: number }>();
+  let order = 0;
+  for (const w of wallets) {
+    const base = baseSymbol(String(w.currency));
+    const g = groups.get(base);
+    if (g) {
+      g.wallets.push(w);
+      g.balance += Number(w.balance ?? 0);
+    } else {
+      groups.set(base, { wallets: [w], balance: Number(w.balance ?? 0), order: order++ });
+    }
+  }
+  const out: MergedRow[] = [];
+  for (const [base, g] of groups) {
+    // Representative wallet = the variant with the largest balance,
+    // so meta lookups (icon, title, decimals) prefer the chain the
+    // user has the most of.
+    const pick = [...g.wallets].sort(
+      (a, b) => Number(b.balance ?? 0) - Number(a.balance ?? 0),
+    )[0];
+    // Variants list — one entry per distinct on-chain wallet the
+    // user holds.  Falls back to a single virtual entry if the
+    // user only has the base symbol.
+    const variants: VariantOption[] = g.wallets
+      .filter((w) => String(w.currency) !== base)
+      .map((w) => ({
+        currency: String(w.currency),
+        label: chainLabel(String(w.currency)),
+      }));
+    out.push({
+      key: variants.length > 1 ? `${base}_MERGED` : pick.id,
+      wallet: { ...pick, currency: base } as Wallet,
+      variants: variants.length > 1 ? variants : undefined,
+      combinedBalance: g.balance,
+    });
+  }
+  // Re-sort by original wallet order (stable group order, plus
+  // largest-balance variant inside each group).
+  return out.sort((a, b) => {
+    const ga = groups.get(baseSymbol(String(a.wallet.currency)))!.order;
+    const gb = groups.get(baseSymbol(String(b.wallet.currency)))!.order;
+    return ga - gb;
+  });
+}
+
+function WalletRow({ wallet: w, variants, combinedBalance, palette: p, isCrypto, onCopy, onShowQr }: {
   wallet: Wallet;
+  variants?: VariantOption[];
+  combinedBalance?: number;
   palette: Palette;
   isCrypto: boolean;
   onCopy: () => void;
@@ -1831,10 +2032,19 @@ function WalletRow({ wallet: w, palette: p, isCrypto, onCopy, onShowQr }: {
 }) {
   const t = useT();
   const meta  = ASSET_META[w.currency] ?? { title: w.currency, subDecimals: 6 };
-  const chain = CHAIN_LABEL[w.currency] ?? w.currency;
+
+  // When this row is a merged USDT view, the parent passes a `variants`
+  // list. Track which chain the user currently wants to receive on; we
+  // refetch the deposit address against that variant.
+  const [activeVariant, setActiveVariant] = useState<VariantOption | null>(
+    variants?.[0] ?? null,
+  );
+  const addressCurrency = activeVariant?.currency ?? w.currency;
+  const chain = CHAIN_LABEL[addressCurrency] ?? CHAIN_LABEL[w.currency] ?? w.currency;
+  const displayBalance = combinedBalance ?? Number(w.balance ?? 0);
 
   // Fetch real custodial address from the server for crypto wallets.
-  const { data: serverAddr, isLoading: addrLoading } = useDepositAddress(w.currency, isCrypto);
+  const { data: serverAddr, isLoading: addrLoading } = useDepositAddress(addressCurrency, isCrypto);
   const fiatRef = `PRMK-${w.currency}-${w.id.slice(0, 8).toUpperCase()}`;
   const addr = isCrypto ? (serverAddr ?? '') : fiatRef;
   const addrReady = isCrypto ? !!serverAddr : true;
@@ -1854,9 +2064,36 @@ function WalletRow({ wallet: w, palette: p, isCrypto, onCopy, onShowQr }: {
           </Text>
         </View>
         <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '600', fontVariant: ['tabular-nums'] }}>
-          {Number(w.balance).toLocaleString('en-US', { maximumFractionDigits: Math.min(meta.subDecimals, 8) })} {w.currency}
+          {displayBalance.toLocaleString('en-US', { maximumFractionDigits: Math.min(meta.subDecimals, 8) })} {w.currency}
         </Text>
       </View>
+
+      {variants && variants.length > 1 && (
+        <View style={{ flexDirection: 'row', gap: 6 }}>
+          {variants.map((v) => {
+            const active = activeVariant?.currency === v.currency;
+            return (
+              <Pressable
+                key={v.currency}
+                onPress={() => setActiveVariant(v)}
+                style={({ pressed }) => ({
+                  paddingHorizontal: 10, paddingVertical: 5, borderRadius: 10,
+                  backgroundColor: active ? p.fg : p.bgElev,
+                  borderWidth: 1, borderColor: active ? p.fg : p.border,
+                  opacity: pressed ? 0.85 : 1,
+                })}
+              >
+                <Text style={{
+                  color: active ? p.bg : p.fgMuted,
+                  fontSize: 10, fontWeight: '700', letterSpacing: 0.6,
+                }}>
+                  {v.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      )}
 
       <View style={{ flexDirection: 'row', gap: 8 }}>
         <Pressable
@@ -1921,8 +2158,8 @@ function QrModal({
   if (!info) return null;
   const { wallet, address, chain } = info;
   const meta = ASSET_META[wallet.currency] ?? ASSET_META.DEFAULT;
-  // Use bg=white + black foreground so the code scans regardless of theme.
-  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=440x440&margin=12&data=${encodeURIComponent(address)}&bgcolor=ffffff&color=000000`;
+  // QR rendered locally via react-native-qrcode-svg below — no
+  // network round-trip, works offline.
 
   return (
     <Modal visible={!!info} transparent animationType="fade" onRequestClose={onClose}>
@@ -1966,10 +2203,17 @@ function QrModal({
             padding: 14,
             alignItems: 'center', justifyContent: 'center',
           }}>
-            <Image
-              source={{ uri: qrUrl }}
-              style={{ width: 220, height: 220, borderRadius: 8 }}
-              resizeMode="contain"
+            <QRCode
+              value={address}
+              size={220}
+              backgroundColor="#ffffff"
+              color="#000000"
+              ecl="H"
+              logo={require('../../assets/icon-black.png')}
+              logoSize={42}
+              logoBackgroundColor="#ffffff"
+              logoMargin={4}
+              logoBorderRadius={10}
             />
           </View>
 

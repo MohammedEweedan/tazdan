@@ -14,13 +14,14 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
-import { Alert, Animated, Pressable, View } from 'react-native';
+import { Alert, Animated, Image, Pressable, View } from 'react-native';
 import { Text } from '@/components/ui/Text';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as LocalAuthentication from 'expo-local-authentication';
 import Svg, { Circle, Path } from 'react-native-svg';
 
+import { useAuthStore } from '@/store/authStore';
 import type { CardEntity } from '@/types';
 
 /* ─── Tier design tokens — mirror CardStack.tsx ────────────────── */
@@ -36,28 +37,33 @@ interface TierTheme {
   brandAccent?: string;
 }
 
+// Mono tier ramps — same hue family for all three tiers (warm graphite
+// → obsidian) so the only thing that distinguishes them is depth, not
+// colour. No periwinkle, no blue. STARTER is the lightest; MASTER is
+// the deepest. Foreground is always near-white because the cards are
+// always dark — light-mode card stock makes the chip metallics look
+// muddy in user testing.
 const TIER: Record<TierKey, TierTheme> = {
   STARTER: {
     label: 'Starter',
-    gradient: ['#8fa3f5', '#6272d4', '#5060c0'],
-    text: '#ffffff',
-    muted: 'rgba(255,255,255,0.65)',
-    visa: 'rgba(255,255,255,0.82)',
+    gradient: ['#3A3A3D', '#26262A', '#1A1A1D'],
+    text: '#FAFAFA',
+    muted: 'rgba(250,250,250,0.62)',
+    visa: 'rgba(250,250,250,0.82)',
   },
   MASTER: {
     label: 'Master',
-    gradient: ['#3558e8', '#1f3db5', '#182f9a'],
-    text: '#ffffff',
-    muted: 'rgba(255,255,255,0.6)',
-    visa: 'rgba(255,255,255,0.80)',
+    gradient: ['#26262A', '#16161A', '#0A0A0B'],
+    text: '#FAFAFA',
+    muted: 'rgba(250,250,250,0.58)',
+    visa: 'rgba(250,250,250,0.85)',
   },
   PRO: {
     label: 'Pro',
-    gradient: ['#2a3145', '#161b28', '#0e1119'],
-    text: '#e8f0ff',
-    muted: 'rgba(160,190,255,0.55)',
-    visa: 'rgba(160,190,255,0.70)',
-    brandAccent: '#60a0ff',
+    gradient: ['#1A1A1D', '#0E0E11', '#040405'],
+    text: '#FAFAFA',
+    muted: 'rgba(250,250,250,0.52)',
+    visa: 'rgba(250,250,250,0.88)',
   },
 };
 
@@ -113,6 +119,15 @@ function Chip() {
 /* ─── Component ─────────────────────────────────────────────────── */
 export function CardVisual({ card }: { card: CardEntity }) {
   const theme = TIER[card.tier] ?? TIER.STARTER;
+  const user  = useAuthStore((s) => s.user);
+  // Authoritative cardholder name — derived from the signed-in user,
+  // not from card.cardHolder. Backfills onto legacy mock cards (e.g.
+  // the "RAYAN ZAHI" demo seed) so cards always read the real user.
+  const liveHolder =
+    [user?.firstName, user?.lastName].filter(Boolean).join(' ').trim().toUpperCase()
+    || card.cardHolder
+    || 'CARD HOLDER';
+  const cardForRender = { ...card, cardHolder: liveHolder };
   const [revealed, setRevealed] = useState(false);
   const [flipped, setFlipped] = useState(false);
 
@@ -190,7 +205,7 @@ export function CardVisual({ card }: { card: CardEntity }) {
           }}
         >
           <CardFace gradient={theme.gradient}>
-            <CardFront card={card} theme={theme} revealed={revealed} maskedNumber={maskedNumber} fullNumber={fullNumber} expiry={expiry} isFrozen={isFrozen} />
+            <CardFront card={cardForRender} theme={theme} revealed={revealed} maskedNumber={maskedNumber} fullNumber={fullNumber} expiry={expiry} isFrozen={isFrozen} />
           </CardFace>
         </Animated.View>
 
@@ -209,19 +224,27 @@ export function CardVisual({ card }: { card: CardEntity }) {
         </Animated.View>
       </Pressable>
 
-      {/* Reveal toggle — floats over the card, eats taps so it doesn't flip. */}
+      {/* Reveal toggle — moved to a small pill at TOP-LEFT so it can
+          never overlap the brand mark that now sits in the top-right
+          corner (per the monochrome redesign). Eats taps so they
+          don't trigger the card flip. */}
       <Pressable
         onPress={requestReveal}
         accessibilityLabel={revealed ? 'Hide card details' : 'Reveal card details'}
         style={({ pressed }) => ({
-          position: 'absolute', top: 12, right: 12,
-          width: 32, height: 32, borderRadius: 16,
-          backgroundColor: pressed ? 'rgba(0,0,0,0.55)' : 'rgba(0,0,0,0.32)',
+          position: 'absolute', top: 14, left: 14,
+          height: 26, paddingHorizontal: 9,
+          borderRadius: 13,
+          backgroundColor: pressed ? 'rgba(255,255,255,0.20)' : 'rgba(255,255,255,0.10)',
           alignItems: 'center', justifyContent: 'center',
-          borderWidth: 1, borderColor: 'rgba(255,255,255,0.25)',
+          borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)',
+          flexDirection: 'row', gap: 4,
         })}
       >
-        <Ionicons name={revealed ? 'eye-off' : 'eye'} size={14} color="#fff" />
+        <Ionicons name={revealed ? 'eye-off' : 'eye'} size={11} color="#fff" />
+        <Text style={{ color: '#fff', fontSize: 9, fontWeight: '700', letterSpacing: 0.6 }}>
+          {revealed ? 'HIDE' : 'REVEAL'}
+        </Text>
       </Pressable>
     </View>
   );
@@ -272,27 +295,11 @@ function CardFront({
     <View style={{ flex: 1, paddingHorizontal: 18, paddingVertical: 16 }}>
       {/* Top row */}
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-        <View>
-          <Text style={{
-            color: theme.text, fontSize: 13, fontWeight: '600',
-            letterSpacing: -0.3, lineHeight: 15,
-          }}>
-            pro
-          </Text>
-          <Text style={{
-            color: theme.brandAccent ?? theme.text,
-            fontSize: 11, fontWeight: '700', opacity: theme.brandAccent ? 1 : 0.8,
-            marginTop: 1,
-          }}>
-            mrkts
-          </Text>
-          <Text style={{
-            color: theme.muted, fontSize: 9, fontWeight: '700',
-            letterSpacing: 1.2, textTransform: 'uppercase', marginTop: 4,
-          }}>
-            {theme.label}
-          </Text>
-        </View>
+        {/* Left side intentionally empty — the eye-toggle pill in the
+            parent now occupies this slot. Tier label moves to the row
+            above the cardholder name (bottom) so it doesn't compete
+            with the brand mark for top-row attention. */}
+        <View />
 
         <View style={{ alignItems: 'flex-end', gap: 6 }}>
           {isFrozen && (
@@ -305,13 +312,30 @@ function CardFront({
               <Text style={{ color: '#fff', fontSize: 10, fontWeight: '600' }}>FROZEN</Text>
             </View>
           )}
-          <ContactlessIcon color={theme.text} />
+          {/* Fortuni mark — icon-white on every tier because the
+              monochrome cards are always dark. Placed in the upper
+              right corner per the design spec. */}
+          <Image
+            source={require('../../../assets/icon-black.png')}
+            style={{ width: 26, height: 26, opacity: 0.95 }}
+            resizeMode="contain"
+          />
         </View>
       </View>
 
-      {/* Chip + number, pushed to the lower half */}
+      {/* Chip + contactless cluster, pushed to the lower half. */}
       <View style={{ flex: 1, justifyContent: 'flex-end', gap: 12 }}>
-        <Chip />
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+          <Chip />
+          <ContactlessIcon color={theme.text} />
+          <View style={{ flex: 1 }} />
+          <Text style={{
+            color: theme.muted, fontSize: 9, fontWeight: '700',
+            letterSpacing: 1.6, textTransform: 'uppercase',
+          }}>
+            {theme.label}
+          </Text>
+        </View>
         <Text style={{
           color: theme.text, fontSize: 16, fontWeight: '600',
           letterSpacing: 2.4, fontVariant: ['tabular-nums'],

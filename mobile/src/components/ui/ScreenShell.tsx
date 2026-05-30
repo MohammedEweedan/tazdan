@@ -8,13 +8,14 @@
  */
 
 import { ReactNode } from 'react';
-import { Pressable, ScrollView, View, type StyleProp, type ViewStyle } from 'react-native';
+import { Platform, Pressable, ScrollView, View, type StyleProp, type ViewStyle } from 'react-native';
 import { Text } from './Text';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { BlurView } from 'expo-blur';
 import { useTheme, useThemedPalette } from '@/store/themeStore';
 import { useHaptics } from '@/hooks';
 
@@ -62,6 +63,93 @@ export function TopGradient({ height }: { height?: number }) {
   );
 }
 
+/**
+ * Sticky top-of-screen region. Stack from bottom to top:
+ *
+ *   1. BlurView      — frosts any content the user scrolls under it,
+ *                      so the title/back button never appear to share
+ *                      pixels with a row that's slid up behind them.
+ *   2. TopGradient   — the existing brand mist over the blur.
+ *   3. <children>    — the actual back button, title, right slot, etc.
+ *
+ * Rendered with absolute positioning so it floats above the ScrollView
+ * — that's what makes it "sticky." The shell pads the scroll content
+ * down by the bar's measured height so the first row isn't hidden
+ * underneath it on first paint.
+ *
+ * Why expo-blur instead of just a solid colour: on iOS the standard
+ * frosted-glass look is what users expect from a sticky nav bar; a
+ * flat background reads as a banner stuck on. Android falls back to
+ * a translucent solid (BlurView is no-op on most Android versions).
+ */
+export function StickyTopBar({
+  children,
+  /** Override the blur tint manually (defaults to the active theme). */
+  tint,
+  /** Hide the hairline rule under the bar (useful when the page
+   *  itself owns a heading row immediately below the bar and the
+   *  extra divider reads as visual noise). */
+  hairline = true,
+}: {
+  children?: ReactNode;
+  tint?: 'light' | 'dark';
+  hairline?: boolean;
+}) {
+  const themeMode = useTheme((s) => s.mode);
+  const p         = useThemedPalette();
+  const insets    = useSafeAreaInsets();
+  const effectiveTint = tint ?? (themeMode === 'dark' ? 'dark' : 'light');
+
+  return (
+    <View
+      pointerEvents="box-none"
+      style={{
+        position: 'absolute',
+        top: 0, left: 0, right: 0,
+        zIndex: 10,
+      }}
+    >
+      {/* Frost — iOS gets a real blur, Android gets a soft translucent
+          fallback so the header still has presence over scrolling
+          content. */}
+      <BlurView
+        intensity={Platform.OS === 'ios' ? 40 : 0}
+        tint={effectiveTint}
+        experimentalBlurMethod={Platform.OS === 'android' ? 'dimezisBlurView' : undefined}
+        style={{
+          position: 'absolute',
+          top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: Platform.OS === 'ios'
+            ? 'transparent'
+            : (themeMode === 'dark'
+                ? 'rgba(10,10,11,0.72)'
+                : 'rgba(250,250,247,0.78)'),
+        }}
+      />
+      <TopGradient />
+      {/* Pad the safe-area top so content sits below the notch. */}
+      <View style={{ paddingTop: insets.top }}>
+        {children}
+      </View>
+      {/* Hairline under the bar — separates it from the scrolling
+          body.  Skipped when a caller passes `hairline={false}` (eg.
+          the home tab, where the gradient already fades smoothly
+          into the avatar/handle row beneath). */}
+      {hairline && (
+        <View
+          pointerEvents="none"
+          style={{
+            position: 'absolute',
+            left: 0, right: 0, bottom: 0,
+            height: 1,
+            backgroundColor: p.border,
+          }}
+        />
+      )}
+    </View>
+  );
+}
+
 interface Props {
   title?: string;
   subtitle?: string;
@@ -78,66 +166,79 @@ interface Props {
 export function ScreenShell({
   title, subtitle, back = true, right, scroll = true, contentStyle, children,
 }: Props) {
-  const router = useRouter();
-  const h = useHaptics();
-  const p = useThemedPalette();
+  const router    = useRouter();
+  const h         = useHaptics();
+  const p         = useThemedPalette();
   const themeMode = useTheme((s) => s.mode);
+  const insets    = useSafeAreaInsets();
 
+  // Approximate height of the sticky bar: safe-area top + the
+  // header's 18 (top) + ~46 (back button + padding) + 10 (bottom).
+  // Padding the body by this amount keeps the first row from being
+  // hidden under the bar on first paint.
+  const stickyH = insets.top + 18 + 38 + 10;
+
+  const bodyPadStyle = scroll
+    ? { paddingTop: stickyH, paddingHorizontal: 24, paddingBottom: 64 }
+    : { paddingTop: stickyH, paddingHorizontal: 24, flex: 1 };
   const bodyProps = scroll
-    ? { showsVerticalScrollIndicator: false, style: { flex: 1 }, contentContainerStyle: [{ paddingHorizontal: 24, paddingBottom: 64 }, contentStyle] }
-    : { style: [{ flex: 1, paddingHorizontal: 24 }, contentStyle] };
+    ? { showsVerticalScrollIndicator: false, style: { flex: 1 }, contentContainerStyle: [bodyPadStyle, contentStyle] }
+    : { style: [bodyPadStyle, contentStyle] };
+
+  const header = (
+    <View style={{
+      flexDirection: 'row', alignItems: 'center',
+      paddingHorizontal: 24, paddingTop: 18, paddingBottom: 10,
+      gap: 12,
+    }}>
+      {back ? (
+        <Pressable
+          onPress={() => { h.selection(); router.back(); }}
+          hitSlop={10}
+          style={{
+            width: 38, height: 38, borderRadius: 19,
+            alignItems: 'center', justifyContent: 'center',
+            backgroundColor: p.pillBg,
+            borderWidth: 1, borderColor: p.border,
+          }}
+        >
+          <Ionicons name="chevron-back" size={20} color={p.fg} />
+        </Pressable>
+      ) : <View style={{ width: 38 }} />}
+
+      <View style={{ flex: 1 }}>
+        {title && (
+          <Text style={{ color: p.fg, fontSize: 17, fontWeight: '500', letterSpacing: -0.3 }} numberOfLines={1}>
+            {title}
+          </Text>
+        )}
+        {subtitle && (
+          <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '500', marginTop: 1 }} numberOfLines={1}>
+            {subtitle}
+          </Text>
+        )}
+      </View>
+
+      {right ?? <View style={{ width: 38 }} />}
+    </View>
+  );
 
   return (
     <View style={{ flex: 1, backgroundColor: p.bg }}>
       <StatusBar style={themeMode === 'dark' ? 'light' : 'dark'} />
-      <TopGradient />
-      <SafeAreaView style={{ flex: 1 }} edges={['top']}>
-        <View style={{ flex: 1 }}>
-          {/* Header — sticky, doesn't scroll */}
-          <View style={{
-            flexDirection: 'row', alignItems: 'center',
-            paddingHorizontal: 24, paddingTop: 18, paddingBottom: 10,
-            gap: 12,
-          }}>
-            {back ? (
-              <Pressable
-                onPress={() => { h.selection(); router.back(); }}
-                hitSlop={10}
-                style={{
-                  width: 38, height: 38, borderRadius: 19,
-                  alignItems: 'center', justifyContent: 'center',
-                  backgroundColor: p.pillBg,
-                  borderWidth: 1, borderColor: p.border,
-                }}
-              >
-                <Ionicons name="chevron-back" size={20} color={p.fg} />
-              </Pressable>
-            ) : <View style={{ width: 38 }} />}
 
-            <View style={{ flex: 1 }}>
-              {title && (
-                <Text style={{ color: p.fg, fontSize: 17, fontWeight: '500', letterSpacing: -0.3 }} numberOfLines={1}>
-                  {title}
-                </Text>
-              )}
-              {subtitle && (
-                <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '500', marginTop: 1 }} numberOfLines={1}>
-                  {subtitle}
-                </Text>
-              )}
-            </View>
+      {/* Scrollable body — under the sticky bar in the stacking
+          order. Content scrolls behind the frosted nav. */}
+      {scroll ? (
+        <ScrollView {...bodyProps}>{children}</ScrollView>
+      ) : (
+        <View {...bodyProps}>{children}</View>
+      )}
 
-            {right ?? <View style={{ width: 38 }} />}
-          </View>
-
-          {/* Scrollable body */}
-          {scroll ? (
-            <ScrollView {...bodyProps}>{children}</ScrollView>
-          ) : (
-            <View {...bodyProps}>{children}</View>
-          )}
-        </View>
-      </SafeAreaView>
+      {/* The sticky bar floats on top — gradient + blur + header
+          composited as a single layer the scroll content slides
+          under. */}
+      <StickyTopBar>{header}</StickyTopBar>
     </View>
   );
 }

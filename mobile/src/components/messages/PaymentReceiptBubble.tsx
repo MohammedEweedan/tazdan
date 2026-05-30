@@ -17,12 +17,13 @@ import { useEffect, useMemo, useRef } from 'react';
 import { Animated, Easing, View } from 'react-native';
 import { Text } from '@/components/ui/Text';
 import { Ionicons } from '@expo/vector-icons';
-import Svg, { Circle, Path } from 'react-native-svg';
+import Svg, { Circle } from 'react-native-svg';
 
 import { useThemedPalette, type Palette } from '@/store/themeStore';
+import { CoinIcon } from '@/components/ui/CoinIcon';
+import { getCurrencyMeta } from '@/constants';
 
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
-const AnimatedPath   = Animated.createAnimatedComponent(Path);
 
 type ReceiptStatus = 'PENDING' | 'COMPLETED' | 'FAILED';
 
@@ -144,7 +145,13 @@ export function PaymentReceiptBubble(props: PaymentReceiptProps) {
                   strokeLinecap="round"
                 />
               </Svg>
-              {/* Counter-rotate the check so it doesn't spin with the ring. */}
+              {/* Counter-rotate so the asset mark doesn't spin with
+                  the ring.  Replaces the generic green checkmark with
+                  the actual currency icon (BTC, ETH, USDT, USD…) so
+                  the receipt makes the asset obvious at a glance.
+                  Crypto symbols render via the CoinIcon SVG set;
+                  everything else (fiat) falls back to the meta
+                  flag/glyph so $/€/£ still read clearly. */}
               <Animated.View
                 style={{
                   position: 'absolute',
@@ -154,16 +161,7 @@ export function PaymentReceiptBubble(props: PaymentReceiptProps) {
                   opacity: checkOpacity,
                 }}
               >
-                <Svg width={28} height={28} viewBox="0 0 24 24">
-                  <AnimatedPath
-                    d="M5 13 l4 4 l10 -10"
-                    stroke={accent}
-                    strokeWidth={3.2}
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    fill="none"
-                  />
-                </Svg>
+                <CurrencyMark currency={props.currency} size={34} fallbackColor={accent} />
               </Animated.View>
             </Animated.View>
           )}
@@ -217,4 +215,34 @@ export function PaymentReceiptBubble(props: PaymentReceiptProps) {
 
 function formatAmount(n: number): string {
   return new Intl.NumberFormat('en-US', { maximumFractionDigits: 8 }).format(n);
+}
+
+/** Render the asset's brand icon for a PAYMENT receipt.  Crypto goes
+ *  through CoinIcon (vector SVG set); fiat falls back to the meta
+ *  glyph (`$`, `€`, `د.إ`…) tinted to the accent colour so the
+ *  receipt always shows *what* was moved. */
+function CurrencyMark({
+  currency, size, fallbackColor,
+}: {
+  currency: string;
+  size: number;
+  fallbackColor: string;
+}) {
+  // Normalise chain variants so the badge always reads as the base
+  // asset (USDT_TRC20 → USDT, ETH_ERC20 → ETH).
+  const base = currency.indexOf('_') >= 0 ? currency.slice(0, currency.indexOf('_')) : currency;
+  const meta = getCurrencyMeta(base);
+  if (meta?.kind === 'crypto') {
+    return <CoinIcon symbol={base} size={size} />;
+  }
+  return (
+    <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
+      <Text style={{
+        color: fallbackColor, fontSize: size * 0.7, fontWeight: '700',
+        lineHeight: size,
+      }}>
+        {meta?.flagOrIcon ?? base.slice(0, 2)}
+      </Text>
+    </View>
+  );
 }
