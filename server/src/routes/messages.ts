@@ -20,6 +20,10 @@ messageRouter.post('/',                            MessageController.send);
 // Conversation list (one row per partner)
 messageRouter.get('/conversations',                MessageController.getConversations);
 
+// Chat privacy toggles
+messageRouter.get('/privacy',                      MessageController.getPrivacy);
+messageRouter.put('/privacy',                      MessageController.updatePrivacy);
+
 // Block / unblock / list blocks
 messageRouter.get('/blocks',                       MessageController.listBlocks);
 messageRouter.post('/block',                       MessageController.block);

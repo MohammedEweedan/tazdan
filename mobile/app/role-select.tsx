@@ -50,7 +50,7 @@ export default function RoleSelectScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: p.bg }}>
-      <StatusBar style={themeMode === 'dark' ? 'light' : 'dark'} />
+      <StatusBar style={themeMode === 'light' ? 'dark' : 'light'} />
       {/* Subtle ambient gradient */}
       <LinearGradient
         colors={themeMode === 'dark'

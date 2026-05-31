@@ -8,7 +8,7 @@
  */
 
 import { useState } from 'react';
-import { Alert, Modal, Pressable, RefreshControl, ScrollView, View } from 'react-native';
+import { Alert, KeyboardAvoidingView, Modal, Platform, Pressable, RefreshControl, ScrollView, View } from 'react-native';
 import { Text, TextInput } from '@/components/ui/Text';
 import { Ionicons } from '@expo/vector-icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -122,6 +122,14 @@ export default function AdminUsers() {
     onError: (e: any) => Alert.alert('KYC action failed', e?.response?.data?.error ?? 'Try again'),
   });
 
+  // Fetch the target user's current balances when the credit sheet is open,
+  // so the admin sees what they hold and can pick a currency to top up.
+  const balancesQ = useQuery({
+    queryKey: ['admin-user-balances', actionUser?.id],
+    queryFn: () => adminService.userBalances(actionUser!.id),
+    enabled: modalKind === 'credit' && !!actionUser?.id,
+  });
+
   const creditMut = useMutation({
     mutationFn: ({ userId, currency, amount, note }: { userId: string; currency: string; amount: number; note?: string }) =>
       adminService.manualCredit({ userId, currency, amount, note }),
@@ -152,7 +160,7 @@ export default function AdminUsers() {
 
   return (
     <View style={{ flex: 1, backgroundColor: p.bg }}>
-      <StatusBar style={themeMode === 'dark' ? 'light' : 'dark'} />
+      <StatusBar style={themeMode === 'light' ? 'dark' : 'light'} />
       <SafeAreaView style={{ flex: 1 }} edges={['top']}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingTop: 8, paddingBottom: 8 }}>
           <Pressable onPress={() => router.back()} hitSlop={8}>
@@ -334,12 +342,36 @@ export default function AdminUsers() {
 
       {/* ── CREDIT WALLET MODAL ──────────────────────── */}
       <Modal visible={modalKind === 'credit'} transparent animationType="slide" onRequestClose={closeModal}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' }}>
-          <View style={{ backgroundColor: p.bg, borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 20, paddingBottom: 36 }}>
+          <ScrollView
+            keyboardShouldPersistTaps="handled"
+            style={{ maxHeight: '88%' }}
+            contentContainerStyle={{ backgroundColor: p.bg, borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 20, paddingBottom: 36 }}
+          >
             <View style={{ alignSelf: 'center', width: 36, height: 4, borderRadius: 2, backgroundColor: p.border, marginBottom: 14 }} />
-            <Text style={{ color: p.fg, fontSize: 18, fontWeight: '600', marginBottom: 14 }}>Credit Wallet — {actionUser?.email}</Text>
+            <Text style={{ color: p.fg, fontSize: 18, fontWeight: '600', marginBottom: 4 }}>Credit Wallet</Text>
+            <Text style={{ color: p.fgMuted, fontSize: 13, marginBottom: 14 }}>{actionUser?.email}</Text>
 
-            <Text style={{ color: p.fgFaint, fontSize: 10, fontWeight: '600', letterSpacing: 0.6, marginBottom: 8 }}>CURRENCY</Text>
+            {/* Current balances — what the user holds right now */}
+            <Text style={{ color: p.fgFaint, fontSize: 10, fontWeight: '600', letterSpacing: 0.6, marginBottom: 8 }}>CURRENT BALANCES</Text>
+            <View style={{ backgroundColor: p.bgElev, borderRadius: 12, borderWidth: 1, borderColor: p.border, padding: 12, marginBottom: 16 }}>
+              {balancesQ.isLoading ? (
+                <Text style={{ color: p.fgMuted, fontSize: 12 }}>Loading balances…</Text>
+              ) : (() => {
+                const rows = [...(balancesQ.data?.wallets ?? []).map((w) => ({ currency: w.currency, balance: w.balance })), ...(balancesQ.data?.crypto ?? [])]
+                  .filter((r) => Number(r.balance) !== 0);
+                if (rows.length === 0) return <Text style={{ color: p.fgMuted, fontSize: 12 }}>No balances yet.</Text>;
+                return rows.map((r) => (
+                  <Pressable key={r.currency} onPress={() => CURRENCIES.includes(r.currency as any) && setCreditCurrency(r.currency)} style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 5 }}>
+                    <Text style={{ color: p.fg, fontSize: 13, fontWeight: '600' }}>{r.currency}</Text>
+                    <Text style={{ color: p.fgMuted, fontSize: 13, fontVariant: ['tabular-nums'] }}>{Number(r.balance).toLocaleString('en-US', { maximumFractionDigits: 8 })}</Text>
+                  </Pressable>
+                ));
+              })()}
+            </View>
+
+            <Text style={{ color: p.fgFaint, fontSize: 10, fontWeight: '600', letterSpacing: 0.6, marginBottom: 8 }}>CREDIT CURRENCY</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, marginBottom: 14 }}>
               {CURRENCIES.map((c) => {
                 const on = creditCurrency === c;
@@ -396,8 +428,9 @@ export default function AdminUsers() {
                 </Text>
               </Pressable>
             </View>
-          </View>
+          </ScrollView>
         </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* ── CHANGE STATUS MODAL ──────────────────────── */}

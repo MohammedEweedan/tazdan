@@ -9,9 +9,11 @@ import { Text, TextInput } from '@/components/ui/Text';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useAuthStore } from '@/store/authStore';
-import { useThemedPalette, useTheme, brand } from '@/store/themeStore';
+import { useThemedPalette } from '@/store/themeStore';
 import { useT } from '@/store/i18nStore';
 import { SlideToConfirm } from '@/components/ui/SlideToConfirm';
+import { StatusBanner } from '@/components/ui/StatusBanner';
+import { StepUpModal } from '@/components/ui/StepUpModal';
 import { ExpressPayButton } from '@/components/ui/ExpressPayButton';
 import { useWallets, useCards, useMarkets, useTransactionSound } from '@/hooks';
 import { CoinAvatar } from '@/components/ui/CoinAvatar';
@@ -58,20 +60,37 @@ const KNOWN: Record<string, { label: string; color: string; icon: string }> = {
   TON:        { label: 'Toncoin',       color: '#0098ea', icon: '💎' },
 };
 
-// Default network for each asset (server expects this in the quote call)
-const DEFAULT_NETWORK: Record<string, string> = {
-  BTC: 'BTC', ETH: 'ERC20', SOL: 'SOL',
-  USDT: 'ERC20', USDT_ERC20: 'ERC20', USDT_TRC20: 'TRC20',
-  USDC: 'ERC20', BNB: 'BEP20', XRP: 'XRP',
-  ADA: 'Cardano', DOGE: 'DOGE', TRX: 'TRON', LTC: 'LTC', MATIC: 'ERC20',
+// Networks available per asset (buy side — same table as SellWidget)
+const ASSET_NETWORKS: Record<string, { label: string; network: string }[]> = {
+  USDT:  [{ label: 'Ethereum (ERC-20)', network: 'ERC20'   },
+          { label: 'Tron (TRC-20)',     network: 'TRC20'   },
+          { label: 'BNB Chain (BEP-20)',network: 'BEP20'   },
+          { label: 'Solana (SPL)',       network: 'SOL'     }],
+  USDC:  [{ label: 'Ethereum (ERC-20)', network: 'ERC20'   },
+          { label: 'Solana (SPL)',       network: 'SOL'     },
+          { label: 'BNB Chain (BEP-20)',network: 'BEP20'   }],
+  BNB:   [{ label: 'BNB Chain (BEP-20)',network: 'BEP20'   },
+          { label: 'Ethereum (ERC-20)', network: 'ERC20'   }],
+  MATIC: [{ label: 'Polygon',           network: 'Polygon' },
+          { label: 'Ethereum (ERC-20)', network: 'ERC20'   }],
+  ETH:   [{ label: 'Ethereum (ERC-20)', network: 'ERC20'   }],
+  BTC:   [{ label: 'Bitcoin',           network: 'BTC'     }],
+  SOL:   [{ label: 'Solana',            network: 'SOL'     }],
+  XRP:   [{ label: 'XRP Ledger',        network: 'XRP'     }],
+  ADA:   [{ label: 'Cardano',           network: 'Cardano' }],
+  DOGE:  [{ label: 'Dogecoin',          network: 'DOGE'    }],
+  LTC:   [{ label: 'Litecoin',          network: 'LTC'     }],
+  TRX:   [{ label: 'TRON',             network: 'TRON'    }],
+  AVAX:  [{ label: 'Avalanche C-Chain', network: 'AVAX'    }],
+  DOT:   [{ label: 'Polkadot',          network: 'DOT'     }],
+  LINK:  [{ label: 'Ethereum (ERC-20)', network: 'ERC20'   }],
 };
+
 // For USDT_ERC20 / USDT_TRC20 the asset sent to server must be "USDT"
-const ASSET_SYMBOL: Record<string, string> = {
-  USDT_ERC20: 'USDT',
-  USDT_TRC20: 'USDT',
-};
+const ASSET_SYMBOL: Record<string, string> = { USDT_ERC20: 'USDT', USDT_TRC20: 'USDT' };
 function defaultNetwork(symbol: string) {
-  return DEFAULT_NETWORK[symbol.toUpperCase()] ?? symbol.toUpperCase();
+  const s = ASSET_SYMBOL[symbol.toUpperCase()] ?? symbol.toUpperCase();
+  return ASSET_NETWORKS[s]?.[0]?.network ?? s;
 }
 function serverAsset(symbol: string) {
   return ASSET_SYMBOL[symbol.toUpperCase()] ?? symbol.toUpperCase();
@@ -148,8 +167,8 @@ export function BuyWidget({ defaultAsset, lockAsset = false }: BuyWidgetProps = 
   const { user } = useAuthStore();
   const tr = useT();
   const p = useThemedPalette();
-  const themeMode = useTheme((s) => s.mode);
-  const brandAccent = themeMode === 'dark' ? brand.primaryDark : brand.primary;
+  // Accent follows the active palette (white on dark/mono, black on light).
+  const brandAccent = p.accent;
   const { data: wallets } = useWallets();
   const { data: cards } = useCards();
   const { data: tickers } = useMarkets();
@@ -178,30 +197,47 @@ export function BuyWidget({ defaultAsset, lockAsset = false }: BuyWidgetProps = 
   const [loading,  setLoading]  = useState(false);
   const [exec,     setExec]     = useState(false);
   const [error,    setError]    = useState<string | null>(null);
+  const [stepUpOpen, setStepUpOpen] = useState(false);
   const [success,  setSuccess]  = useState<string | null>(null);
   const [seconds,  setSeconds]  = useState(0);
   const [showFees, setShowFees] = useState(false);
   const [intent,   setIntent]   = useState<'buy' | 'send'>('buy');
   const [sendAddr, setSendAddr] = useState('');
-  const [paySheetOpen, setPaySheetOpen] = useState(false);
+  const [paySheetOpen,     setPaySheetOpen]     = useState(false);
+  const [networkSheetOpen, setNetworkSheetOpen] = useState(false);
   const [payMethod, setPayMethod] = useState<PayMethod | null>(null);
   const idemRef = useRef(`ord_${Date.now()}`);
 
-  // ── Payment methods ───────────────────────────────────────────────
+  // ── Payment methods — exclude the asset being bought ─────────────
+  // You can't pay for BTC with BTC. Fiat wallets, cards, and other
+  // crypto wallets are all valid. Stablecoins (USDT/USDC) are valid
+  // payment for any non-stablecoin purchase.
+  const buyingBase = serverAsset(asset); // normalised symbol (no _ERC20 suffix)
   const payMethods = useMemo<PayMethod[]>(() => {
     const out: PayMethod[] = [];
+    const CRYPTO_PAY = new Set(['BTC','ETH','USDT','USDC','SOL','BNB','XRP']);
     wallets?.forEach((w) => {
-      if (['BTC','ETH','USDT','SOL','BNB'].includes(w.currency)) {
+      const wBase = ASSET_SYMBOL[w.currency] ?? w.currency;
+      // Skip if it's the same asset the user is buying
+      if (wBase === buyingBase) return;
+      if (CRYPTO_PAY.has(w.currency) && Number(w.balance) > 0) {
         out.push({ type: 'crypto', asset: w.currency, balance: Number(w.balance) });
-      } else {
+      } else if (!CRYPTO_PAY.has(w.currency)) {
         out.push({ type: 'fiat', currency: w.currency, balance: Number(w.balance) });
       }
     });
     cards?.forEach((c) => { if (c.last4) out.push({ type: 'card', last4: c.last4, brand: c.tier ?? 'Card' }); });
     return out;
-  }, [wallets, cards]);
+  }, [wallets, cards, buyingBase]);
 
-  useEffect(() => { if (payMethods.length && !payMethod) setPayMethod(payMethods[0]); }, [payMethods, payMethod]);
+  // Reset pay method when asset changes (old method might now be invalid)
+  useEffect(() => {
+    setPayMethod((prev) => {
+      if (!prev) return payMethods[0] ?? null;
+      const stillValid = payMethods.some((m) => methodId(m) === methodId(prev));
+      return stillValid ? prev : (payMethods[0] ?? null);
+    });
+  }, [payMethods]);
   useEffect(() => { setNetwork(defaultNetwork(asset)); }, [asset]);
 
   // ── Asset selection + recent search persistence ─────────────────
@@ -270,6 +306,19 @@ export function BuyWidget({ defaultAsset, lockAsset = false }: BuyWidgetProps = 
   // Bumping this triggers a fresh quote without the user changing fiat/asset
   const [requoteKey, setRequoteKey] = useState(0);
 
+  // Which currency funds this BUY. ALWAYS concrete — the server now REQUIRES
+  // it and never defaults, so an undefined here would (correctly) fail the
+  // quote rather than silently debit the wrong wallet.
+  //  - fiat wallet   → that fiat currency (LYD, USD, GBP, …)
+  //  - crypto wallet → that asset (USDT, BTC, …)
+  //  - card          → charged in the user's base currency (external on-ramp
+  //                    into that currency basis)
+  const fundingCurrency =
+    payMethod?.type === 'fiat'   ? payMethod.currency :
+    payMethod?.type === 'crypto' ? payMethod.asset    :
+    payMethod?.type === 'card'   ? baseCurrency       :
+    baseCurrency; // no method selected yet → base currency (amount is in base)
+
   // ── Quote fetching ────────────────────────────────────────────────
   useEffect(() => {
     const amt = parseFloat(fiat);
@@ -277,7 +326,7 @@ export function BuyWidget({ defaultAsset, lockAsset = false }: BuyWidgetProps = 
     const id = setTimeout(async () => {
       setLoading(true); setError(null);
       try {
-        const res = await cryptoExchangeAPI.quote({ asset: serverAsset(asset), network, side: 'BUY', fiatAmount: String(amt) });
+        const res = await cryptoExchangeAPI.quote({ asset: serverAsset(asset), network, side: 'BUY', fiatAmount: String(amt), fundingCurrency });
         setQuote(res.data.quote);
         idemRef.current = `ord_${Date.now()}`;
       } catch (e: any) {
@@ -287,7 +336,7 @@ export function BuyWidget({ defaultAsset, lockAsset = false }: BuyWidgetProps = 
     }, 500);
     return () => clearTimeout(id);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [asset, network, fiat, requoteKey]);
+  }, [asset, network, fiat, requoteKey, fundingCurrency]);
 
   // ── Quote countdown — auto-requote when it expires ───────────────
   useEffect(() => {
@@ -307,21 +356,32 @@ export function BuyWidget({ defaultAsset, lockAsset = false }: BuyWidgetProps = 
   }, [quote]);
 
   // ── Confirm ───────────────────────────────────────────────────────
-  async function onConfirm() {
+  async function onConfirm(stepUpCode?: string) {
     if (!quote) return;
     if (intent === 'send' && !sendAddr.trim()) { setError(tr('buy.enterRecipient')); return; }
     setExec(true); setError(null);
     try {
       await cryptoExchangeAPI.execute({
         quoteId: quote.id, confirmedByUser: true, idempotencyKey: idemRef.current,
+        ...(stepUpCode ? { stepUpCode } : {}),
         ...(intent === 'send' ? { recipientAddress: sendAddr.trim() } : {}),
       } as any);
       playSuccess('buy');
+      setStepUpOpen(false);
       setSuccess(`${fmt(quote.cryptoAmount, 8)} ${asset} ${intent === 'send' ? tr('buy.sent') : tr('buy.purchased')} ✓`);
       setQuote(null); setFiat(''); setSendAddr('');
+      setTimeout(() => setSuccess(null), 4000);
     } catch (e: any) {
+      // 401 with a step-up message → prompt for the 6-digit code.
+      const msg = e?.response?.data?.error ?? '';
+      if (e?.response?.status === 401 && /security|verification|code|device/i.test(msg) && !stepUpCode) {
+        setStepUpOpen(true);
+        return; // modal will re-call onConfirm(code)
+      }
       playError();
-      setError(e?.response?.data?.error ?? tr('buy.errOrder'));
+      // If the modal is open, rethrow so the modal shows the error (bad code).
+      if (stepUpCode) throw e;
+      setError(msg || tr('buy.errOrder'));
     } finally { setExec(false); }
   }
 
@@ -395,11 +455,17 @@ export function BuyWidget({ defaultAsset, lockAsset = false }: BuyWidgetProps = 
             <Text style={{ color: p.fgFaint, fontSize: 12, fontWeight: '500' }}>{asset}</Text>
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 3 }}>
-            {livePrice > 0 && (
+            {/* Show OUR price (the quoted, marked-up rate in the funding
+                currency) when a quote exists; otherwise the live reference. */}
+            {quote ? (
+              <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '500', fontVariant: ['tabular-nums'] }}>
+                {sym(fundingCurrency)}{fmtPrice(Number(quote.settlementAmount ?? quote.fiatAmount) / Math.max(Number(quote.cryptoAmount), 1e-18))} · your price
+              </Text>
+            ) : livePrice > 0 ? (
               <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '500', fontVariant: ['tabular-nums'] }}>
                 {sym(baseCurrency)}{fmtPrice(Number(livePrice))}
               </Text>
-            )}
+            ) : null}
             {change24h !== undefined && (
               <View style={{ paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6, backgroundColor: change24h >= 0 ? p.greenBg : p.redBg }}>
                 <Text style={{ color: change24h >= 0 ? p.greenFg : p.redFg, fontSize: 11, fontWeight: '700' }}>
@@ -421,6 +487,31 @@ export function BuyWidget({ defaultAsset, lockAsset = false }: BuyWidgetProps = 
           </View>
         )}
       </Pressable>
+
+      {/* Network selector — only shown when asset has multiple chains */}
+      {(() => {
+        const networks = ASSET_NETWORKS[serverAsset(asset)];
+        if (!networks || networks.length <= 1) return null;
+        const currentLabel = networks.find((n) => n.network === network)?.label ?? network;
+        return (
+          <Pressable
+            onPress={() => { Haptics.selectionAsync(); setNetworkSheetOpen(true); }}
+            style={({ pressed }) => ({
+              flexDirection: 'row', alignItems: 'center', gap: 8,
+              backgroundColor: p.bgElev, borderRadius: 12,
+              borderWidth: 1, borderColor: p.border,
+              paddingHorizontal: 14, paddingVertical: 10, marginBottom: 14,
+              marginTop: -10,
+              opacity: pressed ? 0.8 : 1,
+            })}
+          >
+            <Ionicons name="git-branch-outline" size={14} color={p.fgMuted} />
+            <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '600', flex: 1 }}>Network</Text>
+            <Text style={{ color: p.fg, fontSize: 13, fontWeight: '600' }}>{currentLabel}</Text>
+            <Ionicons name="chevron-down" size={14} color={p.fgMuted} />
+          </Pressable>
+        );
+      })()}
 
       {/* ── Amount input ──
           Label + price-estimate share a row. The estimate can be long
@@ -454,7 +545,7 @@ export function BuyWidget({ defaultAsset, lockAsset = false }: BuyWidgetProps = 
         borderWidth: 1.5, borderColor: error ? p.redFg : (fiatNum > 0 ? brandAccent : p.border),
         paddingHorizontal: 18, marginBottom: 12,
       }}>
-        <Text style={{ color: p.fgMuted, fontSize: 24, fontWeight: '500', marginRight: 6 }}>{sym(baseCurrency)}</Text>
+        <Text style={{ color: p.fgMuted, fontSize: 24, fontWeight: '500', marginRight: 6 }}>{sym(fundingCurrency)}</Text>
         <TextInput
           value={fiat}
           onChangeText={(v) => {
@@ -468,7 +559,7 @@ export function BuyWidget({ defaultAsset, lockAsset = false }: BuyWidgetProps = 
           onSubmitEditing={Keyboard.dismiss}
           style={{ flex: 1, color: p.fg, fontSize: 36, fontWeight: '600', paddingVertical: 18, fontVariant: ['tabular-nums'], letterSpacing: -0.5 }}
         />
-        <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '700', letterSpacing: 0.5 }}>{baseCurrency}</Text>
+        <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '700', letterSpacing: 0.5 }}>{fundingCurrency}</Text>
       </View>
 
       {/* Quick amounts */}
@@ -490,8 +581,8 @@ export function BuyWidget({ defaultAsset, lockAsset = false }: BuyWidgetProps = 
                 shadowRadius: 10,
               })}
             >
-              <Text style={{ color: sel ? '#ffffff' : p.fgMuted, fontSize: 13, fontWeight: '700' }}>
-                {sym(baseCurrency)}{v}
+              <Text style={{ color: sel ? p.accentFg : p.fgMuted, fontSize: 13, fontWeight: '700' }}>
+                {sym(fundingCurrency)}{v}
               </Text>
             </Pressable>
           );
@@ -536,25 +627,29 @@ export function BuyWidget({ defaultAsset, lockAsset = false }: BuyWidgetProps = 
               style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 12, paddingTop: 10, borderTopWidth: 1, borderTopColor: p.border }}
             >
               <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '500' }}>
-                Fee  {sym(baseCurrency)}{fmt(quote.platformFee + quote.networkFee, 2)}
+                Fee  {sym(fundingCurrency)}{fmt(Number(quote.platformFeeSettlement ?? quote.platformFee) + Number(quote.networkFeeSettlement ?? quote.networkFee), 2)}
               </Text>
               <Ionicons name={showFees ? 'chevron-up' : 'chevron-down'} size={14} color={p.fgMuted} />
             </Pressable>
             {showFees && (
               <View style={{ marginTop: 8, gap: 5 }}>
                 {[
-                  { label: tr('buy.platformFee'), value: fmt(quote.platformFee, 2) },
-                  { label: tr('buy.networkFee'),  value: fmt(quote.networkFee, 2) },
-                  { label: tr('buy.exchangeRate'), value: `1 ${asset} = ${sym(baseCurrency)}${fmtPrice(Number(quote.quotedPrice))}` },
+                  { label: tr('buy.platformFee'), value: fmt(quote.platformFeeSettlement ?? quote.platformFee, 2) },
+                  { label: tr('buy.networkFee'),  value: fmt(quote.networkFeeSettlement ?? quote.networkFee, 2) },
+                  { label: tr('buy.exchangeRate'), value: `1 ${asset} = ${sym(fundingCurrency)}${fmtPrice(Number(quote.settlementAmount ?? quote.fiatAmount) / Math.max(Number(quote.cryptoAmount), 1e-18))}` },
+                  { label: 'Spread', value: `${(Number(quote.spreadPct) * 100).toFixed(2)}%` },
                   { label: tr('buy.totalYouPay'), value: fmt(quote.totalUserPays, 2), bold: true },
                 ].map(({ label, value, bold }) => (
                   <View key={label} style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
                     <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: bold ? '700' : '500' }}>{label}</Text>
                     <Text style={{ color: bold ? p.fg : p.fgMuted, fontSize: 12, fontWeight: bold ? '800' : '500' }}>
-                      {bold ? `${sym(baseCurrency)}${value}` : value}
+                      {bold ? `${sym(fundingCurrency)}${value}` : value}
                     </Text>
                   </View>
                 ))}
+                <Text style={{ color: p.fgFaint, fontSize: 11, marginTop: 2 }}>
+                  Our price already includes the {(Number(quote.spreadPct) * 100).toFixed(1)}% spread.
+                </Text>
               </View>
             )}
           </>
@@ -644,11 +739,11 @@ export function BuyWidget({ defaultAsset, lockAsset = false }: BuyWidgetProps = 
       )}
 
       {/* ── Express pay (Apple/Google) — appears for "buy to my wallet" only ── */}
-      {intent === 'buy' && fiatNum > 0 && (
+      {intent === 'buy' && fiatNum > 0 && payMethod?.type === 'card' && (
         <View style={{ marginBottom: 12 }}>
           <ExpressPayButton
             amount={fiatNum}
-            currency={baseCurrency}
+            currency={fundingCurrency}
             cryptoCurrency={serverAsset(asset)}
             enabled={!exec && !success}
             onSuccess={() => {
@@ -665,6 +760,10 @@ export function BuyWidget({ defaultAsset, lockAsset = false }: BuyWidgetProps = 
         </View>
       )}
 
+      {/* ── Status banner (error / success) ── */}
+      <StatusBanner kind="error" message={error} onDismiss={() => setError(null)} />
+      <StatusBanner kind="success" message={success} />
+
       {/* ── CTA — slide to confirm ── */}
       <SlideToConfirm
         label={slideLabel}
@@ -673,16 +772,70 @@ export function BuyWidget({ defaultAsset, lockAsset = false }: BuyWidgetProps = 
         status={exec ? 'loading' : success ? 'success' : error ? 'error' : 'idle'}
         successLabel={success || undefined}
         errorLabel={error || undefined}
-        seconds={canConfirm ? seconds : undefined}
-        totalSeconds={30}
         accent={brandAccent}
-        accentFg="#ffffff"
+        accentFg={p.accentFg}
         trackBg={p.bgElev}
         trackFg={p.fg}
         border={p.border}
         greenBg={p.greenBg} greenFg={p.greenFg}
-        redBg="rgba(239,68,68,0.15)" redFg={p.redFg}
+        redBg={p.redBg} redFg={p.redFg}
       />
+
+      {/* Step-up 6-digit confirmation (high-value / new device) */}
+      <StepUpModal
+        visible={stepUpOpen}
+        action="buy"
+        subtitle={quote ? `${fmt(quote.cryptoAmount, 6)} ${asset}` : undefined}
+        onSubmit={(code) => onConfirm(code)}
+        onCancel={() => { setStepUpOpen(false); setExec(false); }}
+      />
+
+      {/* ══════════════════════════════════════════════════════════════
+          NETWORK PICKER
+      ══════════════════════════════════════════════════════════════ */}
+      <Modal visible={networkSheetOpen} transparent animationType="slide" onRequestClose={() => setNetworkSheetOpen(false)}>
+        <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' }} onPress={() => setNetworkSheetOpen(false)}>
+          <Pressable style={{ backgroundColor: p.bg, borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingTop: 10, paddingBottom: 48 }} onPress={(e) => e.stopPropagation()}>
+            <View style={{ alignItems: 'center', marginBottom: 16 }}>
+              <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: p.border }} />
+            </View>
+            <Text style={{ color: p.fg, fontSize: 18, fontWeight: '600', paddingHorizontal: 20, marginBottom: 6 }}>
+              Select network
+            </Text>
+            <Text style={{ color: p.fgMuted, fontSize: 13, paddingHorizontal: 20, marginBottom: 16 }}>
+              Choose which network to receive {serverAsset(asset)} on.
+            </Text>
+            {(ASSET_NETWORKS[serverAsset(asset)] ?? [{ label: serverAsset(asset), network: network }]).map((n) => {
+              const selected = n.network === network;
+              return (
+                <Pressable
+                  key={n.network}
+                  onPress={() => { Haptics.selectionAsync(); setNetwork(n.network); setNetworkSheetOpen(false); setQuote(null); }}
+                  style={({ pressed }) => ({
+                    flexDirection: 'row', alignItems: 'center', gap: 14,
+                    paddingHorizontal: 20, paddingVertical: 16,
+                    backgroundColor: pressed ? p.bgElev : selected ? `${brandAccent}11` : 'transparent',
+                    borderBottomWidth: 1, borderBottomColor: p.border,
+                  })}
+                >
+                  <View style={{
+                    width: 36, height: 36, borderRadius: 18,
+                    backgroundColor: selected ? `${brandAccent}22` : p.bgElev,
+                    borderWidth: 1, borderColor: selected ? brandAccent : p.border,
+                    alignItems: 'center', justifyContent: 'center',
+                  }}>
+                    <Ionicons name="git-branch-outline" size={16} color={selected ? brandAccent : p.fgMuted} />
+                  </View>
+                  <Text style={{ color: p.fg, fontSize: 15, fontWeight: selected ? '700' : '500', flex: 1 }}>
+                    {n.label}
+                  </Text>
+                  {selected && <Ionicons name="checkmark-circle" size={20} color={brandAccent} />}
+                </Pressable>
+              );
+            })}
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       {/* ══════════════════════════════════════════════════════════════
           ASSET PICKER — full Binance search
@@ -882,7 +1035,8 @@ export function BuyWidget({ defaultAsset, lockAsset = false }: BuyWidgetProps = 
               {payMethods.map((m) => {
                 const selected = payMethod ? methodId(m) === methodId(payMethod) : false;
                 const key = m.type === 'crypto' ? m.asset : m.type === 'fiat' ? m.currency : m.last4;
-                const mc = m.type === 'crypto' ? assetMeta(m.asset).color : m.type === 'fiat' ? '#60a5fa' : '#818cf8';
+                // Fiat/card use the theme accent (mono-safe); crypto keeps its brand colour.
+                const mc = m.type === 'crypto' ? assetMeta(m.asset).color : p.accent;
                 return (
                   <Pressable
                     key={methodId(m)}

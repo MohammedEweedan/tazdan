@@ -4,7 +4,7 @@
  * via expo-print and shared through the OS share sheet.
  */
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Alert, Pressable, ScrollView, View } from 'react-native';
 import { Text } from '@/components/ui/Text';
 import { LoadingPulse } from '@/components/ui/LoadingPulse';
@@ -14,8 +14,9 @@ import { ScreenShell, CTAButton } from '@/components/ui/ScreenShell';
 import { CurrencyBadge } from '@/components/ui/CurrencyBadge';
 import { PressableScale, FadeIn } from '@/components/ui/Motion';
 import { useThemedPalette } from '@/store/themeStore';
+import { useI18n, useT } from '@/store/i18nStore';
 import { useHaptics, useWallets } from '@/hooks';
-import { exportStatementPdf, type StatementFilter } from '@/services/statements';
+import { exportStatementPdf, fetchStatementJson, type StatementFilter, type StatementJson } from '@/services/statements';
 import type { Currency } from '@/types';
 
 type Range = 'THIS_MONTH' | 'LAST_MONTH' | 'YTD' | 'LAST_YEAR' | 'ALL' | 'CUSTOM';
@@ -75,12 +76,16 @@ function recentMonths(): MonthOption[] {
 export default function Statements() {
   const p = useThemedPalette();
   const h = useHaptics();
+  const t = useT();
+  const locale = useI18n((s) => s.locale);
   const { data: wallets } = useWallets();
 
-  const [range, setRange]         = useState<Range>('THIS_MONTH');
+  const [range, setRange]         = useState<Range>('ALL');
   const [monthIdx, setMonthIdx]   = useState<number>(0);
   const [currency, setCurrency]   = useState<Currency | 'ALL'>('ALL');
   const [busy, setBusy]           = useState(false);
+  const [preview, setPreview]     = useState<StatementJson | null>(null);
+  const [loadingPreview, setLoadingPreview] = useState(false);
 
   const months = useMemo(() => recentMonths(), []);
   const holdingCurrencies = useMemo<Currency[]>(() => {
@@ -106,31 +111,75 @@ export default function Statements() {
         range === 'CUSTOM' && months[monthIdx]
           ? { from: months[monthIdx].from, to: months[monthIdx].to, ...(currency !== 'ALL' ? { currency } : {}) }
           : filter;
-      await exportStatementPdf(useFilter);
+      await exportStatementPdf(useFilter, { locale });
       h.success();
     } catch (e: any) {
       h.error();
       Alert.alert(
-        'Statement failed',
-        e?.response?.data?.error ?? e?.message ?? 'Please try again.',
+        t('statements.failed'),
+        e?.response?.data?.error ?? e?.message ?? t('statements.tryAgain'),
       );
     } finally {
       setBusy(false);
     }
   };
 
+  const activeFilter: StatementFilter =
+    range === 'CUSTOM' && months[monthIdx]
+      ? { from: months[monthIdx].from, to: months[monthIdx].to, ...(currency !== 'ALL' ? { currency } : {}) }
+      : filter;
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoadingPreview(true);
+    fetchStatementJson(activeFilter)
+      .then((data) => { if (!cancelled) setPreview(data); })
+      .catch(() => { if (!cancelled) setPreview(null); })
+      .finally(() => { if (!cancelled) setLoadingPreview(false); });
+    return () => { cancelled = true; };
+  }, [activeFilter.from, activeFilter.to, activeFilter.currency, activeFilter.type]);
+
   return (
-    <ScreenShell title="Statements" subtitle="Download PDF for tax, audit, or your records">
+    <ScreenShell title={t('statements.title')} subtitle={t('statements.subtitle')}>
       <FadeIn>
-        <Section label="PERIOD" p={p}>
+        <View style={{
+          marginTop: 8,
+          padding: 18,
+          borderRadius: 22,
+          backgroundColor: p.bgElev,
+          borderWidth: 1, borderColor: p.border,
+          gap: 16,
+        }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+            <View style={{ width: 46, height: 46, borderRadius: 16, backgroundColor: p.pillBg, alignItems: 'center', justifyContent: 'center' }}>
+              <Ionicons name="reader-outline" size={22} color={p.fg} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: p.fg, fontSize: 18, fontWeight: '800', letterSpacing: -0.3 }}>{t('statements.center')}</Text>
+              <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '600', marginTop: 2 }}>
+                {preview ? t('statements.rowsReady', { count: preview.transactions.length }) : loadingPreview ? t('statements.preparing') : t('statements.choosePeriod')}
+              </Text>
+            </View>
+          </View>
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <Metric label={t('statements.transactions')} value={preview?.summary.totalTransactions ?? 0} palette={p} />
+            <Metric label={t('statements.fees')} value={preview ? money(preview.summary.totalFees) : '—'} palette={p} />
+          </View>
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <Metric label={t('statements.deposits')} value={preview ? money(preview.summary.totalDeposits) : '—'} palette={p} />
+            <Metric label={t('statements.withdrawals')} value={preview ? money(preview.summary.totalWithdrawals) : '—'} palette={p} />
+          </View>
+        </View>
+
+        <Section label={t('statements.period')} p={p}>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
             {([
-              ['THIS_MONTH', 'This month'],
-              ['LAST_MONTH', 'Last month'],
-              ['YTD',        'Year to date'],
-              ['LAST_YEAR',  'Last year'],
-              ['ALL',        'All time'],
-              ['CUSTOM',     'Pick month'],
+              ['THIS_MONTH', t('statements.thisMonth')],
+              ['LAST_MONTH', t('statements.lastMonth')],
+              ['YTD',        t('statements.ytd')],
+              ['LAST_YEAR',  t('statements.lastYear')],
+              ['ALL',        t('statements.allTime')],
+              ['CUSTOM',     t('statements.pickMonth')],
             ] as Array<[Range, string]>).map(([key, label]) => (
               <Chip
                 key={key}
@@ -144,7 +193,7 @@ export default function Statements() {
         </Section>
 
         {range === 'CUSTOM' && (
-          <Section label="MONTH" p={p}>
+          <Section label={t('statements.month')} p={p}>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
               {months.map((m, i) => (
                 <Chip
@@ -159,7 +208,7 @@ export default function Statements() {
           </Section>
         )}
 
-        <Section label="CURRENCY" p={p}>
+        <Section label={t('statements.currency')} p={p}>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
             <Pressable
               onPress={() => { h.selection(); setCurrency('ALL'); }}
@@ -174,7 +223,7 @@ export default function Statements() {
                 }}
               >
                 <Text style={{ color: currency === 'ALL' ? p.bg : p.fg, fontSize: 12, fontWeight: '600' }}>
-                  All currencies
+                  {t('statements.allCurrencies')}
                 </Text>
               </View>
             </Pressable>
@@ -219,16 +268,39 @@ export default function Statements() {
             <Ionicons name="document-text" size={20} color={p.fg} />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={{ color: p.fg, fontSize: 13, fontWeight: '700' }}>PDF · A4 portrait</Text>
+            <Text style={{ color: p.fg, fontSize: 13, fontWeight: '700' }}>{t('statements.pdf')}</Text>
             <Text style={{ color: p.fgMuted, fontSize: 12, marginTop: 2 }}>
-              Account summary · balances · full transaction ledger
+              {t('statements.pdfDesc')}
             </Text>
           </View>
         </View>
 
+        <Section label={t('statements.recentRows')} p={p}>
+          <View style={{
+            borderRadius: 18,
+            backgroundColor: p.bgElev,
+            borderWidth: 1, borderColor: p.border,
+            overflow: 'hidden',
+          }}>
+            {loadingPreview ? (
+              <View style={{ alignItems: 'center', paddingVertical: 24 }}>
+                <LoadingPulse size={44} icon="reader-outline" />
+              </View>
+            ) : preview?.transactions?.length ? (
+              preview.transactions.slice(0, 6).map((tx, idx) => (
+                <PreviewRow key={tx.id} tx={tx} palette={p} t={t} borderTop={idx > 0} />
+              ))
+            ) : (
+              <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '600', padding: 16 }}>
+                {t('statements.noRows')}
+              </Text>
+            )}
+          </View>
+        </Section>
+
         <View style={{ marginTop: 22 }}>
           <CTAButton
-            label={busy ? 'Generating…' : 'Generate PDF statement'}
+            label={busy ? t('statements.generating') : t('statements.generate')}
             icon={busy ? 'hourglass' : 'download'}
             loading={busy}
             onPress={onGenerate}
@@ -258,6 +330,45 @@ function Section({ label, p, children }: { label: string; p: ReturnType<typeof u
       {children}
     </View>
   );
+}
+
+function Metric({ label, value, palette: p }: { label: string; value: string | number; palette: ReturnType<typeof useThemedPalette> }) {
+  return (
+    <View style={{ flex: 1, borderRadius: 16, backgroundColor: p.pillBg, borderWidth: 1, borderColor: p.border, padding: 12 }}>
+      <Text style={{ color: p.fgMuted, fontSize: 10, fontWeight: '800', letterSpacing: 0.6 }}>{label.toUpperCase()}</Text>
+      <Text numberOfLines={1} style={{ color: p.fg, fontSize: 16, fontWeight: '900', marginTop: 4, fontVariant: ['tabular-nums'] }}>
+        {value}
+      </Text>
+    </View>
+  );
+}
+
+function PreviewRow({ tx, palette: p, t, borderTop }: { tx: StatementJson['transactions'][number]; palette: ReturnType<typeof useThemedPalette>; t: ReturnType<typeof useT>; borderTop?: boolean }) {
+  const amt = Number(tx.amount);
+  return (
+    <View style={{
+      flexDirection: 'row', alignItems: 'center', gap: 10,
+      padding: 14,
+      borderTopWidth: borderTop ? 1 : 0, borderTopColor: p.border,
+    }}>
+      <View style={{ width: 38, height: 38, borderRadius: 14, backgroundColor: p.pillBg, alignItems: 'center', justifyContent: 'center' }}>
+        <Ionicons name={amt >= 0 ? 'arrow-down-left-box' : 'arrow-up-right-box'} size={17} color={amt >= 0 ? p.greenFg : p.redFg} />
+      </View>
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Text numberOfLines={1} style={{ color: p.fg, fontSize: 14, fontWeight: '800' }}>{tx.type.replace(/_/g, ' ')}</Text>
+        <Text numberOfLines={1} style={{ color: p.fgMuted, fontSize: 11, fontWeight: '600', marginTop: 2 }}>
+          {new Date(tx.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} · {tx.reference ?? t('statements.noReference')}
+        </Text>
+      </View>
+      <Text style={{ color: amt >= 0 ? p.greenFg : p.redFg, fontSize: 13, fontWeight: '900', fontVariant: ['tabular-nums'] }}>
+        {amt >= 0 ? '+' : ''}{Number(tx.amount).toLocaleString('en-US', { maximumFractionDigits: 8 })} {tx.currency}
+      </Text>
+    </View>
+  );
+}
+
+function money(n: number): string {
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 2 }).format(n);
 }
 
 function Chip({

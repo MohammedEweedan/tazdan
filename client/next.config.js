@@ -46,7 +46,11 @@ const STATIC_CACHE_HEADERS = [
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  output: 'standalone',
+  // `standalone` is for the Docker/self-hosted Node server. On Vercel it
+  // breaks App Router routing — unmatched paths fall through to Vercel's own
+  // platform 404 instead of our app/not-found.tsx. Vercel sets VERCEL=1, so
+  // only emit standalone when NOT on Vercel.
+  ...(process.env.VERCEL ? {} : { output: 'standalone' }),
   // Next.js 14 swc minify is on by default; explicit so it survives a Next bump.
   swcMinify: true,
   reactStrictMode: true,

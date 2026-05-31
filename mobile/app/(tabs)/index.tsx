@@ -34,6 +34,7 @@ import { useT } from '@/store/i18nStore';
 import { Sparkline } from '@/components/ui/Sparkline';
 import { CoinIcon } from '@/components/ui/CoinIcon';
 import { getCurrencyMeta } from '@/constants';
+import { formatMoney } from '@/utils/format';
 import { BuyWidget } from '@/components/exchange/BuyWidget';
 import { SellWidget } from '@/components/exchange/SellWidget';
 import { SendWidget } from '@/components/exchange/SendWidget';
@@ -246,7 +247,7 @@ export default function Home() {
 
   return (
     <View style={{ flex: 1, backgroundColor: p.bg }}>
-      <StatusBar style={themeMode === 'dark' ? 'light' : 'dark'} />
+      <StatusBar style={themeMode === 'light' ? 'dark' : 'light'} />
       <TopGradient />
         <Animated.ScrollView
           showsVerticalScrollIndicator={false}
@@ -293,19 +294,22 @@ export default function Home() {
           >
             <LinearGradient
               colors={
-                themeMode === 'dark'
+                themeMode === 'mono'
+                  ? // Flat darker grey — no gradient in monochrome mode.
+                    ['#1A1A1A', '#1A1A1A', '#1A1A1A']
+                  : themeMode === 'dark'
                   ? [
-                      'rgba(180, 180, 180, 0.62)',
-                      'rgba(205, 220, 249, 0.34)',
-                      'rgba(10, 10, 11, 1)',
+                      'rgba(245, 245, 245, 1)', // near-white at top
+                      'rgba(160, 160, 160, 1)', // light grey middle
+                      'rgba(38, 38, 38, 1)',    // dark semi-dark gray at bottom
                     ]
                   : [
-                      'rgba(169, 169, 169, 0.68)',
-                      'rgba(205, 220, 249, 0.36)',
-                      'rgba(250, 250, 247, 1)',
+                      'rgba(38, 38, 38, 1)',    // dark semi-dark gray at top (flipped)
+                      'rgba(160, 160, 160, 1)', // light grey middle
+                      'rgba(245, 245, 245, 1)', // near-white at bottom
                     ]
               }
-              locations={[0, 0.55, 1]}
+              locations={[0, 0.5, 1]}
               start={{ x: 0.5, y: 0 }}
               end={{ x: 0.5, y: 1 }}
               style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
@@ -325,7 +329,7 @@ export default function Home() {
           >
             <BlurView
               intensity={Platform.OS === 'ios' ? 48 : 0}
-              tint={themeMode === 'dark' ? 'dark' : 'light'}
+              tint={themeMode === 'light' ? 'light' : 'dark'}
               style={{
                 position: 'absolute',
                 top: 0, left: 0, right: 0, bottom: 0,
@@ -977,7 +981,7 @@ function BalanceHistoryModal({
   const trend = points.length > 1
     ? points[points.length - 1].balanceUsd >= points[0].balanceUsd
     : true;
-  const lineColor = trend ? '#22c55e' : '#ef4444';
+  const lineColor = trend ? p.greenFg : p.redFg;
 
   const activeIdx = touchIdx !== null ? Math.max(0, Math.min(points.length - 1, touchIdx)) : points.length - 1;
   const activePoint = points[activeIdx];
@@ -1413,7 +1417,7 @@ type TxItem = {
   counterpartyName?: string | null;
   counterpartyAvatar?: string | null;
   note?: string | null;
-  metadata?: { asset?: string; cryptoAmount?: number; priceUsd?: number; counterpartyName?: string; note?: string } | null;
+  metadata?: { asset?: string; cryptoAmount?: number; priceUsd?: number; counterpartyName?: string; note?: string; settlementCurrency?: string; settlementAmount?: string } | null;
 };
 
 /* ── Detail row ─── */
@@ -1445,6 +1449,15 @@ function DetailRow({
   );
 }
 
+function formatCryptoDisplay(value: unknown, currency: string, maximumFractionDigits = 8): string {
+  const raw = String(value ?? '').trim();
+  const n = Number(raw);
+  const amount = Number.isFinite(n)
+    ? n.toLocaleString('en-US', { maximumFractionDigits })
+    : raw.replace(/(\.\d*?[1-9])0+$|\.0+$/, '$1');
+  return `${amount} ${currency}`;
+}
+
 /* ── Transaction detail bottom sheet ─── */
 function TxDetailModal({
   tx, palette: p, dc, onClose,
@@ -1466,9 +1479,14 @@ function TxDetailModal({
   const type      = tx.type;
   const asset     = meta.asset ?? tx.currency;
   const showDual  = (type === 'BUY' || type === 'SELL') && meta.cryptoAmount;
-  const fiatStr   = dc.fmt(abs);
+  // The amount is denominated in the transaction's OWN currency (the
+  // wallet/method actually used) — never the display currency. Show it
+  // exactly, with that currency's symbol & precision.
+  const settleCcy = (meta.settlementCurrency ?? tx.currency) as any;
+  const settleAbs = meta.settlementAmount != null ? Math.abs(Number(meta.settlementAmount)) : abs;
+  const fiatStr   = formatMoney(settleAbs, settleCcy, { showSymbol: true });
   const cryptoStr = meta.cryptoAmount
-    ? `${meta.cryptoAmount.toLocaleString('en-US', { maximumFractionDigits: 8 })} ${asset}`
+    ? formatCryptoDisplay(meta.cryptoAmount, asset, 8)
     : null;
 
   const dt        = new Date(tx.createdAt);
@@ -1615,14 +1633,19 @@ function TxDetailModal({
               {(type === 'BUY' || type === 'SELL') && meta.cryptoAmount != null && (
                 <DetailRow
                   icon="layers-outline" label="Quantity"
-                  value={`${meta.cryptoAmount.toLocaleString('en-US', { maximumFractionDigits: 8 })} ${asset}`}
+                  value={formatCryptoDisplay(meta.cryptoAmount, asset, 8)}
                   palette={p} borderTop
                 />
               )}
               {fee !== null && (
-                <DetailRow icon="flash-outline" label="Network Fee" value={dc.fmt(fee)} palette={p} borderTop />
+                <DetailRow icon="flash-outline" label="Network Fee" value={formatMoney(fee, settleCcy, { showSymbol: true })} palette={p} borderTop />
               )}
-              <DetailRow icon="wallet-outline" label="Currency" value={meta.asset ?? tx.currency} palette={p} borderTop />
+              <DetailRow
+                icon="wallet-outline"
+                label={type === 'BUY' ? 'Paid with' : type === 'SELL' ? 'Received in' : 'Currency'}
+                value={settleCcy}
+                palette={p} borderTop
+              />
             </View>
 
             {/* ── Counterparty ── */}
@@ -1771,16 +1794,28 @@ function ActivityList({
 
         const dateStr = new Date(tx.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
         let subtitle = dateStr;
-        if ((type === 'BUY' || type === 'SELL') && meta.cryptoAmount && meta.priceUsd) {
-          subtitle = `@ ${dc.fmt(meta.priceUsd)}  ·  ${dateStr}`;
+        if (type === 'BUY' || type === 'SELL') {
+          // Show the actual wallet/currency used to fund (BUY) or receive (SELL).
+          const settleCcy = meta.settlementCurrency as string | undefined;
+          const settleAmt = meta.settlementAmount as string | undefined;
+          const verb = type === 'BUY' ? 'paid with' : 'received as';
+          const fundPart = settleCcy
+            ? `${verb} ${settleAmt ? `${settleAmt} ` : ''}${settleCcy}`
+            : null;
+          const pricePart = meta.priceUsd ? `@ ${dc.fmt(meta.priceUsd)}` : null;
+          subtitle = [pricePart, fundPart, dateStr].filter(Boolean).join('  ·  ');
         } else if ((type === 'TRANSFER_IN' || type === 'TRANSFER_OUT' || type === 'SEND' || type === 'RECEIVE') && (meta.note ?? tx.note ?? tx.description)) {
           subtitle = (meta.note ?? tx.note ?? tx.description ?? '') + '  ·  ' + dateStr;
         }
 
         const showDual  = (type === 'BUY' || type === 'SELL') && meta.cryptoAmount;
-        const fiatStr   = dc.fmt(abs);
+        // Display the fiat side in the transaction's OWN currency (the
+        // wallet/method actually used), exactly — never the display currency.
+        const settleCcy = (meta.settlementCurrency ?? tx.currency) as any;
+        const settleAbs = meta.settlementAmount != null ? Math.abs(Number(meta.settlementAmount)) : abs;
+        const fiatStr   = formatMoney(settleAbs, settleCcy, { showSymbol: true });
         const cryptoStr = meta.cryptoAmount
-          ? `${meta.cryptoAmount.toLocaleString('en-US', { maximumFractionDigits: 6 })} ${txAsset}`
+          ? formatCryptoDisplay(meta.cryptoAmount, txAsset, 6)
           : null;
 
         return (
@@ -2324,7 +2359,7 @@ function AssetRow({ wallet, palette: p, onPress, liveUsd, sparkline, changePct, 
   const meta = ASSET_META[wallet.currency] ?? { title: wallet.currency, subDecimals: 6 };
   const usd = liveUsd ?? Number(wallet.fiatValueUsd);
   const positive = (changePct ?? 0) >= 0;
-  const sparkColor = positive ? '#22c55e' : '#ef4444';
+  const sparkColor = positive ? p.greenFg : p.redFg;
   const maxDec = Math.min(meta.subDecimals, 8);
   const balanceStr = Number(wallet.balance).toLocaleString('en-US', { maximumFractionDigits: maxDec });
   const usdStr = dc.fmt(usd);
@@ -2351,7 +2386,7 @@ function AssetRow({ wallet, palette: p, onPress, liveUsd, sparkline, changePct, 
             {showBalance ? balanceStr : maskedBalance} {wallet.currency}
           </Text>
           {changePct !== undefined && (
-            <Text style={{ color: showBalance ? (positive ? '#22c55e' : '#ef4444') : p.fgFaint, fontSize: 11, fontWeight: '600', marginTop: 1 }}>
+            <Text style={{ color: showBalance ? (positive ? p.greenFg : p.redFg) : p.fgFaint, fontSize: 11, fontWeight: '600', marginTop: 1 }}>
               {showBalance ? `${positive ? '+' : ''}${changePct.toFixed(2)}%` : '**.**%'}
             </Text>
           )}
@@ -2436,4 +2471,3 @@ const ASSET_META: Record<string, AssetMeta> = {
   LYD:        { title: 'Libyan Dinar',    subDecimals: 3 },
   DEFAULT:    { title: 'Asset',           subDecimals: 4 },
 };
-

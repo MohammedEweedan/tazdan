@@ -40,6 +40,7 @@ import {
 import NextLink from "next/link";
 import { useAuthStore } from "@/stores/authStore";
 import { userAPI } from "@/lib/api";
+import { useIsAr } from "@/hooks/useIsAr";
 
 // ── Stat cell ─────────────────────────────────────────────────────────
 function StatCell({
@@ -144,6 +145,7 @@ function SettingsCard({
 
 // ══ SETTINGS PAGE ════════════════════════════════════════════════════
 export default function SettingsPage() {
+  const isAr = useIsAr();
   const { user, fetchUser } = useAuthStore();
   const toast = useToast();
   const [loading, setLoading] = useState(true);
@@ -848,7 +850,7 @@ export default function SettingsPage() {
                         <Text fontSize="11px" fontWeight="700" color="#f59e0b" mb={0.5}>
                           Complete KYC Verification
                         </Text>
-                        <Text fontSize="10px" color={textSub} lineHeight={1.5}>
+                        <Text fontSize="10px" color={textSub} lineHeight={isAr ? 1.75 : 1.5}>
                           Verify your identity to unlock full trading features
                         </Text>
                         <Button

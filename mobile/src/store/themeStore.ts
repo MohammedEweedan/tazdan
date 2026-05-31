@@ -16,7 +16,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useEffect } from 'react';
 import { create } from 'zustand';
 
-export type ThemeMode = 'dark' | 'light';
+export type ThemeMode = 'dark' | 'light' | 'mono';
 
 const KEY = 'tazdan.theme';
 
@@ -108,7 +108,41 @@ export const palettes: Record<ThemeMode, Palette> = {
     accentFg:  '#FAFAFA',
     shadow:    'rgba(10,10,11,0.10)',
   },
+  // Pure monochrome — black / grey / white only. Semantic up/down signals
+  // collapse to greyscale (gains = bright white, losses = mid-grey) so the
+  // entire UI, charts and badges included, is colour-free.
+  mono: {
+    // Assets/Activity surfaces are pure black; only borders separate cards.
+    bg:        '#000000',
+    bgElev:    '#000000',
+    bgRaised:  '#0E0E0E',
+    surface:   '#000000',
+    fg:        '#FFFFFF',
+    fgMuted:   'rgba(255,255,255,0.60)',
+    fgFaint:   'rgba(255,255,255,0.34)',
+    border:    'rgba(255,255,255,0.10)',
+    divider:   'rgba(255,255,255,0.16)',
+    ctaBg:     '#FFFFFF',
+    ctaFg:     '#000000',
+    pillBg:    'rgba(255,255,255,0.08)',
+    // Semantic → greyscale. Positive reads bright/white, negative reads dim grey.
+    greenFg:   '#FFFFFF',
+    greenBg:   'rgba(255,255,255,0.12)',
+    redFg:     'rgba(255,255,255,0.55)',
+    redBg:     'rgba(255,255,255,0.06)',
+    amberFg:   'rgba(255,255,255,0.80)',
+    amberBg:   'rgba(255,255,255,0.08)',
+    accent:    '#FFFFFF',
+    accentFg:  '#000000',
+    shadow:    'rgba(0,0,0,0.7)',
+  },
 };
+
+/** True when the active theme is the pure-monochrome variant. Components that
+ *  pull in external colour (coin avatars, chart strokes) should desaturate. */
+export function isMonochrome(mode: ThemeMode): boolean {
+  return mode === 'mono';
+}
 
 /**
  * Legacy `brand` token export — kept so existing imports compile. All
@@ -140,7 +174,9 @@ export const useTheme = create<ThemeState>((set, get) => ({
   palette: palettes.dark,
   isHydrated: false,
   toggle: () => {
-    const next: ThemeMode = get().mode === 'dark' ? 'light' : 'dark';
+    // Cycle dark → light → mono → dark.
+    const order: ThemeMode[] = ['dark', 'light', 'mono'];
+    const next = order[(order.indexOf(get().mode) + 1) % order.length];
     set({ mode: next, palette: palettes[next] });
     AsyncStorage.setItem(KEY, next).catch(() => {});
   },
@@ -151,7 +187,7 @@ export const useTheme = create<ThemeState>((set, get) => ({
   hydrate: async () => {
     try {
       const stored = (await AsyncStorage.getItem(KEY)) as ThemeMode | null;
-      if (stored === 'light' || stored === 'dark') {
+      if (stored === 'light' || stored === 'dark' || stored === 'mono') {
         set({ mode: stored, palette: palettes[stored] });
       }
     } catch { /* noop */ }

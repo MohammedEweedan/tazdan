@@ -26,6 +26,7 @@ import {
   useToast,
 } from "@chakra-ui/react";
 import { useTranslate } from "@tolgee/react";
+import { useIsAr } from "@/hooks/useIsAr";
 import {
   FiPlus,
   FiEdit2,
@@ -178,6 +179,7 @@ function AccountRow({
 // ══ BANK ACCOUNTS PAGE ════════════════════════════════════════════════
 export default function BankAccountsPage() {
   const { t } = useTranslate();
+  const isAr = useIsAr();
   const { user } = useAuthStore();
   const toast = useToast();
   const [bankAccounts, setBankAccounts] = useState<any[]>([]);
@@ -361,7 +363,7 @@ export default function BankAccountsPage() {
             <Box as={FiCheckCircle} color="#3b82f6" size={16} mt="2px" flexShrink={0} />
             <Box>
               <Text fontSize="12px" fontWeight="700" color="#3b82f6" mb={0.5}>Security Notice</Text>
-              <Text fontSize="11px" color={textSub} lineHeight={1.6}>Your bank account information is encrypted and stored securely. We only use this information for processing deposits and withdrawals.</Text>
+              <Text fontSize="11px" color={textSub} lineHeight={isAr ? 1.75 : 1.6}>Your bank account information is encrypted and stored securely. We only use this information for processing deposits and withdrawals.</Text>
             </Box>
           </Flex>
         </Box>

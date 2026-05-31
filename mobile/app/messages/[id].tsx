@@ -10,7 +10,7 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ActionSheetIOS, Alert, Animated, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, View } from 'react-native';
+import { ActionSheetIOS, Alert, Animated, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, Switch, View } from 'react-native';
 import { Text, TextInput } from '@/components/ui/Text';
 import { SendMoneySheet } from '@/components/messages/SendMoneySheet';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -34,6 +34,7 @@ import { QUERY_KEYS } from '@/constants';
 import { PaymentReceiptBubble } from '@/components/messages/PaymentReceiptBubble';
 import { REPORT_REASONS, type ApiMessage, type Conversation } from '@/types/messages';
 import { TopGradient } from '@/components/ui/ScreenShell';
+import { useTransactionSound } from '@/hooks/useTransactionSound';
 
 const BRAND_BLUE = '#737373'; // mono accent neutral
 
@@ -50,8 +51,10 @@ export default function MessageThread() {
   // toggles their contact list.
   const isContact = useChatPrefs((s) => s.contacts.has(partnerId));
   const readReceiptsOn = useChatPrefs((s) => s.readReceiptsOn);
+  const lastSeenOn = useChatPrefs((s) => s.lastSeenOn);
   const qc = useQueryClient();
   const scrollRef = useRef<ScrollView>(null);
+  const txSound = useTransactionSound();
 
   // Partner profile — pulled from the conversation cache when available
   // (instant), otherwise fetched directly. Always returns *something* so
@@ -64,11 +67,25 @@ export default function MessageThread() {
   const { data: fetchedPartner } = useQuery({
     queryKey: ['partner', partnerId],
     queryFn:  () => profileService.byId(partnerId),
-    enabled:  !cachedPartner && !!partnerId,
+    enabled:  !!partnerId,
     staleTime: 60_000,
   });
-  const partner = cachedPartner ?? fetchedPartner ?? null;
+  const partner = fetchedPartner ?? cachedPartner ?? null;
   const isSupport = partner?.username === 'support' || partner?.role === 'AGENT';
+  const { data: serverPrivacy } = useQuery({
+    queryKey: ['message-privacy'],
+    queryFn: messageService.privacy,
+    staleTime: 30_000,
+  });
+  const privacy = serverPrivacy ?? { readReceiptsOn, lastSeenOn };
+  const canSeeReadReceipts = Boolean(privacy.readReceiptsOn && (partner?.messagePrivacy?.canSeeReadReceipts ?? true));
+  const canSeePresence = Boolean(privacy.lastSeenOn && (partner?.messagePrivacy?.canSeePresence ?? true));
+
+  useEffect(() => {
+    if (!serverPrivacy) return;
+    useChatPrefs.getState().setReadReceiptsOn(serverPrivacy.readReceiptsOn).catch(() => {});
+    useChatPrefs.getState().setLastSeenOn(serverPrivacy.lastSeenOn).catch(() => {});
+  }, [serverPrivacy]);
 
 const { data: messages = [], isLoading } = useThread(partnerId);  const sendMut   = useSendMessage(partnerId);
   const editMut   = useEditMessage(partnerId);
@@ -79,8 +96,8 @@ const { data: messages = [], isLoading } = useThread(partnerId);  const sendMut 
 
   // Mark inbound as read whenever we open the thread or a new ws push lands.
   useEffect(() => {
-    if (partnerId) messageService.markRead(partnerId).catch(() => {});
-  }, [partnerId, messages?.length]);
+    if (partnerId && privacy.readReceiptsOn) messageService.markRead(partnerId).catch(() => {});
+  }, [partnerId, messages?.length, privacy.readReceiptsOn]);
 
   // Typing indicator — subscribe to partner's typing events via socket.
   useEffect(() => {
@@ -124,6 +141,8 @@ const { data: messages = [], isLoading } = useThread(partnerId);  const sendMut 
   const [draft, setDraft]   = useState('');
   const [editing, setEditing] = useState<ApiMessage | null>(null);
   const [paymentSheet, setPaymentSheet] = useState(false);
+  const [requestSheet, setRequestSheet] = useState(false);
+  const [profileSheet, setProfileSheet] = useState(false);
   const [reportTarget, setReportTarget] = useState<{ messageId?: string } | null>(null);
   const [showStickers, setShowStickers] = useState(false);
   const [isPartnerTyping, setIsPartnerTyping] = useState(false);
@@ -135,11 +154,15 @@ const { data: messages = [], isLoading } = useThread(partnerId);  const sendMut 
   const isEmittingTypingRef   = useRef(false);
 
   const STICKERS = useMemo(() => [
-    '👍','❤️','😂','🔥','🎉','👏','😭','🤔','👀','🙏',
-    '🚀','💯','✅','⭐','👋','🤝','💪','😎','🥳','😍',
-    '🤯','😤','🫡','🥷','💀','👑','🎯','🏆','🎁','💸',
-    '📈','📉','🌍','🌙','☀️','🔒','⚡','💎','🍀','🦅',
-  ], []);
+    { id: 'paid', emoji: '💸', label: t('chat.sticker.paid') },
+    { id: 'moon', emoji: '🚀', label: t('chat.sticker.moon') },
+    { id: 'locked', emoji: '🔒', label: t('chat.sticker.locked') },
+    { id: 'thanks', emoji: '🙏', label: t('chat.sticker.thanks') },
+    { id: 'deal', emoji: '🤝', label: t('chat.sticker.deal') },
+    { id: 'chart', emoji: '📈', label: t('chat.sticker.chart') },
+    { id: 'verified', emoji: '✅', label: t('chat.sticker.verified') },
+    { id: 'gift', emoji: '🎁', label: t('chat.sticker.gift') },
+  ], [t]);
 
   // Auto-open the payment sheet when arriving with ?openPay=1 (e.g. from
   // the public profile page's "Send money" CTA). Tiny delay so the
@@ -181,7 +204,7 @@ const { data: messages = [], isLoading } = useThread(partnerId);  const sendMut 
         qc.invalidateQueries({ queryKey: ['thread', partnerId] });
         qc.invalidateQueries({ queryKey: QUERY_KEYS.conversations });
       } catch (e: any) {
-        Alert.alert('Reply failed', e?.response?.data?.error ?? e?.message ?? 'Try again');
+        Alert.alert(t('chat.replyFailed'), e?.response?.data?.error ?? e?.message ?? t('common.retry'));
       }
       return;
     }
@@ -200,6 +223,7 @@ const { data: messages = [], isLoading } = useThread(partnerId);  const sendMut 
       {
         onSuccess: () => {
           h.success();
+          txSound.playSuccess('transfer');
           setPaymentSheet(false);
         },
         onError: (e: any) => {
@@ -212,27 +236,54 @@ const { data: messages = [], isLoading } = useThread(partnerId);  const sendMut 
           const msg = e?.response?.data?.error
             ?? e?.response?.data?.message
             ?? e?.message
-            ?? 'Could not send payment.';
-          Alert.alert('Payment failed', msg);
+            ?? t('chat.paymentFailedBody');
+          Alert.alert(t('chat.paymentFailed'), msg);
         },
       },
     );
   };
 
-  const sendSticker = (sticker: string) => {
+  const sendRequest = (amount: number, currency: string, note?: string) => {
+    sendMut.mutate(
+      {
+        receiverId: partnerId,
+        content: note || `${amount} ${currency}`,
+        type: 'REQUEST',
+        metadata: { amount, currency, note, status: 'PENDING' },
+      },
+      {
+        onSuccess: () => {
+          h.success();
+          txSound.playSuccess('transfer');
+          setRequestSheet(false);
+        },
+        onError: (e: any) => {
+          h.error();
+          Alert.alert(t('chat.requestFailed'), e?.response?.data?.error ?? e?.message ?? t('chat.requestFailedBody'));
+        },
+      },
+    );
+  };
+
+  const sendSticker = (sticker: { id: string; emoji: string; label: string }) => {
     h.light();
-    sendMut.mutate({ receiverId: partnerId, content: sticker });
+    sendMut.mutate({
+      receiverId: partnerId,
+      content: sticker.label,
+      type: 'STICKER',
+      metadata: sticker,
+    });
     setShowStickers(false);
   };
 
   // ── Header overflow menu ────────────────────────────────────────
   const openHeaderMenu = () => {
     const options = [
-      'View profile',
-      'Block user',
-      'Report user',
-      ...(isSupport ? [] : ['Escalate to support']),
-      'Cancel',
+      t('chat.viewProfile'),
+      t('chat.blockUser'),
+      t('chat.reportUser'),
+      ...(isSupport ? [] : [t('chat.escalateSupport')]),
+      t('common.cancel'),
     ];
     const cancelIdx = options.length - 1;
 
@@ -255,28 +306,28 @@ const { data: messages = [], isLoading } = useThread(partnerId);  const sendMut 
       );
     } else {
       // Android fallback — simple Alert with buttons.
-      Alert.alert('Conversation actions', undefined, [
-        { text: 'View profile',         onPress: () => run(0) },
-        { text: 'Block user',           style: 'destructive', onPress: () => run(1) },
-        { text: 'Report user',          onPress: () => run(2) },
-        ...(isSupport ? [] : [{ text: 'Escalate to support', onPress: () => run(3) }]),
-        { text: 'Cancel', style: 'cancel' as const },
+      Alert.alert(t('chat.actionsTitle'), undefined, [
+        { text: t('chat.viewProfile'),         onPress: () => run(0) },
+        { text: t('chat.blockUser'),           style: 'destructive', onPress: () => run(1) },
+        { text: t('chat.reportUser'),          onPress: () => run(2) },
+        ...(isSupport ? [] : [{ text: t('chat.escalateSupport'), onPress: () => run(3) }]),
+        { text: t('common.cancel'), style: 'cancel' as const },
       ]);
     }
   };
 
   const confirmBlock = () => {
     Alert.alert(
-      `Block ${partner?.firstName ?? 'this user'}?`,
-      'They will no longer be able to message you, and you will not be able to message them.',
+      t('chat.blockTitle', { name: partner?.firstName ?? 'this user' }),
+      t('chat.blockBody'),
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Block', style: 'destructive',
+          text: t('chat.block'), style: 'destructive',
           onPress: () => {
             blockMut.mutate({ userId: partnerId }, {
               onSuccess: () => { router.back(); },
-              onError: (e: any) => Alert.alert('Could not block', e?.response?.data?.error ?? 'Try again.'),
+              onError: (e: any) => Alert.alert(t('chat.blockFailed'), e?.response?.data?.error ?? t('common.retry')),
             });
           },
         },
@@ -286,21 +337,21 @@ const { data: messages = [], isLoading } = useThread(partnerId);  const sendMut 
 
   const confirmEscalate = () => {
     Alert.alert(
-      'Escalate to support?',
-      'A tazdan agent will join the conversation and review the trade. Both participants will be notified.',
+      t('chat.escalateTitle'),
+      t('chat.escalateBody'),
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Escalate',
+          text: t('chat.escalate'),
           onPress: () => {
             escalateMut.mutate(
               { counterpartyId: partnerId, reason: 'User-initiated escalation' },
               {
                 onSuccess: (res) => {
-                  Alert.alert('Escalation opened', 'A support agent will respond shortly.');
+                  Alert.alert(t('chat.escalationOpened'), t('chat.escalationOpenedBody'));
                   router.replace(`/messages/${res.supportThreadWith}`);
                 },
-                onError: (e: any) => Alert.alert('Could not escalate', e?.response?.data?.error ?? 'Try again.'),
+                onError: (e: any) => Alert.alert(t('chat.escalateFailed'), e?.response?.data?.error ?? t('common.retry')),
               },
             );
           },
@@ -315,8 +366,8 @@ const { data: messages = [], isLoading } = useThread(partnerId);  const sendMut 
     const mine = m.senderId === me?.id;
     h.selection();
     const options = mine
-      ? ['Copy', ...(m.type === 'TEXT' ? ['Edit'] : []), 'Delete', 'Cancel']
-      : ['Copy', 'Report message', 'Cancel'];
+      ? [t('common.copy'), ...(m.type === 'TEXT' ? [t('chat.edit')] : []), t('common.delete'), t('common.cancel')]
+      : [t('common.copy'), t('chat.reportMessage'), t('common.cancel')];
     const cancelIdx = options.length - 1;
 
     const run = (idx: number) => {
@@ -336,7 +387,7 @@ const { data: messages = [], isLoading } = useThread(partnerId);  const sendMut 
       ActionSheetIOS.showActionSheetWithOptions(
         {
           options, cancelButtonIndex: cancelIdx,
-          destructiveButtonIndex: mine ? options.indexOf('Delete') : undefined,
+          destructiveButtonIndex: mine ? options.indexOf(t('common.delete')) : undefined,
         },
         run,
       );
@@ -345,19 +396,19 @@ const { data: messages = [], isLoading } = useThread(partnerId);  const sendMut 
       options.slice(0, -1).forEach((label, i) => {
         buttons.push({
           text: label,
-          style: label === 'Delete' ? 'destructive' : undefined,
+          style: label === t('common.delete') ? 'destructive' : undefined,
           onPress: () => run(i),
         });
       });
       buttons.push({ text: 'Cancel', style: 'cancel' });
-      Alert.alert('Message', undefined, buttons);
+      Alert.alert(t('chat.message'), undefined, buttons);
     }
   };
 
   const confirmDelete = (m: ApiMessage) => {
-    Alert.alert('Delete this message?', 'It will be replaced with "Message deleted" for both of you.', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete', style: 'destructive', onPress: () => deleteMut.mutate(m.id) },
+    Alert.alert(t('chat.deleteTitle'), t('chat.deleteBody'), [
+      { text: t('common.cancel'), style: 'cancel' },
+      { text: t('common.delete'), style: 'destructive', onPress: () => deleteMut.mutate(m.id) },
     ]);
   };
 
@@ -367,7 +418,7 @@ const { data: messages = [], isLoading } = useThread(partnerId);  const sendMut 
   return (
     <View style={{ flex: 1, backgroundColor: p.bg }}>
       <TopGradient />
-      <StatusBar style={themeMode === 'dark' ? 'light' : 'dark'} />
+      <StatusBar style={themeMode === 'light' ? 'dark' : 'light'} />
       <SafeAreaView style={{ flex: 1 }} edges={['top']}>
         {/* Header */}
         <View style={{
@@ -386,7 +437,9 @@ const { data: messages = [], isLoading } = useThread(partnerId);  const sendMut 
           >
             <Ionicons name="chevron-back" size={18} color={p.fg} />
           </Pressable>
-          <View style={{
+          <Pressable
+            onPress={() => { h.selection(); setProfileSheet(true); }}
+            style={{
             width: 32, height: 32, borderRadius: 16,
             backgroundColor: isSupport ? BRAND_BLUE : (partner?.avatarUrl ? p.bgElev : '#7c3aed'),
             alignItems: 'center', justifyContent: 'center',
@@ -402,8 +455,8 @@ const { data: messages = [], isLoading } = useThread(partnerId);  const sendMut 
                 {(partner?.firstName?.[0] ?? partner?.username?.[0] ?? '?').toUpperCase()}
               </Text>
             )}
-          </View>
-          <View style={{ flex: 1 }}>
+          </Pressable>
+          <Pressable onPress={() => { h.selection(); setProfileSheet(true); }} style={{ flex: 1 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
               <Text numberOfLines={1} style={{ color: p.fg, fontSize: 15, fontWeight: '600', letterSpacing: -0.2 }}>
                 {partner ? `${partner.firstName ?? ''} ${partner.lastName ?? ''}`.trim() || `@${partner.username ?? '…'}` : 'Conversation'}
@@ -421,10 +474,13 @@ const { data: messages = [], isLoading } = useThread(partnerId);  const sendMut 
               )}
             </View>
             <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '600', marginTop: 1 }}>
-              {isSupport ? 'tazdan agent · usually replies in minutes'
+              {isSupport ? t('chat.staffStatus')
+               : canSeePresence && partner?.messagePrivacy?.onlineNow ? t('chat.onlineNow')
+               : canSeePresence && partner?.messagePrivacy?.lastSeenAt
+                 ? t('chat.lastSeen', { time: relativeTime(partner.messagePrivacy.lastSeenAt) })
                : partner?.username ? `@${partner.username}` : ' '}
             </Text>
-          </View>
+          </Pressable>
           {/* Contact / favourite toggle.  Tap = add to (or remove
               from) your saved contacts; the row then surfaces in the
               messages tab's horizontal contacts strip.  Long-press
@@ -519,13 +575,13 @@ const { data: messages = [], isLoading } = useThread(partnerId);  const sendMut 
 
             {isLoading && !messages?.length ? (
               <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '500', textAlign: 'center', marginTop: 48 }}>
-                Loading…
+                {t('chat.loadingThread')}
               </Text>
             ) : (messages?.length ?? 0) === 0 ? (
               <View style={{ alignItems: 'center', paddingVertical: 64, paddingHorizontal: 24 }}>
                 <Ionicons name="chatbubbles-outline" size={32} color={p.fgFaint} />
                 <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '600', marginTop: 12, textAlign: 'center' }}>
-                  Say hi to {partner?.firstName ?? 'them'} — your conversation starts now.
+                  {t('chat.emptyThread', { name: partner?.firstName ?? 'them' })}
                 </Text>
               </View>
             ) : (
@@ -543,7 +599,8 @@ const { data: messages = [], isLoading } = useThread(partnerId);  const sendMut 
                         meId={me?.id ?? ''}
                         palette={p}
                         onLongPress={() => onBubbleLongPress(m)}
-                        showReadReceipt={readReceiptsOn}
+                        showReadReceipt={canSeeReadReceipts}
+                        t={t}
                       />
                     );
                   })}
@@ -589,7 +646,7 @@ const { data: messages = [], isLoading } = useThread(partnerId);  const sendMut 
               >
                 <Ionicons name={replyAsSupport ? 'shield-checkmark' : 'shield-outline'} size={14} color={replyAsSupport ? '#A3A3A3' : p.fgMuted} />
                 <Text style={{ color: replyAsSupport ? '#A3A3A3' : p.fgMuted, fontSize: 12, fontWeight: '700', flex: 1 }}>
-                  {replyAsSupport ? 'Replying as @support' : 'Reply as @support (admin)'}
+                  {replyAsSupport ? t('chat.replyingAsSupport') : t('chat.replyAsSupport')}
                 </Text>
                 <View style={{
                   width: 32, height: 18, borderRadius: 9,
@@ -631,9 +688,21 @@ const { data: messages = [], isLoading } = useThread(partnerId);  const sendMut 
                   backgroundColor: pressed ? p.border : 'transparent',
                   alignItems: 'center', justifyContent: 'center',
                 })}
-                accessibilityLabel="Send a payment"
+                accessibilityLabel={t('chat.sendPayment')}
               >
                 <Ionicons name="cash-outline" size={18} color={p.fgMuted} />
+              </Pressable>
+              <Pressable
+                onPress={() => { h.light(); setRequestSheet(true); }}
+                hitSlop={6}
+                style={({ pressed }) => ({
+                  width: 32, height: 32, borderRadius: 16,
+                  backgroundColor: pressed ? p.border : 'transparent',
+                  alignItems: 'center', justifyContent: 'center',
+                })}
+                accessibilityLabel={t('chat.requestMoney')}
+              >
+                <Ionicons name="receipt-outline" size={18} color={p.fgMuted} />
               </Pressable>
               <Pressable
                 onPress={() => { h.selection(); setShowStickers((s) => !s); }}
@@ -643,7 +712,7 @@ const { data: messages = [], isLoading } = useThread(partnerId);  const sendMut 
                   backgroundColor: pressed ? p.border : 'transparent',
                   alignItems: 'center', justifyContent: 'center',
                 })}
-                accessibilityLabel="Stickers"
+                accessibilityLabel={t('chat.stickers')}
               >
                 <Ionicons name={showStickers ? 'close' : 'happy-outline'} size={18} color={p.fgMuted} />
               </Pressable>
@@ -666,7 +735,7 @@ const { data: messages = [], isLoading } = useThread(partnerId);  const sendMut 
                     getSocket().then((sock) => sock.emit('typing:stop', { toUserId: partnerId }));
                   }, 1_500);
                 }}
-                placeholder="Message"
+                placeholder={t('chat.messagePlaceholder')}
                 placeholderTextColor={p.fgFaint}
                 multiline
                 style={{
@@ -684,7 +753,7 @@ const { data: messages = [], isLoading } = useThread(partnerId);  const sendMut 
                   alignItems: 'center', justifyContent: 'center',
                   opacity: pressed ? 0.85 : 1,
                 })}
-                accessibilityLabel="Send"
+                accessibilityLabel={t('action.send')}
               >
                 <Ionicons name={editing ? 'checkmark' : 'arrow-up'} size={18} color="#fff" />
               </Pressable>
@@ -698,16 +767,20 @@ const { data: messages = [], isLoading } = useThread(partnerId);  const sendMut 
               }}>
                 {STICKERS.map((s) => (
                   <Pressable
-                    key={s}
+                    key={s.id}
                     onPress={() => sendSticker(s)}
                     style={({ pressed }) => ({
-                      width: 40, height: 40, borderRadius: 12,
+                      width: 72, height: 78, borderRadius: 18,
                       alignItems: 'center', justifyContent: 'center',
                       backgroundColor: pressed ? p.pillBg : p.bgElev,
                       borderWidth: 1, borderColor: p.border,
+                      shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 8, shadowOffset: { width: 0, height: 3 },
                     })}
                   >
-                    <Text style={{ fontSize: 20 }}>{s}</Text>
+                    <Text style={{ fontSize: 30 }}>{s.emoji}</Text>
+                    <Text numberOfLines={1} style={{ color: p.fgMuted, fontSize: 10, fontWeight: '700', marginTop: 4 }}>
+                      {s.label}
+                    </Text>
                   </Pressable>
                 ))}
               </View>
@@ -720,15 +793,46 @@ const { data: messages = [], isLoading } = useThread(partnerId);  const sendMut 
       <SendMoneySheet
         visible={paymentSheet}
         palette={p}
+        mode="SEND"
         recipientLabel={partner ? (partner.username ? `@${partner.username}` : `${partner.firstName ?? ''} ${partner.lastName ?? ''}`.trim()) : undefined}
         onClose={() => setPaymentSheet(false)}
         onSubmit={sendPayment}
+      />
+      <SendMoneySheet
+        visible={requestSheet}
+        palette={p}
+        mode="REQUEST"
+        recipientLabel={partner ? (partner.username ? `@${partner.username}` : `${partner.firstName ?? ''} ${partner.lastName ?? ''}`.trim()) : undefined}
+        onClose={() => setRequestSheet(false)}
+        onSubmit={sendRequest}
+      />
+
+      <ProfileSheet
+        visible={profileSheet}
+        palette={p}
+        partner={partner}
+        privacy={privacy}
+        onClose={() => setProfileSheet(false)}
+        t={t}
+        onToggleReadReceipts={async (on) => {
+          const next = await messageService.updatePrivacy({ readReceiptsOn: on });
+          await useChatPrefs.getState().setReadReceiptsOn(next.readReceiptsOn);
+          qc.setQueryData(['message-privacy'], next);
+          qc.invalidateQueries({ queryKey: ['partner', partnerId] });
+        }}
+        onToggleLastSeen={async (on) => {
+          const next = await messageService.updatePrivacy({ lastSeenOn: on });
+          await useChatPrefs.getState().setLastSeenOn(next.lastSeenOn);
+          qc.setQueryData(['message-privacy'], next);
+          qc.invalidateQueries({ queryKey: ['partner', partnerId] });
+        }}
       />
 
       {/* Report sheet */}
       <ReportSheet
         visible={!!reportTarget}
         palette={p}
+        t={t}
         onClose={() => setReportTarget(null)}
         onSubmit={(reason, details) => {
           reportMut.mutate({
@@ -738,9 +842,9 @@ const { data: messages = [], isLoading } = useThread(partnerId);  const sendMut 
           }, {
             onSuccess: () => {
               setReportTarget(null);
-              Alert.alert('Report submitted', 'Thanks for letting us know — our team will review.');
+              Alert.alert(t('chat.reportSubmitted'), t('chat.reportSubmittedBody'));
             },
-            onError: (e: any) => Alert.alert('Could not submit', e?.response?.data?.error ?? 'Try again.'),
+            onError: (e: any) => Alert.alert(t('chat.reportFailed'), e?.response?.data?.error ?? t('common.retry')),
           });
         }}
       />
@@ -750,7 +854,7 @@ const { data: messages = [], isLoading } = useThread(partnerId);  const sendMut 
 
 /* ── Bubble ─── */
 function Bubble({
-  message: m, isLastInRun, meId, palette: p, onLongPress, showReadReceipt,
+  message: m, isLastInRun, meId, palette: p, onLongPress, showReadReceipt, t,
 }: {
   message: ApiMessage;
   isLastInRun: boolean;
@@ -761,6 +865,7 @@ function Bubble({
    *  of the "read" double-check, reflecting the local user's
    *  read-receipts preference. */
   showReadReceipt: boolean;
+  t: ReturnType<typeof useT>;
 }) {
   const isMe = m.senderId === meId;
   const time = new Date(m.createdAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
@@ -803,8 +908,8 @@ function Bubble({
     );
   }
 
-  // PAYMENT bubble — animated receipt component.
-  if (m.type === 'PAYMENT' && m.metadata) {
+  // PAYMENT / REQUEST bubble — animated money cards.
+  if ((m.type === 'PAYMENT' || m.type === 'REQUEST') && m.metadata) {
     const amount = Number(m.metadata.amount);
     const currency = String(m.metadata.currency ?? '');
     return (
@@ -824,11 +929,45 @@ function Bubble({
           note={(m.metadata.note as string) || (m.content || undefined)}
           txRef={m.metadata.txRef as string | undefined}
           at={m.createdAt}
-          fromMe={isMe}
+          fromMe={m.type === 'REQUEST' ? !isMe : isMe}
+          labelOverride={m.type === 'REQUEST' ? (isMe ? t('chat.youRequested') : t('chat.requestedFromYou')) : undefined}
           // Only animate if the bubble was created in the last 5s, so old
           // receipts don't replay every time the user scrolls.
           animate={Date.now() - +new Date(m.createdAt) < 5_000}
         />
+      </Pressable>
+    );
+  }
+
+  if (m.type === 'STICKER' && m.metadata) {
+    const emoji = String(m.metadata.emoji ?? m.content ?? '✨');
+    const label = String(m.metadata.label ?? '');
+    return (
+      <Pressable
+        onLongPress={onLongPress}
+        delayLongPress={350}
+        style={{ alignSelf: isMe ? 'flex-end' : 'flex-start', marginTop: 2 }}
+      >
+        <View style={{
+          width: 138, minHeight: 142, borderRadius: 28,
+          backgroundColor: isMe ? '#262626' : p.bgElev,
+          borderWidth: 1, borderColor: p.border,
+          alignItems: 'center', justifyContent: 'center',
+          padding: 14,
+          shadowColor: '#000', shadowOpacity: 0.16, shadowRadius: 16, shadowOffset: { width: 0, height: 8 },
+        }}>
+          <Text style={{ fontSize: 58, lineHeight: 70 }}>{emoji}</Text>
+          {!!label && (
+            <Text style={{ color: isMe ? '#fff' : p.fg, fontSize: 14, fontWeight: '800', marginTop: 8, textAlign: 'center' }}>
+              {label}
+            </Text>
+          )}
+        </View>
+        {isLastInRun && (
+          <Text style={{ color: p.fgFaint, fontSize: 10, fontWeight: '600', marginTop: 4, textAlign: isMe ? 'right' : 'left', paddingHorizontal: 8 }}>
+            {time}
+          </Text>
+        )}
       </Pressable>
     );
   }
@@ -860,7 +999,7 @@ function Bubble({
           fontSize: 15, fontWeight: '500', lineHeight: 20,
           fontStyle: deleted ? 'italic' : 'normal',
         }}>
-          {deleted ? 'Message deleted' : m.content}
+          {deleted ? t('chat.deleted') : m.content}
         </Text>
       </View>
       {isLastInRun && (
@@ -872,7 +1011,7 @@ function Bubble({
         }}>
           {!!m.editedAt && !deleted && (
             <Text style={{ color: p.fgFaint, fontSize: 10, fontWeight: '600' }}>
-              edited ·
+              {t('chat.edited')} ·
             </Text>
           )}
           <Text style={{ color: p.fgFaint, fontSize: 10, fontWeight: '600' }}>
@@ -907,12 +1046,186 @@ function DayChip({ label, palette: p }: { label: string; palette: Palette }) {
   );
 }
 
-/* ── Report sheet ─── */
-function ReportSheet({
-  visible, palette: p, onClose, onSubmit,
+function ProfileSheet({
+  visible, palette: p, partner, privacy, onClose, onToggleReadReceipts, onToggleLastSeen, t,
 }: {
   visible: boolean;
   palette: Palette;
+  partner: Conversation['partner'] | null;
+  privacy: { readReceiptsOn: boolean; lastSeenOn: boolean };
+  onClose: () => void;
+  t: ReturnType<typeof useT>;
+  onToggleReadReceipts: (on: boolean) => Promise<void>;
+  onToggleLastSeen: (on: boolean) => Promise<void>;
+}) {
+  const [busy, setBusy] = useState<string | null>(null);
+  const name = partner ? `${partner.firstName ?? ''} ${partner.lastName ?? ''}`.trim() || `@${partner.username ?? 'user'}` : t('chat.profile');
+  const presence = partner?.messagePrivacy?.canSeePresence
+    ? partner.messagePrivacy.onlineNow ? t('chat.onlineNow')
+      : partner.messagePrivacy.lastSeenAt ? t('chat.lastSeen', { time: relativeTime(partner.messagePrivacy.lastSeenAt) })
+      : t('chat.lastSeenUnavailable')
+    : t('chat.presenceHidden');
+  const joinedDate = partner?.createdAt
+    ? new Date(partner.createdAt).toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })
+    : null;
+
+  const toggle = async (key: 'read' | 'seen', next: boolean) => {
+    setBusy(key);
+    try {
+      if (key === 'read') await onToggleReadReceipts(next);
+      else await onToggleLastSeen(next);
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <Pressable onPress={onClose} style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }}>
+        <Pressable
+          onPress={(e) => e.stopPropagation()}
+          style={{ backgroundColor: p.bg, borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 20, paddingBottom: 34 }}
+        >
+          <View style={{ alignItems: 'center', marginBottom: 18 }}>
+            <View style={{ width: 42, height: 4, borderRadius: 2, backgroundColor: p.border, marginBottom: 18 }} />
+            <View style={{
+              width: 86, height: 86, borderRadius: 43,
+              backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border,
+              alignItems: 'center', justifyContent: 'center',
+            }}>
+              <Text style={{ fontSize: 42 }}>
+                {partner?.avatarUrl ?? (partner?.firstName?.[0] ?? partner?.username?.[0] ?? '?').toUpperCase()}
+              </Text>
+            </View>
+            <Text style={{ color: p.fg, fontSize: 24, fontWeight: '800', marginTop: 14, letterSpacing: -0.4 }}>{name}</Text>
+            <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '700', marginTop: 4 }}>
+              {partner?.username ? `@${partner.username}` : presence}
+            </Text>
+            {partner?.username && (
+              <Text style={{ color: p.fgFaint, fontSize: 12, fontWeight: '600', marginTop: 3 }}>{presence}</Text>
+            )}
+          </View>
+
+          {!!partner?.bio && (
+            <View style={{ backgroundColor: p.bgElev, borderRadius: 18, borderWidth: 1, borderColor: p.border, padding: 14, marginBottom: 12 }}>
+              <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '800', letterSpacing: 0.8, marginBottom: 5 }}>{t('chat.profileBio')}</Text>
+              <Text style={{ color: p.fg, fontSize: 14, fontWeight: '600', lineHeight: 20 }}>{partner.bio}</Text>
+            </View>
+          )}
+
+          <View style={{ backgroundColor: p.bgElev, borderRadius: 18, borderWidth: 1, borderColor: p.border, overflow: 'hidden', marginBottom: 12 }}>
+            <ProfileInfoRow
+              icon="at-outline"
+              label={t('chat.handle')}
+              value={partner?.username ? `@${partner.username}` : t('chat.noHandle')}
+              palette={p}
+            />
+            <ProfileInfoRow
+              icon="globe-outline"
+              label={t('chat.publicProfile')}
+              value={partner?.profilePublic ? t('chat.publicProfileOn') : t('chat.publicProfileOff')}
+              palette={p}
+              borderTop
+            />
+            <ProfileInfoRow
+              icon="calendar-outline"
+              label={t('chat.signupDate')}
+              value={joinedDate ?? '-'}
+              palette={p}
+              borderTop
+            />
+          </View>
+
+          <View style={{ backgroundColor: p.bgElev, borderRadius: 18, borderWidth: 1, borderColor: p.border, overflow: 'hidden' }}>
+            <PrivacyRow
+              icon="checkmark-done-outline"
+              title={t('chat.readReceipts')}
+              subtitle={t('chat.readReceiptsDescMutual')}
+              value={privacy.readReceiptsOn}
+              disabled={busy !== null}
+              palette={p}
+              onValueChange={(v) => toggle('read', v)}
+            />
+            <PrivacyRow
+              icon="time-outline"
+              title={t('chat.lastSeenTitle')}
+              subtitle={t('chat.lastSeenDesc')}
+              value={privacy.lastSeenOn}
+              disabled={busy !== null}
+              palette={p}
+              borderTop
+              onValueChange={(v) => toggle('seen', v)}
+            />
+          </View>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
+function ProfileInfoRow({
+  icon, label, value, borderTop, palette: p,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  value: string;
+  borderTop?: boolean;
+  palette: Palette;
+}) {
+  return (
+    <View style={{
+      flexDirection: 'row', alignItems: 'center', gap: 12,
+      paddingHorizontal: 14, paddingVertical: 13,
+      borderTopWidth: borderTop ? 1 : 0, borderTopColor: p.border,
+    }}>
+      <View style={{ width: 34, height: 34, borderRadius: 17, backgroundColor: p.pillBg, alignItems: 'center', justifyContent: 'center' }}>
+        <Ionicons name={icon} size={16} color={p.fgMuted} />
+      </View>
+      <Text style={{ flex: 1, color: p.fgMuted, fontSize: 12, fontWeight: '800' }}>{label}</Text>
+      <Text style={{ color: p.fg, fontSize: 13, fontWeight: '800', maxWidth: '52%', textAlign: 'right' }} numberOfLines={1}>
+        {value}
+      </Text>
+    </View>
+  );
+}
+
+function PrivacyRow({
+  icon, title, subtitle, value, disabled, borderTop, palette: p, onValueChange,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  title: string;
+  subtitle: string;
+  value: boolean;
+  disabled?: boolean;
+  borderTop?: boolean;
+  palette: Palette;
+  onValueChange: (v: boolean) => void;
+}) {
+  return (
+    <View style={{
+      flexDirection: 'row', alignItems: 'center', gap: 12,
+      padding: 14,
+      borderTopWidth: borderTop ? 1 : 0, borderTopColor: p.border,
+    }}>
+      <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: p.pillBg, alignItems: 'center', justifyContent: 'center' }}>
+        <Ionicons name={icon} size={17} color={p.fgMuted} />
+      </View>
+      <View style={{ flex: 1 }}>
+        <Text style={{ color: p.fg, fontSize: 14, fontWeight: '800' }}>{title}</Text>
+        <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '600', marginTop: 2, lineHeight: 15 }}>{subtitle}</Text>
+      </View>
+      <Switch value={value} disabled={disabled} onValueChange={onValueChange} />
+    </View>
+  );
+}
+
+/* ── Report sheet ─── */
+function ReportSheet({
+  visible, palette: p, onClose, onSubmit, t,
+}: {
+  visible: boolean;
+  palette: Palette;
+  t: ReturnType<typeof useT>;
   onClose: () => void;
   onSubmit: (reason: string, details?: string) => void;
 }) {
@@ -937,10 +1250,10 @@ function ReportSheet({
             <View style={{ width: 42, height: 4, borderRadius: 2, backgroundColor: p.border }} />
           </View>
           <Text style={{ color: p.fg, fontSize: 18, fontWeight: '600', letterSpacing: -0.3 }}>
-            Report
+            {t('chat.reportTitle')}
           </Text>
           <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '500' }}>
-            Reports are reviewed by tazdan trust &amp; safety. False reports may affect your account standing.
+            {t('chat.reportBody')}
           </Text>
 
           <View style={{ gap: 6 }}>
@@ -957,7 +1270,7 @@ function ReportSheet({
                 }}
               >
                 <Text style={{ flex: 1, color: p.fg, fontSize: 13, fontWeight: '600' }}>
-                  {r.label}
+                  {t(`report.${r.key}`)}
                 </Text>
                 {reason === r.key && <Ionicons name="checkmark-circle" size={16} color={BRAND_BLUE} />}
               </Pressable>
@@ -971,7 +1284,7 @@ function ReportSheet({
             <TextInput
               value={details}
               onChangeText={setDetails}
-              placeholder="Additional details (optional)"
+              placeholder={t('chat.reportDetailsPlaceholder')}
               placeholderTextColor={p.fgFaint}
               multiline
               style={{ color: p.fg, fontSize: 13, fontWeight: '500', minHeight: 40 }}
@@ -989,7 +1302,7 @@ function ReportSheet({
             })}
           >
             <Text style={{ color: '#fff', fontSize: 15, fontWeight: '600' }}>
-              Submit report
+              {t('chat.submitReport')}
             </Text>
           </Pressable>
         </Pressable>
@@ -1056,4 +1369,16 @@ function dayLabel(iso: string): string {
   if (sameDay(d, today)) return 'Today';
   if (sameDay(d, yest))  return 'Yesterday';
   return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+}
+
+function relativeTime(iso: string): string {
+  const ms = Date.now() - +new Date(iso);
+  const mins = Math.max(1, Math.floor(ms / 60_000));
+  if (mins < 2) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}d ago`;
+  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }

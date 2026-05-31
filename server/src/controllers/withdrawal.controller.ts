@@ -7,6 +7,7 @@ import { generateReference } from '../utils/helpers';
 import { AuthRequest } from '../types';
 import { collectFee } from '../services/fee/feeCollector.service';
 import { emitActivity } from '../utils/realtime';
+import { enforceStepUp } from '../services/security/stepUp.service';
 
 const FIAT_CURRENCIES = new Set(['USD', 'EUR', 'GBP', 'AED', 'SAR', 'EGP', 'LYD']);
 
@@ -20,6 +21,7 @@ const withdrawalSchema = z.object({
   bankName: z.string().optional(),
   accountNumber: z.string().optional(),
   accountName: z.string().optional(),
+  stepUpCode: z.string().regex(/^\d{6}$/).optional(),
 });
 
 export class WithdrawalController {
@@ -35,6 +37,27 @@ export class WithdrawalController {
       const currency = data.currency.toUpperCase();
       const isFiat = FIAT_CURRENCIES.has(currency);
       const isCryptoEnum = ['USDT','BTC','ETH','BNB','SOL','XRP','ADA','DOGE','MATIC','DOT','AVAX'].includes(currency);
+
+      // Step-up: withdrawals ≥ threshold or from an unrecognized device require
+      // a fresh 6-digit confirmation (email or authenticator). Throws 401 and
+      // auto-issues a code on first call until satisfied.
+      {
+        const { enforceStepUp } = await import('../services/security/stepUp.service');
+        let valueUsd = data.amount;
+        if (!['USD', 'USDT', 'USDC'].includes(currency)) {
+          try {
+            if (isCryptoEnum && currency !== 'USDT') {
+              const { getMarketPrice } = await import('../services/exchange/priceEngine.service');
+              valueUsd = data.amount * Number(await getMarketPrice(`${currency}USDT`));
+            } else {
+              const { getRate } = await import('../services/exchange/fxRateProvider.service');
+              const pair = await getRate(currency, 'USD');
+              valueUsd = data.amount * Number(pair.buyPrice || pair.sellPrice || 1);
+            }
+          } catch { /* fall back to raw amount */ }
+        }
+        await enforceStepUp({ userId: req.user!.id, action: 'withdrawal', valueUsd, req, code: data.stepUpCode });
+      }
 
       // KYC gate for fiat withdrawals
       if (isFiat) {
@@ -86,6 +109,7 @@ export class WithdrawalController {
         available = parseFloat(alts[currency] ?? '0');
       }
       if (data.amount > available) throw new AppError(`Insufficient balance. Available: ${available} ${currency}`, 400);
+      // (Step-up enforcement already ran above, before any state read.)
 
       const feeKey = isFiat ? 'withdrawal_fee_usd' : 'withdrawal_fee_usdt';
       const feeSetting = await prisma.platformSettings.findUnique({ where: { key: feeKey } });

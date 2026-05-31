@@ -23,6 +23,7 @@
     "backfill:fees-usd": "ts-node --transpile-only scripts/backfill-platform-fee-usd.ts",
     "backfill:fees-history": "ts-node --transpile-only scripts/seed-fees-from-history.ts",
     "preflight": "ts-node --transpile-only scripts/preflight.ts",
+    "pentest": "ts-node --transpile-only scripts/pentest.ts",
     "load:test": "k6 run load-test/k6.js",
     "load:test:peak": "k6 run --env BASE_URL=http://localhost:5000/api load-test/k6.js",
     "load:report": "k6 run --out json=load-test/results.json load-test/k6.js",
@@ -33,6 +34,7 @@
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
+    "@aws-sdk/client-kms": "^3.700.0",
     "@sentry/node": "^10.53.1",
     "@solana/web3.js": "^1.98.4",
     "@types/compression": "^1.8.1",

@@ -4,10 +4,30 @@ import { prisma } from '../utils/prisma';
 import { AppError } from '../middleware/errorHandler';
 import { AuthRequest } from '../types';
 
+function messagePrivacyOf(user: { notificationPrefs?: any } | null | undefined) {
+  const prefs = user?.notificationPrefs && typeof user.notificationPrefs === 'object' ? user.notificationPrefs : {};
+  const msg = prefs.messages && typeof prefs.messages === 'object' ? prefs.messages : {};
+  return {
+    readReceiptsOn: msg.readReceiptsOn !== false,
+    lastSeenOn: msg.lastSeenOn !== false,
+  };
+}
+
+// Strip HTML angle brackets from free-text so stored values can never carry
+// markup into any HTML surface (web client, emails). Defense-in-depth on top
+// of the client's own escaping.
+const noHtml = (s: string) => s.replace(/[<>]/g, '');
+// Avatar must be a safe https/data-image URL or a short emoji — never a
+// javascript:/data:text/html scheme (classic stored-XSS vector).
+const safeAvatar = z.string().max(512).refine(
+  (v) => v === '' || /^https:\/\//i.test(v) || /^data:image\//i.test(v) || [...v].length <= 8,
+  'Avatar must be an https URL, image data URL, or emoji',
+);
+
 const updateProfileSchema = z.object({
   username: z.string().min(3).max(30).regex(/^[a-zA-Z0-9_]+$/, 'Username can only contain letters, numbers, and underscores').optional(),
-  bio: z.string().max(500).optional(),
-  avatarUrl: z.string().optional(),
+  bio: z.string().max(500).transform(noHtml).optional(),
+  avatarUrl: safeAvatar.optional(),
   baseCurrency: z.enum(['USD', 'EUR', 'GBP', 'AED', 'SAR', 'EGP', 'USDT', 'BTC', 'ETH', 'BNB', 'SOL', 'XRP', 'ADA', 'DOGE', 'MATIC', 'DOT', 'AVAX']).optional(),
   profilePublic: z.boolean().optional(),
   acceptedCurrencies: z.array(z.string()).optional(),
@@ -48,11 +68,41 @@ export class ProfileController {
         where: { id },
         select: {
           id: true, firstName: true, lastName: true, username: true,
-          avatarUrl: true, role: true, kycStatus: true,
+          bio: true, avatarUrl: true, role: true, kycStatus: true,
+          profilePublic: true, createdAt: true, notificationPrefs: true,
         },
       });
       if (!user) throw new AppError('User not found', 404);
-      res.json({ user });
+      const [me, lastLogin] = await Promise.all([
+        prisma.user.findUnique({
+          where: { id: req.user!.id },
+          select: { notificationPrefs: true },
+        }),
+        prisma.loginHistory.findFirst({
+          where: { userId: id, success: true },
+          orderBy: { createdAt: 'desc' },
+          select: { createdAt: true },
+        }),
+      ]);
+      const mine = messagePrivacyOf(me);
+      const theirs = messagePrivacyOf(user);
+      const canSeeReadReceipts = mine.readReceiptsOn && theirs.readReceiptsOn;
+      const canSeePresence = mine.lastSeenOn && theirs.lastSeenOn;
+      const onlineUsers = req.app.get('onlineUsers') as Map<string, number> | undefined;
+      const onlineNow = canSeePresence ? Boolean(onlineUsers?.has(id)) : false;
+      res.json({
+        user: {
+          ...user,
+          notificationPrefs: undefined,
+          messagePrivacy: {
+            ...theirs,
+            canSeeReadReceipts,
+            canSeePresence,
+            onlineNow,
+            lastSeenAt: canSeePresence ? lastLogin?.createdAt ?? null : null,
+          },
+        },
+      });
     } catch (error) {
       next(error);
     }

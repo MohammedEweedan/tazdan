@@ -19,9 +19,26 @@ export const api = axios.create({
 let onUnauthorized: (() => void) | null = null;
 export function setUnauthorizedHandler(fn: () => void) { onUnauthorized = fn; }
 
+// Stable per-install device id — generated once, persisted in SecureStore, and
+// sent as `x-device-id` so the server can recognize trusted devices and skip
+// the step-up prompt on a device the user has already verified.
+const DEVICE_ID_KEY = 'tazdan.deviceId';
+let _deviceId: string | null = null;
+async function getDeviceId(): Promise<string> {
+  if (_deviceId) return _deviceId;
+  let id = await secureStore.get(DEVICE_ID_KEY).catch(() => null);
+  if (!id) {
+    id = `dev_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 14)}`;
+    await secureStore.set(DEVICE_ID_KEY, id).catch(() => {});
+  }
+  _deviceId = id;
+  return id;
+}
+
 api.interceptors.request.use(async (config: InternalAxiosRequestConfig) => {
   const token = await secureStore.get(STORAGE_KEYS.accessToken);
   if (token && config.headers) config.headers.Authorization = `Bearer ${token}`;
+  if (config.headers) config.headers['x-device-id'] = await getDeviceId();
   return config;
 });
 

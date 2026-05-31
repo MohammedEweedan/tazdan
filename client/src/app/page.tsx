@@ -3,6 +3,7 @@
 import { useRef, useEffect, useState, memo, useMemo, useCallback } from "react";
 import { useTranslate, useTolgee } from "@tolgee/react";
 import dynamic from "next/dynamic";
+import { useRouter } from "next/navigation";
 import NextLink from "next/link";
 import NextImage from "next/image";
 import {
@@ -21,10 +22,6 @@ import {
   useBreakpointValue,
   useDisclosure,
 } from "@chakra-ui/react";
-const AuthenticatedHome = dynamic(() => import("@/components/ui/AuthenticatedHome"), {
-  ssr: false,
-  loading: () => null,
-});
 import { useAuthStore } from "@/stores/authStore";
 import {
   FiArrowRight, FiZap, FiGlobe, FiShield, FiCheck,
@@ -1591,6 +1588,7 @@ function LiveTxFeed() {
 function SectionSocialFinance() {
   const { t } = useTranslate();
   const { colorMode } = useColorMode();
+  const isAr = useIsAr();
   const dark = colorMode === "dark";
   const textMain = dark ? "white" : "#0a0f1e";
   const textSub  = dark ? "rgba(255,255,255,0.6)" : "#64748b";
@@ -1649,98 +1647,11 @@ function SectionSocialFinance() {
   );
 }
 
-function AlternatingFeatureSection({
-  imageSide, eyebrow, title, desc, features, phoneScreen, comingSoon = false, extraBelow,
-}: {
-  imageSide: "left" | "right"; eyebrow: string; title: string; desc: string;
-  features: { icon: React.ElementType; label: string }[];
-  phoneScreen: React.ReactNode; comingSoon?: boolean; extraBelow?: React.ReactNode;
-}) {
-  const { t } = useTranslate();
-  const { colorMode } = useColorMode();
-  const dark = colorMode === "dark";
-  const textMain = dark ? "white" : "#0a0f1e";
-  const textSub  = dark ? "rgba(255,255,255,0.6)" : "#64748b";
-  const tileBg   = dark ? "rgba(255,255,255,0.04)" : "#f4f4f4";
-  const tileBorder = dark ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.10)";
-  /* monochrome eyebrow + tile chrome; brand accent is reserved for the dot */
-  const brand     = "#226dff";
-  const brandSoft = dark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)";
-  const brandLine = dark ? "rgba(255,255,255,0.14)" : "rgba(0,0,0,0.12)";
-
-  return (
-    <Box className="snap-section-normal" position="relative" py={{ base: 16, md: 24 }} px={{ base: 4, md: 10 }} overflow="hidden">
-      <Container maxW="1200px" position="relative" zIndex={2}>
-        <SimpleGrid columns={{ base: 1, lg: 2 }} gap={{ base: 12, lg: 16 }} alignItems="center">
-          <Flex justify="center" order={{ base: 2, lg: imageSide === "left" ? 1 : 2 }} position="relative">
-            {/* deliberate brand accent halo */}
-            <Box
-              position="absolute" zIndex={0} pointerEvents="none"
-              w={{ base: "300px", md: "440px" }} h={{ base: "300px", md: "440px" }}
-              borderRadius="full"
-              bg="rgba(34,109,255,0.18)"
-              filter="blur(110px)"
-              top="50%" left="50%" transform="translate(-50%, -50%)"
-            />
-            <motion.div
-              initial={{ opacity: 0, y: 48, scale: 0.93 }} animate={{ opacity: 1, y: 0, scale: 1 }}
-              viewport={{ once: true, amount: 0.2 }} transition={{ duration: 0.75, ease: [0.22, 1, 0.36, 1] }}
-              style={{ position: "relative", zIndex: 1 }}
-            >
-              <StaticPhone phOverride="clamp(320px, 42vh, 640px)">{phoneScreen}</StaticPhone>
-            </motion.div>
-          </Flex>
-          <motion.div
-            initial={{ opacity: 0, y: 32 }} animate={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, amount: 0.2 }}
-            transition={{ duration: 0.65, delay: 0.1, ease: [0.22, 1, 0.36, 1] }}
-            style={{ order: imageSide === "left" ? 2 : 1 }}
-          >
-            <VStack align={{ base: "center", lg: "start" }} spacing={{ base: 5, md: 7 }} textAlign={{ base: "center", lg: "start" }}>
-              {comingSoon && (
-                <Box px={3} py={1} borderRadius="full" display="inline-flex"
-                  bg={dark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)"}
-                  border={`1px solid ${dark ? "rgba(255,255,255,0.14)" : "rgba(0,0,0,0.10)"}`}
-                  color={textMain} fontWeight="600" fontSize="11px" letterSpacing="0.02em"
-                >
-                  {t("coming_soon")}
-                </Box>
-              )}
-              <Heading fontFamily="'DM Sans', sans-serif" fontWeight="800" fontSize={{ base: "36px", md: "56px", xl: "72px" }} letterSpacing="-0.04em" lineHeight={1.05} color={textMain}>
-                {title}
-              </Heading>
-              <Text fontSize={{ base: "14.5px", md: "16.5px" }} color={textSub} maxW="460px">{desc}</Text>
-              {extraBelow ? (
-                <Box w="100%" maxW="460px">{extraBelow}</Box>
-              ) : features.length > 0 && (
-                <SimpleGrid columns={2} spacing={3} w="100%" maxW="460px">
-                  {features.map((f, i) => (
-                    <motion.div key={f.label} initial={{ opacity: 0, y: 12, scale: 0.96 }} animate={{ opacity: 1, y: 0, scale: 1 }} viewport={{ once: true, amount: 0.3 }} transition={{ duration: 0.4, delay: 0.08 * i }}>
-                      <HStack h="64px" bg={tileBg} border="1px solid" borderColor={tileBorder} borderRadius="16px" px={4} spacing={3}
-                        transition="all 0.2s ease"
-                        _hover={{ transform: "translateY(-3px)", borderColor: brand,
-                          boxShadow: `0 8px 28px rgba(34,109,255,0.18)` }}
-                      >
-                        <Flex w="36px" h="36px" borderRadius="10px" border="1px solid" borderColor={brandLine} align="center" justify="center" flexShrink={0} bg={brandSoft}>
-                          <Icon as={f.icon} color={textMain} />
-                        </Flex>
-                        <Text fontSize="13px" fontWeight="700" color={textMain}>{f.label}</Text>
-                      </HStack>
-                    </motion.div>
-                  ))}
-                </SimpleGrid>
-              )}
-            </VStack>
-          </motion.div>
-        </SimpleGrid>
-      </Container>
-    </Box>
-  );
-}
 
 function SectionBento() {
   const { t } = useTranslate();
   const { colorMode } = useColorMode();
+  const isAr = useIsAr();
   const dark = colorMode === "dark";
   const textMain = dark ? "white" : "#0a0f1e";
   const textSub = dark ? "rgba(255,255,255,0.6)" : "#475569";
@@ -1765,7 +1676,7 @@ function SectionBento() {
       <Container maxW="1200px" position="relative" zIndex={1}>
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} viewport={{ once: true, amount: 0.4 }} transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}>
           <VStack align="center" spacing={3} mb={{ base: 10, md: 16 }} textAlign="center">
-            <Heading fontFamily="'DM Sans', sans-serif" fontWeight="800" fontSize={{ base: "32px", md: "56px", lg: "64px" }} letterSpacing="-0.04em" color={textMain} lineHeight={1.1}>
+            <Heading fontFamily="'DM Sans', sans-serif" fontWeight="800" fontSize={{ base: "32px", md: "56px", lg: "64px" }} letterSpacing="-0.04em" color={textMain} lineHeight={isAr ? 1.2 : 1.1}>
               {t("bento_title_1")}{" "}
               <Box as="span"><EmphText text={t("bento_title_2")} /></Box>
             </Heading>
@@ -1794,7 +1705,7 @@ function SectionBento() {
                   </Flex>
                   <Box>
                     <Text fontSize={{ base: "10px", md: "12px" }} fontWeight="700" letterSpacing="0.1em" opacity={0.6} mb={0.5} textTransform="uppercase">{s.label}</Text>
-                    {s.value && <Heading fontSize={{ base: "28px", md: "44px", lg: "52px" }} fontWeight="900" letterSpacing="-0.04em" fontFamily="'DM Sans', sans-serif" lineHeight={1}>{s.value}</Heading>}
+                    {s.value && <Heading fontSize={{ base: "28px", md: "44px", lg: "52px" }} fontWeight="900" letterSpacing="-0.04em" fontFamily="'DM Sans', sans-serif" lineHeight={isAr ? 1.15 : 1}>{s.value}</Heading>}
                     {s.sub && <Text fontSize={{ base: "12px", md: "14px" }} opacity={0.8} mt={1} maxW="260px" fontWeight="500">{s.sub}</Text>}
                   </Box>
                 </VStack>
@@ -1810,6 +1721,7 @@ function SectionBento() {
 function SectionOnRamp() {
   const { t } = useTranslate();
   const { colorMode } = useColorMode();
+  const isAr = useIsAr();
   const dark = colorMode === "dark";
   const textMain = dark ? "white" : "#0a0f1e";
   const textSub = dark ? "rgba(255,255,255,0.5)" : "#64748b";
@@ -1844,7 +1756,7 @@ function SectionOnRamp() {
             <VStack spacing={5}>
               <Heading fontFamily="'DM Sans', sans-serif" fontWeight="800"
                 fontSize={{ base: "36px", md: "52px", lg: "64px" }}
-                letterSpacing="-0.04em" color={textMain} lineHeight={1.05} maxW="720px"
+                letterSpacing="-0.04em" color={textMain} lineHeight={isAr ? 1.2 : 1.05} maxW="720px"
               >
                 <EmphText text={t("onramp_headline")} />
               </Heading>
@@ -1914,7 +1826,7 @@ function SectionOnRamp() {
                   </Box>
                   <VStack p={{ base: 5, md: 7 }} align="center" spacing={2}>
                     <Heading fontSize={{ base: "18px", md: "20px" }} fontWeight="800" color={textMain} fontFamily="'DM Sans', sans-serif">{c.title}</Heading>
-                    <Text fontSize={{ base: "13.5px", md: "14.5px" }} color={textSub} lineHeight={1.6}>{c.desc}</Text>
+                    <Text fontSize={{ base: "13.5px", md: "14.5px" }} color={textSub} lineHeight={isAr ? 1.75 : 1.6}>{c.desc}</Text>
                   </VStack>
                 </Box>
               </motion.div>
@@ -1970,6 +1882,7 @@ function ScrollFade({ children, range = 0.5 }: { children: React.ReactNode; rang
 function SectionClaimLink() {
   const { t } = useTranslate();
   const { colorMode } = useColorMode();
+  const isAr = useIsAr();
   const dark = colorMode === "dark";
   const textMain = dark ? "#f5f5f7" : "#1d1d1f";
   const textSub = dark ? "rgba(245,245,247,0.60)" : "rgba(29,29,31,0.58)";
@@ -2001,11 +1914,11 @@ function SectionClaimLink() {
               {/* Display line — one word set in italic, editorial register */}
               <Heading fontFamily="'DM Sans', sans-serif" fontWeight="700"
                 fontSize={{ base: "42px", md: "68px", lg: "82px" }}
-                letterSpacing="-0.045em" color={textMain} lineHeight={1.0} maxW="900px"
+                letterSpacing="-0.045em" color={textMain} lineHeight={isAr ? 1.15 : 1.0} maxW="900px"
               >
                 <EmphText text={t("cl_title")} />
               </Heading>
-              <Text fontSize={{ base: "17px", md: "21px" }} color={textSub} maxW="600px" lineHeight={1.5} fontWeight="400">
+              <Text fontSize={{ base: "17px", md: "21px" }} color={textSub} maxW="600px" lineHeight={isAr ? 1.75 : 1.5} fontWeight="400">
                 {t("cl_sub")}
               </Text>
             </VStack>
@@ -2031,14 +1944,14 @@ function SectionClaimLink() {
                   borderColor={dark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.07)"}
                 >
                   <Text fontFamily="'DM Sans', sans-serif" fontWeight="700" fontStyle="italic"
-                    fontSize={{ base: "22px", md: "24px" }} color={textSub} lineHeight={1} mt="2px" sx={{ fontVariantNumeric: "tabular-nums" }}>
+                    fontSize={{ base: "22px", md: "24px" }} color={textSub} lineHeight={isAr ? 1.4 : 1} mt="2px" sx={{ fontVariantNumeric: "tabular-nums" }}>
                     0{i + 1}
                   </Text>
                   <VStack align="start" spacing={1.5} textAlign="left">
                     <Text fontWeight="600" fontSize={{ base: "16px", md: "17px" }} color={textMain} letterSpacing="-0.01em">
                       {s.title}
                     </Text>
-                    <Text fontSize={{ base: "13.5px", md: "14px" }} color={textSub} lineHeight={1.55}>{s.desc}</Text>
+                    <Text fontSize={{ base: "13.5px", md: "14px" }} color={textSub} lineHeight={isAr ? 1.75 : 1.55}>{s.desc}</Text>
                   </VStack>
                 </HStack>
               ))}
@@ -2148,6 +2061,7 @@ function ClaimLinkStage({ dark, textMain, textSub, youLabel, claimedLabel, amoun
 function SectionRecurringBuy() {
   const { t } = useTranslate();
   const { colorMode } = useColorMode();
+  const isAr = useIsAr();
   const dark = colorMode === "dark";
   const textMain = dark ? "#f5f5f7" : "#1d1d1f";
   const textSub = dark ? "rgba(245,245,247,0.60)" : "rgba(29,29,31,0.58)";
@@ -2166,11 +2080,11 @@ function SectionRecurringBuy() {
             <VStack spacing={6} align={{ base: "center", md: "start" }} textAlign={{ base: "center", md: "left" }}>
               <Heading fontFamily="'DM Sans', sans-serif" fontWeight="700"
                 fontSize={{ base: "40px", md: "58px", lg: "66px" }}
-                letterSpacing="-0.045em" color={textMain} lineHeight={1.0} maxW="540px"
+                letterSpacing="-0.045em" color={textMain} lineHeight={isAr ? 1.15 : 1.0} maxW="540px"
               >
                 <EmphText text={t("rb_title")} />
               </Heading>
-              <Text fontSize={{ base: "17px", md: "19px" }} color={textSub} maxW="500px" lineHeight={1.55} fontWeight="400">
+              <Text fontSize={{ base: "17px", md: "19px" }} color={textSub} maxW="500px" lineHeight={isAr ? 1.75 : 1.55} fontWeight="400">
                 {t("rb_sub")}
               </Text>
               <Flex gap={2.5} flexWrap="wrap" justify={{ base: "center", md: "start" }}>
@@ -2219,7 +2133,7 @@ function SectionRecurringBuy() {
                   />
                 ))}
               </Flex>
-              <Text mt={5} fontSize="13px" color={textSub} textAlign="center" lineHeight={1.5}>{t("rb_card_footer")}</Text>
+              <Text mt={5} fontSize="13px" color={textSub} textAlign="center" lineHeight={isAr ? 1.75 : 1.5}>{t("rb_card_footer")}</Text>
             </Box>
           </motion.div>
         </SimpleGrid>
@@ -2236,8 +2150,7 @@ function SectionRecurringBuy() {
    ═════════════════════════════════════════════════════════════════ */
 function SectionPatternBreak({ onWaitlist }: { onWaitlist: () => void }) {
   const { t } = useTranslate();
-  const tolgee = useTolgee(["language"]);
-  const isAr = tolgee.getLanguage() === "ar";
+  const isAr = useIsAr();
   const { colorMode } = useColorMode();
   const dark = colorMode === "dark";
   // Inverted canvas vs. the rest of the page — this is the "break".
@@ -2268,11 +2181,11 @@ function SectionPatternBreak({ onWaitlist }: { onWaitlist: () => void }) {
             <VStack spacing={5}>
               <Heading fontFamily="'DM Sans', sans-serif" fontWeight="700"
                 fontSize={{ base: "48px", md: "88px", lg: "108px" }}
-                letterSpacing="-0.05em" lineHeight={0.95} maxW="1000px"
+                letterSpacing="-0.05em" lineHeight={isAr ? 1.15 : 0.95} maxW="1000px"
               >
                 <EmphText text={t("pb_title")} />
               </Heading>
-              <Text fontSize={{ base: "17px", md: "21px" }} maxW="560px" lineHeight={1.5} fontWeight="400">
+              <Text fontSize={{ base: "17px", md: "21px" }} maxW="560px" lineHeight={isAr ? 1.75 : 1.5} fontWeight="400">
                 {t("pb_sub")}
               </Text>
             </VStack>
@@ -2320,6 +2233,7 @@ function SectionPatternBreak({ onWaitlist }: { onWaitlist: () => void }) {
 function SectionBusiness() {
   const { t } = useTranslate();
   const { colorMode } = useColorMode();
+  const isAr = useIsAr();
   const dark = colorMode === "dark";
   const textMain  = dark ? "#ffffff" : "#0a0a0a";
   const textSub   = dark ? "rgba(255,255,255,0.50)" : "rgba(0,0,0,0.50)";
@@ -2363,7 +2277,7 @@ function SectionBusiness() {
                 <Heading
                   fontFamily="'DM Sans', sans-serif" fontWeight="800"
                   fontSize={{ base: "36px", md: "52px", lg: "64px" }}
-                  letterSpacing="-0.04em" lineHeight={1.00} color={textMain}
+                  letterSpacing="-0.04em" lineHeight={isAr ? 1.2 : 1.00} color={textMain}
                 >
                   {t("biz_headline_1")}{" "}
                   <Box as="span"><EmphText text={t("biz_headline_2")} /></Box>
@@ -2371,7 +2285,7 @@ function SectionBusiness() {
 
                 <Text
                   fontSize={{ base: "15px", md: "17px" }} color={textSub}
-                  lineHeight={1.65} maxW="480px"
+                  lineHeight={isAr ? 1.75 : 1.65} maxW="480px"
                 >
                   {t("biz_sub")}
                 </Text>
@@ -2429,7 +2343,7 @@ function SectionBusiness() {
                     >
                       {p.label}
                     </Text>
-                    <Text fontSize={{ base: "13px", md: "14px" }} color={textSub} lineHeight={1.6} flex={1}>
+                    <Text fontSize={{ base: "13px", md: "14px" }} color={textSub} lineHeight={isAr ? 1.75 : 1.6} flex={1}>
                       {p.value}
                     </Text>
                   </HStack>
@@ -2452,6 +2366,7 @@ function SectionBusiness() {
 function SectionPrepaidCards() {
   const { t } = useTranslate();
   const { colorMode } = useColorMode();
+  const isAr = useIsAr();
   const dark = colorMode === "dark";
   const textMain = dark ? "#f5f5f7" : "#1d1d1f";
   const textSub  = dark ? "rgba(245,245,247,0.60)" : "rgba(29,29,31,0.58)";
@@ -2486,13 +2401,13 @@ function SectionPrepaidCards() {
 
               <Heading fontFamily="'DM Sans', sans-serif" fontWeight="700"
                 fontSize={{ base: "40px", md: "58px", lg: "66px" }}
-                letterSpacing="-0.045em" color={textMain} lineHeight={1.0} maxW="540px"
+                letterSpacing="-0.045em" color={textMain} lineHeight={isAr ? 1.15 : 1.0} maxW="540px"
               >
                 {t("cards_title_1")}{" "}
                 <Box as="span"><EmphText text={t("cards_title_2")} /></Box>
               </Heading>
 
-              <Text fontSize={{ base: "17px", md: "19px" }} color={textSub} maxW="500px" lineHeight={1.55} fontWeight="400">
+              <Text fontSize={{ base: "17px", md: "19px" }} color={textSub} maxW="500px" lineHeight={isAr ? 1.75 : 1.55} fontWeight="400">
                 {t("cards_desc")}
               </Text>
 
@@ -2565,6 +2480,7 @@ function SectionPrepaidCards() {
 function SectionSocialProof() {
   const { t } = useTranslate();
   const { colorMode } = useColorMode();
+  const isAr = useIsAr();
   const dark = colorMode === "dark";
   const textMain = dark ? "white" : "#0a0f1e";
   const prefersReducedMotion = typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -2639,7 +2555,7 @@ function SectionSocialProof() {
             >
               <Heading fontFamily="'DM Sans', sans-serif" fontWeight="900"
                 fontSize={{ base: "28px", md: "44px", lg: "56px" }}
-                letterSpacing="-0.04em" lineHeight={1.1}
+                letterSpacing="-0.04em" lineHeight={isAr ? 1.2 : 1.1}
                 color={textMain}
                 maxW={{ base: "280px", md: "540px" }}
                 mx="auto"
@@ -2659,6 +2575,7 @@ function SectionSocialProof() {
 interface Stage { eyebrow: string; title: string; desc: string; widget?: React.ReactNode; }
 function StageOverlay({ stages }: { stages: Stage[] }) {
   const { colorMode } = useColorMode();
+  const isAr = useIsAr();
   const dark = colorMode === "dark";
   const textMain = dark ? "white" : "#0a0f1e";
   const textSub  = dark ? "rgba(255,255,255,0.6)" : "#64748b";
@@ -2666,15 +2583,15 @@ function StageOverlay({ stages }: { stages: Stage[] }) {
   return (
     <Box position="absolute" inset={0} zIndex={3} pointerEvents="none">
       <Box display={{ base: "block", md: "none" }} position="absolute" top={{ base: "120px", sm: "130px" }} left={0} right={0} textAlign="center" px={5}>
-        <Heading fontFamily="'DM Sans', sans-serif" fontWeight="800" fontSize={{ base: "22px", sm: "28px" }} letterSpacing="-0.03em" color={textMain} lineHeight={1.15}>{s.title}</Heading>
+        <Heading fontFamily="'DM Sans', sans-serif" fontWeight="800" fontSize={{ base: "22px", sm: "28px" }} letterSpacing="-0.03em" color={textMain} lineHeight={isAr ? 1.25 : 1.15}>{s.title}</Heading>
       </Box>
       <Box display={{ base: "block", md: "none" }} position="absolute" bottom={{ base: "20px", sm: "32px" }} left={0} right={0} px={5}>
         <LiveTxFeed />
       </Box>
       <Box display={{ base: "none", md: "block" }} position="absolute" top="50%" left={{ md: "5%" }} transform="translateY(-50%)" w={{ md: "28%" }} maxW={{ md: "320px", xl: "380px" }}>
         <VStack align="start" spacing={5}>
-          <Heading fontFamily="'DM Sans', sans-serif" fontWeight="800" fontSize={{ md: "30px", lg: "40px", xl: "52px" }} letterSpacing="-0.04em" color={textMain} lineHeight={1.1}>{s.title}</Heading>
-          <Text fontSize={{ md: "13px", lg: "15px" }} color={textSub} lineHeight={1.5}>{s.desc}</Text>
+          <Heading fontFamily="'DM Sans', sans-serif" fontWeight="800" fontSize={{ md: "30px", lg: "40px", xl: "52px" }} letterSpacing="-0.04em" color={textMain} lineHeight={isAr ? 1.2 : 1.1}>{s.title}</Heading>
+          <Text fontSize={{ md: "13px", lg: "15px" }} color={textSub} lineHeight={isAr ? 1.75 : 1.5}>{s.desc}</Text>
         </VStack>
       </Box>
       <Box display={{ base: "none", md: "block" }} position="absolute" top="50%" right={{ md: "4%" }} transform="translateY(-50%)" w={{ md: "28%" }} maxW={{ md: "260px", xl: "320px" }}>
@@ -2778,6 +2695,15 @@ function useHeroSnap(ref: React.RefObject<HTMLDivElement>, stages: number) {
     const el = ref.current;
     if (!el) return;
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+
+    // DISABLED ON TOUCH DEVICES: a JS scroll handler that calls
+    // window.scrollTo({behavior:'smooth'}) fights the OS's inertial scroll,
+    // which made the journey both laggy AND non-snapping on phones (the guards
+    // below almost always bailed under touch momentum). On touch we let the
+    // native scroll-driven animation run smoothly with no main-thread snapping.
+    const isTouch = window.matchMedia("(hover: none) and (pointer: coarse)").matches
+      || ("ontouchstart" in window);
+    if (isTouch) return;
 
     let settleTimer: ReturnType<typeof setTimeout> | null = null;
     let snapEndTimer: ReturnType<typeof setTimeout> | null = null;
@@ -3156,6 +3082,7 @@ export default function LandingPage() {
   const deviceOS = useDeviceOS();
 
   const { isAuthenticated, isLoading, fetchUser } = useAuthStore();
+  const router = useRouter();
 
   const textMain = dark ? "#ffffff" : "#0a0a0a";
   const textMuted = dark ? "rgba(255,255,255,0.55)" : "rgba(0,0,0,0.55)";
@@ -3165,6 +3092,11 @@ export default function LandingPage() {
   useEffect(() => { fetchUser(); }, []);
 
   const { isOpen: isWaitlistOpen, onOpen: onWaitlistOpen, onClose: onWaitlistClose } = useDisclosure();
+
+  // Redirect authenticated users to the dashboard instead of showing the home screen
+  useEffect(() => {
+    if (!isLoading && isAuthenticated) router.replace("/dashboard");
+  }, [isLoading, isAuthenticated, router]);
 
   // Force body to match page background so blank gaps never show Chakra's
   // default surface colour through. (overflowX:clip was breaking sticky
@@ -3176,8 +3108,7 @@ export default function LandingPage() {
     return () => { document.body.style.background = prev; };
   }, [pageBg]);
 
-  if (isLoading) return null;
-  if (isAuthenticated) return (<><PublicNav /><AuthenticatedHome /></>);
+  if (isLoading || isAuthenticated) return null;
 
   return (
     <Box minH="100vh" color={textMain} bg={pageBg}>

@@ -131,7 +131,7 @@ export default function Messages() {
   return (
     <View style={{ flex: 1, backgroundColor: p.bg }}>
       <TopGradient />
-      <StatusBar style={themeMode === 'dark' ? 'light' : 'dark'} />
+      <StatusBar style={themeMode === 'light' ? 'dark' : 'light'} />
       <SafeAreaView style={{ flex: 1 }} edges={['top']}>
         {/* Header */}
         <View style={{
@@ -236,14 +236,7 @@ export default function Messages() {
                       fontSize: 13,
                       fontWeight: active ? '800' : '600',
                       letterSpacing: 0.2,
-                      color:
-                        themeMode === 'dark'
-                          ? active
-                            ? '#FFFFFF'
-                            : '#8B8B90'
-                          : active
-                            ? '#000000'
-                            : '#666666',
+                      color: active ? p.fg : p.fgMuted,
                     }}
                   >
                     {filterLabel[f]}
@@ -255,8 +248,7 @@ export default function Messages() {
                         marginTop: 6,
                         height: 2,
                         borderRadius: 2,
-                        backgroundColor:
-                          themeMode === 'dark' ? '#FFFFFF' : '#000000',
+                        backgroundColor: p.fg,
                       }}
                     />
                   )}

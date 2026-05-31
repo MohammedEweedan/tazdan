@@ -2,7 +2,7 @@
  * Admin Settings — every PlatformSetting key/value. Inline editable.
  */
 import { useEffect, useState } from 'react';
-import { Alert, Pressable, RefreshControl, ScrollView, View } from 'react-native';
+import { Alert, Pressable, RefreshControl, ScrollView, Switch, View } from 'react-native';
 import { Text, TextInput } from '@/components/ui/Text';
 import { Ionicons } from '@expo/vector-icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -23,22 +23,30 @@ export default function AdminSettings() {
   const qc = useQueryClient();
   const [draft, setDraft] = useState<Record<string, string>>({});
 
+  type SettingRow = { key: string; value: string; description?: string | null };
+  const [meta, setMeta] = useState<Record<string, { description?: string | null }>>({});
+
   const q = useQuery({
     queryKey: ['admin-settings'],
     queryFn: async () => {
       const { data } = await api.get('/admin/settings');
-      return data as { settings: Record<string, any> };
+      return data as { settings: SettingRow[] };
     },
     enabled: user?.role === 'ADMIN',
   });
 
   useEffect(() => {
-    if (q.data?.settings) {
+    // The API returns an array of { key, value, description } rows.
+    const rows = q.data?.settings;
+    if (Array.isArray(rows)) {
       const flat: Record<string, string> = {};
-      for (const [k, v] of Object.entries(q.data.settings)) {
-        flat[k] = typeof v === 'string' ? v : JSON.stringify(v);
+      const m: Record<string, { description?: string | null }> = {};
+      for (const row of rows) {
+        flat[row.key] = typeof row.value === 'string' ? row.value : JSON.stringify(row.value);
+        m[row.key] = { description: row.description };
       }
       setDraft(flat);
+      setMeta(m);
     }
   }, [q.data]);
 
@@ -68,7 +76,7 @@ export default function AdminSettings() {
   return (
     <View style={{ flex: 1, backgroundColor: p.bg }}>
       <TopGradient />
-      <StatusBar style={themeMode === 'dark' ? 'light' : 'dark'} />
+      <StatusBar style={themeMode === 'light' ? 'dark' : 'light'} />
       <SafeAreaView style={{ flex: 1 }} edges={['top']}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingTop: 8, paddingBottom: 8 }}>
           <Pressable onPress={() => router.back()} hitSlop={8}>
@@ -98,20 +106,46 @@ export default function AdminSettings() {
                 <Ionicons name="settings-outline" size={42} color={p.fgFaint} />
                 <Text style={{ color: p.fgMuted, marginTop: 10 }}>No settings configured</Text>
               </View>
-            ) : keys.map((k) => (
-              <View key={k} style={{ marginBottom: 12 }}>
-                <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '600', marginBottom: 4 }}>{k}</Text>
-                <View style={{ backgroundColor: p.bgElev, borderRadius: 12, borderWidth: 1, borderColor: p.border, paddingHorizontal: 12, height: 44, justifyContent: 'center' }}>
-                  <TextInput
-                    value={draft[k] ?? ''}
-                    onChangeText={(v) => setDraft({ ...draft, [k]: v })}
-                    style={{ color: p.fg, fontSize: 13, fontFamily: 'monospace' }}
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                  />
+            ) : keys.map((k) => {
+              const raw = draft[k] ?? '';
+              const isBool = raw === 'true' || raw === 'false';
+              const isNumeric = raw.trim() !== '' && !isNaN(Number(raw));
+              // Percentage-style settings (stored as a fraction) get a helper hint.
+              const pctHint = /pct|percent|spread/i.test(k) && isNumeric
+                ? `${(Number(raw) * 100).toFixed(2)}%`
+                : null;
+              const label = k.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+              return (
+                <View key={k} style={{ marginBottom: 14 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                    <Text style={{ color: p.fg, fontSize: 13, fontWeight: '700' }}>{label}</Text>
+                    {pctHint && <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '700' }}>{pctHint}</Text>}
+                    {isBool && (
+                      <Switch
+                        value={raw === 'true'}
+                        onValueChange={(on) => setDraft({ ...draft, [k]: on ? 'true' : 'false' })}
+                        trackColor={{ true: p.fg, false: p.border }}
+                      />
+                    )}
+                  </View>
+                  {meta[k]?.description ? (
+                    <Text style={{ color: p.fgMuted, fontSize: 11, marginBottom: 6 }}>{meta[k]?.description}</Text>
+                  ) : null}
+                  {!isBool && (
+                    <View style={{ backgroundColor: p.bgElev, borderRadius: 12, borderWidth: 1, borderColor: p.border, paddingHorizontal: 12, height: 44, justifyContent: 'center' }}>
+                      <TextInput
+                        value={raw}
+                        onChangeText={(v) => setDraft({ ...draft, [k]: v })}
+                        keyboardType={isNumeric ? 'decimal-pad' : 'default'}
+                        style={{ color: p.fg, fontSize: 14 }}
+                        autoCapitalize="none"
+                        autoCorrect={false}
+                      />
+                    </View>
+                  )}
                 </View>
-              </View>
-            ))}
+              );
+            })}
           </ScrollView>
         )}
       </SafeAreaView>

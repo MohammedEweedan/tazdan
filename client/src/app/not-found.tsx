@@ -35,6 +35,7 @@ import {
 import { useTranslate } from "@tolgee/react";
 import PublicNav from "@/components/ui/PublicNav";
 import PublicFooter from "@/components/ui/PublicFooter";
+import { useIsAr } from "@/hooks/useIsAr";
 
 type StatusKind = "live" | "degraded" | "down" | "unknown";
 
@@ -82,6 +83,7 @@ function useServerStatus() {
 export default function NotFound() {
   const { t } = useTranslate();
   const { colorMode } = useColorMode();
+  const isAr = useIsAr();
   const dark = colorMode === "dark";
   const status = useServerStatus();
 
@@ -231,7 +233,7 @@ export default function NotFound() {
               as="h1"
               fontSize={{ base: "30px", md: "44px" }}
               letterSpacing="-0.035em"
-              lineHeight={1.05}
+              lineHeight={isAr ? 1.2 : 1.05}
               fontWeight={800}
               maxW="22ch"
             >
@@ -240,7 +242,7 @@ export default function NotFound() {
             <Text
               color={fgMuted}
               fontSize={{ base: "15px", md: "17px" }}
-              lineHeight={1.55}
+              lineHeight={isAr ? 1.75 : 1.55}
               maxW="56ch"
             >
               {t(

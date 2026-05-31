@@ -3,7 +3,7 @@
  * Mirror `MessageController.toWire()` on the server.
  */
 
-export type MessageType = 'TEXT' | 'PAYMENT' | 'SYSTEM' | 'P2P_NOTE' | 'ESCALATION';
+export type MessageType = 'TEXT' | 'PAYMENT' | 'REQUEST' | 'STICKER' | 'SYSTEM' | 'P2P_NOTE' | 'ESCALATION';
 
 export interface PaymentMetadata {
   amount: number;
@@ -12,6 +12,11 @@ export interface PaymentMetadata {
   status?: 'PENDING' | 'COMPLETED' | 'FAILED';
   /** Free-form note shown under the receipt. */
   note?: string;
+}
+
+export interface MessagePrivacy {
+  readReceiptsOn: boolean;
+  lastSeenOn: boolean;
 }
 
 export interface ApiMessage {
@@ -38,6 +43,15 @@ export interface ConversationPartner {
   avatarUrl?: string | null;
   role?: string;
   kycStatus?: string;
+  bio?: string | null;
+  profilePublic?: boolean;
+  createdAt?: string;
+  messagePrivacy?: MessagePrivacy & {
+    canSeeReadReceipts?: boolean;
+    canSeePresence?: boolean;
+    onlineNow?: boolean;
+    lastSeenAt?: string | null;
+  };
 }
 
 export interface Conversation {

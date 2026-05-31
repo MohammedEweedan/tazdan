@@ -24,6 +24,7 @@ adminRouter.get('/kyc', AdminController.getKYC);
 adminRouter.put('/kyc/:userId/approve', AdminController.approveKYC);
 adminRouter.put('/kyc/:userId/reject', AdminController.rejectKYC);
 adminRouter.get('/users', AdminController.getUsers);
+adminRouter.get('/users/:id/balances', AdminController.getUserBalances);
 adminRouter.put('/users/:id/status', AdminController.updateUserStatus);
 adminRouter.put('/users/:id/freeze',   AdminController.freezeUser);
 adminRouter.put('/users/:id/unfreeze', AdminController.unfreezeUser);
@@ -44,6 +45,16 @@ adminRouter.put('/aml-flags/:id/resolve', AdminController.resolveAMLFlag);
 
 // Real-time platform metrics
 adminRouter.get('/metrics', AdminController.getMetrics);
+
+// Aggregate exposure + total user holdings valuation
+adminRouter.get('/exposure', AdminController.getExposure);
+
+// FX status — live scraped LYD parallel rates + USD/LYD order-book skew
+adminRouter.get('/fx-status', AdminController.getFxStatus);
+
+// Treasury safety — fund-integrity audit + ledger reconciliation + halt control
+adminRouter.get('/fund-integrity', AdminController.getFundIntegrity);
+adminRouter.post('/clear-trading-halt', AdminController.clearTradingHalt);
 
 // Production-safe manual wallet credit
 adminRouter.post('/manual-credit', AdminController.manualCredit);

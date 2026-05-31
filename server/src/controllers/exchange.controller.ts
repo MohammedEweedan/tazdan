@@ -12,6 +12,8 @@ import {
 } from '../services/exchange/priceEngine.service';
 import { executeQuote } from '../services/exchange/orderExecution.service';
 import { getDexQuote, SUPPORTED_CHAINS, type ChainId } from '../services/dex/oneinch';
+import { isLedgerCurrency } from '../services/ledger/ledger.service';
+import { enforceStepUp } from '../services/security/stepUp.service';
 import { sendBuyConfirmed, sendSellConfirmed } from '../services/email';
 import { pushCopy, pushTxEvent } from '../services/push.service';
 import { logger } from '../utils/logger';
@@ -22,6 +24,10 @@ const quoteSchema = z.object({
   side: z.enum(['BUY', 'SELL']),
   fiatAmount: z.union([z.string(), z.number()]).optional(),
   cryptoAmount: z.union([z.string(), z.number()]).optional(),
+  // BUY: fiat wallet to fund from. SELL: fiat/stablecoin wallet to receive into.
+  // Required. Never default, because defaulting silently moves the wrong wallet.
+  receiveCurrency: z.string().min(1).max(10).optional(),
+  fundingCurrency: z.string().min(1).max(10).optional(),
 });
 
 const executeSchema = z.object({
@@ -30,6 +36,8 @@ const executeSchema = z.object({
   idempotencyKey: z.string().min(8).max(128).optional(),
   // Required when the user has 2FA enabled (we re-check server-side).
   twoFactorCode: z.string().min(6).max(8).optional(),
+  // 6-digit step-up code for high-value (≥$1000) or new-device trades.
+  stepUpCode: z.string().regex(/^\d{6}$/).optional(),
 });
 
 export class ExchangeController {
@@ -83,12 +91,36 @@ export class ExchangeController {
       if (body.side === 'SELL' && body.cryptoAmount == null) {
         throw new AppError('cryptoAmount required for SELL', 400);
       }
+
+      // AIRTIGHT SETTLEMENT CURRENCY:
+      // The wallet that funds a BUY / receives a SELL must be explicit and a
+      // real wallet currency. We DO NOT silently default to USDT/USD — that
+      // is exactly what caused trades to debit/credit the wrong wallet. If the
+      // client doesn't say which currency, the quote is rejected.
+      const requested = (body.side === 'SELL' ? body.receiveCurrency : body.fundingCurrency)?.toUpperCase();
+      if (!requested) {
+        throw new AppError(
+          body.side === 'SELL'
+            ? 'receiveCurrency is required (which wallet receives the proceeds)'
+            : 'fundingCurrency is required (which wallet pays for this)',
+          400,
+        );
+      }
+      if (!isLedgerCurrency(requested)) {
+        throw new AppError(`Unsupported settlement currency: ${requested}`, 400);
+      }
+      // Cannot settle an asset into/from itself (e.g. sell USDT → USDT).
+      if (requested === body.asset) {
+        throw new AppError(`Settlement currency must differ from the asset (${body.asset})`, 400);
+      }
+
       const quote = await buildQuote({
         asset: body.asset,
         network: body.network,
         side: body.side,
         fiatAmount: body.fiatAmount,
         cryptoAmount: body.cryptoAmount,
+        settlementCurrency: requested,
       });
       res.json({ quote });
     } catch (error) {
@@ -105,27 +137,25 @@ export class ExchangeController {
       const peek = await getQuote(body.quoteId);
       if (!peek) throw new AppError('Quote expired or not found', 400);
 
-      // 2FA enforcement on every BUY/SELL — sensitive action.
-      const me = await prisma.user.findUnique({ where: { id: req.user!.id } });
-      if (me?.twoFactorEnabled) {
-        if (!body.twoFactorCode) throw new AppError('2FA code required', 401);
-        // eslint-disable-next-line @typescript-eslint/no-var-requires
-        const speakeasy = require('speakeasy');
-        const ok = speakeasy.totp.verify({
-          secret: me.twoFactorSecret!,
-          encoding: 'base32',
-          token: body.twoFactorCode,
-          window: 2,
-        });
-        if (!ok) throw new AppError('Invalid 2FA code', 401);
-      } else {
-        // 2FA not yet configured. We allow the order to go through but
-        // nudge the user — strict policy (block until enabled) is
-        // toggled with EXCHANGE_REQUIRE_2FA=1.
-        if (process.env.EXCHANGE_REQUIRE_2FA === '1') {
-          throw new AppError('Enable 2FA before trading', 403);
-        }
+      // UNIFIED step-up / 2FA gate. One code path, one field.
+      //  - If the user has 2FA enabled → always require a code (satisfied by
+      //    their authenticator TOTP, which verifyStepUp checks).
+      //  - Otherwise → require a code only for high-value (≥$1000) or new-device
+      //    trades (emailed code).
+      // The client may send the code as `stepUpCode` (preferred) or the legacy
+      // `twoFactorCode` field — accept either so the modal "just works".
+      const me = await prisma.user.findUnique({ where: { id: req.user!.id }, select: { twoFactorEnabled: true } });
+      if (!me?.twoFactorEnabled && process.env.EXCHANGE_REQUIRE_2FA === '1') {
+        throw new AppError('Enable 2FA before trading', 403);
       }
+      await enforceStepUp({
+        userId: req.user!.id,
+        action: (peek as any).side === 'SELL' ? 'sell' : 'buy',
+        valueUsd: Number((peek as any).fiatAmount ?? 0),
+        req,
+        code: body.stepUpCode ?? body.twoFactorCode,
+        alwaysRequire: !!me?.twoFactorEnabled,
+      });
 
       const order = await executeQuote({
         userId: req.user!.id,

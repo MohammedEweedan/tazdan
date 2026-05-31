@@ -9,7 +9,9 @@
     "android": "expo run:android",
     "web": "expo start --web",
     "lint": "expo lint",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "i18n:audit": "node scripts/i18n-audit.js",
+    "i18n:audit:strict": "node scripts/i18n-audit.js --strict"
   },
   "dependencies": {
     "@expo-google-fonts/cairo": "^0.4.2",

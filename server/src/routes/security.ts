@@ -9,5 +9,7 @@ router.get('/login-history', authenticate, SecurityController.getLoginHistory);
 router.get('/sessions', authenticate, SecurityController.getSessions);
 router.delete('/sessions/:id', authenticate, SecurityController.revokeSession);
 router.delete('/sessions', authenticate, SecurityController.revokeAllSessions);
+// Step-up: request a 6-digit confirmation for a high-value/unrecognized action.
+router.post('/step-up/start', authenticate, SecurityController.startStepUp);
 
 export { router as securityRouter };

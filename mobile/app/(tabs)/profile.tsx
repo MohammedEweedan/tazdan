@@ -4,7 +4,7 @@
 
 import { Pressable, ScrollView, Switch, View, Modal, Alert, Image } from 'react-native';
 import { Text } from '@/components/ui/Text';
-import { useState } from 'react';
+import { type ReactNode, useState } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
@@ -25,6 +25,7 @@ const ACCENT = '#737373';
 interface Row {
   icon: keyof typeof Ionicons.glyphMap;
   label: string;
+  hidden?: boolean; // skip rendering this row (used to remove the theme row)
   href?: string;
   onPress?: () => void;
   danger?: boolean;
@@ -37,7 +38,7 @@ export default function Profile() {
   const { user, logout, updateUser, biometricEnabled, enableBiometric, disableBiometric, clearViewSelection } = useAuthStore();
   const p = useThemedPalette();
   const themeMode = useTheme((s) => s.mode);
-  const toggleTheme = useTheme((s) => s.toggle);
+  const setMode = useTheme((s) => s.setMode);
   const locale = useI18n((s) => s.locale);
 
   const t = useT();
@@ -143,16 +144,45 @@ export default function Profile() {
 
   const [selectedEmojiCategory, setSelectedEmojiCategory] = useState('Cool');
 
-  const groups: { title: string; rows: Row[] }[] = [
+  const THEMES: { mode: import('@/store/themeStore').ThemeMode; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
+    { mode: 'light', label: t('settings.light'), icon: 'sunny-outline' },
+    { mode: 'dark',  label: t('settings.dark'),  icon: 'moon-outline' },
+    { mode: 'mono',  label: 'Mono',               icon: 'contrast-outline' },
+  ];
+
+  const groups: { title: string; rows: Row[]; headerExtra?: ReactNode }[] = [
     {
       title: t('profile.section.preferences'),
+      headerExtra: (
+        <View style={{
+          flexDirection: 'row', gap: 8, marginBottom: 10,
+          backgroundColor: p.bgElev, borderRadius: 18,
+          borderWidth: 1, borderColor: p.border, padding: 4,
+        }}>
+          {THEMES.map(({ mode, label, icon }) => {
+            const active = themeMode === mode;
+            return (
+              <Pressable
+                key={mode}
+                onPress={() => { h.selection(); setMode(mode); }}
+                style={{
+                  flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+                  gap: 6, paddingVertical: 11, borderRadius: 14,
+                  backgroundColor: active ? p.ctaBg : 'transparent',
+                }}
+              >
+                <Ionicons name={icon} size={14} color={active ? p.ctaFg : p.fgMuted} />
+                <Text style={{ color: active ? p.ctaFg : p.fgMuted, fontSize: 13, fontWeight: active ? '700' : '600' }}>
+                  {label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      ),
       rows: [
-        {
-          icon: themeMode === 'dark' ? 'moon-outline' : 'sunny-outline',
-          label: `${t('profile.row.theme')} · ${themeMode === 'dark' ? t('settings.dark') : t('settings.light')}`,
-          onPress: () => { h.selection(); toggleTheme(); },
-          right: <Ionicons name="swap-horizontal" size={16} color={p.fgFaint} />,
-        },
+        // Theme is now a 3-step segment control rendered separately — hidden here.
+        { icon: 'contrast-outline', label: 'theme-segment-placeholder', hidden: true },
         {
           icon: 'language-outline',
           label: `${t('profile.row.language')} · ${LOCALE_META[locale].label}`,
@@ -265,7 +295,7 @@ export default function Profile() {
 
   return (
     <View style={{ flex: 1, backgroundColor: p.bg }}>
-      <StatusBar style={themeMode === 'dark' ? 'light' : 'dark'} />
+      <StatusBar style={themeMode === 'light' ? 'dark' : 'light'} />
 
       <ScrollView
         showsVerticalScrollIndicator={false}
@@ -329,33 +359,39 @@ export default function Profile() {
           </View>
 
           {/* Groups */}
-          {groups.map((g) => (
-            <View key={g.title} style={{ paddingHorizontal: 24, marginTop: 24 }}>
-              <Text style={{
-                color: p.fgFaint, fontSize: 11, fontWeight: '700', letterSpacing: 1.2,
-                marginBottom: 8, marginLeft: 4,
-              }}>
-                {g.title}
-              </Text>
-              <Panel>
-                {g.rows.map((r, i) => (
-                  <PanelRow
-                    key={r.label}
-                    icon={r.icon}
-                    label={r.label}
-                    danger={r.danger}
-                    last={i === g.rows.length - 1}
-                    right={r.right}
-                    onPress={() => {
-                      h.selection();
-                      if (r.onPress) r.onPress();
-                      else if (r.href) router.push(r.href as never);
-                    }}
-                  />
-                ))}
-              </Panel>
-            </View>
-          ))}
+          {groups.map((g) => {
+            const visibleRows = g.rows.filter((r) => !r.hidden);
+            return (
+              <View key={g.title} style={{ paddingHorizontal: 24, marginTop: 24 }}>
+                <Text style={{
+                  color: p.fgFaint, fontSize: 11, fontWeight: '700', letterSpacing: 1.2,
+                  marginBottom: 8, marginLeft: 4,
+                }}>
+                  {g.title}
+                </Text>
+                {g.headerExtra}
+                {visibleRows.length > 0 && (
+                  <Panel>
+                    {visibleRows.map((r, i) => (
+                      <PanelRow
+                        key={r.label}
+                        icon={r.icon}
+                        label={r.label}
+                        danger={r.danger}
+                        last={i === visibleRows.length - 1}
+                        right={r.right}
+                        onPress={() => {
+                          h.selection();
+                          if (r.onPress) r.onPress();
+                          else if (r.href) router.push(r.href as never);
+                        }}
+                      />
+                    ))}
+                  </Panel>
+                )}
+              </View>
+            );
+          })}
 
           <Text style={{
             color: p.fgFaint, fontSize: 11, fontWeight: '500',

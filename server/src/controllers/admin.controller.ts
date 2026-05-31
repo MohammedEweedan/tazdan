@@ -4,6 +4,8 @@ import { Decimal } from '@prisma/client/runtime/library';
 import { prisma } from '../utils/prisma';
 import { AppError } from '../middleware/errorHandler';
 import { AuthRequest } from '../types';
+import { SPREAD_SETTING_KEY, invalidateSpreadCache, getMarketPrice, getConfiguredSpread } from '../services/exchange/priceEngine.service';
+import { postLedger, isLedgerCurrency } from '../services/ledger/ledger.service';
 
 const rateSchema = z.object({
   buyPrice: z.number().positive(),
@@ -399,6 +401,44 @@ export class AdminController {
       if (!withdrawal) throw new AppError('Withdrawal not found', 404);
       if (withdrawal.status !== 'PENDING') throw new AppError('Withdrawal is not pending', 400);
 
+      // ── MULTI-SIG GATE ──────────────────────────────────────────────
+      // Withdrawals at/above WITHDRAWAL_MULTISIG_USD require N distinct admin
+      // approvals (WITHDRAWAL_MULTISIG_N, default 2) before funds are released.
+      // A single compromised admin session therefore cannot drain the treasury.
+      const thresholdUsd = Number(process.env.WITHDRAWAL_MULTISIG_USD ?? '10000');
+      const requiredApprovals = Math.max(1, Number(process.env.WITHDRAWAL_MULTISIG_N ?? '2'));
+      // Value the withdrawal in USD (1:1 for USD/USDT/USDC; FX otherwise).
+      let usdValue = Number(withdrawal.amount);
+      if (!['USD', 'USDT', 'USDC'].includes(withdrawal.currency)) {
+        try {
+          const { getRate } = await import('../services/exchange/fxRateProvider.service');
+          const pair = await getRate(withdrawal.currency, 'USD');
+          usdValue = Number(withdrawal.amount) * Number(pair.buyPrice || pair.sellPrice || 1);
+        } catch { /* fall back to raw amount */ }
+      }
+
+      if (usdValue >= thresholdUsd && requiredApprovals > 1) {
+        // Record this admin's approval (idempotent per admin).
+        await prisma.withdrawalApproval.upsert({
+          where: { withdrawalId_adminId: { withdrawalId: withdrawal.id, adminId: req.user!.id } },
+          update: { decision: 'APPROVE', note: req.body.notes },
+          create: { withdrawalId: withdrawal.id, adminId: req.user!.id, decision: 'APPROVE', note: req.body.notes },
+        });
+        const approvals = await prisma.withdrawalApproval.count({
+          where: { withdrawalId: withdrawal.id, decision: 'APPROVE' },
+        });
+        if (approvals < requiredApprovals) {
+          await prisma.auditLog.create({
+            data: { action: 'WITHDRAWAL_APPROVAL', entity: 'withdrawal', entityId: withdrawal.id, userId: req.user!.id },
+          }).catch(() => {});
+          return res.json({
+            message: `Approval recorded (${approvals}/${requiredApprovals}). Awaiting ${requiredApprovals - approvals} more admin approval(s) before release.`,
+            pending: true, approvals, required: requiredApprovals,
+          });
+        }
+        // Threshold met → fall through to release.
+      }
+
       await prisma.$transaction(async (tx: any) => {
         await tx.withdrawal.update({ where: { id: withdrawal.id }, data: { status: 'COMPLETED', processedAt: new Date(), processedBy: req.user!.id, adminNotes: req.body.notes } });
         const wallet = await tx.wallet.findUnique({ where: { userId_currency: { userId: withdrawal.userId, currency: withdrawal.currency } } });
@@ -407,6 +447,20 @@ export class AdminController {
 
         await tx.wallet.update({ where: { userId_currency: { userId: withdrawal.userId, currency: withdrawal.currency } }, data: { balance: { decrement: withdrawal.amount }, frozen: { decrement: withdrawal.amount } } });
         await tx.transaction.create({ data: { userId: withdrawal.userId, type: 'WITHDRAWAL', currency: withdrawal.currency, amount: new Decimal(-amount), fee: withdrawal.fee, balanceBefore, balanceAfter: balanceBefore - amount, reference: withdrawal.reference, description: `Withdrawal processed` } });
+
+        // Ledger mirror: user balance leaves — net goes off-platform, fee to platform.
+        if (isLedgerCurrency(withdrawal.currency)) {
+          const feeD = new Decimal(withdrawal.fee.toString());
+          const net = new Decimal(withdrawal.amount.toString()).minus(feeD);
+          await postLedger(tx, {
+            refType: 'withdrawal', refId: withdrawal.id, memo: `Withdrawal ${withdrawal.currency}`,
+            legs: [
+              { type: 'USER', userId: withdrawal.userId, currency: withdrawal.currency as any, amount: new Decimal(withdrawal.amount.toString()).neg() },
+              { type: 'SYSTEM_OFFRAMP', currency: withdrawal.currency as any, amount: net },
+              ...(feeD.gt(0) ? [{ type: 'PLATFORM' as const, currency: withdrawal.currency as any, amount: feeD }] : []),
+            ],
+          }, { allowNegativeUser: true });
+        }
 
         // If USDT withdrawal, queue on-chain send
         if (withdrawal.currency === 'USDT' && withdrawal.walletAddress) {
@@ -480,6 +534,27 @@ export class AdminController {
   }
 
   // ── Users ──────────────────────────────────────────────────────
+  // A user's full balance sheet — fiat/stable Wallet rows + on-chain crypto
+  // columns + altBalances — so an admin can see what they hold before crediting.
+  static async getUserBalances(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const userId = req.params.id;
+      const [walletRows, uw] = await Promise.all([
+        prisma.wallet.findMany({ where: { userId }, orderBy: { currency: 'asc' } }),
+        prisma.userWallet.findUnique({ where: { userId } }),
+      ]);
+      const wallets = walletRows.map((w) => ({ currency: w.currency, balance: w.balance.toString(), frozen: w.frozen.toString() }));
+      const crypto: { currency: string; balance: string }[] = [];
+      if (uw) {
+        const native: Record<string, any> = { ETH: uw.ethBalance, BTC: uw.btcBalance, SOL: uw.solBalance, 'USDT (ERC20)': uw.usdtErc20Bal, 'USDT (TRC20)': uw.usdtTrc20Bal };
+        for (const [k, v] of Object.entries(native)) if (v != null && Number(v) !== 0) crypto.push({ currency: k, balance: v.toString() });
+        const alts = (uw.altBalances && typeof uw.altBalances === 'object' ? uw.altBalances : {}) as Record<string, unknown>;
+        for (const [sym, v] of Object.entries(alts)) if (Number(v) !== 0) crypto.push({ currency: sym, balance: String(v) });
+      }
+      res.json({ wallets, crypto });
+    } catch (error) { next(error); }
+  }
+
   static async getUsers(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const page = parseInt(req.query.page as string) || 1;
@@ -511,6 +586,17 @@ export class AdminController {
   // ── Settings ───────────────────────────────────────────────────
   static async getSettings(_req: AuthRequest, res: Response, next: NextFunction) {
     try {
+      // Ensure the configurable quote spread always appears in the panel,
+      // seeded at the current default on first view.
+      await prisma.platformSettings.upsert({
+        where: { key: SPREAD_SETTING_KEY },
+        update: {},
+        create: {
+          key: SPREAD_SETTING_KEY,
+          value: process.env.QUOTE_SPREAD_PCT ?? '0.025',
+          description: 'Quote spread as a decimal fraction (0.025 = 2.5%). Marks BUY prices up and SELL prices down.',
+        },
+      });
       const settings = await prisma.platformSettings.findMany({ orderBy: { key: 'asc' } });
       res.json({ settings });
     } catch (error) { next(error); }
@@ -520,12 +606,162 @@ export class AdminController {
     try {
       const { settings } = req.body;
       for (const [key, value] of Object.entries(settings)) {
+        // The quote spread is a decimal fraction in [0, 0.5). Reject anything
+        // out of range so a typo can't mint absurd or negative quotes.
+        if (key === SPREAD_SETTING_KEY) {
+          const n = Number(value);
+          if (!Number.isFinite(n) || n < 0 || n >= 0.5) {
+            throw new AppError('quote_spread_pct must be a fraction between 0 and 0.5 (e.g. 0.025 = 2.5%)', 400);
+          }
+        }
         await prisma.platformSettings.upsert({
           where: { key }, update: { value: String(value), updatedBy: req.user!.id },
           create: { key, value: String(value), updatedBy: req.user!.id },
         });
       }
+      if (Object.prototype.hasOwnProperty.call(settings, SPREAD_SETTING_KEY)) {
+        invalidateSpreadCache();
+      }
       res.json({ message: 'Settings updated' });
+    } catch (error) { next(error); }
+  }
+
+  // ── Fund integrity + ledger reconciliation (treasury safety) ───
+  static async getFundIntegrity(_req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const { auditFundIntegrity } = await import('../services/ledger/fundIntegrity.service');
+      const { reconcileLedger, isTradingHalted } = await import('../services/ledger/reconcile.service');
+      // Audit read-only here (don't trip the halt from a manual view).
+      const [funds, ledger, halted] = await Promise.all([
+        auditFundIntegrity({ haltOnBreach: false }),
+        reconcileLedger(),
+        isTradingHalted(),
+      ]);
+      res.json({ tradingHalted: halted, funds, ledger });
+    } catch (error) { next(error); }
+  }
+
+  // Clear a trading halt after an investigation (admin only, audit-logged).
+  static async clearTradingHalt(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const { setTradingHalt } = await import('../services/ledger/reconcile.service');
+      await setTradingHalt(false, `cleared by admin ${req.user!.id}`);
+      await prisma.auditLog.create({
+        data: { action: 'CLEAR_TRADING_HALT', entity: 'ledger', userId: req.user!.id },
+      }).catch(() => { /* audit log is best-effort */ });
+      res.json({ message: 'Trading halt cleared' });
+    } catch (error) { next(error); }
+  }
+
+  // ── FX status (LYD scrape + order-book skew, for cross-check) ───
+  static async getFxStatus(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const hours = Math.min(168, Math.max(1, parseInt(String(req.query.hours ?? '24'), 10) || 24));
+      const { getScrapedLydRates } = await import('../services/exchange/fxRateProvider.service');
+      const { lydOrderBookState, getLydHistory } = await import('../services/exchange/lydOrderBook.service');
+      const [lydScraped, history] = await Promise.all([getScrapedLydRates(), getLydHistory(hours)]);
+      res.json({
+        lydParallelScraped: lydScraped,      // LYD per 1 unit, straight from the source
+        lydOrderBook: lydOrderBookState(),   // net flow + current upward skew
+        usdLydHistory: history,              // [{ t, price, volumeUsd, skewPct }]
+        historyHours: hours,
+        generatedAt: Date.now(),
+      });
+    } catch (error) { next(error); }
+  }
+
+  // ── Exposure & total holdings ──────────────────────────────────
+  // Aggregates every user's crypto + fiat balances, values them at the
+  // current market price, and computes the platform's payout exposure if
+  // all users were to liquidate instantly at our SELL price (market minus
+  // the configured spread). The gap between holdings value and exposure is
+  // the spread cushion we'd capture on a mass liquidation.
+  static async getExposure(_req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      // 1) Crypto: sum the dedicated Decimal columns across all UserWallets.
+      const cryptoAgg = await prisma.userWallet.aggregate({
+        _sum: { ethBalance: true, btcBalance: true, solBalance: true, usdtErc20Bal: true, usdtTrc20Bal: true },
+      });
+      const holdings: Record<string, number> = {
+        ETH:  Number(cryptoAgg._sum.ethBalance ?? 0),
+        BTC:  Number(cryptoAgg._sum.btcBalance ?? 0),
+        SOL:  Number(cryptoAgg._sum.solBalance ?? 0),
+        USDT: Number(cryptoAgg._sum.usdtErc20Bal ?? 0) + Number(cryptoAgg._sum.usdtTrc20Bal ?? 0),
+      };
+
+      // 2) Crypto: fold in the altBalances JSON ledger (BNB, XRP, …).
+      const alts = await prisma.userWallet.findMany({ select: { altBalances: true } });
+      for (const w of alts) {
+        const bal = (w.altBalances ?? {}) as Record<string, unknown>;
+        for (const [sym, v] of Object.entries(bal)) {
+          const n = Number(v);
+          if (Number.isFinite(n) && n !== 0) holdings[sym.toUpperCase()] = (holdings[sym.toUpperCase()] ?? 0) + n;
+        }
+      }
+
+      // 3) Fiat: sum Wallet balances per currency.
+      const fiatRows = await prisma.wallet.groupBy({ by: ['currency'], _sum: { balance: true } });
+
+      // 4) Price every crypto symbol (USDT/USD/USDC = 1). Failures are skipped
+      //    and surfaced in `unpriced` so the dashboard can flag incomplete data.
+      const spread = Number(await getConfiguredSpread());
+      const STABLE = new Set(['USDT', 'USDC', 'USD']);
+      const priced: { symbol: string; amount: number; price: number; valueUsd: number }[] = [];
+      const unpriced: string[] = [];
+      await Promise.all(Object.entries(holdings).map(async ([sym, amount]) => {
+        if (amount === 0) return;
+        if (STABLE.has(sym)) { priced.push({ symbol: sym, amount, price: 1, valueUsd: amount }); return; }
+        try {
+          const price = Number(await getMarketPrice(`${sym}USDT`));
+          priced.push({ symbol: sym, amount, price, valueUsd: amount * price });
+        } catch {
+          unpriced.push(sym);
+        }
+      }));
+
+      const cryptoValueUsd = priced.reduce((s, r) => s + r.valueUsd, 0);
+
+      // 5) Fiat → USD via the FX provider (USD/USDT/USDC = 1).
+      const { getRate } = await import('../services/exchange/fxRateProvider.service');
+      let fiatValueUsd = 0;
+      const fiatBreakdown: { currency: string; amount: number; valueUsd: number }[] = [];
+      for (const row of fiatRows) {
+        const cur = String(row.currency);
+        const amount = Number(row._sum.balance ?? 0);
+        if (amount === 0) continue;
+        let valueUsd = amount;
+        if (!STABLE.has(cur) && cur !== 'USD') {
+          try {
+            const pair = await getRate(cur, 'USD');
+            const usdPerUnit = Number(pair.buyPrice || pair.sellPrice);
+            valueUsd = usdPerUnit > 0 ? amount * usdPerUnit : amount;
+          } catch { /* fall back to 1:1 */ }
+        }
+        fiatValueUsd += valueUsd;
+        fiatBreakdown.push({ currency: cur, amount, valueUsd });
+      }
+
+      const totalHoldingsUsd = cryptoValueUsd + fiatValueUsd;
+      // Exposure: what we'd owe if every crypto holding were sold instantly at
+      // our SELL price (market × (1 − spread)). Fiat is already cash we owe.
+      const cryptoPayoutUsd = cryptoValueUsd * (1 - spread);
+      const exposureUsd = cryptoPayoutUsd + fiatValueUsd;
+      const spreadCushionUsd = cryptoValueUsd - cryptoPayoutUsd;
+
+      res.json({
+        generatedAt: Date.now(),
+        spreadPct: spread,
+        totals: {
+          totalHoldingsUsd,
+          cryptoValueUsd,
+          fiatValueUsd,
+          exposureUsd,
+          spreadCushionUsd,
+        },
+        crypto: priced.sort((a, b) => b.valueUsd - a.valueUsd),
+        fiat: fiatBreakdown.sort((a, b) => b.valueUsd - a.valueUsd),
+        unpriced,
+      });
     } catch (error) { next(error); }
   }
 
@@ -1073,6 +1309,16 @@ export class AdminController {
           create: { userId, currency: cur, balance: dec },
           update: { balance: { increment: dec } },
         });
+        // Ledger mirror: admin credit is external money entering the system.
+        if (isLedgerCurrency(currency)) {
+          await postLedger(tx, {
+            refType: 'admin_credit', refId: reference, memo: description,
+            legs: [
+              { type: 'SYSTEM_ONRAMP', currency: cur, amount: dec.neg() },
+              { type: 'USER', userId, currency: cur, amount: dec },
+            ],
+          });
+        }
         const balanceBefore = Number(wallet.balance) - amount;
         await tx.transaction.create({
           data: {

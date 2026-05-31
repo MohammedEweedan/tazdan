@@ -18,6 +18,7 @@ import { Text, TextInput } from '@/components/ui/Text';
 import { Ionicons } from '@expo/vector-icons';
 
 import { type Palette } from '@/store/themeStore';
+import { useT } from '@/store/i18nStore';
 import { useWallets } from '@/hooks';
 import { getCurrencyMeta } from '@/constants';
 import type { Currency, Wallet } from '@/types';
@@ -29,14 +30,16 @@ export interface SendMoneySheetProps {
   palette: Palette;
   /** Display name of the recipient — shown under the title. */
   recipientLabel?: string;
+  mode?: 'SEND' | 'REQUEST';
   onClose: () => void;
   onSubmit: (amount: number, currency: string, note?: string) => void;
 }
 
 export function SendMoneySheet({
-  visible, palette: p, recipientLabel, onClose, onSubmit,
+  visible, palette: p, recipientLabel, mode = 'SEND', onClose, onSubmit,
 }: SendMoneySheetProps) {
   const { data: wallets } = useWallets();
+  const t = useT();
 
   // Normalised wallet list: any chain variant (USDT_ERC20, USDT_TRC20,
   // ETH_ERC20 if/when introduced, etc.) collapses into a single chip
@@ -99,7 +102,7 @@ export function SendMoneySheet({
   const available = selected?.balance ?? 0;
   const numAmount = parseFloat(amount);
   const overflow = numAmount > available;
-  const valid = !!selected && selected.balance > 0 && numAmount > 0 && !overflow;
+  const valid = !!selected && numAmount > 0 && (mode === 'REQUEST' || (selected.balance > 0 && !overflow));
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
@@ -127,11 +130,11 @@ export function SendMoneySheet({
             {/* Title + recipient */}
             <View>
               <Text style={{ color: p.fg, fontSize: 18, fontWeight: '600', letterSpacing: -0.3 }}>
-                Send a payment
+                {mode === 'REQUEST' ? t('money.requestTitle') : t('money.sendTitle')}
               </Text>
               {!!recipientLabel && (
                 <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '600', marginTop: 2 }}>
-                  To {recipientLabel}
+                  {mode === 'REQUEST' ? t('money.from') : t('money.to')} {recipientLabel}
                 </Text>
               )}
             </View>
@@ -144,10 +147,10 @@ export function SendMoneySheet({
                 gap: 6,
               }}>
                 <Text style={{ color: p.fg, fontSize: 14, fontWeight: '700' }}>
-                  No wallets
+                  {t('money.noWalletsTitle')}
                 </Text>
                 <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '500' }}>
-                  Top up a wallet first to send a payment in chat.
+                  {t('money.noWalletsBody')}
                 </Text>
               </View>
             ) : (
@@ -196,7 +199,7 @@ export function SendMoneySheet({
                             opacity: active ? 0.8 : 1,
                           }}
                         >
-                          {formatBal(d.balance, decimals)} avail.
+                          {formatBal(d.balance, decimals)} {t('money.availableSuffix')}
                         </Text>
                       </Pressable>
                     );
@@ -212,7 +215,7 @@ export function SendMoneySheet({
                 }}>
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
                     <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '700', letterSpacing: 0.5 }}>
-                      AMOUNT
+                      {t('money.amount')}
                     </Text>
                     {selected && selected.balance > 0 && (
                       <Pressable
@@ -225,7 +228,7 @@ export function SendMoneySheet({
                         }}
                       >
                         <Text style={{ color: p.fg, fontSize: 10, fontWeight: '600', letterSpacing: 0.4 }}>
-                          MAX
+                          {t('money.max')}
                         </Text>
                       </Pressable>
                     )}
@@ -249,7 +252,7 @@ export function SendMoneySheet({
                   </View>
                   {overflow && (
                     <Text style={{ color: '#ef4444', fontSize: 11, fontWeight: '700', marginTop: 2 }}>
-                      Exceeds available balance
+                      {t('money.exceedsBalance')}
                     </Text>
                   )}
                 </View>
@@ -263,7 +266,7 @@ export function SendMoneySheet({
                   <TextInput
                     value={note}
                     onChangeText={setNote}
-                    placeholder="What's this for? (optional)"
+                    placeholder={mode === 'REQUEST' ? t('money.requestNotePlaceholder') : t('money.notePlaceholder')}
                     placeholderTextColor={p.fgFaint}
                     multiline
                     style={{ color: p.fg, fontSize: 14, fontWeight: '500', minHeight: 36 }}
@@ -272,7 +275,7 @@ export function SendMoneySheet({
               </>
             )}
 
-            {/* Send CTA */}
+            {/* Send / request CTA */}
             <Pressable
               disabled={!valid}
               // Send the LOGICAL currency (USDT, BTC, ETH…) rather than
@@ -290,9 +293,11 @@ export function SendMoneySheet({
                 flexDirection: 'row', gap: 8,
               })}
             >
-              <Ionicons name="paper-plane" size={15} color="#fff" />
+              <Ionicons name={mode === 'REQUEST' ? 'receipt-outline' : 'paper-plane'} size={15} color="#fff" />
               <Text style={{ color: '#fff', fontSize: 15, fontWeight: '600' }}>
-                {valid ? `Send ${formatAmount(numAmount)} ${currency}` : 'Send payment'}
+                {valid
+                  ? t(mode === 'REQUEST' ? 'money.requestCta' : 'money.sendCta', { amount: formatAmount(numAmount), currency: currency ?? '' })
+                  : t(mode === 'REQUEST' ? 'money.requestFallback' : 'money.sendFallback')}
               </Text>
             </Pressable>
           </Pressable>

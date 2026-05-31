@@ -15,14 +15,22 @@ import axios from 'axios';
 import Decimal from 'decimal.js';
 import { randomUUID } from 'crypto';
 import { redisGet, redisSet, redisDel, getRedisClient } from '../../utils/redis';
+import { prisma } from '../../utils/prisma';
+import { isLedgerCurrency } from '../ledger/ledger.service';
 
 Decimal.set({ precision: 40 });
 
-// ── Silent platform margin (BUY only) ────────────────────────────────
-// Applied on top of the per-asset spread. Collected in the quoted price
-// so it is invisible to the user — appears as part of the natural exchange
-// rate. Separate from the explicit platform fee shown in the UI.
-const PLATFORM_MARGIN = new Decimal(0.015); // 1.5 %
+// Admin-configurable spread. Stored in PlatformSettings under this key as a
+// decimal fraction string (e.g. "0.025" = 2.5 %). Editable from the admin
+// panel; falls back to QUOTE_SPREAD_PCT env / the hardcoded default below.
+export const SPREAD_SETTING_KEY = 'quote_spread_pct';
+
+// ── Default spread ───────────────────────────────────────────────────
+// Flat spread applied to every quote: BUY is marked up, SELL is marked
+// down by this fraction. This is the exchange rate the user transacts at.
+// Override per-asset via FEES.spread below; falls back to this default.
+// Configurable via the QUOTE_SPREAD_PCT env var (e.g. "0.025" = 2.5 %).
+const DEFAULT_SPREAD = new Decimal(process.env.QUOTE_SPREAD_PCT ?? '0.025'); // 2.5 %
 
 // ── Fee schedule (dynamic for all assets) ────────────────────────────
 // Default spread and network fees for any cryptocurrency
@@ -74,9 +82,31 @@ export const FEES = {
   } as Record<string, { gas: number; slippage: number }>,
 } as const;
 
-// Helper to get spread for any asset
-function getSpread(asset: string): number {
-  return FEES.spread[asset.toUpperCase()] ?? FEES.spread.DEFAULT;
+// ── Configurable spread (admin panel → PlatformSettings) ─────────────
+// Cached for a few seconds so quote bursts don't each hit the DB.
+let spreadCache: { value: Decimal; exp: number } | null = null;
+const SPREAD_TTL_MS = 10_000;
+
+export async function getConfiguredSpread(): Promise<Decimal> {
+  if (spreadCache && spreadCache.exp > Date.now()) return spreadCache.value;
+  let value = DEFAULT_SPREAD;
+  try {
+    const row = await prisma.platformSettings.findUnique({ where: { key: SPREAD_SETTING_KEY } });
+    if (row?.value != null && row.value !== '') {
+      const parsed = new Decimal(row.value);
+      // Sanity clamp: spread must be in [0, 50 %) to avoid nonsensical quotes.
+      if (parsed.gte(0) && parsed.lt(0.5)) value = parsed;
+    }
+  } catch {
+    // DB unavailable — fall back to default.
+  }
+  spreadCache = { value, exp: Date.now() + SPREAD_TTL_MS };
+  return value;
+}
+
+// Invalidate the cache immediately after an admin update.
+export function invalidateSpreadCache(): void {
+  spreadCache = null;
 }
 
 // Helper to get network fees for any asset/network combo
@@ -167,8 +197,14 @@ export interface Quote {
   asset: string;
   network: string;
 
+  // Fiat/stablecoin wallet the trade settles into (SELL) or funds from (BUY).
+  // `fiatAmount` is USD/USDT-denominated for pricing math. `settlementAmount`
+  // is the exact amount in `settlementCurrency` the user sees and pays/receives.
+  settlementCurrency: string;
+
   marketPrice: string;     // raw Binance mid
   quotedPrice: string;     // what user sees (market * (1 + spread) on BUY)
+  spreadPct: string;       // disclosed spread fraction, e.g. "0.025" = 2.5 %
 
   fiatAmount: string;      // USDT in
   cryptoAmount: string;    // asset out
@@ -176,8 +212,11 @@ export interface Quote {
   platformFee: string;
   networkFee: string;
   spreadCapture: string;   // your profit (fiat terms)
+  settlementAmount: string;
+  platformFeeSettlement: string;
+  networkFeeSettlement: string;
 
-  totalUserPays: string;   // BUY: fiatAmount (they committed this) | SELL: what we owe them
+  totalUserPays: string;   // BUY: settlementAmount | SELL: cryptoAmount
   expiresAt: number;       // unix ms
 }
 
@@ -261,22 +300,62 @@ export async function consumeQuote(id: string): Promise<Quote | null> {
  *   → sold at `quotedPrice = marketPrice * (1 - spread)`
  *   → fees debited from fiat proceeds, remainder credited as USDT
  */
+/**
+ * Convert an amount in `currency` to USD. USD/USDT/USDC are 1:1; other fiats
+ * route through the FX provider (getRate(currency,'USD') = USD per 1 unit).
+ * Falls back to 1:1 only if no rate is resolvable, which should be rare given
+ * the provider's static fallback table.
+ */
+async function fundingToUsd(currency: string, amount: Decimal): Promise<Decimal> {
+  const c = currency.toUpperCase();
+  if (c === 'USD' || c === 'USDT' || c === 'USDC') return amount;
+  const { getRate } = await import('./fxRateProvider.service');
+  const pair = await getRate(c, 'USD').catch(() => null);
+  const usdPerUnit = pair ? new Decimal(pair.buyPrice || pair.sellPrice) : new Decimal(0);
+  if (usdPerUnit.lte(0)) return amount; // last-resort: treat as USD
+  return amount.mul(usdPerUnit);
+}
+
+async function usdToFunding(currency: string, usdAmount: Decimal): Promise<Decimal> {
+  const c = currency.toUpperCase();
+  if (c === 'USD' || c === 'USDT' || c === 'USDC') return usdAmount;
+  const { getRate } = await import('./fxRateProvider.service');
+  const pair = await getRate('USD', c).catch(() => null);
+  const unitsPerUsd = pair ? new Decimal(pair.sellPrice || pair.buyPrice) : new Decimal(0);
+  if (unitsPerUsd.lte(0)) return usdAmount; // last-resort: treat as USD
+  return usdAmount.mul(unitsPerUsd);
+}
+
 export async function buildQuote(opts: {
   asset: string;
   network: string;
-  fiatAmount?: string | number;    // required for BUY
+  fiatAmount?: string | number;    // required for BUY (in the FUNDING currency)
   cryptoAmount?: string | number;  // required for SELL
   side: Side;
+  settlementCurrency: string;      // fiat/stablecoin wallet; required, never defaulted
 }): Promise<Quote> {
   const asset = opts.asset.toUpperCase();
   const network = opts.network.toUpperCase();
   const { side } = opts;
+  const settlementCurrency = opts.settlementCurrency.toUpperCase();
+  if (!isLedgerCurrency(settlementCurrency)) {
+    throw new Error(`Unsupported settlement currency: ${settlementCurrency}`);
+  }
+  if (settlementCurrency === asset) {
+    throw new Error(`Settlement currency must differ from the asset (${asset})`);
+  }
   
   const nkey = networkKey(asset, network);
-  const spreadPct = new Decimal(getSpread(asset));
+  const spreadPct = await getConfiguredSpread();
   const netCfg = getNetworkFees(asset, network);
   const networkPct = new Decimal(netCfg.gas).plus(netCfg.slippage);
   const platformPct = new Decimal(FEES.platform);
+
+  // Live network-fee floor (USD): the real on-chain cost right now. We charge
+  // at least this so a gas spike above the static estimate can't eat margin.
+  // `null` when no live oracle covers the chain → static table is used as-is.
+  const { liveNetworkCostUsd } = await import('./gasOracle.service');
+  const liveNetworkFloor = await liveNetworkCostUsd(nkey).catch(() => null);
 
   // Fetch market price (USDT = 1).
   const sym = toBinanceSymbol(asset);
@@ -293,11 +372,11 @@ export async function buildQuote(opts: {
     }
   }
 
-  // BUY: mark up by spread + silent platform margin (1.5 %)
-  // SELL: only the explicit spread is deducted (margin not applied on sells
-  //       to stay competitive and avoid unusable rates).
+  // Symmetric spread: BUY is marked up, SELL is marked down by the same
+  // configured fraction. This spread is disclosed to the user (returned as
+  // `spreadPct` and surfaced in the UI).
   const quotedPrice = side === 'BUY'
-    ? marketPrice.mul(new Decimal(1).plus(spreadPct).plus(PLATFORM_MARGIN))
+    ? marketPrice.mul(new Decimal(1).plus(spreadPct))
     : marketPrice.mul(new Decimal(1).minus(spreadPct));
 
   let fiatAmount: Decimal;
@@ -305,14 +384,25 @@ export async function buildQuote(opts: {
   let platformFee: Decimal;
   let networkFee: Decimal;
   let spreadCapture: Decimal;
+  let settlementAmount: Decimal;
+  let platformFeeSettlement: Decimal;
+  let networkFeeSettlement: Decimal;
 
   if (side === 'BUY') {
     if (opts.fiatAmount == null) throw new Error('fiatAmount required for BUY');
-    fiatAmount = new Decimal(opts.fiatAmount);
-    if (fiatAmount.lte(0)) throw new Error('fiatAmount must be > 0');
+    // The user enters the spend amount in their FUNDING currency (LYD, USD,
+    // USDT, …). Internal crypto math is USD-denominated, so convert non-USD
+    // fiats to USD here. `fiatAmount` below is therefore always USD-equivalent;
+    // the settlement leg debits the original funding amount in its own currency.
+    const enteredAmount = new Decimal(opts.fiatAmount);
+    if (enteredAmount.lte(0)) throw new Error('fiatAmount must be > 0');
+    settlementAmount = enteredAmount;
+    fiatAmount = await fundingToUsd(settlementCurrency, enteredAmount);
 
     platformFee = fiatAmount.mul(platformPct);
     networkFee = fiatAmount.mul(networkPct);
+    // Never charge below the live on-chain cost.
+    if (liveNetworkFloor && liveNetworkFloor.gt(networkFee)) networkFee = liveNetworkFloor;
     const spendable = fiatAmount.minus(platformFee).minus(networkFee);
     if (spendable.lte(0)) throw new Error('Amount too small to cover fees');
 
@@ -327,24 +417,35 @@ export async function buildQuote(opts: {
     const gross = cryptoAmount.mul(quotedPrice);
     platformFee = gross.mul(platformPct);
     networkFee = gross.mul(networkPct);
+    // Never charge below the live on-chain cost.
+    if (liveNetworkFloor && liveNetworkFloor.gt(networkFee)) networkFee = liveNetworkFloor;
     fiatAmount = gross.minus(platformFee).minus(networkFee);
     if (fiatAmount.lte(0)) throw new Error('Amount too small to cover fees');
     spreadCapture = marketPrice.minus(quotedPrice).mul(cryptoAmount); // positive on SELL
+    settlementAmount = await usdToFunding(settlementCurrency, fiatAmount);
   }
+
+  platformFeeSettlement = await usdToFunding(settlementCurrency, platformFee);
+  networkFeeSettlement = await usdToFunding(settlementCurrency, networkFee);
 
   const quote: Quote = {
     id: randomUUID(),
     side,
     asset,
     network: network.toUpperCase(),
+    settlementCurrency,
     marketPrice: marketPrice.toFixed(8),
     quotedPrice: quotedPrice.toFixed(8),
+    spreadPct: spreadPct.toFixed(6),
     fiatAmount: fiatAmount.toFixed(8),
     cryptoAmount: cryptoAmount.toFixed(18),
     platformFee: platformFee.toFixed(8),
     networkFee: networkFee.toFixed(8),
     spreadCapture: spreadCapture.toFixed(8),
-    totalUserPays: side === 'BUY' ? fiatAmount.toFixed(8) : cryptoAmount.toFixed(18),
+    settlementAmount: settlementAmount.toFixed(8),
+    platformFeeSettlement: platformFeeSettlement.toFixed(8),
+    networkFeeSettlement: networkFeeSettlement.toFixed(8),
+    totalUserPays: side === 'BUY' ? settlementAmount.toFixed(8) : cryptoAmount.toFixed(18),
     expiresAt: Date.now() + QUOTE_TTL_MS,
   };
   await setQuote(quote);

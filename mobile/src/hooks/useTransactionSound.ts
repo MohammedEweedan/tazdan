@@ -8,10 +8,24 @@
 
 import { useRef, useCallback } from 'react';
 import { Platform } from 'react-native';
-import { Audio } from 'expo-av';
 import * as Haptics from 'expo-haptics';
 import { TRANSACTION_SOUND, type TransactionType } from '@/constants';
 import { SUCCESS_SOUND_ASSET, DECLINE_SOUND_ASSET } from '@/utils/soundGenerator';
+
+// `expo-av` was removed in Expo SDK 54, so `import { Audio } from 'expo-av'`
+// resolves to `undefined` and any static access (e.g. `Audio.Sound`) throws
+// "Cannot read property 'prototype' of undefined" — which crashed the Buy/Sell
+// widgets. Resolve the module defensively at runtime: if the audio backend is
+// missing we silently degrade to haptic-only feedback. To restore sound,
+// install `expo-audio` and swap the loaders below.
+let Audio: any;
+try {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  Audio = require('expo-av')?.Audio;
+} catch {
+  Audio = undefined;
+}
+const audioAvailable = !!Audio?.Sound?.createAsync;
 
 const safe = (fn: () => Promise<unknown> | void) => {
   if (Platform.OS === 'web') return;
@@ -19,10 +33,11 @@ const safe = (fn: () => Promise<unknown> | void) => {
 };
 
 export function useTransactionSound() {
-  const successSoundRef = useRef<Audio.Sound | null>(null);
-  const declineSoundRef = useRef<Audio.Sound | null>(null);
+  const successSoundRef = useRef<any>(null);
+  const declineSoundRef = useRef<any>(null);
 
-  const loadSuccessSound = useCallback(async (): Promise<Audio.Sound> => {
+  const loadSuccessSound = useCallback(async (): Promise<any> => {
+    if (!audioAvailable) return null;
     if (successSoundRef.current) return successSoundRef.current;
     const { sound } = await Audio.Sound.createAsync(
       SUCCESS_SOUND_ASSET,
@@ -32,7 +47,8 @@ export function useTransactionSound() {
     return sound;
   }, []);
 
-  const loadDeclineSound = useCallback(async (): Promise<Audio.Sound> => {
+  const loadDeclineSound = useCallback(async (): Promise<any> => {
+    if (!audioAvailable) return null;
     if (declineSoundRef.current) return declineSoundRef.current;
     const { sound } = await Audio.Sound.createAsync(
       DECLINE_SOUND_ASSET,
@@ -56,7 +72,7 @@ export function useTransactionSound() {
 
     // Apple Pay confirmation sound (fire-and-forget)
     loadSuccessSound()
-      .then((sound) => sound.setPositionAsync(0).then(() => sound.playAsync()))
+      .then((sound) => sound?.setPositionAsync(0).then(() => sound.playAsync()))
       .catch(() => { /* haptic-only fallback */ });
   }, [loadSuccessSound]);
 
@@ -68,7 +84,7 @@ export function useTransactionSound() {
 
     // Apple Pay decline sound (fire-and-forget)
     loadDeclineSound()
-      .then((sound) => sound.setPositionAsync(0).then(() => sound.playAsync()))
+      .then((sound) => sound?.setPositionAsync(0).then(() => sound.playAsync()))
       .catch(() => { /* haptic-only fallback */ });
   }, [loadDeclineSound]);
 

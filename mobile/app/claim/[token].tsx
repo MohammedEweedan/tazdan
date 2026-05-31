@@ -163,7 +163,7 @@ export default function ClaimScreen() {
   /* ── Render ────────────────────────────────────────────────── */
   return (
     <View style={{ flex: 1, backgroundColor: p.bg }}>
-      <StatusBar style={themeMode === 'dark' ? 'light' : 'dark'} />
+      <StatusBar style={themeMode === 'light' ? 'dark' : 'light'} />
       <TopGradient />
 
       <SafeAreaView style={{ flex: 1 }} edges={['top']}>

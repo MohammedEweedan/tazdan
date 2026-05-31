@@ -361,6 +361,10 @@ export interface CryptoQuote {
   platformFee: string;
   networkFee: string;
   spreadCapture: string;
+  settlementCurrency: string;
+  settlementAmount: string;
+  platformFeeSettlement: string;
+  networkFeeSettlement: string;
   totalUserPays: string;
   expiresAt: number;
 }

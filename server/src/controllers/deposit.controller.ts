@@ -8,6 +8,8 @@ import { AuthRequest } from '../types';
 import { getOnRampProvider } from '../services/onramp';
 import { processDeposit } from '../services/wallet/onchainSettlement.service';
 import { logger } from '../utils/logger';
+import { Decimal } from '@prisma/client/runtime/library';
+import { postLedger, isLedgerCurrency } from '../services/ledger/ledger.service';
 import { Currency } from '@prisma/client';
 import type { RampPaymentMethod, RampProvider } from '@prisma/client';
 import { sendDepositConfirmed } from '../services/email';
@@ -128,6 +130,17 @@ export class DepositController {
           update: { balance: { increment: deposit.amount } },
           create: { userId: depositorId, currency: deposit.currency, balance: deposit.amount },
         });
+
+        // Ledger mirror: money enters from the external on-ramp into the user.
+        if (isLedgerCurrency(deposit.currency)) {
+          await postLedger(tx, {
+            refType: 'deposit', refId: deposit.id, memo: `Deposit ${deposit.currency}`,
+            legs: [
+              { type: 'SYSTEM_ONRAMP', currency: deposit.currency as any, amount: new Decimal(deposit.amount.toString()).neg() },
+              { type: 'USER', userId: depositorId, currency: deposit.currency as any, amount: new Decimal(deposit.amount.toString()) },
+            ],
+          });
+        }
 
         await tx.transaction.create({
           data: {
@@ -377,6 +390,16 @@ export class DepositController {
             create: { userId: txn.userId, currency: txn.fiatCurrency, balance: txn.fiatAmount },
             update: { balance: { increment: txn.fiatAmount } },
           });
+          // Ledger mirror: external card/bank on-ramp → user.
+          if (isLedgerCurrency(txn.fiatCurrency)) {
+            await postLedger(tx, {
+              refType: 'deposit', refId: txn.id, memo: `On-ramp ${txn.fiatCurrency}`,
+              legs: [
+                { type: 'SYSTEM_ONRAMP', currency: txn.fiatCurrency as any, amount: new Decimal(txn.fiatAmount.toString()).neg() },
+                { type: 'USER', userId: txn.userId, currency: txn.fiatCurrency as any, amount: new Decimal(txn.fiatAmount.toString()) },
+              ],
+            });
+          }
           const balance = await tx.wallet.findUnique({
             where: { userId_currency: { userId: txn.userId, currency: txn.fiatCurrency } },
           });
@@ -418,11 +441,11 @@ export class DepositController {
               await sendDepositConfirmed({
                 to: u.email, firstName: u.firstName || 'there',
                 asset: txn.fiatCurrency, amount: amt,
-                txHash: txn.providerRef,
+                txHash: txn.providerRef ?? txn.id,
               });
             }
             if (prefs?.push?.deposits !== false) {
-              await pushTxEvent(txn.userId, pushCopy.depositOn(amt, txn.fiatCurrency), txn.providerRef);
+              await pushTxEvent(txn.userId, pushCopy.depositOn(amt, txn.fiatCurrency), txn.providerRef ?? txn.id);
             }
           } catch (err) {
             logger.warn('[deposit.webhookStripe] post-fill notify failed', { userId: txn.userId, err });

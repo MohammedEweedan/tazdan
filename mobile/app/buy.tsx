@@ -17,7 +17,7 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
 import { ScreenShell, CTAButton } from '@/components/ui/ScreenShell';
-import { useTheme, useThemedPalette, type Palette } from '@/store/themeStore';
+import { useTheme, useThemedPalette, type Palette, type ThemeMode } from '@/store/themeStore';
 import { useHaptics, useMarkets, useSwap, useWallets, extractErrorMessage } from '@/hooks';
 import type { Currency } from '@/types';
 
@@ -379,7 +379,7 @@ function ChipGrid({
 /* ── Custom numeric keypad ── */
 function Keypad({
   palette: p, themeMode, onKey,
-}: { palette: Palette; themeMode: 'dark' | 'light'; onKey: (k: string) => void }) {
+}: { palette: Palette; themeMode: ThemeMode; onKey: (k: string) => void }) {
   const KEYS = [
     ['1', '2', '3'],
     ['4', '5', '6'],

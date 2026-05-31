@@ -24,12 +24,16 @@ const quoteLimiter = rateLimit({
 
 const executeLimiter = rateLimit({
   windowMs: 60 * 60_000,
-  max: 10,
+  max: 40, // raised: step-up flows legitimately hit /execute 2-3× per order
   keyGenerator: userKey,
   skip: isSimulator,
+  // Don't count step-up challenges / auth prompts (401) against the limit —
+  // only completed/declined orders should burn the quota. Otherwise a single
+  // order that triggers a 6-digit prompt eats several "attempts".
+  skipFailedRequests: true,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { error: 'Order rate limit hit (10/hour). Try again later.' },
+  message: { error: 'Order rate limit hit. Please wait a bit and try again.' },
 });
 
 // Legacy rate pair endpoints (kept for the P2P / admin rate UI).

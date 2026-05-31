@@ -182,7 +182,7 @@ export function ReceiveWidget() {
             />
             <BankRow label="IBAN" value="DE89 3704 0044 0532 0130 00" palette={p} />
             <BankRow label="BIC / SWIFT" value="COBADEFFXXX" palette={p} />
-            <BankRow label={t('receive.reference')} value={`PRMK-${handle.toUpperCase()}`} palette={p} />
+            <BankRow label={t('receive.reference')} value={`PRMK-${linkSlug.toUpperCase()}`} palette={p} />
             <BankRow label={t('receive.currency')} value="EUR" palette={p} />
           </View>
 
