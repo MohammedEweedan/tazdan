@@ -2,8 +2,21 @@ import { Response, NextFunction } from 'express';
 import { prisma } from '../utils/prisma';
 import { AuthRequest } from '../types';
 import { AppError } from '../middleware/errorHandler';
+import { issueStepUp, type StepUpAction } from '../services/security/stepUp.service';
+
+const STEP_UP_ACTIONS = new Set(['withdrawal', 'buy', 'sell', 'transfer']);
 
 export class SecurityController {
+  // Issue a step-up challenge (emails a 6-digit code, or signals TOTP).
+  static async startStepUp(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const action = String(req.body?.action ?? '');
+      if (!STEP_UP_ACTIONS.has(action)) throw new AppError('Invalid action', 400);
+      const result = await issueStepUp(req.user!.id, action as StepUpAction);
+      res.json({ ...result, message: result.method === 'totp' ? 'Enter the code from your authenticator app.' : 'We emailed you a 6-digit confirmation code.' });
+    } catch (error) { next(error); }
+  }
+
   // Get login history
   static async getLoginHistory(req: AuthRequest, res: Response, next: NextFunction) {
     try {

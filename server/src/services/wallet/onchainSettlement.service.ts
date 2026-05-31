@@ -37,7 +37,6 @@ import { AppError } from '../../middleware/errorHandler';
 import { logger } from '../../utils/logger';
 import { sendDepositConfirmed } from '../email';
 import { pushCopy, pushTxEvent } from '../push.service';
-import { logger } from '../../utils/logger';
 import { deriveKeyForChain } from './walletDerivation.service';
 
 bitcoin.initEccLib(ecc);

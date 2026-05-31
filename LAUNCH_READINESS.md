@@ -1,163 +1,124 @@
-# Fortuni — Launch Readiness Analysis
+# Tazdan — Launch Readiness Analysis (v2)
 
-**Date:** 2026-05-23
+**Date:** 2026-05-31
 **Branch reviewed:** `master`
-**Scope:** mobile app + supporting server pieces required to ship to App Store + Play Store
+**Reviewer:** full-stack + security + financial-controls pass over the *current* codebase
+**Supersedes:** the 2026-05-23 "Fortuni" version (now stale — KYC, rate limiting, FX engine, and much else have since shipped).
 
-This is an honest, prioritised list of what's between "today" and a public launch. It's grouped into:
+This is an honest, current-state readiness map. It reflects what is **actually in the code today**, not the older roadmap. Grouped into:
 
-1. **Hard blockers** — you cannot launch without these.
-2. **Risk reducers** — you *can* launch without them, but you shouldn't.
-3. **Polish** — nice-to-haves that lift perceived quality.
+1. **Hard blockers** — cannot launch without these.
+2. **Risk reducers** — can launch without, shouldn't.
+3. **Polish.**
+
+---
+
+## 0. What's actually built (so we stop re-listing it as "todo")
+
+This is a real platform, not an MVP scaffold. Verified present and wired:
+
+- **Server** — Express + Prisma/Postgres, **51 models**, 33 controllers, Redis, Socket.IO. ~21k LOC.
+- **Mobile** — Expo/React Native, **71 screens**, ~49k LOC. Three themes incl. monochrome.
+- **Web** — Next.js marketing site + **web admin console** + legal pages (privacy, risk, compliance). ~32k LOC.
+- **Exchange engine** — live Binance pricing, quote→execute with **single-use 30s quotes**, **idempotency keys**, Decimal-safe money math, configurable spread (admin-set), live network-fee floor (gas oracle).
+- **FX / LYD rail** — live multi-provider FX (OpenExchangeRates → Frankfurter → open.er-api → static floor), **scraped LYD parallel-market rate** + **adaptive demand-skew order book** flooring at the street rate, FX tick history + admin chart.
+- **KYC** — **real Sumsub integration** (HMAC, applicant creation, webhook signature verification), gated provider selection. **KYB** for business accounts with volume-based tiers.
+- **On-ramp** — Stripe + Checkout.com providers (real), mock fallback for dev.
+- **Custody** — encrypted master-seed (AES-256-GCM, per-encrypt IV, auth tag), HD derivation, on-chain settlement service, withdrawal address whitelist.
+- **Fee ledger** — every fee flows through `collectFee()` → `PlatformFee` ledger + credits a `platform` wallet. Auditable.
+- **Security middleware** — helmet, CORS allow-list, 5 tiered rate limiters (global/auth/register/withdrawal/webhook), bcrypt(12), timing-safe login, **2FA enforced on trades**.
+- **Feature breadth** — P2P (812-line controller w/ escrow + disputes + reputation), cards (issuing, limits, freeze, cashback), group chats, **liquidity pools** (shared wallets / goal-based savings), **claim links** (send-by-link/email/phone + PIN), recurring buys (real scheduled execution w/ idempotency), referrals, transfers, DEX swap (1inch), WhatsApp, push, CSV export.
+- **Prod infra** — `docker-compose.prod.yml` with Redis (auth'd), nginx, **certbot/Let's Encrypt** auto-TLS, managed Postgres.
+
+The gap to launch is now **financial-controls + custody + compliance**, not feature engineering.
 
 ---
 
 ## 1. Hard blockers
 
-### 1.1 Payments are still on the MOCK on-ramp provider
+### 1.1 No double-entry ledger / money-conservation invariant  ⬅ #1 ENGINEERING RISK
+Balances are mutated directly inside `$transaction` blocks. There is a `PlatformFee` ledger but **no global invariant** asserting that money is conserved. This session alone surfaced multiple money-correctness bugs in the core buy/sell path (a stablecoin was credited to the wrong ledger; settlement currency was conflated; a sell produced phantom balance). Those are now fixed — but the *class* of bug recurs until there's a structural guard.
 
-- `server/src/services/onramp/index.ts` defaults to `MockOnRampProvider` unless `ONRAMP_PROVIDER=STRIPE`.
-- The Stripe code path exists (`stripe.provider.ts`) and is wired through `gatewayQuote` / `gatewayConfirm` / `webhookStripe`.
-- **Action:**
-  - Set `ONRAMP_PROVIDER=STRIPE`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` in production.
-  - Set `EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY` + `EXPO_PUBLIC_APPLE_MERCHANT_ID` in the mobile EAS build profile.
-  - Register the webhook URL `https://api.Fortuni.app/api/deposits/webhook/stripe` in the Stripe dashboard. Test with Stripe CLI.
+**Action:**
+- Introduce an append-only **`LedgerEntry`** table (every debit/credit, signed, with a `refType`/`refId`), and make all balance changes go through one `postLedger()` that writes paired entries inside the same tx.
+- Add a **reconciliation job**: `Σ user balances + platform float == Σ deposits − withdrawals` per currency, run on a schedule; **halt trading on drift** and alert.
+- Add **invariant tests**: for every order type, assert debits == credits and total supply unchanged.
 
-### 1.2 Apple Pay / Google Pay native install + Apple merchant cert
+### 1.2 Custody key management
+Master seed is encrypted with a **single env-var key** (`MASTER_SEED_ENC_KEY`). Crypto hygiene is correct, but if the server env leaks, all custody is compromised → insolvency + liability. The code documents a KMS path and the DB row has `kmsKeyId` — it's not wired.
 
-The mobile-side scaffolding I just added (`@stripe/stripe-react-native`, `ExpressPayButton`, `StripeProvider`, entitlements in `app.json`) won't run until you:
+**Action (pick one before holding real crypto):**
+- Move the key to **AWS/GCP KMS** (envelope encryption), OR
+- Adopt **custody-as-a-service** (Fireblocks / BitGo / Cobo) and stop self-custodying hot keys.
+- Either way: **withdrawals require 2-of-N approval**, not a single admin token.
 
-- `cd mobile && npx expo install @stripe/stripe-react-native` (the package is already in `package.json` but `node_modules` hasn't been refreshed).
-- Run a fresh native build via EAS (`eas build -p ios` + `eas build -p android`) — the Stripe plugin needs to apply at prebuild time.
-- In Apple Developer portal, create the merchant ID `merchant.com.Fortuni.app` (or whatever you change `EXPO_PUBLIC_APPLE_MERCHANT_ID` to), then generate an Apple Pay payment-processing certificate using the CSR Stripe provides. Wire the cert in Stripe → Settings → Payments → Apple Pay.
-- For Google Pay, configure the **Google Pay & Wallet Console** merchant profile (Stripe handles the rest).
+### 1.3 Licensing / regulatory registration  ⬅ #1 BUSINESS RISK, longest lead time
+A MENA crypto-fiat exchange touching LYD needs registration (UAE → **VARA** if Dubai-based; the Libya angle needs a real legal opinion). App stores **pull** unlicensed crypto-exchange listings within weeks. This is existential and slow — start now, in parallel with everything else.
 
-### 1.3 KYC / AML provider is not wired
+### 1.4 Production secrets + provider flip
+- Flip on-ramp from mock → live: `ONRAMP_PROVIDER`, Stripe/Checkout live keys + webhook secrets, register webhook URLs, test with CLI.
+- `SUMSUB_APP_TOKEN`/`SUMSUB_SECRET` live; gate **first withdrawal + deposits over threshold** behind verified KYC.
+- Rotate `JWT_SECRET`/`JWT_REFRESH_SECRET`/`MASTER_SEED_ENC_KEY`, distinct per environment.
+- Apple Pay merchant cert in Stripe; EAS native build with the Stripe plugin applied.
 
-- `server/src/__tests__/aml.test.ts` exists but the live integration (Sumsub / Onfido / Persona / Trulioo) is not in the code.
-- App stores will reject a financial app that accepts deposits with no identity verification.
-- **Action:** pick a vendor, integrate at registration + before first withdrawal. Easiest: Sumsub WebSDK in an in-app browser.
+### 1.5 Legal documents live + linked
+Privacy / ToS / AML / risk disclosure pages exist on the web client — confirm they're **final, lawyer-reviewed, jurisdiction-correct**, hosted at stable URLs, and linked in-app (Profile → Legal). Crypto disclosures are jurisdiction-specific.
 
-### 1.4 Legal documents
-
-- Privacy policy, Terms of Service, AML/KYC policy, transfer agreement — required for both App Store + Play Store + Stripe onboarding.
-- Need to be hosted at stable URLs (e.g. `https://Fortuni.app/privacy`) and linked from inside the app (Profile → Legal).
-- Crypto disclosures are jurisdiction-specific (US: SEC/MSB language; EU: MiCA; UK: FCA). Have a fintech lawyer review.
-
-### 1.5 Production server hardening
-
-Check before flipping the prod switch:
-- All `JWT_SECRET` / `JWT_REFRESH_SECRET` values rotated + ≠ between staging and prod.
-- `NODE_ENV=production`, `CORS_ORIGIN` locked to your real domain (not `*`).
-- Database is Postgres in prod (not the dev sqlite, if you're on that).
-- Webhook endpoints rate-limited and behind a HEAD-/POST-only allow-list.
-- TLS terminates at the LB (nginx is already in `docker-compose.prod.yml` — confirm cert auto-renew via Certbot/ACME).
-- All `Authorization: Basic` Stripe calls go out over TLS only.
-- Backups: automated daily Postgres `pg_dump` → S3 (or equivalent) + tested restore.
-
-### 1.6 Store listings + privacy manifests
-
-- App Store: privacy "nutrition label" form requires you to declare every category of data you collect. Map this from the User/Wallet/Transaction models.
-- iOS 17+ requires `PrivacyInfo.xcprivacy` for any third-party SDK with a tracking domain. Stripe, Sentry, Expo, etc. — add their manifests via their config plugins.
-- Play Store: data safety form same idea, plus you need a 24h-resolvable contact email for crypto apps.
-- Both stores require crypto exchange apps to publish licensing/registration info. If you're operating from the UAE that means VARA in Dubai; from Egypt CMA; US is per-state MSB. Without this, listings get pulled within weeks of publication.
+### 1.6 Store compliance
+App Store privacy nutrition labels + `PrivacyInfo.xcprivacy` for third-party SDKs (Stripe, Sentry, Expo). Play data-safety form + 24h-resolvable crypto contact email. Publish licensing info or listings get pulled.
 
 ---
 
-## 2. Risk reducers (ship without at your peril)
+## 2. Risk reducers
 
-### 2.1 Observability
+### 2.1 Test coverage
+**6 test files for a money platform is the scariest non-blocker.** The integrity bugs existed because nothing asserted balance conservation. Add invariant + property tests on every balance mutation, plus E2E on the quote→execute→settle path. Target the money paths first, not coverage %.
 
-- Sentry DSN is declared in mobile `.env` but no `Sentry.init()` call exists in `_layout.tsx`. Wire it. Same for the server (`@sentry/node`).
-- Add basic structured logging (`pino`) on the server with request IDs so you can correlate webhooks ↔ user actions.
-- A `/healthz` + `/readyz` endpoint for the LB to probe.
+### 2.2 Observability
+Wire **Sentry** on mobile (`_layout.tsx`) and server. Structured logging is partly there (`logger`); add request IDs to correlate webhooks ↔ orders. `/healthz` + `/readyz` for the LB. A dashboard for webhook success-rate, quote→execute latency, and **reconciliation status**.
 
-### 2.2 Crypto custody
+### 2.3 Single-process state that won't survive scale
+The LYD order-book skew accumulator and some caches are **in-process**. Fine for one instance; on horizontal scale the demand signal fragments. Move to Redis before running >1 server.
 
-The repo references on-chain webhook handlers (`webhookAlchemy`, `webhookTrongrid`) and a `cryptoWallet` route, but production custody is high-stakes:
-- Hot-wallet keys should be in a KMS (AWS KMS / GCP KMS / HSM), never in env vars.
-- Withdrawals should require a 2-of-N approval flow even for the admin (you'll regret a single-key setup the first time someone's session token leaks).
-- Consider Fireblocks / BitGo / Cobo for custody-as-a-service; you can ship faster and offload the audit burden.
+### 2.4 FX scrape fragility
+The LYD parallel rate is scraped from one site (`blackmarketlive.org`). If its HTML changes, you fall back to admin/static. Good that it degrades — but add a **monitor/alert** when the scrape returns nothing, and surface staleness in admin (the `/admin/fx-status` panel already shows the raw value — wire an alert).
 
-### 2.3 P2P trading
+### 2.5 Push credentials
+Confirm APNs/FCM keys in EAS (`eas credentials`) or server-triggered notifications silently no-op.
 
-`p2p.ts` route + `p2p.tsx` screen exist, but P2P brings additional regulatory risk (you're a marketplace for crypto-fiat trades). Confirm with legal whether to ship P2P on day 1 or hide it behind a feature flag until the licensing is sorted.
+### 2.6 Abuse / fraud
+Rate limiters exist. Add per-IP CAPTCHA on register/login, velocity checks on deposits→withdrawals (classic cash-out fraud), and device fingerprinting on P2P.
 
-### 2.4 Push notifications
+### 2.7 Accessibility
+SlideToConfirm needs a non-gesture fallback + `accessibilityActions`. Icon-only Pressables need labels. Audit 11px label contrast (now monochrome — re-check the grey-on-black tiers).
 
-- `expo-notifications` is wired but I don't see a confirmed APNs/FCM credential setup in EAS. Without it the topup/quote/deposit notifications you trigger from the server will silently no-op.
-- Run `eas credentials` to verify both platforms have valid keys.
-
-### 2.5 Rate limiting + abuse controls
-
-- Spam-register a hundred accounts then try to fetch quotes — currently nothing rate-limits the `/exchange/quote` or `/auth/register` endpoints based on what I see. Add `express-rate-limit` at minimum, and a per-IP CAPTCHA on register/login.
-
-### 2.6 Accessibility
-
-- The new SlideToConfirm relies on swipe gesture — add a long-press fallback for users who can't drag (motor accessibility) AND an `accessibilityActions={[{ name: 'activate' }]}` mapping.
-- Text contrast: the periwinkle-on-charcoal accent in dark mode is AA-passing for body text but borderline for the 11px section labels (`YOU PAY`, etc.). Audit with a contrast checker.
-- Add `accessibilityLabel` to icon-only Pressables (theme toggle, language switcher, intent toggle).
-
-### 2.7 i18n completeness
-
-- `LOCALE_META` advertises 4 locales. Confirm every string in onboarding, signup, KYC, error toasts, and store listing is actually translated. Missing translations fall back to keys, which look ugly.
-- RTL: confirm the BuyWidget / SellWidget asset selector chevron flips in Arabic mode.
-
-### 2.8 Crypto network fees
-
-`BuyWidget` includes a `networkFee` in the quote response — confirm the server actually computes a *live* gas estimate per network (ETH ↔ TRC20 fees diverge by orders of magnitude). A stale fee here = direct revenue leak when ETH spikes.
+### 2.8 i18n / RTL
+Confirm every onboarding/KYC/error string is translated (Arabic especially) and RTL flips correctly across Buy/Sell/P2P.
 
 ---
 
-## 3. Polish (after blockers + risk reducers)
+## 3. Polish
 
-### 3.1 Buy/Sell widget — small UX wins still on the table
-
-- The instant price estimate (`priceEstimate`) is good but it's only shown above the input now — also show it inside the quote panel so the user has a single source of truth.
-- The Pay-with row shows raw `card / fiat / crypto` types; consider grouping (Cards section, Wallets section).
-- For "Send to address", auto-validate the address against the asset's regex (e.g. BTC `^bc1|^[13]`, ETH `^0x[a-fA-F0-9]{40}$`) before allowing slide-to-confirm.
-
-### 3.2 Onboarding
-
-- The new animated hero is pure Reanimated and runs on the UI thread, but consider gating animations behind `AccessibilityInfo.isReduceMotionEnabled()` for users who've disabled motion.
-- The third "permissions" slide silently calls Camera + biometrics + notifications APIs — wrap each in an inline "Allow X" tile so the user understands what just happened, instead of three OS dialogs in sequence.
-
-### 3.3 Tab bar
-
-- Now uses brand-gradient FAB and brand-tinted active state. Test on small devices (iPhone SE) — the 62-px FAB with 3-px border + halo shadow can look cramped.
-- The home tab's long-press → action sheet feature is undiscoverable; add a 1-time tooltip the first time the user lands on home.
-
-### 3.4 SlideToConfirm
-
-- The new shimmer + brand gradient looks great but is slightly more battery than the old design (constant repeat animations). Acceptable; just be aware. If you see complaints, gate the shimmer with `Platform.isLowPowerMode` (need a small native module — skip unless reported).
-
-### 3.5 Theme
-
-- The light mode is genuinely usable but the brand `#226dff` periwinkle accent dominates the page when used heavily (quick-amount chips, intent toggle). Consider toning it to `brand.softLight` (`#dde7ff`) for "selected but secondary" states and reserving full periwinkle for primary CTAs only.
+- Consolidate duplicated `serverAsset()`/`defaultNetwork()`/coin-metadata maps across Buy/Sell into one `cryptoMeta.ts`.
+- Auto-validate destination addresses against per-asset regex before enabling slide-to-confirm.
+- Prune `FxRateTick` history (retention sweep) — ~288 rows/day is fine, but cap it.
+- Onboarding permission slide: inline "Allow X" tiles instead of three stacked OS dialogs.
+- First-run tooltip for the home long-press action sheet.
 
 ---
 
-## 4. Concrete next 7 days
+## 4. Critical path to launch (realistic)
 
-1. **Day 1:** Run `npx expo install @stripe/stripe-react-native`, rebuild with EAS dev client, smoke-test the ExpressPay button against Stripe test keys. Confirm Apple Pay sheet appears in iOS simulator on real device.
-2. **Day 2:** Wire Sumsub (or chosen KYC vendor). Add a `kycStatus` gate in front of withdrawals + first deposit > $X.
-3. **Day 3:** Privacy policy, ToS, AML policy drafted with a lawyer. Hosted under `Fortuni.app/legal/*`. Linked from Profile screen.
-4. **Day 4:** Sentry on both client + server. Pino structured logging. Basic Grafana dashboard for webhook success rate + p95 latency.
-5. **Day 5:** Apple Pay merchant cert generated + uploaded to Stripe. Real Stripe live keys provisioned. End-to-end production webhook test (small amount, real card).
-6. **Day 6:** App Store + Play Store metadata, screenshots (use the new animated onboarding), privacy nutrition labels, crypto licensing affidavit attached.
-7. **Day 7:** Internal TestFlight + closed Play track. Hand the build to ~10 friendlies. Crash-watch via Sentry for 48h before promoting.
+| Phase | Work | Calendar |
+|---|---|---|
+| **A. Integrity** | Double-entry ledger + reconciliation + invariant tests | 2–4 weeks |
+| **B. Custody** | KMS or custody-as-a-service + 2-of-N withdrawals | 1–3 weeks (parallel) |
+| **C. Compliance** | License/legal opinion, final legal docs, store affidavits | **6–12+ weeks (start NOW, longest pole)** |
+| **D. Go-live wiring** | Live keys, certs, EAS build, Sentry, webhooks | 1 week |
+| **E. Closed beta** | One market, capped limits, daily manual reconciliation | 2–4 weeks |
 
----
-
-## 5. Out of scope for this session (worth tracking)
-
-These came up while reviewing the codebase but weren't part of the brief:
-
-- `ALGO` and `NEAR` `KNOWN[]` entries in `SellWidget.tsx` have `color: '#000000'` which renders invisible on a dark surface — fix.
-- `BuyWidget.tsx` line 99 fixes a regex but the `serverAsset()` / `defaultNetwork()` maps are duplicated across Buy + Sell. Consolidate into a single `cryptoMeta.ts` module.
-- `tabs/_layout.tsx` long-press handler shows `t('home.more')` but doesn't actually trigger any of the listed actions on Android (only iOS gets the ActionSheet). Fix or remove the long-press promise.
-- `themeStore.ts` documentation says "warm charcoal" but the dark `bg` is `#141518` — a *cold* charcoal. Tiny copy nit but worth fixing the comment so future contributors don't get confused.
+**Do not run A→E sequentially.** B and C run in parallel with A. The license is the gating item; the engineering can be ready before it is.
 
 ---
 
-**Bottom line:** the architecture is solid. The remaining work is integration + compliance, not engineering. Stripe pieces (server + mobile) are largely done; you mostly need keys, certs, and a KYC vendor. Plan ~3–4 weeks calendar time from today to a credible public launch with the blockers in §1 closed.
+**Bottom line:** the product is genuinely impressive in breadth and mostly sound in architecture. It is **not** held back by missing features — it's held back by the three things that decide whether a money app lives or dies: **provable financial integrity, hardened custody, and a license.** Close those and you have a launchable, differentiated MENA fintech. Skip any one and the first reconciliation gap, key leak, or regulator letter ends it.

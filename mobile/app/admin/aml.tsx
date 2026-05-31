@@ -55,7 +55,7 @@ export default function AdminAML() {
   return (
     <View style={{ flex: 1, backgroundColor: p.bg }}>
       <TopGradient />
-      <StatusBar style={themeMode === 'dark' ? 'light' : 'dark'} />
+      <StatusBar style={themeMode === 'light' ? 'dark' : 'light'} />
       <SafeAreaView style={{ flex: 1 }} edges={['top']}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingTop: 8, paddingBottom: 8 }}>
           <Pressable onPress={() => router.back()} hitSlop={8}>

@@ -34,50 +34,34 @@ interface CacheEntry { at: number; data: NewsItem[]; fallback: boolean }
 const TTL_MS = 60_000;
 const cache  = new Map<string, CacheEntry>();
 
-const CC_CATEGORIES = new Set([
-  'BTC', 'ETH', 'XRP', 'LTC', 'BCH', 'ETC', 'ADA', 'DOGE', 'DOT', 'LINK',
-  'SOL', 'AVAX', 'MATIC', 'TRX', 'BNB', 'USDT', 'USDC', 'XLM', 'XMR',
-  'ATOM', 'NEAR', 'FIL', 'ALGO', 'VET', 'AAVE', 'ARB', 'OP', 'SUI', 'SHIB',
-]);
-
 const SYM_KEYWORDS: Record<string, string[]> = {
-  BTC: ['BTC', 'BITCOIN'],
-  ETH: ['ETH', 'ETHEREUM', 'ETHER'],
-  SOL: ['SOL', 'SOLANA'],
-  BNB: ['BNB', 'BINANCE COIN'],
-  XRP: ['XRP', 'RIPPLE'],
-  ADA: ['ADA', 'CARDANO'],
-  DOGE: ['DOGE', 'DOGECOIN'],
-  MATIC: ['MATIC', 'POLYGON'],
-  DOT: ['DOT', 'POLKADOT'],
-  AVAX: ['AVAX', 'AVALANCHE'],
-  USDT: ['USDT', 'TETHER'],
-  USDC: ['USDC'],
-  LTC: ['LTC', 'LITECOIN'],
-  LINK: ['LINK', 'CHAINLINK'],
-  TRX: ['TRX', 'TRON'],
-  TON: ['TON', 'TONCOIN'],
+  BTC: ['BTC', 'BITCOIN'], ETH: ['ETH', 'ETHEREUM', 'ETHER'],
+  SOL: ['SOL', 'SOLANA'],  BNB: ['BNB', 'BINANCE'],
+  XRP: ['XRP', 'RIPPLE'],  ADA: ['ADA', 'CARDANO'],
+  DOGE: ['DOGE', 'DOGECOIN'], MATIC: ['MATIC', 'POLYGON'],
+  DOT: ['DOT', 'POLKADOT'],   AVAX: ['AVAX', 'AVALANCHE'],
+  USDT: ['USDT', 'TETHER'],   USDC: ['USDC'],
+  LTC: ['LTC', 'LITECOIN'],   LINK: ['LINK', 'CHAINLINK'],
+  TRX: ['TRX', 'TRON'],       TON: ['TON', 'TONCOIN'],
+  SHIB: ['SHIB', 'SHIBA'],    ARB: ['ARB', 'ARBITRUM'],
 };
 
 function matchesSym(item: NewsItem, sym: string): boolean {
   const keywords = SYM_KEYWORDS[sym] ?? [sym];
-  const hay = (
-    (item.title ?? '') + ' ' +
-    (item.body ?? '')  + ' ' +
-    (item.categories ?? '')
-  ).toUpperCase();
+  const hay = ((item.title ?? '') + ' ' + (item.body ?? '') + ' ' + (item.categories ?? '')).toUpperCase();
   return keywords.some((k) => hay.includes(k));
 }
 
-function mapCcItem(n: any): NewsItem {
+// Maps the new CryptoCompare Data API (data-api.cryptocompare.com) shape.
+function mapNewApiItem(n: any): NewsItem {
   return {
-    title:      n.title ?? 'Untitled',
-    source:     n.source_info?.name ?? n.source ?? 'CryptoCompare',
-    url:        n.url ?? '',
-    published:  n.published_on ?? 0,
-    imageUrl:   n.imageurl,
-    body:       n.body ?? '',
-    categories: n.categories ?? '',
+    title:      n.TITLE ?? 'Untitled',
+    source:     n.SOURCE_DATA?.NAME ?? 'CryptoCompare',
+    url:        n.URL ?? n.GUID ?? '',
+    published:  n.PUBLISHED_ON ?? 0,
+    imageUrl:   n.IMAGE_URL,
+    body:       n.BODY ?? '',
+    categories: '',
   };
 }
 
@@ -88,72 +72,66 @@ async function fetchJson(url: string, timeoutMs = 8000): Promise<any | null> {
     const r = await fetch(url, { signal: ctrl.signal });
     if (!r.ok) return null;
     return await r.json();
-  } catch (e) {
+  } catch {
     return null;
   } finally {
     clearTimeout(t);
   }
 }
 
+// CryptoCompare new Data API — no key needed for basic access.
+const CC_BASE = 'https://data-api.cryptocompare.com/news/v1/article/list?lang=EN&limit=30';
+
 export class NewsController {
-  /**
-   * GET /api/news?sym=BTC
-   * Returns up to 6 news items for the given symbol, plus a
-   * `fallback` flag when we couldn't find symbol-specific coverage
-   * and dropped to general crypto news.  Empty `items` + no
-   * `fallback` is the "no news" terminal state — distinct from a
-   * fetch failure (which surfaces as a 503).
-   */
   static async list(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const sym = String(req.query.sym ?? '').toUpperCase();
-      if (!sym) {
-        return res.status(400).json({ error: 'sym query param is required' });
-      }
+      if (!sym) return res.status(400).json({ error: 'sym query param is required' });
 
       const cached = cache.get(sym);
       if (cached && Date.now() - cached.at < TTL_MS) {
         return res.json({ items: cached.data, fallback: cached.fallback });
       }
 
-      // 1) CryptoCompare category filter for symbols it knows.
-      if (CC_CATEGORIES.has(sym)) {
-        const j = await fetchJson(
-          `https://min-api.cryptocompare.com/data/v2/news/?categories=${sym}&lang=EN`,
-        );
-        if (j?.Type === 100 && Array.isArray(j.Data) && j.Data.length > 0) {
-          const items = j.Data.slice(0, 6).map(mapCcItem);
+      // 1) Asset-specific feed via the `categories` param. CryptoCompare's
+      //    article list keys news by category (e.g. BTC, ETH, SOL). The old
+      //    `asset_lookup` param was silently ignored, so every symbol got the
+      //    same generic feed — that's why news wasn't pair-specific. We still
+      //    keyword-filter the result as a guard, since some categories are
+      //    broad. Unknown symbols fall through to the keyword path below.
+      //    NOTE: an unknown/invalid category silently returns the generic
+      //    feed, so we keyword-filter and only treat it as pair-specific when
+      //    at least one item actually mentions the asset. Otherwise we fall
+      //    through to the general path, which labels the result as a fallback.
+      const specific = await fetchJson(`${CC_BASE}&categories=${encodeURIComponent(sym)}`);
+      if (Array.isArray(specific?.Data) && specific.Data.length > 0) {
+        const mapped = specific.Data.map(mapNewApiItem);
+        const matched = mapped.filter((n: NewsItem) => matchesSym(n, sym));
+        if (matched.length > 0) {
+          const items = matched.slice(0, 8);
           cache.set(sym, { at: Date.now(), data: items, fallback: false });
           return res.json({ items, fallback: false });
         }
       }
 
-      // 2) CryptoCompare general feed with keyword filter.
-      const j = await fetchJson(
-        'https://min-api.cryptocompare.com/data/v2/news/?lang=EN',
-      );
-      if (j?.Type === 100 && Array.isArray(j.Data)) {
-        const all = j.Data.slice(0, 100).map(mapCcItem);
+      // 2) General feed with keyword filter.
+      const general = await fetchJson(`${CC_BASE}&limit=60`);
+      if (Array.isArray(general?.Data)) {
+        const all = general.Data.map(mapNewApiItem);
         const matched = all.filter((n: NewsItem) => matchesSym(n, sym));
         if (matched.length > 0) {
-          const items = matched.slice(0, 6);
+          const items = matched.slice(0, 8);
           cache.set(sym, { at: Date.now(), data: items, fallback: false });
           return res.json({ items, fallback: false });
         }
-        // 3) Fall back to general top-crypto coverage so the panel is
-        //    never empty.  Marked `fallback: true` so the client can
-        //    soften the heading ("Top crypto news" instead of
-        //    "{sym} news").
+        // 3) Fallback — top crypto news, marked so client softens the heading.
         if (all.length > 0) {
-          const items = all.slice(0, 6);
+          const items = all.slice(0, 8);
           cache.set(sym, { at: Date.now(), data: items, fallback: true });
           return res.json({ items, fallback: true });
         }
       }
 
-      // No upstream returned usable data — surface a 503 so the
-      // client can render a "couldn't load — retry" state instead of
-      // a misleading "no news".
       logger.warn('[news] all upstreams returned empty/failed', { sym });
       return res.status(503).json({ error: 'News feed unavailable', items: [], fallback: false });
     } catch (e) {

@@ -67,6 +67,9 @@ import { cryptoWalletRouter } from './routes/cryptoWallet';
 import { cryptoWithdrawalRouter } from './routes/cryptoWithdrawal';
 import { recurringBuyRouter } from './routes/recurringBuy';
 import { startRecurringBuyScheduler } from './services/recurringBuy.service';
+import { startLydSampler } from './services/exchange/lydOrderBook.service';
+import { startReconciliation } from './services/ledger/reconcile.service';
+import { startFundIntegrityAudit } from './services/ledger/fundIntegrity.service';
 import { globalLimiter, authLimiter, registerLimiter, withdrawalLimiter, webhookLimiter } from './middleware/rateLimiters';
 import { protectedUploadsRouter } from './middleware/protectedUploads';
 import { ipBanMiddleware } from './middleware/ipBan';
@@ -140,6 +143,8 @@ const corsOrigin: cors.CorsOptions['origin'] = (origin, cb) => {
 const io = new Server(httpServer, {
   cors: { origin: corsOrigin, methods: ['GET', 'POST'], credentials: true },
 });
+const onlineUsers = new Map<string, number>();
+app.set('onlineUsers', onlineUsers);
 
 // Trust the first proxy hop (load balancer / ingress) so req.ip is the
 // real client IP — required for rate limiting to work behind a proxy.
@@ -344,6 +349,7 @@ io.use((socket, next) => {
 io.on('connection', (socket) => {
   const user = (socket.data as any).user as { id: string } | undefined;
   if (user?.id) {
+    onlineUsers.set(user.id, (onlineUsers.get(user.id) ?? 0) + 1);
     socket.join(`user:${user.id}`);
   }
 
@@ -359,7 +365,12 @@ io.on('connection', (socket) => {
     if (user?.id) io.to(`user:${toUserId}`).emit('typing:stop', { fromUserId: user.id });
   });
 
-  socket.on('disconnect', () => { /* nothing to clean up */ });
+  socket.on('disconnect', () => {
+    if (!user?.id) return;
+    const next = (onlineUsers.get(user.id) ?? 1) - 1;
+    if (next <= 0) onlineUsers.delete(user.id);
+    else onlineUsers.set(user.id, next);
+  });
 });
 
 const PORT = parseInt(process.env.PORT || '5000');
@@ -386,6 +397,30 @@ async function start() {
     const isSchedulerWorker = !cluster.isWorker || cluster.worker?.id === 1;
     if (isSchedulerWorker && process.env.DISABLE_RECURRING_BUY_SCHEDULER !== '1') {
       startRecurringBuyScheduler();
+    }
+    // Sample USD/LYD price + volume for the admin chart (one worker only).
+    if (isSchedulerWorker) {
+      startLydSampler();
+    }
+    // One-time idempotent ledger backfill — sync opening balances from the
+    // live Wallet/UserWallet tables so the ledger is an authoritative copy.
+    // Safe to run every boot (only posts diffs). Off by default once stable
+    // via LEDGER_BACKFILL_ON_BOOT=0.
+    if (isSchedulerWorker && process.env.LEDGER_BACKFILL_ON_BOOT !== '0') {
+      try {
+        const { backfillLedgerOpeningBalances } = await import('./services/ledger/backfill.service');
+        await backfillLedgerOpeningBalances();
+      } catch (e) { logger.error('[ledger] boot backfill failed', { err: e }); }
+    }
+    // Periodic ledger reconciliation — re-derives balances, halts trading on
+    // any money-conservation drift (one worker only).
+    if (isSchedulerWorker) {
+      startReconciliation();
+    }
+    // Fund-integrity audit against the live Wallet tables — detects missing or
+    // conjured funds (internal balances vs net external deposits/withdrawals).
+    if (isSchedulerWorker) {
+      startFundIntegrityAudit();
     }
   } catch (error) {
     logger.error('Failed to start server:', { err: error });

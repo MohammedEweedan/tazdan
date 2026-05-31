@@ -17,7 +17,8 @@ import { StatusBar } from 'expo-status-bar';
 
 import { useThemedPalette, useTheme } from '@/store/themeStore';
 import { useAuthStore } from '@/store/authStore';
-import { adminService, type AdminDashboard, type PeriodStats } from '@/services';
+import { adminService, type AdminDashboard, type PeriodStats, type AdminExposure, type AdminFxStatus, type AdminFundIntegrity } from '@/services';
+import Svg, { Path, Rect, Line as SvgLine } from 'react-native-svg';
 import { LoadingPulse } from '@/components/ui/LoadingPulse';
 
 type Metrics = {
@@ -62,6 +63,61 @@ function formatUptime(secs: number): string {
   return `${Math.floor(secs / 86400)}d`;
 }
 
+function fmtSignedUsd(n: number): string {
+  const sign = n > 0 ? '+' : n < 0 ? '−' : '';
+  const a = Math.abs(n);
+  const body = a >= 1_000_000 ? `$${(a / 1_000_000).toFixed(2)}M` : a >= 1_000 ? `$${(a / 1_000).toFixed(1)}k` : `$${a.toFixed(0)}`;
+  return `${sign}${body}`;
+}
+
+// Price line + volume bars for the USD/LYD order book.
+function FxChart({ history, p }: { history: Array<{ t: number; price: number; volumeUsd: number }>; p: any }) {
+  const W = 320, H = 120, PAD = 4, VOL_H = 28;
+  if (history.length < 2) {
+    return (
+      <View style={{ height: H, alignItems: 'center', justifyContent: 'center', marginTop: 12 }}>
+        <Ionicons name="pulse-outline" size={28} color={p.fgFaint} />
+        <Text style={{ color: p.fgMuted, fontSize: 12, marginTop: 6 }}>Collecting price history…</Text>
+      </View>
+    );
+  }
+  const prices = history.map((h) => h.price);
+  const vols = history.map((h) => h.volumeUsd);
+  const min = Math.min(...prices), max = Math.max(...prices);
+  const spread = max - min || 1;
+  const maxVol = Math.max(...vols, 1);
+  const lineTop = PAD, lineBottom = H - VOL_H - PAD;
+  const lineH = lineBottom - lineTop;
+  const step = (W - PAD * 2) / (history.length - 1);
+  const xOf = (i: number) => PAD + i * step;
+  const yOf = (v: number) => lineTop + lineH * (1 - (v - min) / spread);
+  const linePath = prices.map((v, i) => `${i === 0 ? 'M' : 'L'} ${xOf(i).toFixed(1)} ${yOf(v).toFixed(1)}`).join(' ');
+  const up = prices[prices.length - 1] >= prices[0];
+  const color = up ? p.greenFg : p.redFg;
+  const barW = Math.max(1, step * 0.6);
+
+  return (
+    <View style={{ marginTop: 12 }}>
+      <Svg width="100%" height={H} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none">
+        {[0.5].map((f) => {
+          const y = lineTop + lineH * f;
+          return <SvgLine key={f} x1={0} x2={W} y1={y} y2={y} stroke={p.border} strokeWidth={1} strokeDasharray="3,4" />;
+        })}
+        <Path d={linePath} stroke={color} strokeWidth={2} fill="none" />
+        {/* volume bars along the bottom */}
+        {vols.map((v, i) => {
+          const h = (v / maxVol) * VOL_H;
+          return <Rect key={i} x={xOf(i) - barW / 2} y={H - PAD - h} width={barW} height={h} fill={p.fgMuted} opacity={0.5} />;
+        })}
+      </Svg>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 }}>
+        <Text style={{ color: p.fgFaint, fontSize: 10 }}>lo {min.toFixed(4)}</Text>
+        <Text style={{ color: p.fgFaint, fontSize: 10 }}>hi {max.toFixed(4)}</Text>
+      </View>
+    </View>
+  );
+}
+
 export default function AdminScreen() {
   const p = useThemedPalette();
   const themeMode = useTheme((s) => s.mode);
@@ -102,8 +158,38 @@ export default function AdminScreen() {
     refetchInterval: 5_000,
   });
 
+  const exposureQ = useQuery<AdminExposure>({
+    queryKey: ['admin-exposure'],
+    queryFn: () => adminService.exposure(),
+    enabled: isAdmin,
+    refetchInterval: 30_000,
+  });
+
+  const [fxHours, setFxHours] = useState(24);
+  const fxQ = useQuery<AdminFxStatus>({
+    queryKey: ['admin-fx-status', fxHours],
+    queryFn: () => adminService.fxStatus(fxHours),
+    enabled: isAdmin,
+    refetchInterval: 30_000,
+  });
+
+  const fundQ = useQuery<AdminFundIntegrity>({
+    queryKey: ['admin-fund-integrity'],
+    queryFn: () => adminService.fundIntegrity(),
+    enabled: isAdmin,
+    refetchInterval: 60_000,
+  });
+  const clearHaltMut = useMutation({
+    mutationFn: () => adminService.clearTradingHalt(),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['admin-fund-integrity'] }); Alert.alert('Cleared', 'Trading halt lifted.'); },
+    onError: (e: any) => Alert.alert('Failed', e?.response?.data?.error ?? 'Could not clear'),
+  });
+
   const d = dashQ.data as AdminDashboard | undefined;
   const m = metricsQ.data;
+  const exp = exposureQ.data;
+  const fx = fxQ.data;
+  const fund = fundQ.data;
   const stats: PeriodStats | undefined = d?.[period];
 
   // Live pulse for the realtime dot
@@ -120,7 +206,7 @@ export default function AdminScreen() {
   const dotOpacity = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 0.3] });
 
   const onRefresh = async () => {
-    await Promise.all([dashQ.refetch(), metricsQ.refetch()]);
+    await Promise.all([dashQ.refetch(), metricsQ.refetch(), exposureQ.refetch(), fxQ.refetch(), fundQ.refetch()]);
   };
 
   const switchToUser = async () => {
@@ -131,7 +217,7 @@ export default function AdminScreen() {
   if (!isAdmin) {
     return (
       <View style={{ flex: 1, backgroundColor: p.bg, alignItems: 'center', justifyContent: 'center', padding: 40 }}>
-        <StatusBar style={themeMode === 'dark' ? 'light' : 'dark'} />
+        <StatusBar style={themeMode === 'light' ? 'dark' : 'light'} />
         <Ionicons name="lock-closed-outline" size={48} color={p.fgFaint} />
         <Text style={{ color: p.fg, fontSize: 18, fontWeight: '600', marginTop: 14 }}>Admin access only</Text>
         <Pressable onPress={() => router.back()} style={{ marginTop: 24, paddingHorizontal: 18, paddingVertical: 11, borderRadius: 12, backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border }}>
@@ -144,7 +230,7 @@ export default function AdminScreen() {
   if (dashQ.isLoading && !d) {
     return (
       <View style={{ flex: 1, backgroundColor: p.bg }}>
-        <StatusBar style={themeMode === 'dark' ? 'light' : 'dark'} />
+        <StatusBar style={themeMode === 'light' ? 'dark' : 'light'} />
         <LoadingPulse fullscreen icon="speedometer-outline" label="Loading admin console…" />
       </View>
     );
@@ -153,7 +239,7 @@ export default function AdminScreen() {
   if (dashQ.isError && !d) {
     return (
       <View style={{ flex: 1, backgroundColor: p.bg, alignItems: 'center', justifyContent: 'center', padding: 40 }}>
-        <StatusBar style={themeMode === 'dark' ? 'light' : 'dark'} />
+        <StatusBar style={themeMode === 'light' ? 'dark' : 'light'} />
         <Ionicons name="cloud-offline-outline" size={48} color={p.fgFaint} />
         <Text style={{ color: p.fg, fontSize: 16, fontWeight: '700', marginTop: 14, textAlign: 'center' }}>Could not load dashboard</Text>
         <Text style={{ color: p.fgMuted, fontSize: 13, marginTop: 6, textAlign: 'center' }}>
@@ -168,13 +254,21 @@ export default function AdminScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: p.bg }}>
-      <StatusBar style={themeMode === 'dark' ? 'light' : 'dark'} />
+      <StatusBar style={themeMode === 'light' ? 'dark' : 'light'} />
       <TopGradient />
 
       <SafeAreaView style={{ flex: 1, backgroundColor: 'transparent' }} edges={['top']}>
         <ScrollView
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{ paddingBottom: 60 }}
+          // The dashboard auto-refetches (metrics 5s, fx/exposure 30s, …). When
+          // that changes content height, iOS can drift the scroll position on
+          // its own. Anchoring the visible content keeps the view put while the
+          // user is idle, and disabling content-inset adjustment stops the
+          // momentum jump some iOS versions apply on re-render.
+          maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
+          automaticallyAdjustContentInsets={false}
+          contentInsetAdjustmentBehavior="never"
           refreshControl={<RefreshControl refreshing={dashQ.isFetching || metricsQ.isFetching} onRefresh={onRefresh} tintColor={p.fg} />}
         >
           {/* Top bar */}
@@ -275,6 +369,209 @@ export default function AdminScreen() {
               <BigCell label="TRANSACTIONS" value={(d?.totalTransactions ?? 0).toLocaleString()} p={p} />
               <BigCell label="DEPOSITS USD" value={formatUSD(d?.totalDepositsUSD ?? 0, { compact: true })} p={p} last />
             </View>
+          </View>
+
+          {/* Exposure & total holdings */}
+          <View style={{ marginTop: 18, paddingHorizontal: 20 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+              <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '600', letterSpacing: 0.7 }}>EXPOSURE & HOLDINGS</Text>
+              {exp && <Text style={{ color: p.fgFaint, fontSize: 10, fontWeight: '600' }}>spread {(exp.spreadPct * 100).toFixed(2)}%</Text>}
+            </View>
+
+            <View style={{ borderRadius: 20, padding: 20, backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border }}>
+              <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '600', letterSpacing: 0.7 }}>
+                TOTAL USER HOLDINGS · ALL PLATFORMS
+              </Text>
+              <Text style={{ color: p.fg, fontSize: 36, fontWeight: '600', letterSpacing: -1.2, marginTop: 6, fontVariant: ['tabular-nums'] }}>
+                {exposureQ.isLoading && !exp ? '—' : formatUSD(exp?.totals.totalHoldingsUsd ?? 0)}
+              </Text>
+
+              <View style={{ height: 1, backgroundColor: p.border, marginVertical: 14 }} />
+
+              <View style={{ flexDirection: 'row', gap: 14 }}>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: p.fgFaint, fontSize: 9, fontWeight: '600', letterSpacing: 0.5 }}>CRYPTO</Text>
+                  <Text style={{ color: p.fg, fontSize: 17, fontWeight: '600', marginTop: 4, fontVariant: ['tabular-nums'] }}>{formatUSD(exp?.totals.cryptoValueUsd ?? 0, { compact: true })}</Text>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: p.fgFaint, fontSize: 9, fontWeight: '600', letterSpacing: 0.5 }}>FIAT</Text>
+                  <Text style={{ color: p.fg, fontSize: 17, fontWeight: '600', marginTop: 4, fontVariant: ['tabular-nums'] }}>{formatUSD(exp?.totals.fiatValueUsd ?? 0, { compact: true })}</Text>
+                </View>
+              </View>
+            </View>
+
+            {/* Instant-liquidation exposure */}
+            <View style={{ marginTop: 10, borderRadius: 16, padding: 16, backgroundColor: 'rgba(239,68,68,0.08)', borderWidth: 1, borderColor: 'rgba(239,68,68,0.25)' }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Ionicons name="alert-circle-outline" size={16} color="#ef4444" />
+                <Text style={{ color: p.fg, fontSize: 12, fontWeight: '700' }}>If all users sold instantly</Text>
+              </View>
+              <Text style={{ color: p.fgMuted, fontSize: 11, marginTop: 4 }}>
+                Payout owed at our sell price (market − spread):
+              </Text>
+              <Text style={{ color: '#ef4444', fontSize: 26, fontWeight: '700', marginTop: 6, fontVariant: ['tabular-nums'] }}>
+                {formatUSD(exp?.totals.exposureUsd ?? 0)}
+              </Text>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 10 }}>
+                <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '600' }}>Spread cushion retained</Text>
+                <Text style={{ color: '#22c55e', fontSize: 13, fontWeight: '700', fontVariant: ['tabular-nums'] }}>
+                  +{formatUSD(exp?.totals.spreadCushionUsd ?? 0)}
+                </Text>
+              </View>
+            </View>
+
+            {/* Top holdings breakdown */}
+            {!!exp?.crypto?.length && (
+              <View style={{ marginTop: 10, backgroundColor: p.bgElev, borderRadius: 14, borderWidth: 1, borderColor: p.border, overflow: 'hidden' }}>
+                {exp.crypto.slice(0, 6).map((row, i, arr) => (
+                  <View key={row.symbol} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 14, paddingVertical: 11, borderBottomWidth: i === arr.length - 1 ? 0 : 1, borderBottomColor: p.border }}>
+                    <Text style={{ color: p.fg, fontSize: 13, fontWeight: '700' }}>{row.symbol}</Text>
+                    <View style={{ alignItems: 'flex-end' }}>
+                      <Text style={{ color: p.fg, fontSize: 13, fontWeight: '600', fontVariant: ['tabular-nums'] }}>{formatUSD(row.valueUsd, { compact: true })}</Text>
+                      <Text style={{ color: p.fgFaint, fontSize: 10, fontVariant: ['tabular-nums'] }}>
+                        {row.amount.toLocaleString('en-US', { maximumFractionDigits: 4 })} @ {formatUSD(row.price, { compact: true })}
+                      </Text>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            )}
+
+            {!!exp?.unpriced?.length && (
+              <Text style={{ color: p.fgFaint, fontSize: 10, marginTop: 8 }}>
+                Excludes (no price): {exp.unpriced.join(', ')}
+              </Text>
+            )}
+          </View>
+
+          {/* Treasury integrity — fund audit + ledger reconciliation */}
+          <View style={{ marginTop: 18, paddingHorizontal: 20 }}>
+            <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '600', letterSpacing: 0.7, marginBottom: 10 }}>TREASURY INTEGRITY</Text>
+
+            {fund?.tradingHalted && (
+              <View style={{ marginBottom: 10, borderRadius: 14, padding: 14, backgroundColor: 'rgba(239,68,68,0.12)', borderWidth: 1, borderColor: '#ef4444' }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <Ionicons name="warning" size={18} color="#ef4444" />
+                  <Text style={{ color: '#ef4444', fontSize: 14, fontWeight: '800' }}>TRADING HALTED</Text>
+                </View>
+                <Text style={{ color: p.fgMuted, fontSize: 12, marginTop: 6 }}>
+                  A money-conservation check failed. Trading is blocked until you investigate and clear it.
+                </Text>
+                <Pressable
+                  onPress={() => clearHaltMut.mutate()}
+                  disabled={clearHaltMut.isPending}
+                  style={{ marginTop: 10, alignSelf: 'flex-start', paddingHorizontal: 14, paddingVertical: 9, borderRadius: 10, backgroundColor: '#ef4444' }}
+                >
+                  <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>{clearHaltMut.isPending ? 'Clearing…' : 'Clear halt'}</Text>
+                </Pressable>
+              </View>
+            )}
+
+            <View style={{ flexDirection: 'row', gap: 10, marginBottom: 10 }}>
+              <View style={{ flex: 1, borderRadius: 14, padding: 14, backgroundColor: p.bgElev, borderWidth: 1, borderColor: fund ? (fund.funds.ok ? p.greenFg + '40' : '#f59e0b') : p.border }}>
+                <Text style={{ color: p.fgFaint, fontSize: 10, fontWeight: '700', letterSpacing: 0.5 }}>FUND AUDIT</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6 }}>
+                  <Ionicons name={fund?.funds.ok ? 'checkmark-circle' : 'information-circle'} size={16} color={fund?.funds.ok ? p.greenFg : '#f59e0b'} />
+                  <Text style={{ color: fund?.funds.ok ? p.greenFg : '#f59e0b', fontSize: 15, fontWeight: '700' }}>{fund ? (fund.funds.ok ? 'Balanced' : 'Review') : '—'}</Text>
+                </View>
+                <Text style={{ color: p.fgFaint, fontSize: 9, marginTop: 4 }}>internal balances vs net deposits</Text>
+              </View>
+              <View style={{ flex: 1, borderRadius: 14, padding: 14, backgroundColor: p.bgElev, borderWidth: 1, borderColor: fund ? (fund.ledger.ok ? p.greenFg + '40' : '#ef4444') : p.border }}>
+                <Text style={{ color: p.fgFaint, fontSize: 10, fontWeight: '700', letterSpacing: 0.5 }}>LEDGER</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6 }}>
+                  <Ionicons name={fund?.ledger.ok ? 'checkmark-circle' : 'alert-circle'} size={16} color={fund?.ledger.ok ? p.greenFg : '#ef4444'} />
+                  <Text style={{ color: fund?.ledger.ok ? p.greenFg : '#ef4444', fontSize: 15, fontWeight: '700' }}>{fund ? (fund.ledger.ok ? 'Reconciled' : 'BROKEN') : '—'}</Text>
+                </View>
+                <Text style={{ color: p.fgFaint, fontSize: 9, marginTop: 4 }}>double-entry conservation</Text>
+              </View>
+            </View>
+
+            {/* Explain the (non-contradictory) "review + reconciled" combo. */}
+            {fund && !fund.funds.ok && fund.ledger.ok && (
+              <View style={{ flexDirection: 'row', gap: 8, padding: 12, marginBottom: 10, borderRadius: 12, backgroundColor: 'rgba(245,158,11,0.08)', borderWidth: 1, borderColor: 'rgba(245,158,11,0.25)' }}>
+                <Ionicons name="information-circle-outline" size={16} color="#f59e0b" />
+                <Text style={{ flex: 1, color: p.fgMuted, fontSize: 11, lineHeight: 16 }}>
+                  Books are internally consistent (ledger reconciled — no money created or lost). The amounts below entered outside the deposit flow (opening balances / admin seeding) and just need a recorded source for full attribution.
+                </Text>
+              </View>
+            )}
+
+            {/* Per-currency drift rows (only show non-OK to keep it tight) */}
+            {!!fund?.funds.perCurrency?.some((c) => !c.ok) && (
+              <View style={{ backgroundColor: p.bgElev, borderRadius: 14, borderWidth: 1, borderColor: p.border, overflow: 'hidden' }}>
+                {fund.funds.perCurrency.filter((c) => !c.ok).slice(0, 8).map((c) => (
+                  <View key={c.currency} style={{ flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 14, paddingVertical: 9, borderBottomWidth: 1, borderBottomColor: p.border }}>
+                    <Text style={{ color: p.fg, fontSize: 13, fontWeight: '700' }}>{c.currency}</Text>
+                    <Text style={{ color: '#ef4444', fontSize: 12, fontWeight: '600', fontVariant: ['tabular-nums'] }}>off by {c.diff}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+          </View>
+
+          {/* FX — USD/LYD order book + scraped parallel rates */}
+          <View style={{ marginTop: 18, paddingHorizontal: 20 }}>
+            <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '600', letterSpacing: 0.7, marginBottom: 10 }}>FX · USD/LYD ORDER BOOK</Text>
+
+            <View style={{ borderRadius: 18, padding: 16, backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border }}>
+              {/* Current rate + skew */}
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <View>
+                  <Text style={{ color: p.fgFaint, fontSize: 10, fontWeight: '600', letterSpacing: 0.5 }}>USD/LYD (LIVE)</Text>
+                  <Text style={{ color: p.fg, fontSize: 30, fontWeight: '600', letterSpacing: -1, marginTop: 4, fontVariant: ['tabular-nums'] }}>
+                    {fx?.usdLydHistory?.length ? fx.usdLydHistory[fx.usdLydHistory.length - 1].price.toFixed(4) : (fx?.lydParallelScraped?.USD?.toFixed(4) ?? '—')}
+                  </Text>
+                  <Text style={{ color: p.fgMuted, fontSize: 10, marginTop: 2 }}>
+                    floor {fx?.lydParallelScraped?.USD?.toFixed(4) ?? '—'} (street)
+                  </Text>
+                </View>
+                <View style={{ alignItems: 'flex-end' }}>
+                  <View style={{
+                    flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8,
+                    backgroundColor: (fx?.lydOrderBook.skewPct ?? 0) > 0 ? 'rgba(34,197,94,0.15)' : p.pillBg,
+                  }}>
+                    <Ionicons name="trending-up" size={12} color={(fx?.lydOrderBook.skewPct ?? 0) > 0 ? '#22c55e' : p.fgMuted} />
+                    <Text style={{ color: (fx?.lydOrderBook.skewPct ?? 0) > 0 ? '#22c55e' : p.fgMuted, fontSize: 12, fontWeight: '700' }}>
+                      +{((fx?.lydOrderBook.skewPct ?? 0) * 100).toFixed(2)}% skew
+                    </Text>
+                  </View>
+                  <Text style={{ color: p.fgFaint, fontSize: 10, marginTop: 4 }}>
+                    net flow {fmtSignedUsd(fx?.lydOrderBook.netUsd ?? 0)}
+                  </Text>
+                </View>
+              </View>
+
+              {/* Range picker */}
+              <View style={{ flexDirection: 'row', gap: 6, marginTop: 14 }}>
+                {([[6, '6h'], [24, '24h'], [72, '3d'], [168, '7d']] as [number, string][]).map(([h, lbl]) => (
+                  <Pressable key={h} onPress={() => setFxHours(h)} style={{
+                    paddingHorizontal: 12, paddingVertical: 5, borderRadius: 8,
+                    backgroundColor: fxHours === h ? p.fg : 'transparent',
+                    borderWidth: 1, borderColor: fxHours === h ? p.fg : p.border,
+                  }}>
+                    <Text style={{ color: fxHours === h ? p.bg : p.fgMuted, fontSize: 11, fontWeight: '700' }}>{lbl}</Text>
+                  </Pressable>
+                ))}
+              </View>
+
+              {/* Price + volume chart */}
+              <FxChart history={fx?.usdLydHistory ?? []} p={p} />
+            </View>
+
+            {/* Scraped parallel rates table */}
+            {fx?.lydParallelScraped && Object.keys(fx.lydParallelScraped).length > 0 && (
+              <View style={{ marginTop: 10, backgroundColor: p.bgElev, borderRadius: 14, borderWidth: 1, borderColor: p.border, overflow: 'hidden' }}>
+                <Text style={{ color: p.fgFaint, fontSize: 10, fontWeight: '700', letterSpacing: 0.5, padding: 12, paddingBottom: 6 }}>
+                  PARALLEL RATES (LYD per unit · scraped)
+                </Text>
+                {Object.entries(fx.lydParallelScraped).map(([cur, val], i, arr) => (
+                  <View key={cur} style={{ flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 14, paddingVertical: 9, borderTopWidth: 1, borderTopColor: p.border }}>
+                    <Text style={{ color: p.fg, fontSize: 13, fontWeight: '700' }}>{cur}/LYD</Text>
+                    <Text style={{ color: p.fg, fontSize: 13, fontWeight: '600', fontVariant: ['tabular-nums'] }}>{Number(val).toFixed(2)}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
           </View>
 
           {/* Pending action queue */}

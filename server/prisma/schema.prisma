@@ -250,6 +250,9 @@ model User {
   createdAt                    DateTime                     @default(now())
   updatedAt                    DateTime                     @updatedAt
   wallets                      Wallet[]
+  ledgerAccounts               LedgerAccount[]
+  stepUpChallenges             StepUpChallenge[]
+  knownDevices                 KnownDevice[]
   deposits                     Deposit[]
   withdrawals                  Withdrawal[]
   orders                       Order[]
@@ -441,9 +444,28 @@ model Withdrawal {
   updatedAt     DateTime         @updatedAt
   user          User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   onChainTxs    OnChainTx[]
+  approvals     WithdrawalApproval[]
 
   @@index([userId])
   @@index([status])
+}
+
+/// Multi-sig withdrawal approvals. Withdrawals at/above a configured USD
+/// threshold require N distinct admin approvals before funds are released —
+/// so a single leaked admin session can't drain the treasury. One row per
+/// (withdrawal, admin); a unique constraint prevents an admin double-voting.
+model WithdrawalApproval {
+  id           String     @id @default(cuid())
+  withdrawalId String
+  adminId      String
+  decision     String     // 'APPROVE' | 'REJECT'
+  note         String?
+  createdAt    DateTime   @default(now())
+
+  withdrawal   Withdrawal @relation(fields: [withdrawalId], references: [id], onDelete: Cascade)
+
+  @@unique([withdrawalId, adminId])
+  @@index([withdrawalId])
 }
 
 model Order {
@@ -543,6 +565,21 @@ model ExchangeRate {
   @@index([baseCurrency, quoteCurrency])
 }
 
+/// Time-series of FX rates + traded volume for admin charts (e.g. USD/LYD).
+/// One row per sampling tick. `price` is quote-per-1-base (LYD per USD),
+/// `volumeUsd` is the USD-equivalent traded in that bucket, `skewPct` is the
+/// order-book demand skew applied at the time.
+model FxRateTick {
+  id        String   @id @default(uuid())
+  pair      String   // e.g. "USD/LYD"
+  price     Decimal  @db.Decimal(20, 8)
+  volumeUsd Decimal  @default(0) @db.Decimal(20, 2)
+  skewPct   Decimal  @default(0) @db.Decimal(10, 6)
+  createdAt DateTime @default(now())
+
+  @@index([pair, createdAt])
+}
+
 model PlatformSettings {
   id          String   @id @default(uuid())
   key         String   @unique
@@ -551,6 +588,76 @@ model PlatformSettings {
   updatedBy   String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// DOUBLE-ENTRY LEDGER
+//
+// The single source of truth for money. Every value movement is recorded
+// as a balanced set of LedgerEntry rows grouped by `groupId`. Within each
+// group, signed amounts sum to exactly zero PER CURRENCY — money is never
+// created or destroyed, only moved between accounts. The cached `balance`
+// on LedgerAccount is the running sum of its entries and is reconciled by
+// a scheduled invariant check (which halts trading on drift).
+//
+// User wallets, the platform treasury, and "system" accounts (the other
+// side of deposits/withdrawals/on-chain/fx) are all LedgerAccounts. This
+// is what lets external flows balance: a fiat deposit debits the
+// SYSTEM_ONRAMP account and credits the user — net zero in the books.
+// ─────────────────────────────────────────────────────────────────────
+
+enum LedgerAccountType {
+  USER          // a user's spendable balance in one currency
+  PLATFORM      // platform treasury / fee revenue
+  SYSTEM_ONRAMP // external fiat/card rail (deposits enter from here)
+  SYSTEM_OFFRAMP// external fiat rail (withdrawals exit to here)
+  SYSTEM_CHAIN  // on-chain crypto custody (crypto in/out)
+  SYSTEM_FX     // FX conversion counterparty (cross-currency legs settle here)
+  SYSTEM_ESCROW // P2P / claim-link funds held in escrow
+}
+
+model LedgerAccount {
+  id        String            @id @default(cuid())
+  type      LedgerAccountType
+  /// User-owned accounts set userId; system/platform accounts leave it null.
+  userId    String?
+  currency  Currency
+  /// Cached running balance (Σ entries). Authoritative value is the entry
+  /// sum; this is a performance cache verified by reconciliation.
+  balance   Decimal           @default(0) @db.Decimal(38, 18)
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+
+  user      User?             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  entries   LedgerEntry[]
+
+  /// One account per (type, user, currency). System accounts are unique per
+  /// (type, currency) since userId is null.
+  @@unique([type, userId, currency])
+  @@index([userId])
+  @@index([type, currency])
+}
+
+model LedgerEntry {
+  id          String        @id @default(cuid())
+  /// Groups the balanced legs of a single logical transaction.
+  groupId     String
+  accountId   String
+  currency    Currency
+  /// Signed: positive = credit into the account, negative = debit out.
+  amount      Decimal       @db.Decimal(38, 18)
+  /// What produced this group: 'buy','sell','deposit','withdrawal',
+  /// 'transfer','fee','p2p','claim','fx','onchain','adjustment', …
+  refType     String
+  refId       String?
+  memo        String?
+  createdAt   DateTime      @default(now())
+
+  account     LedgerAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([groupId])
+  @@index([accountId, createdAt])
+  @@index([refType, refId])
 }
 
 /// Unified fee ledger — every commission or transaction fee the
@@ -1250,6 +1357,48 @@ model APIKey {
 }
 
 // ── Login History ────────────────────────────────────────────────────
+/// Step-up authentication challenge. Issued before a high-value or
+/// unrecognized-device action (withdrawal / buy / sell / transfer ≥ the USD
+/// threshold). The user proves possession via a 6-digit code delivered by
+/// email, OR their TOTP authenticator. Single-use, short-lived, rate-limited.
+model StepUpChallenge {
+  id          String   @id @default(cuid())
+  userId      String
+  /// What this challenge authorizes — bound so a code for one action can't be
+  /// replayed for another: e.g. "withdrawal", "buy", "sell", "transfer".
+  action      String
+  /// SHA-256 of the 6-digit code (never store the code in the clear).
+  codeHash    String
+  /// 'email' | 'totp' — how the user will satisfy it.
+  method      String
+  attempts    Int      @default(0)
+  consumedAt  DateTime?
+  expiresAt   DateTime
+  createdAt   DateTime @default(now())
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, action])
+  @@index([expiresAt])
+}
+
+/// Recognized devices. An action from a device whose fingerprint isn't here
+/// triggers step-up even below the value threshold. Fingerprint = stable hash
+/// of (userAgent + a client-provided device id).
+model KnownDevice {
+  id          String   @id @default(cuid())
+  userId      String
+  fingerprint String
+  label       String?  // human-readable ("iPhone 15 · Safari")
+  lastSeenAt  DateTime @default(now())
+  createdAt   DateTime @default(now())
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, fingerprint])
+  @@index([userId])
+}
+
 model LoginHistory {
   id        String   @id @default(uuid())
   userId    String

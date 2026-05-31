@@ -43,6 +43,7 @@ import {
 
 import { queryClient } from '@/lib/queryClient';
 import { setUnauthorizedHandler } from '@/lib/api';
+import { initObservability } from '@/lib/observability';
 import { useAuthStore } from '@/store/authStore';
 import { useChatPrefs } from '@/store/chatPrefsStore';
 import { authService } from '@/services';
@@ -64,6 +65,7 @@ function AuthGate() {
   const { isAuthenticated, isHydrating, hydrate, logout, lastUser, updateUser, user, needsViewSelection } = useAuthStore();
   const [hasOnboarded, setHasOnboarded] = useState<boolean | null>(null);
 
+  useEffect(() => { initObservability(); }, []);
   useEffect(() => { hydrate(); }, [hydrate]);
   // Pull persisted chat prefs (pins, contacts, read-receipts) once
   // per cold start so the conversation list paints in the user's

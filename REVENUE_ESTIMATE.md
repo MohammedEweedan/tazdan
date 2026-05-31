@@ -1,116 +1,103 @@
-# tazdan Platform — Revenue Estimate
+# Tazdan — Revenue Model & Estimate (v2)
 
-## Executive Summary
-
-Based on the implemented features, here is a realistic monthly revenue projection assuming moderate adoption in all markets with ~5,000 active monthly users in year 1, scaling to ~25,000 by year 3.
-
----
-
-## Revenue Streams
-
-### 1. Trading Fees (Exchange Orders)
-- **Fee**: 0.1% – 0.25% per trade
-- **Assumption**: 2,000 daily trades, avg $200/trade
-- **Monthly Volume**: $12M
-- **Monthly Revenue**: **$12,000 – $30,000**
-
-### 2. P2P Marketplace Escrow Fees
-- **Fee**: 0.5% from each party (1% total per trade)
-- **Assumption**: 500 P2P trades/month, avg $500/trade
-- **Monthly Volume**: $250,000
-- **Monthly Revenue**: **$2,500**
-
-### 3. Withdrawal Fees
-- **Fee**: $1–$5 per withdrawal (fiat), 0.1% (crypto)
-- **Assumption**: 3,000 withdrawals/month
-- **Monthly Revenue**: **$6,000 – $9,000**
-
-### 4. Deposit Processing Fees
-- **Fee**: 0.5% for bank deposits, free for crypto
-- **Assumption**: 2,000 fiat deposits/month, avg $300
-- **Monthly Volume**: $600,000
-- **Monthly Revenue**: **$3,000**
-
-### 5. Transfer Fees (Internal)
-- **Fee**: 0.1% per internal transfer
-- **Assumption**: 5,000 transfers/month, avg $100
-- **Monthly Revenue**: **$500**
-
-### 6. Memecoin Minting (NEW)
-- **Fee**: $20 – $150 per token deployment (chain-dependent)
-- **Assumption**: 50–200 token mints/month (very conservative)
-- **Average fee**: ~$45/mint
-- **Monthly Revenue**: **$2,250 – $9,000**
-- **Growth potential**: Very high — memecoin mania drives recurring demand
-
-### 7. Smart Contract Deployment (NEW)
-- **Fee**: $25 – $100 per contract
-- **Assumption**: 20–80 contracts/month
-- **Average fee**: ~$50/contract
-- **Monthly Revenue**: **$1,000 – $4,000**
-
-### 8. P2P Dispute Penalties
-- **Fee**: 5% – 100% seizure from ill-intentioned party
-- **Assumption**: 2% dispute rate on P2P trades, avg 25% penalty
-- **Monthly Revenue**: **$625 – $1,500**
-
-### 9. Exchange Rate Spread
-- **Spread**: 0.5% – 2% on LYD/USDT pair
-- **Assumption**: $5M monthly LYD volume
-- **Monthly Revenue**: **$25,000 – $100,000**
-- **Note**: This is the biggest earner in this market due to controlled forex
-
-### 10. Agent Network Commissions (Platform Cut)
-- **Platform takes**: 0.25% of agent-processed volume
-- **Assumption**: 100 agents, $10,000/month each
-- **Monthly Volume**: $1M
-- **Monthly Revenue**: **$2,500**
+**Date:** 2026-05-31
+**Supersedes** the earlier estimate. That version listed memecoin minting and smart-contract deployment as revenue lines — **those are not built and are removed here.** This version only counts streams with shipped code behind them, and discounts assumptions to defensible levels.
 
 ---
 
-## Monthly Revenue Summary
+## Honest framing first
 
-| Stream | Conservative | Moderate | Optimistic |
+Tazdan is, at its core, a **MENA-first FX-and-crypto rail whose defensible edge is the USD/LYD parallel-market spread.** Generic crypto trading competes head-on with Binance and loses on price; the LYD/FX angle is the real, hard-to-copy business. The model below reflects that: **the FX spread is ~60–75% of realistic revenue.** Treat the rest as retention surface, not the engine.
+
+Every line maps to actual implemented code:
+
+| Stream | Code that backs it |
+|---|---|
+| Exchange spread (crypto buy/sell) | `priceEngine.service` — admin-configurable spread, baked into quote |
+| FX spread (USD/LYD + MENA fiat) | `fxRateProvider.service` + `lydOrderBook.service` — scraped floor + demand skew |
+| Withdrawal fees | `withdrawal` / `cryptoWithdrawal` controllers → `collectFee()` |
+| P2P escrow fees | `p2p.controller` (812 LOC, escrow + disputes) |
+| Card interchange/issuing | `Card`/`CardTransaction` models, card issuer service |
+| Business (KYB) tiered fees | `BusinessProfile` w/ volume-based `industry` tier |
+| Liquidity pools | `LiquidityPool` (shared wallet / goal-based) |
+
+---
+
+## The one number that matters: FX spread
+
+This is the business. Conservative math:
+
+- Spread applied: **2.5%** default (admin-set), symmetric, **floored at the live street rate** so low demand can't erode it.
+- The market is real: Libya's official vs parallel USD/LYD diverges ~40%+, and MENA remittance/FX demand is large and underserved by app-native rails.
+
+| Monthly LYD/FX volume | Revenue @ 2.5% |
+|---|---|
+| $1M (early, one market) | **$25,000** |
+| $4M (traction) | **$100,000** |
+| $10M (established) | **$250,000** |
+
+Volume here is the whole ballgame. $1M/mo is a few hundred active users moving meaningful sums — plausible in-market within months of a licensed launch. Everything else is rounding by comparison.
+
+---
+
+## Full stream estimate (defensible)
+
+Assumptions deliberately conservative for a **new** emerging-markets app — the prior doc's "5,000 MAU each trading $2,400/mo" was ~5–10× too hot.
+
+| Stream | Conservative (early) | Moderate | Optimistic |
 |---|---|---|---|
-| Trading Fees | $12,000 | $20,000 | $30,000 |
-| P2P Escrow Fees | $1,500 | $2,500 | $5,000 |
-| Withdrawal Fees | $6,000 | $7,500 | $9,000 |
-| Deposit Fees | $2,000 | $3,000 | $5,000 |
-| Transfer Fees | $300 | $500 | $1,000 |
-| **Memecoin Minting** | **$2,250** | **$4,500** | **$9,000** |
-| **Smart Contracts** | **$1,000** | **$2,500** | **$4,000** |
-| Dispute Penalties | $625 | $1,000 | $1,500 |
-| Exchange Spread | $25,000 | $50,000 | $100,000 |
-| Agent Commissions | $1,500 | $2,500 | $5,000 |
-| **TOTAL MONTHLY** | **$52,175** | **$94,000** | **$169,500** |
-| **TOTAL ANNUAL** | **$626,100** | **$1,128,000** | **$2,034,000** |
+| **FX spread (USD/LYD + MENA)** | **$25,000** | **$60,000** | **$150,000** |
+| Crypto exchange spread (2.5%) | $3,000 | $9,000 | $25,000 |
+| Withdrawal fees | $2,000 | $5,000 | $9,000 |
+| P2P escrow fees | $800 | $2,500 | $6,000 |
+| Card interchange + tiers | $500 | $3,000 | $10,000 |
+| Business (KYB) accounts | $1,000 | $4,000 | $15,000 |
+| Transfers / misc | $300 | $800 | $2,000 |
+| **TOTAL / MONTH** | **~$32,600** | **~$84,300** | **~$217,000** |
+| **TOTAL / YEAR** | **~$391k** | **~$1.0M** | **~$2.6M** |
+
+**Read the conservative column as your real Year-1 planning number, and even that assumes you clear licensing and reach ~$1M/mo FX volume.** A more cautious Year-1 (sub-$1M FX volume while licensing settles) is **$8k–$20k/mo** — still a real business, just slower.
 
 ---
 
-## Key Assumptions & Notes
+## Costs (the prior doc badly under-counted these)
 
-1. **Context**: The forex spread is the single largest revenue opportunity. 
+For a regulated money app, compliance and fraud dominate — not hosting.
 
-2. **Memecoin minting**: This is high-margin, automated revenue. Each deployment costs the platform near-zero (gas fees only), while charging $20-$150. Expected to grow exponentially with marketing.
+| Cost | Monthly |
+|---|---|
+| Compliance / legal / license maintenance | $5,000 – $20,000 |
+| KYC/KYB per-check (Sumsub) | $1 – $3 × volume |
+| Custody (Fireblocks/BitGo) or KMS + insurance | $2,000 – $10,000 |
+| Payment processing (Stripe/Checkout) | 1.5–3% of card on-ramp |
+| Chargebacks / fraud losses | budget 0.5–2% of card volume |
+| Infra (DO/AWS, Redis, Postgres, Sentry) | $500 – $3,000 |
+| Support / ops | $2,000 – $8,000 |
+| **Realistic total** | **$15,000 – $40,000+/mo once live** |
 
-3. **Smart contracts**: Enterprise-grade service at retail prices. Escrow contracts alone could become the most-used template given the trust deficit in business.
-
-4. **AML compliance fees**: Indirectly generate revenue through reduced fraud losses and increased user trust leading to higher volumes.
-
-5. **Scaling**: Revenue scales non-linearly. At 25,000 MAU (year 3), these estimates 3-5x due to network effects and market share.
-
-6. **Costs**: Estimated monthly operating costs of $5,000-$15,000 (hosting, support, compliance, development). Net margin: **75-90%** on most revenue streams.
+Net margin is healthy **on the FX spread specifically** (near-zero marginal cost per trade). It is **thin or negative on card on-ramp** after processing + fraud. Don't blend them into one "75–90% margin" — that was the prior doc's biggest financial error.
 
 ---
 
-## Year 1-3 Projection
+## 3-year outlook (conviction-weighted)
 
-| Year | MAU | Monthly Rev | Annual Rev |
+| Year | Posture | Monthly Rev (realistic) | Annual |
 |---|---|---|---|
-| Year 1 | 5,000 | $52K – $94K | $626K – $1.1M |
-| Year 2 | 15,000 | $150K – $280K | $1.8M – $3.4M |
-| Year 3 | 25,000+ | $300K – $500K | $3.6M – $6M |
+| Year 1 | Licensed launch, one market, capped limits | $20k – $50k | $240k – $600k |
+| Year 2 | 2–3 markets, business accounts ramp | $60k – $150k | $720k – $1.8M |
+| Year 3 | Established MENA rail, network effects | $150k – $350k | $1.8M – $4.2M |
+
+This is a **$1–4M/yr revenue business** if executed well — a genuinely good outcome for a focused fintech, **not** a unicorn, and it lives or dies on (1) the license and (2) never losing a customer dollar to a ledger bug.
 
 ---
 
-*This estimate is based on comparable platforms in emerging markets (Paxful Nigeria, Binance P2P MENA, LocalBitcoins Africa) adjusted for all markets size and regulatory environment.*
+## What would change these numbers most (in order)
+
+1. **Licensing** — gates whether you can operate and stay in the stores at all.
+2. **FX volume** — the single revenue lever; concentrate product + marketing here.
+3. **Trust / integrity** — one public balance-loss incident in this market kills word-of-mouth permanently.
+4. **Business/KYB accounts** — highest revenue-per-user; the KYB plumbing exists, so this is upside that's mostly sales/onboarding effort, not engineering.
+
+---
+
+*Comparables: Binance P2P MENA, regional remittance apps, and controlled-FX arbitrage rails. Adjusted down for a new entrant's volume ramp and up for the structural LYD spread advantage.*

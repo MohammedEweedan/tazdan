@@ -25,6 +25,7 @@ import { secureStore } from '@/lib/secureStore';
 const KEY_PINS         = 'chat.prefs.pinned.v1';
 const KEY_CONTACTS     = 'chat.prefs.contacts.v1';
 const KEY_READ_RECEIPT = 'chat.prefs.readReceipts.v1';
+const KEY_LAST_SEEN     = 'chat.prefs.lastSeen.v1';
 
 export interface ChatContact {
   id: string;        // partnerId
@@ -39,6 +40,7 @@ interface ChatPrefsState {
   pinnedPartners: Set<string>;
   contacts: Map<string, ChatContact>;
   readReceiptsOn: boolean;
+  lastSeenOn: boolean;
 
   hydrate: () => Promise<void>;
 
@@ -51,6 +53,7 @@ interface ChatPrefsState {
   contactList: () => ChatContact[];
 
   setReadReceiptsOn: (on: boolean) => Promise<void>;
+  setLastSeenOn: (on: boolean) => Promise<void>;
 }
 
 async function loadJson<T>(key: string, fallback: T): Promise<T> {
@@ -72,17 +75,20 @@ export const useChatPrefs = create<ChatPrefsState>((set, get) => ({
   pinnedPartners: new Set(),
   contacts: new Map(),
   readReceiptsOn: true,
+  lastSeenOn: true,
 
   hydrate: async () => {
-    const [pinsArr, contactsArr, receipts] = await Promise.all([
+    const [pinsArr, contactsArr, receipts, lastSeen] = await Promise.all([
       loadJson<string[]>(KEY_PINS, []),
       loadJson<ChatContact[]>(KEY_CONTACTS, []),
       loadJson<{ on: boolean }>(KEY_READ_RECEIPT, { on: true }),
+      loadJson<{ on: boolean }>(KEY_LAST_SEEN, { on: true }),
     ]);
     set({
       pinnedPartners: new Set(pinsArr),
       contacts: new Map(contactsArr.map((c) => [c.id, c])),
       readReceiptsOn: receipts?.on ?? true,
+      lastSeenOn: lastSeen?.on ?? true,
       hydrated: true,
     });
   },
@@ -114,5 +120,9 @@ export const useChatPrefs = create<ChatPrefsState>((set, get) => ({
   setReadReceiptsOn: async (on: boolean) => {
     set({ readReceiptsOn: on });
     await saveJson(KEY_READ_RECEIPT, { on });
+  },
+  setLastSeenOn: async (on: boolean) => {
+    set({ lastSeenOn: on });
+    await saveJson(KEY_LAST_SEEN, { on });
   },
 }));

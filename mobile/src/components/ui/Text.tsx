@@ -1,6 +1,6 @@
 import React, { forwardRef } from 'react';
 import { Text as RNText, TextInput as RNTextInput, TextProps, TextInputProps, StyleSheet } from 'react-native';
-import { useI18n } from '@/store/i18nStore';
+import { translateLiteral, useI18n, type Locale } from '@/store/i18nStore';
 
 const CAIRO_WEIGHT_MAP: Record<string, string> = {
   '300': 'Cairo_300Light',
@@ -56,6 +56,18 @@ function isNumericContent(children: React.ReactNode): boolean {
   return true;
 }
 
+function localizeChildren(children: React.ReactNode, locale: Locale): React.ReactNode {
+  if (typeof children === 'string') return translateLiteral(children, locale);
+  if (Array.isArray(children)) {
+    return children.map((child, index) => (
+      typeof child === 'string'
+        ? <React.Fragment key={index}>{translateLiteral(child, locale)}</React.Fragment>
+        : child
+    ));
+  }
+  return children;
+}
+
 function resolveFontFamily(style: any, useCairo: boolean): any {
   const flattened = StyleSheet.flatten(style) || {};
   const weight = String(flattened.fontWeight || '400');
@@ -75,7 +87,8 @@ export const Text = forwardRef<RNText, TextProps>((props, ref) => {
   // Arabic uses Cairo — except for numeric/currency content, which stays Outfit.
   const useCairo = locale === 'ar' && !isNumericContent(props.children);
   const resolvedStyle = resolveFontFamily(props.style, useCairo);
-  return <RNText {...props} ref={ref} style={resolvedStyle} />;
+  const localizedChildren = localizeChildren(props.children, locale);
+  return <RNText {...props} ref={ref} style={resolvedStyle}>{localizedChildren}</RNText>;
 });
 
 export const TextInput = forwardRef<RNTextInput, TextInputProps>((props, ref) => {
@@ -83,5 +96,6 @@ export const TextInput = forwardRef<RNTextInput, TextInputProps>((props, ref) =>
   // For inputs we can't know the typed value's script ahead of time; keep the
   // locale-driven family (Cairo in Arabic) so placeholders/labels read right.
   const resolvedStyle = resolveFontFamily(props.style, locale === 'ar');
-  return <RNTextInput {...props} ref={ref} style={resolvedStyle} />;
+  const placeholder = translateLiteral(props.placeholder, locale);
+  return <RNTextInput {...props} ref={ref} placeholder={placeholder ?? undefined} style={resolvedStyle} />;
 });

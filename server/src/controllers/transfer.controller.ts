@@ -8,6 +8,8 @@ import { AuthRequest } from '../types';
 import { logger } from '../utils/logger';
 import { sendTransferSent, sendTransferReceived } from '../services/email';
 import { pushCopy, pushTxEvent } from '../services/push.service';
+import { postLedger, isLedgerCurrency } from '../services/ledger/ledger.service';
+import { enforceStepUp } from '../services/security/stepUp.service';
 
 // Internal-transfer accepts the same set as wallet creation, including
 // the USDT on-chain variants. We normalise them to a single logical
@@ -51,6 +53,7 @@ const transferSchema = z.object({
   currency: z.enum(SUPPORTED_CURRENCIES).default('USDT'),
   amount: z.number().positive(),
   note: z.string().max(200).optional(),
+  stepUpCode: z.string().regex(/^\d{6}$/).optional(),
 }).refine(data => data.recipientEmail || data.recipientPhone || data.recipientUsername, {
   message: 'Recipient email, phone, or username is required',
 });
@@ -92,6 +95,17 @@ export class TransferController {
       const MIN: Record<string, number> = { USDT: 1, USD: 1, LYD: 1 };
       const min = MIN[logicalCurrency] ?? 0.00001;
       if (data.amount < min) throw new AppError(`Minimum transfer is ${min} ${logicalCurrency}`, 400);
+
+      // Step-up: transfers ≥ $1000 or from a new device need a 6-digit code.
+      let usdValue = data.amount;
+      if (!['USD', 'USDT', 'USDC'].includes(logicalCurrency)) {
+        try {
+          const { getRate } = await import('../services/exchange/fxRateProvider.service');
+          const pair = await getRate(logicalCurrency, 'USD');
+          usdValue = data.amount * Number(pair.buyPrice || pair.sellPrice || 1);
+        } catch { /* fall back to raw amount */ }
+      }
+      await enforceStepUp({ userId: req.user!.id, action: 'transfer', valueUsd: usdValue, req, code: data.stepUpCode });
 
       const reference = generateReference('TRF');
 
@@ -165,6 +179,17 @@ export class TransferController {
             note: data.note,
           },
         });
+
+        // Mirror into the double-entry ledger (same tx, atomic). Sender pays
+        // amount+fee; recipient gets amount; platform gets the fee — nets to 0.
+        if (isLedgerCurrency(logicalCurrency)) {
+          const legs = [
+            { type: 'USER' as const, userId: req.user!.id, currency: logicalCurrency as any, amount: new Decimal(-totalDeducted) },
+            { type: 'USER' as const, userId: recipient.id, currency: logicalCurrency as any, amount: new Decimal(data.amount) },
+            ...(fee > 0 ? [{ type: 'PLATFORM' as const, currency: logicalCurrency as any, amount: new Decimal(fee) }] : []),
+          ];
+          await postLedger(tx, { refType: 'transfer', refId: reference, memo: `Transfer ${logicalCurrency}`, legs }, { allowNegativeUser: true });
+        }
 
         await tx.transaction.createMany({
           data: [

@@ -20,6 +20,7 @@ import { Ionicons } from '@expo/vector-icons';
 import Svg, { Circle } from 'react-native-svg';
 
 import { useThemedPalette, type Palette } from '@/store/themeStore';
+import { useT } from '@/store/i18nStore';
 import { CoinIcon } from '@/components/ui/CoinIcon';
 import { getCurrencyMeta } from '@/constants';
 
@@ -51,12 +52,14 @@ export interface PaymentReceiptProps {
   at: string;
   /** True when the bubble is on the right (sent by me). Tints accents. */
   fromMe?: boolean;
+  labelOverride?: string;
   /** When false, jump to the end-state without animating (used for old bubbles). */
   animate?: boolean;
 }
 
 export function PaymentReceiptBubble(props: PaymentReceiptProps) {
   const p = useThemedPalette();
+  const tLabel = useT();
   const status: ReceiptStatus = props.status ?? 'COMPLETED';
 
   // Master 0 → 1 driver. We only animate when the status is COMPLETED;
@@ -169,7 +172,7 @@ export function PaymentReceiptBubble(props: PaymentReceiptProps) {
 
         <View style={{ flex: 1 }}>
           <Text style={{ color: p.fgMuted, fontSize: 10, fontWeight: '700', letterSpacing: 0.6 }}>
-            {props.fromMe ? 'YOU SENT' : 'YOU RECEIVED'}
+            {props.labelOverride ?? (props.fromMe ? tLabel('chat.youSent') : tLabel('chat.youReceived'))}
           </Text>
           <Text style={{
             color: p.fg, fontSize: 22, fontWeight: '600', marginTop: 1,

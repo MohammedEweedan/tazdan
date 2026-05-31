@@ -5,10 +5,8 @@
  * asset on a fixed cadence. Execution reuses the exact same path a
  * manual buy uses: build a quote, then execute it. Funding:
  *
- *   • WALLET — the fiat amount is converted to USDT-equivalent and the
- *     order is executed against the user's wallet (the exchange engine
- *     already debits the USDT wallet and credits the crypto). For a
- *     non-USD preferred currency we convert to USDT via the FX provider.
+ *   • WALLET — the amount is quoted in the user's selected fiat currency and
+ *     the engine debits that exact wallet at execution time.
  *   • CARD  — the schedule is recorded and the user is notified; an
  *     automated card charge requires the off-session Stripe flow which
  *     is provisioned separately. The wallet path is the fully-automated
@@ -47,28 +45,6 @@ export function computeNextRun(from: Date, frequency: RecurringFrequency): Date 
 }
 
 /**
- * Convert a fiat amount in `fiatCurrency` to USDT-equivalent, which is
- * what the exchange engine consumes for a BUY. USD≈USDT≈1; other fiats
- * route through the FX provider.
- */
-async function toUsdtAmount(fiatCurrency: string, fiatAmount: Decimal): Promise<Decimal> {
-  if (fiatCurrency === 'USDT' || fiatCurrency === 'USD' || fiatCurrency === 'USDC') {
-    return fiatAmount;
-  }
-  try {
-    const { getRate } = await import('./exchange/fxRateProvider.service');
-    // getRate(base, quote) → RatePair priced as `quote` per 1 `base`.
-    // We want USD per 1 unit of the user's fiat.
-    const pair = await getRate(fiatCurrency, 'USD');
-    const usdPerUnit = new Decimal(pair.buyPrice);
-    return fiatAmount.mul(usdPerUnit);
-  } catch (e) {
-    logger.warn('[recurringBuy] FX conversion failed, assuming 1:1', { fiatCurrency, err: e });
-    return fiatAmount;
-  }
-}
-
-/**
  * Execute a single recurring buy now. Returns the created order, or
  * throws on failure (caller records lastError + bumps failureCount).
  */
@@ -83,17 +59,17 @@ export async function executeRecurringBuy(id: string) {
     throw new Error('Card-funded auto-buy requires off-session charge (not yet enabled)');
   }
 
-  // The funding wallet is the user's chosen fiat currency. Build the quote
-  // in USDT terms (the engine prices in USDT) but execute against the chosen
-  // wallet — the engine FX-converts and debits THAT wallet, not USDT.
+  // The funding wallet is the user's chosen fiat currency. The quote amount is
+  // expressed in that same currency, and the engine carries that settlement
+  // currency through quote → execute → transaction. No hidden USDT default.
   const fundingCurrency = rb.sourceId || rb.fiatCurrency;
-  const usdtAmount = await toUsdtAmount(rb.fiatCurrency, rb.fiatAmount as unknown as Decimal);
 
   const quote = await buildQuote({
     asset: rb.asset,
     network: rb.network,
     side: 'BUY',
-    fiatAmount: usdtAmount.toFixed(8),
+    fiatAmount: (rb.fiatAmount as unknown as Decimal).toString(),
+    settlementCurrency: fundingCurrency,
   });
 
   // Idempotency: one execution per (schedule, scheduled slot). Using the

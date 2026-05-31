@@ -1,7 +1,7 @@
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Image, Platform, Pressable, Text, View, ActionSheetIOS, Alert } from 'react-native';
-import { useThemedPalette, useTheme } from '@/store/themeStore';
+import { useThemedPalette } from '@/store/themeStore';
 import { useAuthStore } from '@/store/authStore';
 import { useT } from '@/store/i18nStore';
 import { useMessageRealtime } from '@/hooks';
@@ -19,13 +19,12 @@ export default function TabsLayout() {
   const p = useThemedPalette();
   const t = useT();
   const userId = useAuthStore((s) => s.user?.id);
-  const themeMode = useTheme((s) => s.mode);
   // FAB is a clean mono disc; the "active" feel comes from a soft
   // halo ring behind it, not a gradient fill. Halo colour matches the
   // primary foreground so it reads on either theme.
   const fabFill = p.fg;
   const fabFg   = p.bg;
-  const haloColor = themeMode === 'dark' ? '#FAFAFA' : '#0A0A0B';
+  const haloColor = p.fg; // white on dark/mono, near-black on light
 
   useMessageRealtime(userId);
 

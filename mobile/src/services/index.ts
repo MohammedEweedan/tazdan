@@ -18,7 +18,7 @@ import type {
   BankAccount, CardEntity, MarketTicker, P2POffer, Transaction, User, Wallet,
 } from '@/types';
 import type {
-  ApiMessage, Conversation, BlockedUser,
+  ApiMessage, Conversation, BlockedUser, MessagePrivacy,
 } from '@/types/messages';
 
 // Allow `EXPO_PUBLIC_FALLBACK_TO_MOCKS=true` to use seed data when the
@@ -176,6 +176,16 @@ export const depositService = {
 export const exchangeService = {
   async fxRate(base: string, quote: string): Promise<{ buyPrice: string; sellPrice: string; source: string; fetchedAt: string }> {
     const { data } = await api.get(`/exchange/fx/${base}/${quote}`);
+    return data;
+  },
+};
+
+// ───────── Security / step-up ─────────
+export const securityService = {
+  /** Request a 6-digit confirmation code for a high-value/new-device action.
+   *  Returns the delivery method so the modal can prompt correctly. */
+  async startStepUp(action: 'withdrawal' | 'buy' | 'sell' | 'transfer'): Promise<{ method: 'email' | 'totp' }> {
+    const { data } = await api.post('/security/step-up/start', { action });
     return data;
   },
 };
@@ -382,7 +392,13 @@ export const profileService = {
   byId: async (id: string): Promise<{
     id: string; firstName?: string; lastName?: string;
     username?: string | null; avatarUrl?: string | null;
-    role?: string; kycStatus?: string;
+    bio?: string | null; role?: string; kycStatus?: string; profilePublic?: boolean; createdAt?: string;
+    messagePrivacy?: MessagePrivacy & {
+      canSeeReadReceipts?: boolean;
+      canSeePresence?: boolean;
+      onlineNow?: boolean;
+      lastSeenAt?: string | null;
+    };
   } | null> => {
     try {
       const { data } = await api.get(`/profile/by-id/${id}`);
@@ -449,7 +465,7 @@ export const messageService = {
   send: async (payload: {
     receiverId: string;
     content: string;
-    type?: 'TEXT' | 'PAYMENT' | 'P2P_NOTE';
+    type?: 'TEXT' | 'PAYMENT' | 'REQUEST' | 'STICKER' | 'P2P_NOTE';
     metadata?: Record<string, any>;
     tradeId?: string;
   }): Promise<ApiMessage> => {
@@ -465,6 +481,15 @@ export const messageService = {
     return data.message;
   },
   markRead: (userId: string) => api.post(`/messages/read/${userId}`),
+
+  privacy: async (): Promise<MessagePrivacy> => {
+    const { data } = await api.get('/messages/privacy');
+    return data.privacy;
+  },
+  updatePrivacy: async (privacy: Partial<MessagePrivacy>): Promise<MessagePrivacy> => {
+    const { data } = await api.put('/messages/privacy', privacy);
+    return data.privacy;
+  },
 
   // Block / unblock / list
   block:   (userId: string, reason?: string) => api.post('/messages/block', { userId, reason }),
@@ -672,9 +697,63 @@ export interface AdminDashboard {
   totalOrdersMonth: number;
 }
 
+export interface AdminExposure {
+  generatedAt: number;
+  spreadPct: number;
+  totals: {
+    totalHoldingsUsd: number;
+    cryptoValueUsd: number;
+    fiatValueUsd: number;
+    exposureUsd: number;
+    spreadCushionUsd: number;
+  };
+  crypto: Array<{ symbol: string; amount: number; price: number; valueUsd: number }>;
+  fiat: Array<{ currency: string; amount: number; valueUsd: number }>;
+  unpriced: string[];
+}
+
+export interface AdminFxStatus {
+  lydParallelScraped: Record<string, number>;  // e.g. { USD: 8.32, EUR: 9.79, ... } LYD per unit
+  lydOrderBook: { netUsd: number; skewPct: number; maxSkewPct: number; refUsd: number };
+  usdLydHistory: Array<{ t: number; price: number; volumeUsd: number; skewPct: number }>;
+  historyHours: number;
+  generatedAt: number;
+}
+
+export interface AdminFundIntegrity {
+  tradingHalted: boolean;
+  funds: {
+    checkedAt: number;
+    ok: boolean;
+    perCurrency: Array<{ currency: string; internalHeld: string; enteredOutside: string; diff: string; ok: boolean }>;
+  };
+  ledger: {
+    ok: boolean;
+    checkedAt: number;
+    cacheDrift: Array<{ accountId: string; cached: string; derived: string; diff: string }>;
+    conservation: Array<{ currency: string; sum: string }>;
+  };
+}
+
 export const adminService = {
   dashboard: async (): Promise<AdminDashboard> => {
     const { data } = await api.get<AdminDashboard>('/admin/dashboard');
+    return data;
+  },
+  exposure: async (): Promise<AdminExposure> => {
+    const { data } = await api.get<AdminExposure>('/admin/exposure');
+    return data;
+  },
+  fxStatus: async (hours = 24): Promise<AdminFxStatus> => {
+    const { data } = await api.get<AdminFxStatus>('/admin/fx-status', { params: { hours } });
+    return data;
+  },
+  fundIntegrity: async (): Promise<AdminFundIntegrity> => {
+    const { data } = await api.get<AdminFundIntegrity>('/admin/fund-integrity');
+    return data;
+  },
+  clearTradingHalt: async (): Promise<{ message: string }> => {
+    const { data } = await api.post<{ message: string }>('/admin/clear-trading-halt', {});
     return data;
   },
   users: (params?: { search?: string; status?: string; page?: number; limit?: number }) =>
@@ -967,6 +1046,10 @@ export const adminService = {
     ),
   manualCredit: async (payload: { userId: string; currency: string; amount: number; note?: string }) => {
     const { data } = await api.post('/admin/manual-credit', payload);
+    return data;
+  },
+  userBalances: async (userId: string): Promise<{ wallets: { currency: string; balance: string; frozen: string }[]; crypto: { currency: string; balance: string }[] }> => {
+    const { data } = await api.get(`/admin/users/${userId}/balances`);
     return data;
   },
 

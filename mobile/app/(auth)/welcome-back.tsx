@@ -103,7 +103,7 @@ export default function WelcomeBack() {
   return (
     <View style={{ flex: 1, backgroundColor: p.bg }}>
       <TopGradient />
-      <StatusBar style={themeMode === 'dark' ? 'light' : 'dark'} />
+      <StatusBar style={themeMode === 'light' ? 'dark' : 'light'} />
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <SafeAreaView style={{ flex: 1 }} edges={['top', 'bottom']}>
           {/* Globe button top-right */}
@@ -134,7 +134,7 @@ export default function WelcomeBack() {
                 )}
               </View>
               <Text style={{ color: p.fg, fontSize: 32, fontWeight: '600', letterSpacing: -1, marginTop: 22, textAlign: 'center' }}>
-                {t('auth.welcomeBack', { handle })}
+                {t('auth.welcomeBack', { handle: handle ?? firstName ?? 'there' })}
               </Text>
               <Text style={{ color: p.fgMuted, fontSize: 15, fontWeight: '600', marginTop: 6, textAlign: 'center' }}>
                 {fullName}

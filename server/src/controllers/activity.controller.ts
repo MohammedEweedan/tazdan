@@ -248,20 +248,13 @@ export class ActivityController {
           createdAt: r.createdAt.toISOString(),
         });
       }
-      for (const o of cryptoOrders as any[]) {
-        merged.push({
-          id: o.id,
-          kind: 'crypto_order',
-          type: o.type,
-          currency: o.asset,
-          amount: o.cryptoAmount.toString(),
-          fee: o.platformFee?.toString(),
-          status: o.status,
-          description: `${o.type} ${o.cryptoAmount} ${o.asset} · ${o.actualCost} USDT`,
-          metadata: { network: o.network, networkFee: o.networkFee?.toString(), spreadCapture: o.spreadCapture?.toString() },
-          createdAt: o.createdAt.toISOString(),
-        });
-      }
+      // NOTE: crypto BUY/SELL orders are intentionally NOT merged here. Each
+      // executed order already creates a `Transaction` row (see
+      // orderExecution.service) which represents the trade with the correct
+      // fiat side. Merging cryptoOrders too produced a duplicate, phantom
+      // entry per trade (e.g. a bogus "+9,733,255 USDT" credit). The
+      // `cryptoOrders` fetch is retained for the type filter / future use.
+      void cryptoOrders;
 
       // Sort the merged list by createdAt desc, then paginate.
       merged.sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));

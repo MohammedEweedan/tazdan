@@ -75,7 +75,7 @@ export default function AdminEscalations() {
   return (
     <View style={{ flex: 1, backgroundColor: p.bg }}>
       <TopGradient />
-      <StatusBar style={themeMode === 'dark' ? 'light' : 'dark'} />
+      <StatusBar style={themeMode === 'light' ? 'dark' : 'light'} />
       <SafeAreaView style={{ flex: 1 }} edges={['top']}>
         {/* Header */}
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingTop: 8, paddingBottom: 12 }}>
@@ -301,7 +301,7 @@ function EscalationCard({ escalation: e, p, meId, onAssign, onResolve, onView }:
 function DeniedView({ p, themeMode, onBack }: any) {
   return (
     <View style={{ flex: 1, backgroundColor: p.bg, alignItems: 'center', justifyContent: 'center', padding: 40 }}>
-      <StatusBar style={themeMode === 'dark' ? 'light' : 'dark'} />
+      <StatusBar style={themeMode === 'light' ? 'dark' : 'light'} />
       <Ionicons name="lock-closed-outline" size={48} color={p.fgFaint} />
       <Text style={{ color: p.fg, fontSize: 18, fontWeight: '600', marginTop: 14 }}>Admin access only</Text>
       <Pressable onPress={onBack} style={{ marginTop: 24, paddingHorizontal: 18, paddingVertical: 11, borderRadius: 12, backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border }}>

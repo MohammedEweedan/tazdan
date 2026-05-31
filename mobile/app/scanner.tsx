@@ -96,7 +96,7 @@ export default function ScannerPage() {
     return (
       <View style={{ flex: 1, backgroundColor: p.bg, alignItems: 'center', justifyContent: 'center' }}>
       <TopGradient />
-        <StatusBar style={themeMode === 'dark' ? 'light' : 'dark'} />
+        <StatusBar style={themeMode === 'light' ? 'dark' : 'light'} />
         <Text style={{ color: p.fgMuted, fontSize: 14 }}>Requesting camera permission…</Text>
       </View>
     );
@@ -105,7 +105,7 @@ export default function ScannerPage() {
   if (!permission.granted) {
     return (
       <View style={{ flex: 1, backgroundColor: p.bg, alignItems: 'center', justifyContent: 'center', padding: 32 }}>
-        <StatusBar style={themeMode === 'dark' ? 'light' : 'dark'} />
+        <StatusBar style={themeMode === 'light' ? 'dark' : 'light'} />
         <Ionicons name="camera-outline" size={48} color={p.fgFaint} />
         <Text style={{ color: p.fg, fontSize: 18, fontWeight: '600', marginTop: 16, textAlign: 'center' }}>
           Camera access denied

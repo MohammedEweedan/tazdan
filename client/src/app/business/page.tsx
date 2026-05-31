@@ -21,6 +21,7 @@ import {
 } from "react-icons/fi";
 import PublicNav from "@/components/ui/PublicNav";
 import PublicFooter from "@/components/ui/PublicFooter";
+import { useIsAr } from "@/hooks/useIsAr";
 
 const ACCENT = "#226dff";
 const ease = [0.22, 1, 0.36, 1] as const;
@@ -44,6 +45,7 @@ const fadeUp = (delay = 0) => ({
 function Hero() {
   const { t } = useTranslate();
   const { colorMode } = useColorMode();
+  const isAr = useIsAr();
   const dark     = colorMode === "dark";
   const textMain = dark ? "#ffffff" : "#0a0a0a";
   const textSub  = dark ? "rgba(255,255,255,0.52)" : "rgba(0,0,0,0.52)";
@@ -90,14 +92,14 @@ function Hero() {
               <Heading
                 fontFamily="'DM Sans', sans-serif" fontWeight="800"
                 fontSize={{ base: "40px", md: "62px", lg: "76px" }}
-                letterSpacing="-0.045em" lineHeight={0.97} color={textMain}
+                letterSpacing="-0.045em" lineHeight={isAr ? 1.15 : 0.97} color={textMain}
               >
                 {t("biz_page_h1_1")}
                 <br />
                 <Box as="span" color={ACCENT}>{t("biz_page_h1_2")}</Box>
               </Heading>
 
-              <Text fontSize={{ base: "15px", md: "17px" }} color={textSub} maxW="480px" lineHeight={1.65}>
+              <Text fontSize={{ base: "15px", md: "17px" }} color={textSub} maxW="480px" lineHeight={isAr ? 1.75 : 1.65}>
                 {t("biz_page_sub")}
               </Text>
 
@@ -163,7 +165,7 @@ function Hero() {
                     <Text
                       fontFamily="'DM Sans', sans-serif" fontWeight="800"
                       fontSize={{ base: "28px", md: "36px" }}
-                      letterSpacing="-0.04em" color={textMain} lineHeight={1}
+                      letterSpacing="-0.04em" color={textMain} lineHeight={isAr ? 1.15 : 1}
                     >
                       {s.stat}
                     </Text>
@@ -186,6 +188,7 @@ function Hero() {
 function Comparison() {
   const { t } = useTranslate();
   const { colorMode } = useColorMode();
+  const isAr = useIsAr();
   const dark     = colorMode === "dark";
   const textMain = dark ? "#ffffff" : "#0a0a0a";
   const textSub  = dark ? "rgba(255,255,255,0.52)" : "rgba(0,0,0,0.52)";
@@ -208,11 +211,11 @@ function Comparison() {
             <VStack spacing={4} align="start" maxW="600px">
               <Heading
                 fontSize={{ base: "28px", md: "44px" }} fontWeight="800"
-                letterSpacing="-0.04em" color={textMain} lineHeight={1.05}
+                letterSpacing="-0.04em" color={textMain} lineHeight={isAr ? 1.2 : 1.05}
               >
                 {t("biz_cmp_title")}
               </Heading>
-              <Text fontSize={{ base: "14px", md: "16px" }} color={textSub} lineHeight={1.65}>
+              <Text fontSize={{ base: "14px", md: "16px" }} color={textSub} lineHeight={isAr ? 1.75 : 1.65}>
                 {t("biz_cmp_sub")}
               </Text>
             </VStack>
@@ -268,6 +271,7 @@ function Comparison() {
 function Capabilities() {
   const { t } = useTranslate();
   const { colorMode } = useColorMode();
+  const isAr = useIsAr();
   const dark     = colorMode === "dark";
   const textMain = dark ? "#ffffff" : "#0a0a0a";
   const textSub  = dark ? "rgba(255,255,255,0.52)" : "rgba(0,0,0,0.52)";
@@ -297,10 +301,10 @@ function Capabilities() {
                 {t("biz_section_cap")}
               </Text>
               <Heading fontSize={{ base: "28px", md: "44px" }} fontWeight="800"
-                letterSpacing="-0.04em" color={textMain} lineHeight={1.05}>
+                letterSpacing="-0.04em" color={textMain} lineHeight={isAr ? 1.2 : 1.05}>
                 {t("biz_cap_title")}
               </Heading>
-              <Text fontSize={{ base: "14px", md: "16px" }} color={textSub} lineHeight={1.65}>
+              <Text fontSize={{ base: "14px", md: "16px" }} color={textSub} lineHeight={isAr ? 1.75 : 1.65}>
                 {t("biz_cap_sub")}
               </Text>
             </VStack>
@@ -336,7 +340,7 @@ function Capabilities() {
                     color={textMain} letterSpacing="-0.02em">
                     {c.title}
                   </Text>
-                  <Text fontSize={{ base: "13px", md: "13.5px" }} color={textSub} lineHeight={1.65}>
+                  <Text fontSize={{ base: "13px", md: "13.5px" }} color={textSub} lineHeight={isAr ? 1.75 : 1.65}>
                     {c.desc}
                   </Text>
                 </VStack>
@@ -353,6 +357,7 @@ function Capabilities() {
 function UseCases() {
   const { t } = useTranslate();
   const { colorMode } = useColorMode();
+  const isAr = useIsAr();
   const dark     = colorMode === "dark";
   const textMain = dark ? "#ffffff" : "#0a0a0a";
   const textSub  = dark ? "rgba(255,255,255,0.52)" : "rgba(0,0,0,0.52)";
@@ -378,10 +383,10 @@ function UseCases() {
                 {t("biz_section_uc")}
               </Text>
               <Heading fontSize={{ base: "28px", md: "44px" }} fontWeight="800"
-                letterSpacing="-0.04em" color={textMain} lineHeight={1.05}>
+                letterSpacing="-0.04em" color={textMain} lineHeight={isAr ? 1.2 : 1.05}>
                 {t("biz_uc_title")}
               </Heading>
-              <Text fontSize={{ base: "14px", md: "16px" }} color={textSub} lineHeight={1.65}>
+              <Text fontSize={{ base: "14px", md: "16px" }} color={textSub} lineHeight={isAr ? 1.75 : 1.65}>
                 {t("biz_uc_sub")}
               </Text>
             </VStack>
@@ -415,10 +420,10 @@ function UseCases() {
                     </Text>
                   </HStack>
                   <Heading fontSize={{ base: "20px", md: "23px" }} fontWeight="800"
-                    color={textMain} letterSpacing="-0.025em" mb={3} lineHeight={1.15}>
+                    color={textMain} letterSpacing="-0.025em" mb={3} lineHeight={isAr ? 1.25 : 1.15}>
                     {c.title}
                   </Heading>
-                  <Text fontSize={{ base: "13.5px", md: "14.5px" }} color={textSub} lineHeight={1.65}>
+                  <Text fontSize={{ base: "13.5px", md: "14.5px" }} color={textSub} lineHeight={isAr ? 1.75 : 1.65}>
                     {c.desc}
                   </Text>
                 </Box>
@@ -435,6 +440,7 @@ function UseCases() {
 function CTASection() {
   const { t } = useTranslate();
   const { colorMode } = useColorMode();
+  const isAr = useIsAr();
   const dark   = colorMode === "dark";
   const border = dark ? "rgba(255,255,255,0.09)" : "rgba(0,0,0,0.09)";
 
@@ -482,12 +488,12 @@ function CTASection() {
               </Text>
               <Heading
                 fontSize={{ base: "28px", md: "48px" }} fontWeight="800"
-                color="#ffffff" letterSpacing="-0.04em" lineHeight={1.04}
+                color="#ffffff" letterSpacing="-0.04em" lineHeight={isAr ? 1.2 : 1.04}
                 fontFamily="'DM Sans', sans-serif"
               >
                 {t("biz_cta_title")}
               </Heading>
-              <Text fontSize={{ base: "14px", md: "17px" }} color="rgba(255,255,255,0.55)" lineHeight={1.65}>
+              <Text fontSize={{ base: "14px", md: "17px" }} color="rgba(255,255,255,0.55)" lineHeight={isAr ? 1.75 : 1.65}>
                 {t("biz_cta_sub")}
               </Text>
               <HStack spacing={3} flexWrap="wrap" pt={1}>
@@ -523,6 +529,7 @@ function CTASection() {
 /* ─── PAGE ────────────────────────────────────────────────────────── */
 export default function BusinessPage() {
   const { colorMode } = useColorMode();
+  const isAr = useIsAr();
   const dark     = colorMode === "dark";
   const pageBg   = dark ? "#000000" : "#ffffff";
   const textMain = dark ? "#ffffff" : "#0a0a0a";

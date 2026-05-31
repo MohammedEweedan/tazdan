@@ -254,16 +254,28 @@ export default function Settings() {
       <Panel style={{ marginTop: 8 }}>
         <PanelRow
           icon="contrast-outline"
-          label={`${t('settings.theme')} · ${themeMode === 'dark' ? t('settings.dark') : t('settings.light')}`}
+          label={`${t('settings.theme')} · ${themeMode === 'mono' ? 'Mono' : themeMode === 'dark' ? t('settings.dark') : t('settings.light')}`}
           onPress={() => { h.selection(); toggleTheme(); }}
           right={<Ionicons name="swap-horizontal" size={16} color={p.fgFaint} />}
         />
         <PanelRow
+          icon="sunny-outline"
+          label={t('settings.light')}
+          onPress={() => { h.selection(); setMode('light'); }}
+          right={themeMode === 'light' ? <Ionicons name="checkmark-circle" size={18} color={p.greenFg} /> : null}
+        />
+        <PanelRow
           icon="moon-outline"
-          label={t('settings.useDark')}
-          last
+          label={t('settings.dark')}
           onPress={() => { h.selection(); setMode('dark'); }}
           right={themeMode === 'dark' ? <Ionicons name="checkmark-circle" size={18} color={p.greenFg} /> : null}
+        />
+        <PanelRow
+          icon="contrast"
+          label="Monochrome"
+          last
+          onPress={() => { h.selection(); setMode('mono'); }}
+          right={themeMode === 'mono' ? <Ionicons name="checkmark-circle" size={18} color={p.greenFg} /> : null}
         />
       </Panel>
 

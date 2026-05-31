@@ -19,6 +19,67 @@ import { AppError } from '../../middleware/errorHandler';
 import { createUserWallets } from '../wallet/walletDerivation.service';
 import { consumeQuote, type Quote, type SupportedAsset } from './priceEngine.service';
 import { collectFee } from '../fee/feeCollector.service';
+import { postLedger, isLedgerCurrency, type Leg } from '../ledger/ledger.service';
+
+// Local alias for the centralized ledger-currency check.
+const isLedgerCcy = (c: string) => isLedgerCurrency(c);
+
+/**
+ * Mirror a trade into the double-entry ledger, inside the same tx as the
+ * Wallet mutations so the two ledgers stay in lockstep. Posts balanced legs:
+ * the user's two sides (asset + settlement) against the SYSTEM_CHAIN account
+ * (our counterparty that sources crypto / absorbs fiat). Best-effort during
+ * the mirror phase — a ledger problem must never break a working trade — but
+ * any failure is logged loudly so reconciliation/alerting catches drift.
+ *
+ * USDC maps onto the USDT enum value (same as the Transaction record), so its
+ * legs are tagged USDT to keep the ledger enum-valid.
+ */
+async function mirrorTradeToLedger(tx: Prisma.TransactionClient, args: {
+  userId: string;
+  side: 'BUY' | 'SELL';
+  asset: string;          // crypto leg currency
+  cryptoAmount: Decimal;  // asset quantity
+  settlementCurrency: string;
+  settlementAmount: Decimal;
+  orderId: string;
+  /** Forward trades gate on the ledger; reversals/refunds must always apply. */
+  gate?: boolean;
+}): Promise<void> {
+  const asset = args.asset.toUpperCase();
+  const settle = args.settlementCurrency.toUpperCase() === 'USDC' ? 'USDT' : args.settlementCurrency.toUpperCase();
+  // Only post currencies the ledger enum supports (skip exotic altcoins for now).
+  if (!isLedgerCcy(asset) || !isLedgerCcy(settle)) return;
+
+  const c = (s: string) => s as any; // narrow to Currency for the leg type
+  const assetAmt = args.cryptoAmount;
+  const settleAmt = args.settlementAmount;
+  const legs: Leg[] = args.side === 'BUY'
+    ? [
+        // User pays settlement, receives asset; SYSTEM_CHAIN is the counterparty.
+        { type: 'USER', userId: args.userId, currency: c(settle), amount: settleAmt.neg() },
+        { type: 'SYSTEM_CHAIN', currency: c(settle), amount: settleAmt },
+        { type: 'USER', userId: args.userId, currency: c(asset), amount: assetAmt },
+        { type: 'SYSTEM_CHAIN', currency: c(asset), amount: assetAmt.neg() },
+      ]
+    : [
+        // User delivers asset, receives settlement.
+        { type: 'USER', userId: args.userId, currency: c(asset), amount: assetAmt.neg() },
+        { type: 'SYSTEM_CHAIN', currency: c(asset), amount: assetAmt },
+        { type: 'USER', userId: args.userId, currency: c(settle), amount: settleAmt },
+        { type: 'SYSTEM_CHAIN', currency: c(settle), amount: settleAmt.neg() },
+      ];
+
+  // Forward trades GATE on the ledger (gate=true → allowNegativeUser:false):
+  // if the user's ledger balance can't cover the debit, the post throws and
+  // the whole tx rolls back — the ledger is authoritative. Reversals/refunds
+  // pass gate=false so a correction can always be applied.
+  await postLedger(
+    tx,
+    { refType: args.side.toLowerCase(), refId: args.orderId, memo: `${args.side} ${asset}`, legs },
+    { allowNegativeUser: !(args.gate ?? false) },
+  );
+}
 
 Decimal.set({ precision: 40 });
 
@@ -83,13 +144,24 @@ function roundQty(asset: string, amount: Decimal): string {
 // Native-column assets have a dedicated Decimal field on UserWallet.
 type NativeField = 'ethBalance' | 'btcBalance' | 'solBalance' | 'usdtErc20Bal' | 'usdtTrc20Bal';
 
+// Stablecoins the user holds in the fiat-style `Wallet` table (USD/USDT/LYD…),
+// NOT the on-chain UserWallet columns. When one of these is the *traded asset*,
+// the asset leg must move the Wallet row the user actually sees and holds —
+// otherwise selling USDT decrements an unrelated on-chain column and the
+// displayed balance never changes (the bug behind the phantom credits).
+const WALLET_ASSETS = new Set(['USDT', 'USDC', 'USD']);
+function isWalletAsset(asset: string): boolean {
+  return WALLET_ASSETS.has(asset.toUpperCase());
+}
+
 function nativeField(asset: string, network: string): NativeField | null {
   const a = asset.toUpperCase();
   const n = network.toUpperCase();
   if (a === 'ETH')  return 'ethBalance';
   if (a === 'BTC')  return 'btcBalance';
   if (a === 'SOL')  return 'solBalance';
-  if (a === 'USDT') return n === 'TRC20' ? 'usdtTrc20Bal' : 'usdtErc20Bal';
+  // USDT/USDC as a traded asset are handled via the Wallet table (see
+  // isWalletAsset), so they intentionally do NOT map to a native column here.
   return null;
 }
 
@@ -135,8 +207,13 @@ export async function executeQuote(opts: {
   fundingCurrency?: string;
 }) {
   const { userId, quoteId, idempotencyKey } = opts;
-  const fundingCurrency = (opts.fundingCurrency || 'USDT').toUpperCase();
-  const fundFromUsdt = fundingCurrency === 'USDT' || fundingCurrency === 'USD' || fundingCurrency === 'USDC';
+
+  // Treasury safety: refuse to execute while a ledger/fund-integrity breach
+  // has halted trading. Better to block orders than compound a discrepancy.
+  const { isTradingHalted } = await import('./../ledger/reconcile.service');
+  if (await isTradingHalted()) {
+    throw new AppError('Trading is temporarily halted for a treasury integrity check. Please try again shortly.', 503);
+  }
 
   if (idempotencyKey) {
     const prior = await prisma.cryptoOrder.findUnique({ where: { idempotencyKey } });
@@ -150,16 +227,42 @@ export async function executeQuote(opts: {
   const crypto_ = new Decimal(quote.cryptoAmount);
   const assetUpper = quote.asset.toUpperCase();
 
+  // Settlement wallet: BUY debits it, SELL credits it. This MUST come from the
+  // quote (validated at quote time). No silent default — defaulting to USDT is
+  // exactly what credited/debited the wrong wallet and corrupted balances.
+  const settlementCurrency = (quote.settlementCurrency || '').toUpperCase();
+  if (!settlementCurrency || !isLedgerCurrency(settlementCurrency)) {
+    throw new AppError('Quote is missing a valid settlement currency. Request a new quote.', 400);
+  }
+  if (settlementCurrency === assetUpper) {
+    throw new AppError(`Settlement currency must differ from the asset (${assetUpper})`, 400);
+  }
+  // Two distinct facts that must NOT be conflated:
+  //  - settleIsOneToOne: no FX needed — USDT/USD/USDC all equal the USDT amount.
+  //  - creditsUsdtWallet: hits the dedicated USDT wallet. ONLY true USDT does.
+  //    USD and USDC are their own Wallet rows (1:1 amount), like GBP/EUR — they
+  //    must never be credited to the USDT balance.
+  const settleIsOneToOne = settlementCurrency === 'USDT' || settlementCurrency === 'USD' || settlementCurrency === 'USDC';
+  const creditsUsdtWallet = settlementCurrency === 'USDT';
+
+  // Guard against a no-op self-trade (e.g. USDT→USDT) which would credit and
+  // debit the same wallet and corrupt the balance.
+  if (assetUpper === settlementCurrency) {
+    throw new AppError(`Cannot ${quote.side.toLowerCase()} ${assetUpper} into ${settlementCurrency}`, 400);
+  }
+
   let userWallet = await prisma.userWallet.findUnique({ where: { userId } });
   if (!userWallet) userWallet = await createUserWallets(userId);
 
   const native = nativeField(quote.asset, quote.network);
 
-  // For a BUY funded from a non-USDT fiat wallet, resolve the debit amount
-  // in that currency up front (outside the tx — FX lookup may be network).
-  const fundingDebit = (quote.side === 'BUY' && !fundFromUsdt)
-    ? await usdtToFunding(fundingCurrency, fiat)
-    : fiat;
+  // Resolve the settlement amount in the target fiat up front (outside the tx —
+  // the FX lookup may hit the network). For USDT/USD/USDC this is 1:1.
+  const settlementAmount = quote.settlementAmount
+    ? new Decimal(quote.settlementAmount)
+    : settleIsOneToOne
+      ? fiat
+      : await usdtToFunding(settlementCurrency, fiat);
 
   const order = await prisma.$transaction(async (tx) => {
     const uw = await tx.userWallet.findUnique({ where: { userId } });
@@ -171,9 +274,10 @@ export async function executeQuote(opts: {
     if (!usdt) throw new AppError('USDT wallet missing', 400);
 
     if (quote.side === 'BUY') {
-      // Debit the funding wallet the user chose. Default (USDT) preserves
-      // legacy behaviour; any other fiat debits that wallet (FX-converted).
-      if (fundFromUsdt) {
+      // Debit the funding wallet the user chose. USDT debits the dedicated USDT
+      // wallet; every other currency (USD, USDC, GBP, …) debits its own Wallet
+      // row at the resolved amount.
+      if (creditsUsdtWallet) {
         if (new Decimal(usdt.balance.toString()).lt(fiat)) {
           throw new AppError('Insufficient USDT balance', 400);
         }
@@ -183,19 +287,27 @@ export async function executeQuote(opts: {
         });
       } else {
         const fundWallet = await tx.wallet.findUnique({
-          where: { userId_currency: { userId, currency: fundingCurrency as any } },
+          where: { userId_currency: { userId, currency: settlementCurrency as any } },
         });
-        if (!fundWallet) throw new AppError(`${fundingCurrency} wallet missing`, 400);
-        if (new Decimal(fundWallet.balance.toString()).lt(fundingDebit)) {
-          throw new AppError(`Insufficient ${fundingCurrency} balance`, 400);
+        if (!fundWallet) throw new AppError(`${settlementCurrency} wallet missing`, 400);
+        if (new Decimal(fundWallet.balance.toString()).lt(settlementAmount)) {
+          throw new AppError(`Insufficient ${settlementCurrency} balance`, 400);
         }
         await tx.wallet.update({
           where: { id: fundWallet.id },
-          data: { balance: { decrement: new Prisma.Decimal(fundingDebit.toFixed(8)) } },
+          data: { balance: { decrement: new Prisma.Decimal(settlementAmount.toFixed(8)) } },
         });
       }
 
-      if (native) {
+      // Credit the bought asset. USDT/USDC live in the Wallet table (the
+      // balance the user actually sees), everything else in UserWallet.
+      if (isWalletAsset(assetUpper)) {
+        await tx.wallet.upsert({
+          where: { userId_currency: { userId, currency: assetUpper as any } },
+          update: { balance: { increment: new Prisma.Decimal(crypto_.toFixed(8)) } },
+          create: { userId, currency: assetUpper as any, balance: new Prisma.Decimal(crypto_.toFixed(8)) },
+        });
+      } else if (native) {
         await tx.userWallet.update({
           where: { id: uw.id },
           data: { [native]: { increment: new Prisma.Decimal(crypto_.toFixed(18)) } },
@@ -206,8 +318,18 @@ export async function executeQuote(opts: {
         await tx.userWallet.update({ where: { id: uw.id }, data: { altBalances: next } });
       }
     } else {
-      // SELL
-      if (native) {
+      // SELL — debit the sold asset from where the user actually holds it.
+      if (isWalletAsset(assetUpper)) {
+        const assetWallet = await tx.wallet.findUnique({
+          where: { userId_currency: { userId, currency: assetUpper as any } },
+        });
+        const current = new Decimal(assetWallet?.balance.toString() ?? '0');
+        if (current.lt(crypto_)) throw new AppError(`Insufficient ${quote.asset} balance`, 400);
+        await tx.wallet.update({
+          where: { id: assetWallet!.id },
+          data: { balance: { decrement: new Prisma.Decimal(crypto_.toFixed(8)) } },
+        });
+      } else if (native) {
         const current = new Decimal((uw as any)[native].toString());
         if (current.lt(crypto_)) throw new AppError(`Insufficient ${quote.asset} balance`, 400);
         await tx.userWallet.update({
@@ -220,13 +342,26 @@ export async function executeQuote(opts: {
         const next = setAltBalance(uw.altBalances, assetUpper, current.minus(crypto_));
         await tx.userWallet.update({ where: { id: uw.id }, data: { altBalances: next } });
       }
-      await tx.wallet.update({
-        where: { id: usdt.id },
-        data: { balance: { increment: new Prisma.Decimal(fiat.toFixed(8)) } },
-      });
+      // Credit the proceeds into the wallet the user chose to receive into.
+      // Only true USDT lands in the dedicated USDT wallet; USD/USDC/GBP/… each
+      // get their own Wallet row (USD/USDC at the 1:1 amount, others FX'd).
+      if (creditsUsdtWallet) {
+        await tx.wallet.update({
+          where: { id: usdt.id },
+          data: { balance: { increment: new Prisma.Decimal(fiat.toFixed(8)) } },
+        });
+      } else {
+        // Credit the receiving fiat wallet, creating it on the fly if the
+        // user doesn't have one yet (e.g. first time receiving USD or GBP).
+        await tx.wallet.upsert({
+          where: { userId_currency: { userId, currency: settlementCurrency as any } },
+          update: { balance: { increment: new Prisma.Decimal(settlementAmount.toFixed(8)) } },
+          create: { userId, currency: settlementCurrency as any, balance: new Prisma.Decimal(settlementAmount.toFixed(8)) },
+        });
+      }
     }
 
-    return tx.cryptoOrder.create({
+    const created = await tx.cryptoOrder.create({
       data: {
         userId,
         type: quote.side,
@@ -244,35 +379,72 @@ export async function executeQuote(opts: {
         idempotencyKey: idempotencyKey ?? null,
       },
     });
+
+    // Mirror the settled balances into the double-entry ledger, ATOMICALLY
+    // with the Wallet mutations (same tx). postLedger checks the conservation
+    // invariant before writing, so the only failure mode is a DB error — in
+    // which case rolling the whole trade back is the safe outcome (we never
+    // want a committed trade with a half-written or imbalanced ledger). The
+    // settlement leg uses the resolved amount (1:1 for USDT/USD/USDC,
+    // FX-converted otherwise) so both ledgers move identically.
+    await mirrorTradeToLedger(tx, {
+      userId,
+      side: quote.side,
+      asset: quote.asset,
+      cryptoAmount: crypto_,
+      settlementCurrency,
+      settlementAmount,
+      orderId: created.id,
+      gate: true, // forward trade: ledger is authoritative for the debit
+    });
+
+    return created;
   });
 
-  // Transaction.currency must be a valid Currency enum value.
-  // All crypto trades settle via the user's USDT wallet, so record USDT
-  // as the currency and store the actual asset ticker in metadata.
+  // Record the transaction in the currency the trade actually settled into.
+  // `settlementAmount` is denominated in `settlementCurrency`. USDC isn't a
+  // Currency enum value so it maps to USDT; USD/EUR/GBP/… are recorded as-is.
+  const VALID_CURRENCIES = new Set(['USDT','BTC','ETH','BNB','SOL','XRP','ADA','DOGE','MATIC','DOT','AVAX','USD','EUR','GBP','AED','SAR','EGP','LYD']);
+  const txCurrency = (settlementCurrency === 'USDC' || !VALID_CURRENCIES.has(settlementCurrency))
+    ? 'USDT'
+    : settlementCurrency;
+  const settleStr = settlementAmount.toFixed(2);
   await prisma.transaction.create({
     data: {
       userId,
       type: quote.side === 'BUY' ? 'BUY' : 'SELL',
-      currency: 'USDT',
+      currency: txCurrency as any,
       amount: quote.side === 'BUY'
-        ? new Prisma.Decimal(-fiat.toFixed(8))   // USDT out
-        : new Prisma.Decimal(fiat.toFixed(8)),    // USDT in
+        ? new Prisma.Decimal(`-${settleStr}`)        // settlement currency out
+        : new Prisma.Decimal(settleStr),             // settlement currency in
       balanceBefore: new Prisma.Decimal(0),
       balanceAfter:  new Prisma.Decimal(0),
       description: quote.side === 'BUY'
-        ? `Bought ${crypto_.toFixed(8)} ${quote.asset} with ${fiat.toFixed(2)} USDT`
-        : `Sold ${crypto_.toFixed(8)} ${quote.asset} for ${fiat.toFixed(2)} USDT`,
+        ? `Bought ${crypto_.toFixed(8)} ${quote.asset} with ${settleStr} ${settlementCurrency}`
+        : `Sold ${crypto_.toFixed(8)} ${quote.asset} for ${settleStr} ${settlementCurrency}`,
       reference: `CRPT-${order.id.slice(0, 8).toUpperCase()}`,
       metadata: {
         kind: 'crypto_order',
         orderId: order.id,
         asset: quote.asset,
         network: quote.network,
-        fiatAmount: fiat.toFixed(2),
+        settlementCurrency,
+        settlementAmount: settleStr,
+        fiatAmount: fiat.toFixed(2),   // USDT-denominated, for reference
         cryptoAmount: crypto_.toFixed(8),
       },
     },
   });
+
+  // Feed the USD/LYD soft order book. A crypto BUY funded from LYD means the
+  // user bought USD-equivalent from us (drains USD → upward skew); a SELL into
+  // LYD means they sold USD to us (relaxes skew). `fiat` is USD-denominated.
+  if (settlementCurrency === 'LYD') {
+    try {
+      const { recordLydFlow } = await import('./lydOrderBook.service');
+      recordLydFlow(quote.side, fiat.toNumber());
+    } catch { /* non-critical */ }
+  }
 
   // Pour platform fee + spread capture into the platform wallet
   const totalFee = new Decimal(quote.platformFee || 0).add(quote.spreadCapture || 0);
@@ -312,15 +484,22 @@ export async function executeQuote(opts: {
 
       if (quote.side === 'BUY') {
         // Refund the same wallet we debited.
-        if (fundFromUsdt) {
+        if (creditsUsdtWallet) {
           await tx.wallet.update({ where: { id: usdt.id }, data: { balance: { increment: new Prisma.Decimal(fiat.toFixed(8)) } } });
         } else {
-          const fundWallet = await tx.wallet.findUnique({ where: { userId_currency: { userId, currency: fundingCurrency as any } } });
+          const fundWallet = await tx.wallet.findUnique({ where: { userId_currency: { userId, currency: settlementCurrency as any } } });
           if (fundWallet) {
-            await tx.wallet.update({ where: { id: fundWallet.id }, data: { balance: { increment: new Prisma.Decimal(fundingDebit.toFixed(8)) } } });
+            await tx.wallet.update({ where: { id: fundWallet.id }, data: { balance: { increment: new Prisma.Decimal(settlementAmount.toFixed(8)) } } });
           }
         }
-        if (native) {
+        // Remove the credited asset (reverse the BUY's asset leg).
+        if (isWalletAsset(assetUpper)) {
+          const aw = await tx.wallet.findUnique({ where: { userId_currency: { userId, currency: assetUpper as any } } });
+          if (aw) {
+            const next = Decimal.max(0, new Decimal(aw.balance.toString()).minus(crypto_));
+            await tx.wallet.update({ where: { id: aw.id }, data: { balance: new Prisma.Decimal(next.toFixed(8)) } });
+          }
+        } else if (native) {
           await tx.userWallet.update({ where: { id: uw.id }, data: { [native]: { decrement: new Prisma.Decimal(crypto_.toFixed(18)) } } });
         } else {
           const current = getAltBalance(uw.altBalances, assetUpper);
@@ -328,15 +507,40 @@ export async function executeQuote(opts: {
           await tx.userWallet.update({ where: { id: uw.id }, data: { altBalances: next } });
         }
       } else {
-        if (native) {
+        // Reverse the SELL: return the sold asset and claw back the proceeds.
+        if (isWalletAsset(assetUpper)) {
+          await tx.wallet.upsert({
+            where: { userId_currency: { userId, currency: assetUpper as any } },
+            update: { balance: { increment: new Prisma.Decimal(crypto_.toFixed(8)) } },
+            create: { userId, currency: assetUpper as any, balance: new Prisma.Decimal(crypto_.toFixed(8)) },
+          });
+        } else if (native) {
           await tx.userWallet.update({ where: { id: uw.id }, data: { [native]: { increment: new Prisma.Decimal(crypto_.toFixed(18)) } } });
         } else {
           const current = getAltBalance(uw.altBalances, assetUpper);
           const next    = setAltBalance(uw.altBalances, assetUpper, current.plus(crypto_));
           await tx.userWallet.update({ where: { id: uw.id }, data: { altBalances: next } });
         }
-        await tx.wallet.update({ where: { id: usdt.id }, data: { balance: { decrement: new Prisma.Decimal(fiat.toFixed(8)) } } });
+        if (creditsUsdtWallet) {
+          await tx.wallet.update({ where: { id: usdt.id }, data: { balance: { decrement: new Prisma.Decimal(fiat.toFixed(8)) } } });
+        } else {
+          const recvWallet = await tx.wallet.findUnique({ where: { userId_currency: { userId, currency: settlementCurrency as any } } });
+          if (recvWallet) {
+            await tx.wallet.update({ where: { id: recvWallet.id }, data: { balance: { decrement: new Prisma.Decimal(settlementAmount.toFixed(8)) } } });
+          }
+        }
       }
+      // Reverse the ledger mirror too — a refund is the trade run backwards,
+      // so post the opposite side. Keeps the ledger in lockstep with Wallet.
+      await mirrorTradeToLedger(tx, {
+        userId,
+        side: quote.side === 'BUY' ? 'SELL' : 'BUY',
+        asset: quote.asset,
+        cryptoAmount: crypto_,
+        settlementCurrency,
+        settlementAmount,
+        orderId: order.id,
+      });
       await tx.cryptoOrder.update({ where: { id: order.id }, data: { status: 'FAILED' } });
     });
     throw new AppError('Order execution failed — balance refunded', 502);

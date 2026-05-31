@@ -18,11 +18,17 @@ export interface CryptoQuote {
   network: string;
   marketPrice: string;
   quotedPrice: string;
+  spreadPct: string;       // disclosed spread fraction, e.g. "0.025" = 2.5%
+  settlementCurrency: string; // wallet the trade settles into/from
   fiatAmount: string;
+
   cryptoAmount: string;
   platformFee: string;
   networkFee: string;
   spreadCapture: string;
+  settlementAmount: string;
+  platformFeeSettlement: string;
+  networkFeeSettlement: string;
   totalUserPays: string;
   expiresAt: number;
 }
@@ -67,8 +73,10 @@ export const cryptoExchangeAPI = {
     side: 'BUY' | 'SELL';
     fiatAmount?: string;
     cryptoAmount?: string;
+    receiveCurrency?: string;   // SELL: wallet to receive proceeds into
+    fundingCurrency?: string;   // BUY: wallet to fund the purchase from
   }) => api.post<{ quote: CryptoQuote }>('/exchange/quote', data),
-  execute: (data: { quoteId: string; confirmedByUser: true; idempotencyKey?: string }) =>
+  execute: (data: { quoteId: string; confirmedByUser: true; idempotencyKey?: string; stepUpCode?: string; twoFactorCode?: string; recipientAddress?: string }) =>
     api.post<{ order: any }>('/exchange/execute', data),
   orders: (page = 1, limit = 20) =>
     api.get(`/exchange/orders?page=${page}&limit=${limit}`),

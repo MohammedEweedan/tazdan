@@ -28,6 +28,33 @@ const EDIT_WINDOW_MS = 5 * 60_000;
 
 /** Surface-level shape returned to mobile clients. */
 type WireMessage = ReturnType<typeof toWire>;
+type MessagePrivacy = { readReceiptsOn: boolean; lastSeenOn: boolean };
+
+function notificationPrefsOf(user: { notificationPrefs?: any } | null | undefined): any {
+  return user?.notificationPrefs && typeof user.notificationPrefs === 'object' ? user.notificationPrefs : {};
+}
+
+function messagePrivacyOf(user: { notificationPrefs?: any } | null | undefined): MessagePrivacy {
+  const prefs = notificationPrefsOf(user);
+  const msg = prefs.messages && typeof prefs.messages === 'object' ? prefs.messages : {};
+  return {
+    readReceiptsOn: msg.readReceiptsOn !== false,
+    lastSeenOn: msg.lastSeenOn !== false,
+  };
+}
+
+function mergeMessagePrivacy(prefs: any, patch: Partial<MessagePrivacy>) {
+  const base = prefs && typeof prefs === 'object' ? prefs : {};
+  const msg = base.messages && typeof base.messages === 'object' ? base.messages : {};
+  return {
+    ...base,
+    messages: {
+      ...msg,
+      ...(patch.readReceiptsOn != null ? { readReceiptsOn: patch.readReceiptsOn } : {}),
+      ...(patch.lastSeenOn != null ? { lastSeenOn: patch.lastSeenOn } : {}),
+    },
+  };
+}
 
 function toWire(m: any) {
   return {
@@ -73,7 +100,7 @@ async function assertNotBlocked(a: string, b: string) {
 const sendSchema = z.object({
   receiverId: z.string().uuid(),
   content:    z.string().min(1).max(4_000),
-  type:       z.enum(['TEXT', 'PAYMENT', 'P2P_NOTE']).default('TEXT'),
+  type:       z.enum(['TEXT', 'PAYMENT', 'REQUEST', 'STICKER', 'P2P_NOTE']).default('TEXT'),
   /** PAYMENT: { amount, currency, txRef? }. Free-form for other types. */
   metadata:   z.record(z.any()).optional(),
   tradeId:    z.string().uuid().optional(),
@@ -102,9 +129,44 @@ const escalateSchema = z.object({
   details:        z.string().max(2_000).optional(),
 });
 
+const privacySchema = z.object({
+  readReceiptsOn: z.boolean().optional(),
+  lastSeenOn: z.boolean().optional(),
+}).refine((v) => v.readReceiptsOn != null || v.lastSeenOn != null, {
+  message: 'No privacy setting provided',
+});
+
 // ── Controller ──────────────────────────────────────────────────────
 
 export class MessageController {
+  /** GET /api/messages/privacy — current user's chat privacy prefs. */
+  static async getPrivacy(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const me = await prisma.user.findUnique({
+        where: { id: req.user!.id },
+        select: { notificationPrefs: true },
+      });
+      res.json({ privacy: messagePrivacyOf(me) });
+    } catch (e) { next(e); }
+  }
+
+  /** PUT /api/messages/privacy — toggle read receipts / last seen. */
+  static async updatePrivacy(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const patch = privacySchema.parse(req.body);
+      const current = await prisma.user.findUnique({
+        where: { id: req.user!.id },
+        select: { notificationPrefs: true },
+      });
+      const updated = await prisma.user.update({
+        where: { id: req.user!.id },
+        data: { notificationPrefs: mergeMessagePrivacy(current?.notificationPrefs, patch) },
+        select: { notificationPrefs: true },
+      });
+      res.json({ privacy: messagePrivacyOf(updated) });
+    } catch (e) { next(e); }
+  }
+
   /** POST /api/messages — send a TEXT, PAYMENT_NOTE, or P2P_NOTE. */
   static async send(req: AuthRequest, res: Response, next: NextFunction) {
     try {
@@ -432,9 +494,14 @@ export class MessageController {
         orderBy: { createdAt: 'asc' },
       });
 
-      // Mark inbound unread as read in a single batch.
+      // Mark inbound unread as read only when the reader allows receipts.
+      const myPrefs = await prisma.user.findUnique({
+        where: { id: me },
+        select: { notificationPrefs: true },
+      });
+      const canSendReadReceipt = messagePrivacyOf(myPrefs).readReceiptsOn;
       const unread = messages.filter((m) => m.receiverId === me && !m.isRead).map((m) => m.id);
-      if (unread.length) {
+      if (unread.length && canSendReadReceipt) {
         await prisma.message.updateMany({
           where: { id: { in: unread } },
           data:  { isRead: true, readAt: new Date() },
@@ -498,6 +565,13 @@ export class MessageController {
     try {
       const me = req.user!.id;
       const { userId } = req.params;
+      const myPrefs = await prisma.user.findUnique({
+        where: { id: me },
+        select: { notificationPrefs: true },
+      });
+      if (!messagePrivacyOf(myPrefs).readReceiptsOn) {
+        return res.json({ updated: 0, suppressed: true });
+      }
       const result = await prisma.message.updateMany({
         where: { senderId: userId, receiverId: me, isRead: false },
         data:  { isRead: true, readAt: new Date() },

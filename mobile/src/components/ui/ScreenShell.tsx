@@ -35,16 +35,19 @@ export function TopGradient({ height }: { height?: number }) {
   return (
     <LinearGradient
       colors={
-        themeMode === 'dark'
+        themeMode === 'mono'
+          ? // Flat, subtle grey — no gradient in monochrome mode.
+            ['rgba(26,26,26,0.6)', 'rgba(26,26,26,0.2)', 'rgba(0,0,0,0)']
+          : themeMode === 'dark'
           ? [
-              'rgba(169, 169, 169, 0.58)', // subtle white top
-              'rgba(205, 220, 249, 0.29)', // soft grey middle
-              'rgba(111, 111, 111, 0)',          // fade to transparent
+              'rgba(245, 245, 245, 0.95)', // near-white at top
+              'rgba(160, 160, 160, 0.65)', // light grey middle
+              'rgba(38, 38, 38, 0)',       // fade to transparent
             ]
           : [
-             'rgba(169, 169, 169, 0.58)', // subtle white top
-              'rgba(205, 220, 249, 0.29)', // soft grey middle
-              'rgba(111, 111, 111, 0)',     // fade to transparent
+              'rgba(38, 38, 38, 0.95)',    // dark semi-dark gray at top (flipped)
+              'rgba(160, 160, 160, 0.65)', // light grey middle
+              'rgba(245, 245, 245, 0)',    // fade to transparent
             ]
       }
       locations={[0, 0.45, 1]}
@@ -98,7 +101,7 @@ export function StickyTopBar({
   const themeMode = useTheme((s) => s.mode);
   const p         = useThemedPalette();
   const insets    = useSafeAreaInsets();
-  const effectiveTint = tint ?? (themeMode === 'dark' ? 'dark' : 'light');
+  const effectiveTint = tint ?? (themeMode === 'light' ? 'light' : 'dark');
 
   return (
     <View
@@ -225,7 +228,7 @@ export function ScreenShell({
 
   return (
     <View style={{ flex: 1, backgroundColor: p.bg }}>
-      <StatusBar style={themeMode === 'dark' ? 'light' : 'dark'} />
+      <StatusBar style={themeMode === 'light' ? 'dark' : 'light'} />
 
       {/* Scrollable body — under the sticky bar in the stacking
           order. Content scrolls behind the frosted nav. */}

@@ -25,7 +25,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '@/store/authStore';
 import { authService } from '@/services';
 import { useHaptics } from '@/hooks';
-import { useTheme, useThemedPalette, type Palette } from '@/store/themeStore';
+import { useTheme, useThemedPalette, type Palette, type ThemeMode } from '@/store/themeStore';
 import { useI18n, LOCALE_META } from '@/store/i18nStore';
 import { COUNTRIES, COUNTRY_BY_ISO, type Country } from '@/data/countries';
 import { Modal, FlatList } from 'react-native';
@@ -220,7 +220,7 @@ export default function Register() {
   return (
     <View style={{ flex: 1, backgroundColor: p.bg }}>
       <TopGradient />
-      <StatusBar style={themeMode === 'dark' ? 'light' : 'dark'} />
+      <StatusBar style={themeMode === 'light' ? 'dark' : 'light'} />
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -549,7 +549,7 @@ export default function Register() {
                             }}
                           >
                             <Text style={{
-                              color: active ? (themeMode === 'dark' ? '#0f172a' : '#fff') : p.fg,
+                              color: active ? (themeMode !== 'light' ? '#0f172a' : '#fff') : p.fg,
                               fontSize: 12, fontWeight: '700',
                             }}>
                               {cat}
@@ -628,7 +628,7 @@ export default function Register() {
                     backgroundColor: termsAccepted ? p.fg : 'transparent',
                     alignItems: 'center', justifyContent: 'center',
                   }}>
-                    {termsAccepted && <Ionicons name="checkmark" size={14} color={themeMode === 'dark' ? '#0f172a' : '#fff'} />}
+                    {termsAccepted && <Ionicons name="checkmark" size={14} color={themeMode !== 'light' ? '#0f172a' : '#fff'} />}
                   </View>
                   <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '500', flex: 1, lineHeight: 20 }}>
                     I agree to the Terms of Service and Privacy Policy.
@@ -859,7 +859,7 @@ function PrimaryCTA({
   palette: p, themeMode, label, onPress, loading, disabled,
 }: {
   palette: Palette;
-  themeMode: 'dark' | 'light';
+  themeMode: ThemeMode;
   label: string;
   onPress: () => void;
   loading?: boolean;

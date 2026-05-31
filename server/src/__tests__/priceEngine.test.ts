@@ -16,7 +16,7 @@ afterEach(() => {
 
 describe('buildQuote — BUY', () => {
   it('returns a valid quote for BUY BTC', async () => {
-    const quote = await buildQuote({ asset: 'BTC', network: 'BTC', fiatAmount: 100, side: 'BUY' });
+    const quote = await buildQuote({ asset: 'BTC', network: 'BTC', fiatAmount: 100, side: 'BUY', settlementCurrency: 'USD' });
     expect(quote.id).toBeDefined();
     expect(quote.side).toBe('BUY');
     expect(quote.asset).toBe('BTC');
@@ -26,12 +26,12 @@ describe('buildQuote — BUY', () => {
   });
 
   it('throws if fiatAmount is missing for BUY', async () => {
-    await expect(buildQuote({ asset: 'BTC', network: 'BTC', side: 'BUY' })).rejects.toThrow('fiatAmount');
+    await expect(buildQuote({ asset: 'BTC', network: 'BTC', side: 'BUY', settlementCurrency: 'USD' })).rejects.toThrow('fiatAmount');
   });
 
   it('still returns a quote for very small amounts (no minimum enforced at quote stage)', async () => {
     // Minimum-amount enforcement happens at the withdrawal/order layer, not quote.
-    const quote = await buildQuote({ asset: 'BTC', network: 'BTC', fiatAmount: 0.001, side: 'BUY' });
+    const quote = await buildQuote({ asset: 'BTC', network: 'BTC', fiatAmount: 0.001, side: 'BUY', settlementCurrency: 'USD' });
     expect(quote.id).toBeDefined();
     expect(new Decimal(quote.cryptoAmount).gt(0)).toBe(true);
   });
@@ -39,31 +39,31 @@ describe('buildQuote — BUY', () => {
 
 describe('buildQuote — SELL', () => {
   it('returns a valid quote for SELL BTC', async () => {
-    const quote = await buildQuote({ asset: 'BTC', network: 'BTC', cryptoAmount: 0.001, side: 'SELL' });
+    const quote = await buildQuote({ asset: 'BTC', network: 'BTC', cryptoAmount: 0.001, side: 'SELL', settlementCurrency: 'USD' });
     expect(quote.side).toBe('SELL');
     expect(new Decimal(quote.fiatAmount).toNumber()).toBeGreaterThan(0);
   });
 
   it('BUY quoted price is higher than market (spread applied)', async () => {
-    const quote = await buildQuote({ asset: 'BTC', network: 'BTC', fiatAmount: 100, side: 'BUY' });
+    const quote = await buildQuote({ asset: 'BTC', network: 'BTC', fiatAmount: 100, side: 'BUY', settlementCurrency: 'USD' });
     expect(new Decimal(quote.quotedPrice).gt(quote.marketPrice)).toBe(true);
   });
 
   it('SELL quoted price is lower than market (spread applied)', async () => {
-    const quote = await buildQuote({ asset: 'BTC', network: 'BTC', cryptoAmount: 0.01, side: 'SELL' });
+    const quote = await buildQuote({ asset: 'BTC', network: 'BTC', cryptoAmount: 0.01, side: 'SELL', settlementCurrency: 'USD' });
     expect(new Decimal(quote.quotedPrice).lt(quote.marketPrice)).toBe(true);
   });
 });
 
 describe('Quote cache', () => {
   it('getQuote returns the stored quote by id', async () => {
-    const quote = await buildQuote({ asset: 'BTC', network: 'BTC', fiatAmount: 100, side: 'BUY' });
+    const quote = await buildQuote({ asset: 'BTC', network: 'BTC', fiatAmount: 100, side: 'BUY', settlementCurrency: 'USD' });
     const retrieved = await getQuote(quote.id);
     expect(retrieved?.id).toBe(quote.id);
   });
 
   it('consumeQuote removes the quote from cache', async () => {
-    const quote = await buildQuote({ asset: 'ETH', network: 'ETH', fiatAmount: 50, side: 'BUY' });
+    const quote = await buildQuote({ asset: 'ETH', network: 'ETH', fiatAmount: 50, side: 'BUY', settlementCurrency: 'USD' });
     const consumed = await consumeQuote(quote.id);
     expect(consumed?.id).toBe(quote.id);
     expect(await getQuote(quote.id)).toBeNull();
@@ -76,7 +76,7 @@ describe('Quote cache', () => {
 
 describe('USDT stablecoin (1:1 peg)', () => {
   it('does not call Binance for USDT', async () => {
-    await buildQuote({ asset: 'USDT', network: 'TRC20', fiatAmount: 100, side: 'BUY' });
+    await buildQuote({ asset: 'USDT', network: 'TRC20', fiatAmount: 100, side: 'BUY', settlementCurrency: 'USD' });
     expect(mockedAxios.get).not.toHaveBeenCalled();
   });
 });

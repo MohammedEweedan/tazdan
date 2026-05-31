@@ -57,7 +57,7 @@ export function moneyParts(
   currency: Currency,
   opts: FormatOpts = {},
 ): MoneyParts {
-  const meta = CURRENCY_META[currency];
+  const meta = CURRENCY_META[currency] ?? getCurrencyMeta(currency)!;
   const locale = opts.locale ?? 'en-US';
   const n = toNumber(amount);
   const sign: '' | '-' | '+' =
