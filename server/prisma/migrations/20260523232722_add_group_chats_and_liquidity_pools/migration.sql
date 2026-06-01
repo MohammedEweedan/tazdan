@@ -11,17 +11,17 @@ CREATE TYPE "LiquidityPoolStatus" AS ENUM ('OPEN', 'LOCKED', 'COMPLETED', 'DISSO
 CREATE TYPE "LiquidityPoolContribDirection" AS ENUM ('DEPOSIT', 'WITHDRAW');
 
 -- AlterTable
-ALTER TABLE "Notification" ADD COLUMN     "broadcastId" TEXT,
-ADD COLUMN     "createdBy" TEXT,
-ADD COLUMN     "description" TEXT,
-ADD COLUMN     "locales" JSONB,
-ADD COLUMN     "mediaType" TEXT,
-ADD COLUMN     "mediaUrl" TEXT,
-ADD COLUMN     "subtitle" TEXT;
+ALTER TABLE "Notification" ADD COLUMN IF NOT EXISTS "broadcastId" TEXT,
+ADD COLUMN IF NOT EXISTS "createdBy" TEXT,
+ADD COLUMN IF NOT EXISTS "description" TEXT,
+ADD COLUMN IF NOT EXISTS "locales" JSONB,
+ADD COLUMN IF NOT EXISTS "mediaType" TEXT,
+ADD COLUMN IF NOT EXISTS "mediaUrl" TEXT,
+ADD COLUMN IF NOT EXISTS "subtitle" TEXT;
 
 -- AlterTable
-ALTER TABLE "User" ADD COLUMN     "phoneOtpCode" TEXT,
-ADD COLUMN     "phoneOtpExpires" TIMESTAMP(3);
+ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "phoneOtpCode" TEXT,
+ADD COLUMN IF NOT EXISTS "phoneOtpExpires" TIMESTAMP(3);
 
 -- CreateTable
 CREATE TABLE "GroupChat" (
@@ -164,10 +164,10 @@ CREATE INDEX "LiquidityPoolContribution_poolId_createdAt_idx" ON "LiquidityPoolC
 CREATE INDEX "LiquidityPoolContribution_userId_idx" ON "LiquidityPoolContribution"("userId");
 
 -- CreateIndex
-CREATE INDEX "Notification_type_idx" ON "Notification"("type");
+CREATE INDEX IF NOT EXISTS "Notification_type_idx" ON "Notification"("type");
 
 -- CreateIndex
-CREATE INDEX "Notification_broadcastId_idx" ON "Notification"("broadcastId");
+CREATE INDEX IF NOT EXISTS "Notification_broadcastId_idx" ON "Notification"("broadcastId");
 
 -- AddForeignKey
 ALTER TABLE "GroupChat" ADD CONSTRAINT "GroupChat_createdById_fkey" FOREIGN KEY ("createdById") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;

@@ -191,20 +191,40 @@ export async function enforceStepUp(opts: {
   valueUsd: number;
   req: { headers: Record<string, any> };
   code?: string;
-  /** When true, ALWAYS require a code (used for trades when 2FA is enabled),
-   *  not just for high-value/new-device. Unifies the old separate 2FA gate. */
-  alwaysRequire?: boolean;
+  /** The client asserts it just passed a LOCAL biometric (Face ID/Touch ID)
+   *  check. Honoured ONLY on a trusted/known device — never on a new device,
+   *  where biometric alone is insufficient and a server code is required. */
+  biometricVerified?: boolean;
 }): Promise<void> {
   const fp = deviceFingerprint(opts.req);
   const known = await isKnownDevice(opts.userId, fp);
-  const reason = opts.alwaysRequire
-    ? '2fa'
-    : stepUpRequired({ valueUsd: opts.valueUsd, knownDevice: known });
-  if (!reason) return; // no step-up needed
+  const highValue = Number.isFinite(opts.valueUsd) && opts.valueUsd >= STEP_UP_USD;
+
+  // SECURITY MODEL:
+  //  - Trusted (known) device → a LOCAL biometric is sufficient confirmation;
+  //    the server does not require a code. (Face ID for purchases/sells.)
+  //  - New/unknown device OR no biometric available → the server requires a
+  //    real code (authenticator TOTP if 2FA on, else emailed code). Biometric
+  //    is local-only and cannot be trusted on an unrecognized device.
+  if (known && opts.biometricVerified) {
+    await rememberDevice(opts.userId, fp).catch(() => {});
+    return;
+  }
+
+  // Decide whether a server code is required at all.
+  //  - new device → always (login/activity from somewhere new)
+  //  - high value → always
+  //  - known device, normal value, no biometric → still fine to allow, but if
+  //    biometric wasn't done we fall through to requiring confirmation.
+  const needCode = !known || highValue || !opts.biometricVerified;
+  if (!needCode) {
+    await rememberDevice(opts.userId, fp).catch(() => {});
+    return;
+  }
 
   if (!opts.code) {
     const { method } = await issueStepUp(opts.userId, opts.action);
-    const why = reason === 'new_device' ? 'new device' : reason === '2fa' ? '2FA' : 'high-value action';
+    const why = !known ? 'new device' : highValue ? 'high-value action' : 'security';
     throw new AppError(
       `Security verification required (${why}). ` +
         `${method === 'totp' ? 'Enter your authenticator code.' : 'Enter the code we emailed you.'}`,

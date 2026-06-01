@@ -16,6 +16,7 @@ import { StatusBanner } from '@/components/ui/StatusBanner';
 import { StepUpModal } from '@/components/ui/StepUpModal';
 import { ExpressPayButton } from '@/components/ui/ExpressPayButton';
 import { useWallets, useCards, useMarkets, useTransactionSound } from '@/hooks';
+import * as LocalAuthentication from 'expo-local-authentication';
 import { CoinAvatar } from '@/components/ui/CoinAvatar';
 import { cryptoExchangeAPI, type CryptoQuote, type AssetSearchResult } from '@/lib/cryptoApi';
 
@@ -164,7 +165,7 @@ interface BuyWidgetProps {
 }
 
 export function BuyWidget({ defaultAsset, lockAsset = false }: BuyWidgetProps = {}) {
-  const { user } = useAuthStore();
+  const { user, biometricEnabled } = useAuthStore();
   const tr = useT();
   const p = useThemedPalette();
   // Accent follows the active palette (white on dark/mono, black on light).
@@ -359,11 +360,31 @@ export function BuyWidget({ defaultAsset, lockAsset = false }: BuyWidgetProps = 
   async function onConfirm(stepUpCode?: string) {
     if (!quote) return;
     if (intent === 'send' && !sendAddr.trim()) { setError(tr('buy.enterRecipient')); return; }
+
+    // Face ID confirmation for the purchase (when enabled + enrolled). On a
+    // trusted device the server accepts this in lieu of a code; on a new device
+    // it'll still 401 and we fall back to the code modal below.
+    let biometricVerified = false;
+    if (!stepUpCode && biometricEnabled) {
+      try {
+        const enrolled = await LocalAuthentication.isEnrolledAsync();
+        if (enrolled) {
+          const r = await LocalAuthentication.authenticateAsync({
+            promptMessage: `Confirm purchase of ${asset}`,
+            cancelLabel: 'Cancel', fallbackLabel: 'Use passcode', disableDeviceFallback: false,
+          });
+          if (!r.success) { setError('Verification cancelled'); setExec(false); return; }
+          biometricVerified = true;
+        }
+      } catch { /* biometric unavailable → server will require a code */ }
+    }
+
     setExec(true); setError(null);
     try {
       await cryptoExchangeAPI.execute({
         quoteId: quote.id, confirmedByUser: true, idempotencyKey: idemRef.current,
         ...(stepUpCode ? { stepUpCode } : {}),
+        ...(biometricVerified ? { biometricVerified: true } : {}),
         ...(intent === 'send' ? { recipientAddress: sendAddr.trim() } : {}),
       } as any);
       playSuccess('buy');

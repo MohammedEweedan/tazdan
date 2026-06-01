@@ -10,9 +10,21 @@ import { Platform } from 'react-native';
  *  4. Web + iOS Simulator can use `localhost` directly.
  */
 const API_PORT = 5000;
+const PRODUCTION_API_BASE = 'https://api.promrkts.com';
+
 function resolveApiBase(): string {
   const fromEnv = process.env.EXPO_PUBLIC_API_BASE;
-  if (fromEnv) return fromEnv;
+  if (fromEnv) {
+    if (!__DEV__ && !fromEnv.startsWith('https://')) {
+      throw new Error(
+        `[security] Refusing cleartext API base "${fromEnv}" in a release build. ` +
+        `Set EXPO_PUBLIC_API_BASE to an https:// URL at build time.`,
+      );
+    }
+    return fromEnv;
+  }
+
+  if (!__DEV__) return PRODUCTION_API_BASE;
 
   const hostUri = (Constants.expoConfig?.hostUri ?? Constants.expoGoConfig?.debuggerHost) as string | undefined;
   const lanHost = hostUri?.split(':')[0];

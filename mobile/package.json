@@ -10,6 +10,7 @@
     "web": "expo start --web",
     "lint": "expo lint",
     "typecheck": "tsc --noEmit",
+    "postinstall": "node scripts/patch-stripe-swift-interop.js",
     "i18n:audit": "node scripts/i18n-audit.js",
     "i18n:audit:strict": "node scripts/i18n-audit.js --strict"
   },

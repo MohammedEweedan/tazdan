@@ -25,8 +25,7 @@ export async function initRedis(): Promise<void> {
     url: REDIS_URL,
     socket: {
       reconnectStrategy: (retries) => {
-        if (retries >= 10) return new Error('Redis reconnect attempts exhausted');
-        return Math.min(retries * 100, 1000);
+        return Math.min(Math.max(retries, 1) * 100, 5000);
       },
     },
   });
@@ -39,11 +38,20 @@ export async function initRedis(): Promise<void> {
     ready = true;
     logger.info('[redis] ready');
   });
+  client.on('end', () => {
+    ready = false;
+    logger.warn('[redis] connection closed');
+  });
+  client.on('reconnecting', () => {
+    ready = false;
+    logger.warn('[redis] reconnecting');
+  });
 
   try {
     await client.connect();
   } catch (error) {
     logger.error('[redis] connection failed', { err: error });
+    await client.disconnect().catch(() => undefined);
     client = null;
     ready = false;
   }

@@ -188,6 +188,23 @@ export const securityService = {
     const { data } = await api.post('/security/step-up/start', { action });
     return data;
   },
+  async devices(): Promise<{ devices: Array<{ id: string; label: string | null; fingerprint: string; lastSeenAt: string; createdAt: string }> }> {
+    const { data } = await api.get('/security/devices');
+    return data;
+  },
+  async forgetDevice(id: string): Promise<void> {
+    await api.delete(`/security/devices/${id}`);
+  },
+  async sessions(): Promise<{ sessions: Array<{ id: string; ipAddress: string | null; userAgent: string | null; createdAt: string; expiresAt: string }> }> {
+    const { data } = await api.get('/security/sessions');
+    return data;
+  },
+  async revokeSession(id: string): Promise<void> {
+    await api.delete(`/security/sessions/${id}`);
+  },
+  async revokeAllSessions(): Promise<void> {
+    await api.delete('/security/sessions');
+  },
 };
 
 // ───────── Wallets ─────────
