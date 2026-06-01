@@ -4,13 +4,27 @@ const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
 };
 
-// Append connection_limit to DATABASE_URL so Prisma's pool is large enough
-// for concurrent load (default = num_cpus*2+1 ≈ 9–17, too small for load tests).
+const isProduction = process.env.NODE_ENV === 'production';
+
+function parsePositiveInt(value: string | undefined, fallback: number): number {
+  if (!value) return fallback;
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+// Keep each app process's Prisma pool deliberately small. Managed Postgres
+// plans often have low connection caps; a large per-process pool plus PM2 or
+// cluster workers can starve the database and take the whole API down.
 function buildDbUrl(): string {
   const base = process.env.DATABASE_URL ?? '';
   if (!base || base.includes('connection_limit')) return base;
   const sep = base.includes('?') ? '&' : '?';
-  return `${base}${sep}connection_limit=50&pool_timeout=30`;
+  const connectionLimit = parsePositiveInt(
+    process.env.DB_CONNECTION_LIMIT,
+    isProduction ? 3 : 10,
+  );
+  const poolTimeout = parsePositiveInt(process.env.DB_POOL_TIMEOUT, 20);
+  return `${base}${sep}connection_limit=${connectionLimit}&pool_timeout=${poolTimeout}`;
 }
 
 export const prisma =

@@ -121,17 +121,37 @@ export async function postLedger(
     else agg.set(k, { leg, amount: amt });
   }
 
-  // 3) Apply each leg: write the entry + update the cached balance.
+  // 3) Apply each leg: write the entry + atomically update the cached balance.
+  // Never read-modify-write the balance in application memory. Concurrent
+  // debits must compete against the current DB value, otherwise two requests
+  // can both pass a stale balance check and overwrite each other's result.
   for (const { leg, amount } of agg.values()) {
     if (amount.isZero()) continue;
     const acct = await resolveAccount(tx, leg.type, leg.currency, leg.userId ?? null);
-    const next = acct.balance.plus(amount);
 
-    if (leg.type === 'USER' && !opts.allowNegativeUser && next.lt(0)) {
-      throw new Error(
-        `Insufficient ${leg.currency} balance for user ${leg.userId}: ` +
-          `have ${acct.balance.toString()}, need ${amount.abs().toString()}`,
-      );
+    if (leg.type === 'USER' && !opts.allowNegativeUser && amount.lt(0)) {
+      const updated = await tx.ledgerAccount.updateMany({
+        where: {
+          id: acct.id,
+          balance: { gte: new Prisma.Decimal(amount.abs().toFixed(18)) },
+        },
+        data: {
+          balance: { increment: new Prisma.Decimal(amount.toFixed(18)) },
+        },
+      });
+      if (updated.count !== 1) {
+        throw new Error(
+          `Insufficient ${leg.currency} balance for user ${leg.userId}: ` +
+            `need ${amount.abs().toString()}`,
+        );
+      }
+    } else {
+      await tx.ledgerAccount.update({
+        where: { id: acct.id },
+        data: {
+          balance: { increment: new Prisma.Decimal(amount.toFixed(18)) },
+        },
+      });
     }
 
     await tx.ledgerEntry.create({
@@ -144,10 +164,6 @@ export async function postLedger(
         refId: input.refId ?? null,
         memo: input.memo,
       },
-    });
-    await tx.ledgerAccount.update({
-      where: { id: acct.id },
-      data: { balance: new Prisma.Decimal(next.toFixed(18)) },
     });
   }
 
