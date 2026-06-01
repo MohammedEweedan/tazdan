@@ -21,6 +21,7 @@ import { SlideToConfirm } from '@/components/ui/SlideToConfirm';
 import { StatusBanner } from '@/components/ui/StatusBanner';
 import { StepUpModal } from '@/components/ui/StepUpModal';
 import { useWallets, useMarkets, useTransactionSound } from '@/hooks';
+import * as LocalAuthentication from 'expo-local-authentication';
 import { CoinAvatar } from '@/components/ui/CoinAvatar';
 import { cryptoExchangeAPI, type CryptoQuote } from '@/lib/cryptoApi';
 
@@ -140,7 +141,7 @@ interface SellWidgetProps {
 }
 
 export function SellWidget({ defaultAsset, lockAsset = false }: SellWidgetProps = {}) {
-  const { user } = useAuthStore();
+  const { user, biometricEnabled } = useAuthStore();
   const tr = useT();
   const p = useThemedPalette();
   // Accent follows the active palette (white on dark/mono, black on light) so
@@ -279,9 +280,27 @@ export function SellWidget({ defaultAsset, lockAsset = false }: SellWidgetProps 
   // ── Confirm ───────────────────────────────────────────────────────
   async function onConfirm(stepUpCode?: string) {
     if (!quote) return;
+
+    // Face ID confirmation for the sale (when enabled). Trusted device → server
+    // accepts it; new device → 401 falls through to the code modal.
+    let biometricVerified = false;
+    if (!stepUpCode && biometricEnabled) {
+      try {
+        const enrolled = await LocalAuthentication.isEnrolledAsync();
+        if (enrolled) {
+          const r = await LocalAuthentication.authenticateAsync({
+            promptMessage: `Confirm sale of ${asset}`,
+            cancelLabel: 'Cancel', fallbackLabel: 'Use passcode', disableDeviceFallback: false,
+          });
+          if (!r.success) { setError('Verification cancelled'); return; }
+          biometricVerified = true;
+        }
+      } catch { /* biometric unavailable → server will require a code */ }
+    }
+
     setExec(true); setError(null);
     try {
-      await cryptoExchangeAPI.execute({ quoteId: quote.id, confirmedByUser: true, idempotencyKey: idemRef.current, ...(stepUpCode ? { stepUpCode } : {}) } as any);
+      await cryptoExchangeAPI.execute({ quoteId: quote.id, confirmedByUser: true, idempotencyKey: idemRef.current, ...(stepUpCode ? { stepUpCode } : {}), ...(biometricVerified ? { biometricVerified: true } : {}) } as any);
       playSuccess('sell');
       setStepUpOpen(false);
       const recvAmt = receiveTo?.isFiat

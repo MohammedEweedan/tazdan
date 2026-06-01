@@ -38,6 +38,9 @@ const executeSchema = z.object({
   twoFactorCode: z.string().min(6).max(8).optional(),
   // 6-digit step-up code for high-value (≥$1000) or new-device trades.
   stepUpCode: z.string().regex(/^\d{6}$/).optional(),
+  // Client asserts a local biometric (Face ID/Touch ID) just passed. Honoured
+  // only on a trusted device; ignored on a new device (code required there).
+  biometricVerified: z.boolean().optional(),
 });
 
 export class ExchangeController {
@@ -137,13 +140,11 @@ export class ExchangeController {
       const peek = await getQuote(body.quoteId);
       if (!peek) throw new AppError('Quote expired or not found', 400);
 
-      // UNIFIED step-up / 2FA gate. One code path, one field.
-      //  - If the user has 2FA enabled → always require a code (satisfied by
-      //    their authenticator TOTP, which verifyStepUp checks).
-      //  - Otherwise → require a code only for high-value (≥$1000) or new-device
-      //    trades (emailed code).
-      // The client may send the code as `stepUpCode` (preferred) or the legacy
-      // `twoFactorCode` field — accept either so the modal "just works".
+      // Step-up gate (biometric-or-code).
+      //  - Trusted device + Face ID (biometricVerified) → no code needed.
+      //  - New device or high-value → server code required (authenticator TOTP
+      //    if 2FA on, else emailed code). The client may send the code as
+      //    `stepUpCode` (preferred) or legacy `twoFactorCode` — both accepted.
       const me = await prisma.user.findUnique({ where: { id: req.user!.id }, select: { twoFactorEnabled: true } });
       if (!me?.twoFactorEnabled && process.env.EXCHANGE_REQUIRE_2FA === '1') {
         throw new AppError('Enable 2FA before trading', 403);
@@ -154,7 +155,7 @@ export class ExchangeController {
         valueUsd: Number((peek as any).fiatAmount ?? 0),
         req,
         code: body.stepUpCode ?? body.twoFactorCode,
-        alwaysRequire: !!me?.twoFactorEnabled,
+        biometricVerified: body.biometricVerified === true,
       });
 
       const order = await executeQuote({

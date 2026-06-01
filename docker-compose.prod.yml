@@ -3,14 +3,16 @@ services:
     image: redis:7-alpine
     container_name: tazdan-redis
     restart: unless-stopped
-    command: redis-server --requirepass ${REDIS_PASSWORD} --save 60 1 --loglevel warning
+    command: redis-server --requirepass ${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env} --save 60 1 --loglevel warning
     volumes:
       - redisdata:/data
     healthcheck:
-      test: ['CMD', 'redis-cli', '-a', '${REDIS_PASSWORD}', 'ping']
+      test: ['CMD-SHELL', 'redis-cli -a "$$REDIS_PASSWORD" ping | grep PONG']
       interval: 10s
       timeout: 5s
       retries: 5
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env}
     networks:
       - app
 
@@ -27,7 +29,9 @@ services:
     environment:
       NODE_ENV: production
       PORT: 5000
-      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+      REDIS_URL: redis://:${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env}@redis:6379
+      CLUSTER_WORKERS: ${CLUSTER_WORKERS:-1}
+      CLIENT_URL: ${CLIENT_URL:-https://promrkts.com,https://www.promrkts.com}
     ports:
       - '5000:5000'
     volumes:
@@ -46,8 +50,8 @@ services:
     env_file: .env
     environment:
       NODE_ENV: production
-      NEXT_PUBLIC_API_URL: https://${DOMAIN}/api
-      NEXT_PUBLIC_WS_URL: https://${DOMAIN}
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://api.promrkts.com/api}
+      NEXT_PUBLIC_WS_URL: ${NEXT_PUBLIC_WS_URL:-https://api.promrkts.com}
     networks:
       - app
 

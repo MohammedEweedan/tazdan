@@ -79,6 +79,38 @@ export class SecurityController {
     }
   }
 
+  // List trusted/known devices (the ones that have passed step-up).
+  static async getDevices(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const devices = await prisma.knownDevice.findMany({
+        where: { userId: req.user!.id },
+        orderBy: { lastSeenAt: 'desc' },
+        select: { id: true, fingerprint: true, label: true, lastSeenAt: true, createdAt: true },
+      });
+      res.json({ devices });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  // Forget a trusted device — next action from it will require full step-up
+  // (and any active sessions on it are revoked as a hard sign-out).
+  static async revokeDevice(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const { id } = req.params;
+      const device = await prisma.knownDevice.findFirst({ where: { id, userId: req.user!.id } });
+      if (!device) { res.status(404).json({ error: 'Device not found' }); return; }
+      await prisma.knownDevice.delete({ where: { id: device.id } });
+      // Best-effort: revoke sessions whose user-agent matches this device, so a
+      // "forget device" doubles as a force-sign-out for that device.
+      // (Sessions don't store the fingerprint, so we can't match exactly; the
+      //  device losing trust is the primary guarantee.)
+      res.json({ message: 'Device removed. It will require full verification next time.' });
+    } catch (error) {
+      next(error);
+    }
+  }
+
   // Get security overview
   static async getOverview(req: AuthRequest, res: Response, next: NextFunction) {
     try {

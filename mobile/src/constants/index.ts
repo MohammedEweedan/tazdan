@@ -16,6 +16,8 @@ import type { Currency, CurrencyMeta } from '@/types';
  *  4. Web + iOS Simulator can use `localhost` directly.
  */
 const API_PORT = 5000;
+const PRODUCTION_API_BASE = 'https://api.promrkts.com';
+
 function resolveApiBase(): string {
   const fromEnv = process.env.EXPO_PUBLIC_API_BASE;
   if (fromEnv) {
@@ -33,14 +35,11 @@ function resolveApiBase(): string {
     return fromEnv;
   }
 
-  // Release builds with no env override are misconfigured — there is
-  // no sane http://… fallback that wouldn't leak credentials.  Force
-  // the build to fail loudly rather than silently shipping a LAN
-  // dev URL to production users.
+  // Release/TestFlight-style builds should use the hosted API by default.
+  // Dev keeps the LAN/localhost resolver below so Expo Go and simulators
+  // do not accidentally hit production while you are iterating.
   if (!__DEV__) {
-    throw new Error(
-      '[security] EXPO_PUBLIC_API_BASE is required in release builds and must use https://.',
-    );
+    return PRODUCTION_API_BASE;
   }
 
   // hostUri looks like "192.168.1.42:8081" when launched from `expo start`

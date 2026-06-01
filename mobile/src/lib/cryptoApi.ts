@@ -76,7 +76,7 @@ export const cryptoExchangeAPI = {
     receiveCurrency?: string;   // SELL: wallet to receive proceeds into
     fundingCurrency?: string;   // BUY: wallet to fund the purchase from
   }) => api.post<{ quote: CryptoQuote }>('/exchange/quote', data),
-  execute: (data: { quoteId: string; confirmedByUser: true; idempotencyKey?: string; stepUpCode?: string; twoFactorCode?: string; recipientAddress?: string }) =>
+  execute: (data: { quoteId: string; confirmedByUser: true; idempotencyKey?: string; stepUpCode?: string; twoFactorCode?: string; recipientAddress?: string; biometricVerified?: boolean }) =>
     api.post<{ order: any }>('/exchange/execute', data),
   orders: (page = 1, limit = 20) =>
     api.get(`/exchange/orders?page=${page}&limit=${limit}`),

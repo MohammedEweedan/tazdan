@@ -233,7 +233,6 @@ export default function Settings() {
         <PanelRow
           icon="shield-outline"
           label={`Two-Factor Auth · ${user?.twoFactorEnabled ? 'ON' : 'OFF'}`}
-          last
           right={
             twoFALoading
               ? <ActivityIndicator size="small" color={p.fgMuted} />
@@ -244,6 +243,13 @@ export default function Settings() {
                 : <Ionicons name="chevron-forward" size={16} color={p.fgFaint} />
           }
           onPress={press2FA}
+        />
+        <PanelRow
+          icon="phone-portrait-outline"
+          label="Trusted Devices"
+          last
+          right={<Ionicons name="chevron-forward" size={16} color={p.fgFaint} />}
+          onPress={() => { h.selection(); router.push('/settings/devices' as any); }}
         />
       </Panel>
 
