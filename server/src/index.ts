@@ -28,7 +28,6 @@ import { Server } from 'socket.io';
 import jwt from 'jsonwebtoken';
 import path from 'path';
 import cluster from 'cluster';
-import os from 'os';
 
 import { authRouter } from './routes/auth';
 import { userRouter } from './routes/user';
@@ -75,10 +74,11 @@ import { protectedUploadsRouter } from './middleware/protectedUploads';
 import { ipBanMiddleware } from './middleware/ipBan';
 
 // ── Cluster load balancing ────────────────────────────────────────────────
-// In production, fork one Express worker per CPU core. The OS distributes
-// incoming TCP connections across workers. Crashed workers restart automatically.
+// Default to ONE production worker. Each worker has its own Prisma pool, so
+// automatically forking per CPU can exhaust small managed Postgres plans.
+// Scale only by explicitly setting CLUSTER_WORKERS after sizing DB capacity.
 // In dev/test: single-process (ts-node-dev / jest don't play well with cluster).
-const NUM_WORKERS = parseInt(process.env.CLUSTER_WORKERS ?? '0') || os.cpus().length;
+const NUM_WORKERS = parseInt(process.env.CLUSTER_WORKERS ?? '1', 10) || 1;
 const CLUSTER_ENABLED = process.env.NODE_ENV === 'production' && NUM_WORKERS > 1 && cluster.isPrimary;
 
 if (CLUSTER_ENABLED) {
@@ -380,7 +380,9 @@ async function start() {
     await prisma.$connect();
     logger.info('Database connected');
 
-    await seedAdmin();
+    // Admin/support bootstrap is non-critical. Custody seed and Redis are
+    // critical for a money server, so those fail startup if misconfigured.
+    await seedAdmin().catch((e) => logger.error('[boot] seedAdmin failed', { err: e }));
     await ensureMasterSeed();
     await initRedis();
 
@@ -406,7 +408,8 @@ async function start() {
     // live Wallet/UserWallet tables so the ledger is an authoritative copy.
     // Safe to run every boot (only posts diffs). Off by default once stable
     // via LEDGER_BACKFILL_ON_BOOT=0.
-    if (isSchedulerWorker && process.env.LEDGER_BACKFILL_ON_BOOT !== '0') {
+    const runLedgerBackfill = process.env.LEDGER_BACKFILL_ON_BOOT === '1';
+    if (isSchedulerWorker && runLedgerBackfill) {
       try {
         const { backfillLedgerOpeningBalances } = await import('./services/ledger/backfill.service');
         await backfillLedgerOpeningBalances();

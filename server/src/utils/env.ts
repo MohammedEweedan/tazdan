@@ -27,6 +27,19 @@ function fail(msg: string): never {
   process.exit(1);
 }
 
+function warn(msg: string): void {
+  // eslint-disable-next-line no-console
+  console.warn(`\n[env] ${msg}\n`);
+}
+
+function parseDbUrl(raw: string): URL | null {
+  try {
+    return new URL(raw);
+  } catch {
+    return null;
+  }
+}
+
 export function validateEnv() {
   const env = process.env.NODE_ENV ?? 'development';
   const isProd = env === 'production';
@@ -52,6 +65,21 @@ export function validateEnv() {
     }
     if (process.env.JWT_SECRET === process.env.JWT_REFRESH_SECRET) {
       fail('JWT_SECRET and JWT_REFRESH_SECRET must differ in production.');
+    }
+
+    const dbUrl = parseDbUrl(process.env.DATABASE_URL ?? '');
+    if (!dbUrl) fail('DATABASE_URL must be a valid PostgreSQL connection URL.');
+    const isLocalDb = ['localhost', '127.0.0.1', '::1'].includes(dbUrl.hostname);
+    if (!isLocalDb && dbUrl.searchParams.get('sslmode') !== 'require') {
+      fail('Production DATABASE_URL for a remote database must include sslmode=require.');
+    }
+    const connectionLimit = Number.parseInt(dbUrl.searchParams.get('connection_limit') ?? process.env.DB_CONNECTION_LIMIT ?? '3', 10);
+    if (Number.isFinite(connectionLimit) && connectionLimit > 10) {
+      fail('Production DB connection_limit is too high. Use <=10 per app process; 3 is recommended on small managed Postgres plans.');
+    }
+    const clusterWorkers = Number.parseInt(process.env.CLUSTER_WORKERS ?? '1', 10);
+    if (Number.isFinite(connectionLimit) && Number.isFinite(clusterWorkers) && connectionLimit * clusterWorkers > 20) {
+      warn(`DB pool budget is ${connectionLimit * clusterWorkers} connections (${connectionLimit} x ${clusterWorkers}). Confirm your Postgres plan can handle this.`);
     }
   }
 
