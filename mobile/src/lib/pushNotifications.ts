@@ -99,7 +99,7 @@ function routeFromPayload(data: unknown): void {
           else    router.push('/(tabs)/p2p' as any);
           break;
         case 'kyc_update':
-          router.push('/(auth)/kyc' as any);
+          router.push('/kyc' as any);
           break;
         default:
           // Unknown — open notifications screen so the user sees context.

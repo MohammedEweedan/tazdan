@@ -121,7 +121,15 @@ export default function WelcomeBack() {
             contentContainerStyle={{ flexGrow: 1, paddingHorizontal: 24, paddingBottom: 32, justifyContent: 'center' }}
           >
             <View style={{ alignItems: 'center' }}>
-              <Image source={require('../../assets/icon-black.png')} style={{ width: 54, height: 54 }} resizeMode="contain" />
+              {/* Light mode → dark mark; dark/mono → light mark, so the logo
+                  always contrasts the background. */}
+              <Image
+                source={themeMode === 'light'
+                  ? require('../../assets/icon-white.png')   // black mark
+                  : require('../../assets/icon-black.png')}  // white mark
+                style={{ width: 54, height: 54 }}
+                resizeMode="contain"
+              />
               <View style={{
                 marginTop: 28, width: 104, height: 104, borderRadius: 52,
                 backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border,

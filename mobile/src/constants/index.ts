@@ -18,6 +18,20 @@ import type { Currency, CurrencyMeta } from '@/types';
 const API_PORT = 5000;
 const PRODUCTION_API_BASE = 'https://api.promrkts.com';
 
+/**
+ * Every server route is mounted under `/api/...` (see server `app.use('/api/...')`)
+ * and every dev branch below already appends `/api`. Release builds set
+ * `EXPO_PUBLIC_API_BASE` to a bare host (e.g. https://api.promrkts.com) WITHOUT
+ * the suffix — which previously made calls hit `/exchange/execute` instead of
+ * `/api/exchange/execute`, so reads silently fell back to mock data and Buy/Sell
+ * 404'd. We now guarantee exactly one trailing `/api` regardless of how the env
+ * var is written, so the prod app talks to the same paths as dev.
+ */
+function withApiSuffix(base: string): string {
+  const trimmed = base.replace(/\/+$/, '');           // drop trailing slashes
+  return /\/api$/.test(trimmed) ? trimmed : `${trimmed}/api`;
+}
+
 function resolveApiBase(): string {
   const fromEnv = process.env.EXPO_PUBLIC_API_BASE;
   if (fromEnv) {
@@ -32,14 +46,14 @@ function resolveApiBase(): string {
         `Set EXPO_PUBLIC_API_BASE to an https:// URL at build time.`,
       );
     }
-    return fromEnv;
+    return withApiSuffix(fromEnv);
   }
 
   // Release/TestFlight-style builds should use the hosted API by default.
   // Dev keeps the LAN/localhost resolver below so Expo Go and simulators
   // do not accidentally hit production while you are iterating.
   if (!__DEV__) {
-    return PRODUCTION_API_BASE;
+    return withApiSuffix(PRODUCTION_API_BASE);
   }
 
   // hostUri looks like "192.168.1.42:8081" when launched from `expo start`
@@ -118,17 +132,58 @@ export const CURRENCY_META: Record<Currency, CurrencyMeta> = {
   MATIC: { code: 'MATIC', kind: 'crypto', name: 'Polygon',    symbol: 'MATIC',decimals: 4, flagOrIcon: '◆' },
   DOT:   { code: 'DOT',   kind: 'crypto', name: 'Polkadot',   symbol: 'DOT',  decimals: 4, flagOrIcon: '●' },
   AVAX:  { code: 'AVAX',  kind: 'crypto', name: 'Avalanche',  symbol: 'AVAX', decimals: 4, flagOrIcon: '▲' },
-  // fiat — flagOrIcon shows the currency symbol, not a flag emoji
-  USD:   { code: 'USD',   kind: 'fiat',   name: 'US Dollar',         symbol: '$',  decimals: 2, flagOrIcon: '$' },
-  EUR:   { code: 'EUR',   kind: 'fiat',   name: 'Euro',              symbol: '€',  decimals: 2, flagOrIcon: '€' },
-  GBP:   { code: 'GBP',   kind: 'fiat',   name: 'British Pound',     symbol: '£',  decimals: 2, flagOrIcon: '£' },
-  AED:   { code: 'AED',   kind: 'fiat',   name: 'UAE Dirham',        symbol: 'د.إ',decimals: 2, flagOrIcon: 'د.إ' },
-  SAR:   { code: 'SAR',   kind: 'fiat',   name: 'Saudi Riyal',       symbol: '﷼',  decimals: 2, flagOrIcon: '﷼' },
-  EGP:   { code: 'EGP',   kind: 'fiat',   name: 'Egyptian Pound',    symbol: '£',  decimals: 2, flagOrIcon: '£' },
-  // Libyan Dinar — local convention is 3 decimals (millimes). Symbol
-  // is "ل.د" (lām-dāl); printed as "LD" in Latin contexts.
-  LYD:   { code: 'LYD',   kind: 'fiat',   name: 'Libyan Dinar',      symbol: 'ل.د', decimals: 3, flagOrIcon: 'ل.د' },
+  // fiat — flagOrIcon / symbol below are the ENGLISH defaults. For the
+  // locale-aware, font-safe glyph (Arabic variants, the new Saudi Riyal mark,
+  // LD for the Libyan Dinar, …) use `fiatSymbol(code, locale)` instead of
+  // reading these fields directly. They remain here so static callers and the
+  // crypto entries keep working unchanged.
+  USD:   { code: 'USD',   kind: 'fiat',   name: 'US Dollar',         symbol: '$',   decimals: 2, flagOrIcon: '$' },
+  EUR:   { code: 'EUR',   kind: 'fiat',   name: 'Euro',              symbol: '€',   decimals: 2, flagOrIcon: '€' },
+  GBP:   { code: 'GBP',   kind: 'fiat',   name: 'British Pound',     symbol: '£',   decimals: 2, flagOrIcon: '£' },
+  AED:   { code: 'AED',   kind: 'fiat',   name: 'UAE Dirham',        symbol: 'AED', decimals: 2, flagOrIcon: 'AED' },
+  SAR:   { code: 'SAR',   kind: 'fiat',   name: 'Saudi Riyal',       symbol: 'SAR', decimals: 2, flagOrIcon: 'SAR' },
+  EGP:   { code: 'EGP',   kind: 'fiat',   name: 'Egyptian Pound',    symbol: 'E£',  decimals: 2, flagOrIcon: 'E£' },
+  // Libyan Dinar — 3 decimals (millimes). "LD" in Latin contexts, "د.ل" in Arabic.
+  LYD:   { code: 'LYD',   kind: 'fiat',   name: 'Libyan Dinar',      symbol: 'LD',  decimals: 3, flagOrIcon: 'LD' },
 };
+
+/**
+ * Locale- and font-safe fiat currency symbols.
+ *
+ * Each entry has a Latin/default form and an Arabic form. We deliberately use
+ * representations that render correctly on shipping device fonts:
+ *  - The brand-new Saudi Riyal mark (U+20C0, approved Feb 2025) has almost no
+ *    font coverage yet, so we render the well-supported "SAR" / "ر.س" instead
+ *    of a tofu box. Swap `SAR.default` to '⃀' once OS fonts ship it.
+ *  - The Libyan Dinar shows "LD" in Latin and "د.ل" in Arabic, per request.
+ *
+ * Symbols are plain text, so colour is inherited from the surrounding <Text>
+ * — i.e. automatically theme-aware. Pass the active locale for locale-awareness.
+ */
+const FIAT_SYMBOL_LOCALE: Record<string, { default: string; ar: string }> = {
+  USD: { default: '$',   ar: '$' },
+  EUR: { default: '€',   ar: '€' },
+  GBP: { default: '£',   ar: '£' },
+  AED: { default: 'AED', ar: 'د.إ' },
+  SAR: { default: 'SAR', ar: 'ر.س' },   // see note above re: U+20C0
+  EGP: { default: 'E£',  ar: 'ج.م' },
+  LYD: { default: 'LD',  ar: 'د.ل' },
+  CHF: { default: 'Fr',  ar: 'فرنك' },
+  JPY: { default: '¥',   ar: '¥' },
+  CAD: { default: 'CA$', ar: 'دولار كندي' },
+  AUD: { default: 'A$',  ar: 'دولار أسترالي' },
+  SDG: { default: 'SDG', ar: 'ج.س' },
+  NGN: { default: '₦',   ar: '₦' },
+  TRY: { default: '₺',   ar: '₺' },
+  LBP: { default: 'LBP', ar: 'ل.ل' },
+};
+
+/** Best, font-safe symbol for a fiat code in the given locale. */
+export function fiatSymbol(code: string, locale?: string): string {
+  const entry = FIAT_SYMBOL_LOCALE[code];
+  if (!entry) return code;
+  return locale === 'ar' ? entry.ar : entry.default;
+}
 
 export function normalizeCurrencyCode(currency: string): Currency | null {
   if (currency in CURRENCY_META) return currency as Currency;

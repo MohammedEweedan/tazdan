@@ -27,14 +27,23 @@ function timeAgo(iso: string): string {
   return `${Math.floor(h / 24)}d ago`;
 }
 
-function parseUA(ua: string | null): string {
-  if (!ua) return 'Unknown device';
-  if (/iphone/i.test(ua)) return 'iPhone';
-  if (/ipad/i.test(ua)) return 'iPad';
-  if (/android/i.test(ua)) return 'Android';
-  if (/mac/i.test(ua)) return 'Mac';
-  if (/windows/i.test(ua)) return 'Windows';
-  return 'Web';
+function deviceIcon(type: string): keyof typeof Ionicons.glyphMap {
+  switch (type) {
+    case 'mobile':  return 'phone-portrait-outline';
+    case 'tablet':  return 'tablet-portrait-outline';
+    case 'desktop': return 'desktop-outline';
+    default:        return 'globe-outline';
+  }
+}
+
+/** One labelled metadata line (icon + text) inside a session card. */
+function DetailLine({ icon, text, p }: { icon: keyof typeof Ionicons.glyphMap; text: string; p: ReturnType<typeof useThemedPalette> }) {
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+      <Ionicons name={icon} size={12} color={p.fgFaint} />
+      <Text style={{ color: p.fgMuted, fontSize: 12 }} numberOfLines={1}>{text}</Text>
+    </View>
+  );
 }
 
 export default function TrustedDevicesScreen() {
@@ -69,6 +78,12 @@ export default function TrustedDevicesScreen() {
       { text: 'Forget', style: 'destructive', onPress: () => forget.mutate(id) },
     ]);
 
+  const confirmSignOut = (id: string, label: string) =>
+    Alert.alert('Sign out device?', `This will end the session on ${label}. It will need to sign in again.`, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Sign out', style: 'destructive', onPress: () => revoke.mutate(id) },
+    ]);
+
   const loading = devicesQ.isLoading || sessionsQ.isLoading;
 
   return (
@@ -98,15 +113,25 @@ export default function TrustedDevicesScreen() {
                   <Text style={{ color: p.fgMuted, fontSize: 13 }}>No trusted devices yet.</Text>
                 </View>
               ) : devicesQ.data!.devices.map((d, i, arr) => (
-                <View key={d.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderBottomWidth: i === arr.length - 1 ? 0 : 1, borderBottomColor: p.border }}>
+                <View key={d.id} style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 12, padding: 14, borderBottomWidth: i === arr.length - 1 ? 0 : 1, borderBottomColor: p.border }}>
                   <View style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: p.pillBg, alignItems: 'center', justifyContent: 'center' }}>
-                    <Ionicons name="shield-checkmark-outline" size={20} color={p.greenFg} />
+                    <Ionicons name={deviceIcon(d.deviceType)} size={20} color={p.greenFg} />
                   </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ color: p.fg, fontSize: 14, fontWeight: '600' }}>{d.label || 'Verified device'}</Text>
-                    <Text style={{ color: p.fgMuted, fontSize: 12, marginTop: 1 }}>Last used {timeAgo(d.lastSeenAt)}</Text>
+                  <View style={{ flex: 1, gap: 3 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                      <Text style={{ color: p.fg, fontSize: 14, fontWeight: '600' }}>{d.label}</Text>
+                      {d.current && (
+                        <View style={{ paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6, backgroundColor: p.pillBg, borderWidth: 1, borderColor: p.greenFg }}>
+                          <Text style={{ color: p.greenFg, fontSize: 10, fontWeight: '700' }}>This device</Text>
+                        </View>
+                      )}
+                    </View>
+                    {d.os && d.os !== 'Unknown' && <DetailLine icon="hardware-chip-outline" text={d.os} p={p} />}
+                    {d.location && <DetailLine icon="location-outline" text={d.location} p={p} />}
+                    {d.ipAddress && <DetailLine icon="wifi-outline" text={d.ipAddress} p={p} />}
+                    <DetailLine icon="time-outline" text={`Last used ${timeAgo(d.lastSeenAt)}`} p={p} />
                   </View>
-                  <Pressable onPress={() => confirmForget(d.id, d.label || 'This device')} hitSlop={8} style={{ paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: p.redFg }}>
+                  <Pressable onPress={() => confirmForget(d.id, d.label)} hitSlop={8} style={{ paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: p.redFg }}>
                     <Text style={{ color: p.redFg, fontSize: 12, fontWeight: '700' }}>Forget</Text>
                   </Pressable>
                 </View>
@@ -128,17 +153,46 @@ export default function TrustedDevicesScreen() {
                   <Text style={{ color: p.fgMuted, fontSize: 13 }}>No active sessions.</Text>
                 </View>
               ) : sessionsQ.data!.sessions.map((s, i, arr) => (
-                <View key={s.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderBottomWidth: i === arr.length - 1 ? 0 : 1, borderBottomColor: p.border }}>
+                <View key={s.id} style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 12, padding: 14, borderBottomWidth: i === arr.length - 1 ? 0 : 1, borderBottomColor: p.border }}>
                   <View style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: p.pillBg, alignItems: 'center', justifyContent: 'center' }}>
-                    <Ionicons name="globe-outline" size={20} color={p.fgMuted} />
+                    <Ionicons name={deviceIcon(s.deviceType)} size={20} color={s.current ? p.greenFg : p.fgMuted} />
                   </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ color: p.fg, fontSize: 14, fontWeight: '600' }}>{parseUA(s.userAgent)}</Text>
-                    <Text style={{ color: p.fgMuted, fontSize: 12, marginTop: 1 }}>{s.ipAddress || 'Unknown IP'} · {timeAgo(s.createdAt)}</Text>
+                  <View style={{ flex: 1, gap: 3 }}>
+                    {/* Device name + OS, with a "This device" badge for the current session */}
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                      <Text style={{ color: p.fg, fontSize: 14, fontWeight: '600' }}>
+                        {s.deviceName}{s.browser ? ` · ${s.browser}` : ''}
+                      </Text>
+                      {s.current && (
+                        <View style={{ paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6, backgroundColor: p.pillBg, borderWidth: 1, borderColor: p.greenFg }}>
+                          <Text style={{ color: p.greenFg, fontSize: 10, fontWeight: '700' }}>This device</Text>
+                        </View>
+                      )}
+                    </View>
+                    {/* OS / software */}
+                    {s.os && s.os !== 'Unknown' && (
+                      <DetailLine icon="hardware-chip-outline" text={s.os} p={p} />
+                    )}
+                    {/* Location: City, Country */}
+                    <DetailLine icon="location-outline" text={s.location ?? 'Location unavailable'} p={p} />
+                    {/* IP address */}
+                    <DetailLine icon="wifi-outline" text={s.ipAddress || 'Unknown IP'} p={p} />
+                    {/* Last login / active */}
+                    <DetailLine icon="time-outline" text={`Last login ${timeAgo(s.lastActiveAt ?? s.createdAt)}`} p={p} />
                   </View>
-                  <Pressable onPress={() => revoke.mutate(s.id)} hitSlop={8} style={{ paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: p.border }}>
-                    <Text style={{ color: p.fg, fontSize: 12, fontWeight: '700' }}>Sign out</Text>
-                  </Pressable>
+                  {s.current ? (
+                    <View style={{ paddingHorizontal: 10, paddingVertical: 6 }}>
+                      <Ionicons name="checkmark-circle" size={18} color={p.greenFg} />
+                    </View>
+                  ) : (
+                    <Pressable
+                      onPress={() => confirmSignOut(s.id, `${s.deviceName}${s.location ? ` (${s.location})` : ''}`)}
+                      hitSlop={8}
+                      style={{ paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: p.redFg }}
+                    >
+                      <Text style={{ color: p.redFg, fontSize: 12, fontWeight: '700' }}>Sign out</Text>
+                    </Pressable>
+                  )}
                 </View>
               ))}
             </View>

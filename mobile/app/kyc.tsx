@@ -14,6 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { useThemedPalette } from '@/store/themeStore';
 import { useAuthStore } from '@/store/authStore';
+import { authService } from '@/services';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { useRouter } from 'expo-router';
@@ -45,14 +46,15 @@ async function fetchKYCStatus(): Promise<{ kycStatus: string; documents: any[] }
   return data;
 }
 
-async function submitKYC(files: Record<DocSlot, PickedFile | null>): Promise<void> {
+async function submitKYC(files: Record<DocSlot, PickedFile | null>): Promise<{ kycStatus?: string; autoApproved?: boolean }> {
   const form = new FormData();
   form.append('documentType', 'identity');
   for (const slot of Object.keys(files) as DocSlot[]) {
     const f = files[slot];
     if (f) form.append('documents', { uri: f.uri, name: f.name, type: f.type } as any);
   }
-  await api.post('/users/kyc', form, { headers: { 'Content-Type': 'multipart/form-data' } });
+  const { data } = await api.post('/users/kyc', form, { headers: { 'Content-Type': 'multipart/form-data' } });
+  return data ?? {};
 }
 
 export default function KYCScreen() {
@@ -61,6 +63,7 @@ export default function KYCScreen() {
   const router = useRouter();
   const qc = useQueryClient();
   const user = useAuthStore((s) => s.user);
+  const updateUser = useAuthStore((s) => s.updateUser);
 
   const [files, setFiles] = useState<Record<DocSlot, PickedFile | null>>({ front: null, back: null, selfie: null });
 
@@ -71,10 +74,18 @@ export default function KYCScreen() {
 
   const submit = useMutation({
     mutationFn: () => submitKYC(files),
-    onSuccess: () => {
+    onSuccess: async (res) => {
       h.success();
       qc.invalidateQueries({ queryKey: ['kyc-status'] });
-      Alert.alert('Submitted', 'Your documents are under review. We\'ll notify you when verified.');
+      // Refresh the auth user so gated screens (deposit/withdraw/cards) pick up
+      // the new kycStatus immediately — without this they'd keep blocking until
+      // the next cold start.
+      try { updateUser(await authService.me()); } catch { /* keep cached user */ }
+      if (res?.autoApproved || res?.kycStatus === 'APPROVED') {
+        Alert.alert('Verified', 'Your identity is verified — you can now deposit, withdraw, and order a card.');
+      } else {
+        Alert.alert('Submitted', 'Your documents are under review. We\'ll notify you when verified.');
+      }
     },
     onError: (e: any) => {
       h.error();

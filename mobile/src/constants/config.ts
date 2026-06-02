@@ -12,6 +12,13 @@ import { Platform } from 'react-native';
 const API_PORT = 5000;
 const PRODUCTION_API_BASE = 'https://api.promrkts.com';
 
+// Guarantee exactly one trailing `/api` — server routes are all under `/api`.
+// (Kept in sync with constants/index.ts, which is the module actually imported.)
+function withApiSuffix(base: string): string {
+  const trimmed = base.replace(/\/+$/, '');
+  return /\/api$/.test(trimmed) ? trimmed : `${trimmed}/api`;
+}
+
 function resolveApiBase(): string {
   const fromEnv = process.env.EXPO_PUBLIC_API_BASE;
   if (fromEnv) {
@@ -21,10 +28,10 @@ function resolveApiBase(): string {
         `Set EXPO_PUBLIC_API_BASE to an https:// URL at build time.`,
       );
     }
-    return fromEnv;
+    return withApiSuffix(fromEnv);
   }
 
-  if (!__DEV__) return PRODUCTION_API_BASE;
+  if (!__DEV__) return withApiSuffix(PRODUCTION_API_BASE);
 
   const hostUri = (Constants.expoConfig?.hostUri ?? Constants.expoGoConfig?.debuggerHost) as string | undefined;
   const lanHost = hostUri?.split(':')[0];

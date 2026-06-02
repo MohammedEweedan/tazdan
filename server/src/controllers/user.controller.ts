@@ -64,8 +64,24 @@ export class UserController {
       }));
 
       await prisma.kYCDocument.createMany({ data: documents });
+
+      // When no real KYC provider is wired (KYC_PROVIDER=MOCK, the default in
+      // dev), auto-approve on submit so the rest of the app — deposits,
+      // withdrawals, card issuing — is actually testable end-to-end without a
+      // manual admin step. With a real provider configured, we stay PENDING and
+      // let the provider's webhook (or an admin) flip the status in production.
+      const provider = (process.env.KYC_PROVIDER || 'MOCK').toUpperCase();
+      if (provider === 'MOCK') {
+        await prisma.user.update({
+          where: { id: req.user!.id },
+          data: { kycStatus: 'APPROVED', kycTier: 'TIER_2' },
+        });
+        res.json({ message: 'KYC approved', kycStatus: 'APPROVED', autoApproved: true });
+        return;
+      }
+
       await prisma.user.update({ where: { id: req.user!.id }, data: { kycStatus: 'PENDING' } });
-      res.json({ message: 'KYC documents submitted for review' });
+      res.json({ message: 'KYC documents submitted for review', kycStatus: 'PENDING' });
     } catch (error) {
       next(error);
     }

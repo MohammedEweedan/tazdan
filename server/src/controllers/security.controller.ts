@@ -2,7 +2,8 @@ import { Response, NextFunction } from 'express';
 import { prisma } from '../utils/prisma';
 import { AuthRequest } from '../types';
 import { AppError } from '../middleware/errorHandler';
-import { issueStepUp, type StepUpAction } from '../services/security/stepUp.service';
+import { issueStepUp, deviceFingerprint, type StepUpAction } from '../services/security/stepUp.service';
+import { parseUserAgent, geoLocate } from '../utils/deviceInfo';
 
 const STEP_UP_ACTIONS = new Set(['withdrawal', 'buy', 'sell', 'transfer']);
 
@@ -40,14 +41,39 @@ export class SecurityController {
     }
   }
 
-  // Get active sessions
+  // Get active sessions — enriched with parsed device (name/type/OS/browser),
+  // a "City, Country" geo location resolved from the IP, last-active time, and
+  // a `current` flag for the session making this request.
   static async getSessions(req: AuthRequest, res: Response, next: NextFunction) {
     try {
-      const sessions = await prisma.session.findMany({
+      const currentToken = req.headers.authorization?.replace('Bearer ', '') ?? '';
+      const rows = await prisma.session.findMany({
         where: { userId: req.user!.id, expiresAt: { gt: new Date() } },
         orderBy: { createdAt: 'desc' },
-        select: { id: true, ipAddress: true, userAgent: true, createdAt: true, expiresAt: true },
+        select: { id: true, token: true, ipAddress: true, userAgent: true, createdAt: true, expiresAt: true },
       });
+
+      const sessions = await Promise.all(
+        rows.map(async (s) => {
+          const device = parseUserAgent(s.userAgent);
+          const location = await geoLocate(s.ipAddress);
+          return {
+            id: s.id,
+            ipAddress: s.ipAddress,
+            userAgent: s.userAgent,
+            createdAt: s.createdAt,
+            expiresAt: s.expiresAt,
+            lastActiveAt: s.createdAt, // best available "last login" for the session
+            deviceName: device.name,
+            deviceType: device.type,
+            os: device.os,
+            browser: device.browser ?? null,
+            location,                   // "City, Country" | "Local network" | null
+            current: !!currentToken && s.token === currentToken,
+          };
+        }),
+      );
+
       res.json({ sessions });
     } catch (error) {
       next(error);
@@ -79,14 +105,41 @@ export class SecurityController {
     }
   }
 
-  // List trusted/known devices (the ones that have passed step-up).
+  // List trusted/known devices (the ones that have passed step-up), enriched
+  // with device type, OS, IP, and "City, Country". `current` flags the device
+  // making this request so the UI can label it and protect it from removal.
   static async getDevices(req: AuthRequest, res: Response, next: NextFunction) {
     try {
-      const devices = await prisma.knownDevice.findMany({
+      const rows = await prisma.knownDevice.findMany({
         where: { userId: req.user!.id },
         orderBy: { lastSeenAt: 'desc' },
-        select: { id: true, fingerprint: true, label: true, lastSeenAt: true, createdAt: true },
+        select: {
+          id: true, fingerprint: true, label: true, deviceType: true,
+          os: true, ipAddress: true, location: true, lastSeenAt: true, createdAt: true,
+        },
       });
+
+      // Fingerprint of the device making this request, so we can mark "current".
+      const currentFp = deviceFingerprint(req);
+
+      const devices = rows.map((d) => {
+        // Back-fill detail for rows saved before we captured it: parse the
+        // current request's UA only for the current device; otherwise keep
+        // whatever was stored (older rows may just have a generic label).
+        const fallback = d.fingerprint === currentFp ? parseUserAgent(req.headers['user-agent'] as string) : null;
+        return {
+          id: d.id,
+          label: d.label || fallback?.name || 'Verified device',
+          deviceType: d.deviceType || fallback?.type || 'unknown',
+          os: d.os || fallback?.os || null,
+          ipAddress: d.ipAddress || null,
+          location: d.location || null,
+          lastSeenAt: d.lastSeenAt,
+          createdAt: d.createdAt,
+          current: d.fingerprint === currentFp,
+        };
+      });
+
       res.json({ devices });
     } catch (error) {
       next(error);

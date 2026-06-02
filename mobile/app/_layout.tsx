@@ -42,6 +42,8 @@ import {
 } from '@expo-google-fonts/cairo';
 
 import { queryClient } from '@/lib/queryClient';
+import { useConnectivity } from '@/hooks/useConnectivity';
+import { OfflineScreen } from '@/components/ui/OfflineScreen';
 import { setUnauthorizedHandler } from '@/lib/api';
 import { initObservability } from '@/lib/observability';
 import { useAuthStore } from '@/store/authStore';
@@ -258,6 +260,7 @@ export default function RootLayout() {
             <Stack.Screen name="topup"    options={{ presentation: 'modal' }} />
           </Stack>
           <SplashGate />
+          <OfflineGate />
           </StripeProvider>
         </QueryClientProvider>
       </SafeAreaProvider>
@@ -269,4 +272,28 @@ function SplashGate() {
   const isHydrating = useAuthStore((s) => s.isHydrating);
   if (!isHydrating) return null;
   return <SplashOverlay />;
+}
+
+/**
+ * Covers the whole app with the offline screen whenever connectivity drops,
+ * so no stale or fabricated balance is ever visible behind it. Sits above the
+ * navigator (absolute fill) and disappears the instant we're back online.
+ */
+function OfflineGate() {
+  const { isOnline, refresh } = useConnectivity();
+  const [reconnecting, setReconnecting] = useState(false);
+  if (isOnline) return null;
+  const onRetry = async () => {
+    setReconnecting(true);
+    try { await refresh(); } finally { setReconnecting(false); }
+  };
+  return (
+    <Animated.View
+      style={StyleSheet.absoluteFillObject}
+      // Keep above the navigator; tappable so Retry works.
+      pointerEvents="auto"
+    >
+      <OfflineScreen reconnecting={reconnecting} onRetry={onRetry} />
+    </Animated.View>
+  );
 }

@@ -10,15 +10,14 @@
  * theme-aware modal.
  */
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { cryptoWalletAPI } from '@/lib/cryptoApi';
 import { TopGradient } from '@/components/ui/ScreenShell';
 import { ActivityIndicator, Animated, Dimensions, Image, KeyboardAvoidingView, Modal, PanResponder, Platform, Pressable, RefreshControl, ScrollView, Share, StyleSheet, View } from 'react-native';
 import { BlurView } from 'expo-blur';
-import { LinearGradient } from 'expo-linear-gradient';
 import { Text, TextInput } from '@/components/ui/Text';
-import BalanceSvg, { Path as SvgPath, Defs as SvgDefs, LinearGradient as SvgLinearGradient, Stop as SvgStop, Line as SvgLine, Circle as SvgCircle } from 'react-native-svg';
+import BalanceSvg, { Path as SvgPath, Defs as SvgDefs, LinearGradient as SvgLinearGradient, RadialGradient as SvgRadialGradient, Rect as SvgRect, Stop as SvgStop, Line as SvgLine, Circle as SvgCircle } from 'react-native-svg';
 import QRCode from 'react-native-qrcode-svg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -30,10 +29,10 @@ import { useAuthStore } from '@/store/authStore';
 import { realHandle, displayHandle, avatarMode } from '@/utils/displayUser';
 import { useWallets, useHaptics, useTransactions, useActivities, useActivityRealtime, useNotificationRealtime, useUnreadCount, useMarkets, useDisplayCurrency } from '@/hooks';
 import { useTheme, useThemedPalette, type Palette } from '@/store/themeStore';
-import { useT } from '@/store/i18nStore';
+import { useT, useI18n } from '@/store/i18nStore';
 import { Sparkline } from '@/components/ui/Sparkline';
 import { CoinIcon } from '@/components/ui/CoinIcon';
-import { getCurrencyMeta } from '@/constants';
+import { getCurrencyMeta, fiatSymbol } from '@/constants';
 import { formatMoney } from '@/utils/format';
 import { BuyWidget } from '@/components/exchange/BuyWidget';
 import { SellWidget } from '@/components/exchange/SellWidget';
@@ -132,6 +131,7 @@ export default function Home() {
     outputRange: [1, 1],
     extrapolate: 'clamp',
   });
+
   const onRefresh = async () => {
     setRefreshing(true);
     h.light();
@@ -240,9 +240,9 @@ export default function Home() {
   // Buy, Sell, Top up (deposit). Withdraw + everything else lives
   // in the More (···) modal.
   const ACTIONS: ActionDef[] = [
-    { key: 'buy',     icon: 'arrow-up-outline',         label: t('action.buy'),     onPress: () => setBuyModalVisible(true) },
-    { key: 'sell',    icon: 'arrow-down-outline',       label: t('action.sell'),    onPress: () => setSellModalVisible(true) },
-    { key: 'topup',   icon: 'arrow-down-circle-outline', label: t('action.topup'),  onPress: () => setDepositModalVisible(true) },
+    { key: 'buy',     icon: 'arrow-up-outline',          label: t('action.buy'),    tone: 'white', onPress: () => setBuyModalVisible(true) },
+    { key: 'sell',    icon: 'arrow-down-outline',        label: t('action.sell'),   tone: 'grey',  onPress: () => setSellModalVisible(true) },
+    { key: 'topup',   icon: 'arrow-down-circle-outline', label: t('action.topup'),  tone: 'black', onPress: () => setDepositModalVisible(true) },
   ];
 
   return (
@@ -290,30 +290,10 @@ export default function Home() {
               position: 'absolute',
               top: 0, left: 0, right: 0, bottom: 0,
               opacity: gradientOpacity,
+              overflow: 'hidden',
             }}
           >
-            <LinearGradient
-              colors={
-                themeMode === 'mono'
-                  ? // Flat darker grey — no gradient in monochrome mode.
-                    ['#1A1A1A', '#1A1A1A', '#1A1A1A']
-                  : themeMode === 'dark'
-                  ? [
-                      'rgba(245, 245, 245, 1)', // near-white at top
-                      'rgba(160, 160, 160, 1)', // light grey middle
-                      'rgba(38, 38, 38, 1)',    // dark semi-dark gray at bottom
-                    ]
-                  : [
-                      'rgba(38, 38, 38, 1)',    // dark semi-dark gray at top (flipped)
-                      'rgba(160, 160, 160, 1)', // light grey middle
-                      'rgba(245, 245, 245, 1)', // near-white at bottom
-                    ]
-              }
-              locations={[0, 0.5, 1]}
-              start={{ x: 0.5, y: 0 }}
-              end={{ x: 0.5, y: 1 }}
-              style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
-            />
+            <BreathingGradient mode={themeMode} />
           </Animated.View>
 
           {/* Blur layer — only fades in once scrolling so the at-rest
@@ -342,10 +322,33 @@ export default function Home() {
             />
           </Animated.View>
 
+          {/* Show/hide balance — pinned to the upper-right corner of the
+              card, level with the balance (clear of the header icon
+              cluster). Sits above the gradient/blur so it stays tappable. */}
+          <Pressable
+            onPress={() => { h.selection(); setShowBalance((v) => !v); }}
+            hitSlop={12}
+            accessibilityRole="button"
+            accessibilityLabel={showBalance ? 'Hide balance' : 'Show balance'}
+            style={{
+              position: 'absolute',
+              top: insets.top + 64, right: 20,
+              zIndex: 5,
+              width: 30, height: 30, borderRadius: 15,
+              alignItems: 'center', justifyContent: 'center',
+            }}
+          >
+            <Ionicons
+              name={showBalance ? 'eye-outline' : 'eye-off-outline'}
+              size={18}
+              color={p.fgFaint}
+            />
+          </Pressable>
+
           {/* Header */}
           <View style={{
             flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-            paddingHorizontal: 24, paddingTop: insets.top + 18, paddingBottom: 8,
+            paddingHorizontal: 24, paddingTop: insets.top + 8, paddingBottom: 6,
             gap: 10,
           }}>
             <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10, minWidth: 0 }}>
@@ -415,7 +418,15 @@ export default function Home() {
                 </Pressable>
               )}
             </View>
-            <View style={{ flexDirection: 'row', gap: 7, flexShrink: 0 }}>
+            {/* Icon cluster — one segmented track holding all three
+                actions so they read as a single intentional control
+                rather than three heavy floating circles. */}
+            <View style={{
+              flexDirection: 'row', alignItems: 'center', flexShrink: 0,
+              backgroundColor: p.pillBg,
+              borderRadius: 17,
+              paddingHorizontal: 3,
+            }}>
               <HeaderIconButton
                 icon="repeat-outline"
                 onPress={() => { h.selection(); setRecurringModalVisible(true); }}
@@ -443,27 +454,26 @@ export default function Home() {
             palette={p}
             dc={dc}
             showBalance={showBalance}
-            onToggle={() => setShowBalance(v => !v)}
             onPress={() => { h.selection(); setBalanceChartVisible(true); }}
           />
 
-          {/* 24h delta — smaller, directly under balance */}
+          {/* 24h delta — compact, directly under balance */}
           <View style={{
-            flexDirection: 'row', alignItems: 'center', gap: 6,
+            flexDirection: 'row', alignItems: 'center', gap: 5,
             justifyContent: 'center',
-            paddingHorizontal: 24, marginTop: 2,
+            paddingHorizontal: 24, marginTop: 1,
           }}>
             <Text style={{
               color: p.fgMuted,
-              fontSize: 11, fontWeight: '500', fontVariant: ['tabular-nums'],
+              fontSize: 10, fontWeight: '500', fontVariant: ['tabular-nums'],
             }}>
               {showBalance
                 ? `${positive ? '+' : '-'}${dc.fmt(Math.abs(deltaUsd))}`
                 : `${dc.symbol}****`}
             </Text>
             <View style={{
-              flexDirection: 'row', alignItems: 'center', gap: 3,
-              paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6,
+              flexDirection: 'row', alignItems: 'center', gap: 2,
+              paddingHorizontal: 5, paddingVertical: 1, borderRadius: 5,
               backgroundColor: showBalance
                 ? (positive ? 'rgba(34,197,94,0.12)' : 'rgba(239,68,68,0.12)')
                 : p.pillBg,
@@ -473,11 +483,11 @@ export default function Home() {
                 : p.border,
             }}>
               {showBalance && (
-                <Ionicons name={positive ? 'caret-up' : 'caret-down'} size={8} color={positive ? p.greenFg : p.redFg} />
+                <Ionicons name={positive ? 'caret-up' : 'caret-down'} size={7} color={positive ? p.greenFg : p.redFg} />
               )}
               <Text style={{
                 color: showBalance ? (positive ? p.greenFg : p.redFg) : p.fgFaint,
-                fontSize: 10, fontWeight: '600',
+                fontSize: 9, fontWeight: '600',
               }}>
                 {showBalance ? `${Math.abs(deltaPct).toFixed(2)}%` : '**.**%'}
               </Text>
@@ -485,35 +495,37 @@ export default function Home() {
           </View>
 
           {/* ── PRIMARY ACTIONS ── */}
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingHorizontal: 24, marginTop: 28 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingHorizontal: 24, marginTop: 18 }}>
             {ACTIONS.map((a) => (
-              <ActionButton key={a.key} label={a.label} to={a.to} onPress={a.onPress} palette={p} />
+              <ActionButton key={a.key} label={a.label} to={a.to} tone={a.tone} onPress={a.onPress} palette={p} />
             ))}
             <MoreActionButton palette={p} onPress={() => { h.selection(); setMoreMenuVisible(true); }} />
           </View>
 
           {/* Spacer between the action pills and the Assets/Activity
               switcher so the pinned hero block has breathing room. */}
-          <View style={{ height: 22 }} />
-
-          {/* Assets / Activity tabs — part of the sticky region so
-              the switcher is always reachable while scrolling. */}
-          <View style={{
-            flexDirection: 'row', gap: 32,
-            paddingHorizontal: 24,
-            justifyContent: 'center',
-          }}>
-            <TabBtn label={t('home.assets')}   active={tab === 'ASSETS'}   palette={p} onPress={() => { h.selection(); setTab('ASSETS'); }} />
-            <TabBtn label={t('home.activity')} active={tab === 'ACTIVITY'} palette={p} onPress={() => { h.selection(); setTab('ACTIVITY'); }} />
-          </View>
-
-          <View style={{ height: 14 }} />
+          <View style={{ height: 16 }} />
           </View>
           {/* /sticky top block */}
 
           {/* Announcement Banner — out of the sticky region; lives
               between the pinned hero and the scrolling feed. */}
           <AnnouncementBanner />
+
+          {/* Assets / Activity — segmented control. No longer pinned; it
+              sits above the asset/activity rows and scrolls with them. */}
+          <View style={{ paddingHorizontal: 24, alignItems: 'center', marginTop: 18, marginBottom: 4 }}>
+            <View style={{
+              flexDirection: 'row',
+              backgroundColor: p.pillBg,
+              borderRadius: 12,
+              padding: 3,
+              alignSelf: 'center',
+            }}>
+              <TabBtn label={t('home.assets')}   active={tab === 'ASSETS'}   palette={p} onPress={() => { h.selection(); setTab('ASSETS'); }} />
+              <TabBtn label={t('home.activity')} active={tab === 'ACTIVITY'} palette={p} onPress={() => { h.selection(); setTab('ACTIVITY'); }} />
+            </View>
+          </View>
 
           {/* Rows */}
           {tab === 'ACTIVITY' ? (
@@ -1169,55 +1181,107 @@ function BalanceHistoryModal({
   );
 }
 
+/**
+ * Self-contained breathing radial gradient for the sticky card.
+ *
+ * Its per-frame state lives HERE, not in Home — so the animation re-renders
+ * only this tiny SVG, never the whole screen (asset rows, etc.). That's the
+ * fix for the card jitter: previously the rAF→setState loop sat in Home and
+ * re-rendered everything ~25×/s. Memoised so parent re-renders don't reset it.
+ * Flat charcoal (no motion) in mono theme.
+ */
+const BreathingGradient = memo(function BreathingGradient({ mode }: { mode: 'dark' | 'light' | 'mono' }) {
+  const [pulse, setPulse] = useState(0);
+  useEffect(() => {
+    if (mode === 'mono') return;
+    let raf: any;
+    let last = 0;
+    const PERIOD = 9000; // one full breathe in+out ~9s
+    const start = Date.now();
+    const tick = () => {
+      const now = Date.now();
+      if (now - last >= 50) { // ~20fps is plenty for a slow, soft glow
+        last = now;
+        const phase = ((now - start) % PERIOD) / PERIOD * Math.PI * 2;
+        setPulse((1 - Math.cos(phase)) / 2);
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [mode]);
+
+  if (mode === 'mono') {
+    return <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#161617' }} />;
+  }
+
+  const midOffset = 30 + pulse * 35; // 30%..65% → edges breathe darker↔lighter
+  const stops = mode === 'dark'
+    ? [{ key: 'a', o: '0%', c: '#FDFDFD' }, { key: 'b', o: `${midOffset}%`, c: '#8C8C8C' }, { key: 'c', o: '100%', c: '#161617' }]
+    : [{ key: 'a', o: '0%', c: '#FDFDFD' }, { key: 'b', o: `${midOffset}%`, c: '#BDBDBD' }, { key: 'c', o: '100%', c: '#2E2E2E' }];
+
+  return (
+    <BalanceSvg width="100%" height="100%" style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}>
+      <SvgDefs>
+        <SvgRadialGradient id="cardGlow" cx="50%" cy="42%" r="90%">
+          {stops.map((s) => (
+            <SvgStop key={s.key} offset={s.o} stopColor={s.c} stopOpacity={1} />
+          ))}
+        </SvgRadialGradient>
+      </SvgDefs>
+      <SvgRect x="0" y="0" width="100%" height="100%" fill="url(#cardGlow)" />
+    </BalanceSvg>
+  );
+});
+
 function AnimatedTotal({
   value,
   palette: p,
   dc,
   showBalance,
-  onToggle,
   onPress,
 }: {
   value: number;
   palette: Palette;
   dc: ReturnType<typeof useDisplayCurrency>;
   showBalance: boolean;
-  onToggle: () => void;
   onPress?: () => void;
 }) {
   const t = useT();
   const initializedRef = useRef(false);
   const [displayed, setDisplayed] = useState(0);
-  const fromRef = useRef(0);
-  const targetRef = useRef(value);
-  const startTsRef = useRef<number | null>(null);
-
-  const prevValueRef = useRef<number | null>(null);
+  // Live mirror of `displayed` so the animation always eases from the CURRENT
+  // number, not a stale render closure (the old [value]-dep effect read a stale
+  // `displayed`, which made it jump/restart on every live tick — the jitter).
+  const displayedRef = useRef(0);
 
   useEffect(() => {
-    // On first load with real data, snap directly — no count-up from zero.
+    // First real value → snap, no count-up.
     if (!initializedRef.current && value > 0) {
       initializedRef.current = true;
+      displayedRef.current = value;
       setDisplayed(value);
-      prevValueRef.current = value;
       return;
     }
-    // Subsequent value changes (live price ticks, new transactions) animate smoothly.
-    fromRef.current = displayed;
-    targetRef.current = value;
-    startTsRef.current = Date.now();
-    const dur = 1400;
+    const from = displayedRef.current;
+    const delta = value - from;
+    // Ignore micro-ticks (sub-cent / rounding noise from live prices) so the
+    // number doesn't twitch every websocket frame.
+    if (Math.abs(delta) < 0.01) return;
+
+    // Duration scales gently with how big the jump is, capped — small live
+    // ticks settle fast (~450ms), big changes glide (~1100ms). Keeps it smooth
+    // without ever feeling sluggish or restarting a long anim on every tick.
+    const dur = Math.min(1100, 350 + Math.abs(delta) / Math.max(1, Math.abs(value)) * 4000);
+    const start = Date.now();
     let raf: any;
-    let lastFrameTs = 0;
     const tick = () => {
-      const now = Date.now();
-      if (now - lastFrameTs < 33) { raf = requestAnimationFrame(tick); return; }
-      lastFrameTs = now;
-      const elapsed = now - (startTsRef.current ?? now);
-      const progress = Math.min(1, elapsed / dur);
-      const eased = progress < 0.5
-        ? 8 * progress * progress * progress * progress
-        : 1 - Math.pow(-2 * progress + 2, 4) / 2;
-      setDisplayed(fromRef.current + (targetRef.current - fromRef.current) * eased);
+      const progress = Math.min(1, (Date.now() - start) / dur);
+      // easeOutCubic — fast, natural settle (no jarring mid-point kink).
+      const eased = 1 - Math.pow(1 - progress, 3);
+      const next = from + delta * eased;
+      displayedRef.current = next;
+      setDisplayed(next);
       if (progress < 1) raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
@@ -1235,51 +1299,54 @@ function AnimatedTotal({
   const maskedStr = totalStr.replace(/[0-9]/g, '*');
 
   return (
-    <View style={{ alignItems: 'center', paddingHorizontal: 24, paddingTop: 10, paddingBottom: 2 }}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-        <Pressable onPress={onPress} hitSlop={12}>
-          <Text style={{
-            color: p.fg,
-            // Slightly larger, with a hair of positive letter-spacing so the
-            // digits breathe and read cleanly at a glance.
-            fontSize: fontSize + 4, fontWeight: '600', letterSpacing: 0.5,
-            textAlign: 'center',
-            fontVariant: ['tabular-nums'],
-          }}>
-            {dc.symbol}{showBalance ? totalStr : maskedStr}
-          </Text>
-        </Pressable>
-        {/* Eye toggle sits at the top-right of the balance — replaces the
-            former green/red 24h flash arrow. */}
-        <Pressable onPress={onToggle} hitSlop={10} style={{ padding: 4 }}>
-          <Ionicons
-            name={showBalance ? 'eye-outline' : 'eye-off-outline'}
-            size={20}
-            color={p.fgFaint}
-          />
-        </Pressable>
-      </View>
+    <View style={{ alignItems: 'center', paddingHorizontal: 24, paddingTop: 6, paddingBottom: 2 }}>
+      {/* Balance centers cleanly — the show/hide eye now lives pinned in
+          the sticky block's top-right corner, not beside the number. */}
+      <Pressable onPress={onPress} hitSlop={12}>
+        <Text style={{
+          color: p.fg,
+          // Slightly larger, with a hair of positive letter-spacing so the
+          // digits breathe and read cleanly at a glance.
+          fontSize: fontSize + 4, fontWeight: '600', letterSpacing: 0.5,
+          textAlign: 'center',
+          fontVariant: ['tabular-nums'],
+        }}>
+          {dc.symbol}{showBalance ? totalStr : maskedStr}
+        </Text>
+      </Pressable>
     </View>
   );
 }
 
 /* ── Action buttons — pill row (Revolut / Robinhood style) ────────── */
-interface ActionDef { key: string; icon: keyof typeof Ionicons.glyphMap; label: string; to?: string; onPress?: () => void }
+type ActionTone = 'white' | 'grey' | 'black';
+interface ActionDef { key: string; icon: keyof typeof Ionicons.glyphMap; label: string; tone?: ActionTone; to?: string; onPress?: () => void }
+
+// Buy / Sell / Top up each get a distinct neutral shade so they read as
+// separate buttons — and stay distinct from the white/grey/black gradient
+// behind them. Greys are chosen to sit clearly between pure white/black.
+const TONE_STYLE: Record<ActionTone, { bg: string; fg: string }> = {
+  white: { bg: '#FFFFFF', fg: '#111111' },
+  // Sell — a distinct accent so it clearly contrasts the white/grey/black
+  // gradient and the other two buttons (no longer a muddy mid-grey).
+  grey:  { bg: '#4d4d4d', fg: '#FFFFFF' },
+  black: { bg: '#111111', fg: '#FFFFFF' },
+};
 
 /**
- * Action pill — white in dark mode, black in light mode.
+ * Action pill — tone-driven (Buy=white, Sell=grey, Top up=black).
  */
 function ActionButton({
-  label, onPress, to,
+  label, onPress, to, tone = 'white',
 }: {
   label: string;
   onPress?: () => void;
   to?: string;
+  tone?: ActionTone;
   palette: Palette;
 }) {
   const router = useRouter();
-  const themeMode = useTheme((s) => s.mode);
-  const isDark = themeMode === 'dark';
+  const ts = TONE_STYLE[tone];
 
   const handlePress = () => {
     if (onPress) onPress();
@@ -1287,21 +1354,21 @@ function ActionButton({
   };
 
   return (
-    <PressableScale onPress={handlePress}>
+    <PressableScale onPress={handlePress} style={{ flex: 1 }}>
       <View style={{
-        height: 44,
-        borderRadius: 22,
-        backgroundColor: isDark ? '#ffffff' : '#111111',
-        paddingHorizontal: 18,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: ts.bg,
+        paddingHorizontal: 14,
         alignItems: 'center',
         justifyContent: 'center',
-        shadowColor: isDark ? '#ffffff' : '#000000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.15,
-        shadowRadius: 8,
-        elevation: 3,
+        shadowColor: '#000000',
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.12,
+        shadowRadius: 6,
+        elevation: 2,
       }}>
-        <Text style={{ color: isDark ? '#111111' : '#ffffff', fontSize: 15, fontWeight: '700', letterSpacing: -0.2 }}>
+        <Text style={{ color: ts.fg, fontSize: 14, fontWeight: '700', letterSpacing: -0.2 }}>
           {label}
         </Text>
       </View>
@@ -1309,25 +1376,19 @@ function ActionButton({
   );
 }
 
-function MoreActionButton({ onPress }: { palette: Palette; onPress: () => void }) {
-  const themeMode = useTheme((s) => s.mode);
-  const isDark = themeMode === 'dark';
-
+function MoreActionButton({ palette: p, onPress }: { palette: Palette; onPress: () => void }) {
+  // Neutral pill so the three coloured actions stay the focus.
   return (
     <PressableScale onPress={onPress}>
       <View style={{
-        width: 44, height: 44,
-        borderRadius: 22,
-        backgroundColor: isDark ? '#ffffff' : '#111111',
+        width: 40, height: 40,
+        borderRadius: 20,
+        backgroundColor: p.pillBg,
+        borderWidth: 1, borderColor: p.border,
         alignItems: 'center',
         justifyContent: 'center',
-        shadowColor: isDark ? '#ffffff' : '#000000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.15,
-        shadowRadius: 8,
-        elevation: 3,
       }}>
-        <Text style={{ color: isDark ? '#111111' : '#ffffff', fontSize: 16, fontWeight: '700', letterSpacing: 1.5 }}>
+        <Text style={{ color: p.fg, fontSize: 16, fontWeight: '700', letterSpacing: 1.5 }}>
           {'···'}
         </Text>
       </View>
@@ -1347,6 +1408,9 @@ function HeaderIconButton({
   a11y: string;
   badge?: number;
 }) {
+  // Lives inside the header's segmented pill track, so it carries no
+  // background/border of its own — just a tappable icon with a soft
+  // pressed-state highlight.
   return (
     <Pressable
       onPress={onPress}
@@ -1354,26 +1418,25 @@ function HeaderIconButton({
       accessibilityRole="button"
       accessibilityLabel={a11y}
       style={({ pressed }) => ({
-        width: 38, height: 38, borderRadius: 19,
-        backgroundColor: pressed ? p.border : p.bgElev,
-        borderWidth: 1, borderColor: p.border,
+        width: 32, height: 32, borderRadius: 16,
+        backgroundColor: pressed ? p.border : 'transparent',
         alignItems: 'center', justifyContent: 'center',
       })}
     >
-      <Ionicons name={icon} size={17} color={p.fg} />
+      <Ionicons name={icon} size={16} color={p.fg} />
       {badge !== undefined && badge > 0 && (
         <View
           style={{
             position: 'absolute',
-            top: -3, right: -3,
-            minWidth: 17, height: 17, borderRadius: 9,
+            top: -1, right: -1,
+            minWidth: 16, height: 16, borderRadius: 8,
             backgroundColor: p.redFg,
             borderWidth: 2, borderColor: p.bg,
             alignItems: 'center', justifyContent: 'center',
             paddingHorizontal: 3,
           }}
         >
-          <Text style={{ color: '#fff', fontSize: 9.5, fontWeight: '600' }}>
+          <Text style={{ color: '#fff', fontSize: 9, fontWeight: '600' }}>
             {badge > 9 ? '9+' : badge}
           </Text>
         </View>
@@ -1382,26 +1445,28 @@ function HeaderIconButton({
   );
 }
 
+/**
+ * One segment of the Assets / Activity switcher. Active segment is a
+ * filled ctaBg pill; inactive is transparent muted text.
+ */
 function TabBtn({ label, active, palette: p, onPress }: {
   label: string; active: boolean; palette: Palette; onPress: () => void;
 }) {
   return (
-    <Pressable onPress={onPress} hitSlop={6}>
-      <View style={{ paddingBottom: 10 }}>
+    <Pressable onPress={onPress} hitSlop={4}>
+      <View style={{
+        paddingHorizontal: 22, paddingVertical: 7,
+        borderRadius: 9,
+        backgroundColor: active ? p.ctaBg : 'transparent',
+      }}>
         <Text style={{
-          color: active ? p.fg : p.fgFaint,
-          fontSize: 17,
+          color: active ? p.ctaFg : p.fgMuted,
+          fontSize: 14,
           fontWeight: active ? '700' : '600',
           letterSpacing: -0.2,
         }}>
           {label}
         </Text>
-        {active && (
-          <View style={{
-            position: 'absolute', bottom: -1, left: 0, right: 0,
-            height: 2, backgroundColor: p.fg, borderRadius: 2,
-          }} />
-        )}
       </View>
     </Pressable>
   );
@@ -2410,14 +2475,19 @@ function AssetRow({ wallet, palette: p, onPress, liveUsd, sparkline, changePct, 
 
 /* ── Currency icons ── */
 function CurrencyIcon({ currency, palette: p, size = 44 }: { currency: string; palette: Palette; size?: number }) {
+  const locale = useI18n((s) => s.locale);
   const meta = getCurrencyMeta(currency);
   const isCrypto = meta?.kind === 'crypto';
   if (isCrypto) {
     return <CoinIcon symbol={currency} size={size} />;
   }
+  // Fiat → locale-aware, font-safe symbol (Arabic variants, LD for LYD, …).
+  const glyph = fiatSymbol(currency, locale);
+  // Multi-letter codes (AED/SAR/LD) need to read smaller than a single $/€.
+  const fontSize = glyph.length > 2 ? size * 0.3 : size * 0.5;
   return (
     <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
-      <Text style={{ fontSize: size * 0.5, lineHeight: size * 0.64, color: p.fg }}>{meta?.flagOrIcon ?? currency.slice(0, 2)}</Text>
+      <Text style={{ fontSize, lineHeight: size * 0.64, color: p.fg, fontWeight: '700' }} numberOfLines={1}>{glyph}</Text>
     </View>
   );
 }

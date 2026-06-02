@@ -43,6 +43,7 @@ export default function Onboarding() {
   const themeMode = useTheme((s) => s.mode);
   const toggleTheme = useTheme((s) => s.toggle);
   const locale = useI18n((s) => s.locale);
+  const isAr = locale === 'ar';
 
   const [page, setPage] = useState(0);
   const [langPickerVisible, setLangPickerVisible] = useState(false);
@@ -158,10 +159,13 @@ export default function Onboarding() {
                     <Text
                       style={{
                         color: fg,
-                        fontSize: 38,
+                        fontSize: isAr ? 34 : 38,
                         fontWeight: '800',
-                        letterSpacing: -1.3,
-                        lineHeight: 44,
+                        // Arabic is a connected script: negative tracking jams
+                        // the joined letters, and a tight lineHeight clips the
+                        // dots (i'jām). Give it zero tracking + generous height.
+                        letterSpacing: isAr ? 0 : -1.3,
+                        lineHeight: isAr ? 56 : 44,
                         textAlign: 'center',
                         opacity: active ? 1 : 0.35,
                       }}

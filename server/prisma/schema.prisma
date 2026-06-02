@@ -1390,6 +1390,10 @@ model KnownDevice {
   userId      String
   fingerprint String
   label       String?  // human-readable ("iPhone 15 · Safari")
+  deviceType  String?  // "mobile" | "tablet" | "desktop" | "unknown"
+  os          String?  // parsed OS, e.g. "iOS 17.4"
+  ipAddress   String?  // last-seen IP
+  location    String?  // "City, Country" resolved from the IP
   lastSeenAt  DateTime @default(now())
   createdAt   DateTime @default(now())
 

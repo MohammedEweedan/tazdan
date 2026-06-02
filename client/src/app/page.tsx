@@ -35,7 +35,7 @@ import {
 import { FaApple, FaGooglePlay, FaApplePay, FaGooglePay, FaCcVisa, FaCcMastercard } from "react-icons/fa";
 import { SiRevolut } from "react-icons/si";
 import {
-  motion, useTransform, useMotionValue, useScroll,
+  motion, useTransform, useMotionValue, useScroll, useSpring,
   MotionValue, AnimatePresence,
 } from "framer-motion";
 import { ContainerScroll } from "@/components/ui/container-scroll-animation";
@@ -2773,7 +2773,16 @@ function PhoneJourney() {
   const isAr = useIsAr();
 
   const ref = useRef<HTMLDivElement>(null);
-  const { scrollYProgress } = useScroll({ target: ref, offset: ["start start", "end end"] });
+  const { scrollYProgress: rawProgress } = useScroll({ target: ref, offset: ["start start", "end end"] });
+  // Smooth the raw scroll value through a spring so the ~20 derived transforms
+  // below glide instead of snapping to each discrete scroll event — this is the
+  // fix for the jittery journey. Tuned for a responsive-but-buttery feel.
+  const scrollYProgress = useSpring(rawProgress, {
+    stiffness: 120,
+    damping: 28,
+    mass: 0.35,
+    restDelta: 0.0005,
+  });
 
   const textMain  = dark ? "#ffffff" : "#0a0a0a";
   const textMuted = dark ? "rgba(255,255,255,0.55)" : "rgba(0,0,0,0.55)";
