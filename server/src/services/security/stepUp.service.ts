@@ -24,6 +24,7 @@ import { prisma } from '../../utils/prisma';
 import { AppError } from '../../middleware/errorHandler';
 import { sendEmail } from '../email';
 import { logger } from '../../utils/logger';
+import { parseUserAgent, geoLocate } from '../../utils/deviceInfo';
 
 export const STEP_UP_USD = Number(process.env.STEP_UP_USD ?? '1000');
 const TTL_MS = 10 * 60_000;
@@ -57,12 +58,48 @@ export async function isKnownDevice(userId: string, fingerprint: string): Promis
   return !!d;
 }
 
-/** Remember a device after a successful step-up (or first trusted login). */
-export async function rememberDevice(userId: string, fingerprint: string, label?: string): Promise<void> {
+/**
+ * Remember a device after a successful step-up (or first trusted login).
+ *
+ * Captures a human-readable label, device type, OS, IP, and "City, Country"
+ * from the request so the Trusted Devices screen can show real detail instead
+ * of a generic "Verified device". Geo lookup is best-effort and never blocks.
+ */
+export async function rememberDevice(
+  userId: string,
+  fingerprint: string,
+  req?: { headers: Record<string, any>; ip?: string },
+): Promise<void> {
+  let label: string | undefined;
+  let deviceType: string | undefined;
+  let os: string | undefined;
+  let ipAddress: string | undefined;
+  let location: string | null = null;
+
+  if (req) {
+    const ua = String(req.headers['user-agent'] ?? '');
+    const parsed = parseUserAgent(ua);
+    label = parsed.browser ? `${parsed.name} · ${parsed.browser}` : parsed.name;
+    deviceType = parsed.type;
+    os = parsed.os;
+    ipAddress =
+      req.ip ||
+      (req.headers['x-forwarded-for']?.toString().split(',')[0].trim()) ||
+      undefined;
+    location = await geoLocate(ipAddress).catch(() => null);
+  }
+
   await prisma.knownDevice.upsert({
     where: { userId_fingerprint: { userId, fingerprint } },
-    update: { lastSeenAt: new Date(), ...(label ? { label } : {}) },
-    create: { userId, fingerprint, label },
+    update: {
+      lastSeenAt: new Date(),
+      ...(label ? { label } : {}),
+      ...(deviceType ? { deviceType } : {}),
+      ...(os ? { os } : {}),
+      ...(ipAddress ? { ipAddress } : {}),
+      ...(location ? { location } : {}),
+    },
+    create: { userId, fingerprint, label, deviceType, os, ipAddress, location },
   });
 }
 
@@ -207,7 +244,7 @@ export async function enforceStepUp(opts: {
   //    real code (authenticator TOTP if 2FA on, else emailed code). Biometric
   //    is local-only and cannot be trusted on an unrecognized device.
   if (known && opts.biometricVerified) {
-    await rememberDevice(opts.userId, fp).catch(() => {});
+    await rememberDevice(opts.userId, fp, opts.req).catch(() => {});
     return;
   }
 
@@ -218,7 +255,7 @@ export async function enforceStepUp(opts: {
   //    biometric wasn't done we fall through to requiring confirmation.
   const needCode = !known || highValue || !opts.biometricVerified;
   if (!needCode) {
-    await rememberDevice(opts.userId, fp).catch(() => {});
+    await rememberDevice(opts.userId, fp, opts.req).catch(() => {});
     return;
   }
 
@@ -234,5 +271,5 @@ export async function enforceStepUp(opts: {
 
   await verifyStepUp(opts.userId, opts.action, opts.code);
   // Passed → trust this device going forward.
-  await rememberDevice(opts.userId, fp).catch(() => {});
+  await rememberDevice(opts.userId, fp, opts.req).catch(() => {});
 }

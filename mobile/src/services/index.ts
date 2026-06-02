@@ -1,19 +1,18 @@
 /**
- * Service layer — real HTTP only. No mocks.
+ * Service layer — real HTTP only. NO MOCKS, EVER.
  *
  * Auth, wallets, transactions, markets, P2P, cards — every call goes to the
- * Express backend at `EXPO_PUBLIC_API_BASE`. The mocked seed data still lives
- * in `data/fakeData.ts` and is used as a graceful fallback for read-only
- * endpoints when the backend is unreachable (network error / 5xx). Auth
- * mutations always require the backend.
+ * Express backend at `EXPO_PUBLIC_API_BASE`. There is deliberately no mock
+ * fallback: a money app must never show a real user fake balances or holdings
+ * when the backend is unreachable. On a network error / 5xx the call now
+ * REJECTS, so React Query surfaces the error and the UI shows the offline /
+ * error state (see the connectivity banner + offline screen) instead of a
+ * fabricated portfolio.
  */
 
 import { api } from '@/lib/api';
 import { secureStore } from '@/lib/secureStore';
 import { APP, STORAGE_KEYS } from '@/constants';
-import {
-  MOCK_CARDS, MOCK_MARKETS, MOCK_P2P_OFFERS, MOCK_TRANSACTIONS, MOCK_WALLETS,
-} from '@/data/fakeData';
 import type {
   BankAccount, CardEntity, MarketTicker, P2POffer, Transaction, User, Wallet,
 } from '@/types';
@@ -21,26 +20,14 @@ import type {
   ApiMessage, Conversation, BlockedUser, MessagePrivacy,
 } from '@/types/messages';
 
-// Allow `EXPO_PUBLIC_FALLBACK_TO_MOCKS=true` to use seed data when the
-// backend is unreachable OR the route isn't implemented yet (404/5xx).
-// Defaults to `true` so demos work even before the full backend is wired.
-const FALLBACK = (process.env.EXPO_PUBLIC_FALLBACK_TO_MOCKS ?? 'true') === 'true';
-
-function isFallbackable(e: unknown): boolean {
-  if (typeof e !== 'object' || e === null) return false;
-  const ax = e as { code?: string; response?: { status?: number } };
-  if (ax.code === 'ERR_NETWORK') return true;             // backend down
-  const status = ax.response?.status;
-  // 404 — route missing; 5xx — server error. (401 is NOT fallbackable — let the
-  // refresh interceptor in api.ts handle it and retry. Falling back on 401 would
-  // silently hide auth failures and return empty data.)
-  if (status && (status === 404 || status >= 500)) return true;
-  return false;
-}
-
-async function withFallback<T>(req: () => Promise<T>, fallback: T): Promise<T> {
-  try { return await req(); }
-  catch (e) { if (FALLBACK && isFallbackable(e)) return fallback; throw e; }
+/**
+ * Pass-through wrapper kept only so existing call sites compile. It performs
+ * the request and lets every error propagate — the second argument (a former
+ * mock/empty fallback) is intentionally ignored and no longer substitutes
+ * data. Errors reaching here are real and must reach the caller.
+ */
+async function withFallback<T>(req: () => Promise<T>, _ignored?: T): Promise<T> {
+  return req();
 }
 
 // ───────── Auth (REAL — never mocked) ─────────
@@ -188,14 +175,41 @@ export const securityService = {
     const { data } = await api.post('/security/step-up/start', { action });
     return data;
   },
-  async devices(): Promise<{ devices: Array<{ id: string; label: string | null; fingerprint: string; lastSeenAt: string; createdAt: string }> }> {
+  async devices(): Promise<{
+    devices: Array<{
+      id: string;
+      label: string;
+      deviceType: 'mobile' | 'tablet' | 'desktop' | 'unknown';
+      os: string | null;
+      ipAddress: string | null;
+      location: string | null;   // "City, Country" | "Local network" | null
+      lastSeenAt: string;
+      createdAt: string;
+      current: boolean;
+    }>;
+  }> {
     const { data } = await api.get('/security/devices');
     return data;
   },
   async forgetDevice(id: string): Promise<void> {
     await api.delete(`/security/devices/${id}`);
   },
-  async sessions(): Promise<{ sessions: Array<{ id: string; ipAddress: string | null; userAgent: string | null; createdAt: string; expiresAt: string }> }> {
+  async sessions(): Promise<{
+    sessions: Array<{
+      id: string;
+      ipAddress: string | null;
+      userAgent: string | null;
+      createdAt: string;
+      expiresAt: string;
+      lastActiveAt: string;
+      deviceName: string;
+      deviceType: 'mobile' | 'tablet' | 'desktop' | 'unknown';
+      os: string;
+      browser: string | null;
+      location: string | null;   // "City, Country" | "Local network" | null
+      current: boolean;
+    }>;
+  }> {
     const { data } = await api.get('/security/sessions');
     return data;
   },
@@ -239,7 +253,6 @@ export const walletService = {
 
       return wallets;
     },
-    MOCK_WALLETS,
   ),
 };
 
@@ -247,7 +260,6 @@ export const walletService = {
 export const transactionService = {
   list: (page = 1, limit = 20, type?: string, currency?: string) => withFallback<{ items: Transaction[]; total: number }>(
     async () => (await api.get('/transactions', { params: { page, limit, type, currency } })).data,
-    { items: MOCK_TRANSACTIONS.slice((page - 1) * limit, page * limit), total: MOCK_TRANSACTIONS.length },
   ),
 };
 
@@ -278,7 +290,6 @@ export const activityService = {
 export const marketsService = {
   tickers: () => withFallback<MarketTicker[]>(
     async () => (await api.get('/markets/ticker')).data.tickers,
-    MOCK_MARKETS,
   ),
 };
 
@@ -325,7 +336,6 @@ export interface P2PListing {
 export const p2pService = {
   offers: (filter: 'BUY' | 'SELL' | 'ALL' = 'ALL') => withFallback<P2POffer[]>(
     async () => (await api.get('/p2p/offers', { params: { side: filter } })).data.offers,
-    filter === 'ALL' ? MOCK_P2P_OFFERS : MOCK_P2P_OFFERS.filter((o) => o.side === filter),
   ),
   myListings: (): Promise<P2PListing[]> =>
     withFallback<P2PListing[]>(
@@ -550,11 +560,10 @@ export interface CardTransaction {
 export const cardsService = {
   list: () => withFallback<CardEntity[]>(
     async () => {
-      const cards: CardEntity[] = (await api.get('/cards')).data.cards ?? [];
-      // Server returning an empty array means no real cards yet — use demo data
-      return FALLBACK && cards.length === 0 ? MOCK_CARDS : cards;
+      // Real cards only. An empty array means the user has no cards yet —
+      // the UI shows the proper empty state, never demo cards.
+      return (await api.get('/cards')).data.cards ?? [];
     },
-    MOCK_CARDS,
   ),
   issue: async (payload: { tier: 'STARTER' | 'PRO' | 'MASTER'; colorway: CardEntity['colorway'] }): Promise<CardEntity> => {
     const { data } = await api.post('/cards', payload);

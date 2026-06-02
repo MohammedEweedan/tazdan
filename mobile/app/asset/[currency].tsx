@@ -32,7 +32,7 @@ import { useLivePrice } from '@/hooks/useLivePrice';
 import { useOHLC, useOHLCCandles, type Candle } from '@/hooks/useOHLC';
 import { cryptoExchangeAPI, cryptoWalletAPI } from '@/lib/cryptoApi';
 import type { Currency, Wallet } from '@/types';
-import { CURRENCY_META } from '@/constants';
+import { CURRENCY_META, getCurrencyMeta } from '@/constants';
 import { formatMoney } from '@/utils/format';
 import { CurrencyBadge } from '@/components/ui/CurrencyBadge';
 import { AssetTxRow, txBelongsToAsset } from '@/components/transactions/AssetTxRow';
@@ -813,18 +813,20 @@ function NewsSection({ p, sym }: { p: Palette; sym: string }) {
   const [news, setNews] = useState<NewsItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [isFallback, setIsFallback] = useState(false);
+  const [isCountry, setIsCountry] = useState(false);
   const [fetchFailed, setFetchFailed] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const isFiat = FIAT_CODES.has(sym);
+  // For fiat, the feed is the currency's country/economy news.
+  const countryName = isFiat ? (getCurrencyMeta(sym)?.name ?? sym) : sym;
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setIsFallback(false);
+    setIsCountry(false);
     setFetchFailed(false);
     setNews([]);
-
-    if (isFiat) { setLoading(false); return; }
 
     async function load() {
       try {
@@ -833,6 +835,7 @@ function NewsSection({ p, sym }: { p: Palette; sym: string }) {
         const items = Array.isArray(data?.items) ? (data.items as NewsItem[]) : [];
         setNews(items);
         setIsFallback(!!data?.fallback);
+        setIsCountry(data?.kind === 'country');
       } catch {
         if (cancelled) return;
         setFetchFailed(true);
@@ -845,18 +848,7 @@ function NewsSection({ p, sym }: { p: Palette; sym: string }) {
     load();
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sym, isFiat, reloadKey]);
-
-  if (isFiat) {
-    return (
-      <View style={{ paddingVertical: 48, alignItems: 'center', gap: 10 }}>
-        <Ionicons name="cash-outline" size={32} color={p.fgFaint} />
-        <Text style={{ color: p.fgMuted, fontSize: 14, fontWeight: '500', textAlign: 'center' }}>
-          Market news isn't available for fiat currencies.
-        </Text>
-      </View>
-    );
-  }
+  }, [sym, reloadKey]);
 
   if (loading) {
     return (
@@ -905,7 +897,7 @@ function NewsSection({ p, sym }: { p: Palette; sym: string }) {
       <View style={{ paddingVertical: 48, alignItems: 'center', gap: 10 }}>
         <Ionicons name="newspaper-outline" size={32} color={p.fgFaint} />
         <Text style={{ color: p.fgMuted, fontSize: 14, fontWeight: '500', textAlign: 'center' }}>
-          No recent {sym} news found.
+          {isFiat ? `No recent ${countryName} news found.` : `No recent ${sym} news found.`}
         </Text>
       </View>
     );
@@ -913,11 +905,15 @@ function NewsSection({ p, sym }: { p: Palette; sym: string }) {
 
   return (
     <View style={{ gap: 1 }}>
-      {isFallback && (
+      {isCountry ? (
+        <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '700', letterSpacing: 0.6, marginBottom: 12 }}>
+          {countryName.toUpperCase()} · ECONOMY & MARKETS
+        </Text>
+      ) : isFallback ? (
         <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '700', letterSpacing: 0.6, marginBottom: 12 }}>
           TOP CRYPTO NEWS
         </Text>
-      )}
+      ) : null}
       {news.map((item, i) => (
         <Pressable
           key={i}

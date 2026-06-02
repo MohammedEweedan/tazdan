@@ -1,11 +1,15 @@
 import { useMemo } from 'react';
 import { useAuthStore } from '@/store/authStore';
+import { useI18n } from '@/store/i18nStore';
+import { fiatSymbol } from '@/constants';
 import { useForexRates } from './useForexRates';
 import { useBackendTickers } from './useBackendTickers';
 
+// English/default fiat symbols (locale-agnostic snapshot). For locale-aware
+// display use `fiatSymbol(code, locale)` from constants — the hook below does.
 const FIAT_SYMBOLS: Record<string, string> = {
   USD: '$', EUR: '€', GBP: '£',
-  AED: 'د.إ', SAR: '﷼', EGP: 'E£',
+  AED: 'AED', SAR: 'SAR', EGP: 'E£', LYD: 'LD',
   CHF: 'Fr', JPY: '¥', CAD: 'CA$', AUD: 'A$',
 };
 
@@ -18,10 +22,11 @@ export const CURRENCY_SYMBOLS: Record<string, string> = {
   ...CRYPTO_SYMBOLS,
 };
 
-const FIAT_CURRENCIES = new Set(['USD', 'EUR', 'GBP', 'AED', 'SAR', 'EGP', 'CHF', 'JPY', 'CAD', 'AUD']);
+const FIAT_CURRENCIES = new Set(['USD', 'EUR', 'GBP', 'AED', 'SAR', 'EGP', 'LYD', 'CHF', 'JPY', 'CAD', 'AUD']);
 
 export function useDisplayCurrency() {
   const baseCurrency: string = useAuthStore((s) => (s.user as any)?.baseCurrency ?? 'USD');
+  const locale = useI18n((s) => s.locale);
   const { data: rates } = useForexRates();
   const { data: tickers } = useBackendTickers();
 
@@ -35,8 +40,11 @@ export function useDisplayCurrency() {
     return ticker && ticker.price > 0 ? 1 / ticker.price : 1;
   }, [baseCurrency, rates, tickers]);
 
-  const symbol = CURRENCY_SYMBOLS[baseCurrency] ?? (baseCurrency + ' ');
   const isCrypto = !FIAT_CURRENCIES.has(baseCurrency);
+  // Fiat → locale-aware, font-safe glyph; crypto → its ticker symbol.
+  const symbol = isCrypto
+    ? (CRYPTO_SYMBOLS[baseCurrency] ?? (baseCurrency + ' '))
+    : fiatSymbol(baseCurrency, locale);
 
   function convert(usdAmount: number): number {
     return usdAmount * rate;

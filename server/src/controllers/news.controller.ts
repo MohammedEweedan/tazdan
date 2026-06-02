@@ -34,6 +34,61 @@ interface CacheEntry { at: number; data: NewsItem[]; fallback: boolean }
 const TTL_MS = 60_000;
 const cache  = new Map<string, CacheEntry>();
 
+/**
+ * Fiat currencies → their country, used to surface COUNTRY news (not crypto
+ * news) on a fiat asset's detail page. Each entry carries a Google News
+ * locale (hl/gl/ceid) so the feed comes back in the right language/region,
+ * plus a human label used as the search topic.
+ */
+const FIAT_COUNTRY: Record<string, { topic: string; hl: string; gl: string; ceid: string }> = {
+  USD: { topic: 'United States economy', hl: 'en-US', gl: 'US', ceid: 'US:en' },
+  EUR: { topic: 'Eurozone economy',      hl: 'en',    gl: 'EU', ceid: 'EU:en' },
+  GBP: { topic: 'United Kingdom economy',hl: 'en-GB', gl: 'GB', ceid: 'GB:en' },
+  AED: { topic: 'United Arab Emirates economy', hl: 'en', gl: 'AE', ceid: 'AE:en' },
+  SAR: { topic: 'Saudi Arabia economy',  hl: 'en',    gl: 'SA', ceid: 'SA:en' },
+  EGP: { topic: 'Egypt economy',         hl: 'en',    gl: 'EG', ceid: 'EG:en' },
+  LYD: { topic: 'Libya economy',         hl: 'en',    gl: 'LY', ceid: 'LY:en' },
+  SDG: { topic: 'Sudan economy',         hl: 'en',    gl: 'SD', ceid: 'SD:en' },
+  NGN: { topic: 'Nigeria economy',       hl: 'en-NG', gl: 'NG', ceid: 'NG:en' },
+  TRY: { topic: 'Turkey economy',        hl: 'en',    gl: 'TR', ceid: 'TR:en' },
+  LBP: { topic: 'Lebanon economy',       hl: 'en',    gl: 'LB', ceid: 'LB:en' },
+};
+
+/** Minimal Google News RSS → NewsItem parser (no XML dep — regex over items). */
+function parseGoogleNewsRss(xml: string, sourceFallback: string): NewsItem[] {
+  const items: NewsItem[] = [];
+  const blocks = xml.split(/<item>/i).slice(1);
+  for (const block of blocks) {
+    const get = (tag: string) => {
+      const m = block.match(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)</${tag}>`, 'i'));
+      return m ? m[1] : '';
+    };
+    const strip = (s: string) =>
+      s.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1')
+       .replace(/<[^>]+>/g, '')
+       .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+       .replace(/&#39;|&apos;/g, "'").replace(/&quot;/g, '"')
+       .trim();
+    const title = strip(get('title'));
+    const link  = strip(get('link'));
+    if (!title || !link) continue;
+    const pub = Date.parse(strip(get('pubDate')));
+    // Google News titles end with " - Source"; pull that as the source.
+    const dashIdx = title.lastIndexOf(' - ');
+    const source = dashIdx > 0 ? title.slice(dashIdx + 3) : sourceFallback;
+    items.push({
+      title: dashIdx > 0 ? title.slice(0, dashIdx) : title,
+      source,
+      url: link,
+      published: Number.isNaN(pub) ? 0 : Math.floor(pub / 1000),
+      body: strip(get('description')).slice(0, 240),
+      categories: 'country',
+    });
+    if (items.length >= 10) break;
+  }
+  return items;
+}
+
 const SYM_KEYWORDS: Record<string, string[]> = {
   BTC: ['BTC', 'BITCOIN'], ETH: ['ETH', 'ETHEREUM', 'ETHER'],
   SOL: ['SOL', 'SOLANA'],  BNB: ['BNB', 'BINANCE'],
@@ -79,6 +134,32 @@ async function fetchJson(url: string, timeoutMs = 8000): Promise<any | null> {
   }
 }
 
+async function fetchText(url: string, timeoutMs = 8000): Promise<string | null> {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const r = await fetch(url, { signal: ctrl.signal, headers: { 'User-Agent': 'TazdanNews/1.0' } });
+    if (!r.ok) return null;
+    return await r.text();
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(t);
+  }
+}
+
+/** Country/economy news for a fiat currency, via Google News RSS. */
+async function fetchCountryNews(sym: string): Promise<NewsItem[]> {
+  const meta = FIAT_COUNTRY[sym];
+  if (!meta) return [];
+  const url =
+    `https://news.google.com/rss/search?q=${encodeURIComponent(meta.topic)}` +
+    `&hl=${meta.hl}&gl=${meta.gl}&ceid=${encodeURIComponent(meta.ceid)}`;
+  const xml = await fetchText(url);
+  if (!xml) return [];
+  return parseGoogleNewsRss(xml, meta.topic);
+}
+
 // CryptoCompare new Data API — no key needed for basic access.
 const CC_BASE = 'https://data-api.cryptocompare.com/news/v1/article/list?lang=EN&limit=30';
 
@@ -91,6 +172,18 @@ export class NewsController {
       const cached = cache.get(sym);
       if (cached && Date.now() - cached.at < TTL_MS) {
         return res.json({ items: cached.data, fallback: cached.fallback });
+      }
+
+      // Fiat currencies → show the currency's COUNTRY/economy news instead of
+      // crypto news (the old behaviour was a dead "no news for fiat" panel).
+      if (sym in FIAT_COUNTRY) {
+        const countryItems = await fetchCountryNews(sym);
+        if (countryItems.length > 0) {
+          cache.set(sym, { at: Date.now(), data: countryItems, fallback: false });
+          return res.json({ items: countryItems, fallback: false, kind: 'country' });
+        }
+        logger.warn('[news] country feed empty', { sym });
+        return res.status(503).json({ error: 'News feed unavailable', items: [], fallback: false, kind: 'country' });
       }
 
       // 1) Asset-specific feed via the `categories` param. CryptoCompare's

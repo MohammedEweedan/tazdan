@@ -17,7 +17,8 @@ import { useRouter } from 'expo-router';
 import Svg, { Circle, Text as SvgText } from 'react-native-svg';
 
 import { useWallets } from '@/hooks';
-import { getCurrencyMeta } from '@/constants';
+import { getCurrencyMeta, fiatSymbol } from '@/constants';
+import { useI18n } from '@/store/i18nStore';
 import { useTheme, useThemedPalette } from '@/store/themeStore';
 import type { Wallet } from '@/types';
 import { TopGradient } from '@/components/ui/ScreenShell';
@@ -28,6 +29,7 @@ export default function FiatPortfolio() {
   const router = useRouter();
   const p = useThemedPalette();
   const themeMode = useTheme((s) => s.mode);
+  const locale = useI18n((s) => s.locale);
   const { data: wallets } = useWallets();
   const [sort, setSort] = useState<SortOption>('value');
 
@@ -80,7 +82,8 @@ export default function FiatPortfolio() {
   };
   const formatNative = (w: Wallet) => {
     const meta = getCurrencyMeta(w.currency);
-    return `${meta?.symbol ?? ''}${Number(w.balance).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: meta?.decimals ?? 2 })}`;
+    const sym = fiatSymbol(w.currency, locale);
+    return `${sym}${Number(w.balance).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: meta?.decimals ?? 2 })}`;
   };
 
   const COLORS = ['#22c55e', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4'];
@@ -263,8 +266,8 @@ export default function FiatPortfolio() {
                       marginBottom: 8,
                     })}
                   >
-                    <Text style={{ fontSize: 28, width: 40, textAlign: 'center', marginRight: 12 }}>
-                      {meta.flagOrIcon}
+                    <Text style={{ fontSize: fiatSymbol(asset.currency, locale).length > 2 ? 18 : 28, width: 40, textAlign: 'center', marginRight: 12, fontWeight: '700', color: p.fg }}>
+                      {fiatSymbol(asset.currency, locale)}
                     </Text>
                     <View style={{ flex: 1 }}>
                       <Text style={{ color: p.fg, fontSize: 15, fontWeight: '700' }}>{meta.name}</Text>

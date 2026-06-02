@@ -108,32 +108,34 @@ export const palettes: Record<ThemeMode, Palette> = {
     accentFg:  '#FAFAFA',
     shadow:    'rgba(10,10,11,0.10)',
   },
-  // Pure monochrome — black / grey / white only. Semantic up/down signals
-  // collapse to greyscale (gains = bright white, losses = mid-grey) so the
-  // entire UI, charts and badges included, is colour-free.
+  // Monochrome — greyscale only. Softened off the old pitch-black so it's
+  // easier on the eyes: the base is a deep charcoal rather than #000, cards
+  // sit a touch above it, and the foreground is a near-white (not glaring
+  // pure white). Semantic up/down signals still collapse to greyscale.
   mono: {
-    // Assets/Activity surfaces are pure black; only borders separate cards.
-    bg:        '#000000',
-    bgElev:    '#000000',
-    bgRaised:  '#0E0E0E',
-    surface:   '#000000',
-    fg:        '#FFFFFF',
-    fgMuted:   'rgba(255,255,255,0.60)',
-    fgFaint:   'rgba(255,255,255,0.34)',
-    border:    'rgba(255,255,255,0.10)',
-    divider:   'rgba(255,255,255,0.16)',
-    ctaBg:     '#FFFFFF',
-    ctaFg:     '#000000',
-    pillBg:    'rgba(255,255,255,0.08)',
+    // Soft charcoal base — eases eye strain vs. pure black, with cards a
+    // step above so elevation reads without harsh OLED contrast.
+    bg:        '#0C0C0D',
+    bgElev:    '#161617',
+    bgRaised:  '#1E1E20',
+    surface:   '#161617',
+    fg:        '#F5F5F5',                  // near-white, less glare than #FFF
+    fgMuted:   'rgba(245,245,245,0.62)',
+    fgFaint:   'rgba(245,245,245,0.36)',
+    border:    'rgba(255,255,255,0.12)',
+    divider:   'rgba(255,255,255,0.18)',
+    ctaBg:     '#F5F5F5',
+    ctaFg:     '#0C0C0D',
+    pillBg:    'rgba(255,255,255,0.09)',
     // Semantic → greyscale. Positive reads bright/white, negative reads dim grey.
-    greenFg:   '#FFFFFF',
-    greenBg:   'rgba(255,255,255,0.12)',
-    redFg:     'rgba(255,255,255,0.55)',
-    redBg:     'rgba(255,255,255,0.06)',
-    amberFg:   'rgba(255,255,255,0.80)',
-    amberBg:   'rgba(255,255,255,0.08)',
-    accent:    '#FFFFFF',
-    accentFg:  '#000000',
+    greenFg:   '#F5F5F5',
+    greenBg:   'rgba(245,245,245,0.12)',
+    redFg:     'rgba(245,245,245,0.55)',
+    redBg:     'rgba(245,245,245,0.06)',
+    amberFg:   'rgba(245,245,245,0.80)',
+    amberBg:   'rgba(245,245,245,0.08)',
+    accent:    '#F5F5F5',
+    accentFg:  '#0C0C0D',
     shadow:    'rgba(0,0,0,0.7)',
   },
 };
