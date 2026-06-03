@@ -4,7 +4,12 @@
       "Bash(grep -i \"bg\\\\s*[=:]\\\\|#[0-9a-f]\\\\{3,6\\\\}\")",
       "Bash(npx prisma *)",
       "Bash(grep -nE \">[ ]*[A-Z][a-z]{2,}[ a-zA-Z]*<|placeholder=\\\\\"[A-Za-z]|: '[A-Z][a-z]+ [a-z]\" src/components/exchange/BuyWidget.tsx)",
-      "Bash(awk 'NR>=1918 && NR<=2280 && /ACCENT/' src/app/page.tsx)"
+      "Bash(awk 'NR>=1918 && NR<=2280 && /ACCENT/' src/app/page.tsx)",
+      "Bash(grep -n \"await sendEmail\\({ to, subject, html }\\);\" /Users/moe/Downloads/promrkts/server/src/services/email.ts)",
+      "Bash(echo \"SERVER_EXIT=$?\")",
+      "Bash(npx tsc *)",
+      "Bash(echo \"MOBILE_EXIT=$?\")",
+      "Read(//tmp/**)"
     ]
   }
 }

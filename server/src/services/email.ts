@@ -6,9 +6,41 @@ const SMTP_HOST = process.env.SMTP_HOST;
 const SMTP_PORT = parseInt(process.env.SMTP_PORT || '587', 10);
 const SMTP_USER = process.env.SMTP_USER;
 const SMTP_PASS = process.env.SMTP_PASS;
-// From address — defaults to the branded sender. Override in .env with SMTP_FROM.
-const SMTP_FROM = process.env.SMTP_FROM || process.env.MAIL_FROM || 'hi@tazdan.com';
 const REQUIRED_SMTP_ENV = ['SMTP_HOST', 'SMTP_USER', 'SMTP_PASS'] as const;
+
+/* ─────────────────────────────────────────────────────────────
+   Senders — each kind of email ships from a purpose-built address
+   so users (and inbox filters) can tell auth, onboarding, and money
+   movement apart at a glance.
+
+     • noreply@tazdan.com — auth codes / verification / password reset
+     • hi@tazdan.com      — welcome & onboarding (the warm one)
+     • txn@tazdan.com     — every money movement (buy/sell/send/receive/claim…)
+
+   Each is overridable via env so staging can point them elsewhere.
+   Note: when authenticating against a provider that rewrites the From
+   header to the mailbox owner (e.g. plain Gmail SMTP), these aliases
+   only take effect once SMTP_USER is on the tazdan.com domain or the
+   aliases are verified send-as addresses.
+─────────────────────────────────────────────────────────────── */
+const SENDERS = {
+  auth:    process.env.MAIL_FROM_AUTH    || 'noreply@tazdan.com',
+  welcome: process.env.MAIL_FROM_WELCOME || 'hi@tazdan.com',
+  txn:     process.env.MAIL_FROM_TXN     || 'txn@tazdan.com',
+} as const;
+
+type SenderKey = keyof typeof SENDERS;
+
+// Display name shown alongside the address, tuned per sender.
+const SENDER_NAME: Record<SenderKey, string> = {
+  auth:    'tazdan',
+  welcome: 'tazdan',
+  txn:     'tazdan',
+};
+
+function fromHeader(sender: SenderKey): string {
+  return `"${SENDER_NAME[sender]}" <${SENDERS[sender]}>`;
+}
 
 function resolveClientUrl(): string {
   if (process.env.FRONTEND_URL) return process.env.FRONTEND_URL.trim();
@@ -68,7 +100,7 @@ export function getEmailStatus() {
   return {
     smtpConfigured: hasCredentials,
     missingEnv: missingSmtpEnv,
-    fromConfigured: !!(process.env.SMTP_FROM || process.env.MAIL_FROM),
+    senders: SENDERS,
   };
 }
 
@@ -90,49 +122,72 @@ function baseTemplate(title: string, body: string): string {
     table, td { mso-table-lspace: 0pt; mso-table-rspace: 0pt; }
     img { border: 0; height: auto; line-height: 100%; outline: none; text-decoration: none; }
 
+    /* ──────────────────────────────────────────────────────────
+       tazdan identity — pure monochrome. Black, white, and greys
+       only; no colour casts. Surfaces lean on subtle grey gradients
+       so the brand reads the same in light and dark. Every gradient
+       carries a flat background-color fallback for Outlook (which
+       drops linear-gradient and only honours the solid colour).
+    ────────────────────────────────────────────────────────────── */
+
     /* ── Light mode (default) ── */
     body {
       margin: 0;
       padding: 0;
-      background-color: #ffffff;
-      color: #0b0f19;
+      background-color: #f4f4f5;
+      color: #18181b;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
     }
-    .email-bg   { background-color: #ffffff; }
-    .card       { background-color: #f5f5f5; border: 1px solid #e5e5e5; }
-    .text-muted { color: #6b7280; }
-    .text-main  { color: #0b0f19; }
-    .divider    { background-color: #e5e5e5; }
-    .code-box   { background-color: #f0f0f0; border: 1px solid #e0e0e0; }
-    .code-text  { color: #0b0f19; }
-    .btn        { background-color: #0b0f19; color: #ffffff !important; }
-    .footer-text{ color: #9ca3af; }
+    .email-bg   { background-color: #f4f4f5; background-image: linear-gradient(180deg, #ffffff 0%, #f4f4f5 100%); }
+    .card       { background-color: #ffffff; border: 1px solid #e4e4e7; }
+    .hero       { background-color: #18181b; background-image: linear-gradient(120deg, #000000 0%, #27272a 55%, #52525b 100%); }
+    .hero-text  { color: #fafafa !important; }
+    .hero-sub   { color: #d4d4d8 !important; }
+    .text-muted { color: #71717a; }
+    .text-main  { color: #18181b; }
+    .divider    { background-color: #e4e4e7; }
+    .code-box   { background-color: #f4f4f5; background-image: linear-gradient(135deg, #fafafa 0%, #e4e4e7 100%); border: 1px solid #e4e4e7; }
+    .code-text  { color: #18181b; }
+    .btn        { background-color: #18181b; background-image: linear-gradient(120deg, #000000 0%, #3f3f46 100%); color: #ffffff !important; }
+    .btn-ghost  { color: #18181b !important; border-color: #d4d4d8 !important; }
+    .footer-text{ color: #a1a1aa; }
     .logo-light { display: block !important; }
     .logo-dark  { display: none !important; }
 
     /* ── Dark mode ── */
     @media (prefers-color-scheme: dark) {
-      body        { background-color: #080b14 !important; color: #f1f5f9 !important; }
-      .email-bg   { background-color: #080b14 !important; }
-      .card       { background-color: rgba(255,255,255,0.03) !important; border-color: rgba(255,255,255,0.07) !important; }
-      .text-muted { color: #94a3b8 !important; }
-      .text-main  { color: #f1f5f9 !important; }
-      .divider    { background-color: rgba(255,255,255,0.07) !important; }
-      .code-box   { background-color: rgba(255,255,255,0.04) !important; border-color: rgba(255,255,255,0.08) !important; }
-      .code-text  { color: #f1f5f9 !important; }
-      .btn        { background-color: #ffffff !important; color: #0b0f19 !important; }
-      .footer-text{ color: #475569 !important; }
+      body        { background-color: #000000 !important; color: #f4f4f5 !important; }
+      .email-bg   { background-color: #000000 !important; background-image: linear-gradient(180deg, #0a0a0a 0%, #000000 100%) !important; }
+      .card       { background-color: #0c0c0d !important; background-image: linear-gradient(180deg, #141416 0%, #0a0a0b 100%) !important; border-color: #27272a !important; }
+      .hero       { background-color: #1c1c1f !important; background-image: linear-gradient(120deg, #27272a 0%, #3f3f46 55%, #52525b 100%) !important; }
+      .hero-text  { color: #fafafa !important; }
+      .hero-sub   { color: #d4d4d8 !important; }
+      .text-muted { color: #a1a1aa !important; }
+      .text-main  { color: #f4f4f5 !important; }
+      .divider    { background-color: #27272a !important; }
+      .code-box   { background-color: #18181b !important; background-image: linear-gradient(135deg, #27272a 0%, #18181b 100%) !important; border-color: #3f3f46 !important; }
+      .code-text  { color: #fafafa !important; }
+      .btn        { background-color: #fafafa !important; background-image: linear-gradient(120deg, #ffffff 0%, #d4d4d8 100%) !important; color: #09090b !important; }
+      .btn-ghost  { color: #f4f4f5 !important; border-color: #3f3f46 !important; }
+      .footer-text{ color: #52525b !important; }
       .logo-light { display: none !important; }
       .logo-dark  { display: block !important; }
     }
 
     /* ── Layout ── */
-    .wrapper    { max-width: 560px; margin: 0 auto; padding: 48px 24px; }
-    .logo-wrap  { text-align: left; margin-bottom: 40px; }
-    .logo-wrap img { height: 24px; width: auto; max-width: 100px; }
-    .card       { border-radius: 20px; padding: 36px 32px; }
+    .wrapper    { max-width: 560px; margin: 0 auto; padding: 40px 24px; }
+    .logo-wrap  { text-align: left; margin-bottom: 28px; padding-left: 4px; }
+    .logo-wrap img { height: 26px; width: auto; max-width: 110px; }
+    .card       { border-radius: 24px; overflow: hidden; }
+    .card-pad   { padding: 36px 32px; }
+
+    /* Gradient hero band that crowns the card */
+    .hero       { padding: 22px 32px; }
+    .hero-text  { font-size: 13px; font-weight: 800; letter-spacing: 0.18em; text-transform: uppercase; margin: 0; }
+    .hero-sub   { font-size: 13px; font-weight: 500; letter-spacing: 0.01em; margin: 4px 0 0; }
+
     h1 {
-      font-size: 22px;
+      font-size: 23px;
       font-weight: 800;
       letter-spacing: -0.03em;
       margin: 0 0 12px;
@@ -141,28 +196,37 @@ function baseTemplate(title: string, body: string): string {
     p  { font-size: 14px; line-height: 1.7; margin: 0 0 14px; }
     .btn {
       display: inline-block;
-      padding: 13px 26px;
+      padding: 14px 28px;
       border-radius: 100px;
       text-decoration: none;
       font-weight: 700;
       font-size: 14px;
       letter-spacing: -0.01em;
     }
+    .btn-ghost {
+      display: inline-block;
+      padding: 10px 18px;
+      border-radius: 100px;
+      border: 1px solid;
+      text-decoration: none;
+      font-weight: 600;
+      font-size: 13px;
+    }
     .btn-wrap   { margin: 28px 0; }
-    .divider    { height: 1px; margin: 24px 0; }
-    .code-box   { border-radius: 16px; padding: 28px; text-align: center; margin: 24px 0; }
-    .code-text  { font-size: 38px; font-weight: 800; letter-spacing: 12px; font-variant-numeric: tabular-nums; font-family: 'Courier New', monospace; }
-    .footer     { margin-top: 36px; text-align: left; }
+    .divider    { height: 1px; margin: 24px 0; border: 0; }
+    .code-box   { border-radius: 18px; padding: 30px; text-align: center; margin: 24px 0; }
+    .code-text  { font-size: 40px; font-weight: 800; letter-spacing: 14px; font-variant-numeric: tabular-nums; font-family: 'SF Mono', 'Courier New', monospace; }
+    .footer     { margin-top: 32px; text-align: left; padding-left: 4px; }
     .footer p   { font-size: 12px; margin: 0 0 4px; }
     .footer a   { color: inherit; text-decoration: underline; }
-    ul          { color: #6b7280; font-size: 14px; line-height: 1.8; padding-left: 20px; margin: 12px 0 20px; }
+    ul          { color: #71717a; font-size: 14px; line-height: 1.8; padding-left: 20px; margin: 12px 0 20px; }
     li span     { font-weight: 700; }
 
     /* Subtle notice box */
-    .notice { border-radius: 10px; padding: 14px 16px; margin-top: 12px; background: rgba(0,0,0,0.04); }
+    .notice { border-radius: 12px; padding: 14px 16px; margin-top: 12px; background: rgba(0,0,0,0.04); }
     @media (prefers-color-scheme: dark) {
-      .notice { background: rgba(255,255,255,0.04) !important; }
-      ul      { color: #94a3b8 !important; }
+      .notice { background: rgba(255,255,255,0.05) !important; }
+      ul      { color: #a1a1aa !important; }
     }
   </style>
 </head>
@@ -177,12 +241,19 @@ function baseTemplate(title: string, body: string): string {
       </div>
 
       <div class="card">
-        ${body}
+        <!-- Gradient hero band — the brand signature on every email -->
+        <div class="hero">
+          <p class="hero-text">tazdan</p>
+          <p class="hero-sub">money, simplified</p>
+        </div>
+        <div class="card-pad">
+          ${body}
+        </div>
       </div>
 
       <div class="footer">
         <p class="footer-text">Need help? <a href="mailto:support@tazdan.com">support@tazdan.com</a></p>
-        <p class="footer-text">tazdan — money, simplified</p>
+        <p class="footer-text">© tazdan — money, simplified</p>
       </div>
 
     </div>
@@ -206,10 +277,13 @@ export async function sendEmail({
   to,
   subject,
   html,
+  sender = 'welcome',
 }: {
   to: string;
   subject: string;
   html: string;
+  /** Which branded address this email ships from. Defaults to the warm `hi@`. */
+  sender?: SenderKey;
 }) {
   if (isSuppressed(to)) {
     return; // silently drop — simulation/test address
@@ -226,7 +300,7 @@ export async function sendEmail({
     return;
   }
   await transporter.sendMail({
-    from:    `"tazdan" <${SMTP_FROM}>`,
+    from:    fromHeader(sender),
     to,
     subject,
     html,
@@ -319,6 +393,7 @@ export async function sendWelcomeEmail({
     to,
     subject: `Welcome to tazdan, ${firstName} — let's get you set up`,
     html,
+    sender: 'welcome',
   });
 }
 
@@ -348,7 +423,7 @@ export async function sendVerificationEmail({
       <p class="text-muted" style="margin:0; font-size:13px;">Expires in 24 hours. Didn't sign up? You can safely ignore this.</p>
     </div>`
   );
-  await sendEmail({ to, subject: 'Your tazdan verification code', html });
+  await sendEmail({ to, subject: 'Your tazdan verification code', html, sender: 'auth' });
 }
 
 /* ─────────────────────────────────────────────────────────────
@@ -370,7 +445,7 @@ export async function sendWaitlistConfirmation({ to }: { to: string }) {
 
     <p class="text-muted" style="font-size:13px; margin:0;">Questions? Reply to this email or visit <a href="${CLIENT_URL}/faq" style="color:inherit;">tazdan.com/faq</a>.</p>`,
   );
-  await sendEmail({ to, subject: "You're on the tazdan waitlist", html });
+  await sendEmail({ to, subject: "You're on the tazdan waitlist", html, sender: 'welcome' });
 }
 
 /* ─────────────────────────────────────────────────────────────
@@ -402,7 +477,7 @@ export async function sendPasswordResetEmail({
 
     <p class="text-muted" style="font-size:12px; margin-top:16px;">This link expires in 1 hour. Didn't request this? Your account is safe — ignore this email.</p>`
   );
-  await sendEmail({ to, subject: 'Reset your tazdan password', html });
+  await sendEmail({ to, subject: 'Reset your tazdan password', html, sender: 'auth' });
 }
 /* ─────────────────────────────────────────────────────────────
    Withdrawal Confirmed
@@ -440,7 +515,7 @@ export async function sendWithdrawalConfirmed({
       <p class="text-muted" style="margin:0; font-size:13px;">This withdrawal cannot be reversed once broadcast. If you did not initiate this, contact <a href="mailto:support@tazdan.com" style="color:inherit;">support@tazdan.com</a> immediately.</p>
     </div>`,
   );
-  await sendEmail({ to, subject: `Withdrawal sent — ${amount} ${asset}`, html });
+  await sendEmail({ to, subject: `Withdrawal sent — ${amount} ${asset}`, html, sender: 'txn' });
 }
 
 /* ─────────────────────────────────────────────────────────────
@@ -468,7 +543,7 @@ export async function sendDepositConfirmed({
       <a href="${CLIENT_URL}/dashboard/wallet" class="btn">View wallet</a>
     </div>`,
   );
-  await sendEmail({ to, subject: `${amount} ${asset} arrived in your wallet`, html });
+  await sendEmail({ to, subject: `${amount} ${asset} arrived in your wallet`, html, sender: 'txn' });
 }
 
 /* ─────────────────────────────────────────────────────────────
@@ -506,7 +581,7 @@ export async function sendP2PTradeUpdate({
       <a href="${CLIENT_URL}/dashboard/p2p/${tradeId}" class="btn">View trade</a>
     </div>`,
   );
-  await sendEmail({ to, subject: `P2P trade update — ${info.label}`, html });
+  await sendEmail({ to, subject: `P2P trade update — ${info.label}`, html, sender: 'txn' });
 }
 
 /* ─────────────────────────────────────────────────────────────
@@ -603,7 +678,7 @@ export async function sendBuyConfirmed({
       <p class="text-muted" style="margin:0; font-size:13px;">If you did not place this order, contact <a href="mailto:support@tazdan.com" style="color:inherit;">support@tazdan.com</a> immediately.</p>
     </div>`,
   );
-  await sendEmail({ to, subject, html });
+  await sendEmail({ to, subject, html, sender: 'txn' });
 }
 
 /* ── Sell confirmed ─────────────────────────────────────────── */
@@ -636,7 +711,7 @@ export async function sendSellConfirmed({
       <p class="text-muted" style="margin:0; font-size:13px;">If you did not place this order, contact <a href="mailto:support@tazdan.com" style="color:inherit;">support@tazdan.com</a> immediately.</p>
     </div>`,
   );
-  await sendEmail({ to, subject, html });
+  await sendEmail({ to, subject, html, sender: 'txn' });
 }
 
 /* ── Swap confirmed ─────────────────────────────────────────── */
@@ -667,7 +742,7 @@ export async function sendSwapConfirmed({
 
     ${receiptCta(orderId)}`,
   );
-  await sendEmail({ to, subject, html });
+  await sendEmail({ to, subject, html, sender: 'txn' });
 }
 
 /* ── Internal transfer sent (sender copy) ───────────────────── */
@@ -699,7 +774,7 @@ export async function sendTransferSent({
       <p class="text-muted" style="margin:0; font-size:13px;">Internal transfers settle instantly and cannot be reversed. If this wasn't you, contact <a href="mailto:support@tazdan.com" style="color:inherit;">support@tazdan.com</a> immediately.</p>
     </div>`,
   );
-  await sendEmail({ to, subject, html });
+  await sendEmail({ to, subject, html, sender: 'txn' });
 }
 
 /* ─────────────────────────────────────────────────────────────
@@ -733,7 +808,7 @@ export async function sendClaimLinkPending({
   const qrDataUri = await QRCode.toDataURL(claimUrl, {
     width: 220,
     margin: 2,
-    color: { dark: '#0b0f19', light: '#ffffff' },
+    color: { dark: '#09090b', light: '#ffffff' },
   });
 
   const html = baseTemplate(
@@ -757,7 +832,7 @@ export async function sendClaimLinkPending({
 
     <div style="text-align:center; margin:28px 0;">
       <p class="text-muted" style="font-size:12px; font-weight:600; margin-bottom:12px; text-transform:uppercase; letter-spacing:1px;">Or scan with your camera</p>
-      <img src="${qrDataUri}" alt="Scan to claim" width="220" height="220" style="border-radius:16px; border:1px solid #e5e5e5;" />
+      <img src="${qrDataUri}" alt="Scan to claim" width="220" height="220" style="border-radius:16px; border:1px solid #e4e4e7; background:#ffffff;" />
       <p class="text-muted" style="font-size:11px; margin-top:8px;">Scan with the tazdan app or any QR scanner</p>
     </div>
 
@@ -769,7 +844,7 @@ export async function sendClaimLinkPending({
       Don't recognise the sender? You can safely ignore this — the funds will return to them automatically after the expiry date.
     </p>`,
   );
-  await sendEmail({ to, subject, html });
+  await sendEmail({ to, subject, html, sender: 'txn' });
 }
 
 export async function sendClaimLinkClaimedSenderCopy({
@@ -795,7 +870,7 @@ export async function sendClaimLinkClaimedSenderCopy({
 
     ${receiptCta(linkId)}`,
   );
-  await sendEmail({ to, subject, html });
+  await sendEmail({ to, subject, html, sender: 'txn' });
 }
 
 /* ── Internal transfer received (recipient copy) ────────────── */
@@ -823,5 +898,5 @@ export async function sendTransferReceived({
 
     ${receiptCta(transferId)}`,
   );
-  await sendEmail({ to, subject, html });
+  await sendEmail({ to, subject, html, sender: 'txn' });
 }

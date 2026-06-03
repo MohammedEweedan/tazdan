@@ -37,10 +37,33 @@ import { TopGradient } from '@/components/ui/ScreenShell';
  * 18+ check — server enforces this too, but we mirror it here for fast
  * client-side feedback.
  */
+/**
+ * Parse a `dd/mm/yyyy` string into a Date, rejecting impossible dates
+ * (e.g. 31/02/2000). Returns null if the string is malformed or invalid.
+ */
+function parseDdMmYyyy(dob: string): Date | null {
+  const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(dob);
+  if (!m) return null;
+  const day = Number(m[1]);
+  const month = Number(m[2]);
+  const year = Number(m[3]);
+  if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+  const d = new Date(year, month - 1, day);
+  // Reject roll-over (e.g. 31/02 → 03 March): the components must round-trip.
+  if (d.getFullYear() !== year || d.getMonth() !== month - 1 || d.getDate() !== day) return null;
+  return d;
+}
+
+/** dd/mm/yyyy → YYYY-MM-DD for the API (which expects an ISO date). */
+function ddMmYyyyToIso(dob: string): string {
+  const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(dob);
+  if (!m) return dob;
+  return `${m[3]}-${m[2]}-${m[1]}`;
+}
+
 function isAdultDateString(dob: string): boolean {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(dob)) return false;
-  const d = new Date(dob);
-  if (Number.isNaN(d.getTime())) return false;
+  const d = parseDdMmYyyy(dob);
+  if (!d) return false;
   const cutoff = new Date();
   cutoff.setFullYear(cutoff.getFullYear() - 18);
   return d.getTime() <= cutoff.getTime();
@@ -52,7 +75,7 @@ const stepOneSchema = z.object({
   email:     z.string().email('Enter a valid email'),
   country:   z.string().length(2, 'Select your country'),
   phone:     z.string().regex(/^\d{4,20}$/, 'Enter a valid phone number'),
-  dateOfBirth: z.string().refine(isAdultDateString, 'You must be 18 or older (YYYY-MM-DD)'),
+  dateOfBirth: z.string().refine(isAdultDateString, 'You must be 18 or older (dd/mm/yyyy)'),
   password:  z.string().min(8, 'At least 8 characters'),
   username:  z.string().min(3, 'Handle is required (3+ chars)').regex(/^[a-z0-9._]+$/i, 'Handle: a-z 0-9 . _'),
   referralCode: z.string().optional(),
@@ -149,7 +172,7 @@ export default function Register() {
         country: data.country,
         phoneCountryCode: COUNTRY_BY_ISO[data.country].dialCode,
         phone: data.phone,
-        dateOfBirth: data.dateOfBirth, // YYYY-MM-DD
+        dateOfBirth: ddMmYyyyToIso(data.dateOfBirth), // dd/mm/yyyy → YYYY-MM-DD for the API
         username: data.username,
         avatarUrl: avatarUrl || undefined,
         referralCode: data.referralCode || undefined,
@@ -473,20 +496,20 @@ export default function Register() {
                     </Text>
                   )}
 
-                  {/* Date of birth (YYYY-MM-DD; manual entry to avoid native date-picker dep). */}
+                  {/* Date of birth (dd/mm/yyyy; manual entry to avoid native date-picker dep). */}
                   <Controller
                     control={formOne.control}
                     name="dateOfBirth"
                     render={({ field: { onChange, onBlur, value } }) => (
                       <Field
-                        label="Date of birth (YYYY-MM-DD)"
+                        label="Date of birth (dd/mm/yyyy)"
                         value={value || ''}
                         onChangeText={(t) => {
-                          // Auto-insert dashes for friendlier typing.
+                          // Auto-insert slashes for friendlier typing: dd/mm/yyyy.
                           const digits = t.replace(/\D/g, '').slice(0, 8);
                           let out = digits;
-                          if (digits.length > 4) out = `${digits.slice(0, 4)}-${digits.slice(4)}`;
-                          if (digits.length > 6) out = `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6)}`;
+                          if (digits.length > 2) out = `${digits.slice(0, 2)}/${digits.slice(2)}`;
+                          if (digits.length > 4) out = `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`;
                           onChange(out);
                         }}
                         onBlur={onBlur}
