@@ -1,12 +1,21 @@
 import nodemailer from 'nodemailer';
 import path from 'path';
 import QRCode from 'qrcode';
+import axios from 'axios';
 
 const SMTP_HOST = process.env.SMTP_HOST;
 const SMTP_PORT = parseInt(process.env.SMTP_PORT || '587', 10);
 const SMTP_USER = process.env.SMTP_USER;
 const SMTP_PASS = process.env.SMTP_PASS;
 const REQUIRED_SMTP_ENV = ['SMTP_HOST', 'SMTP_USER', 'SMTP_PASS'] as const;
+
+// ── Resend (HTTP email API over port 443) ───────────────────────────────
+// Many cloud hosts (e.g. DigitalOcean) block outbound SMTP ports (25/465/587),
+// so nodemailer/Gmail silently time out (ETIMEDOUT). Resend sends over HTTPS,
+// which is never blocked. When RESEND_API_KEY is set we send via Resend;
+// otherwise we fall back to the SMTP transport (handy for local dev).
+const RESEND_API_KEY = process.env.RESEND_API_KEY;
+const useResend = !!RESEND_API_KEY;
 
 /* ─────────────────────────────────────────────────────────────
    Senders — each kind of email ships from a purpose-built address
@@ -54,8 +63,9 @@ function resolveClientUrl(): string {
 
 const CLIENT_URL = resolveClientUrl();
 
-// Logos are embedded inline as CID attachments so they render in every email
-// client (Gmail, Outlook, Apple Mail) without needing a public CDN URL.
+// Logos are embedded inline as base64 data URIs directly in the HTML so they
+// render the same whether the email ships via SMTP or the Resend HTTP API —
+// Resend does not auto-resolve cid: references the way SMTP attachments do.
 // __dirname is:
 //   dev  (ts-node)  → <root>/server/src/services/
 //   prod (node dist) → <root>/server/dist/services/
@@ -70,24 +80,38 @@ function resolveAsset(filename: string): string {
   for (const p of candidates) {
     if (fs.existsSync(p)) return p;
   }
-  return candidates[0]; // best guess; nodemailer will warn if missing
+  return candidates[0]; // best guess
 }
 
-const LOGO_BLACK_PATH = resolveAsset('logo-black.png');
-const LOGO_WHITE_PATH = resolveAsset('logo-white.png');
+/** Read an asset once and return a `data:` URI, or '' if it can't be read. */
+function assetDataUri(filename: string, mime = 'image/png'): string {
+  try {
+    const fs = require('fs') as typeof import('fs');
+    const buf = fs.readFileSync(resolveAsset(filename));
+    return `data:${mime};base64,${buf.toString('base64')}`;
+  } catch {
+    return '';
+  }
+}
 
-// CID values referenced in the HTML via cid:logo-black and cid:logo-white.
-const CID_BLACK = 'logo-black@tazdan.com';
-const CID_WHITE = 'logo-white@tazdan.com';
+// Loaded once at module init. Referenced directly in the <img src="…"> of the
+// template (replaces the old cid: references).
+const LOGO_BLACK_URI = assetDataUri('logo-black.png');
+const LOGO_WHITE_URI = assetDataUri('logo-white.png');
 
-const hasCredentials = !!(SMTP_HOST && SMTP_USER && SMTP_PASS);
+const hasSmtpCredentials = !!(SMTP_HOST && SMTP_USER && SMTP_PASS);
 const missingSmtpEnv = REQUIRED_SMTP_ENV.filter((key) => !process.env[key]);
 
-if (!hasCredentials && process.env.NODE_ENV === 'production') {
-  console.error('[email] SMTP is not configured in production. Missing env:', missingSmtpEnv.join(', '));
+// We can send if EITHER Resend (HTTP) or SMTP is configured.
+const canSend = useResend || hasSmtpCredentials;
+
+if (!canSend && process.env.NODE_ENV === 'production') {
+  console.error('[email] No transport configured in production. Set RESEND_API_KEY (recommended) or SMTP_*');
+} else if (useResend) {
+  console.log('[email] using Resend HTTP API');
 }
 
-const transporter = hasCredentials
+const transporter = hasSmtpCredentials
   ? nodemailer.createTransport({
       host: SMTP_HOST,
       port: SMTP_PORT,
@@ -98,7 +122,10 @@ const transporter = hasCredentials
 
 export function getEmailStatus() {
   return {
-    smtpConfigured: hasCredentials,
+    transport: useResend ? 'resend' : hasSmtpCredentials ? 'smtp' : 'none',
+    canSend,
+    smtpConfigured: hasSmtpCredentials,
+    resendConfigured: useResend,
     missingEnv: missingSmtpEnv,
     senders: SENDERS,
   };
@@ -236,8 +263,8 @@ function baseTemplate(title: string, body: string): string {
 
       <!-- Logo: CID-embedded so it renders without a CDN. Dark/light via media query. -->
       <div class="logo-wrap">
-        <img class="logo-light" src="cid:${CID_BLACK}" alt="tazdan" />
-        <img class="logo-dark"  src="cid:${CID_WHITE}" alt="tazdan" />
+        <img class="logo-light" src="${LOGO_BLACK_URI}" alt="tazdan" />
+        <img class="logo-dark"  src="${LOGO_WHITE_URI}" alt="tazdan" />
       </div>
 
       <div class="card">
@@ -273,6 +300,28 @@ function isSuppressed(address: string): boolean {
   return SUPPRESSED_DOMAINS.some((d) => domain === d || domain.endsWith(`.${d}`));
 }
 
+/** Send via the Resend HTTP API (port 443 — never blocked by host firewalls). */
+async function sendViaResend(opts: { from: string; to: string; subject: string; html: string }) {
+  try {
+    await axios.post(
+      'https://api.resend.com/emails',
+      { from: opts.from, to: [opts.to], subject: opts.subject, html: opts.html },
+      {
+        headers: {
+          Authorization: `Bearer ${RESEND_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        timeout: 10_000,
+      },
+    );
+  } catch (err: any) {
+    // Surface Resend's error body — usually a clear domain/auth message.
+    const detail = err?.response?.data ?? err?.message;
+    console.error('[email] Resend send failed:', opts.subject, 'to', opts.to, '→', detail);
+    throw err;
+  }
+}
+
 export async function sendEmail({
   to,
   subject,
@@ -288,40 +337,26 @@ export async function sendEmail({
   if (isSuppressed(to)) {
     return; // silently drop — simulation/test address
   }
+
+  const from = fromHeader(sender);
+
+  // Prefer Resend (HTTP) when configured; the logos are embedded as inline
+  // data URIs in the HTML, so no attachments are needed on either transport.
+  if (useResend) {
+    await sendViaResend({ from, to, subject, html });
+    return;
+  }
+
   if (!transporter) {
     console.warn(
-      '[email] SMTP not configured — skipping send:',
-      subject,
-      'to',
-      to,
-      'missing',
-      missingSmtpEnv.join(', ') || 'unknown',
+      '[email] No transport configured — skipping send:',
+      subject, 'to', to,
+      '(set RESEND_API_KEY or SMTP_*; missing SMTP:', missingSmtpEnv.join(', ') || 'unknown', ')',
     );
     return;
   }
-  await transporter.sendMail({
-    from:    fromHeader(sender),
-    to,
-    subject,
-    html,
-    // Inline attachments — referenced via cid: in the HTML so logos render
-    // in every client without needing a public CDN URL. Gmail, Outlook, and
-    // Apple Mail all support CID-embedded images in HTML email.
-    attachments: [
-      {
-        filename:    'logo-black.png',
-        path:        LOGO_BLACK_PATH,
-        cid:         CID_BLACK,
-        contentDisposition: 'inline',
-      },
-      {
-        filename:    'logo-white.png',
-        path:        LOGO_WHITE_PATH,
-        cid:         CID_WHITE,
-        contentDisposition: 'inline',
-      },
-    ],
-  });
+
+  await transporter.sendMail({ from, to, subject, html });
 }
 
 /* ─────────────────────────────────────────────────────────────
