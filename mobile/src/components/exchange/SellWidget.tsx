@@ -160,27 +160,26 @@ export function SellWidget({ defaultAsset, lockAsset = false }: SellWidgetProps 
       .map((w) => ({ currency: w.currency, balance: parseFloat(w.balance) }));
   }, [wallets]);
 
-  // ── Receive options — fiat wallets + stablecoins the user holds,
-  //    filtered so you can't receive the same asset you're selling ───
+  // ── Receive options — every fiat the platform settles into (all ledger
+  //    fiats) plus the USDC stablecoin. We DON'T restrict to wallets the user
+  //    already holds: selling crypto into e.g. LYD must be offered even before
+  //    the user has an LYD balance — the backend creates the wallet on
+  //    settlement. Balances are shown when a row exists, else 0. ───
   const receiveOptions = useMemo<ReceiveOption[]>(() => {
-    if (!wallets) return [];
+    // All fiat currencies the ledger supports (mirrors server LEDGER_CURRENCIES).
+    const LEDGER_FIATS = ['USD', 'EUR', 'GBP', 'AED', 'SAR', 'EGP', 'LYD'];
+    const STABLES = ['USDC'];
+    const balanceOf = (cur: string) =>
+      parseFloat(wallets?.find((w) => w.currency === cur)?.balance ?? '0') || 0;
+
     const out: ReceiveOption[] = [];
-    wallets.forEach((w) => {
-      const isFiat = FIAT_CODES.has(w.currency);
-      const isStable = (w.currency as string) === 'USDC';
-      if (!isFiat && !isStable) return;
-      const bal = parseFloat(w.balance ?? '0');
-      const name = isFiat ? fiatName(w.currency) : assetMeta(w.currency).label;
-      out.push({
-        currency: w.currency,
-        balance: bal,
-        isFiat,
-        label: `${name}`,
-      });
-    });
-    // Always ensure the user's base currency is an option even if balance=0
-    if (!out.find((o) => o.currency === baseCurrency)) {
-      out.unshift({ currency: baseCurrency, balance: 0, isFiat: true, label: fiatName(baseCurrency) });
+    // Lead with the user's base currency, then the rest of the fiats.
+    const fiatOrder = [baseCurrency, ...LEDGER_FIATS.filter((c) => c !== baseCurrency)];
+    for (const cur of fiatOrder) {
+      out.push({ currency: cur, balance: balanceOf(cur), isFiat: true, label: fiatName(cur) });
+    }
+    for (const cur of STABLES) {
+      out.push({ currency: cur, balance: balanceOf(cur), isFiat: false, label: assetMeta(cur).label });
     }
     return out;
   }, [wallets, baseCurrency]);

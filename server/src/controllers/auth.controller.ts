@@ -437,7 +437,15 @@ export class AuthController {
       });
 
       const qrCodeUrl = await QRCode.toDataURL(secret.otpauth_url!);
-      res.json({ secret: secret.base32, qrCode: qrCodeUrl });
+      // Return both the data-URI QR and the raw otpauth URL. Field names match
+      // the mobile client (qrCodeDataUrl / otpauthUrl); `qrCode` kept for any
+      // older/web client that still reads it.
+      res.json({
+        secret: secret.base32,
+        otpauthUrl: secret.otpauth_url,
+        qrCodeDataUrl: qrCodeUrl,
+        qrCode: qrCodeUrl,
+      });
     } catch (error) {
       next(error);
     }
