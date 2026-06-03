@@ -210,6 +210,29 @@ export default function AdminScreen() {
     onError: (e: any) => Alert.alert('Failed', e?.response?.data?.error ?? 'Could not clear'),
   });
 
+  const reconcileMut = useMutation({
+    mutationFn: (currency: string) => adminService.reconcileFundIntegrity(currency, 'Admin-confirmed credit reconciliation'),
+    onSuccess: (res) => {
+      qc.invalidateQueries({ queryKey: ['admin-fund-integrity'] });
+      Alert.alert('Reconciled', `Recorded ${res.reconciledAmount} ${res.currency} as an admin credit. Remaining diff: ${res.diffAfter}.`);
+    },
+    onError: (e: any) => Alert.alert('Reconcile failed', e?.response?.data?.error ?? 'Could not reconcile'),
+  });
+
+  // Ask the admin to confirm the breach is a legitimate credit before booking it.
+  const confirmReconcile = (currency: string, diff: string) => {
+    Alert.alert(
+      `Reconcile ${currency}?`,
+      `This records ${diff} ${currency} as an admin credit (a credit reconciliation) so the books balance. ` +
+        `Only do this if the funds are legitimate (e.g. opening balances / admin seeding that entered outside the deposit flow). ` +
+        `No user balances change.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Yes, it was a credit', style: 'destructive', onPress: () => reconcileMut.mutate(currency) },
+      ],
+    );
+  };
+
   const d = dashQ.data as AdminDashboard | undefined;
   const m = metricsQ.data;
   const exp = exposureQ.data;
@@ -537,12 +560,28 @@ export default function AdminScreen() {
             {/* Per-currency drift rows (only show non-OK to keep it tight) */}
             {!!fund?.funds.perCurrency?.some((c) => !c.ok) && (
               <View style={{ backgroundColor: p.bgElev, borderRadius: 14, borderWidth: 1, borderColor: p.border, overflow: 'hidden' }}>
-                {fund.funds.perCurrency.filter((c) => !c.ok).slice(0, 8).map((c) => (
-                  <View key={c.currency} style={{ flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 14, paddingVertical: 9, borderBottomWidth: 1, borderBottomColor: p.border }}>
-                    <Text style={{ color: p.fg, fontSize: 13, fontWeight: '700' }}>{c.currency}</Text>
-                    <Text style={{ color: '#ef4444', fontSize: 12, fontWeight: '600', fontVariant: ['tabular-nums'] }}>off by {c.diff}</Text>
-                  </View>
-                ))}
+                {fund.funds.perCurrency.filter((c) => !c.ok).slice(0, 8).map((c) => {
+                  const positive = !String(c.diff).trim().startsWith('-'); // only a positive diff is a credit recon
+                  return (
+                    <View key={c.currency} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, paddingHorizontal: 14, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: p.border }}>
+                      <Text style={{ color: p.fg, fontSize: 13, fontWeight: '700' }}>{c.currency}</Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                        <Text style={{ color: '#ef4444', fontSize: 12, fontWeight: '600', fontVariant: ['tabular-nums'] }}>off by {c.diff}</Text>
+                        {positive ? (
+                          <Pressable
+                            onPress={() => confirmReconcile(c.currency, c.diff)}
+                            disabled={reconcileMut.isPending}
+                            style={{ paddingHorizontal: 12, paddingVertical: 7, borderRadius: 9, backgroundColor: '#f59e0b', opacity: reconcileMut.isPending ? 0.6 : 1 }}
+                          >
+                            <Text style={{ color: '#1a1a1a', fontSize: 11, fontWeight: '800' }}>{reconcileMut.isPending && reconcileMut.variables === c.currency ? 'Reconciling…' : 'Reconcile'}</Text>
+                          </Pressable>
+                        ) : (
+                          <Text style={{ color: p.fgFaint, fontSize: 10, fontWeight: '600' }}>investigate (leak)</Text>
+                        )}
+                      </View>
+                    </View>
+                  );
+                })}
               </View>
             )}
           </View>

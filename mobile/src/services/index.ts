@@ -782,6 +782,10 @@ export const adminService = {
     const { data } = await api.post<{ message: string }>('/admin/clear-trading-halt', {});
     return data;
   },
+  reconcileFundIntegrity: async (currency: string, note?: string): Promise<{ message: string; currency: string; reconciledAmount: string; diffAfter: string }> => {
+    const { data } = await api.post('/admin/fund-integrity/reconcile', { currency, note });
+    return data;
+  },
   users: (params?: { search?: string; status?: string; kycStatus?: string; page?: number; limit?: number }) =>
     withFallback<{ users: any[]; total: number; page: number; totalPages: number }>(
       async () => {

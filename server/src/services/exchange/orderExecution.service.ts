@@ -122,18 +122,44 @@ async function placeBinanceMarket(opts: {
   const signature = sign(params.toString(), secret);
   params.append('signature', signature);
 
-  const { data } = await axios.post(
-    `${BINANCE_REST}/api/v3/order`,
-    params.toString(),
-    {
-      headers: {
-        'X-MBX-APIKEY': key,
-        'Content-Type': 'application/x-www-form-urlencoded',
+  try {
+    const { data } = await axios.post(
+      `${BINANCE_REST}/api/v3/order`,
+      params.toString(),
+      {
+        headers: {
+          'X-MBX-APIKEY': key,
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        timeout: 10_000,
       },
-      timeout: 10_000,
-    },
-  );
-  return { orderId: String(data?.orderId ?? ''), simulated: false };
+    );
+    return { orderId: String(data?.orderId ?? ''), simulated: false };
+  } catch (err: any) {
+    // Distinguish INFRASTRUCTURE failures from real order REJECTIONS.
+    //  - Infra (Binance unreachable): HTTP 451 geo-block — Binance blocks many
+    //    data-center IPs — plus timeouts / DNS / 5xx. The exchange leg simply
+    //    can't be placed; we fall back to a SIMULATED fill so the user's order
+    //    still settles against our custodial book (broker model). Self-heals to
+    //    real fills the moment Binance is reachable again.
+    //  - Rejection (4xx from Binance's matching engine, e.g. -2010 insufficient
+    //    balance, -1013 LOT_SIZE/filter, bad symbol): a genuine problem — must
+    //    NOT be silently "filled". Rethrow so the caller refunds and surfaces it.
+    const status = err?.response?.status as number | undefined;
+    const code = err?.code as string | undefined; // ETIMEDOUT/ECONNREFUSED/ENOTFOUND…
+    const isGeoBlock = status === 451;
+    const isNetwork = !status || ['ETIMEDOUT', 'ECONNABORTED', 'ECONNREFUSED', 'ENOTFOUND', 'EAI_AGAIN'].includes(code ?? '');
+    const isUpstream5xx = typeof status === 'number' && status >= 500;
+
+    if (isGeoBlock || isNetwork || isUpstream5xx) {
+      console.warn('[binance] unreachable — simulating fill (custodial book):', {
+        symbol: opts.symbol, side: opts.side, status: status ?? code,
+      });
+      return { orderId: null, simulated: true };
+    }
+    // Real rejection from Binance — let it bubble up to the refund path.
+    throw err;
+  }
 }
 
 function roundQty(asset: string, amount: Decimal): string {
