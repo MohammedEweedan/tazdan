@@ -107,6 +107,104 @@ export async function auditFundIntegrity(opts: { haltOnBreach?: boolean } = {}):
   return { checkedAt: Date.now(), ok, perCurrency };
 }
 
+/**
+ * Reconcile a confirmed breach for one currency by recording it as a
+ * legitimate external credit (an admin-acknowledged "credit reconciliation").
+ *
+ * The audit's invariant is: Σ internal balances == money that entered from
+ * outside (deposits − withdrawals + admin credits). When internal balances
+ * exceed that — as with the standing USDT discrepancy from seed/legacy data —
+ * the books say money was "conjured". If an admin confirms the funds are real
+ * (they were credited outside the deposit flow), we make the books honest by
+ * recording WHERE the money came from, without touching any user balance:
+ *
+ *   1. Post a balanced double-entry leg: SYSTEM_ONRAMP (the external rail)
+ *      → PLATFORM, for the diff. This records the inflow on the ledger.
+ *   2. Write an ADMIN_CREDIT Transaction for the diff so auditFundIntegrity's
+ *      "entered from outside" sum picks it up and the breach clears.
+ *
+ * Idempotency: the diff is recomputed live at call time, so re-acknowledging
+ * after balances drift only books the *remaining* gap. Returns the booked
+ * amount and the post-reconcile diff (≈0 on success).
+ */
+export async function reconcileBreach(opts: {
+  currency: string;
+  adminId: string;
+  note?: string;
+}): Promise<{ currency: string; reconciledAmount: string; diffAfter: string }> {
+  const currency = opts.currency.toUpperCase();
+
+  // Recompute the live diff for just this currency (don't trust a stale value
+  // passed from the client — the gap may have changed since it was shown).
+  const report = await auditFundIntegrity({ haltOnBreach: false });
+  const row = report.perCurrency.find((p) => p.currency === currency);
+  if (!row) throw new Error(`No balances found for currency ${currency}`);
+
+  const diff = new Decimal(row.diff);
+  if (diff.abs().lte(EPS)) {
+    return { currency, reconciledAmount: '0', diffAfter: row.diff };
+  }
+  // Only a POSITIVE diff (internal exceeds external — "conjured" funds) is a
+  // credit reconciliation. A negative diff means money LEAKED; that must not be
+  // papered over with a credit — it needs investigation, so we refuse.
+  if (diff.lt(0)) {
+    throw new Error(
+      `Cannot credit-reconcile ${currency}: diff is negative (${row.diff}) — ` +
+        `internal balances are SHORT, indicating a leak, not an unrecorded credit. Investigate.`,
+    );
+  }
+
+  const { isLedgerCurrency } = await import('./ledger.service');
+  const ref = `RECON-${currency}-${Date.now()}`;
+  const memo = `[fund-recon] ${opts.note?.trim() || 'Admin-confirmed credit reconciliation'}`;
+
+  await prisma.$transaction(async (tx: any) => {
+    // 1) Double-entry: external rail funded the platform by `diff`.
+    if (isLedgerCurrency(currency)) {
+      const { postLedger } = await import('./ledger.service');
+      await postLedger(tx, {
+        refType: 'fund_reconciliation',
+        refId: ref,
+        memo,
+        legs: [
+          { type: 'SYSTEM_ONRAMP', currency: currency as any, amount: diff.neg() },
+          { type: 'PLATFORM',      currency: currency as any, amount: diff },
+        ],
+      });
+    }
+    // 2) ADMIN_CREDIT Transaction so the audit's "entered from outside" sum
+    //    includes this going forward. No userId — it's a platform-level
+    //    external adjustment, attributed to the approving admin in metadata.
+    await tx.transaction.create({
+      data: {
+        userId: opts.adminId,
+        type: 'ADMIN_CREDIT',
+        currency: currency as any,
+        amount: new Decimal(diff.toFixed(8)),
+        fee: new Decimal(0),
+        reference: ref,
+        description: memo,
+        metadata: { fundReconciliation: true, reconciledBy: opts.adminId, originalDiff: row.diff } as any,
+      },
+    });
+    await tx.auditLog.create({
+      data: {
+        userId: opts.adminId,
+        action: 'FUND_RECONCILIATION',
+        entity: 'ledger',
+        entityId: ref,
+        newValues: { currency, amount: diff.toString(), note: opts.note || null } as any,
+      },
+    }).catch(() => { /* audit log best-effort */ });
+  });
+
+  // Re-audit to report the residual diff (should be ≈0).
+  const after = await auditFundIntegrity({ haltOnBreach: false });
+  const afterRow = after.perCurrency.find((p) => p.currency === currency);
+  logger.info('[fund-integrity] breach reconciled', { currency, amount: diff.toString(), by: opts.adminId });
+  return { currency, reconciledAmount: diff.toString(), diffAfter: afterRow?.diff ?? '0' };
+}
+
 let started = false;
 /** Start periodic fund-integrity auditing (one worker only). */
 export function startFundIntegrityAudit(intervalMs = Number(process.env.FUND_AUDIT_MS ?? 10 * 60_000)): void {

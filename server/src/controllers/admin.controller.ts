@@ -846,6 +846,26 @@ export class AdminController {
     } catch (error) { next(error); }
   }
 
+  // Admin acknowledges a fund-integrity breach as a legitimate credit
+  // reconciliation. Posts the balancing admin-credit double-entry so the books
+  // balance and future audits pass. Refuses negative diffs (a leak — must be
+  // investigated, never papered over). Audit-logged inside reconcileBreach.
+  static async reconcileFundIntegrity(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const schema = z.object({
+        currency: z.string().min(1).max(10),
+        note: z.string().max(500).optional(),
+      });
+      const { currency, note } = schema.parse(req.body);
+      const { reconcileBreach } = await import('../services/ledger/fundIntegrity.service');
+      const result = await reconcileBreach({ currency, adminId: req.user!.id, note });
+      res.json({
+        message: `Reconciled ${result.reconciledAmount} ${result.currency} as an admin credit.`,
+        ...result,
+      });
+    } catch (error) { next(error); }
+  }
+
   // ── FX status (LYD scrape + order-book skew, for cross-check) ───
   static async getFxStatus(req: AuthRequest, res: Response, next: NextFunction) {
     try {
