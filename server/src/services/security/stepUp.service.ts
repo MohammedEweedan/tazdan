@@ -124,21 +124,29 @@ export async function issueStepUp(userId: string, action: StepUpAction): Promise
   });
   if (!user) throw new AppError('User not found', 404);
 
-  // Idempotency: if a fresh, unconsumed challenge already exists (issued in the
-  // last RESEND_COOLDOWN), reuse it instead of issuing a SECOND code/email.
-  // This is what stops two emails when an action is (re)triggered quickly.
+  // The challenge method must match the user's CURRENT 2FA state. A user with
+  // no authenticator (or who disabled it) must get an EMAILED code.
+  const wantMethod: 'email' | 'totp' = user.twoFactorEnabled ? 'totp' : 'email';
+
+  // Idempotency: if a fresh, unconsumed challenge of the SAME method already
+  // exists (issued in the last RESEND_COOLDOWN), reuse it instead of issuing a
+  // second code/email — stops duplicate emails when an action is re-triggered
+  // quickly (e.g. /execute and /step-up/start firing together). A stale
+  // challenge of the WRONG method (e.g. a leftover TOTP row for a user who no
+  // longer has 2FA) must NOT be reused — that would suppress the email and
+  // leave the user with nothing to enter.
   const existing = await prisma.stepUpChallenge.findFirst({
-    where: { userId, action, consumedAt: null, expiresAt: { gt: new Date() } },
+    where: { userId, action, method: wantMethod, consumedAt: null, expiresAt: { gt: new Date() } },
     orderBy: { createdAt: 'desc' },
   });
   if (existing && Date.now() - existing.createdAt.getTime() < RESEND_COOLDOWN_MS) {
-    return { method: existing.method as 'email' | 'totp' };
+    return { method: wantMethod };
   }
 
-  // Otherwise clear stale challenges and issue a fresh one.
+  // Otherwise clear stale challenges (any method) and issue a fresh one.
   await prisma.stepUpChallenge.deleteMany({ where: { userId, action, consumedAt: null } });
 
-  if (user.twoFactorEnabled) {
+  if (wantMethod === 'totp') {
     // TOTP path — verified live against the authenticator secret; we still
     // record a row so the action knows a challenge is outstanding.
     await prisma.stepUpChallenge.create({
@@ -147,19 +155,29 @@ export async function issueStepUp(userId: string, action: StepUpAction): Promise
     return { method: 'totp' };
   }
 
+  // Email path: create the challenge, then AWAIT the email so a send failure is
+  // surfaced (we don't want to tell the user "check your email" when nothing
+  // sent). If the send fails, delete the orphan challenge and throw so the
+  // client shows a real error instead of prompting for a code that never came.
   const code = String(crypto.randomInt(0, 1_000_000)).padStart(6, '0');
-  await prisma.stepUpChallenge.create({
+  const challenge = await prisma.stepUpChallenge.create({
     data: { userId, action, codeHash: hashCode(code), method: 'email', expiresAt: new Date(Date.now() + TTL_MS) },
   });
-  await sendEmail({
-    to: user.email,
-    subject: `Your tazdan security code: ${code}`,
-    html: `<p>Hi ${user.firstName || 'there'},</p>
-      <p>Confirm your <b>${action}</b> with this code. It expires in 10 minutes.</p>
-      <p style="font-size:28px;font-weight:700;letter-spacing:4px">${code}</p>
-      <p>If you didn't request this, your account may be at risk — change your password and contact support.</p>`,
-    sender: 'auth',
-  }).catch((e) => logger.error('[stepUp] email send failed', { err: emailErrorSummary(e) }));
+  try {
+    await sendEmail({
+      to: user.email,
+      subject: `Your tazdan security code: ${code}`,
+      html: `<p>Hi ${user.firstName || 'there'},</p>
+        <p>Confirm your <b>${action}</b> with this code. It expires in 10 minutes.</p>
+        <p style="font-size:28px;font-weight:700;letter-spacing:4px">${code}</p>
+        <p>If you didn't request this, your account may be at risk — change your password and contact support.</p>`,
+      sender: 'auth',
+    });
+  } catch (e) {
+    logger.error('[stepUp] security-code email failed to send', { userId, action, err: emailErrorSummary(e) });
+    await prisma.stepUpChallenge.delete({ where: { id: challenge.id } }).catch(() => {});
+    throw new AppError('Could not send your security code email. Please try again shortly.', 502);
+  }
   return { method: 'email' };
 }
 
