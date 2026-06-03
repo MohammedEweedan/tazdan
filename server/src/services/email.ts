@@ -66,11 +66,11 @@ const CLIENT_URL = resolveClientUrl();
 // Gmail and others flag data-URI images as suspicious and won't align them
 // with the sending domain; hosting them on tazdan.com is better for inbox
 // placement. The PNGs are served by the web app from its public root
-// (client/public/logo-*.png → https://tazdan.com/logo-*.png). Override the
+// (client/public/icon-*.png → https://tazdan.com/icon-*.png). Override the
 // base with EMAIL_ASSET_BASE if assets live elsewhere (e.g. a CDN/subdomain).
 const EMAIL_ASSET_BASE = (process.env.EMAIL_ASSET_BASE || CLIENT_URL).replace(/\/+$/, '');
-const LOGO_BLACK_URI = `${EMAIL_ASSET_BASE}/logo-black.png`;
-const LOGO_WHITE_URI = `${EMAIL_ASSET_BASE}/logo-white.png`;
+const LOGO_BLACK_URI = `${EMAIL_ASSET_BASE}/icon-black.png`;
+const LOGO_WHITE_URI = `${EMAIL_ASSET_BASE}/icon-white.png`;
 
 const hasSmtpCredentials = !!(SMTP_HOST && SMTP_USER && SMTP_PASS);
 const missingSmtpEnv = REQUIRED_SMTP_ENV.filter((key) => !process.env[key]);
