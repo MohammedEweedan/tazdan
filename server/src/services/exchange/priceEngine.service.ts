@@ -17,6 +17,7 @@ import { randomUUID } from 'crypto';
 import { redisGet, redisSet, redisDel, getRedisClient } from '../../utils/redis';
 import { prisma } from '../../utils/prisma';
 import { isLedgerCurrency } from '../ledger/ledger.service';
+import { logger } from '../../utils/logger';
 
 Decimal.set({ precision: 40 });
 
@@ -156,11 +157,92 @@ const priceCache = new Map<string, { price: Decimal; exp: number }>();
 const PRICE_TTL_MS = 5_000;
 const PRICE_TTL_S  = 5;
 
+// ── "Last good" price fallback (long TTL) ────────────────────────────
+// Binance can be temporarily unreachable from the production host — it
+// geo-blocks / IP-blocks many data-center ranges (HTTP 451) and can time
+// out under load. Without a fallback, every quote 500s ("Could not fetch
+// price…") and the buy widget breaks on load. So alongside the 5 s fresh
+// cache we persist the last successfully fetched price for much longer and
+// serve it when the live fetch fails. Stale-but-usable beats a hard 500;
+// the disclosed spread absorbs minor drift, and the price still refreshes
+// the moment Binance is reachable again.
+const STALE_PRICE_TTL_S = 6 * 60 * 60; // 6h — survives extended outages
+const lastGoodPrice = new Map<string, Decimal>();
+
+function staleKey(symbol: string): string {
+  return `price:last:${symbol}`;
+}
+
+async function readStalePrice(symbol: string): Promise<Decimal | null> {
+  const mem = lastGoodPrice.get(symbol);
+  if (mem) return mem;
+  try {
+    const cached = await redisGet<string>(staleKey(symbol));
+    if (cached) {
+      const price = new Decimal(cached);
+      lastGoodPrice.set(symbol, price);
+      return price;
+    }
+  } catch { /* Redis unavailable — no stale price */ }
+  return null;
+}
+
+function writeStalePrice(symbol: string, price: Decimal): void {
+  lastGoodPrice.set(symbol, price);
+  redisSet(staleKey(symbol), price.toString(), STALE_PRICE_TTL_S).catch(() => { /* non-fatal */ });
+}
+
 /**
- * Fetch the last trade price for a Binance pair.
+ * Fetch the last trade price for a USDT-quoted symbol (e.g. "BTCUSDT").
  * Results are cached in Redis (5 s) with an in-process fallback to absorb
- * burst traffic without hitting Binance on every quote request.
+ * burst traffic without hitting the upstream on every quote request.
  */
+// ── Price providers ──────────────────────────────────────────────────
+// Binance is primary, but it returns HTTP 451 to many data-center IPs and
+// regions — so production hosts often can't reach it at all. We therefore
+// try a chain of providers, each reachable from blocked regions, and use
+// the first that answers. All are symbol-driven (no per-coin ID map), keyed
+// off the base asset extracted from the "<ASSET>USDT" symbol, and priced in
+// USD/USDT (≈1:1 for our spread math). Order matters: cheapest/most-reliable
+// first. Override or disable Binance via BINANCE_REST_URL.
+type PriceProvider = { name: string; fetch: (base: string) => Promise<Decimal | null> };
+
+const PRICE_PROVIDERS: PriceProvider[] = [
+  {
+    name: 'binance',
+    fetch: async (base) => {
+      const url = `${BINANCE_REST}/api/v3/ticker/price?symbol=${encodeURIComponent(base)}USDT`;
+      const { data } = await axios.get<{ price: string }>(url, { timeout: 5000 });
+      return data?.price ? new Decimal(data.price) : null;
+    },
+  },
+  {
+    name: 'coinbase',
+    fetch: async (base) => {
+      // https://api.coinbase.com/v2/prices/BTC-USD/spot
+      const url = `https://api.coinbase.com/v2/prices/${encodeURIComponent(base)}-USD/spot`;
+      const { data } = await axios.get<{ data?: { amount?: string } }>(url, { timeout: 5000 });
+      const amt = data?.data?.amount;
+      return amt ? new Decimal(amt) : null;
+    },
+  },
+  {
+    name: 'cryptocompare',
+    fetch: async (base) => {
+      // https://min-api.cryptocompare.com/data/price?fsym=BTC&tsyms=USDT
+      const url = `https://min-api.cryptocompare.com/data/price?fsym=${encodeURIComponent(base)}&tsyms=USDT`;
+      const { data } = await axios.get<{ USDT?: number; Response?: string }>(url, { timeout: 5000 });
+      // CryptoCompare returns 200 with { Response: "Error" } for unknown syms.
+      return data && typeof data.USDT === 'number' ? new Decimal(data.USDT) : null;
+    },
+  },
+];
+
+/** "BTCUSDT" → "BTC". Symbols here are always `<ASSET>USDT`. */
+function symbolToBase(symbol: string): string {
+  return symbol.toUpperCase().replace(/USDT$/, '');
+}
+
 export async function getMarketPrice(symbol: string): Promise<Decimal> {
   const cacheKey = `price:${symbol}`;
 
@@ -178,17 +260,41 @@ export async function getMarketPrice(symbol: string): Promise<Decimal> {
     }
   } catch { /* Redis miss — fall through */ }
 
-  // 3. Live Binance fetch
-  const url = `${BINANCE_REST}/api/v3/ticker/price?symbol=${encodeURIComponent(symbol)}`;
-  const { data } = await axios.get<{ symbol: string; price: string }>(url, { timeout: 5000 });
-  if (!data?.price) throw new Error(`Binance returned no price for ${symbol}`);
-  const price = new Decimal(data.price);
+  // 3. Live fetch — try each provider until one answers.
+  const base = symbolToBase(symbol);
+  const failures: string[] = [];
+  for (const provider of PRICE_PROVIDERS) {
+    try {
+      const price = await provider.fetch(base);
+      if (price && price.gt(0)) {
+        // Populate the fresh caches and the long-lived "last good" fallback.
+        priceCache.set(symbol, { price, exp: Date.now() + PRICE_TTL_MS });
+        redisSet(cacheKey, price.toString(), PRICE_TTL_S).catch(() => { /* non-fatal */ });
+        writeStalePrice(symbol, price);
+        if (provider.name !== 'binance') {
+          logger.info('[priceEngine] price via fallback provider', { symbol, provider: provider.name });
+        }
+        return price;
+      }
+      failures.push(`${provider.name}:empty`);
+    } catch (err) {
+      const status = (err as any)?.response?.status;
+      failures.push(`${provider.name}:${status ?? (err instanceof Error ? err.message : 'err')}`);
+    }
+  }
 
-  // Populate both caches
-  priceCache.set(symbol, { price, exp: Date.now() + PRICE_TTL_MS });
-  redisSet(cacheKey, price.toString(), PRICE_TTL_S).catch(() => { /* non-fatal */ });
-
-  return price;
+  // 4. All providers failed. Serve the last known good price rather than
+  // 500ing the quote. Only if we have never fetched this symbol do we throw.
+  const stale = await readStalePrice(symbol);
+  if (stale) {
+    logger.warn('[priceEngine] all providers failed — serving stale price', {
+      symbol, stalePrice: stale.toString(), failures,
+    });
+    priceCache.set(symbol, { price: stale, exp: Date.now() + PRICE_TTL_MS });
+    return stale;
+  }
+  logger.error('[priceEngine] all providers failed and no stale price', { symbol, failures });
+  throw new Error(`Could not fetch price for ${base} from any provider (${failures.join(', ')})`);
 }
 
 export interface Quote {
