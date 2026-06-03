@@ -1,5 +1,5 @@
-import { useRef, useCallback } from 'react';
-import { StyleSheet } from 'react-native';
+import { useRef, useCallback, useEffect } from 'react';
+import { StyleSheet, Animated, Easing } from 'react-native';
 import { GLView } from 'expo-gl';
 
 const VERT = `
@@ -53,9 +53,37 @@ function compileShader(gl: WebGLRenderingContext, type: number, src: string): We
   return shader;
 }
 
-export function ShaderLines({ style }: { style?: object }) {
+/**
+ * Animated shader lines (original RGB colours).
+ *  - `dimAfterMs` fades the whole layer down to `dimTo` opacity after a delay
+ *    (used on onboarding so the shader recedes after the first few seconds).
+ */
+export function ShaderLines({
+  style,
+  opacity: baseOpacity = 1,
+  dimAfterMs,
+  dimTo = 0.35,
+}: {
+  style?: object;
+  /** Constant opacity for the whole layer — set this low when the shader
+   *  would otherwise hurt foreground contrast. */
+  opacity?: number;
+  dimAfterMs?: number;
+  dimTo?: number;
+}) {
   const rafRef = useRef<number | null>(null);
   const glRef  = useRef<(WebGLRenderingContext & { endFrameEXP: () => void }) | null>(null);
+  const opacity = useRef(new Animated.Value(baseOpacity)).current;
+
+  useEffect(() => {
+    if (dimAfterMs == null) return;
+    const id = setTimeout(() => {
+      Animated.timing(opacity, {
+        toValue: dimTo, duration: 1600, easing: Easing.out(Easing.cubic), useNativeDriver: true,
+      }).start();
+    }, dimAfterMs);
+    return () => clearTimeout(id);
+  }, [dimAfterMs, dimTo, opacity]);
 
   const onContextCreate = useCallback((gl: WebGLRenderingContext & { endFrameEXP: () => void }) => {
     glRef.current = gl;
@@ -93,14 +121,13 @@ export function ShaderLines({ style }: { style?: object }) {
   }, []);
 
   // Cancel animation loop on unmount
-  const cleanup = useCallback(() => {
+  useEffect(() => () => {
     if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
   }, []);
 
   return (
-    <GLView
-      style={[StyleSheet.absoluteFill, style]}
-      onContextCreate={onContextCreate}
-    />
+    <Animated.View style={[StyleSheet.absoluteFill, { opacity }, style]} pointerEvents="none">
+      <GLView style={StyleSheet.absoluteFill} onContextCreate={onContextCreate} />
+    </Animated.View>
   );
 }

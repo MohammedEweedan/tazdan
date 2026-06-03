@@ -127,6 +127,15 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         user = null;
       }
       if (user) {
+        // Defensive merge: if /me comes back without a username/avatar but the
+        // cached profile had one (e.g. the user just set their @handle and the
+        // server read replica hasn't caught up), keep the cached value so the
+        // handle doesn't vanish on reload. Real fields from /me always win.
+        if (lastUser) {
+          if (!user.username && lastUser.username) user.username = lastUser.username;
+          if (!user.avatarUrl && lastUser.avatarUrl) user.avatarUrl = lastUser.avatarUrl;
+          if (!user.avatarEmoji && lastUser.avatarEmoji) user.avatarEmoji = lastUser.avatarEmoji;
+        }
         await cacheLastUser(user);
       } else if (lastUser) {
         // Reconstruct a soft user object from the cached profile. This
@@ -170,9 +179,16 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const result = await authService.login(email, password, twoFactorCode);
     if ('requires2FA' in result) return { requires2FA: true };
 
-    const { user, accessToken, refreshToken } = result;
+    let { user } = result;
+    const { accessToken, refreshToken } = result;
     await secureStore.set(STORAGE_KEYS.accessToken, accessToken);
     await secureStore.set(STORAGE_KEYS.refreshToken, refreshToken);
+    // Every account has a @handle. If the login payload came back lean
+    // (no username), fetch /me so the handle is present instantly — no
+    // "Set @handle" flash, no reload needed to reveal it.
+    if (!user.username) {
+      try { user = await authService.me(); } catch { /* keep lean user */ }
+    }
     await cacheLastUser(user);
     // Fresh login always re-prompts admins for which view to enter.
     await secureStore.remove(VIEW_MODE_KEY).catch(() => {});

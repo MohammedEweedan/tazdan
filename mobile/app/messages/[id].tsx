@@ -640,12 +640,12 @@ const { data: messages = [], isLoading } = useThread(partnerId);  const sendMut 
                   flexDirection: 'row', alignItems: 'center', gap: 8,
                   paddingHorizontal: 10, paddingVertical: 7, marginBottom: 8,
                   borderRadius: 10,
-                  backgroundColor: replyAsSupport ? 'rgba(74,143,224,0.15)' : p.pillBg,
-                  borderWidth: 1, borderColor: replyAsSupport ? 'rgba(74,143,224,0.40)' : p.border,
+                  backgroundColor: replyAsSupport ? p.accentSoft : p.pillBg,
+                  borderWidth: 1, borderColor: replyAsSupport ? p.accentBorder : p.border,
                 }}
               >
-                <Ionicons name={replyAsSupport ? 'shield-checkmark' : 'shield-outline'} size={14} color={replyAsSupport ? '#A3A3A3' : p.fgMuted} />
-                <Text style={{ color: replyAsSupport ? '#A3A3A3' : p.fgMuted, fontSize: 12, fontWeight: '700', flex: 1 }}>
+                <Ionicons name={replyAsSupport ? 'shield-checkmark' : 'shield-outline'} size={14} color={replyAsSupport ? p.accentText : p.fgMuted} />
+                <Text style={{ color: replyAsSupport ? p.accentText : p.fgMuted, fontSize: 12, fontWeight: '700', flex: 1 }}>
                   {replyAsSupport ? t('chat.replyingAsSupport') : t('chat.replyAsSupport')}
                 </Text>
                 <View style={{

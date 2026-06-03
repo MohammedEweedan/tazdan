@@ -66,10 +66,10 @@ export function ReceiveWidget() {
           >
             <View style={{
               paddingVertical: 11, borderRadius: 12, alignItems: 'center',
-              backgroundColor: tab === tabKey ? p.ctaBg : 'transparent',
+              backgroundColor: tab === tabKey ? p.accent : 'transparent',
             }}>
               <Text style={{
-                color: tab === tabKey ? p.ctaFg : p.fgMuted,
+                color: tab === tabKey ? p.accentFg : p.fgMuted,
                 fontSize: 13, fontWeight: '700', letterSpacing: 0.4,
               }}>
                 {tabKey === 'HANDLE' ? t('receive.handleQr') : t('receive.bankTransfer')}

@@ -29,7 +29,7 @@ const ACCENT = '#737373';
 
 const ROLE_META: Record<TeamRole, { label: string; desc: string; color: string }> = {
   OWNER:     { label: 'Owner',     desc: 'Full access including billing',   color: '#f59e0b' },
-  ADMIN:     { label: 'Admin',     desc: 'Manage team and API keys',        color: '#60a5fa' },
+  ADMIN:     { label: 'Admin',     desc: 'Manage team and API keys',        color: '#63a1db' },
   DEVELOPER: { label: 'Developer', desc: 'API key access, view payouts',    color: ACCENT },
   ANALYST:   { label: 'Analyst',   desc: 'View-only — stats and payouts',   color: '#a78bfa' },
 };

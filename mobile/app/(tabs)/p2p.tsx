@@ -238,8 +238,8 @@ function Chip({ active, onPress, label, flag, palette: p }: {
       onPress={onPress}
       style={({ pressed }) => ({
         paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999,
-        backgroundColor: active ? p.fg : p.bgElev,
-        borderWidth: 1, borderColor: active ? p.fg : p.border,
+        backgroundColor: active ? p.accent : p.bgElev,
+        borderWidth: 1, borderColor: active ? p.accent : p.border,
         opacity: pressed ? 0.7 : 1,
         flexDirection: 'row', alignItems: 'center', gap: 4,
       })}
@@ -247,10 +247,10 @@ function Chip({ active, onPress, label, flag, palette: p }: {
       {flag ? (
         <>
           <Text style={{ fontSize: 14, lineHeight: 18 }}>{flag}</Text>
-          <Text style={{ color: active ? p.bg : p.fgMuted, fontSize: 13, fontWeight: '700' }}>{label}</Text>
+          <Text style={{ color: active ? p.accentFg : p.fgMuted, fontSize: 13, fontWeight: '700' }}>{label}</Text>
         </>
       ) : (
-        <Text style={{ color: active ? p.bg : p.fgMuted, fontSize: 13, fontWeight: '700' }}>{label}</Text>
+        <Text style={{ color: active ? p.accentFg : p.fgMuted, fontSize: 13, fontWeight: '700' }}>{label}</Text>
       )}
     </Pressable>
   );
@@ -489,8 +489,8 @@ function OfferDetailSheet({ offer, palette: p, t, onClose, onTradeStarted }: {
                       const active = selectedMethod === m;
                       return (
                         <Pressable key={m} onPress={() => { h.selection(); setMethod(m); }}
-                          style={{ paddingHorizontal: 12, paddingVertical: 7, borderRadius: 10, backgroundColor: active ? p.fg : p.pillBg, borderWidth: 1, borderColor: active ? p.fg : p.border }}>
-                          <Text style={{ color: active ? p.bg : p.fgMuted, fontSize: 12, fontWeight: '700' }}>{m}</Text>
+                          style={{ paddingHorizontal: 12, paddingVertical: 7, borderRadius: 10, backgroundColor: active ? p.accent : p.pillBg, borderWidth: 1, borderColor: active ? p.accent : p.border }}>
+                          <Text style={{ color: active ? p.accentFg : p.fgMuted, fontSize: 12, fontWeight: '700' }}>{m}</Text>
                         </Pressable>
                       );
                     })}
@@ -510,8 +510,8 @@ function OfferDetailSheet({ offer, palette: p, t, onClose, onTradeStarted }: {
                 <View style={{ flexDirection: 'row', backgroundColor: p.bgElev, borderRadius: 10, padding: 3, gap: 3, marginBottom: 10, alignSelf: 'flex-start' }}>
                   {(['fiat', 'crypto'] as const).map((mode) => (
                     <Pressable key={mode} onPress={() => { h.selection(); setInputMode(mode); setRawAmount(''); }}
-                      style={{ paddingHorizontal: 12, paddingVertical: 5, borderRadius: 8, backgroundColor: inputMode === mode ? p.fg : 'transparent' }}>
-                      <Text style={{ color: inputMode === mode ? p.bg : p.fgMuted, fontSize: 11, fontWeight: '600' }}>
+                      style={{ paddingHorizontal: 12, paddingVertical: 5, borderRadius: 8, backgroundColor: inputMode === mode ? p.accent : 'transparent' }}>
+                      <Text style={{ color: inputMode === mode ? p.accentFg : p.fgMuted, fontSize: 11, fontWeight: '600' }}>
                         {mode === 'fiat' ? offer.quote : offer.base}
                       </Text>
                     </Pressable>
@@ -798,11 +798,11 @@ function CreateListingSheet({ palette: p, t, onClose, onCreated }: {
                     onPress={() => { h.selection(); setSide(s); }}
                     style={{
                       flex: 1, paddingVertical: 11, borderRadius: 10, alignItems: 'center',
-                      backgroundColor: side === s ? p.fg : 'transparent',
+                      backgroundColor: side === s ? p.accent : 'transparent',
                     }}
                   >
                     <Text style={{
-                      color: side === s ? p.bg : p.fgMuted,
+                      color: side === s ? p.accentFg : p.fgMuted,
                       fontSize: 13, fontWeight: '600', letterSpacing: 0.4,
                     }}>
                       {t('p2p.listingType').toUpperCase()} {s === 'BUY' ? t('p2p.buy').toUpperCase() : t('p2p.sell').toUpperCase()}
@@ -1084,7 +1084,7 @@ function CreateListingSheet({ palette: p, t, onClose, onCreated }: {
                                       width: 38, height: 38, borderRadius: 19,
                                       backgroundColor: p.pillBg, alignItems: 'center', justifyContent: 'center',
                                     }}>
-                                      <Text style={{ fontSize: 13, fontWeight: '600', color: selected ? p.fg : p.fgMuted }}>
+                                      <Text style={{ fontSize: 13, fontWeight: '600', color: selected ? p.accentText : p.fgMuted }}>
                                         {c.slice(0, 2)}
                                       </Text>
                                     </View>
@@ -1135,13 +1135,13 @@ function CreateListingSheet({ palette: p, t, onClose, onCreated }: {
                           onPress={() => { h.selection(); setMinMode(mode); }}
                           style={{
                             flex: 1, paddingVertical: 6, borderRadius: 8,
-                            backgroundColor: minMode === mode ? p.fg : p.pillBg,
-                            borderWidth: 1, borderColor: minMode === mode ? p.fg : p.border,
+                            backgroundColor: minMode === mode ? p.accent : p.pillBg,
+                            borderWidth: 1, borderColor: minMode === mode ? p.accent : p.border,
                             alignItems: 'center',
                           }}
                         >
                           <Text style={{
-                            color: minMode === mode ? p.bg : p.fgMuted,
+                            color: minMode === mode ? p.accentFg : p.fgMuted,
                             fontSize: 11, fontWeight: '600',
                           }}>
                             {mode === 'fiat' ? fiatCurrency : currency}
@@ -1168,13 +1168,13 @@ function CreateListingSheet({ palette: p, t, onClose, onCreated }: {
                           onPress={() => { h.selection(); setMaxMode(mode); }}
                           style={{
                             flex: 1, paddingVertical: 6, borderRadius: 8,
-                            backgroundColor: maxMode === mode ? p.fg : p.pillBg,
-                            borderWidth: 1, borderColor: maxMode === mode ? p.fg : p.border,
+                            backgroundColor: maxMode === mode ? p.accent : p.pillBg,
+                            borderWidth: 1, borderColor: maxMode === mode ? p.accent : p.border,
                             alignItems: 'center',
                           }}
                         >
                           <Text style={{
-                            color: maxMode === mode ? p.bg : p.fgMuted,
+                            color: maxMode === mode ? p.accentFg : p.fgMuted,
                             fontSize: 11, fontWeight: '600',
                           }}>
                             {mode === 'fiat' ? fiatCurrency : currency}
@@ -1221,11 +1221,11 @@ function CreateListingSheet({ palette: p, t, onClose, onCreated }: {
                         onPress={() => toggleMethod(m)}
                         style={{
                           paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12,
-                          backgroundColor: on ? p.fg : p.pillBg,
-                          borderWidth: 1, borderColor: on ? p.fg : p.border,
+                          backgroundColor: on ? p.accent : p.pillBg,
+                          borderWidth: 1, borderColor: on ? p.accent : p.border,
                         }}
                       >
-                        <Text style={{ color: on ? p.bg : p.fg, fontSize: 12, fontWeight: '700' }}>
+                        <Text style={{ color: on ? p.accentFg : p.fg, fontSize: 12, fontWeight: '700' }}>
                           {m}
                         </Text>
                       </Pressable>
@@ -1255,9 +1255,9 @@ function CreateListingSheet({ palette: p, t, onClose, onCreated }: {
               <SheetSection title="IDENTITY" palette={p}>
                 <Pressable
                   onPress={() => { h.selection(); setAnonymous((v) => !v); }}
-                  style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, paddingHorizontal: 14, borderRadius: 14, backgroundColor: p.bgElev, borderWidth: 1, borderColor: anonymous ? p.fg : p.border }}
+                  style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, paddingHorizontal: 14, borderRadius: 14, backgroundColor: p.bgElev, borderWidth: 1, borderColor: anonymous ? p.accent : p.border }}
                 >
-                  <View style={{ width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: anonymous ? p.fg : p.border, backgroundColor: anonymous ? p.fg : 'transparent', alignItems: 'center', justifyContent: 'center' }}>
+                  <View style={{ width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: anonymous ? p.accent : p.border, backgroundColor: anonymous ? p.accent : 'transparent', alignItems: 'center', justifyContent: 'center' }}>
                     {anonymous && <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: p.bg }} />}
                   </View>
                   <View style={{ flex: 1 }}>
@@ -1387,11 +1387,11 @@ function ChipRow({ palette: p, options, value, onPick }: {
             onPress={() => { h.selection(); onPick(o); }}
             style={{
               paddingHorizontal: 14, paddingVertical: 9, borderRadius: 12,
-              backgroundColor: on ? p.fg : p.pillBg,
-              borderWidth: 1, borderColor: on ? p.fg : p.border,
+              backgroundColor: on ? p.accent : p.pillBg,
+              borderWidth: 1, borderColor: on ? p.accent : p.border,
             }}
           >
-            <Text style={{ color: on ? p.bg : p.fg, fontSize: 13, fontWeight: '700' }}>{o}</Text>
+            <Text style={{ color: on ? p.accentFg : p.fg, fontSize: 13, fontWeight: '700' }}>{o}</Text>
           </Pressable>
         );
       })}

@@ -278,12 +278,12 @@ export function DepositWidget() {
               onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setAmount(String(q)); }}
               style={({ pressed }) => ({
                 flex: 1, paddingVertical: 11, borderRadius: 12,
-                backgroundColor: Number(amount) === q ? p.fg : p.pillBg,
-                borderWidth: 1, borderColor: Number(amount) === q ? p.fg : p.border,
+                backgroundColor: Number(amount) === q ? p.accent : p.pillBg,
+                borderWidth: 1, borderColor: Number(amount) === q ? p.accent : p.border,
                 alignItems: 'center', opacity: pressed ? 0.8 : 1,
               })}
             >
-              <Text style={{ color: Number(amount) === q ? p.bg : p.fg, fontSize: 12, fontWeight: '500' }}>
+              <Text style={{ color: Number(amount) === q ? p.accentFg : p.fg, fontSize: 12, fontWeight: '500' }}>
                 {sym}{q}
               </Text>
             </Pressable>

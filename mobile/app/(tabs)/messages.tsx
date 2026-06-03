@@ -236,7 +236,7 @@ export default function Messages() {
                       fontSize: 13,
                       fontWeight: active ? '800' : '600',
                       letterSpacing: 0.2,
-                      color: active ? p.fg : p.fgMuted,
+                      color: active ? p.accentText : p.fgMuted,
                     }}
                   >
                     {filterLabel[f]}

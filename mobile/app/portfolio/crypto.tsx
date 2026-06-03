@@ -233,7 +233,7 @@ export default function CryptoPortfolio() {
                 key={option} onPress={() => setSort(option)}
                 style={{ flex: 1, paddingVertical: 8, borderRadius: 8, alignItems: 'center', backgroundColor: sort === option ? p.bg : 'transparent' }}
               >
-                <Text style={{ color: sort === option ? p.fg : p.fgMuted, fontSize: 13, fontWeight: sort === option ? '600' : '500', textTransform: 'capitalize' }}>
+                <Text style={{ color: sort === option ? p.accentText : p.fgMuted, fontSize: 13, fontWeight: sort === option ? '600' : '500', textTransform: 'capitalize' }}>
                   {option}
                 </Text>
               </Pressable>

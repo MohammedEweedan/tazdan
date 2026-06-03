@@ -359,13 +359,13 @@ function ChipGrid({
           onPress={() => onPick(c)}
           style={({ pressed }) => ({
             paddingHorizontal: 14, paddingVertical: 10, borderRadius: 999,
-            backgroundColor: c === active ? p.fg : p.bgElev,
-            borderWidth: 1, borderColor: c === active ? p.fg : p.border,
+            backgroundColor: c === active ? p.accent : p.bgElev,
+            borderWidth: 1, borderColor: c === active ? p.accent : p.border,
             opacity: pressed ? 0.85 : 1,
           })}
         >
           <Text style={{
-            color: c === active ? p.bg : p.fg,
+            color: c === active ? p.accentFg : p.fg,
             fontSize: 13, fontWeight: '700', letterSpacing: 0.4,
           }}>
             {c}

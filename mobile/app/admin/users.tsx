@@ -280,9 +280,9 @@ export default function AdminUsers() {
               <Pressable
                 key={f}
                 onPress={() => setFilter(f)}
-                style={{ paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10, backgroundColor: on ? p.fg : p.pillBg, borderWidth: 1, borderColor: on ? p.fg : p.border }}
+                style={{ paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10, backgroundColor: on ? p.accent : p.pillBg, borderWidth: 1, borderColor: on ? p.accent : p.border }}
               >
-                <Text style={{ color: on ? p.bg : p.fg, fontSize: 11, fontWeight: '600', letterSpacing: 0.4 }}>{f.replace('_', ' ')}</Text>
+                <Text style={{ color: on ? p.accentFg : p.fg, fontSize: 11, fontWeight: '600', letterSpacing: 0.4 }}>{f.replace('_', ' ')}</Text>
               </Pressable>
             );
           })}
@@ -380,8 +380,8 @@ export default function AdminUsers() {
                 {CURRENCIES.map((c) => {
                   const on = createOpeningCurrency === c;
                   return (
-                    <Pressable key={c} onPress={() => setCreateOpeningCurrency(c)} style={{ paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10, backgroundColor: on ? p.fg : p.pillBg, borderWidth: 1, borderColor: on ? p.fg : p.border }}>
-                      <Text style={{ color: on ? p.bg : p.fg, fontSize: 12, fontWeight: '700' }}>{c}</Text>
+                    <Pressable key={c} onPress={() => setCreateOpeningCurrency(c)} style={{ paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10, backgroundColor: on ? p.accent : p.pillBg, borderWidth: 1, borderColor: on ? p.accent : p.border }}>
+                      <Text style={{ color: on ? p.accentFg : p.fg, fontSize: 12, fontWeight: '700' }}>{c}</Text>
                     </Pressable>
                   );
                 })}
@@ -546,9 +546,9 @@ export default function AdminUsers() {
                   <Pressable
                     key={c}
                     onPress={() => setCreditCurrency(c)}
-                    style={{ paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10, backgroundColor: on ? p.fg : p.pillBg, borderWidth: 1, borderColor: on ? p.fg : p.border }}
+                    style={{ paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10, backgroundColor: on ? p.accent : p.pillBg, borderWidth: 1, borderColor: on ? p.accent : p.border }}
                   >
-                    <Text style={{ color: on ? p.bg : p.fg, fontSize: 12, fontWeight: '600' }}>{c}</Text>
+                    <Text style={{ color: on ? p.accentFg : p.fg, fontSize: 12, fontWeight: '600' }}>{c}</Text>
                   </Pressable>
                 );
               })}
@@ -702,9 +702,9 @@ function CreateSegment<T extends string>({
             <Pressable
               key={opt}
               onPress={() => onChange(opt)}
-              style={{ paddingHorizontal: 11, paddingVertical: 8, borderRadius: 10, backgroundColor: on ? p.fg : p.pillBg, borderWidth: 1, borderColor: on ? p.fg : p.border }}
+              style={{ paddingHorizontal: 11, paddingVertical: 8, borderRadius: 10, backgroundColor: on ? p.accent : p.pillBg, borderWidth: 1, borderColor: on ? p.accent : p.border }}
             >
-              <Text style={{ color: on ? p.bg : p.fg, fontSize: 11, fontWeight: '700' }}>{opt.replace('_', ' ')}</Text>
+              <Text style={{ color: on ? p.accentFg : p.fg, fontSize: 11, fontWeight: '700' }}>{opt.replace('_', ' ')}</Text>
             </Pressable>
           );
         })}
@@ -745,7 +745,7 @@ function UserCard({ u, p, onMessage, onFreeze, onUnfreeze, onKyc, onCredit, onSt
               </View>
             )}
             {u.role === 'ADMIN' && (
-              <View style={{ paddingHorizontal: 6, paddingVertical: 2, borderRadius: 5, backgroundColor: 'rgba(74,143,224,0.15)' }}>
+              <View style={{ paddingHorizontal: 6, paddingVertical: 2, borderRadius: 5, backgroundColor: 'rgba(99,161,219,0.15)' }}>
                 <Text style={{ color: '#A3A3A3', fontSize: 9, fontWeight: '600', letterSpacing: 0.5 }}>ADMIN</Text>
               </View>
             )}

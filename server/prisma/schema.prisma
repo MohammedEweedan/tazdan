@@ -228,6 +228,11 @@ model User {
   emailVerificationCodeExpires DateTime?
   passwordResetToken           String?                      @unique
   passwordResetExpires         DateTime?
+  // 2FA recovery for locked-out users (lost authenticator). We email a
+  // 6-digit code (hash stored here) and additionally verify phone + DOB
+  // before disabling 2FA. Separate from passwordReset* to avoid collision.
+  twoFactorRecoveryCode        String?
+  twoFactorRecoveryExpires     DateTime?
   phoneVerified                Boolean                      @default(false)
   phoneOtpCode                 String?
   phoneOtpExpires              DateTime?

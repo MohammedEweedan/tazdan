@@ -68,7 +68,7 @@ export default function AdminAML() {
         <View style={{ flexDirection: 'row', gap: 8, paddingHorizontal: 16, marginBottom: 10, flexWrap: 'wrap' }}>
           {[
             ['Open', summary.open ?? 0, '#f59e0b'],
-            ['Reviewing', summary.reviewing ?? 0, '#3b82f6'],
+            ['Reviewing', summary.reviewing ?? 0, '#63a1db'],
             ['Escalated', summary.escalated ?? 0, '#a855f7'],
             ['Critical', summary.critical ?? 0, '#ef4444'],
           ].map(([label, val, col]) => (
@@ -83,8 +83,8 @@ export default function AdminAML() {
           {(['ALL', 'OPEN', 'REVIEWING', 'RESOLVED', 'ESCALATED'] as Filter[]).map((f) => {
             const on = filter === f;
             return (
-              <Pressable key={f} onPress={() => setFilter(f)} style={{ paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10, backgroundColor: on ? p.fg : p.pillBg, borderWidth: 1, borderColor: on ? p.fg : p.border }}>
-                <Text style={{ color: on ? p.bg : p.fg, fontSize: 11, fontWeight: '600' }}>{f}</Text>
+              <Pressable key={f} onPress={() => setFilter(f)} style={{ paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10, backgroundColor: on ? p.accent : p.pillBg, borderWidth: 1, borderColor: on ? p.accent : p.border }}>
+                <Text style={{ color: on ? p.accentFg : p.fg, fontSize: 11, fontWeight: '600' }}>{f}</Text>
               </Pressable>
             );
           })}
@@ -139,8 +139,8 @@ export default function AdminAML() {
               {(['RESOLVED', 'ESCALATED', 'REVIEWING'] as const).map((s) => {
                 const on = newStatus === s;
                 return (
-                  <Pressable key={s} onPress={() => setNewStatus(s)} style={{ flex: 1, paddingVertical: 9, borderRadius: 10, backgroundColor: on ? p.fg : p.bgElev, borderWidth: 1, borderColor: on ? p.fg : p.border, alignItems: 'center' }}>
-                    <Text style={{ color: on ? p.bg : p.fg, fontSize: 11, fontWeight: '700' }}>{s}</Text>
+                  <Pressable key={s} onPress={() => setNewStatus(s)} style={{ flex: 1, paddingVertical: 9, borderRadius: 10, backgroundColor: on ? p.accent : p.bgElev, borderWidth: 1, borderColor: on ? p.accent : p.border, alignItems: 'center' }}>
+                    <Text style={{ color: on ? p.accentFg : p.fg, fontSize: 11, fontWeight: '700' }}>{s}</Text>
                   </Pressable>
                 );
               })}

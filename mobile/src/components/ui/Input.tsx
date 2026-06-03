@@ -33,7 +33,7 @@ export function Input({ label, error, right, value, onFocus, onBlur, ...rest }: 
           height: 64,
           borderRadius: 16,
           borderWidth: 1,
-          borderColor: error ? p.redFg : focused ? p.fg : p.border,
+          borderColor: error ? p.redFg : focused ? p.accentText : p.border,
           backgroundColor: p.pillBg,
           justifyContent: 'center',
           paddingTop: 18,

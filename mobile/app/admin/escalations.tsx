@@ -104,11 +104,11 @@ export default function AdminEscalations() {
                 onPress={() => setFilter(s)}
                 style={{
                   paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10,
-                  backgroundColor: on ? p.fg : p.pillBg,
-                  borderWidth: 1, borderColor: on ? p.fg : p.border,
+                  backgroundColor: on ? p.accent : p.pillBg,
+                  borderWidth: 1, borderColor: on ? p.accent : p.border,
                 }}
               >
-                <Text style={{ color: on ? p.bg : p.fg, fontSize: 12, fontWeight: '600' }}>{s}</Text>
+                <Text style={{ color: on ? p.accentFg : p.fg, fontSize: 12, fontWeight: '600' }}>{s}</Text>
               </Pressable>
             );
           })}

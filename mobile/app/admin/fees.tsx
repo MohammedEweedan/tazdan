@@ -96,9 +96,9 @@ export default function AdminFees() {
                 <Pressable
                   key={s}
                   onPress={() => setSource(s)}
-                  style={{ paddingHorizontal: 12, paddingVertical: 7, borderRadius: 9, backgroundColor: on ? p.fg : p.pillBg, borderWidth: 1, borderColor: on ? p.fg : p.border }}
+                  style={{ paddingHorizontal: 12, paddingVertical: 7, borderRadius: 9, backgroundColor: on ? p.accent : p.pillBg, borderWidth: 1, borderColor: on ? p.accent : p.border }}
                 >
-                  <Text style={{ color: on ? p.bg : p.fg, fontSize: 11, fontWeight: '600', letterSpacing: 0.4 }}>{SOURCE_LABEL[s]}</Text>
+                  <Text style={{ color: on ? p.accentFg : p.fg, fontSize: 11, fontWeight: '600', letterSpacing: 0.4 }}>{SOURCE_LABEL[s]}</Text>
                 </Pressable>
               );
             })}

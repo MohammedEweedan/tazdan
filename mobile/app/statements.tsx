@@ -218,11 +218,11 @@ export default function Statements() {
                 style={{
                   paddingHorizontal: 12, paddingVertical: 8,
                   borderRadius: 999,
-                  backgroundColor: currency === 'ALL' ? p.fg : p.bgElev,
-                  borderWidth: 1, borderColor: currency === 'ALL' ? p.fg : p.border,
+                  backgroundColor: currency === 'ALL' ? p.accent : p.bgElev,
+                  borderWidth: 1, borderColor: currency === 'ALL' ? p.accent : p.border,
                 }}
               >
-                <Text style={{ color: currency === 'ALL' ? p.bg : p.fg, fontSize: 12, fontWeight: '600' }}>
+                <Text style={{ color: currency === 'ALL' ? p.accentFg : p.fg, fontSize: 12, fontWeight: '600' }}>
                   {t('statements.allCurrencies')}
                 </Text>
               </View>
@@ -238,10 +238,10 @@ export default function Statements() {
                   variant="chip"
                   size="md"
                   style={{
-                    backgroundColor: currency === c ? p.fg : p.bgElev,
-                    borderColor: currency === c ? p.fg : p.border,
+                    backgroundColor: currency === c ? p.accent : p.bgElev,
+                    borderColor: currency === c ? p.accent : p.border,
                   }}
-                  codeStyle={{ color: currency === c ? p.bg : p.fg }}
+                  codeStyle={{ color: currency === c ? p.accentFg : p.fg }}
                 />
               </Pressable>
             ))}
@@ -380,11 +380,11 @@ function Chip({
       style={{
         paddingHorizontal: 12, paddingVertical: 8,
         borderRadius: 999,
-        backgroundColor: active ? p.fg : p.bgElev,
-        borderWidth: 1, borderColor: active ? p.fg : p.border,
+        backgroundColor: active ? p.accent : p.bgElev,
+        borderWidth: 1, borderColor: active ? p.accent : p.border,
       }}
     >
-      <Text style={{ color: active ? p.bg : p.fg, fontSize: 12, fontWeight: '600', letterSpacing: 0.2 }}>
+      <Text style={{ color: active ? p.accentFg : p.fg, fontSize: 12, fontWeight: '600', letterSpacing: 0.2 }}>
         {label}
       </Text>
     </PressableScale>

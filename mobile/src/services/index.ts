@@ -65,6 +65,23 @@ export const authService = {
   async resendVerification(): Promise<void> {
     await api.post('/auth/resend-verification');
   },
+  /** Request a password-reset email. Always resolves (server hides whether
+   *  the email exists, to avoid user enumeration). */
+  async forgotPassword(email: string): Promise<void> {
+    await api.post('/auth/forgot-password', { email });
+  },
+  /** Complete a reset with the token/6-digit code from the email + a new password. */
+  async resetPassword(token: string, password: string): Promise<void> {
+    await api.post('/auth/reset-password', { token, password });
+  },
+  /** 2FA recovery (locked out). Step 1: email a 6-digit recovery code. */
+  async request2FARecovery(email: string): Promise<void> {
+    await api.post('/auth/2fa/recover/request', { email });
+  },
+  /** Step 2: code + phone + DOB (YYYY-MM-DD) → server disables 2FA. */
+  async verify2FARecovery(payload: { email: string; code: string; phone: string; dateOfBirth: string }): Promise<void> {
+    await api.post('/auth/2fa/recover/verify', payload);
+  },
   async logout() {
     const refreshToken = await secureStore.get(STORAGE_KEYS.refreshToken);
     if (refreshToken) await api.post('/auth/logout', { refreshToken }).catch(() => {});
@@ -88,8 +105,10 @@ export const authService = {
   async verify2FA(code: string): Promise<void> {
     await api.post('/auth/2fa/verify', { code });
   },
-  async disable2FA(code: string): Promise<void> {
-    await api.post('/auth/2fa/disable', { code });
+  /** Disable 2FA. The server requires BOTH the current TOTP code and the
+   *  account password (so a stolen unlocked phone can't strip 2FA in one tap). */
+  async disable2FA(code: string, password: string): Promise<void> {
+    await api.post('/auth/2fa/disable', { code, password });
   },
 };
 
@@ -746,6 +765,26 @@ export interface AdminFxStatus {
   generatedAt: number;
 }
 
+export interface SystemHealth {
+  status: string;
+  version?: string;
+  environment?: string;
+  uptime?: number;
+  timestamp?: string;
+  checks?: { database?: string; redis?: string };
+  diagnostics?: {
+    email?: {
+      transport?: string;
+      canSend?: boolean;
+      smtpConfigured?: boolean;
+      resendConfigured?: boolean;
+      missingEnv?: string[];
+      senders?: Record<string, string>;
+    };
+  };
+  worker?: number;
+}
+
 export interface AdminFundIntegrity {
   tradingHalted: boolean;
   funds: {
@@ -776,6 +815,12 @@ export const adminService = {
   },
   fundIntegrity: async (): Promise<AdminFundIntegrity> => {
     const { data } = await api.get<AdminFundIntegrity>('/admin/fund-integrity');
+    return data;
+  },
+  /** System health — db / redis / email transport. Public `/health` endpoint
+   *  (the public API is proxied at root, so no /api prefix). */
+  systemHealth: async (): Promise<SystemHealth> => {
+    const { data } = await api.get<SystemHealth>('/health');
     return data;
   },
   clearTradingHalt: async (): Promise<{ message: string }> => {

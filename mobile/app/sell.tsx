@@ -48,13 +48,13 @@ export default function Sell() {
             onPress={() => { h.selection(); setCoin(c); setAmount(''); }}
             style={({ pressed }) => ({
               flex: 1, paddingVertical: 12, borderRadius: 14,
-              backgroundColor: coin === c ? p.fg : p.bgElev,
-              borderWidth: 1, borderColor: coin === c ? p.fg : p.border,
+              backgroundColor: coin === c ? p.accent : p.bgElev,
+              borderWidth: 1, borderColor: coin === c ? p.accent : p.border,
               opacity: pressed ? 0.85 : 1,
               alignItems: 'center',
             })}
           >
-            <Text style={{ color: coin === c ? p.bg : p.fg, fontWeight: '700', fontSize: 13 }}>
+            <Text style={{ color: coin === c ? p.accentFg : p.fg, fontWeight: '700', fontSize: 13 }}>
               {c}
             </Text>
           </Pressable>

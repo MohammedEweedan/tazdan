@@ -409,7 +409,7 @@ export default function AssetDetail() {
             style={{ marginRight: 24, paddingVertical: 12, position: 'relative' }}
           >
             <Text style={{
-              color: tab === t ? p.fg : p.fgMuted,
+              color: tab === t ? p.accentText : p.fgMuted,
               fontSize: 14,
               fontWeight: tab === t ? '700' : '500',
               textTransform: 'capitalize',
@@ -529,10 +529,10 @@ function OverviewTab({
                 <View style={{
                   flexDirection: 'row', alignItems: 'center', gap: 5,
                   paddingHorizontal: 12, paddingVertical: 7, borderRadius: 9,
-                  backgroundColor: chartType === t ? p.fg : 'transparent',
+                  backgroundColor: chartType === t ? p.accent : 'transparent',
                 }}>
-                  <Ionicons name={icon} size={13} color={chartType === t ? p.bg : p.fgMuted} />
-                  <Text style={{ color: chartType === t ? p.bg : p.fgMuted, fontWeight: '700', fontSize: 11, letterSpacing: 0.4 }}>
+                  <Ionicons name={icon} size={13} color={chartType === t ? p.accentFg : p.fgMuted} />
+                  <Text style={{ color: chartType === t ? p.accentFg : p.fgMuted, fontWeight: '700', fontSize: 11, letterSpacing: 0.4 }}>
                     {t === 'line' ? 'Line' : 'Candles'}
                   </Text>
                 </View>
@@ -556,10 +556,10 @@ function OverviewTab({
               >
                 <View style={{
                   paddingVertical: 9, borderRadius: 10, alignItems: 'center',
-                  backgroundColor: range === r ? p.fg : 'transparent',
+                  backgroundColor: range === r ? p.accent : 'transparent',
                 }}>
                   <Text style={{
-                    color: range === r ? p.bg : p.fgMuted,
+                    color: range === r ? p.accentFg : p.fgMuted,
                     fontWeight: '700', fontSize: 11, letterSpacing: 0.4,
                   }}>
                     {r}

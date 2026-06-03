@@ -168,7 +168,9 @@ export function BuyWidget({ defaultAsset, lockAsset = false }: BuyWidgetProps = 
   const { user, biometricEnabled } = useAuthStore();
   const tr = useT();
   const p = useThemedPalette();
-  // Accent follows the active palette (white on dark/mono, black on light).
+  // Accent follows the active palette — the soft brand blue on dark/light,
+  // greyscale in mono. Drives selected chips, the focus ring, and the
+  // "Change" pill below. Primary CTAs stay neutral (p.ctaBg).
   const brandAccent = p.accent;
   const { data: wallets } = useWallets();
   const { data: cards } = useCards();
@@ -371,9 +373,9 @@ export function BuyWidget({ defaultAsset, lockAsset = false }: BuyWidgetProps = 
         if (enrolled) {
           const r = await LocalAuthentication.authenticateAsync({
             promptMessage: `Confirm purchase of ${asset}`,
-            cancelLabel: 'Cancel', fallbackLabel: 'Use passcode', disableDeviceFallback: false,
+            cancelLabel: tr('common.cancel'), fallbackLabel: tr('common.usePasscode'), disableDeviceFallback: false,
           });
-          if (!r.success) { setError('Verification cancelled'); setExec(false); return; }
+          if (!r.success) { setError(tr('common.verificationCancelled')); setExec(false); return; }
           biometricVerified = true;
         }
       } catch { /* biometric unavailable → server will require a code */ }
@@ -527,7 +529,7 @@ export function BuyWidget({ defaultAsset, lockAsset = false }: BuyWidgetProps = 
             })}
           >
             <Ionicons name="git-branch-outline" size={14} color={p.fgMuted} />
-            <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '600', flex: 1 }}>Network</Text>
+            <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '600', flex: 1 }}>{tr('common.network')}</Text>
             <Text style={{ color: p.fg, fontSize: 13, fontWeight: '600' }}>{currentLabel}</Text>
             <Ionicons name="chevron-down" size={14} color={p.fgMuted} />
           </Pressable>
@@ -596,10 +598,11 @@ export function BuyWidget({ defaultAsset, lockAsset = false }: BuyWidgetProps = 
                 backgroundColor: sel ? brandAccent : p.bgElev,
                 borderWidth: 1, borderColor: sel ? brandAccent : p.border,
                 opacity: pressed ? 0.8 : 1,
+                // Soft lift, not a glow — keep the blue calm, never poppy.
                 shadowColor: sel ? brandAccent : 'transparent',
-                shadowOpacity: sel ? 0.35 : 0,
-                shadowOffset: { width: 0, height: 4 },
-                shadowRadius: 10,
+                shadowOpacity: sel ? 0.18 : 0,
+                shadowOffset: { width: 0, height: 3 },
+                shadowRadius: 8,
               })}
             >
               <Text style={{ color: sel ? p.accentFg : p.fgMuted, fontSize: 13, fontWeight: '700' }}>
@@ -658,7 +661,7 @@ export function BuyWidget({ defaultAsset, lockAsset = false }: BuyWidgetProps = 
                   { label: tr('buy.platformFee'), value: fmt(quote.platformFeeSettlement ?? quote.platformFee, 2) },
                   { label: tr('buy.networkFee'),  value: fmt(quote.networkFeeSettlement ?? quote.networkFee, 2) },
                   { label: tr('buy.exchangeRate'), value: `1 ${asset} = ${sym(fundingCurrency)}${fmtPrice(Number(quote.settlementAmount ?? quote.fiatAmount) / Math.max(Number(quote.cryptoAmount), 1e-18))}` },
-                  { label: 'Spread', value: `${(Number(quote.spreadPct) * 100).toFixed(2)}%` },
+                  { label: tr('common.spread'), value: `${(Number(quote.spreadPct) * 100).toFixed(2)}%` },
                   { label: tr('buy.totalYouPay'), value: fmt(quote.totalUserPays, 2), bold: true },
                 ].map(({ label, value, bold }) => (
                   <View key={label} style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
@@ -726,9 +729,9 @@ export function BuyWidget({ defaultAsset, lockAsset = false }: BuyWidgetProps = 
               alignItems: 'center',
               backgroundColor: intent === v ? brandAccent : 'transparent',
               shadowColor: intent === v ? brandAccent : 'transparent',
-              shadowOpacity: intent === v ? 0.35 : 0,
-              shadowOffset: { width: 0, height: 4 },
-              shadowRadius: 10,
+              shadowOpacity: intent === v ? 0.18 : 0,
+              shadowOffset: { width: 0, height: 3 },
+              shadowRadius: 8,
             }}
           >
             <Text style={{
@@ -793,6 +796,8 @@ export function BuyWidget({ defaultAsset, lockAsset = false }: BuyWidgetProps = 
         status={exec ? 'loading' : success ? 'success' : error ? 'error' : 'idle'}
         successLabel={success || undefined}
         errorLabel={error || undefined}
+        // Confirm slider wears the brand blue so the primary action carries
+        // the brand colour.
         accent={brandAccent}
         accentFg={p.accentFg}
         trackBg={p.bgElev}

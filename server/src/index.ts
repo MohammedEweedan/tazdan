@@ -210,6 +210,7 @@ app.use('/api/auth/login', authLimiter);
 app.use('/api/auth/forgot-password', authLimiter);
 app.use('/api/auth/reset-password', authLimiter);
 app.use('/api/auth/verify-email-code', authLimiter);
+app.use('/api/auth/2fa/recover', authLimiter);
 app.use('/api/auth/refresh', authLimiter);
 app.use('/api/auth/register', registerLimiter);
 app.use('/api/withdrawals', withdrawalLimiter);

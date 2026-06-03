@@ -144,8 +144,9 @@ export function SellWidget({ defaultAsset, lockAsset = false }: SellWidgetProps 
   const { user, biometricEnabled } = useAuthStore();
   const tr = useT();
   const p = useThemedPalette();
-  // Accent follows the active palette (white on dark/mono, black on light) so
-  // it stays visible in every theme — never the legacy two-mode brand token.
+  // Accent follows the active palette — soft brand blue on dark/light,
+  // greyscale in mono. Drives the USE MAX pill, focus ring, and selected
+  // network rows. The confirm CTA stays neutral (accent-only policy).
   const brandAccent = p.accent;
   const { data: wallets } = useWallets();
   const { data: tickers } = useMarkets();
@@ -289,9 +290,9 @@ export function SellWidget({ defaultAsset, lockAsset = false }: SellWidgetProps 
         if (enrolled) {
           const r = await LocalAuthentication.authenticateAsync({
             promptMessage: `Confirm sale of ${asset}`,
-            cancelLabel: 'Cancel', fallbackLabel: 'Use passcode', disableDeviceFallback: false,
+            cancelLabel: tr('common.cancel'), fallbackLabel: tr('common.usePasscode'), disableDeviceFallback: false,
           });
-          if (!r.success) { setError('Verification cancelled'); return; }
+          if (!r.success) { setError(tr('common.verificationCancelled')); return; }
           biometricVerified = true;
         }
       } catch { /* biometric unavailable → server will require a code */ }
@@ -403,7 +404,7 @@ export function SellWidget({ defaultAsset, lockAsset = false }: SellWidgetProps 
           })}
         >
           <Ionicons name="git-branch-outline" size={14} color={p.fgMuted} />
-          <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '600', flex: 1 }}>Network</Text>
+          <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '600', flex: 1 }}>{tr('common.network')}</Text>
           <Text style={{ color: p.fg, fontSize: 13, fontWeight: '600' }}>{currentNetworkLabel}</Text>
           <Ionicons name="chevron-down" size={14} color={p.fgMuted} />
         </Pressable>
@@ -419,7 +420,7 @@ export function SellWidget({ defaultAsset, lockAsset = false }: SellWidgetProps 
           hitSlop={8}
           style={{ paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10, backgroundColor: `${brandAccent}1f`, borderWidth: 1, borderColor: `${brandAccent}3a` }}
         >
-          <Text style={{ color: brandAccent, fontSize: 11, fontWeight: '700', letterSpacing: 0.5 }}>USE MAX</Text>
+          <Text style={{ color: brandAccent, fontSize: 11, fontWeight: '700', letterSpacing: 0.5 }}>{tr('common.useMax').toUpperCase()}</Text>
         </Pressable>
       </View>
       <View style={{
@@ -578,6 +579,8 @@ export function SellWidget({ defaultAsset, lockAsset = false }: SellWidgetProps 
         status={exec ? 'loading' : success ? 'success' : error ? 'error' : 'idle'}
         successLabel={success || undefined}
         errorLabel={error || undefined}
+        // Confirm slider wears the brand blue so the primary action carries
+        // the brand colour.
         accent={brandAccent}
         accentFg={p.accentFg}
         trackBg={p.bgElev}
@@ -600,7 +603,7 @@ export function SellWidget({ defaultAsset, lockAsset = false }: SellWidgetProps 
       <Modal visible={assetSheetOpen} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setAssetSheetOpen(false)}>
         <View style={{ flex: 1, backgroundColor: p.bg }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', padding: 20, paddingTop: 24, borderBottomWidth: 1, borderBottomColor: p.border }}>
-            <Text style={{ flex: 1, color: p.fg, fontSize: 18, fontWeight: '600' }}>Select asset to sell</Text>
+            <Text style={{ flex: 1, color: p.fg, fontSize: 18, fontWeight: '600' }}>{tr('sell.selectAsset')}</Text>
             <Pressable onPress={() => setAssetSheetOpen(false)} hitSlop={12}>
               <Ionicons name="close" size={24} color={p.fg} />
             </Pressable>
@@ -612,7 +615,7 @@ export function SellWidget({ defaultAsset, lockAsset = false }: SellWidgetProps 
                 ref={searchRef}
                 value={searchQuery}
                 onChangeText={setSearchQuery}
-                placeholder="Search holdings…"
+                placeholder={tr('sell.filterHoldings')}
                 placeholderTextColor={p.fgFaint}
                 autoCapitalize="none"
                 autoCorrect={false}

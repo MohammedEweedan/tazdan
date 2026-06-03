@@ -162,12 +162,12 @@ export default function NewListing() {
               onPress={() => { h.selection(); setSide(s); }}
               style={{
                 flex: 1, paddingVertical: 11, borderRadius: 10,
-                backgroundColor: side === s ? p.fg : 'transparent',
+                backgroundColor: side === s ? p.accent : 'transparent',
                 alignItems: 'center',
               }}
             >
               <Text style={{
-                color: side === s ? p.bg : p.fgMuted,
+                color: side === s ? p.accentFg : p.fgMuted,
                 fontSize: 13, fontWeight: '600', letterSpacing: 0.4,
               }}>
                 I WANT TO {s}
@@ -232,13 +232,13 @@ export default function NewListing() {
                     onPress={() => { h.selection(); setMinMode(mode); }}
                     style={{
                       flex: 1, paddingVertical: 6, borderRadius: 8,
-                      backgroundColor: minMode === mode ? p.fg : p.pillBg,
-                      borderWidth: 1, borderColor: minMode === mode ? p.fg : p.border,
+                      backgroundColor: minMode === mode ? p.accent : p.pillBg,
+                      borderWidth: 1, borderColor: minMode === mode ? p.accent : p.border,
                       alignItems: 'center',
                     }}
                   >
                     <Text style={{
-                      color: minMode === mode ? p.bg : p.fgMuted,
+                      color: minMode === mode ? p.accentFg : p.fgMuted,
                       fontSize: 11, fontWeight: '600',
                     }}>
                       {mode === 'fiat' ? fiatCurrency : currency}
@@ -265,13 +265,13 @@ export default function NewListing() {
                     onPress={() => { h.selection(); setMaxMode(mode); }}
                     style={{
                       flex: 1, paddingVertical: 6, borderRadius: 8,
-                      backgroundColor: maxMode === mode ? p.fg : p.pillBg,
-                      borderWidth: 1, borderColor: maxMode === mode ? p.fg : p.border,
+                      backgroundColor: maxMode === mode ? p.accent : p.pillBg,
+                      borderWidth: 1, borderColor: maxMode === mode ? p.accent : p.border,
                       alignItems: 'center',
                     }}
                   >
                     <Text style={{
-                      color: maxMode === mode ? p.bg : p.fgMuted,
+                      color: maxMode === mode ? p.accentFg : p.fgMuted,
                       fontSize: 11, fontWeight: '600',
                     }}>
                       {mode === 'fiat' ? fiatCurrency : currency}
@@ -318,12 +318,12 @@ export default function NewListing() {
                   onPress={() => toggleMethod(m)}
                   style={{
                     paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12,
-                    backgroundColor: on ? p.fg : p.pillBg,
-                    borderWidth: 1, borderColor: on ? p.fg : p.border,
+                    backgroundColor: on ? p.accent : p.pillBg,
+                    borderWidth: 1, borderColor: on ? p.accent : p.border,
                   }}
                 >
                   <Text style={{
-                    color: on ? p.bg : p.fg,
+                    color: on ? p.accentFg : p.fg,
                     fontSize: 12, fontWeight: '700',
                   }}>
                     {m}
@@ -423,12 +423,12 @@ function ChipGroup({
             onPress={() => onPick(o)}
             style={{
               paddingHorizontal: 14, paddingVertical: 9, borderRadius: 12,
-              backgroundColor: on ? p.fg : p.pillBg,
-              borderWidth: 1, borderColor: on ? p.fg : p.border,
+              backgroundColor: on ? p.accent : p.pillBg,
+              borderWidth: 1, borderColor: on ? p.accent : p.border,
             }}
           >
             <Text style={{
-              color: on ? p.bg : p.fg,
+              color: on ? p.accentFg : p.fg,
               fontSize: 13, fontWeight: '700',
             }}>
               {o}

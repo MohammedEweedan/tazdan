@@ -104,7 +104,7 @@ export default function AdminSupport() {
             const on = tab === t;
             return (
               <Pressable key={t} onPress={() => setTab(t)} style={{ paddingBottom: 10 }}>
-                <Text style={{ color: on ? p.fg : p.fgMuted, fontSize: 13, fontWeight: '600', letterSpacing: 0.4 }}>
+                <Text style={{ color: on ? p.accentText : p.fgMuted, fontSize: 13, fontWeight: '600', letterSpacing: 0.4 }}>
                   {t}
                 </Text>
                 {on && <View style={{ marginTop: 6, height: 2, backgroundColor: p.fg, borderRadius: 1 }} />}

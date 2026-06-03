@@ -13,10 +13,10 @@
 export const colors = {
   /* ── Monochrome surfaces (dark mode primary) ─────────────────────── */
   mono: {
-    // Dark mode — near-black with a faint warm tilt
-    bg:         '#0A0A0B',
-    bgElev:     '#141416',
-    bgRaised:   '#1C1C1F',
+    // Dark mode — soft charcoal (not pitch black) with a faint cool tilt
+    bg:         '#16181C',
+    bgElev:     '#1E2127',
+    bgRaised:   '#262A31',
     line:       'rgba(255,255,255,0.08)',
     lineStrong: 'rgba(255,255,255,0.14)',
     fg:         '#FAFAFA',
@@ -38,6 +38,19 @@ export const colors = {
     fgFaintL:   'rgba(10,10,11,0.28)',
     accentL:    '#0A0A0B',  // black CTAs in light mode
     accentFgL:  '#FFFFFF',
+  },
+
+  /* ── Brand accent (soft pantone blue #63a1db) ───────────────────────
+     Used sparingly as an accent — selected states, focus rings, links,
+     the active tab. Not on primary CTAs. The `text` variants are
+     contrast-tuned per surface so small blue text stays legible. */
+  accent: {
+    base:      '#63A1DB',          // dark-surface chip fill
+    baseLight: '#4F8BC4',          // light-surface chip fill (deepened)
+    text:      '#7DB4E4',          // blue text/icon on dark page bg (AA)
+    textLight: '#3E78AE',          // blue text/icon on light page bg (AA)
+    soft:      'rgba(99,161,219,0.14)',
+    border:    'rgba(99,161,219,0.40)',
   },
 
   /* ── Status (kept — confirmed by user) ──────────────────────────── */
@@ -102,12 +115,15 @@ export const gradients = {
   // Kept as an array so LinearGradient consumers don't need to change shape.
   brand:        ['#FFFFFF', '#E5E5E5'],
   brandReverse: ['#E5E5E5', '#FFFFFF'],
-  // Background sweep — three-stop near-black ramp behind the app
-  surface:      ['#0A0A0B', '#141416', '#1C1C1F'],
+  // Background sweep — three-stop charcoal ramp behind the app
+  surface:      ['#16181C', '#1E2127', '#262A31'],
   // Card highlights — subtle inner sheen, white on translucent
   cardSheen:    ['rgba(255,255,255,0.06)', 'rgba(255,255,255,0.0)'],
   // Glass — semi-transparent for blur cards
   glass:        ['rgba(255,255,255,0.08)', 'rgba(255,255,255,0.03)'],
+  // Soft brand-blue glow — a barely-there wash for hero / logo backdrops.
+  // Top-stop is deliberately low-alpha so it reads as mist, never a fill.
+  accentGlow:   ['rgba(99,161,219,0.16)', 'rgba(99,161,219,0)'],
   // Status fills (kept colored — these are accessibility signals)
   success:      ['#1F8F58', '#2BB36F'],
   danger:       ['#B7373B', '#E5484D'],

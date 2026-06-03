@@ -67,7 +67,7 @@ function useCountdown(expiresAt: string | null) {
 const STATUS_META: Record<string, { label: string; color: string; bg: string; icon: any }> = {
   PENDING:           { label: 'Awaiting payment',       color: '#f59e0b', bg: 'rgba(245,158,11,0.12)',  icon: 'time-outline' },
   ESCROW_FUNDED:     { label: 'Escrow funded — pay now', color: '#f59e0b', bg: 'rgba(245,158,11,0.12)', icon: 'lock-closed-outline' },
-  PAYMENT_SENT:      { label: 'Payment sent — awaiting confirmation', color: '#60a5fa', bg: 'rgba(96,165,250,0.12)', icon: 'hourglass-outline' },
+  PAYMENT_SENT:      { label: 'Payment sent — awaiting confirmation', color: '#63a1db', bg: 'rgba(99,161,219,0.12)', icon: 'hourglass-outline' },
   PAYMENT_CONFIRMED: { label: 'Payment confirmed',       color: '#4ade80', bg: 'rgba(74,222,128,0.12)', icon: 'checkmark-circle-outline' },
   COMPLETED:         { label: 'Trade completed ✓',       color: '#4ade80', bg: 'rgba(74,222,128,0.12)', icon: 'checkmark-done-outline' },
   ESCROW_RELEASED:   { label: 'Escrow released ✓',       color: '#4ade80', bg: 'rgba(74,222,128,0.12)', icon: 'checkmark-done-outline' },

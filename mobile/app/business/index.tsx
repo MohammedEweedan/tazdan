@@ -86,7 +86,7 @@ function PayoutRow({ payout, palette: p }: { payout: BusinessPayout; palette: Re
     status === 'COMPLETED'  ? p.greenFg :
     status === 'FAILED'     ? p.redFg   :
     status === 'CANCELLED'  ? p.fgFaint :
-    status === 'PROCESSING' ? '#60a5fa' : p.amberFg;
+    status === 'PROCESSING' ? '#63a1db' : p.amberFg;
 
   return (
     <View style={{

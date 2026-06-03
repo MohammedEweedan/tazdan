@@ -51,8 +51,8 @@ export default function AdminMessages() {
           {(['MESSAGES', 'REPORTS'] as Tab[]).map((t) => {
             const on = tab === t;
             return (
-              <Pressable key={t} onPress={() => { setTab(t); setPage(1); }} style={{ flex: 1, paddingVertical: 9, borderRadius: 10, backgroundColor: on ? p.fg : p.bgElev, borderWidth: 1, borderColor: on ? p.fg : p.border, alignItems: 'center' }}>
-                <Text style={{ color: on ? p.bg : p.fg, fontSize: 12, fontWeight: '600' }}>{t}</Text>
+              <Pressable key={t} onPress={() => { setTab(t); setPage(1); }} style={{ flex: 1, paddingVertical: 9, borderRadius: 10, backgroundColor: on ? p.accent : p.bgElev, borderWidth: 1, borderColor: on ? p.accent : p.border, alignItems: 'center' }}>
+                <Text style={{ color: on ? p.accentFg : p.fg, fontSize: 12, fontWeight: '600' }}>{t}</Text>
               </Pressable>
             );
           })}

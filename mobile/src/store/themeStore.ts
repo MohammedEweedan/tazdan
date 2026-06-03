@@ -45,9 +45,14 @@ export interface Palette {
   redBg:     string;
   amberFg:   string;
   amberBg:   string;
-  // ── Brand accent (used sparingly — focus rings, link, hot states)
-  accent:    string;
-  accentFg:  string;
+  // ── Brand accent (soft pantone blue — used sparingly: focus rings,
+  //    links, selected states, the active tab. NEVER on primary CTAs in
+  //    dark/light; those stay neutral. In `mono` these collapse to grey.)
+  accent:       string;   // chip fill / selected surface (the soft blue)
+  accentFg:     string;   // text/icon sitting ON the accent fill
+  accentSoft:   string;   // translucent blue wash for selected backgrounds
+  accentBorder: string;   // translucent blue hairline for selected outlines
+  accentText:   string;   // contrast-tuned blue for text/icons on the page bg
   // ── Shadow color tuned to the surface so cards look planted, not
   //    glued — soft black on light, pure black on dark.
   shadow:    string;
@@ -55,21 +60,23 @@ export interface Palette {
 
 export const palettes: Record<ThemeMode, Palette> = {
   dark: {
-    // Monochrome graphite ramp — pure grayscale, no blue undertone.
-    // Step-up tiers stay legible even without color contrast cues.
-    bg:        '#0A0A0B',
-    bgElev:    '#141416',
-    bgRaised:  '#1C1C1F',
-    surface:   '#141416',
-    fg:        '#FAFAFA',
-    fgMuted:   'rgba(250,250,250,0.62)',
-    fgFaint:   'rgba(250,250,250,0.36)',
-    border:    'rgba(255,255,255,0.08)',
-    divider:   'rgba(255,255,255,0.14)',
-    // CTA — pure white inverse so primary actions read as urgent without color
-    ctaBg:     '#FAFAFA',
-    ctaFg:     '#0A0A0B',
-    pillBg:    'rgba(255,255,255,0.08)',
+    // Warm charcoal ramp — NOT pitch black. Pure black (#0A0A0B) punished
+    // the eyes and made card edges vanish; this lifts the base to a soft
+    // charcoal with a faint cool tilt that pairs with the brand blue, and
+    // steps each elevation tier up so depth reads cleanly.
+    bg:        '#16181C',   // base — soft charcoal (was near-black #0A0A0B)
+    bgElev:    '#1E2127',   // cards / sheets
+    bgRaised:  '#262A31',   // popovers / hovered rows
+    surface:   '#1E2127',
+    fg:        '#F4F5F7',
+    fgMuted:   'rgba(244,245,247,0.62)',
+    fgFaint:   'rgba(244,245,247,0.36)',
+    border:    'rgba(255,255,255,0.09)',
+    divider:   'rgba(255,255,255,0.15)',
+    // CTA — bright near-white inverse so primary actions read as urgent
+    ctaBg:     '#F4F5F7',
+    ctaFg:     '#16181C',
+    pillBg:    'rgba(255,255,255,0.07)',
     // Semantic — kept (accessibility signals for confirm/decline/warn)
     greenFg:   '#3FCF8E',
     greenBg:   'rgba(63,207,142,0.14)',
@@ -77,10 +84,15 @@ export const palettes: Record<ThemeMode, Palette> = {
     redBg:     'rgba(248,113,113,0.14)',
     amberFg:   '#FBBF24',
     amberBg:   'rgba(251,191,36,0.14)',
-    // Accent is the same off-white as CTA in mono mode — no brand color
-    accent:    '#FAFAFA',
-    accentFg:  '#0A0A0B',
-    shadow:    'rgba(0,0,0,0.55)',
+    // Brand accent — soft pantone blue (#63a1db). Reads calm on the dark
+    // charcoal bg. `accentText` is lifted to #7DB4E4 so small blue text /
+    // icons clear AA contrast on the charcoal surface.
+    accent:       '#63A1DB',
+    accentFg:     '#16181C',
+    accentSoft:   'rgba(99,161,219,0.16)',
+    accentBorder: 'rgba(99,161,219,0.42)',
+    accentText:   '#8BBCE8',
+    shadow:    'rgba(0,0,0,0.5)',
   },
   light: {
     // Paper off-white, cards step UP from page
@@ -103,9 +115,14 @@ export const palettes: Record<ThemeMode, Palette> = {
     redBg:     'rgba(192,39,45,0.10)',
     amberFg:   '#A26B0B',
     amberBg:   'rgba(162,107,11,0.10)',
-    // Accent — also black; mono mode has no separate brand color
-    accent:    '#0A0A0B',
-    accentFg:  '#FAFAFA',
+    // Brand accent — the blue, slightly deepened to #4F8BC4 so the chip
+    // fill holds its own against the paper-white bg. `accentText` darkens
+    // further (#3E78AE) so links/labels clear AA on the off-white page.
+    accent:       '#4F8BC4',
+    accentFg:     '#FFFFFF',
+    accentSoft:   'rgba(79,139,196,0.12)',
+    accentBorder: 'rgba(79,139,196,0.38)',
+    accentText:   '#3E78AE',
     shadow:    'rgba(10,10,11,0.10)',
   },
   // Monochrome — greyscale only. Softened off the old pitch-black so it's
@@ -134,8 +151,13 @@ export const palettes: Record<ThemeMode, Palette> = {
     redBg:     'rgba(245,245,245,0.06)',
     amberFg:   'rgba(245,245,245,0.80)',
     amberBg:   'rgba(245,245,245,0.08)',
-    accent:    '#F5F5F5',
-    accentFg:  '#0C0C0D',
+    // Mono stays pure grayscale by design — the blue accent tokens collapse
+    // to the existing greyscale ramp so a `mono` user sees zero colour.
+    accent:       '#F5F5F5',
+    accentFg:     '#0C0C0D',
+    accentSoft:   'rgba(255,255,255,0.09)',
+    accentBorder: 'rgba(255,255,255,0.18)',
+    accentText:   '#F5F5F5',
     shadow:    'rgba(0,0,0,0.7)',
   },
 };
