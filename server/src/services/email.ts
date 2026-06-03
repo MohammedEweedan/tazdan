@@ -1,5 +1,4 @@
 import nodemailer from 'nodemailer';
-import path from 'path';
 import QRCode from 'qrcode';
 import axios from 'axios';
 
@@ -63,41 +62,15 @@ function resolveClientUrl(): string {
 
 const CLIENT_URL = resolveClientUrl();
 
-// Logos are embedded inline as base64 data URIs directly in the HTML so they
-// render the same whether the email ships via SMTP or the Resend HTTP API —
-// Resend does not auto-resolve cid: references the way SMTP attachments do.
-// __dirname is:
-//   dev  (ts-node)  → <root>/server/src/services/
-//   prod (node dist) → <root>/server/dist/services/
-// Both resolve to <root>/server/src/assets/ via the logic below.
-function resolveAsset(filename: string): string {
-  const candidates = [
-    path.resolve(__dirname, '..', 'assets', filename),          // ts-node: src/services → src/assets
-    path.resolve(__dirname, '..', '..', 'src', 'assets', filename), // compiled: dist/services → src/assets
-    path.resolve(process.cwd(), 'src', 'assets', filename),     // fallback: cwd/src/assets
-  ];
-  const fs = require('fs') as typeof import('fs');
-  for (const p of candidates) {
-    if (fs.existsSync(p)) return p;
-  }
-  return candidates[0]; // best guess
-}
-
-/** Read an asset once and return a `data:` URI, or '' if it can't be read. */
-function assetDataUri(filename: string, mime = 'image/png'): string {
-  try {
-    const fs = require('fs') as typeof import('fs');
-    const buf = fs.readFileSync(resolveAsset(filename));
-    return `data:${mime};base64,${buf.toString('base64')}`;
-  } catch {
-    return '';
-  }
-}
-
-// Loaded once at module init. Referenced directly in the <img src="…"> of the
-// template (replaces the old cid: references).
-const LOGO_BLACK_URI = assetDataUri('logo-black.png');
-const LOGO_WHITE_URI = assetDataUri('logo-white.png');
+// Logos are referenced by URL on the sending domain (NOT base64 data URIs).
+// Gmail and others flag data-URI images as suspicious and won't align them
+// with the sending domain; hosting them on tazdan.com is better for inbox
+// placement. The PNGs are served by the web app from its public root
+// (client/public/logo-*.png → https://tazdan.com/logo-*.png). Override the
+// base with EMAIL_ASSET_BASE if assets live elsewhere (e.g. a CDN/subdomain).
+const EMAIL_ASSET_BASE = (process.env.EMAIL_ASSET_BASE || CLIENT_URL).replace(/\/+$/, '');
+const LOGO_BLACK_URI = `${EMAIL_ASSET_BASE}/logo-black.png`;
+const LOGO_WHITE_URI = `${EMAIL_ASSET_BASE}/logo-white.png`;
 
 const hasSmtpCredentials = !!(SMTP_HOST && SMTP_USER && SMTP_PASS);
 const missingSmtpEnv = REQUIRED_SMTP_ENV.filter((key) => !process.env[key]);
@@ -261,7 +234,7 @@ function baseTemplate(title: string, body: string): string {
   <div class="email-bg">
     <div class="wrapper">
 
-      <!-- Logo: CID-embedded so it renders without a CDN. Dark/light via media query. -->
+      <!-- Logo: hosted on the sending domain. Dark/light via media query. -->
       <div class="logo-wrap">
         <img class="logo-light" src="${LOGO_BLACK_URI}" alt="tazdan" />
         <img class="logo-dark"  src="${LOGO_WHITE_URI}" alt="tazdan" />
