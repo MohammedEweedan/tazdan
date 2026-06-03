@@ -182,6 +182,10 @@ export async function reconcileBreach(opts: {
         currency: currency as any,
         amount: new Decimal(diff.toFixed(8)),
         fee: new Decimal(0),
+        // Platform-level bookkeeping entry (not a user wallet movement), but
+        // balanceBefore/After are required columns — record them as 0.
+        balanceBefore: new Decimal(0),
+        balanceAfter: new Decimal(0),
         reference: ref,
         description: memo,
         metadata: { fundReconciliation: true, reconciledBy: opts.adminId, originalDiff: row.diff } as any,
