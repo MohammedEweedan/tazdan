@@ -18,6 +18,7 @@ import {
   sendWelcomeEmail,
   sendVerificationEmail,
   sendPasswordResetEmail,
+  emailErrorSummary,
 } from '../services/email';
 import { createUserWallets } from '../services/wallet/walletDerivation.service';
 import { startVerification, checkVerification } from '../services/whatsapp';
@@ -231,7 +232,7 @@ export class AuthController {
       // Welcome email is intentionally NOT sent here — it goes out from
       // verifyEmailCode() once the user proves they own the address.
       sendVerificationEmail({ to: user.email, firstName: user.firstName, code: verificationCode })
-        .catch((e) => console.error('[email] verification failed:', e));
+        .catch((e) => console.error('[email] verification failed:', emailErrorSummary(e)));
 
       res.status(201).json({
         user: {
@@ -556,7 +557,7 @@ export class AuthController {
       // Welcome email is sent ONLY now — proves the address is real and
       // avoids polluting inboxes for half-finished signups.
       sendWelcomeEmail({ to: dbUser.email, firstName: dbUser.firstName })
-        .catch((e) => console.error('[email] welcome failed:', e));
+        .catch((e) => console.error('[email] welcome failed:', emailErrorSummary(e)));
 
       res.json({ message: 'Email verified successfully' });
     } catch (error) {
@@ -593,7 +594,7 @@ export class AuthController {
         to: dbUser.email,
         firstName: dbUser.firstName,
         code: verificationCode,
-      }).catch((e) => console.error('[email] resend verification failed:', e));
+      }).catch((e) => console.error('[email] resend verification failed:', emailErrorSummary(e)));
 
       res.json({ message: 'Verification email sent' });
     } catch (error) {
@@ -631,7 +632,7 @@ export class AuthController {
         to: user.email,
         firstName: user.firstName,
         token,
-      }).catch((e) => console.error('[email] password reset failed:', e));
+      }).catch((e) => console.error('[email] password reset failed:', emailErrorSummary(e)));
 
       res.json({ message: 'If an account exists, a reset email has been sent.' });
     } catch (error) {
