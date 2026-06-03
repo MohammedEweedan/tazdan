@@ -22,7 +22,7 @@ import { useHaptics, useMarkets, useSwap, useWallets, extractErrorMessage } from
 import type { Currency } from '@/types';
 
 const CRYPTO: Currency[] = ['BTC', 'ETH', 'USDT', 'SOL', 'BNB', 'XRP', 'ADA', 'DOGE'];
-const FIATS:  Currency[] = ['USD', 'EUR', 'GBP', 'AED', 'SAR', 'EGP'];
+const FIATS:  Currency[] = ['USD', 'EUR', 'GBP', 'AED', 'SAR', 'EGP', 'LYD'];
 
 type Mode = 'FIAT' | 'CRYPTO';
 
@@ -55,7 +55,7 @@ export default function Buy() {
   // demo rate — accurate enough for a dev preview.
   const fiatPerUsd: Record<string, number> = {
     USD: 1,    EUR: 0.92, GBP: 0.79, AED: 3.67,
-    SAR: 3.75, EGP: 49.5,
+    SAR: 3.75, EGP: 49.5, LYD: 5.6,
   };
   const rateFiatPerUsd = fiatPerUsd[fiat] ?? 1;
   const pricePerCoinFiat = spotUsd * rateFiatPerUsd;
