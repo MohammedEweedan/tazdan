@@ -24,6 +24,7 @@ adminRouter.get('/kyc', AdminController.getKYC);
 adminRouter.put('/kyc/:userId/approve', AdminController.approveKYC);
 adminRouter.put('/kyc/:userId/reject', AdminController.rejectKYC);
 adminRouter.get('/users', AdminController.getUsers);
+adminRouter.post('/users', AdminController.createUser);
 adminRouter.get('/users/:id/balances', AdminController.getUserBalances);
 adminRouter.put('/users/:id/status', AdminController.updateUserStatus);
 adminRouter.put('/users/:id/freeze',   AdminController.freezeUser);

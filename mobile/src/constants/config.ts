@@ -11,11 +11,20 @@ import { Platform } from 'react-native';
  */
 const API_PORT = 5000;
 const PRODUCTION_API_BASE = 'https://api.promrkts.com';
+const HOSTED_API_HOSTS = new Set(['api.promrkts.com']);
 
-// Guarantee exactly one trailing `/api` — server routes are all under `/api`.
+// Hosted production is reverse-proxied at root; localhost/LAN still needs /api.
 // (Kept in sync with constants/index.ts, which is the module actually imported.)
-function withApiSuffix(base: string): string {
+function normalizeApiBase(base: string): string {
   const trimmed = base.replace(/\/+$/, '');
+  try {
+    const url = new URL(trimmed);
+    if (HOSTED_API_HOSTS.has(url.hostname)) {
+      return url.origin;
+    }
+  } catch {
+    // Fall through for relative/custom bases.
+  }
   return /\/api$/.test(trimmed) ? trimmed : `${trimmed}/api`;
 }
 
@@ -28,10 +37,10 @@ function resolveApiBase(): string {
         `Set EXPO_PUBLIC_API_BASE to an https:// URL at build time.`,
       );
     }
-    return withApiSuffix(fromEnv);
+    return normalizeApiBase(fromEnv);
   }
 
-  if (!__DEV__) return withApiSuffix(PRODUCTION_API_BASE);
+  if (!__DEV__) return normalizeApiBase(PRODUCTION_API_BASE);
 
   const hostUri = (Constants.expoConfig?.hostUri ?? Constants.expoGoConfig?.debuggerHost) as string | undefined;
   const lanHost = hostUri?.split(':')[0];

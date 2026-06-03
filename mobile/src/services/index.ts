@@ -782,7 +782,7 @@ export const adminService = {
     const { data } = await api.post<{ message: string }>('/admin/clear-trading-halt', {});
     return data;
   },
-  users: (params?: { search?: string; status?: string; page?: number; limit?: number }) =>
+  users: (params?: { search?: string; status?: string; kycStatus?: string; page?: number; limit?: number }) =>
     withFallback<{ users: any[]; total: number; page: number; totalPages: number }>(
       async () => {
         const { data } = await api.get('/admin/users', { params });
@@ -790,6 +790,26 @@ export const adminService = {
       },
       { users: [], total: 0, page: 1, totalPages: 1 },
     ),
+  createUser: async (payload: {
+    email: string;
+    firstName: string;
+    lastName: string;
+    username?: string;
+    phoneCountryCode?: string;
+    phone?: string;
+    country?: string;
+    dateOfBirth?: string;
+    password?: string;
+    status?: 'PENDING' | 'ACTIVE' | 'SUSPENDED';
+    kycStatus?: 'NOT_SUBMITTED' | 'PENDING' | 'APPROVED';
+    emailVerified?: boolean;
+    relationship?: string;
+    note?: string;
+    initialBalances?: Array<{ currency: string; amount: number }>;
+  }) => {
+    const { data } = await api.post('/admin/users', payload);
+    return data as { user: any; temporaryPassword?: string; message: string };
+  },
   updateUserStatus: async (id: string, status: 'ACTIVE' | 'SUSPENDED' | 'BANNED') => {
     const { data } = await api.put(`/admin/users/${id}/status`, { status });
     return data;

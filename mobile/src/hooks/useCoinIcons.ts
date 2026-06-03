@@ -2,7 +2,7 @@
  * useCoinIcons — synchronous coin icon resolver.
  *
  * Priority:
- *   1. Server /api/markets/icons map (fast, best quality)
+ *   1. Server markets/icons map (fast, best quality)
  *   2. Client-side CoinGecko search cache (fills gaps dynamically)
  *   3. CoinCap CDN (broader than jsDelivr, ~2,000 coins)
  *   4. jsDelivr cryptocurrency-icons (reliable fallback, ~800 coins)
@@ -57,7 +57,7 @@ function jsDelivrUrl(sym: string): string {
 }
 
 // ── Server-side CoinGecko map ────────────────────────────────────────────────
-const API_ROOT = APP.apiBaseUrl.replace(/\/api\/?$/, '');
+const API_ROOT = APP.apiBaseUrl.replace(/\/+$/, '');
 let serverMap: Record<string, string> = {};
 let serverState: 'idle' | 'loading' | 'done' = 'idle';
 const serverListeners: Array<(map: Record<string, string>) => void> = [];
@@ -65,7 +65,7 @@ const serverListeners: Array<(map: Record<string, string>) => void> = [];
 function loadServerIcons() {
   if (serverState !== 'idle') return;
   serverState = 'loading';
-  fetch(`${API_ROOT}/api/markets/icons`, { signal: AbortSignal.timeout?.(8000) })
+  fetch(`${API_ROOT}/markets/icons`, { signal: AbortSignal.timeout?.(8000) })
     .then((r) => r.json())
     .then((data) => {
       if (data?.icons && typeof data.icons === 'object') {

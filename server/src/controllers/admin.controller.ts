@@ -1,16 +1,43 @@
 import { Response, NextFunction } from 'express';
 import { z } from 'zod';
+import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 import { Decimal } from '@prisma/client/runtime/library';
 import { prisma } from '../utils/prisma';
 import { AppError } from '../middleware/errorHandler';
 import { AuthRequest } from '../types';
 import { SPREAD_SETTING_KEY, invalidateSpreadCache, getMarketPrice, getConfiguredSpread } from '../services/exchange/priceEngine.service';
 import { postLedger, isLedgerCurrency } from '../services/ledger/ledger.service';
+import { generateReferralCode } from '../utils/helpers';
+import { createUserWallets } from '../services/wallet/walletDerivation.service';
 
 const rateSchema = z.object({
   buyPrice: z.number().positive(),
   sellPrice: z.number().positive(),
 });
+
+const INITIAL_CURRENCIES = ['USDT', 'USD', 'EUR', 'GBP', 'AED', 'SAR', 'EGP'] as const;
+
+function adminTempPassword(): string {
+  return `Tz-${crypto.randomBytes(6).toString('base64url')}9!`;
+}
+
+async function uniqueAdminUsername(seed: string): Promise<string> {
+  const base = seed
+    .toLowerCase()
+    .replace(/@.*$/, '')
+    .replace(/[^a-z0-9._]+/g, '.')
+    .replace(/^[._]+|[._]+$/g, '')
+    .slice(0, 24) || `user${Date.now().toString(36)}`;
+  let candidate = base.length >= 3 ? base : `${base}001`;
+  for (let i = 0; i < 50; i += 1) {
+    const exists = await prisma.user.findFirst({ where: { username: candidate }, select: { id: true } });
+    if (!exists) return candidate;
+    const suffix = `${i + 2}`;
+    candidate = `${base.slice(0, Math.max(3, 30 - suffix.length))}${suffix}`;
+  }
+  return `${base.slice(0, 20)}${crypto.randomInt(10000, 99999)}`;
+}
 
 export class AdminController {
   // ── Dashboard ──────────────────────────────────────────────────
@@ -534,6 +561,162 @@ export class AdminController {
   }
 
   // ── Users ──────────────────────────────────────────────────────
+  static async createUser(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const schema = z.object({
+        email: z.string().email(),
+        firstName: z.string().min(1).max(100),
+        lastName: z.string().min(1).max(100),
+        username: z.string().min(3).max(30).regex(/^[a-z0-9._]+$/i).optional().or(z.literal('')),
+        phoneCountryCode: z.string().min(1).max(4).regex(/^\d+$/).optional().or(z.literal('')),
+        phone: z.string().min(4).max(20).optional().or(z.literal('')),
+        country: z.string().length(2).optional().or(z.literal('')),
+        dateOfBirth: z.coerce.date().optional(),
+        password: z.string().min(8).max(128).optional().or(z.literal('')),
+        status: z.enum(['PENDING', 'ACTIVE', 'SUSPENDED']).default('ACTIVE'),
+        kycStatus: z.enum(['NOT_SUBMITTED', 'PENDING', 'APPROVED']).default('NOT_SUBMITTED'),
+        emailVerified: z.boolean().default(true),
+        relationship: z.string().max(120).optional().or(z.literal('')),
+        note: z.string().max(500).optional().or(z.literal('')),
+        initialBalances: z.array(z.object({
+          currency: z.string().min(1).max(10),
+          amount: z.number().positive(),
+        })).max(12).optional(),
+      });
+      const data = schema.parse(req.body);
+      const email = data.email.trim().toLowerCase();
+      const phoneDigits = data.phone?.replace(/\D/g, '') ?? '';
+      const normalisedPhone = data.phoneCountryCode && phoneDigits ? `+${data.phoneCountryCode}${phoneDigits}` : null;
+      const username = data.username?.trim()
+        ? data.username.trim().toLowerCase()
+        : await uniqueAdminUsername(`${data.firstName}.${data.lastName}`);
+
+      const [existingEmail, existingPhone, existingHandle] = await Promise.all([
+        prisma.user.findUnique({ where: { email }, select: { id: true } }),
+        normalisedPhone ? prisma.user.findUnique({ where: { phone: normalisedPhone }, select: { id: true } }) : Promise.resolve(null),
+        prisma.user.findFirst({ where: { username }, select: { id: true } }),
+      ]);
+      if (existingEmail) throw new AppError('A user with this email already exists', 400);
+      if (existingPhone) throw new AppError('A user with this phone already exists', 400);
+      if (existingHandle) throw new AppError('A user with this handle already exists', 400);
+
+      const generatedPassword = data.password ? null : adminTempPassword();
+      const passwordHash = await bcrypt.hash(data.password || generatedPassword!, 12);
+      const referralCode = generateReferralCode();
+      const referenceBase = `ADMIN-ONBOARD-${Date.now()}`;
+
+      const user = await prisma.$transaction(async (tx: any) => {
+        const created = await tx.user.create({
+          data: {
+            email,
+            passwordHash,
+            firstName: data.firstName.trim(),
+            lastName: data.lastName.trim(),
+            phone: normalisedPhone,
+            phoneCountryCode: data.phoneCountryCode || null,
+            country: data.country ? data.country.toUpperCase() : null,
+            dateOfBirth: data.dateOfBirth,
+            username,
+            profilePublic: true,
+            referralCode,
+            status: data.status,
+            kycStatus: data.kycStatus,
+            emailVerified: data.emailVerified,
+          },
+          select: {
+            id: true, email: true, firstName: true, lastName: true, username: true,
+            phone: true, country: true, status: true, kycStatus: true, emailVerified: true,
+            referralCode: true, createdAt: true,
+          },
+        });
+
+        await tx.wallet.createMany({
+          data: INITIAL_CURRENCIES.map((currency) => ({ userId: created.id, currency })),
+          skipDuplicates: true,
+        });
+
+        for (const [idx, row] of (data.initialBalances ?? []).entries()) {
+          const cur = row.currency.toUpperCase() as any;
+          const dec = new Decimal(row.amount);
+          const wallet = await tx.wallet.upsert({
+            where: { userId_currency: { userId: created.id, currency: cur } },
+            create: { userId: created.id, currency: cur, balance: dec },
+            update: { balance: { increment: dec } },
+          });
+          const ref = `${referenceBase}-${idx + 1}`;
+          const memo = `[admin-onboard] ${data.note || data.relationship || 'Opening balance'}`;
+          if (isLedgerCurrency(String(cur))) {
+            await postLedger(tx, {
+              refType: 'admin_onboard_credit',
+              refId: ref,
+              memo,
+              legs: [
+                { type: 'SYSTEM_ONRAMP', currency: cur, amount: dec.neg() },
+                { type: 'USER', userId: created.id, currency: cur, amount: dec },
+              ],
+            });
+          }
+          await tx.transaction.create({
+            data: {
+              userId: created.id,
+              type: 'ADMIN_CREDIT',
+              currency: cur,
+              amount: dec,
+              fee: new Decimal(0),
+              balanceBefore: new Decimal(wallet.balance).minus(dec),
+              balanceAfter: wallet.balance,
+              reference: ref,
+              description: memo,
+              metadata: { createdByAdmin: req.user!.id, relationship: data.relationship || null } as any,
+            },
+          });
+        }
+
+        await tx.auditLog.create({
+          data: {
+            userId: req.user!.id,
+            action: 'ADMIN_CREATE_USER',
+            entity: 'User',
+            entityId: created.id,
+            newValues: {
+              email,
+              username,
+              status: data.status,
+              kycStatus: data.kycStatus,
+              emailVerified: data.emailVerified,
+              relationship: data.relationship || null,
+              note: data.note || null,
+              initialBalances: data.initialBalances ?? [],
+            },
+          },
+        });
+
+        await tx.notification.create({
+          data: {
+            userId: created.id,
+            title: 'Welcome to tazdan',
+            message: 'Your account was created by the tazdan team. Please sign in and change your password.',
+            type: 'security',
+          },
+        });
+
+        return created;
+      });
+
+      createUserWallets(user.id).catch((e) => {
+        console.error('[wallet] createUserWallets failed for admin-created user', user.id, e);
+      });
+
+      res.status(201).json({
+        user,
+        temporaryPassword: generatedPassword,
+        message: generatedPassword
+          ? 'User created. Temporary password returned once.'
+          : 'User created.',
+      });
+    } catch (error) { next(error); }
+  }
+
   // A user's full balance sheet — fiat/stable Wallet rows + on-chain crypto
   // columns + altBalances — so an admin can see what they hold before crediting.
   static async getUserBalances(req: AuthRequest, res: Response, next: NextFunction) {
@@ -560,8 +743,18 @@ export class AdminController {
       const page = parseInt(req.query.page as string) || 1;
       const limit = parseInt(req.query.limit as string) || 20;
       const search = req.query.search as string | undefined;
+      const status = req.query.status as string | undefined;
+      const kycStatus = req.query.kycStatus as string | undefined;
       const where: any = { role: 'USER' };
-      if (search) where.OR = [{ email: { contains: search, mode: 'insensitive' } }, { firstName: { contains: search, mode: 'insensitive' } }, { lastName: { contains: search, mode: 'insensitive' } }];
+      if (status) where.status = status.toUpperCase();
+      if (kycStatus) where.kycStatus = kycStatus.toUpperCase();
+      if (search) where.OR = [
+        { email: { contains: search, mode: 'insensitive' } },
+        { firstName: { contains: search, mode: 'insensitive' } },
+        { lastName: { contains: search, mode: 'insensitive' } },
+        { username: { contains: search, mode: 'insensitive' } },
+        { phone: { contains: search, mode: 'insensitive' } },
+      ];
 
       const [users, total] = await Promise.all([
         prisma.user.findMany({

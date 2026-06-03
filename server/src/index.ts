@@ -68,6 +68,7 @@ import { recurringBuyRouter } from './routes/recurringBuy';
 import { startRecurringBuyScheduler } from './services/recurringBuy.service';
 import { startLydSampler } from './services/exchange/lydOrderBook.service';
 import { startReconciliation } from './services/ledger/reconcile.service';
+import { getEmailStatus } from './services/email';
 import { startFundIntegrityAudit } from './services/ledger/fundIntegrity.service';
 import { globalLimiter, authLimiter, registerLimiter, withdrawalLimiter, webhookLimiter } from './middleware/rateLimiters';
 import { protectedUploadsRouter } from './middleware/protectedUploads';
@@ -311,6 +312,9 @@ app.get('/api/health', async (_req, res) => {
     uptime: Math.floor(process.uptime()),
     timestamp: new Date().toISOString(),
     checks,
+    diagnostics: {
+      email: getEmailStatus(),
+    },
     worker: process.pid,
   });
 });

@@ -8,6 +8,7 @@ const SMTP_USER = process.env.SMTP_USER;
 const SMTP_PASS = process.env.SMTP_PASS;
 // From address — defaults to the branded sender. Override in .env with SMTP_FROM.
 const SMTP_FROM = process.env.SMTP_FROM || process.env.MAIL_FROM || 'hi@tazdan.com';
+const REQUIRED_SMTP_ENV = ['SMTP_HOST', 'SMTP_USER', 'SMTP_PASS'] as const;
 
 function resolveClientUrl(): string {
   if (process.env.FRONTEND_URL) return process.env.FRONTEND_URL.trim();
@@ -48,6 +49,11 @@ const CID_BLACK = 'logo-black@tazdan.com';
 const CID_WHITE = 'logo-white@tazdan.com';
 
 const hasCredentials = !!(SMTP_HOST && SMTP_USER && SMTP_PASS);
+const missingSmtpEnv = REQUIRED_SMTP_ENV.filter((key) => !process.env[key]);
+
+if (!hasCredentials && process.env.NODE_ENV === 'production') {
+  console.error('[email] SMTP is not configured in production. Missing env:', missingSmtpEnv.join(', '));
+}
 
 const transporter = hasCredentials
   ? nodemailer.createTransport({
@@ -57,6 +63,14 @@ const transporter = hasCredentials
       auth: { user: SMTP_USER, pass: SMTP_PASS },
     })
   : null;
+
+export function getEmailStatus() {
+  return {
+    smtpConfigured: hasCredentials,
+    missingEnv: missingSmtpEnv,
+    fromConfigured: !!(process.env.SMTP_FROM || process.env.MAIL_FROM),
+  };
+}
 
 /**
  * Base template — reacts to dark/light mode via prefers-color-scheme.
@@ -201,7 +215,14 @@ export async function sendEmail({
     return; // silently drop — simulation/test address
   }
   if (!transporter) {
-    console.warn('[email] SMTP not configured — skipping send:', subject, 'to', to);
+    console.warn(
+      '[email] SMTP not configured — skipping send:',
+      subject,
+      'to',
+      to,
+      'missing',
+      missingSmtpEnv.join(', ') || 'unknown',
+    );
     return;
   }
   await transporter.sendMail({

@@ -24,12 +24,19 @@ import { LoadingPulse } from '@/components/ui/LoadingPulse';
 type Metrics = {
   onlineSockets: number;
   onlineUsers: number;
+  txPerMin: number;
+  feesPerMin: number;
   recentTransactions5m: number;
   recentOrders5m: number;
   recentDeposits5m: number;
   recentWithdrawals5m: number;
+  recentTransfers5m: number;
+  recentP2P5m: number;
+  recentCardTx5m: number;
+  commissions5mUSD: number;
   totalCommissionsUSD: number;
   commissions24hUSD: number;
+  feesBySource?: Array<{ source: string; totalUsd: number; count: number }>;
   uptimeSeconds: number;
   memoryMb: number;
 };
@@ -141,12 +148,26 @@ export default function AdminScreen() {
 
   const isAdmin = user?.role === 'ADMIN';
   const [period, setPeriod] = useState<Period>('today');
+  const [scrolling, setScrolling] = useState(false);
+  const scrollSettleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const markScrolling = () => {
+    if (scrollSettleTimer.current) clearTimeout(scrollSettleTimer.current);
+    setScrolling(true);
+  };
+  const settleScrolling = (delay = 0) => {
+    if (scrollSettleTimer.current) clearTimeout(scrollSettleTimer.current);
+    scrollSettleTimer.current = setTimeout(() => {
+      setScrolling(false);
+      scrollSettleTimer.current = null;
+    }, delay);
+  };
 
   const dashQ = useQuery({
     queryKey: ['admin-dashboard'],
     queryFn: () => adminService.dashboard(),
     enabled: isAdmin,
-    refetchInterval: 15_000,
+    refetchInterval: scrolling ? false : 15_000,
+    refetchOnWindowFocus: false,
   });
   const metricsQ = useQuery<Metrics>({
     queryKey: ['admin-metrics'],
@@ -155,14 +176,16 @@ export default function AdminScreen() {
       return data;
     },
     enabled: isAdmin,
-    refetchInterval: 5_000,
+    refetchInterval: scrolling ? false : 5_000,
+    refetchOnWindowFocus: false,
   });
 
   const exposureQ = useQuery<AdminExposure>({
     queryKey: ['admin-exposure'],
     queryFn: () => adminService.exposure(),
     enabled: isAdmin,
-    refetchInterval: 30_000,
+    refetchInterval: scrolling ? false : 30_000,
+    refetchOnWindowFocus: false,
   });
 
   const [fxHours, setFxHours] = useState(24);
@@ -170,14 +193,16 @@ export default function AdminScreen() {
     queryKey: ['admin-fx-status', fxHours],
     queryFn: () => adminService.fxStatus(fxHours),
     enabled: isAdmin,
-    refetchInterval: 30_000,
+    refetchInterval: scrolling ? false : 30_000,
+    refetchOnWindowFocus: false,
   });
 
   const fundQ = useQuery<AdminFundIntegrity>({
     queryKey: ['admin-fund-integrity'],
     queryFn: () => adminService.fundIntegrity(),
     enabled: isAdmin,
-    refetchInterval: 60_000,
+    refetchInterval: scrolling ? false : 60_000,
+    refetchOnWindowFocus: false,
   });
   const clearHaltMut = useMutation({
     mutationFn: () => adminService.clearTradingHalt(),
@@ -202,6 +227,9 @@ export default function AdminScreen() {
       ]),
     ).start();
   }, [pulse]);
+  useEffect(() => () => {
+    if (scrollSettleTimer.current) clearTimeout(scrollSettleTimer.current);
+  }, []);
   const dotScale   = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.6] });
   const dotOpacity = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 0.3] });
 
@@ -261,14 +289,11 @@ export default function AdminScreen() {
         <ScrollView
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{ paddingBottom: 60 }}
-          // The dashboard auto-refetches (metrics 5s, fx/exposure 30s, …). When
-          // that changes content height, iOS can drift the scroll position on
-          // its own. Anchoring the visible content keeps the view put while the
-          // user is idle, and disabling content-inset adjustment stops the
-          // momentum jump some iOS versions apply on re-render.
-          maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
           automaticallyAdjustContentInsets={false}
           contentInsetAdjustmentBehavior="never"
+          onScrollBeginDrag={markScrolling}
+          onMomentumScrollEnd={() => settleScrolling()}
+          onScrollEndDrag={() => settleScrolling(900)}
           refreshControl={<RefreshControl refreshing={dashQ.isFetching || metricsQ.isFetching} onRefresh={onRefresh} tintColor={p.fg} />}
         >
           {/* Top bar */}
@@ -353,6 +378,19 @@ export default function AdminScreen() {
               <KpiCard label="FROZEN"        value={(d?.frozenUsers ?? d?.suspendedUsers ?? 0).toLocaleString()} hint="suspended" icon="snow-outline" accent="#ef4444" p={p} />
               <KpiCard label="UPTIME"        value={formatUptime(m?.uptimeSeconds ?? 0)} hint={`${m?.memoryMb ?? 0} MB`} icon="pulse-outline" accent={p.fg} p={p} />
               <KpiCard label="TOTAL USERS"   value={(d?.totalUsers ?? 0).toLocaleString()} hint={`+${d?.newUsersToday ?? 0} today`} icon="globe-outline" accent={p.fg} p={p} />
+            </View>
+          </View>
+
+          {/* Platform control strip */}
+          <View style={{ marginTop: 18, paddingHorizontal: 20 }}>
+            <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '600', letterSpacing: 0.7, marginBottom: 10 }}>PLATFORM CONTROL</Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
+              <KpiCard label="TX / MIN"       value={(m?.txPerMin ?? 0).toFixed(1)} hint="5 min avg" icon="speedometer-outline" accent="#06b6d4" p={p} />
+              <KpiCard label="FEES / MIN"     value={formatUSD(m?.feesPerMin ?? 0, { compact: true })} hint={`${formatUSD(m?.commissions5mUSD ?? 0, { compact: true })} / 5m`} icon="cash-outline" accent="#22c55e" p={p} />
+              <KpiCard label="DEPOSITS 5M"   value={(m?.recentDeposits5m ?? 0).toLocaleString()} hint={`${d?.pendingDeposits ?? 0} pending`} icon="arrow-down-circle-outline" accent="#22c55e" p={p} />
+              <KpiCard label="WITHDRAWALS"   value={(m?.recentWithdrawals5m ?? 0).toLocaleString()} hint={`${d?.pendingWithdrawals ?? 0} queue`} icon="arrow-up-circle-outline" accent="#ef4444" p={p} />
+              <KpiCard label="P2P / 5MIN"    value={(m?.recentP2P5m ?? 0).toLocaleString()} hint="trades opened" icon="swap-horizontal-outline" accent="#8b5cf6" p={p} />
+              <KpiCard label="CARDS / 5MIN"  value={(m?.recentCardTx5m ?? 0).toLocaleString()} hint="card events" icon="card-outline" accent="#f59e0b" p={p} />
             </View>
           </View>
 
@@ -580,6 +618,7 @@ export default function AdminScreen() {
             <ActionRow icon="document-text-outline"   label="KYC Reviews"             count={d?.pendingKYC ?? 0}         onPress={() => router.push('/admin/kyc' as any)} p={p} />
             <ActionRow icon="arrow-down-circle-outline" label="Deposits Awaiting"     count={d?.pendingDeposits ?? 0}    onPress={() => router.push('/admin/deposits' as any)} p={p} />
             <ActionRow icon="arrow-up-circle-outline"  label="Withdrawal Queue"        count={d?.pendingWithdrawals ?? 0} onPress={() => router.push('/admin/withdrawals' as any)} p={p} />
+            <ActionRow icon="person-add-outline"       label="Create Relationship User"                                  onPress={() => router.push('/admin/users' as any)} p={p} />
             <ActionRow icon="warning-outline"          label="Escalated P2P / Support"                                    onPress={() => router.push('/admin/escalations' as any)} p={p} />
             <ActionRow icon="chatbubble-ellipses-outline" label="Support Chats"                                          onPress={() => router.push('/admin/support' as any)} p={p} />
           </View>

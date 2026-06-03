@@ -2,7 +2,7 @@
  * CoinIcon — displays a real coin logo inside a coloured circle.
  *
  * Uses useCoinIcons() which cascades through sources:
- *   1. Server /api/markets/icons map
+ *   1. Server markets/icons map
  *   2. Client-side CoinGecko search cache
  *   3. CoinCap CDN  (~2,000 coins)
  *   4. jsDelivr      (~800 coins)
