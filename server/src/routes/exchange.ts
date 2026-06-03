@@ -13,8 +13,13 @@ const isSimulator = (req: any) =>
   process.env.NODE_ENV !== 'production' && req.headers['x-simulator'] === 'true';
 
 const quoteLimiter = rateLimit({
+  // Quotes are read-only and the buy/sell widget refreshes live: it re-quotes
+  // on each (debounced) amount keystroke AND on a 10s countdown. 5/min was far
+  // too tight — a user simply typing an amount hit 429 "Too many quote
+  // requests", which surfaced as "can't get a quote". 60/min (≈1/s) leaves
+  // ample headroom for normal use while still blocking scripted abuse.
   windowMs: 60_000,
-  max: 5,
+  max: 60,
   keyGenerator: userKey,
   skip: isSimulator,
   standardHeaders: true,
