@@ -236,6 +236,25 @@ const PRICE_PROVIDERS: PriceProvider[] = [
       return data && typeof data.USDT === 'number' ? new Decimal(data.USDT) : null;
     },
   },
+  {
+    name: 'coingecko',
+    fetch: async (base) => {
+      // CoinGecko uses coin IDs, not tickers. Map the assets we trade; unknowns
+      // return null so the chain moves on. https://api.coingecko.com/api/v3/simple/price
+      const ids: Record<string, string> = {
+        BTC: 'bitcoin', ETH: 'ethereum', SOL: 'solana', BNB: 'binancecoin',
+        XRP: 'ripple', ADA: 'cardano', DOGE: 'dogecoin', TRX: 'tron',
+        LINK: 'chainlink', MATIC: 'matic-network', DOT: 'polkadot', AVAX: 'avalanche-2',
+        USDT: 'tether', USDC: 'usd-coin',
+      };
+      const id = ids[base.toUpperCase()];
+      if (!id) return null;
+      const url = `https://api.coingecko.com/api/v3/simple/price?ids=${id}&vs_currencies=usd`;
+      const { data } = await axios.get<Record<string, { usd?: number }>>(url, { timeout: 5000 });
+      const usd = data?.[id]?.usd;
+      return typeof usd === 'number' ? new Decimal(usd) : null;
+    },
+  },
 ];
 
 /** "BTCUSDT" → "BTC". Symbols here are always `<ASSET>USDT`. */
