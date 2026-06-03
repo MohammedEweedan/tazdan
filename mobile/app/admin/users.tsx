@@ -7,7 +7,7 @@
  *  - Direct DM
  */
 
-import { useState } from 'react';
+import { useState, type ComponentProps } from 'react';
 import { Alert, KeyboardAvoidingView, Modal, Platform, Pressable, RefreshControl, ScrollView, View } from 'react-native';
 import { Text, TextInput } from '@/components/ui/Text';
 import { Ionicons } from '@expo/vector-icons';
@@ -24,9 +24,9 @@ import { TopGradient } from '@/components/ui/ScreenShell';
 
 type Filter = 'ALL' | 'ACTIVE' | 'SUSPENDED' | 'PENDING_KYC';
 type UserStatus = 'ACTIVE' | 'SUSPENDED' | 'BANNED';
-type ModalKind = 'freeze' | 'kyc' | 'credit' | 'status' | null;
+type ModalKind = 'create' | 'freeze' | 'kyc' | 'credit' | 'status' | null;
 
-const CURRENCIES = ['USD', 'USDT', 'BTC', 'ETH', 'EUR', 'GBP'];
+const CURRENCIES = ['USD', 'USDT', 'BTC', 'ETH', 'EUR', 'GBP', 'AED', 'SAR', 'EGP', 'LYD'];
 
 function kycColor(s: string | undefined) {
   if (s === 'APPROVED') return '#22c55e';
@@ -51,6 +51,24 @@ export default function AdminUsers() {
 
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<Filter>('ALL');
+
+  // Admin-created relationship account
+  const [createEmail, setCreateEmail] = useState('');
+  const [createFirstName, setCreateFirstName] = useState('');
+  const [createLastName, setCreateLastName] = useState('');
+  const [createUsername, setCreateUsername] = useState('');
+  const [createPhoneCode, setCreatePhoneCode] = useState('');
+  const [createPhone, setCreatePhone] = useState('');
+  const [createCountry, setCreateCountry] = useState('');
+  const [createDob, setCreateDob] = useState('');
+  const [createPassword, setCreatePassword] = useState('');
+  const [createStatus, setCreateStatus] = useState<'PENDING' | 'ACTIVE' | 'SUSPENDED'>('ACTIVE');
+  const [createKyc, setCreateKyc] = useState<'NOT_SUBMITTED' | 'PENDING' | 'APPROVED'>('NOT_SUBMITTED');
+  const [createEmailVerified, setCreateEmailVerified] = useState(true);
+  const [createRelationship, setCreateRelationship] = useState('');
+  const [createNote, setCreateNote] = useState('');
+  const [createOpeningCurrency, setCreateOpeningCurrency] = useState('USDT');
+  const [createOpeningAmount, setCreateOpeningAmount] = useState('');
 
   // Active action target
   const [actionUser, setActionUser] = useState<any | null>(null);
@@ -87,6 +105,25 @@ export default function AdminUsers() {
     refetchInterval: 30_000,
   });
 
+  const resetCreateForm = () => {
+    setCreateEmail('');
+    setCreateFirstName('');
+    setCreateLastName('');
+    setCreateUsername('');
+    setCreatePhoneCode('');
+    setCreatePhone('');
+    setCreateCountry('');
+    setCreateDob('');
+    setCreatePassword('');
+    setCreateStatus('ACTIVE');
+    setCreateKyc('NOT_SUBMITTED');
+    setCreateEmailVerified(true);
+    setCreateRelationship('');
+    setCreateNote('');
+    setCreateOpeningCurrency('USDT');
+    setCreateOpeningAmount('');
+  };
+
   const openModal = (u: any, kind: ModalKind) => {
     setActionUser(u);
     setModalKind(kind);
@@ -100,6 +137,44 @@ export default function AdminUsers() {
   };
 
   const closeModal = () => { setActionUser(null); setModalKind(null); };
+
+  const createMut = useMutation({
+    mutationFn: () => {
+      const openingAmount = Number(createOpeningAmount);
+      return adminService.createUser({
+        email: createEmail.trim(),
+        firstName: createFirstName.trim(),
+        lastName: createLastName.trim(),
+        username: createUsername.trim() || undefined,
+        phoneCountryCode: createPhoneCode.trim() || undefined,
+        phone: createPhone.trim() || undefined,
+        country: createCountry.trim().toUpperCase() || undefined,
+        dateOfBirth: createDob.trim() || undefined,
+        password: createPassword || undefined,
+        status: createStatus,
+        kycStatus: createKyc,
+        emailVerified: createEmailVerified,
+        relationship: createRelationship.trim() || undefined,
+        note: createNote.trim() || undefined,
+        initialBalances: Number.isFinite(openingAmount) && openingAmount > 0
+          ? [{ currency: createOpeningCurrency, amount: openingAmount }]
+          : undefined,
+      });
+    },
+    onSuccess: (res) => {
+      qc.invalidateQueries({ queryKey: ['admin-users'] });
+      qc.invalidateQueries({ queryKey: ['admin-dashboard'] });
+      closeModal();
+      resetCreateForm();
+      Alert.alert(
+        'User created',
+        res.temporaryPassword
+          ? `Created ${res.user.email}.\n\nTemporary password:\n${res.temporaryPassword}\n\nShare it securely and ask them to change it after signing in.`
+          : `Created ${res.user.email}.`,
+      );
+    },
+    onError: (e: any) => Alert.alert('Create user failed', e?.response?.data?.error ?? e?.response?.data?.message ?? e?.message ?? 'Try again'),
+  });
 
   const freezeMut = useMutation({
     mutationFn: ({ id, reason }: { id: string; reason?: string }) => adminService.freezeUser(id, reason),
@@ -168,6 +243,13 @@ export default function AdminUsers() {
           </Pressable>
           <Text style={{ flex: 1, color: p.fg, fontSize: 18, fontWeight: '600', letterSpacing: -0.3 }}>Users</Text>
           <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '700' }}>{q.data?.total ?? users.length}</Text>
+          <Pressable
+            onPress={() => { resetCreateForm(); setModalKind('create'); }}
+            hitSlop={8}
+            style={{ width: 34, height: 34, borderRadius: 10, backgroundColor: p.fg, alignItems: 'center', justifyContent: 'center' }}
+          >
+            <Ionicons name="person-add-outline" size={17} color={p.bg} />
+          </Pressable>
         </View>
 
         {/* Search */}
@@ -237,6 +319,91 @@ export default function AdminUsers() {
           )}
         </ScrollView>
       </SafeAreaView>
+
+      {/* ── CREATE USER MODAL ────────────────────────── */}
+      <Modal visible={modalKind === 'create'} transparent animationType="slide" onRequestClose={closeModal}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
+          <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' }}>
+            <ScrollView
+              keyboardShouldPersistTaps="handled"
+              style={{ maxHeight: '92%' }}
+              contentContainerStyle={{ backgroundColor: p.bg, borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 20, paddingBottom: 36 }}
+            >
+              <View style={{ alignSelf: 'center', width: 36, height: 4, borderRadius: 2, backgroundColor: p.border, marginBottom: 14 }} />
+              <Text style={{ color: p.fg, fontSize: 18, fontWeight: '700' }}>Create relationship user</Text>
+              <Text style={{ color: p.fgMuted, fontSize: 12, marginTop: 4, marginBottom: 16 }}>
+                For trusted close friends and family. Audit log and optional opening balance are recorded.
+              </Text>
+
+              <View style={{ flexDirection: 'row', gap: 10 }}>
+                <CreateField label="FIRST NAME" value={createFirstName} onChangeText={setCreateFirstName} placeholder="First" p={p} style={{ flex: 1 }} />
+                <CreateField label="LAST NAME" value={createLastName} onChangeText={setCreateLastName} placeholder="Last" p={p} style={{ flex: 1 }} />
+              </View>
+              <CreateField label="EMAIL" value={createEmail} onChangeText={setCreateEmail} placeholder="name@example.com" keyboardType="email-address" autoCapitalize="none" p={p} />
+              <CreateField label="HANDLE (optional)" value={createUsername} onChangeText={setCreateUsername} placeholder="auto-generated if blank" autoCapitalize="none" p={p} />
+              <View style={{ flexDirection: 'row', gap: 10 }}>
+                <CreateField label="DIAL" value={createPhoneCode} onChangeText={setCreatePhoneCode} placeholder="218" keyboardType="number-pad" p={p} style={{ width: 92 }} />
+                <CreateField label="PHONE" value={createPhone} onChangeText={setCreatePhone} placeholder="912345678" keyboardType="phone-pad" p={p} style={{ flex: 1 }} />
+                <CreateField label="COUNTRY" value={createCountry} onChangeText={setCreateCountry} placeholder="LY" autoCapitalize="characters" p={p} style={{ width: 88 }} />
+              </View>
+              <CreateField label="DATE OF BIRTH (optional)" value={createDob} onChangeText={setCreateDob} placeholder="YYYY-MM-DD" p={p} />
+              <CreateField label="PASSWORD (optional)" value={createPassword} onChangeText={setCreatePassword} placeholder="Leave blank to generate one" secureTextEntry p={p} />
+
+              <CreateSegment
+                label="STATUS"
+                options={['ACTIVE', 'PENDING', 'SUSPENDED'] as const}
+                value={createStatus}
+                onChange={setCreateStatus}
+                p={p}
+              />
+              <CreateSegment
+                label="KYC"
+                options={['NOT_SUBMITTED', 'PENDING', 'APPROVED'] as const}
+                value={createKyc}
+                onChange={setCreateKyc}
+                p={p}
+              />
+
+              <Pressable
+                onPress={() => setCreateEmailVerified((v) => !v)}
+                style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 14, padding: 12, borderRadius: 12, borderWidth: 1, borderColor: p.border, backgroundColor: p.bgElev }}
+              >
+                <Ionicons name={createEmailVerified ? 'checkbox' : 'square-outline'} size={19} color={createEmailVerified ? '#22c55e' : p.fgMuted} />
+                <Text style={{ color: p.fg, fontSize: 13, fontWeight: '700' }}>Mark email verified</Text>
+              </Pressable>
+
+              <CreateField label="RELATIONSHIP / SOURCE" value={createRelationship} onChangeText={setCreateRelationship} placeholder="Close friend, family, IB referral…" p={p} />
+              <CreateField label="ADMIN NOTE" value={createNote} onChangeText={setCreateNote} placeholder="Reason for creating this account" p={p} />
+
+              <Text style={{ color: p.fgFaint, fontSize: 10, fontWeight: '700', letterSpacing: 0.6, marginBottom: 8 }}>OPENING CREDIT (optional)</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, marginBottom: 10 }}>
+                {CURRENCIES.map((c) => {
+                  const on = createOpeningCurrency === c;
+                  return (
+                    <Pressable key={c} onPress={() => setCreateOpeningCurrency(c)} style={{ paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10, backgroundColor: on ? p.fg : p.pillBg, borderWidth: 1, borderColor: on ? p.fg : p.border }}>
+                      <Text style={{ color: on ? p.bg : p.fg, fontSize: 12, fontWeight: '700' }}>{c}</Text>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+              <CreateField label="AMOUNT" value={createOpeningAmount} onChangeText={setCreateOpeningAmount} placeholder="0.00" keyboardType="decimal-pad" p={p} />
+
+              <View style={{ flexDirection: 'row', gap: 10, marginTop: 4 }}>
+                <Pressable onPress={closeModal} style={{ flex: 1, height: 50, borderRadius: 12, backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border, alignItems: 'center', justifyContent: 'center' }}>
+                  <Text style={{ color: p.fg, fontWeight: '700' }}>Cancel</Text>
+                </Pressable>
+                <Pressable
+                  disabled={createMut.isPending || !createEmail.trim() || !createFirstName.trim() || !createLastName.trim()}
+                  onPress={() => createMut.mutate()}
+                  style={{ flex: 1, height: 50, borderRadius: 12, backgroundColor: p.fg, alignItems: 'center', justifyContent: 'center', opacity: createMut.isPending || !createEmail.trim() || !createFirstName.trim() || !createLastName.trim() ? 0.5 : 1 }}
+                >
+                  <Text style={{ color: p.bg, fontWeight: '700' }}>{createMut.isPending ? 'Creating…' : 'Create user'}</Text>
+                </Pressable>
+              </View>
+            </ScrollView>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
 
       {/* ── FREEZE MODAL ─────────────────────────────── */}
       <Modal visible={modalKind === 'freeze'} transparent animationType="slide" onRequestClose={closeModal}>
@@ -475,6 +642,73 @@ export default function AdminUsers() {
           </View>
         </View>
       </Modal>
+    </View>
+  );
+}
+
+function CreateField({
+  label,
+  value,
+  onChangeText,
+  placeholder,
+  p,
+  style,
+  ...rest
+}: {
+  label: string;
+  value: string;
+  onChangeText: (v: string) => void;
+  placeholder: string;
+  p: any;
+  style?: any;
+} & ComponentProps<typeof TextInput>) {
+  return (
+    <View style={[{ marginBottom: 12 }, style]}>
+      <Text style={{ color: p.fgFaint, fontSize: 10, fontWeight: '700', letterSpacing: 0.6, marginBottom: 6 }}>{label}</Text>
+      <View style={{ backgroundColor: p.bgElev, borderRadius: 12, borderWidth: 1, borderColor: p.border, paddingHorizontal: 12, minHeight: 46, justifyContent: 'center' }}>
+        <TextInput
+          value={value}
+          onChangeText={onChangeText}
+          placeholder={placeholder}
+          placeholderTextColor={p.fgFaint}
+          style={{ color: p.fg, fontSize: 14, fontWeight: '600' }}
+          {...rest}
+        />
+      </View>
+    </View>
+  );
+}
+
+function CreateSegment<T extends string>({
+  label,
+  options,
+  value,
+  onChange,
+  p,
+}: {
+  label: string;
+  options: readonly T[];
+  value: T;
+  onChange: (v: T) => void;
+  p: any;
+}) {
+  return (
+    <View style={{ marginBottom: 14 }}>
+      <Text style={{ color: p.fgFaint, fontSize: 10, fontWeight: '700', letterSpacing: 0.6, marginBottom: 8 }}>{label}</Text>
+      <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+        {options.map((opt) => {
+          const on = value === opt;
+          return (
+            <Pressable
+              key={opt}
+              onPress={() => onChange(opt)}
+              style={{ paddingHorizontal: 11, paddingVertical: 8, borderRadius: 10, backgroundColor: on ? p.fg : p.pillBg, borderWidth: 1, borderColor: on ? p.fg : p.border }}
+            >
+              <Text style={{ color: on ? p.bg : p.fg, fontSize: 11, fontWeight: '700' }}>{opt.replace('_', ' ')}</Text>
+            </Pressable>
+          );
+        })}
+      </View>
     </View>
   );
 }

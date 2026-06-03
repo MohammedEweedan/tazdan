@@ -59,6 +59,7 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
+      "./plugins/with-react-native-bundle-ip-output",
       "expo-router",
       "expo-secure-store",
       "expo-video",

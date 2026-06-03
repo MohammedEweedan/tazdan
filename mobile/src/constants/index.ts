@@ -17,18 +17,25 @@ import type { Currency, CurrencyMeta } from '@/types';
  */
 const API_PORT = 5000;
 const PRODUCTION_API_BASE = 'https://api.promrkts.com';
+const HOSTED_API_HOSTS = new Set(['api.promrkts.com']);
 
 /**
- * Every server route is mounted under `/api/...` (see server `app.use('/api/...')`)
- * and every dev branch below already appends `/api`. Release builds set
- * `EXPO_PUBLIC_API_BASE` to a bare host (e.g. https://api.promrkts.com) WITHOUT
- * the suffix — which previously made calls hit `/exchange/execute` instead of
- * `/api/exchange/execute`, so reads silently fell back to mock data and Buy/Sell
- * 404'd. We now guarantee exactly one trailing `/api` regardless of how the env
- * var is written, so the prod app talks to the same paths as dev.
+ * Local/dev servers expose Express routes under `/api/...`, so LAN and
+ * localhost bases need a trailing `/api`. The hosted production domain is
+ * already reverse-proxied so `https://api.promrkts.com/auth/login` reaches
+ * Express `/api/auth/login`; adding another `/api` produces `/api/api/...`
+ * upstream and every request 404s.
  */
-function withApiSuffix(base: string): string {
-  const trimmed = base.replace(/\/+$/, '');           // drop trailing slashes
+function normalizeApiBase(base: string): string {
+  const trimmed = base.replace(/\/+$/, '');
+  try {
+    const url = new URL(trimmed);
+    if (HOSTED_API_HOSTS.has(url.hostname)) {
+      return url.origin;
+    }
+  } catch {
+    // Fall through for relative/custom bases.
+  }
   return /\/api$/.test(trimmed) ? trimmed : `${trimmed}/api`;
 }
 
@@ -46,14 +53,14 @@ function resolveApiBase(): string {
         `Set EXPO_PUBLIC_API_BASE to an https:// URL at build time.`,
       );
     }
-    return withApiSuffix(fromEnv);
+    return normalizeApiBase(fromEnv);
   }
 
   // Release/TestFlight-style builds should use the hosted API by default.
   // Dev keeps the LAN/localhost resolver below so Expo Go and simulators
   // do not accidentally hit production while you are iterating.
   if (!__DEV__) {
-    return withApiSuffix(PRODUCTION_API_BASE);
+    return normalizeApiBase(PRODUCTION_API_BASE);
   }
 
   // hostUri looks like "192.168.1.42:8081" when launched from `expo start`
