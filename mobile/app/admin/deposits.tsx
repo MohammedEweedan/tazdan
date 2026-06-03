@@ -5,37 +5,33 @@
  */
 
 import { useState } from 'react';
-import { Alert, Modal, Pressable, RefreshControl, ScrollView, View } from 'react-native';
+import { Alert, Modal, Pressable, RefreshControl, View } from 'react-native';
 import { Text, TextInput } from '@/components/ui/Text';
 import { Ionicons } from '@expo/vector-icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useRouter } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { StatusBar } from 'expo-status-bar';
 import { formatRelativeTime } from '@/utils/format';
 
-import { useThemedPalette, useTheme } from '@/store/themeStore';
-import { useAuthStore } from '@/store/authStore';
+import { useThemedPalette } from '@/store/themeStore';
 import { adminService } from '@/services';
 import { LoadingPulse } from '@/components/ui/LoadingPulse';
-import { TopGradient } from '@/components/ui/ScreenShell';
+import { AdminScreen, AdminTabs } from '@/components/admin/AdminScreen';
+
+type DepFilter = 'WAITING_CONFIRMATION' | 'CONFIRMED' | 'REJECTED';
 
 export default function AdminDeposits() {
   const p = useThemedPalette();
-  const themeMode = useTheme((s) => s.mode);
-  const router = useRouter();
   const qc = useQueryClient();
-  const user = useAuthStore((s) => s.user);
-  const isAdmin = user?.role === 'ADMIN';
 
-  const [filter, setFilter] = useState<'PENDING' | 'CONFIRMED' | 'REJECTED'>('PENDING');
+  // Deposits awaiting review are created server-side as WAITING_CONFIRMATION
+  // (see deposit.controller). The queue's "Awaiting" tab must query THAT status
+  // — filtering by PENDING showed an empty queue while real deposits piled up.
+  const [filter, setFilter] = useState<DepFilter>('WAITING_CONFIRMATION');
   const [rejecting, setRejecting] = useState<any | null>(null);
   const [reason, setReason] = useState('');
 
   const q = useQuery({
     queryKey: ['admin-deposits', filter],
     queryFn: () => adminService.deposits({ status: filter }),
-    enabled: isAdmin,
     refetchInterval: 15_000,
   });
 
@@ -57,35 +53,24 @@ export default function AdminDeposits() {
 
   const deposits = q.data?.deposits ?? [];
 
-  if (!isAdmin) {
-    return <DeniedView p={p} themeMode={themeMode} onBack={() => router.back()} />;
-  }
-
   return (
-    <View style={{ flex: 1, backgroundColor: p.bg }}>
-      <TopGradient />
-      <StatusBar style={themeMode === 'light' ? 'dark' : 'light'} />
-      <SafeAreaView style={{ flex: 1 }} edges={['top']}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingTop: 8, paddingBottom: 8 }}>
-          <Pressable onPress={() => router.back()} hitSlop={8}>
-            <Ionicons name="chevron-back" size={26} color={p.fg} />
-          </Pressable>
-          <Text style={{ flex: 1, color: p.fg, fontSize: 18, fontWeight: '600', letterSpacing: -0.3 }}>Deposit Queue</Text>
-          <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '700' }}>{deposits.length}</Text>
-        </View>
+    <AdminScreen
+      title="Deposit Queue"
+      subtitle={`${deposits.length} ${filter === 'WAITING_CONFIRMATION' ? 'awaiting' : filter.toLowerCase()}`}
+      refreshControl={<RefreshControl refreshing={q.isFetching} onRefresh={q.refetch} tintColor={p.fg} />}
+    >
+      <AdminTabs<DepFilter>
+        value={filter}
+        onChange={setFilter}
+        tabs={[
+          { key: 'WAITING_CONFIRMATION', label: 'Awaiting', count: filter === 'WAITING_CONFIRMATION' ? deposits.length : undefined },
+          { key: 'CONFIRMED', label: 'Confirmed' },
+          { key: 'REJECTED', label: 'Rejected' },
+        ]}
+      />
 
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, gap: 8 }}>
-          {(['PENDING', 'CONFIRMED', 'REJECTED'] as const).map((s) => {
-            const on = filter === s;
-            return (
-              <Pressable key={s} onPress={() => setFilter(s)} style={{ paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10, backgroundColor: on ? p.fg : p.pillBg, borderWidth: 1, borderColor: on ? p.fg : p.border }}>
-                <Text style={{ color: on ? p.bg : p.fg, fontSize: 12, fontWeight: '600' }}>{s}</Text>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
-
-        <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 80 }} refreshControl={<RefreshControl refreshing={q.isFetching} onRefresh={q.refetch} tintColor={p.fg} />}>
+      {(() => (
+        <>
           {q.isLoading ? (
             <View style={{ paddingTop: 80, alignItems: 'center' }}>
               <LoadingPulse size={56} icon="arrow-down-circle-outline" label="Loading deposits…" />
@@ -93,7 +78,9 @@ export default function AdminDeposits() {
           ) : deposits.length === 0 ? (
             <View style={{ paddingVertical: 60, alignItems: 'center' }}>
               <Ionicons name="file-tray-outline" size={42} color={p.fgFaint} />
-              <Text style={{ color: p.fgMuted, marginTop: 10, fontSize: 13 }}>No {filter.toLowerCase()} deposits</Text>
+              <Text style={{ color: p.fgMuted, marginTop: 10, fontSize: 13 }}>
+                No {filter === 'WAITING_CONFIRMATION' ? 'awaiting' : filter.toLowerCase()} deposits
+              </Text>
             </View>
           ) : (
             deposits.map((d: any) => (
@@ -114,7 +101,7 @@ export default function AdminDeposits() {
                 {d.reference && (
                   <Text style={{ color: p.fgFaint, fontSize: 11, marginTop: 4 }}>Ref: {d.reference}</Text>
                 )}
-                {filter === 'PENDING' && (
+                {filter === 'WAITING_CONFIRMATION' && (
                   <View style={{ flexDirection: 'row', gap: 8, marginTop: 12 }}>
                     <Pressable
                       onPress={() => Alert.alert('Confirm deposit?', `Credit ${d.user?.email}'s wallet with ${d.amount} ${d.currency}?`, [
@@ -136,9 +123,10 @@ export default function AdminDeposits() {
               </View>
             ))
           )}
-        </ScrollView>
+        </>
+      ))()}
 
-        <Modal visible={!!rejecting} transparent animationType="slide" onRequestClose={() => setRejecting(null)}>
+      <Modal visible={!!rejecting} transparent animationType="slide" onRequestClose={() => setRejecting(null)}>
           <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' }}>
             <View style={{ backgroundColor: p.bg, borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 20, paddingBottom: 36 }}>
               <View style={{ alignSelf: 'center', width: 36, height: 4, borderRadius: 2, backgroundColor: p.border, marginBottom: 14 }} />
@@ -169,20 +157,6 @@ export default function AdminDeposits() {
             </View>
           </View>
         </Modal>
-      </SafeAreaView>
-    </View>
-  );
-}
-
-function DeniedView({ p, themeMode, onBack }: any) {
-  return (
-    <View style={{ flex: 1, backgroundColor: p.bg, alignItems: 'center', justifyContent: 'center', padding: 40 }}>
-      <StatusBar style={themeMode === 'light' ? 'dark' : 'light'} />
-      <Ionicons name="lock-closed-outline" size={48} color={p.fgFaint} />
-      <Text style={{ color: p.fg, fontSize: 18, fontWeight: '600', marginTop: 14 }}>Admin only</Text>
-      <Pressable onPress={onBack} style={{ marginTop: 24, paddingHorizontal: 18, paddingVertical: 11, borderRadius: 12, backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border }}>
-        <Text style={{ color: p.fg, fontWeight: '700' }}>Back</Text>
-      </Pressable>
-    </View>
+    </AdminScreen>
   );
 }

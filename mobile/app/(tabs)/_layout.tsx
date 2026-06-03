@@ -1,10 +1,36 @@
+import { useEffect, useRef } from 'react';
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { Image, Platform, Pressable, Text, View, ActionSheetIOS, Alert } from 'react-native';
+import { Animated, Easing, Platform, Pressable, Text, View, ActionSheetIOS, Alert } from 'react-native';
 import { useThemedPalette } from '@/store/themeStore';
 import { useAuthStore } from '@/store/authStore';
 import { useT } from '@/store/i18nStore';
 import { useMessageRealtime } from '@/hooks';
+
+/** The brand asterisk in the centre FAB, rotating slowly + continuously. */
+function RotatingMark({ size, mono }: { size: number; mono: boolean }) {
+  const spin = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.timing(spin, { toValue: 1, duration: 10000, easing: Easing.linear, useNativeDriver: true }),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [spin]);
+  const rotate = spin.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
+  // Mono → the white mark on the (constant) white disc reads as a debossed
+  // asterisk; non-mono → the true-blue colour mark.
+  const src = mono
+    ? require('../../assets/icon-white.png')
+    : require('../../assets/icon-color.png');
+  return (
+    <Animated.Image
+      source={src}
+      style={{ width: size, height: size, transform: [{ rotate }] }}
+      resizeMode="contain"
+    />
+  );
+}
 
 const ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   wallet: 'wallet',
@@ -19,12 +45,12 @@ export default function TabsLayout() {
   const p = useThemedPalette();
   const t = useT();
   const userId = useAuthStore((s) => s.user?.id);
-  // FAB is a clean mono disc; the "active" feel comes from a soft
-  // halo ring behind it, not a gradient fill. Halo colour matches the
-  // primary foreground so it reads on either theme.
-  const fabFill = p.fg;
-  const fabFg   = p.bg;
-  const haloColor = p.fg; // white on dark/mono, near-black on light
+  // FAB is a CONSTANT white disc carrying the brand asterisk, which rotates
+  // slowly. In dark/light it's the true-blue mark (icon-color); in mono it's
+  // the black mark (icon-white) on the same white disc — pure monochrome.
+  const isMono    = p.accentText === p.fg; // mono collapses accent → fg
+  const fabFill   = '#FFFFFF';             // white disc, constant across themes
+  const haloColor = isMono ? '#000000' : p.accent;   // soft blue halo (grey in mono)
 
   useMessageRealtime(userId);
 
@@ -47,7 +73,7 @@ export default function TabsLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: p.fg,
+        tabBarActiveTintColor: p.accentText,
         tabBarInactiveTintColor: p.fgFaint,
         tabBarShowLabel: false,
         tabBarStyle: {
@@ -99,11 +125,9 @@ export default function TabsLayout() {
                 marginTop: -10,
               }}
             >
-              {/* Clean mono disc — no gradient, no concentric rings.
-                  The "halo" is a soft shadow glow in the FAB's own
-                  colour, picked up by the shadowColor below.  This
-                  preserves the lifted feel without painting any
-                  visible rings around the button. */}
+              {/* Constant white disc with a slowly-rotating brand mark. The
+                  "halo" is a soft shadow glow (blue in dark/light, grey in
+                  mono) — no gradient, no concentric rings. */}
               <View
                 style={{
                   width: FAB_SIZE,
@@ -121,11 +145,7 @@ export default function TabsLayout() {
                   elevation: 10,
                 }}
               >
-                <Image
-                  source={require('../../assets/icon-color.png')}
-                  style={{ width: FAB_SIZE - 22, height: FAB_SIZE - 22, tintColor: fabFg }}
-                  resizeMode="contain"
-                />
+                <RotatingMark size={FAB_SIZE - 22} mono={isMono} />
               </View>
             </Pressable>
           ),

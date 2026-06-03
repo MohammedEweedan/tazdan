@@ -25,19 +25,22 @@ module.exports = {
           accent:     '#FFFFFF',
           accentFg:   '#0A0A0B',
         },
-        // Legacy brand alias — points at grayscale so `bg-brand-500` etc.
-        // continue to read as the new mono accent during the migration.
+        // Brand ramp — soft pantone blue (#63a1db at the 500 anchor). Used
+        // for `bg-brand`/`text-brand` accent utilities. Primary CTAs do NOT
+        // use these (they stay neutral via the mono/ctaBg tokens); this ramp
+        // is for selected states, links, and accent surfaces only.
         brand: {
-          50:  '#F4F4F4',
-          100: '#E5E5E5',
-          200: '#D4D4D4',
-          300: '#A3A3A3',
-          400: '#FFFFFF', // primary CTA fill (was brand mid blue)
-          500: '#FAFAFA',
-          600: '#0A0A0B', // primary CTA dark variant (was deep blue)
-          700: '#262626',
-          800: '#171717',
-          900: '#0A0A0B',
+          50:  '#EEF5FB',
+          100: '#D7E7F5',
+          200: '#B3D0EC',
+          300: '#8FBAE3',
+          400: '#7BB0DF',
+          500: '#63A1DB', // brand anchor
+          600: '#4F8BC4', // deepened — light-surface fill
+          700: '#3E78AE', // text on light bg (AA)
+          800: '#2E5C86',
+          900: '#1F3F5C',
+          DEFAULT: '#63A1DB',
         },
         // Surface ramp — graphite, no blue undertone
         surface: {

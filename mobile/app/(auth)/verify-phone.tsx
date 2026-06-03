@@ -174,17 +174,17 @@ export default function VerifyPhoneScreen() {
                       style={{
                         flex: 1, height: 52, borderRadius: 14,
                         borderWidth: channel === ch ? 2 : 1,
-                        borderColor: channel === ch ? p.fg : p.border,
-                        backgroundColor: channel === ch ? (isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)') : 'transparent',
+                        borderColor: channel === ch ? p.accent : p.border,
+                        backgroundColor: channel === ch ? p.accentSoft : 'transparent',
                         alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8,
                       }}
                     >
                       <Ionicons
                         name={ch === 'whatsapp' ? 'logo-whatsapp' : 'chatbubble-ellipses-outline'}
                         size={18}
-                        color={channel === ch ? p.fg : p.fgMuted}
+                        color={channel === ch ? p.accentText : p.fgMuted}
                       />
-                      <Text style={{ color: channel === ch ? p.fg : p.fgMuted, fontSize: 14, fontWeight: '600', textTransform: 'capitalize' }}>
+                      <Text style={{ color: channel === ch ? p.accentText : p.fgMuted, fontSize: 14, fontWeight: '600', textTransform: 'capitalize' }}>
                         {ch === 'whatsapp' ? 'WhatsApp' : 'SMS'}
                       </Text>
                     </Pressable>

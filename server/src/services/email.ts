@@ -478,29 +478,62 @@ export async function sendPasswordResetEmail({
   to,
   firstName,
   token,
+  code,
 }: {
   to: string;
   firstName: string;
   token: string;
+  /** 6-digit code for the mobile app. Falls back to `token` if omitted. */
+  code?: string;
 }) {
+  const theCode = code ?? token;
   const resetUrl = `${CLIENT_URL}/auth/reset-password?token=${token}`;
   const html = baseTemplate(
     'Reset your password — tazdan',
     `<h1 class="text-main">Reset your password</h1>
     <p class="text-muted">Hi ${firstName}, we received a request to reset your tazdan password.</p>
 
+    <p class="text-muted" style="margin:18px 0 6px; font-size:13px;">In the app, enter this code:</p>
+    <div style="text-align:center; margin:6px 0 18px;">
+      <span style="display:inline-block; font-size:32px; font-weight:800; letter-spacing:10px; padding:14px 22px; border-radius:12px; background:#f1f0eb; color:#0a0a0b;">${theCode}</span>
+    </div>
+
     <div class="btn-wrap">
-      <a href="${resetUrl}" class="btn">Set New Password</a>
+      <a href="${resetUrl}" class="btn">Or set a new password on the web</a>
     </div>
 
     <div class="notice">
-      <p class="text-muted" style="margin:0 0 6px; font-size:13px;">Or copy this link:</p>
+      <p class="text-muted" style="margin:0 0 6px; font-size:13px;">Web link:</p>
       <p class="text-muted" style="margin:0; font-size:11px; word-break:break-all;">${resetUrl}</p>
     </div>
 
-    <p class="text-muted" style="font-size:12px; margin-top:16px;">This link expires in 1 hour. Didn't request this? Your account is safe — ignore this email.</p>`
+    <p class="text-muted" style="font-size:12px; margin-top:16px;">This code expires in 1 hour. Didn't request this? Your account is safe — ignore this email.</p>`
   );
-  await sendEmail({ to, subject: 'Reset your tazdan password', html, sender: 'auth' });
+  await sendEmail({ to, subject: 'Your tazdan password reset code', html, sender: 'auth' });
+}
+
+export async function send2FARecoveryEmail({
+  to,
+  firstName,
+  code,
+}: {
+  to: string;
+  firstName: string;
+  code: string;
+}) {
+  const html = baseTemplate(
+    'Two-factor recovery — tazdan',
+    `<h1 class="text-main">Two-factor recovery</h1>
+    <p class="text-muted">Hi ${firstName}, here's the code to remove two-factor authentication from your account. You'll also need to confirm your phone number and date of birth in the app.</p>
+
+    <p class="text-muted" style="margin:18px 0 6px; font-size:13px;">Your recovery code:</p>
+    <div style="text-align:center; margin:6px 0 18px;">
+      <span style="display:inline-block; font-size:32px; font-weight:800; letter-spacing:10px; padding:14px 22px; border-radius:12px; background:#f1f0eb; color:#0a0a0b;">${code}</span>
+    </div>
+
+    <p class="text-muted" style="font-size:12px; margin-top:16px;">This code expires in 30 minutes. If you didn't request this, ignore this email — your 2FA stays on.</p>`
+  );
+  await sendEmail({ to, subject: 'Your tazdan 2FA recovery code', html, sender: 'auth' });
 }
 /* ─────────────────────────────────────────────────────────────
    Withdrawal Confirmed

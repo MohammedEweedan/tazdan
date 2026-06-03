@@ -58,8 +58,8 @@ const KNOWN_META: Record<string, { label: string; color: string; bg: string; ico
   OP:   { label: 'Optimism',    color: '#ff0420', bg: 'rgba(255,4,32,0.14)',    icon: '○' },
   SUI:  { label: 'Sui',         color: '#6fbcf0', bg: 'rgba(111,188,240,0.14)', icon: '◎' },
   TON:  { label: 'TON',         color: '#0098ea', bg: 'rgba(0,152,234,0.14)',   icon: '◈' },
-  USD:  { label: 'US Dollar',   color: '#60a5fa', bg: 'rgba(96,165,250,0.14)',  icon: '$' },
-  EUR:  { label: 'Euro',        color: '#60a5fa', bg: 'rgba(96,165,250,0.14)',  icon: '€' },
+  USD:  { label: 'US Dollar',   color: '#63a1db', bg: 'rgba(99,161,219,0.14)',  icon: '$' },
+  EUR:  { label: 'Euro',        color: '#63a1db', bg: 'rgba(99,161,219,0.14)',  icon: '€' },
   GBP:  { label: 'Pound',       color: '#7c3aed', bg: 'rgba(124,58,237,0.14)',  icon: '£' },
   AED:  { label: 'UAE Dirham',  color: '#0f766e', bg: 'rgba(15,118,110,0.14)',  icon: 'د' },
   SAR:  { label: 'Saudi Riyal', color: '#15803d', bg: 'rgba(21,128,61,0.14)',   icon: '﷼' },
@@ -175,9 +175,9 @@ export function SendWidget() {
           <Pressable
             key={m}
             onPress={() => { haptics.selection(); setMode(m); }}
-            style={{ flex: 1, paddingVertical: 10, borderRadius: 11, alignItems: 'center', backgroundColor: mode === m ? p.ctaBg : 'transparent' }}
+            style={{ flex: 1, paddingVertical: 10, borderRadius: 11, alignItems: 'center', backgroundColor: mode === m ? p.accent : 'transparent' }}
           >
-            <Text style={{ color: mode === m ? p.ctaFg : p.fgMuted, fontSize: 12, fontWeight: '600', letterSpacing: 0.4 }}>
+            <Text style={{ color: mode === m ? p.accentFg : p.fgMuted, fontSize: 12, fontWeight: '600', letterSpacing: 0.4 }}>
               {m === 'FIAT' ? 'FIAT' : 'CRYPTO'}
             </Text>
           </Pressable>
@@ -189,7 +189,7 @@ export function SendWidget() {
       <View style={{
         flexDirection: 'row', alignItems: 'center',
         backgroundColor: p.bgElev, borderRadius: 18,
-        borderWidth: 1, borderColor: picked ? p.ctaBg : p.border,
+        borderWidth: 1, borderColor: picked ? p.accent : p.border,
         paddingHorizontal: 14, marginBottom: 8,
       }}>
         <Ionicons name="search-outline" size={18} color={p.fgMuted} />
@@ -382,7 +382,7 @@ export function SendWidget() {
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
         <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '700', letterSpacing: 0.5 }}>{t('send.amount').toUpperCase()}</Text>
         <Pressable onPress={() => { haptics.selection(); setAmount(String(balance)); }} hitSlop={8}>
-          <Text style={{ color: p.ctaBg, fontSize: 12, fontWeight: '600' }}>{t('common.useMax').toUpperCase()}</Text>
+          <Text style={{ color: p.accentText, fontSize: 12, fontWeight: '600' }}>{t('common.useMax').toUpperCase()}</Text>
         </Pressable>
       </View>
       <View style={{

@@ -163,14 +163,14 @@ function CurrencySelector({
             onPress={() => onPick(c)}
             style={({ pressed }) => ({
               flex: 1, paddingVertical: 11, borderRadius: 11,
-              backgroundColor: currency === c ? p.fg : p.bgElev,
-              borderWidth: 1, borderColor: currency === c ? p.fg : p.border,
+              backgroundColor: currency === c ? p.accent : p.bgElev,
+              borderWidth: 1, borderColor: currency === c ? p.accent : p.border,
               opacity: pressed ? 0.85 : 1,
               alignItems: 'center',
             })}
           >
             <Text style={{
-              color: currency === c ? p.bg : p.fg,
+              color: currency === c ? p.accentFg : p.fg,
               fontWeight: '700', fontSize: 11,
             }}>
               {c}

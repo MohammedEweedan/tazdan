@@ -26,6 +26,9 @@ import { useCoinIcons } from '@/hooks/useCoinIcons';
 import { brand } from '@/store/themeStore';
 import { ShaderLines } from './ShaderLines';
 
+/** Brand accent (soft pantone blue #63a1db) used for the "Join" word. */
+const ACCENT = '#63A1DB';
+
 const { width: W } = Dimensions.get('window');
 
 interface Props {
@@ -279,9 +282,9 @@ function PhoneMockup({ isDark }: { isDark: boolean }) {
 
 function BrandIcon({ isDark }: { isDark: boolean }) {
   const pulse = useSharedValue(1);
-  const iconSrc = isDark
-    ? require('../../../assets/icon-black.png')
-    : require('../../../assets/icon-white.png');
+  // The brand MARK in its true blue (icon-color) — sits under the "Join"
+  // word for the final onboarding lockup.
+  const iconSrc = require('../../../assets/icon-color.png');
 
   useEffect(() => {
     pulse.value = withRepeat(
@@ -298,7 +301,7 @@ function BrandIcon({ isDark }: { isDark: boolean }) {
     <Animated.View style={animatedStyle}>
       <Image
         source={iconSrc}
-        style={{ width: 90, height: 90 }}
+        style={{ width: 84, height: 84 }}
         resizeMode="contain"
       />
     </Animated.View>
@@ -381,27 +384,18 @@ export const OnboardingHero = memo(function OnboardingHero({ bg, variant = 1 }: 
   if (variant === 3) {
     return (
       <View style={sharedStyles.root}>
-        {/* Animated shader background */}
-        <ShaderLines />
+        {/* Shader lines as a subtle backdrop — kept dim from the start so they
+            never fight the foreground lockup for contrast. */}
+        <ShaderLines opacity={0.28} />
 
-        {/* Vignette overlay — same colour as page bg for depth & contrast */}
-        <View style={{
-          position: 'absolute', inset: 0,
-          backgroundColor: isDark ? 'rgba(0,0,0,0.55)' : 'rgba(255,255,255,0.55)',
-        }} />
-
-        {/* Centered brand lockup: icon + title */}
+        {/* Centered lockup: "Join" (accent) stacked ABOVE the brand mark. */}
         <View style={{ alignItems: 'center', justifyContent: 'center', zIndex: 2 }}>
-          <BrandIcon isDark={isDark} />
           <Text style={{
-            fontSize: 32, fontWeight: '800', color: isDark ? '#ffffff' : '#0a0a0a',
-            letterSpacing: -1, marginTop: 16,
-            textShadowColor: isDark ? 'rgba(0,0,0,0.5)' : 'rgba(255,255,255,0.8)',
-            textShadowOffset: { width: 0, height: 2 },
-            textShadowRadius: 8,
+            fontSize: 30, fontWeight: '800', color: ACCENT, letterSpacing: -0.8, marginBottom: 12,
           }}>
-            Join tazdan
+            Join
           </Text>
+          <BrandIcon isDark={isDark} />
         </View>
 
         {edgeLeft}{edgeRight}

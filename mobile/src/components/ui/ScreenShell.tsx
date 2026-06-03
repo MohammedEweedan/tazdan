@@ -36,18 +36,21 @@ export function TopGradient({ height }: { height?: number }) {
     <LinearGradient
       colors={
         themeMode === 'mono'
-          ? // Flat, subtle grey — no gradient in monochrome mode.
+          ? // Flat, subtle grey — no gradient (and no blue) in monochrome mode.
             ['rgba(26,26,26,0.6)', 'rgba(26,26,26,0.2)', 'rgba(0,0,0,0)']
           : themeMode === 'dark'
           ? [
-              'rgba(245, 245, 245, 0.95)', // near-white at top
-              'rgba(160, 160, 160, 0.65)', // light grey middle
-              'rgba(38, 38, 38, 0)',       // fade to transparent
+              // Soft brand-blue mist over the top, fading to nothing. Low
+              // alpha so it reads as a tint on the dark bg, never a fill.
+              'rgba(99, 161, 219, 0.22)',  // #63a1db whisper at top
+              'rgba(99, 161, 219, 0.07)',  // thinning out
+              'rgba(10, 10, 11, 0)',       // fade to transparent
             ]
           : [
-              'rgba(38, 38, 38, 0.95)',    // dark semi-dark gray at top (flipped)
-              'rgba(160, 160, 160, 0.65)', // light grey middle
-              'rgba(245, 245, 245, 0)',    // fade to transparent
+              // Light mode — an even fainter blue haze on the paper bg.
+              'rgba(79, 139, 196, 0.16)',  // deepened blue, low alpha
+              'rgba(79, 139, 196, 0.05)',
+              'rgba(250, 250, 247, 0)',    // fade to transparent
             ]
       }
       locations={[0, 0.45, 1]}
@@ -125,7 +128,7 @@ export function StickyTopBar({
           backgroundColor: Platform.OS === 'ios'
             ? 'transparent'
             : (themeMode === 'dark'
-                ? 'rgba(10,10,11,0.72)'
+                ? 'rgba(22,24,28,0.74)'
                 : 'rgba(250,250,247,0.78)'),
         }}
       />

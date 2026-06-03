@@ -357,9 +357,9 @@ export default function AdminScreen() {
                   <Pressable
                     key={per}
                     onPress={() => setPeriod(per)}
-                    style={{ flex: 1, paddingVertical: 9, borderRadius: 9, backgroundColor: on ? p.fg : 'transparent', alignItems: 'center' }}
+                    style={{ flex: 1, paddingVertical: 9, borderRadius: 9, backgroundColor: on ? p.accent : 'transparent', alignItems: 'center' }}
                   >
-                    <Text style={{ color: on ? p.bg : p.fgMuted, fontSize: 12, fontWeight: '600', letterSpacing: 0.4, textTransform: 'capitalize' }}>
+                    <Text style={{ color: on ? p.accentFg : p.fgMuted, fontSize: 12, fontWeight: '600', letterSpacing: 0.4, textTransform: 'capitalize' }}>
                       {per}
                     </Text>
                   </Pressable>
@@ -397,7 +397,7 @@ export default function AdminScreen() {
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
               <KpiCard label="USERS ONLINE"  value={(m?.onlineUsers ?? 0).toLocaleString()} hint={`${m?.onlineSockets ?? 0} sockets`} icon="people-outline" accent="#22c55e" p={p} />
               <KpiCard label="TXS / 5MIN"    value={(m?.recentTransactions5m ?? 0).toLocaleString()} hint={`${m?.recentOrders5m ?? 0} orders`} icon="flash-outline" accent="#f59e0b" p={p} />
-              <KpiCard label="ACTIVE USERS"  value={(d?.activeUsers ?? 0).toLocaleString()} hint={`+${d?.newUsersWeek ?? 0} this week`} icon="person-add-outline" accent="#3b82f6" p={p} />
+              <KpiCard label="ACTIVE USERS"  value={(d?.activeUsers ?? 0).toLocaleString()} hint={`+${d?.newUsersWeek ?? 0} this week`} icon="person-add-outline" accent="#63a1db" p={p} />
               <KpiCard label="FROZEN"        value={(d?.frozenUsers ?? d?.suspendedUsers ?? 0).toLocaleString()} hint="suspended" icon="snow-outline" accent="#ef4444" p={p} />
               <KpiCard label="UPTIME"        value={formatUptime(m?.uptimeSeconds ?? 0)} hint={`${m?.memoryMb ?? 0} MB`} icon="pulse-outline" accent={p.fg} p={p} />
               <KpiCard label="TOTAL USERS"   value={(d?.totalUsers ?? 0).toLocaleString()} hint={`+${d?.newUsersToday ?? 0} today`} icon="globe-outline" accent={p.fg} p={p} />
@@ -623,10 +623,10 @@ export default function AdminScreen() {
                 {([[6, '6h'], [24, '24h'], [72, '3d'], [168, '7d']] as [number, string][]).map(([h, lbl]) => (
                   <Pressable key={h} onPress={() => setFxHours(h)} style={{
                     paddingHorizontal: 12, paddingVertical: 5, borderRadius: 8,
-                    backgroundColor: fxHours === h ? p.fg : 'transparent',
-                    borderWidth: 1, borderColor: fxHours === h ? p.fg : p.border,
+                    backgroundColor: fxHours === h ? p.accent : 'transparent',
+                    borderWidth: 1, borderColor: fxHours === h ? p.accent : p.border,
                   }}>
-                    <Text style={{ color: fxHours === h ? p.bg : p.fgMuted, fontSize: 11, fontWeight: '700' }}>{lbl}</Text>
+                    <Text style={{ color: fxHours === h ? p.accentFg : p.fgMuted, fontSize: 11, fontWeight: '700' }}>{lbl}</Text>
                   </Pressable>
                 ))}
               </View>
@@ -758,6 +758,7 @@ export default function AdminScreen() {
           <View style={{ marginTop: 22, paddingHorizontal: 20 }}>
             <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '600', letterSpacing: 0.7, marginBottom: 10 }}>MANAGE</Text>
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
+              <NavTile icon="pulse-outline"             label="Diagnostics"    onPress={() => router.push('/admin/diagnostics' as any)} p={p} />
               <NavTile icon="people-outline"            label="Users"          onPress={() => router.push('/admin/users' as any)} p={p} />
               <NavTile icon="trending-up-outline"       label="Rates"          onPress={() => router.push('/admin/rates' as any)} p={p} />
               <NavTile icon="server-outline"            label="Database"       onPress={() => router.push('/admin/data' as any)} p={p} />

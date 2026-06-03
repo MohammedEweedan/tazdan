@@ -10,7 +10,7 @@
  *   Background: single solid colour — pure black or pure white.
  */
 
-import { useRef, useState } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import { Dimensions, FlatList, Image, Pressable, View } from 'react-native';
 import { Text } from '@/components/ui/Text';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -56,19 +56,22 @@ export default function Onboarding() {
   };
 
   const isDark = themeMode === 'dark';
+  const isLight = themeMode === 'light';
 
   /* Single solid background — no gradients, no tonal shifts */
-  const bg      = isDark ? '#000000' : '#FFFFFF';
+  const bg      = isDark ? '#16181C' : '#FFFFFF';   // soft charcoal, not pitch black
   const fg      = isDark ? '#ffffff' : '#0a0a0a';
   const fgFaint = isDark ? 'rgba(255,255,255,0.30)' : 'rgba(0,0,0,0.25)';
   const chipBg  = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)';
   const chipBd  = isDark ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.08)';
   const ctaBg   = isDark ? '#ffffff' : '#0a0a0a';
   const ctaFg   = isDark ? '#0a0a0a' : '#ffffff';
+  // Active page-dot accent — brand blue on dark/light, grey in mono.
+  const dotAccent = themeMode === 'mono' ? ctaBg : '#63A1DB';
 
-  const logoSrc = isDark
-    ? require("../../assets/logo-white.png")
-    : require("../../assets/logo-black.png");
+  // Header wordmark reacts to the theme: white on dark, black on light, so it
+  // flips live when the user toggles the theme button beside it.
+  const logoSrc = require("../../assets/logo-color.png");
 
   return (
     <View style={{ flex: 1, backgroundColor: bg }}>
@@ -180,7 +183,23 @@ export default function Onboarding() {
         />
 
         {/* ── Footer — page dots + CTAs ── */}
-        <View style={{ paddingHorizontal: 24, paddingBottom: 28, paddingTop: 8 }}>
+        <View style={{ paddingHorizontal: 14, paddingBottom: 8, paddingTop: 18 }}>
+          {/* Slogan — fades in on the final page, sitting just above the CTAs.
+              Matches the big bold title style used on the previous slides. */}
+          {last && (
+            <Typewriter
+              key="slogan"
+              text={t('common.slogan')}
+              style={{
+                textAlign: 'center', marginBottom: 24,
+                color: fg,
+                fontSize: isAr ? 34 : 38,
+                fontWeight: '800',
+                letterSpacing: isAr ? 0 : -1.3,
+                lineHeight: isAr ? 56 : 44,
+              }}
+            />
+          )}
           {/* Page dots */}
           <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 6, marginBottom: 28 }}>
             {SLIDES.map((s, i) => (
@@ -189,7 +208,7 @@ export default function Onboarding() {
                 style={{
                   height: 4, borderRadius: 2,
                   width: i === page ? 28 : 6,
-                  backgroundColor: i === page ? ctaBg : fgFaint,
+                  backgroundColor: i === page ? dotAccent : fgFaint,
                 }}
               />
             ))}
@@ -206,10 +225,12 @@ export default function Onboarding() {
               alignSelf: 'stretch',
               height: 56,
               borderRadius: 28,
-              backgroundColor: ctaBg,
+              backgroundColor: dotAccent,
               opacity: pressed ? 0.82 : 1,
+              flexDirection: isAr ? 'row-reverse' : 'row',
               alignItems: 'center',
               justifyContent: 'center',
+              gap: 8,
               shadowColor: '#000',
               shadowOpacity: isDark ? 0.35 : 0.12,
               shadowOffset: { width: 0, height: 4 },
@@ -220,6 +241,14 @@ export default function Onboarding() {
             <Text style={{ color: ctaFg, fontSize: 16, fontWeight: '700', letterSpacing: -0.2 }}>
               {last ? 'Join tazdan' : t('onboard.continue')}
             </Text>
+            {/* Forward arrow — points the way reading flows: right in LTR,
+                left in Arabic (RTL). row-reverse above puts it on the
+                correct side too. */}
+            <Ionicons
+              name={isAr ? 'arrow-back' : 'arrow-forward'}
+              size={18}
+              color={ctaFg}
+            />
           </Pressable>
 
           {/* Secondary CTA */}
@@ -245,5 +274,41 @@ export default function Onboarding() {
 
       <LocalePickerModal visible={langPickerVisible} onClose={() => setLangPickerVisible(false)} />
     </View>
+  );
+}
+
+/**
+ * Typewriter — reveals `text` one character at a time with a blinking caret,
+ * as if being typed live. Uses the shared <Text> so the brand font applies.
+ */
+function Typewriter({ text, style }: { text: string; style?: any }) {
+  const [count, setCount] = useState(0);
+  const [caretOn, setCaretOn] = useState(true);
+
+  // Type the characters in.
+  useEffect(() => {
+    setCount(0);
+    if (!text) return;
+    let i = 0;
+    const id = setInterval(() => {
+      i += 1;
+      setCount(i);
+      if (i >= text.length) clearInterval(id);
+    }, 70);
+    return () => clearInterval(id);
+  }, [text]);
+
+  // Blink the caret.
+  useEffect(() => {
+    const id = setInterval(() => setCaretOn((c) => !c), 480);
+    return () => clearInterval(id);
+  }, []);
+
+  const done = count >= text.length;
+  return (
+    <Text style={style}>
+      {text.slice(0, count)}
+      <Text style={{ opacity: done ? 0 : caretOn ? 0.9 : 0 }}>|</Text>
+    </Text>
   );
 }

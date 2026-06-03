@@ -5,7 +5,7 @@ export default function AuthLayout() {
     <Stack
       screenOptions={{
         headerShown: false,
-        contentStyle: { backgroundColor: '#000' },
+        contentStyle: { backgroundColor: '#16181C' },
         animation: 'slide_from_right',
       }}
     >
@@ -13,6 +13,8 @@ export default function AuthLayout() {
       <Stack.Screen name="welcome-back" options={{ animation: 'fade' }} />
       <Stack.Screen name="login" />
       <Stack.Screen name="register" />
+      <Stack.Screen name="reset-password" />
+      <Stack.Screen name="recover-2fa" />
       <Stack.Screen name="kyc" />
     </Stack>
   );

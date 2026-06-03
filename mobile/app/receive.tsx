@@ -51,10 +51,10 @@ export default function Receive() {
           >
             <View style={{
               paddingVertical: 10, borderRadius: 10, alignItems: 'center',
-              backgroundColor: tab === t ? p.ctaBg : 'transparent',
+              backgroundColor: tab === t ? p.accent : 'transparent',
             }}>
               <Text style={{
-                color: tab === t ? p.ctaFg : p.fgMuted,
+                color: tab === t ? p.accentFg : p.fgMuted,
                 fontSize: 12, fontWeight: '700', letterSpacing: 0.5,
               }}>
                 {t === 'HANDLE' ? '@HANDLE' : 'BANK TRANSFER'}

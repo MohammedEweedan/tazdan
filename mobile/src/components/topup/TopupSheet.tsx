@@ -283,7 +283,7 @@ function Stepper({ step, palette: p }: { step: Step; palette: Palette }) {
           key={i}
           style={{
             flex: 1, height: 4, borderRadius: 2,
-            backgroundColor: i <= idx ? p.fg : p.divider,
+            backgroundColor: i <= idx ? p.accent : p.divider,
           }}
         />
       ))}
@@ -403,10 +403,10 @@ function AmountStep({
               variant="chip"
               size="md"
               style={{
-                backgroundColor: currency === c ? p.fg : p.bgElev,
-                borderColor: currency === c ? p.fg : p.border,
+                backgroundColor: currency === c ? p.accent : p.bgElev,
+                borderColor: currency === c ? p.accent : p.border,
               }}
-              codeStyle={{ color: currency === c ? p.bg : p.fg }}
+              codeStyle={{ color: currency === c ? p.accentFg : p.fg }}
             />
           </Pressable>
         ))}

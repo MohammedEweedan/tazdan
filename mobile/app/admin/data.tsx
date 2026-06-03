@@ -169,9 +169,9 @@ export default function AdminData() {
               <Pressable
                 key={key}
                 onPress={() => { setTab(key); setPage(1); setSearch(''); }}
-                style={{ paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10, backgroundColor: on ? p.fg : p.pillBg, borderWidth: 1, borderColor: on ? p.fg : p.border }}
+                style={{ paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10, backgroundColor: on ? p.accent : p.pillBg, borderWidth: 1, borderColor: on ? p.accent : p.border }}
               >
-                <Text style={{ color: on ? p.bg : p.fg, fontSize: 11, fontWeight: '600', letterSpacing: 0.4 }}>{label}</Text>
+                <Text style={{ color: on ? p.accentFg : p.fg, fontSize: 11, fontWeight: '600', letterSpacing: 0.4 }}>{label}</Text>
               </Pressable>
             );
           })}

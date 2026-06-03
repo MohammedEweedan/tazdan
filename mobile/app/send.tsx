@@ -239,10 +239,10 @@ export default function Send() {
             >
               <View style={{
                 paddingVertical: 10, borderRadius: 10, alignItems: 'center',
-                backgroundColor: mode === m ? p.fg : 'transparent',
+                backgroundColor: mode === m ? p.accent : 'transparent',
               }}>
                 <Text style={{
-                  color: mode === m ? p.bg : p.fgMuted,
+                  color: mode === m ? p.accentFg : p.fgMuted,
                   fontSize: 12, fontWeight: '700', letterSpacing: 0.5,
                 }}>
                   {m === 'FIAT' ? 'SEND FIAT' : 'SEND CRYPTO'}
@@ -267,12 +267,12 @@ export default function Send() {
               onPress={() => { h.selection(); setCurrency(c); setAmount(''); }}
               style={({ pressed }) => ({
                 paddingVertical: 10, paddingHorizontal: 14, borderRadius: 14,
-                backgroundColor: currency === c ? p.fg : p.bgElev,
-                borderWidth: 1, borderColor: currency === c ? p.fg : p.border,
+                backgroundColor: currency === c ? p.accent : p.bgElev,
+                borderWidth: 1, borderColor: currency === c ? p.accent : p.border,
                 opacity: pressed ? 0.85 : 1,
               })}
             >
-              <Text style={{ color: currency === c ? p.bg : p.fg, fontWeight: '700', fontSize: 12 }}>
+              <Text style={{ color: currency === c ? p.accentFg : p.fg, fontWeight: '700', fontSize: 12 }}>
                 {c}
               </Text>
             </Pressable>

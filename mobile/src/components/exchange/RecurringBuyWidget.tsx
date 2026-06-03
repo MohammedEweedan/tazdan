@@ -160,12 +160,12 @@ export function RecurringBuyWidget({ onDone }: { onDone?: () => void }) {
               style={{
                 flexDirection: 'row', alignItems: 'center', gap: 7,
                 paddingHorizontal: 12, paddingVertical: 9, borderRadius: 14,
-                backgroundColor: active ? p.fg : p.bgElev,
-                borderWidth: 1, borderColor: active ? p.fg : p.border,
+                backgroundColor: active ? p.accent : p.bgElev,
+                borderWidth: 1, borderColor: active ? p.accent : p.border,
               }}
             >
               <CoinAvatar sym={a} size={20} />
-              <Text style={{ color: active ? p.bg : p.fg, fontSize: 14, fontWeight: '700' }}>{a}</Text>
+              <Text style={{ color: active ? p.accentFg : p.fg, fontSize: 14, fontWeight: '700' }}>{a}</Text>
             </Pressable>
           );
         })}
@@ -219,11 +219,11 @@ export function RecurringBuyWidget({ onDone }: { onDone?: () => void }) {
               onPress={() => { Haptics.selectionAsync(); setFrequency(f.key); }}
               style={{
                 paddingHorizontal: 16, paddingVertical: 11, borderRadius: 13,
-                backgroundColor: active ? p.fg : p.bgElev,
-                borderWidth: 1, borderColor: active ? p.fg : p.border,
+                backgroundColor: active ? p.accent : p.bgElev,
+                borderWidth: 1, borderColor: active ? p.accent : p.border,
               }}
             >
-              <Text style={{ color: active ? p.bg : p.fg, fontSize: 14, fontWeight: '700' }}>
+              <Text style={{ color: active ? p.accentFg : p.fg, fontSize: 14, fontWeight: '700' }}>
                 {t(f.labelKey)}
               </Text>
             </Pressable>
@@ -266,7 +266,7 @@ export function RecurringBuyWidget({ onDone }: { onDone?: () => void }) {
                       style={{
                         flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
                         padding: 14, borderRadius: 14, backgroundColor: p.bgElev,
-                        borderWidth: 1.5, borderColor: active ? p.fg : p.border,
+                        borderWidth: 1.5, borderColor: active ? p.accent : p.border,
                       }}
                     >
                       <Text style={{ color: p.fg, fontSize: 15, fontWeight: '600' }}>
@@ -289,13 +289,13 @@ export function RecurringBuyWidget({ onDone }: { onDone?: () => void }) {
                       style={{
                         flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
                         padding: 14, borderRadius: 14, backgroundColor: p.bgElev,
-                        borderWidth: 1.5, borderColor: active ? p.fg : p.border,
+                        borderWidth: 1.5, borderColor: active ? p.accent : p.border,
                       }}
                     >
                       <Text style={{ color: p.fg, fontSize: 15, fontWeight: '600' }}>
                         {c.nickname || c.tier} •••• {c.last4}
                       </Text>
-                      <Ionicons name={active ? 'checkmark-circle' : 'ellipse-outline'} size={18} color={active ? p.fg : p.fgFaint} />
+                      <Ionicons name={active ? 'checkmark-circle' : 'ellipse-outline'} size={18} color={active ? p.accentText : p.fgFaint} />
                     </Pressable>
                   );
                 }))}
@@ -386,12 +386,12 @@ function FundingTab({ icon, label, active, onPress, palette: p }: {
       style={{
         flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
         paddingVertical: 13, borderRadius: 14,
-        backgroundColor: active ? p.fg : p.bgElev,
-        borderWidth: 1, borderColor: active ? p.fg : p.border,
+        backgroundColor: active ? p.accent : p.bgElev,
+        borderWidth: 1, borderColor: active ? p.accent : p.border,
       }}
     >
-      <Ionicons name={icon} size={17} color={active ? p.bg : p.fg} />
-      <Text style={{ color: active ? p.bg : p.fg, fontSize: 14, fontWeight: '700' }}>{label}</Text>
+      <Ionicons name={icon} size={17} color={active ? p.accentFg : p.fg} />
+      <Text style={{ color: active ? p.accentFg : p.fg, fontSize: 14, fontWeight: '700' }}>{label}</Text>
     </Pressable>
   );
 }

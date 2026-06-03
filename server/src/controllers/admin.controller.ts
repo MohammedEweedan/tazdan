@@ -127,7 +127,10 @@ export class AdminController {
         prisma.user.count({ where: { role: 'USER', createdAt: { gte: todayStart } } }),
         prisma.user.count({ where: { role: 'USER', createdAt: { gte: weekStart } } }),
         prisma.user.count({ where: { role: 'USER', createdAt: { gte: monthStart } } }),
-        prisma.deposit.count({    where: { status: 'PENDING' } }),
+        // Deposits awaiting admin action are created as WAITING_CONFIRMATION
+        // (some legacy/manual ones may be PENDING) — count BOTH so the
+        // dashboard's "deposits awaiting" badge reflects the real queue.
+        prisma.deposit.count({    where: { status: { in: ['WAITING_CONFIRMATION', 'PENDING'] } } }),
         prisma.withdrawal.count({ where: { status: 'PENDING' } }),
         prisma.user.count({       where: { kycStatus: 'PENDING' } }),
         prisma.order.count(),
@@ -168,7 +171,7 @@ export class AdminController {
 
         // Recent activity
         prisma.order.findMany({       orderBy: { createdAt: 'desc' }, take: 15, include: { user: { select: { email: true, firstName: true, lastName: true } } } }),
-        prisma.deposit.findMany({     where: { status: 'PENDING' },   orderBy: { createdAt: 'desc' }, take: 10, include: { user: { select: { email: true, firstName: true } } } }),
+        prisma.deposit.findMany({     where: { status: { in: ['WAITING_CONFIRMATION', 'PENDING'] } },   orderBy: { createdAt: 'desc' }, take: 10, include: { user: { select: { email: true, firstName: true } } } }),
         prisma.withdrawal.findMany({  where: { status: 'PENDING' },   orderBy: { createdAt: 'desc' }, take: 10, include: { user: { select: { email: true, firstName: true } } } }),
 
         prisma.order.count({ where: { side: 'BUY'  } }),
@@ -375,7 +378,12 @@ export class AdminController {
     try {
       const deposit = await prisma.deposit.findUnique({ where: { id: req.params.id } });
       if (!deposit) throw new AppError('Deposit not found', 404);
-      if (deposit.status !== 'PENDING') throw new AppError('Deposit is not pending', 400);
+      // Deposits awaiting review are WAITING_CONFIRMATION (a few legacy ones may
+      // be PENDING). Accept either — checking only PENDING made every confirm
+      // fail with "Deposit is not pending".
+      if (!['WAITING_CONFIRMATION', 'PENDING'].includes(deposit.status)) {
+        throw new AppError('Deposit is not awaiting confirmation', 400);
+      }
 
       await prisma.$transaction(async (tx: any) => {
         await tx.deposit.update({ where: { id: deposit.id }, data: { status: 'CONFIRMED', confirmedAt: new Date(), confirmedBy: req.user!.id, adminNotes: req.body.notes } });
@@ -394,7 +402,9 @@ export class AdminController {
     try {
       const deposit = await prisma.deposit.findUnique({ where: { id: req.params.id } });
       if (!deposit) throw new AppError('Deposit not found', 404);
-      if (deposit.status !== 'PENDING') throw new AppError('Deposit is not pending', 400);
+      if (!['WAITING_CONFIRMATION', 'PENDING'].includes(deposit.status)) {
+        throw new AppError('Deposit is not awaiting confirmation', 400);
+      }
 
       await prisma.deposit.update({ where: { id: deposit.id }, data: { status: 'REJECTED', adminNotes: req.body.reason || 'Rejected by admin', confirmedBy: req.user!.id } });
       await prisma.notification.create({ data: { userId: deposit.userId, title: 'Deposit Rejected', message: `Your deposit of ${deposit.amount} ${deposit.currency} has been rejected. Reason: ${req.body.reason || 'N/A'}`, type: 'deposit' } });

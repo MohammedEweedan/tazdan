@@ -9,7 +9,8 @@
       "Bash(echo \"SERVER_EXIT=$?\")",
       "Bash(npx tsc *)",
       "Bash(echo \"MOBILE_EXIT=$?\")",
-      "Read(//tmp/**)"
+      "Read(//tmp/**)",
+      "Bash(npm run *)"
     ]
   }
 }

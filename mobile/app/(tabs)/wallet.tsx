@@ -232,10 +232,10 @@ export default function WalletScreen() {
               >
                 <View style={{
                   paddingVertical: 9, borderRadius: 10, alignItems: 'center',
-                  backgroundColor: filter === f ? p.fg : 'transparent',
+                  backgroundColor: filter === f ? p.accent : 'transparent',
                 }}>
                   <Text style={{
-                    color: filter === f ? p.bg : p.fgMuted,
+                    color: filter === f ? p.accentFg : p.fgMuted,
                     fontWeight: '700', fontSize: 11, letterSpacing: 0.6,
                   }}>
                     {f === 'CARDS' ? t('home.cards') : t(`wallet.${f.toLowerCase()}`)}
@@ -302,7 +302,7 @@ export default function WalletScreen() {
                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
                           <View style={{
                             width: 8, height: 8, borderRadius: 4,
-                            backgroundColor: c.status === 'ACTIVE' ? '#10b981' : c.status === 'FROZEN' ? '#60a5fa' : p.fgFaint,
+                            backgroundColor: c.status === 'ACTIVE' ? '#10b981' : c.status === 'FROZEN' ? '#63a1db' : p.fgFaint,
                           }} />
                           <Text style={{ color: p.fg, fontSize: 13, fontWeight: '700' }}>
                             {c.status === 'ACTIVE' ? t('cards.active') : c.status === 'FROZEN' ? t('cards.frozen') : c.status}

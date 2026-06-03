@@ -44,7 +44,7 @@ function statusColor(status: PayoutStatus, p: ReturnType<typeof useThemedPalette
     case 'COMPLETED':  return p.greenFg;
     case 'FAILED':     return p.redFg;
     case 'CANCELLED':  return p.fgFaint;
-    case 'PROCESSING': return '#60a5fa';
+    case 'PROCESSING': return '#63a1db';
     default:           return p.amberFg;
   }
 }

@@ -431,8 +431,8 @@ export function WithdrawWidget() {
                 key={bank.id}
                 onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setSelectedBank(bank); }}
                 style={({ pressed }) => ({
-                  backgroundColor: selected ? p.bgElev : p.bgElev,
-                  borderWidth: 1.5, borderColor: selected ? p.fg : p.border,
+                  backgroundColor: selected ? p.accentSoft : p.bgElev,
+                  borderWidth: 1.5, borderColor: selected ? p.accent : p.border,
                   borderRadius: 14, padding: 14, marginBottom: 8,
                   opacity: pressed ? 0.8 : 1,
                 })}
@@ -583,9 +583,9 @@ export function WithdrawWidget() {
               <Pressable
                 key={net}
                 onPress={() => setNetwork(net)}
-                style={{ flex: 1, paddingVertical: 12, borderRadius: 12, backgroundColor: network === net ? p.fg : p.pillBg, borderWidth: 1, borderColor: network === net ? p.fg : p.border, alignItems: 'center' }}
+                style={{ flex: 1, paddingVertical: 12, borderRadius: 12, backgroundColor: network === net ? p.accent : p.pillBg, borderWidth: 1, borderColor: network === net ? p.accent : p.border, alignItems: 'center' }}
               >
-                <Text style={{ color: network === net ? p.bg : p.fg, fontWeight: '700', fontSize: 13 }}>{net}</Text>
+                <Text style={{ color: network === net ? p.accentFg : p.fg, fontWeight: '700', fontSize: 13 }}>{net}</Text>
               </Pressable>
             ))}
           </View>

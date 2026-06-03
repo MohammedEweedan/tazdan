@@ -59,8 +59,8 @@ export default function AdminOrders() {
           {(['ALL', 'BUY', 'SELL', 'PENDING', 'COMPLETED'] as Filter[]).map((f) => {
             const on = filter === f;
             return (
-              <Pressable key={f} onPress={() => setFilter(f)} style={{ paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10, backgroundColor: on ? p.fg : p.pillBg, borderWidth: 1, borderColor: on ? p.fg : p.border }}>
-                <Text style={{ color: on ? p.bg : p.fg, fontSize: 11, fontWeight: '600' }}>{f}</Text>
+              <Pressable key={f} onPress={() => setFilter(f)} style={{ paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10, backgroundColor: on ? p.accent : p.pillBg, borderWidth: 1, borderColor: on ? p.accent : p.border }}>
+                <Text style={{ color: on ? p.accentFg : p.fg, fontSize: 11, fontWeight: '600' }}>{f}</Text>
               </Pressable>
             );
           })}

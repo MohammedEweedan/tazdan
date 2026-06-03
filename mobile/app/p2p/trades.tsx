@@ -102,8 +102,8 @@ export default function P2PTrades() {
           {(['ACTIVE', 'COMPLETED', 'ALL'] as const).map((f) => {
             const label = f === 'ACTIVE' ? t('p2p.filter.active') : f === 'COMPLETED' ? t('p2p.filter.completed') : t('p2p.filter.all');
             return (
-              <Pressable key={f} onPress={() => { h.selection(); setFilter(f); }} style={{ flex: 1, paddingVertical: 9, borderRadius: 9, backgroundColor: filter === f ? p.fg : 'transparent', alignItems: 'center' }}>
-                <Text style={{ color: filter === f ? p.bg : p.fgMuted, fontSize: 11, fontWeight: '600', letterSpacing: 0.5 }}>
+              <Pressable key={f} onPress={() => { h.selection(); setFilter(f); }} style={{ flex: 1, paddingVertical: 9, borderRadius: 9, backgroundColor: filter === f ? p.accent : 'transparent', alignItems: 'center' }}>
+                <Text style={{ color: filter === f ? p.accentFg : p.fgMuted, fontSize: 11, fontWeight: '600', letterSpacing: 0.5 }}>
                   {label.toUpperCase()}
                 </Text>
               </Pressable>

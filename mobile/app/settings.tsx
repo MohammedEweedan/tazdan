@@ -105,30 +105,20 @@ export default function Settings() {
     }
   };
 
+  // Disabling 2FA requires the account password too (server-enforced), which
+  // the dedicated /settings/2fa screen collects. Route there instead of the
+  // old code-only modal that the API now rejects.
   const disable2FA = async () => {
-    if (twoFACode.length < 6) return;
-    setTwoFALoading(true);
-    try {
-      await authService.disable2FA(twoFACode);
-      updateUser({ twoFactorEnabled: false });
-      h.success();
-      setTwoFAModal('idle');
-    } catch (e: any) {
-      h.error();
-      Alert.alert('Invalid code', e?.response?.data?.error ?? 'Try again.');
-    } finally {
-      setTwoFALoading(false);
-    }
+    setTwoFAModal('idle');
+    router.push('/settings/2fa' as any);
   };
 
   const press2FA = () => {
     h.selection();
-    if (user?.twoFactorEnabled) {
-      setTwoFACode('');
-      setTwoFAModal('disable');
-    } else {
-      open2FASetup();
-    }
+    // The dedicated /settings/2fa screen is the canonical 2FA manager —
+    // enable, disable (code + password), and reset-to-new-device all live
+    // there. Routing avoids a second, divergent disable UI here.
+    router.push('/settings/2fa' as any);
   };
 
   return (

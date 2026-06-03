@@ -18,6 +18,7 @@ import {
   sendWelcomeEmail,
   sendVerificationEmail,
   sendPasswordResetEmail,
+  send2FARecoveryEmail,
   emailErrorSummary,
 } from '../services/email';
 import { createUserWallets } from '../services/wallet/walletDerivation.service';
@@ -621,17 +622,18 @@ export class AuthController {
         return res.json({ message: 'If an account exists, a reset email has been sent.' });
       }
 
-      // Generate the raw token (high-entropy, 256 bits) for the email
-      // link, but persist only the SHA-256 hash.  A read-only DB
-      // compromise (backup leak, replica access, slow-query log)
-      // would otherwise yield every live reset token → instant
-      // takeover.  Same pattern refreshTokens already uses.
-      const token     = crypto.randomBytes(32).toString('hex');
-      const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+      // Two ways to reset, one shared secret:
+      //   • a 6-digit CODE the user types into the mobile app, and
+      //   • a LINK (the same code as a query param) for the web client.
+      // We persist only the SHA-256 hash of the code (a DB/backup/replica
+      // leak must not yield a live reset secret). `resetPassword` hashes
+      // whatever it's given and compares — so the code works for both paths.
+      const code     = crypto.randomInt(100000, 1000000).toString(); // 6 digits, CSPRNG
+      const codeHash = crypto.createHash('sha256').update(code).digest('hex');
       await prisma.user.update({
         where: { id: user.id },
         data: {
-          passwordResetToken: tokenHash,
+          passwordResetToken: codeHash,
           passwordResetExpires: new Date(Date.now() + 60 * 60 * 1000),
         },
       });
@@ -639,7 +641,8 @@ export class AuthController {
       sendPasswordResetEmail({
         to: user.email,
         firstName: user.firstName,
-        token,
+        token: code,   // doubles as the link token and the typed code
+        code,
       }).catch((e) => console.error('[email] password reset failed:', emailErrorSummary(e)));
 
       res.json({ message: 'If an account exists, a reset email has been sent.' });
@@ -682,6 +685,91 @@ export class AuthController {
       });
 
       res.json({ message: 'Password reset successfully. Please log in again.' });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /* ─── 2FA recovery (locked-out users who lost their authenticator) ───
+     Two steps:
+       1. request: email a 6-digit code to the account email.
+       2. verify:  code + phone + date-of-birth must all match → disable 2FA.
+     The extra phone+DOB identity check means an attacker needs the email
+     inbox AND knowledge of the user's phone and birthday — not just one. */
+  static async request2FARecovery(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const { email } = z.object({ email: z.string().email() }).parse(req.body);
+      const GENERIC = { message: 'If an account with 2FA exists, a recovery code has been sent.' };
+
+      const user = await prisma.user.findUnique({ where: { email } });
+      // Always return success (no enumeration). Only actually send when the
+      // account exists AND has 2FA enabled (nothing to recover otherwise).
+      if (!user || !user.twoFactorEnabled) return res.json(GENERIC);
+
+      const code     = crypto.randomInt(100000, 1000000).toString();
+      const codeHash = crypto.createHash('sha256').update(code).digest('hex');
+      await prisma.user.update({
+        where: { id: user.id },
+        data: {
+          twoFactorRecoveryCode: codeHash,
+          twoFactorRecoveryExpires: new Date(Date.now() + 30 * 60 * 1000), // 30 min
+        },
+      });
+
+      send2FARecoveryEmail({ to: user.email, firstName: user.firstName, code })
+        .catch((e) => console.error('[email] 2FA recovery failed:', emailErrorSummary(e)));
+
+      res.json(GENERIC);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async verify2FARecovery(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const { email, code, phone, dateOfBirth } = z.object({
+        email: z.string().email(),
+        code: z.string().min(6).max(6),
+        phone: z.string().min(3),
+        dateOfBirth: z.string().min(8), // YYYY-MM-DD
+      }).parse(req.body);
+
+      const GENERIC_FAIL = new AppError('Recovery details do not match. Check your code, phone, and date of birth.', 400);
+
+      const codeHash = crypto.createHash('sha256').update(code).digest('hex');
+      const user = await prisma.user.findFirst({
+        where: {
+          email,
+          twoFactorRecoveryCode: codeHash,
+          twoFactorRecoveryExpires: { gt: new Date() },
+        },
+      });
+      if (!user) throw GENERIC_FAIL;
+
+      // Identity gate: phone (digits-only compare, ignoring dial code) + DOB.
+      const norm = (s: string) => s.replace(/\D/g, '');
+      const phoneOk = !!user.phone && norm(user.phone).endsWith(norm(phone).slice(-9));
+      const dobOk = !!user.dateOfBirth &&
+        new Date(user.dateOfBirth).toISOString().slice(0, 10) === dateOfBirth.slice(0, 10);
+      if (!phoneOk || !dobOk) throw GENERIC_FAIL;
+
+      // All checks pass → disable 2FA and clear the recovery code. Also revoke
+      // sessions so a re-login is required with the (now 2FA-free) account.
+      await prisma.user.update({
+        where: { id: user.id },
+        data: {
+          twoFactorEnabled: false,
+          twoFactorSecret: null,
+          twoFactorRecoveryCode: null,
+          twoFactorRecoveryExpires: null,
+        },
+      });
+      await prisma.refreshToken.updateMany({
+        where: { userId: user.id },
+        data: { revokedAt: new Date() },
+      });
+
+      res.json({ message: '2FA has been removed. Sign in with your email and password.' });
     } catch (error) {
       next(error);
     }

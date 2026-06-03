@@ -56,7 +56,7 @@ import { usePushDeepLink } from '@/lib/pushNotifications';
 
 // Match the dark palette bg exactly so the system chrome (keyboard toolbar,
 // nav bar on Android) never flashes a different shade of black.
-SystemUI.setBackgroundColorAsync('#0A0A0B').catch(() => {});
+SystemUI.setBackgroundColorAsync('#16181C').catch(() => {});
 
 // Force LTR everywhere
 try { I18nManager.allowRTL(false); I18nManager.forceRTL(false); } catch { /* noop */ }
@@ -157,7 +157,7 @@ function SplashOverlay() {
     >
       {/* Base — inverts with system colour scheme */}
       <LinearGradient
-        colors={dark ? ['#000000', '#0A0A0B', '#000000'] : ['#FFFFFF', '#FAFAF7', '#FFFFFF']}
+        colors={dark ? ['#121418', '#16181C', '#121418'] : ['#FFFFFF', '#FAFAF7', '#FFFFFF']}
         locations={[0, 0.5, 1]}
         style={StyleSheet.absoluteFillObject}
       />
@@ -232,7 +232,7 @@ export default function RootLayout() {
   if (!fontsLoaded) return null;
 
   return (
-    <GestureHandlerRootView style={{ flex: 1, backgroundColor: '#0A0A0B' }}>
+    <GestureHandlerRootView style={{ flex: 1, backgroundColor: '#16181C' }}>
       <SafeAreaProvider>
         <QueryClientProvider client={queryClient}>
           <StripeProvider
@@ -246,7 +246,7 @@ export default function RootLayout() {
             screenOptions={{
               headerShown: false,
               animation: 'fade',
-              contentStyle: { backgroundColor: '#0A0A0B' },
+              contentStyle: { backgroundColor: '#16181C' },
             }}
           >
             <Stack.Screen name="(auth)" options={{ animation: 'fade' }} />

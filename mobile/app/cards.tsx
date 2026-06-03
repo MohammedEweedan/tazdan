@@ -1312,17 +1312,17 @@ export default function Cards() {
                           flexDirection: 'row', alignItems: 'center', gap: 5,
                           paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8,
                           backgroundColor: activeCard.status === 'ACTIVE' ? 'rgba(34,197,94,0.12)' :
-                            activeCard.status === 'FROZEN' ? 'rgba(96,165,250,0.12)' : 'rgba(239,68,68,0.12)',
+                            activeCard.status === 'FROZEN' ? 'rgba(99,161,219,0.12)' : 'rgba(239,68,68,0.12)',
                         }}>
                           <View style={{
                             width: 6, height: 6, borderRadius: 3,
                             backgroundColor: activeCard.status === 'ACTIVE' ? '#22c55e' :
-                              activeCard.status === 'FROZEN' ? '#60a5fa' : '#ef4444',
+                              activeCard.status === 'FROZEN' ? '#63a1db' : '#ef4444',
                           }} />
                           <Text style={{
                             fontSize: 11, fontWeight: '600',
                             color: activeCard.status === 'ACTIVE' ? '#22c55e' :
-                              activeCard.status === 'FROZEN' ? '#60a5fa' : '#ef4444',
+                              activeCard.status === 'FROZEN' ? '#63a1db' : '#ef4444',
                           }}>
                             {activeCard.status}
                           </Text>
@@ -1344,17 +1344,17 @@ export default function Cards() {
                       disabled={busyId === activeCard.id}
                       style={({ pressed }) => ({
                         flex: 1, height: 56, borderRadius: 16,
-                        backgroundColor: activeCard.status === 'FROZEN' ? 'rgba(96,165,250,0.12)' : p.pillBg,
+                        backgroundColor: activeCard.status === 'FROZEN' ? 'rgba(99,161,219,0.12)' : p.pillBg,
                         borderWidth: 1,
-                        borderColor: activeCard.status === 'FROZEN' ? 'rgba(96,165,250,0.3)' : p.border,
+                        borderColor: activeCard.status === 'FROZEN' ? 'rgba(99,161,219,0.3)' : p.border,
                         alignItems: 'center', justifyContent: 'center', gap: 4,
                         opacity: pressed || busyId === activeCard.id ? 0.7 : 1,
                       })}
                     >
                       {busyId === activeCard.id
                         ? <ActivityIndicator size="small" color={p.fg} />
-                        : <Ionicons name={activeCard.status === 'FROZEN' ? 'sunny-outline' : 'snow-outline'} size={20} color={activeCard.status === 'FROZEN' ? '#60a5fa' : p.fg} />}
-                      <Text style={{ color: activeCard.status === 'FROZEN' ? '#60a5fa' : p.fg, fontSize: 10, fontWeight: '700' }}>
+                        : <Ionicons name={activeCard.status === 'FROZEN' ? 'sunny-outline' : 'snow-outline'} size={20} color={activeCard.status === 'FROZEN' ? '#63a1db' : p.fg} />}
+                      <Text style={{ color: activeCard.status === 'FROZEN' ? '#63a1db' : p.fg, fontSize: 10, fontWeight: '700' }}>
                         {activeCard.status === 'FROZEN' ? t('cards.unfreeze') : t('cards.freeze')}
                       </Text>
                     </Pressable>

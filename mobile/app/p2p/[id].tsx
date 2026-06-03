@@ -210,7 +210,7 @@ export default function OfferDetail() {
             backgroundColor: p.bgElev,
             borderRadius: 20,
             borderWidth: 1.5,
-            borderColor: tooHigh || tooLow ? p.redFg : fiatAmount ? p.fg : p.border,
+            borderColor: tooHigh || tooLow ? p.redFg : fiatAmount ? p.accent : p.border,
             paddingHorizontal: 20, paddingVertical: 18,
             alignItems: 'center', flexDirection: 'row',
           }}>

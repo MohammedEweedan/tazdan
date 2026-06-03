@@ -178,9 +178,9 @@ export default function AdminNotifications() {
               <Pressable
                 key={t}
                 onPress={() => setTab(t)}
-                style={{ paddingHorizontal: 18, paddingVertical: 8, borderRadius: 10, backgroundColor: on ? p.fg : p.pillBg, borderWidth: 1, borderColor: on ? p.fg : p.border }}
+                style={{ paddingHorizontal: 18, paddingVertical: 8, borderRadius: 10, backgroundColor: on ? p.accent : p.pillBg, borderWidth: 1, borderColor: on ? p.accent : p.border }}
               >
-                <Text style={{ color: on ? p.bg : p.fg, fontSize: 12, fontWeight: '600', letterSpacing: 0.3 }}>
+                <Text style={{ color: on ? p.accentFg : p.fg, fontSize: 12, fontWeight: '600', letterSpacing: 0.3 }}>
                   {t === 'history' ? 'History' : 'Compose'}
                 </Text>
               </Pressable>
@@ -307,9 +307,9 @@ export default function AdminNotifications() {
                   <Pressable
                     key={t}
                     onPress={() => setNotifType(t)}
-                    style={{ paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10, backgroundColor: on ? p.fg : p.pillBg, borderWidth: 1, borderColor: on ? p.fg : p.border }}
+                    style={{ paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10, backgroundColor: on ? p.accent : p.pillBg, borderWidth: 1, borderColor: on ? p.accent : p.border }}
                   >
-                    <Text style={{ color: on ? p.bg : p.fg, fontSize: 11, fontWeight: '600', letterSpacing: 0.3 }}>{t.toUpperCase()}</Text>
+                    <Text style={{ color: on ? p.accentFg : p.fg, fontSize: 11, fontWeight: '600', letterSpacing: 0.3 }}>{t.toUpperCase()}</Text>
                   </Pressable>
                 );
               })}

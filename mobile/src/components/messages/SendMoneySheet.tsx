@@ -174,13 +174,13 @@ export function SendMoneySheet({
                         style={({ pressed }) => ({
                           paddingHorizontal: 12, paddingVertical: 10,
                           borderRadius: 14, minWidth: 110,
-                          backgroundColor: active ? p.fg : p.bgElev,
-                          borderWidth: 1, borderColor: active ? p.fg : p.border,
+                          backgroundColor: active ? p.accent : p.bgElev,
+                          borderWidth: 1, borderColor: active ? p.accent : p.border,
                           opacity: hasBalance ? (pressed ? 0.9 : 1) : 0.45,
                         })}
                       >
                         <Text style={{
-                          color: active ? p.bg : p.fg,
+                          color: active ? p.accentFg : p.fg,
                           fontSize: 13, fontWeight: '600', letterSpacing: 0.2,
                         }}>
                           {meta?.flagOrIcon ?? d.currency.slice(0, 1)} {d.currency}
@@ -193,7 +193,7 @@ export function SendMoneySheet({
                         <Text
                           numberOfLines={1}
                           style={{
-                            color: active ? p.bg : p.fgMuted,
+                            color: active ? p.accentFg : p.fgMuted,
                             fontSize: 10, fontWeight: '600', marginTop: 2,
                             fontVariant: ['tabular-nums'],
                             opacity: active ? 0.8 : 1,

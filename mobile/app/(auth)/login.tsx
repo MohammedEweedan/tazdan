@@ -244,9 +244,9 @@ export default function Login() {
               <Pressable
                 hitSlop={6}
                 style={{ alignSelf: 'flex-end', marginTop: 2 }}
-                onPress={() => Alert.alert('Forgot password?', 'Password reset is coming soon. Contact support@tazdan.com for now.')}
+                onPress={() => { h.selection(); router.push('/(auth)/reset-password' as any); }}
               >
-                <Text style={{ color: p.fg, fontSize: 13, fontWeight: '700' }}>
+                <Text style={{ color: p.accentText, fontSize: 13, fontWeight: '700' }}>
                   {t('login.forgot')}
                 </Text>
               </Pressable>
@@ -267,21 +267,22 @@ export default function Login() {
                 height: 58,
                 minHeight: 58,
                 borderRadius: 29,
-                backgroundColor: p.ctaBg,
+                // Login leads with the brand blue (mono falls back to neutral).
+                backgroundColor: themeMode === 'mono' ? p.ctaBg : p.accent,
                 opacity: submitting ? 0.7 : pressed ? 0.85 : 1,
                 alignItems: 'center', justifyContent: 'center',
                 flexDirection: 'row',
                 gap: 10,
-                shadowColor: '#000',
-                shadowOpacity: 0.22,
+                shadowColor: themeMode === 'mono' ? '#000' : p.accent,
+                shadowOpacity: themeMode === 'mono' ? 0.22 : 0.32,
                 shadowOffset: { width: 0, height: 6 },
                 shadowRadius: 14,
                 elevation: 4,
               })}
             >
-              {submitting && <ActivityIndicator size="small" color={p.ctaFg} />}
-              <Ionicons name="arrow-forward" size={18} color={p.ctaFg} />
-              <Text style={{ color: p.ctaFg, fontSize: 16, fontWeight: '600', letterSpacing: -0.2 }}>
+              {submitting && <ActivityIndicator size="small" color={themeMode === 'mono' ? p.ctaFg : p.accentFg} />}
+              <Ionicons name="arrow-forward" size={18} color={themeMode === 'mono' ? p.ctaFg : p.accentFg} />
+              <Text style={{ color: themeMode === 'mono' ? p.ctaFg : p.accentFg, fontSize: 16, fontWeight: '600', letterSpacing: -0.2 }}>
                 {submitting ? t('login.loading') : t('login.cta')}
               </Text>
             </Pressable>
@@ -396,7 +397,10 @@ export default function Login() {
         animationType="fade"
         onRequestClose={() => { if (!submitting) { setTwoFAOpen(false); setPendingCreds(null); } }}
       >
-        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'center', paddingHorizontal: 28 }}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'center', paddingHorizontal: 28, paddingBottom: 40 }}
+        >
           <View style={{ backgroundColor: p.bg, borderRadius: 24, padding: 24, borderWidth: 1, borderColor: p.border }}>
             <Text style={{ color: p.fg, fontSize: 20, fontWeight: '600', marginBottom: 8 }}>
               Two-factor code
@@ -454,8 +458,19 @@ export default function Login() {
                 <Text style={{ color: p.ctaFg, fontSize: 14, fontWeight: '600' }}>Verify</Text>
               </Pressable>
             </View>
+
+            {/* Locked out? Recover 2FA via email code + phone + DOB. */}
+            <Pressable
+              onPress={() => { h.selection(); setTwoFAOpen(false); setPendingCreds(null); router.push('/(auth)/recover-2fa' as any); }}
+              hitSlop={6}
+              style={{ alignSelf: 'center', marginTop: 16 }}
+            >
+              <Text style={{ color: p.accentText, fontSize: 13, fontWeight: '700' }}>
+                {t('recover.lostAuthenticator')}
+              </Text>
+            </Pressable>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );
@@ -488,7 +503,7 @@ function Field({
           paddingTop: value || focused ? 18 : 0,
           backgroundColor: p.bgElev,
           borderWidth: 1,
-          borderColor: error ? p.redFg : focused ? p.fg : p.border,
+          borderColor: error ? p.redFg : focused ? p.accentText : p.border,
           justifyContent: 'center',
         }}
       >

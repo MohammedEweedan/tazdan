@@ -11,7 +11,7 @@
  * Mirrors the visual language of `login.tsx` and the web client register page.
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { ActivityIndicator, Alert, Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from 'react-native';
 import { Text, TextInput } from '@/components/ui/Text';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -23,7 +23,7 @@ import { z } from 'zod';
 import { Ionicons } from '@expo/vector-icons';
 
 import { useAuthStore } from '@/store/authStore';
-import { authService } from '@/services';
+import { authService, profileService } from '@/services';
 import { useHaptics } from '@/hooks';
 import { useTheme, useThemedPalette, type Palette, type ThemeMode } from '@/store/themeStore';
 import { useI18n, LOCALE_META } from '@/store/i18nStore';
@@ -85,6 +85,10 @@ type StepOne = z.infer<typeof stepOneSchema>;
 /* ── Emoji groups ────────────────────────────────── */
 
 const EMOJI_GROUPS: Record<string, string[]> = {
+  // Brand-first — the tazdan asterisk leads, on-identity for an avatar.
+  Brand: [
+    '✳️','✴️','❇️','✨','⭐','🌟','💠','🔷','🔹','🔵','💙','🩵',
+  ],
   Cool: [
     '🔥','⚡','💀','☠️','👑','😈','😎','🫡','💯','🚀','🎯','🥷',
     '🦾','🔒','💸','🏴','⭐','✨','🌙','☄️','🪐','⚔️','🛡️','🏁',
@@ -99,17 +103,20 @@ const EMOJI_GROUPS: Record<string, string[]> = {
   ],
   Symbols: [
     '👑','💎','💸','💯','🔒','⚡','🔥','⭐','✨','☠️','💀','🚀',
-    '🎯','🏴','🏁','⚔️','🛡️','📿','🧿','🪬','🌍','☄️','🪐','🌊',
+    '🎯','🏴','🏁','⚔️','🛡️','🌍','☄️','🪐','🌊','💠','🔷','✳️',
   ],
   Nature: [
     '☀️','🌙','☁️','❄️','🌊','🌴','🌵','🌍','🌎','🌏','🪐','☄️',
-    '⭐','✨','🌊','🌴','🍂','🍁','🌸','🌹','🌺','🌻','🌼','🌿',
+    '⭐','✨','🌅','🏔️','🍂','🍁','🌸','🌹','🌺','🌻','🌼','🌿',
   ],
-  Faith: [
-    '📿','☪️','🕋','🤲','🙏','🧿','🪬','🕊️','🤍','🌙','⭐','☀️',
-  ],
+  // Comprehensive flag set — MENA-first, then major world flags. Deliberately
+  // excludes the rainbow/pride flag per brand request.
   Flags: [
-    '🇱🇾','🇵🇸','🇸🇦','🇦🇪','🇪🇬','🇹🇳','🇩🇿','🇲🇦','🇹🇷','🇮🇹',
+    '🇱🇾','🇵🇸','🇸🇦','🇦🇪','🇪🇬','🇹🇳','🇩🇿','🇲🇦','🇶🇦','🇰🇼',
+    '🇧🇭','🇴🇲','🇯🇴','🇱🇧','🇮🇶','🇸🇾','🇾🇪','🇸🇩','🇲🇷','🇸🇴',
+    '🇹🇷','🇮🇷','🇵🇰','🇮🇳','🇧🇩','🇮🇩','🇲🇾','🇳🇬','🇿🇦','🇪🇹',
+    '🇬🇧','🇺🇸','🇨🇦','🇫🇷','🇩🇪','🇮🇹','🇪🇸','🇳🇱','🇸🇪','🇨🇭',
+    '🇧🇷','🇲🇽','🇦🇷','🇯🇵','🇰🇷','🇨🇳','🇷🇺','🇦🇺','🇶🇦','🏴',
   ],
 };
 
@@ -128,6 +135,11 @@ export default function Register() {
 
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
   const [one, setOne] = useState<StepOne | null>(null);
+  // The REAL user the server created (correct id + @handle). We keep this so
+  // that after email verification we authenticate with the actual account —
+  // not a hand-built object missing the username (which clobbered the cached
+  // profile and made the @handle vanish on reload).
+  const [registeredUser, setRegisteredUser] = useState<import('@/types').User | null>(null);
   const [avatarUrl, setAvatarUrl] = useState('');
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -136,6 +148,8 @@ export default function Register() {
   const [error, setError] = useState('');
   const [emojiCategory, setEmojiCategory] = useState(Object.keys(EMOJI_GROUPS)[0]);
   const [showCountryPicker, setShowCountryPicker] = useState(false);
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showLegal, setShowLegal] = useState<null | 'terms' | 'privacy'>(null);
 
   const formOne = useForm<StepOne>({
     resolver: zodResolver(stepOneSchema),
@@ -149,7 +163,33 @@ export default function Register() {
   const selectedCountryCode = formOne.watch('country') || 'LY';
   const selectedCountry: Country = COUNTRY_BY_ISO[selectedCountryCode] ?? COUNTRY_BY_ISO['LY'];
 
-  const handleAvailable = (formOne.watch('username')?.length ?? 0) >= 3 && !/[^a-z0-9._]/i.test(formOne.watch('username') ?? '');
+  const usernameValue = formOne.watch('username') ?? '';
+  const usernameFormatOk = usernameValue.length >= 3 && !/[^a-z0-9._]/i.test(usernameValue);
+
+  // Real-time @handle availability. Handles are public (the /profile/:handle
+  // route is a discovery endpoint), so checking them is NOT a user-enumeration
+  // leak — unlike email/phone, which the server deliberately keeps opaque
+  // (generic "already in use" error) to defeat credential-stuffing. We debounce
+  // and treat a 404 as "available", a 200 as "taken".
+  const [handleStatus, setHandleStatus] = useState<'idle' | 'checking' | 'available' | 'taken'>('idle');
+  useEffect(() => {
+    if (!usernameFormatOk) { setHandleStatus('idle'); return; }
+    let cancelled = false;
+    setHandleStatus('checking');
+    const t = setTimeout(async () => {
+      try {
+        await profileService.byHandle(usernameValue.toLowerCase());
+        if (!cancelled) setHandleStatus('taken');      // profile found → taken
+      } catch (e: any) {
+        if (cancelled) return;
+        // 404 → nobody has it → available. Other errors → don't block; treat as available.
+        setHandleStatus('available');
+      }
+    }, 450);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [usernameValue, usernameFormatOk]);
+
+  const handleAvailable = usernameFormatOk && handleStatus === 'available';
 
   const submitAccount = async (data: StepOne) => {
     setError('');
@@ -178,6 +218,7 @@ export default function Register() {
         referralCode: data.referralCode || undefined,
       }, { skipStateUpdate: true });
       setOne(data);
+      setRegisteredUser(user);   // keep the real account (id + @handle)
       h.success();
       setStep(2);
     } catch (e: any) {
@@ -198,13 +239,17 @@ export default function Register() {
     try {
       await authService.verifyEmailCode(verificationCode);
       h.success();
-      // Mark user as authenticated so AuthGate doesn't bounce them
-      if (one) {
+      // Authenticate with the REAL server account (correct id + @handle), not
+      // a fabricated object — that's what made the @handle disappear on reload.
+      // Fall back to a soft object only if, somehow, we don't have it.
+      if (registeredUser) {
+        setAuthenticated({ ...registeredUser, emailVerified: true });
+      } else if (one) {
         setAuthenticated({
           id: '', email: one.email, firstName: one.firstName, lastName: one.lastName,
-          avatarUrl, referralCode: '', kycStatus: 'NOT_SUBMITTED', kycTier: 'TIER_0',
+          username: one.username, avatarUrl, referralCode: '', kycStatus: 'NOT_SUBMITTED', kycTier: 'TIER_0',
           twoFactorEnabled: false, emailVerified: true, createdAt: new Date().toISOString(),
-        });
+        } as any);
       }
       setStep(3);
     } catch (e: any) {
@@ -321,7 +366,7 @@ export default function Register() {
                     height: 6,
                     flex: step === n ? 2 : 1,
                     borderRadius: 3,
-                    backgroundColor: step >= n ? p.fg : p.border,
+                    backgroundColor: step >= n ? p.accent : p.border,
                   }}
                 />
               ))}
@@ -405,6 +450,30 @@ export default function Register() {
                         autoCorrect={false}
                         error={formOne.formState.errors.email?.message}
                         palette={p}
+                      />
+                    )}
+                  />
+                  {/* Password sits with the credentials (email + password), not
+                      buried at the end of the form. */}
+                  <Controller
+                    control={formOne.control}
+                    name="password"
+                    render={({ field: { onChange, onBlur, value } }) => (
+                      <Field
+                        label="Password"
+                        value={value}
+                        onChangeText={onChange}
+                        onBlur={onBlur}
+                        secureTextEntry={!showPw}
+                        autoCapitalize="none"
+                        autoCorrect={false}
+                        error={formOne.formState.errors.password?.message}
+                        palette={p}
+                        right={
+                          <Pressable hitSlop={8} onPress={() => { h.selection(); setShowPw((s) => !s); }}>
+                            <Ionicons name={showPw ? 'eye-off' : 'eye'} size={18} color={p.fgMuted} />
+                          </Pressable>
+                        }
                       />
                     )}
                   />
@@ -496,30 +565,45 @@ export default function Register() {
                     </Text>
                   )}
 
-                  {/* Date of birth (dd/mm/yyyy; manual entry to avoid native date-picker dep). */}
+                  {/* Date of birth — opens a wheel picker; must be 18+ (enforced
+                      in the picker and again by the schema). */}
                   <Controller
                     control={formOne.control}
                     name="dateOfBirth"
-                    render={({ field: { onChange, onBlur, value } }) => (
-                      <Field
-                        label="Date of birth (dd/mm/yyyy)"
-                        value={value || ''}
-                        onChangeText={(t) => {
-                          // Auto-insert slashes for friendlier typing: dd/mm/yyyy.
-                          const digits = t.replace(/\D/g, '').slice(0, 8);
-                          let out = digits;
-                          if (digits.length > 2) out = `${digits.slice(0, 2)}/${digits.slice(2)}`;
-                          if (digits.length > 4) out = `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`;
-                          onChange(out);
-                        }}
-                        onBlur={onBlur}
-                        keyboardType="number-pad"
-                        autoCapitalize="none"
-                        autoCorrect={false}
-                        error={formOne.formState.errors.dateOfBirth?.message}
-                        palette={p}
-                      />
-                    )}
+                    render={({ field: { value } }) => {
+                      const hasValue = !!value;
+                      const underage = hasValue && !isAdultDateString(value);
+                      return (
+                        <>
+                          <Pressable
+                            onPress={() => { h.selection(); setShowDatePicker(true); }}
+                            style={{
+                              height: 60, borderRadius: 16, paddingHorizontal: 16,
+                              backgroundColor: p.bgElev,
+                              borderWidth: 1,
+                              borderColor: (formOne.formState.errors.dateOfBirth || underage) ? p.redFg : (hasValue ? p.accent : p.border),
+                              justifyContent: 'center',
+                            }}
+                          >
+                            <Text style={{ position: 'absolute', left: 16, top: 10, color: p.fgMuted, fontSize: 11, fontWeight: '500' }}>
+                              Date of birth
+                            </Text>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 14 }}>
+                              <Ionicons name="calendar-outline" size={16} color={p.fgMuted} style={{ marginRight: 8 }} />
+                              <Text style={{ color: hasValue ? p.fg : p.fgFaint, fontSize: 16, fontWeight: '500', flex: 1 }}>
+                                {hasValue ? value : 'Select your date of birth'}
+                              </Text>
+                              <Ionicons name="chevron-down" size={18} color={p.fgMuted} />
+                            </View>
+                          </Pressable>
+                          {(underage || formOne.formState.errors.dateOfBirth) && (
+                            <Text style={{ color: p.redFg, fontSize: 12, fontWeight: '600', marginLeft: 4 }}>
+                              {underage ? 'You must be 18 or older to use tazdan.' : (formOne.formState.errors.dateOfBirth?.message as string)}
+                            </Text>
+                          )}
+                        </>
+                      );
+                    }}
                   />
                   <Controller
                     control={formOne.control}
@@ -532,15 +616,20 @@ export default function Register() {
                         onBlur={onBlur}
                         autoCapitalize="none"
                         autoCorrect={false}
-                        error={formOne.formState.errors.username?.message}
+                        error={
+                          formOne.formState.errors.username?.message ??
+                          (usernameFormatOk && handleStatus === 'taken' ? 'That @handle is taken — try another.' : undefined)
+                        }
                         palette={p}
                         right={
                           (value?.length ?? 0) >= 3 ? (
-                            <Ionicons
-                              name={handleAvailable ? 'checkmark-circle' : 'close-circle'}
-                              size={18}
-                              color={handleAvailable ? p.greenFg : p.redFg}
-                            />
+                            handleStatus === 'checking'
+                              ? <ActivityIndicator size="small" color={p.fgMuted} />
+                              : handleStatus === 'available'
+                                ? <Ionicons name="checkmark-circle" size={18} color={p.greenFg} />
+                                : handleStatus === 'taken'
+                                  ? <Ionicons name="close-circle" size={18} color={p.redFg} />
+                                  : undefined
                           ) : undefined
                         }
                       />
@@ -567,12 +656,12 @@ export default function Register() {
                             style={{
                               paddingHorizontal: 14, paddingVertical: 8,
                               borderRadius: 999,
-                              backgroundColor: active ? p.fg : p.bgElev,
-                              borderWidth: 1, borderColor: active ? p.fg : p.border,
+                              backgroundColor: active ? p.accent : p.bgElev,
+                              borderWidth: 1, borderColor: active ? p.accent : p.border,
                             }}
                           >
                             <Text style={{
-                              color: active ? (themeMode !== 'light' ? '#0f172a' : '#fff') : p.fg,
+                              color: active ? p.accentFg : p.fg,
                               fontSize: 12, fontWeight: '700',
                             }}>
                               {cat}
@@ -590,9 +679,9 @@ export default function Register() {
                           style={{
                             width: 46, height: 46, borderRadius: 12,
                             alignItems: 'center', justifyContent: 'center',
-                            backgroundColor: avatarUrl === emoji ? p.fg : p.bgElev,
+                            backgroundColor: avatarUrl === emoji ? p.accentSoft : p.bgElev,
                             borderWidth: 1.5,
-                            borderColor: avatarUrl === emoji ? p.fg : p.border,
+                            borderColor: avatarUrl === emoji ? p.accent : p.border,
                           }}
                         >
                           <Text style={{ fontSize: 22 }}>{emoji}</Text>
@@ -601,28 +690,6 @@ export default function Register() {
                     </View>
                   </View>
 
-                  <Controller
-                    control={formOne.control}
-                    name="password"
-                    render={({ field: { onChange, onBlur, value } }) => (
-                      <Field
-                        label="Password"
-                        value={value}
-                        onChangeText={onChange}
-                        onBlur={onBlur}
-                        secureTextEntry={!showPw}
-                        autoCapitalize="none"
-                        autoCorrect={false}
-                        error={formOne.formState.errors.password?.message}
-                        palette={p}
-                        right={
-                          <Pressable hitSlop={8} onPress={() => { h.selection(); setShowPw((s) => !s); }}>
-                            <Ionicons name={showPw ? 'eye-off' : 'eye'} size={18} color={p.fgMuted} />
-                          </Pressable>
-                        }
-                      />
-                    )}
-                  />
                   <Controller
                     control={formOne.control}
                     name="referralCode"
@@ -640,23 +707,39 @@ export default function Register() {
                   />
                 </View>
 
-                {/* Terms checkbox */}
-                <Pressable
-                  onPress={() => { h.selection(); setTermsAccepted((s) => !s); }}
-                  style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginTop: 20 }}
-                >
-                  <View style={{
-                    width: 22, height: 22, borderRadius: 6,
-                    borderWidth: 1.5, borderColor: termsAccepted ? p.fg : p.border,
-                    backgroundColor: termsAccepted ? p.fg : 'transparent',
-                    alignItems: 'center', justifyContent: 'center',
-                  }}>
-                    {termsAccepted && <Ionicons name="checkmark" size={14} color={themeMode !== 'light' ? '#0f172a' : '#fff'} />}
-                  </View>
+                {/* Terms — the checkbox toggles consent; the two links open
+                    readable modals so the user can actually read before agreeing. */}
+                <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginTop: 20 }}>
+                  <Pressable
+                    onPress={() => { h.selection(); setTermsAccepted((s) => !s); }}
+                    hitSlop={8}
+                    style={{
+                      width: 22, height: 22, borderRadius: 6, marginTop: 1,
+                      borderWidth: 1.5, borderColor: termsAccepted ? p.accent : p.border,
+                      backgroundColor: termsAccepted ? p.accent : 'transparent',
+                      alignItems: 'center', justifyContent: 'center',
+                    }}
+                  >
+                    {termsAccepted && <Ionicons name="checkmark" size={14} color={p.accentFg} />}
+                  </Pressable>
                   <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '500', flex: 1, lineHeight: 20 }}>
-                    I agree to the Terms of Service and Privacy Policy.
+                    I agree to the{' '}
+                    <Text
+                      onPress={() => { h.selection(); setShowLegal('terms'); }}
+                      style={{ color: p.accentText, fontWeight: '700' }}
+                    >
+                      Terms of Service
+                    </Text>
+                    {' '}and{' '}
+                    <Text
+                      onPress={() => { h.selection(); setShowLegal('privacy'); }}
+                      style={{ color: p.accentText, fontWeight: '700' }}
+                    >
+                      Privacy Policy
+                    </Text>
+                    .
                   </Text>
-                </Pressable>
+                </View>
 
                 <PrimaryCTA
                   palette={p}
@@ -664,6 +747,7 @@ export default function Register() {
                   label={submitting ? 'Creating account…' : 'Continue'}
                   onPress={formOne.handleSubmit((v) => { h.medium(); submitAccount(v); }, () => h.error())}
                   loading={submitting}
+                  disabled={submitting || handleStatus === 'taken' || handleStatus === 'checking'}
                 />
               </View>
             )}
@@ -873,9 +957,210 @@ export default function Register() {
           </Pressable>
         </Pressable>
       </Modal>
+
+      {/* Date-of-birth wheel picker (18+ enforced) */}
+      <DatePickerModal
+        visible={showDatePicker}
+        palette={p}
+        initial={formOne.getValues('dateOfBirth')}
+        onClose={() => setShowDatePicker(false)}
+        onConfirm={(ddmmyyyy) => {
+          formOne.setValue('dateOfBirth', ddmmyyyy, { shouldValidate: true });
+          setShowDatePicker(false);
+        }}
+      />
+
+      {/* Readable Terms / Privacy modal */}
+      <LegalModal
+        kind={showLegal}
+        palette={p}
+        onClose={() => setShowLegal(null)}
+        onAgree={() => { setTermsAccepted(true); setShowLegal(null); }}
+      />
     </View>
   );
 }
+
+/* ════════════════════════════════════════════════════════════════════
+   Date-of-birth picker — self-contained scrollable day / month / year
+   wheels (no native datetimepicker dependency). Enforces 18+: the year
+   column only offers years that make the user at least 18.
+   ════════════════════════════════════════════════════════════════════ */
+
+const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const ITEM_H = 44;
+
+function DatePickerModal({
+  visible, palette: p, initial, onClose, onConfirm,
+}: {
+  visible: boolean;
+  palette: Palette;
+  initial?: string;
+  onClose: () => void;
+  onConfirm: (ddmmyyyy: string) => void;
+}) {
+  const now = new Date();
+  const maxYear = now.getFullYear() - 18;          // newest allowed birth year (turns 18 this year)
+  const minYear = now.getFullYear() - 100;
+  const years = Array.from({ length: maxYear - minYear + 1 }, (_, i) => maxYear - i); // desc
+
+  // Seed from the existing value (dd/mm/yyyy) or a sensible default (~25yo).
+  const seed = parseDdMmYyyy(initial ?? '') ?? new Date(maxYear - 7, 0, 1);
+  const [day, setDay]     = useState(seed.getDate());
+  const [month, setMonth] = useState(seed.getMonth()); // 0-based
+  const [year, setYear]   = useState(seed.getFullYear());
+
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
+  const safeDay = Math.min(day, daysInMonth);
+
+  const Column = ({ data, selected, onSelect, width, fmt }: {
+    data: number[]; selected: number; onSelect: (v: number) => void; width: number; fmt?: (v: number) => string;
+  }) => (
+    <ScrollView
+      style={{ width, height: ITEM_H * 5 }}
+      showsVerticalScrollIndicator={false}
+      contentContainerStyle={{ paddingVertical: ITEM_H * 2 }}
+      snapToInterval={ITEM_H}
+      decelerationRate="fast"
+    >
+      {data.map((v) => {
+        const on = v === selected;
+        return (
+          <Pressable key={v} onPress={() => onSelect(v)} style={{ height: ITEM_H, alignItems: 'center', justifyContent: 'center' }}>
+            <Text style={{
+              color: on ? p.accentText : p.fgMuted,
+              fontSize: on ? 20 : 16,
+              fontWeight: on ? '800' : '500',
+              fontVariant: ['tabular-nums'],
+            }}>
+              {fmt ? fmt(v) : v}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </ScrollView>
+  );
+
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <Pressable onPress={onClose} style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' }}>
+        <Pressable onPress={() => {}} style={{ backgroundColor: p.bg, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingBottom: 28 }}>
+          <View style={{ alignItems: 'center', paddingVertical: 10 }}>
+            <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: p.border }} />
+          </View>
+          <Text style={{ color: p.fg, fontSize: 18, fontWeight: '700', paddingHorizontal: 20, paddingBottom: 4 }}>
+            Date of birth
+          </Text>
+          <Text style={{ color: p.fgMuted, fontSize: 13, paddingHorizontal: 20, paddingBottom: 8 }}>
+            You must be 18 or older to use tazdan.
+          </Text>
+          {/* Wheels with a centered selection band */}
+          <View style={{ position: 'relative', flexDirection: 'row', justifyContent: 'center', gap: 8, paddingHorizontal: 20 }}>
+            <View pointerEvents="none" style={{
+              position: 'absolute', left: 20, right: 20, top: ITEM_H * 2, height: ITEM_H,
+              borderRadius: 12, backgroundColor: p.accentSoft, borderWidth: 1, borderColor: p.accentBorder,
+            }} />
+            <Column data={days} selected={safeDay} onSelect={setDay} width={64} />
+            <Column data={MONTHS.map((_, i) => i)} selected={month} onSelect={setMonth} width={88} fmt={(i) => MONTHS[i]} />
+            <Column data={years} selected={year} onSelect={setYear} width={88} />
+          </View>
+          <View style={{ paddingHorizontal: 20, marginTop: 16 }}>
+            <Pressable
+              onPress={() => {
+                const dd = String(safeDay).padStart(2, '0');
+                const mm = String(month + 1).padStart(2, '0');
+                onConfirm(`${dd}/${mm}/${year}`);
+              }}
+              style={({ pressed }) => ({
+                height: 54, borderRadius: 27, backgroundColor: p.accent,
+                alignItems: 'center', justifyContent: 'center', opacity: pressed ? 0.85 : 1,
+              })}
+            >
+              <Text style={{ color: p.accentFg, fontSize: 16, fontWeight: '700' }}>Confirm</Text>
+            </Pressable>
+          </View>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   Legal modal — readable Terms / Privacy summary with an Agree button so
+   the user can actually read before consenting.
+   ════════════════════════════════════════════════════════════════════ */
+
+function LegalModal({
+  kind, palette: p, onClose, onAgree,
+}: {
+  kind: null | 'terms' | 'privacy';
+  palette: Palette;
+  onClose: () => void;
+  onAgree: () => void;
+}) {
+  if (!kind) return null;
+  const isTerms = kind === 'terms';
+  const title = isTerms ? 'Terms of Service' : 'Privacy Policy';
+  const url = isTerms ? 'https://tazdan.com/legal/terms' : 'https://tazdan.com/legal/privacy';
+  const sections = isTerms ? TERMS_SECTIONS : PRIVACY_SECTIONS;
+
+  return (
+    <Modal visible transparent animationType="slide" onRequestClose={onClose}>
+      <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }}>
+        <View style={{ backgroundColor: p.bg, borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: '88%', paddingBottom: 24 }}>
+          <View style={{ alignItems: 'center', paddingVertical: 10 }}>
+            <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: p.border }} />
+          </View>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingBottom: 8 }}>
+            <Text style={{ color: p.fg, fontSize: 20, fontWeight: '700' }}>{title}</Text>
+            <Pressable onPress={onClose} hitSlop={8} style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: p.pillBg, alignItems: 'center', justifyContent: 'center' }}>
+              <Ionicons name="close" size={16} color={p.fg} />
+            </Pressable>
+          </View>
+          <ScrollView style={{ paddingHorizontal: 20 }} contentContainerStyle={{ paddingBottom: 16 }} showsVerticalScrollIndicator={false}>
+            {sections.map((s) => (
+              <View key={s.h} style={{ marginTop: 16 }}>
+                <Text style={{ color: p.fg, fontSize: 15, fontWeight: '700', marginBottom: 6 }}>{s.h}</Text>
+                <Text style={{ color: p.fgMuted, fontSize: 14, lineHeight: 21 }}>{s.b}</Text>
+              </View>
+            ))}
+            <Text style={{ color: p.fgFaint, fontSize: 12, marginTop: 18 }}>
+              This is a summary. Read the full {title.toLowerCase()} at {url}.
+            </Text>
+          </ScrollView>
+          <View style={{ paddingHorizontal: 20, paddingTop: 12 }}>
+            <Pressable
+              onPress={onAgree}
+              style={({ pressed }) => ({ height: 54, borderRadius: 27, backgroundColor: p.accent, alignItems: 'center', justifyContent: 'center', opacity: pressed ? 0.85 : 1 })}
+            >
+              <Text style={{ color: p.accentFg, fontSize: 16, fontWeight: '700' }}>I've read & agree</Text>
+            </Pressable>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+const TERMS_SECTIONS = [
+  { h: '1. Who we are', b: 'tazdan provides a wallet, crypto buy/sell, transfers, a card, and P2P trading for the markets we serve. By creating an account you agree to these terms.' },
+  { h: '2. Eligibility', b: 'You must be at least 18 and legally able to use financial services in your country. You agree to complete identity verification (KYC) where required.' },
+  { h: '3. Your account', b: 'Keep your credentials safe. You are responsible for activity on your account. We may apply limits, request verification, or pause activity to protect you and the platform.' },
+  { h: '4. Money & risk', b: 'Crypto prices move and can lose value. FX and parallel-market rates are shown transparently with a disclosed spread; you transact at the displayed rate at the time of the order.' },
+  { h: '5. Fees', b: 'Applicable spreads and fees are shown before you confirm any transaction. You agree to the fees displayed at confirmation time.' },
+  { h: '6. Prohibited use', b: 'No fraud, money laundering, sanctions evasion, or illegal activity. We may report and freeze activity as required by law.' },
+  { h: '7. Changes', b: 'We may update these terms; continued use means you accept the changes. Material changes will be communicated in-app or by email.' },
+];
+
+const PRIVACY_SECTIONS = [
+  { h: '1. What we collect', b: 'Account details (name, email, phone), identity documents for KYC, device info, and transaction history needed to operate a regulated money service.' },
+  { h: '2. How we use it', b: 'To run your account, verify your identity, prevent fraud, meet legal/AML obligations, and improve the product. We do not sell your personal data.' },
+  { h: '3. Who we share with', b: 'Trusted providers that power the app (identity verification, payments, custody, analytics) under strict agreements, and authorities where the law requires.' },
+  { h: '4. Security', b: 'Funds sit on a conservation-checked ledger; custody keys are hardware-encrypted; sensitive actions require step-up verification. No system is perfect — keep your device and credentials secure.' },
+  { h: '5. Your rights', b: 'You can access, correct, or request deletion of your data subject to legal retention requirements. Contact support to exercise these rights.' },
+  { h: '6. Retention', b: 'We keep records as long as needed to provide the service and to satisfy financial-regulatory retention rules.' },
+];
 
 /* ── Reusable themed CTA ─────────────────────────── */
 function PrimaryCTA({
@@ -947,7 +1232,7 @@ function Field({
           paddingTop: value || focused ? 18 : 0,
           backgroundColor: p.bgElev,
           borderWidth: 1,
-          borderColor: error ? p.redFg : focused ? p.fg : p.border,
+          borderColor: error ? p.redFg : focused ? p.accentText : p.border,
           justifyContent: 'center',
         }}
       >

@@ -17,5 +17,9 @@ authRouter.post('/reset-password', AuthController.resetPassword);
 authRouter.post('/2fa/enable', authenticate, AuthController.enable2FA);
 authRouter.post('/2fa/verify', authenticate, AuthController.verify2FA);
 authRouter.post('/2fa/disable', authenticate, AuthController.disable2FA);
+// 2FA recovery for locked-out users (no auth — they can't log in). Identity
+// is proven by email code + phone + date of birth inside the controller.
+authRouter.post('/2fa/recover/request', AuthController.request2FARecovery);
+authRouter.post('/2fa/recover/verify', AuthController.verify2FARecovery);
 authRouter.post('/phone/start', authenticate, AuthController.startPhoneVerification);
 authRouter.post('/phone/verify', authenticate, AuthController.verifyPhone);

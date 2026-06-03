@@ -4,37 +4,30 @@
  */
 
 import { useState } from 'react';
-import { Alert, Modal, Pressable, RefreshControl, ScrollView, View } from 'react-native';
+import { Alert, Modal, Pressable, RefreshControl, View } from 'react-native';
 import { Text, TextInput } from '@/components/ui/Text';
 import { Ionicons } from '@expo/vector-icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useRouter } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { StatusBar } from 'expo-status-bar';
 import { formatRelativeTime } from '@/utils/format';
 
-import { useThemedPalette, useTheme } from '@/store/themeStore';
-import { useAuthStore } from '@/store/authStore';
+import { useThemedPalette } from '@/store/themeStore';
 import { adminService } from '@/services';
 import { LoadingPulse } from '@/components/ui/LoadingPulse';
-import { TopGradient } from '@/components/ui/ScreenShell';
+import { AdminScreen, AdminTabs } from '@/components/admin/AdminScreen';
+
+type WdFilter = 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'REJECTED';
 
 export default function AdminWithdrawals() {
   const p = useThemedPalette();
-  const themeMode = useTheme((s) => s.mode);
-  const router = useRouter();
   const qc = useQueryClient();
-  const user = useAuthStore((s) => s.user);
-  const isAdmin = user?.role === 'ADMIN';
 
-  const [filter, setFilter] = useState<'PENDING' | 'PROCESSING' | 'COMPLETED' | 'REJECTED'>('PENDING');
+  const [filter, setFilter] = useState<WdFilter>('PENDING');
   const [rejecting, setRejecting] = useState<any | null>(null);
   const [reason, setReason] = useState('');
 
   const q = useQuery({
     queryKey: ['admin-withdrawals', filter],
     queryFn: () => adminService.withdrawals({ status: filter }),
-    enabled: isAdmin,
     refetchInterval: 15_000,
   });
 
@@ -56,35 +49,25 @@ export default function AdminWithdrawals() {
 
   const withdrawals = q.data?.withdrawals ?? [];
 
-  if (!isAdmin) {
-    return <DeniedView p={p} themeMode={themeMode} onBack={() => router.back()} />;
-  }
-
   return (
-    <View style={{ flex: 1, backgroundColor: p.bg }}>
-      <TopGradient />
-      <StatusBar style={themeMode === 'light' ? 'dark' : 'light'} />
-      <SafeAreaView style={{ flex: 1 }} edges={['top']}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingTop: 8, paddingBottom: 8 }}>
-          <Pressable onPress={() => router.back()} hitSlop={8}>
-            <Ionicons name="chevron-back" size={26} color={p.fg} />
-          </Pressable>
-          <Text style={{ flex: 1, color: p.fg, fontSize: 18, fontWeight: '600', letterSpacing: -0.3 }}>Withdrawal Queue</Text>
-          <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '700' }}>{withdrawals.length}</Text>
-        </View>
+    <AdminScreen
+      title="Withdrawal Queue"
+      subtitle={`${withdrawals.length} ${filter.toLowerCase()}`}
+      refreshControl={<RefreshControl refreshing={q.isFetching} onRefresh={q.refetch} tintColor={p.fg} />}
+    >
+      <AdminTabs<WdFilter>
+        value={filter}
+        onChange={setFilter}
+        tabs={[
+          { key: 'PENDING', label: 'Pending', count: filter === 'PENDING' ? withdrawals.length : undefined },
+          { key: 'PROCESSING', label: 'Processing' },
+          { key: 'COMPLETED', label: 'Completed' },
+          { key: 'REJECTED', label: 'Rejected' },
+        ]}
+      />
 
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, gap: 8 }}>
-          {(['PENDING', 'PROCESSING', 'COMPLETED', 'REJECTED'] as const).map((s) => {
-            const on = filter === s;
-            return (
-              <Pressable key={s} onPress={() => setFilter(s)} style={{ paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10, backgroundColor: on ? p.fg : p.pillBg, borderWidth: 1, borderColor: on ? p.fg : p.border }}>
-                <Text style={{ color: on ? p.bg : p.fg, fontSize: 12, fontWeight: '600' }}>{s}</Text>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
-
-        <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 80 }} refreshControl={<RefreshControl refreshing={q.isFetching} onRefresh={q.refetch} tintColor={p.fg} />}>
+      {(() => (
+        <>
           {q.isLoading ? (
             <View style={{ paddingTop: 80, alignItems: 'center' }}>
               <LoadingPulse size={56} icon="arrow-up-circle-outline" label="Loading withdrawals…" />
@@ -142,9 +125,10 @@ export default function AdminWithdrawals() {
               </View>
             ))
           )}
-        </ScrollView>
+        </>
+      ))()}
 
-        <Modal visible={!!rejecting} transparent animationType="slide" onRequestClose={() => setRejecting(null)}>
+      <Modal visible={!!rejecting} transparent animationType="slide" onRequestClose={() => setRejecting(null)}>
           <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' }}>
             <View style={{ backgroundColor: p.bg, borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 20, paddingBottom: 36 }}>
               <View style={{ alignSelf: 'center', width: 36, height: 4, borderRadius: 2, backgroundColor: p.border, marginBottom: 14 }} />
@@ -175,20 +159,6 @@ export default function AdminWithdrawals() {
             </View>
           </View>
         </Modal>
-      </SafeAreaView>
-    </View>
-  );
-}
-
-function DeniedView({ p, themeMode, onBack }: any) {
-  return (
-    <View style={{ flex: 1, backgroundColor: p.bg, alignItems: 'center', justifyContent: 'center', padding: 40 }}>
-      <StatusBar style={themeMode === 'light' ? 'dark' : 'light'} />
-      <Ionicons name="lock-closed-outline" size={48} color={p.fgFaint} />
-      <Text style={{ color: p.fg, fontSize: 18, fontWeight: '600', marginTop: 14 }}>Admin only</Text>
-      <Pressable onPress={onBack} style={{ marginTop: 24, paddingHorizontal: 18, paddingVertical: 11, borderRadius: 12, backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border }}>
-        <Text style={{ color: p.fg, fontWeight: '700' }}>Back</Text>
-      </Pressable>
-    </View>
+    </AdminScreen>
   );
 }

@@ -82,8 +82,8 @@ export default function AdminWhatsApp() {
           {(['ALL', 'IN', 'OUT'] as const).map((d) => {
             const on = direction === d;
             return (
-              <Pressable key={d} onPress={() => { setDirection(d); setPage(1); }} style={{ flex: 1, paddingVertical: 8, borderRadius: 10, backgroundColor: on ? p.fg : p.bgElev, borderWidth: 1, borderColor: on ? p.fg : p.border, alignItems: 'center' }}>
-                <Text style={{ color: on ? p.bg : p.fg, fontSize: 12, fontWeight: '600' }}>{d}</Text>
+              <Pressable key={d} onPress={() => { setDirection(d); setPage(1); }} style={{ flex: 1, paddingVertical: 8, borderRadius: 10, backgroundColor: on ? p.accent : p.bgElev, borderWidth: 1, borderColor: on ? p.accent : p.border, alignItems: 'center' }}>
+                <Text style={{ color: on ? p.accentFg : p.fg, fontSize: 12, fontWeight: '600' }}>{d}</Text>
               </Pressable>
             );
           })}
@@ -95,7 +95,7 @@ export default function AdminWhatsApp() {
               <View key={row.id} style={{ backgroundColor: p.bgElev, borderWidth: 1, borderColor: row.direction === 'IN' ? 'rgba(37,211,102,0.3)' : p.border, borderRadius: 12, padding: 14, marginBottom: 8 }}>
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                    <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: row.direction === 'IN' ? '#25d366' : '#3b82f6' }} />
+                    <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: row.direction === 'IN' ? '#25d366' : '#63a1db' }} />
                     <Text style={{ color: p.fgMuted, fontSize: 10, fontWeight: '600' }}>{row.direction} · +{row.phoneNumber}</Text>
                   </View>
                   <Text style={{ color: p.fgFaint, fontSize: 10 }}>{formatRelativeTime(row.createdAt)}</Text>

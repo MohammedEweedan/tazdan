@@ -26,9 +26,9 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 
 import { useAuthStore } from '@/store/authStore';
-import { realHandle, displayHandle, avatarMode } from '@/utils/displayUser';
+import { realHandle, avatarMode } from '@/utils/displayUser';
 import { useWallets, useHaptics, useTransactions, useActivities, useActivityRealtime, useNotificationRealtime, useUnreadCount, useMarkets, useDisplayCurrency } from '@/hooks';
-import { useTheme, useThemedPalette, type Palette } from '@/store/themeStore';
+import { useTheme, useThemedPalette, isMonochrome, type Palette } from '@/store/themeStore';
 import { useT, useI18n } from '@/store/i18nStore';
 import { Sparkline } from '@/components/ui/Sparkline';
 import { CoinIcon } from '@/components/ui/CoinIcon';
@@ -231,8 +231,10 @@ export default function Home() {
   const [fiatOpen, setFiatOpen] = useState(true);
 
   // Display helpers — NEVER use the email local-part as a handle (PII leak).
-  const handle = realHandle(user);                   // null when not set
-  const handleLabel = displayHandle(user, t('home.setHandle') || 'Set @handle');
+  // Every account has a @handle, so we render it directly; the empty string
+  // only shows for the brief moment before the user object hydrates.
+  const handleSlug = realHandle(user);
+  const handleLabel = handleSlug ? `@${handleSlug}` : '';
   const av = avatarMode(user);
   const initial = av.kind === 'initials' ? av.char : (user?.firstName?.[0] ?? '?').toUpperCase();
 
@@ -316,7 +318,7 @@ export default function Home() {
                 backgroundColor: Platform.OS === 'ios'
                   ? 'transparent'
                   : (themeMode === 'dark'
-                      ? 'rgba(10,10,11,0.78)'
+                      ? 'rgba(22,24,28,0.80)'
                       : 'rgba(250,250,247,0.82)'),
               }}
             />
@@ -380,22 +382,27 @@ export default function Home() {
                     <Text style={{ color: p.fg, fontWeight: '700', fontSize: 16 }}>{initial}</Text>
                   )}
                 </View>
-                <Text
-                  style={{
-                    color: handle ? p.fg : p.fgMuted,
-                    fontSize: (handleLabel.length <= 8 ? 17 : handleLabel.length <= 14 ? 15 : handleLabel.length <= 20 ? 13 : 11),
-                    fontWeight: '600',
-                    letterSpacing: -0.3,
-                    flexShrink: 1,
-                    minWidth: 0,
-                  }}
-                  numberOfLines={1}
-                  ellipsizeMode="tail"
-                  adjustsFontSizeToFit
-                  minimumFontScale={0.7}
-                >
-                  {handleLabel}
-                </Text>
+                <View style={{ flexShrink: 1, minWidth: 0 }}>
+                  {/* Every account has a @handle, so the header always greets
+                      "Hi, @handle" — no "Set @handle" state exists. */}
+                  <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '500', letterSpacing: 0.2 }} numberOfLines={1}>
+                    {t('home.greeting')}
+                  </Text>
+                  <Text
+                    style={{
+                      color: p.fg,
+                      fontSize: (handleLabel.length <= 8 ? 17 : handleLabel.length <= 14 ? 15 : handleLabel.length <= 20 ? 13 : 11),
+                      fontWeight: '600',
+                      letterSpacing: -0.3,
+                    }}
+                    numberOfLines={1}
+                    ellipsizeMode="tail"
+                    adjustsFontSizeToFit
+                    minimumFontScale={0.7}
+                  >
+                    {handleLabel}
+                  </Text>
+                </View>
               </Pressable>
               {(user?.role === 'ADMIN') && (
                 <Pressable
@@ -405,14 +412,14 @@ export default function Home() {
                     flexDirection: 'row', alignItems: 'center', gap: 4,
                     paddingHorizontal: 8, paddingVertical: 4,
                     borderRadius: 7,
-                    backgroundColor: 'rgba(74,143,224,0.18)',
-                    borderWidth: 1, borderColor: 'rgba(74,143,224,0.35)',
+                    backgroundColor: p.accentSoft,
+                    borderWidth: 1, borderColor: p.accentBorder,
                     opacity: pressed ? 0.7 : 1,
                     flexShrink: 0,
                   })}
                 >
-                  <Ionicons name="shield-checkmark" size={11} color="#A3A3A3" />
-                  <Text style={{ color: '#A3A3A3', fontSize: 10, fontWeight: '600', letterSpacing: 0.6 }}>
+                  <Ionicons name="shield-checkmark" size={11} color={p.accentText} />
+                  <Text style={{ color: p.accentText, fontSize: 10, fontWeight: '600', letterSpacing: 0.6 }}>
                     ADMIN
                   </Text>
                 </Pressable>
@@ -497,7 +504,7 @@ export default function Home() {
           {/* ── PRIMARY ACTIONS ── */}
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingHorizontal: 24, marginTop: 18 }}>
             {ACTIONS.map((a) => (
-              <ActionButton key={a.key} label={a.label} to={a.to} tone={a.tone} onPress={a.onPress} palette={p} />
+              <ActionButton key={a.key} label={a.label} icon={a.icon} to={a.to} tone={a.tone} onPress={a.onPress} palette={p} />
             ))}
             <MoreActionButton palette={p} onPress={() => { h.selection(); setMoreMenuVisible(true); }} />
           </View>
@@ -538,9 +545,9 @@ export default function Home() {
                 <View style={{ marginTop: 16 }}>
                   <Pressable
                     onPress={() => setCryptoOpen((v) => !v)}
-                    style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, marginBottom: 12 }}
+                    style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 24, marginBottom: 10 }}
                   >
-                    <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '600', letterSpacing: 0.6 }}>
+                    <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '700', letterSpacing: 1 }}>
                       {t('home.cryptoAssets').toUpperCase()}
                     </Text>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
@@ -578,9 +585,9 @@ export default function Home() {
                 <View style={{ marginTop: 24 }}>
                   <Pressable
                     onPress={() => setFiatOpen((v) => !v)}
-                    style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, marginBottom: 12 }}
+                    style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 24, marginBottom: 10 }}
                   >
-                    <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '600', letterSpacing: 0.6 }}>
+                    <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '700', letterSpacing: 1 }}>
                       {t('home.fiatAssets').toUpperCase()}
                     </Text>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
@@ -1161,13 +1168,13 @@ function BalanceHistoryModal({
                 onPress={() => { setTouchIdx(null); setRange(r); }}
                 style={{
                   paddingHorizontal: 20, paddingVertical: 9, borderRadius: 20,
-                  backgroundColor: range === r ? p.ctaBg : p.pillBg,
+                  backgroundColor: range === r ? p.accent : p.pillBg,
                   borderWidth: 1,
-                  borderColor: range === r ? p.ctaBg : p.border,
+                  borderColor: range === r ? p.accent : p.border,
                 }}
               >
                 <Text style={{
-                  color: range === r ? p.ctaFg : p.fgMuted,
+                  color: range === r ? p.accentFg : p.fgMuted,
                   fontSize: 13, fontWeight: '600',
                 }}>
                   {r}
@@ -1190,46 +1197,47 @@ function BalanceHistoryModal({
  * re-rendered everything ~25×/s. Memoised so parent re-renders don't reset it.
  * Flat charcoal (no motion) in mono theme.
  */
+/**
+ * Static brand-glow backdrop behind the balance hero.
+ *
+ * Was an animated "breathing" radial driven by a 20fps requestAnimationFrame
+ * loop — it caused jank (every frame re-rendered the SVG) and never quite
+ * read right. Replaced with a STATIC two-layer glow: no rAF, no state, zero
+ * re-renders. A soft off-axis brand-blue core sits over a deeper page-bg
+ * fill, giving the hero depth and a calm blue aura without any runtime cost.
+ *
+ * `mono` stays a flat charcoal (no colour, by design).
+ */
 const BreathingGradient = memo(function BreathingGradient({ mode }: { mode: 'dark' | 'light' | 'mono' }) {
-  const [pulse, setPulse] = useState(0);
-  useEffect(() => {
-    if (mode === 'mono') return;
-    let raf: any;
-    let last = 0;
-    const PERIOD = 9000; // one full breathe in+out ~9s
-    const start = Date.now();
-    const tick = () => {
-      const now = Date.now();
-      if (now - last >= 50) { // ~20fps is plenty for a slow, soft glow
-        last = now;
-        const phase = ((now - start) % PERIOD) / PERIOD * Math.PI * 2;
-        setPulse((1 - Math.cos(phase)) / 2);
-      }
-      raf = requestAnimationFrame(tick);
-    };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, [mode]);
-
   if (mode === 'mono') {
     return <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#161617' }} />;
   }
 
-  const midOffset = 30 + pulse * 35; // 30%..65% → edges breathe darker↔lighter
-  const stops = mode === 'dark'
-    ? [{ key: 'a', o: '0%', c: '#FDFDFD' }, { key: 'b', o: `${midOffset}%`, c: '#8C8C8C' }, { key: 'c', o: '100%', c: '#161617' }]
-    : [{ key: 'a', o: '0%', c: '#FDFDFD' }, { key: 'b', o: `${midOffset}%`, c: '#BDBDBD' }, { key: 'c', o: '100%', c: '#2E2E2E' }];
+  // Two radial stops per theme: a bright-ish blue core fading into the page bg.
+  // `core` carries the #63a1db tint; `edge` is the surrounding surface so the
+  // glow melts seamlessly into the scroll body below.
+  const core = mode === 'dark' ? '#3C5E80' : '#BCD6EE';
+  const edge = mode === 'dark' ? '#16181C' : '#FAFAF7';
 
   return (
     <BalanceSvg width="100%" height="100%" style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}>
       <SvgDefs>
-        <SvgRadialGradient id="cardGlow" cx="50%" cy="42%" r="90%">
-          {stops.map((s) => (
-            <SvgStop key={s.key} offset={s.o} stopColor={s.c} stopOpacity={1} />
-          ))}
+        {/* Primary glow — offset up-left of centre so the light feels
+            directional, not a flat spotlight. */}
+        <SvgRadialGradient id="cardGlow" cx="38%" cy="30%" r="95%">
+          <SvgStop offset="0%"   stopColor={core} stopOpacity={mode === 'dark' ? 0.9 : 0.8} />
+          <SvgStop offset="55%"  stopColor={core} stopOpacity={mode === 'dark' ? 0.28 : 0.22} />
+          <SvgStop offset="100%" stopColor={edge} stopOpacity={1} />
+        </SvgRadialGradient>
+        {/* Secondary cool accent — a faint #63a1db wash low-right for depth. */}
+        <SvgRadialGradient id="cardGlowAccent" cx="82%" cy="78%" r="70%">
+          <SvgStop offset="0%"   stopColor="#63A1DB" stopOpacity={mode === 'dark' ? 0.16 : 0.10} />
+          <SvgStop offset="100%" stopColor="#63A1DB" stopOpacity={0} />
         </SvgRadialGradient>
       </SvgDefs>
+      <SvgRect x="0" y="0" width="100%" height="100%" fill={edge} />
       <SvgRect x="0" y="0" width="100%" height="100%" fill="url(#cardGlow)" />
+      <SvgRect x="0" y="0" width="100%" height="100%" fill="url(#cardGlowAccent)" />
     </BalanceSvg>
   );
 });
@@ -1292,26 +1300,37 @@ function AnimatedTotal({
   const converted = dc.convert(displayed);
   const totalStr = converted.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: dc.isCrypto ? 6 : 2 });
   const digitCount = totalStr.replace(/[^0-9]/g, '').length;
-  const fontSize = digitCount <= 7 ? 48 : digitCount <= 9 ? 40 : digitCount <= 11 ? 34 : 28;
+  const fontSize = digitCount <= 7 ? 52 : digitCount <= 9 ? 44 : digitCount <= 11 ? 36 : 30;
 
-  // Masked display preserves layout: keep separators in place, replace
-  // each digit with a star. Eye toggle sits to the right and never shifts.
-  const maskedStr = totalStr.replace(/[0-9]/g, '*');
+  // Split into the whole part and the cents so the fraction can render
+  // smaller/dimmer — a small touch that makes the balance read like a
+  // premium fintech figure rather than one flat number.
+  const [whole, frac] = (showBalance ? totalStr : totalStr.replace(/[0-9]/g, '*')).split('.');
 
   return (
     <View style={{ alignItems: 'center', paddingHorizontal: 24, paddingTop: 6, paddingBottom: 2 }}>
       {/* Balance centers cleanly — the show/hide eye now lives pinned in
           the sticky block's top-right corner, not beside the number. */}
-      <Pressable onPress={onPress} hitSlop={12}>
+      <Pressable onPress={onPress} hitSlop={12} style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
+        {/* Currency symbol — smaller + muted, raised like a superscript. */}
+        <Text style={{
+          color: p.fgMuted, fontSize: fontSize * 0.5, fontWeight: '600',
+          marginTop: fontSize * 0.12, marginRight: 2, letterSpacing: -0.5,
+        }}>
+          {dc.symbol}
+        </Text>
         <Text style={{
           color: p.fg,
-          // Slightly larger, with a hair of positive letter-spacing so the
-          // digits breathe and read cleanly at a glance.
-          fontSize: fontSize + 4, fontWeight: '600', letterSpacing: 0.5,
+          fontSize, fontWeight: '700', letterSpacing: -1.2,
           textAlign: 'center',
           fontVariant: ['tabular-nums'],
         }}>
-          {dc.symbol}{showBalance ? totalStr : maskedStr}
+          {whole}
+          {frac != null && (
+            <Text style={{ color: p.fgMuted, fontSize: fontSize * 0.56, fontWeight: '700', letterSpacing: -0.6 }}>
+              .{frac}
+            </Text>
+          )}
         </Text>
       </Pressable>
     </View>
@@ -1322,53 +1341,86 @@ function AnimatedTotal({
 type ActionTone = 'white' | 'grey' | 'black';
 interface ActionDef { key: string; icon: keyof typeof Ionicons.glyphMap; label: string; tone?: ActionTone; to?: string; onPress?: () => void }
 
-// Buy / Sell / Top up each get a distinct neutral shade so they read as
-// separate buttons — and stay distinct from the white/grey/black gradient
-// behind them. Greys are chosen to sit clearly between pure white/black.
-const TONE_STYLE: Record<ActionTone, { bg: string; fg: string }> = {
-  white: { bg: '#FFFFFF', fg: '#111111' },
-  // Sell — a distinct accent so it clearly contrasts the white/grey/black
-  // gradient and the other two buttons (no longer a muddy mid-grey).
-  grey:  { bg: '#4d4d4d', fg: '#FFFFFF' },
-  black: { bg: '#111111', fg: '#FFFFFF' },
+/**
+ * Visual recipe for an action pill. Clean flat solids (gradients read muddy at
+ * this size) with three clear weights:
+ *   • Buy    → solid brand blue, white ink — the hero, only one that's coloured
+ *   • Sell   → elevated surface + hairline, full-contrast fg ink (neutral)
+ *   • Top up → fg inverse (white-on-charcoal / black-on-paper), max contrast
+ * `mono` collapses all three to the original white / grey / black.
+ */
+type ActionLook = {
+  bg: string;                    // flat fill
+  fg: string;                    // ink (label + icon)
+  border?: string;               // optional hairline
+  glow?: string;                 // shadow colour (only Buy glows)
 };
 
+function actionLook(tone: ActionTone, p: Palette, mono: boolean): ActionLook {
+  if (mono) {
+    const m = {
+      white: { bg: '#FFFFFF', fg: '#111111' },
+      grey:  { bg: p.bgElev,  fg: p.fg, border: p.divider },
+      black: { bg: '#111111', fg: '#FFFFFF' },
+    } as const;
+    return m[tone];
+  }
+  switch (tone) {
+    case 'white': // Buy — the one coloured pill. Solid brand blue, white ink, soft blue glow.
+      return { bg: p.accent, fg: '#FFFFFF', glow: p.accent };
+    case 'grey':  // Sell — neutral elevated surface, full-contrast ink + hairline.
+      return { bg: p.bgElev, fg: p.fg, border: p.divider };
+    case 'black': // Top up — fg inverse for the third distinct weight.
+      return { bg: p.fg, fg: p.bg };
+  }
+}
+
 /**
- * Action pill — tone-driven (Buy=white, Sell=grey, Top up=black).
+ * Action pill — icon + label, three distinct high-contrast looks. The Buy
+ * hero gets a brand-blue gradient; Sell and Top up are crisp solids.
  */
 function ActionButton({
-  label, onPress, to, tone = 'white',
+  label, icon, onPress, to, tone = 'white', palette: p,
 }: {
   label: string;
+  icon?: keyof typeof Ionicons.glyphMap;
   onPress?: () => void;
   to?: string;
   tone?: ActionTone;
   palette: Palette;
 }) {
   const router = useRouter();
-  const ts = TONE_STYLE[tone];
+  const mono = isMonochrome(useTheme((s) => s.mode));
+  const look = actionLook(tone, p, mono);
 
   const handlePress = () => {
     if (onPress) onPress();
     else if (to) router.push(to as any);
   };
 
+  const glowing = !!look.glow;
   return (
     <PressableScale onPress={handlePress} style={{ flex: 1 }}>
       <View style={{
-        height: 40,
-        borderRadius: 20,
-        backgroundColor: ts.bg,
-        paddingHorizontal: 14,
+        height: 46,
+        borderRadius: 23,
+        paddingHorizontal: 12,
         alignItems: 'center',
         justifyContent: 'center',
-        shadowColor: '#000000',
-        shadowOffset: { width: 0, height: 3 },
-        shadowOpacity: 0.12,
-        shadowRadius: 6,
-        elevation: 2,
+        flexDirection: 'row',
+        gap: 6,
+        backgroundColor: look.bg,
+        borderWidth: look.border ? 1 : 0,
+        borderColor: look.border,
+        // Only the Buy hero casts a soft brand-blue glow; the others sit flat.
+        shadowColor: look.glow ?? '#000000',
+        shadowOffset: { width: 0, height: glowing ? 5 : 2 },
+        shadowOpacity: glowing ? 0.28 : 0.10,
+        shadowRadius: glowing ? 12 : 5,
+        elevation: glowing ? 5 : 1,
       }}>
-        <Text style={{ color: ts.fg, fontSize: 14, fontWeight: '700', letterSpacing: -0.2 }}>
+        {icon && <Ionicons name={icon} size={15} color={look.fg} />}
+        <Text style={{ color: look.fg, fontSize: 14, fontWeight: '700', letterSpacing: -0.2 }}>
           {label}
         </Text>
       </View>
@@ -1377,20 +1429,19 @@ function ActionButton({
 }
 
 function MoreActionButton({ palette: p, onPress }: { palette: Palette; onPress: () => void }) {
-  // Neutral pill so the three coloured actions stay the focus.
+  // Neutral square pill — sized to match the action row (46px) so the four
+  // controls line up. Stays neutral so the three coloured actions lead.
   return (
     <PressableScale onPress={onPress}>
       <View style={{
-        width: 40, height: 40,
-        borderRadius: 20,
+        width: 46, height: 46,
+        borderRadius: 23,
         backgroundColor: p.pillBg,
         borderWidth: 1, borderColor: p.border,
         alignItems: 'center',
         justifyContent: 'center',
       }}>
-        <Text style={{ color: p.fg, fontSize: 16, fontWeight: '700', letterSpacing: 1.5 }}>
-          {'···'}
-        </Text>
+        <Ionicons name="ellipsis-horizontal" size={18} color={p.fg} />
       </View>
     </PressableScale>
   );
@@ -1457,10 +1508,10 @@ function TabBtn({ label, active, palette: p, onPress }: {
       <View style={{
         paddingHorizontal: 22, paddingVertical: 7,
         borderRadius: 9,
-        backgroundColor: active ? p.ctaBg : 'transparent',
+        backgroundColor: active ? p.accent : 'transparent',
       }}>
         <Text style={{
-          color: active ? p.ctaFg : p.fgMuted,
+          color: active ? p.accentFg : p.fgMuted,
           fontSize: 14,
           fontWeight: active ? '700' : '600',
           letterSpacing: -0.2,
@@ -2150,13 +2201,13 @@ function WalletRow({ wallet: w, variants, combinedBalance, palette: p, isCrypto,
                 onPress={() => setActiveVariant(v)}
                 style={({ pressed }) => ({
                   paddingHorizontal: 10, paddingVertical: 5, borderRadius: 10,
-                  backgroundColor: active ? p.fg : p.bgElev,
-                  borderWidth: 1, borderColor: active ? p.fg : p.border,
+                  backgroundColor: active ? p.accent : p.bgElev,
+                  borderWidth: 1, borderColor: active ? p.accent : p.border,
                   opacity: pressed ? 0.85 : 1,
                 })}
               >
                 <Text style={{
-                  color: active ? p.bg : p.fgMuted,
+                  color: active ? p.accentFg : p.fgMuted,
                   fontSize: 10, fontWeight: '700', letterSpacing: 0.6,
                 }}>
                   {v.label}
@@ -2281,7 +2332,7 @@ function QrModal({
               backgroundColor="#ffffff"
               color="#000000"
               ecl="H"
-              logo={require('../../assets/icon-black.png')}
+              logo={require('../../assets/icon-color.png')}
               logoSize={42}
               logoBackgroundColor="#ffffff"
               logoMargin={4}
@@ -2435,35 +2486,48 @@ function AssetRow({ wallet, palette: p, onPress, liveUsd, sparkline, changePct, 
     <Pressable
       onPress={onPress}
       style={({ pressed }) => ({
-        paddingHorizontal: 20, paddingVertical: 12,
-        backgroundColor: pressed ? p.bgElev : 'transparent',
-        borderBottomWidth: 1, borderBottomColor: p.border,
+        marginHorizontal: 16, marginBottom: 4,
+        paddingHorizontal: 14, paddingVertical: 13,
+        borderRadius: 18,
+        backgroundColor: pressed ? p.bgElev : p.bgElev,
+        borderWidth: 1, borderColor: p.border,
       })}
     >
-      {/* Top row: icon, name/balance, price */}
+      {/* Top row: icon, name/balance, value + change pill */}
       <View style={{ flexDirection: 'row', alignItems: 'center' }}>
         <CurrencyIcon currency={wallet.currency} palette={p} />
         <View style={{ flex: 1, marginLeft: 12, minWidth: 0 }}>
-          <Text style={{ color: p.fg, fontSize: 15, fontWeight: '600' }} numberOfLines={1}>
+          <Text style={{ color: p.fg, fontSize: 15.5, fontWeight: '700', letterSpacing: -0.2 }} numberOfLines={1}>
             {meta.title}
           </Text>
-          <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '600', marginTop: 1 }} numberOfLines={1}>
+          <Text style={{ color: p.fgMuted, fontSize: 12.5, fontWeight: '500', marginTop: 2, fontVariant: ['tabular-nums'] }} numberOfLines={1}>
             {showBalance ? balanceStr : maskedBalance} {wallet.currency}
           </Text>
-          {changePct !== undefined && (
-            <Text style={{ color: showBalance ? (positive ? p.greenFg : p.redFg) : p.fgFaint, fontSize: 11, fontWeight: '600', marginTop: 1 }}>
-              {showBalance ? `${positive ? '+' : ''}${changePct.toFixed(2)}%` : '**.**%'}
-            </Text>
-          )}
         </View>
-        <View style={{ alignItems: 'flex-end' }}>
-          <Text style={{ color: p.fg, fontSize: 14, fontWeight: '600', fontVariant: ['tabular-nums'] }}>
+
+        {/* Mid: sparkline sits between name and value for rhythm */}
+        {sparkline && sparkline.length >= 2 && (
+          <View style={{ marginHorizontal: 10, opacity: 0.85 }}>
+            <Sparkline data={sparkline} width={62} height={28} color={sparkColor} strokeWidth={1.6} />
+          </View>
+        )}
+
+        <View style={{ alignItems: 'flex-end', minWidth: 72 }}>
+          <Text style={{ color: p.fg, fontSize: 15, fontWeight: '700', fontVariant: ['tabular-nums'], letterSpacing: -0.2 }} numberOfLines={1}>
             {showBalance ? usdStr : maskedUsd}
           </Text>
-          {/* Sparkline below */}
-          {sparkline && sparkline.length >= 2 && (
-            <View style={{ marginTop: 8, width: '100%', opacity: 0.9 }}>
-              <Sparkline data={sparkline} width={100} height={32} color={sparkColor} strokeWidth={1.5} />
+          {changePct !== undefined && (
+            <View style={{
+              flexDirection: 'row', alignItems: 'center', gap: 2, marginTop: 4,
+              paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6,
+              backgroundColor: !showBalance ? p.pillBg : positive ? p.greenBg : p.redBg,
+            }}>
+              {showBalance && (
+                <Ionicons name={positive ? 'caret-up' : 'caret-down'} size={8} color={positive ? p.greenFg : p.redFg} />
+              )}
+              <Text style={{ color: showBalance ? (positive ? p.greenFg : p.redFg) : p.fgFaint, fontSize: 10.5, fontWeight: '700', fontVariant: ['tabular-nums'] }}>
+                {showBalance ? `${Math.abs(changePct).toFixed(2)}%` : '**.**%'}
+              </Text>
             </View>
           )}
         </View>
