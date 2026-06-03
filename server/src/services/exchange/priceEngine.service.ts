@@ -157,39 +157,52 @@ const priceCache = new Map<string, { price: Decimal; exp: number }>();
 const PRICE_TTL_MS = 5_000;
 const PRICE_TTL_S  = 5;
 
-// ── "Last good" price fallback (long TTL) ────────────────────────────
-// Binance can be temporarily unreachable from the production host — it
-// geo-blocks / IP-blocks many data-center ranges (HTTP 451) and can time
-// out under load. Without a fallback, every quote 500s ("Could not fetch
-// price…") and the buy widget breaks on load. So alongside the 5 s fresh
-// cache we persist the last successfully fetched price for much longer and
-// serve it when the live fetch fails. Stale-but-usable beats a hard 500;
-// the disclosed spread absorbs minor drift, and the price still refreshes
-// the moment Binance is reachable again.
-const STALE_PRICE_TTL_S = 6 * 60 * 60; // 6h — survives extended outages
-const lastGoodPrice = new Map<string, Decimal>();
+// ── "Last good" price fallback (SHORT, time-bounded) ─────────────────
+// Binance can be temporarily unreachable from the production host (HTTP 451
+// geo-block, timeouts). To absorb a brief blip we keep the last successfully
+// fetched price and may serve it when a live fetch fails — BUT only if it is
+// still FRESH. Pricing a real trade off a price that's minutes-to-hours old
+// is a financial-integrity bug (it's how a BTC quote showed 70326 while the
+// market was 66982). So the fallback is strictly time-bounded: a stale price
+// older than STALE_PRICE_MAX_AGE_MS is NOT used — the quote fails cleanly and
+// the user retries, rather than trading at a wrong rate.
+//
+// We persist the value WITH its fetch timestamp (Redis key holds {p,t}); a
+// short TTL on the key is a second guard so nothing ancient can ever resurface.
+const STALE_PRICE_MAX_AGE_MS = 90_000; // 90s — old enough to bridge a blip, fresh enough to trade
+const STALE_PRICE_TTL_S = 120;         // Redis key self-expires shortly after max age
+type StaleEntry = { price: Decimal; t: number };
+const lastGoodPrice = new Map<string, StaleEntry>();
 
 function staleKey(symbol: string): string {
   return `price:last:${symbol}`;
 }
 
+/** Returns the last-good price ONLY if it's within the freshness window. */
 async function readStalePrice(symbol: string): Promise<Decimal | null> {
+  const fresh = (e: StaleEntry | null): Decimal | null =>
+    e && Date.now() - e.t <= STALE_PRICE_MAX_AGE_MS ? e.price : null;
+
   const mem = lastGoodPrice.get(symbol);
-  if (mem) return mem;
+  const memFresh = fresh(mem ?? null);
+  if (memFresh) return memFresh;
+
   try {
-    const cached = await redisGet<string>(staleKey(symbol));
-    if (cached) {
-      const price = new Decimal(cached);
-      lastGoodPrice.set(symbol, price);
-      return price;
+    const cached = await redisGet<{ p: string; t: number }>(staleKey(symbol));
+    if (cached && typeof cached.t === 'number') {
+      const entry: StaleEntry = { price: new Decimal(cached.p), t: cached.t };
+      lastGoodPrice.set(symbol, entry);
+      return fresh(entry);
     }
   } catch { /* Redis unavailable — no stale price */ }
   return null;
 }
 
 function writeStalePrice(symbol: string, price: Decimal): void {
-  lastGoodPrice.set(symbol, price);
-  redisSet(staleKey(symbol), price.toString(), STALE_PRICE_TTL_S).catch(() => { /* non-fatal */ });
+  const entry: StaleEntry = { price, t: Date.now() };
+  lastGoodPrice.set(symbol, entry);
+  redisSet(staleKey(symbol), { p: price.toString(), t: entry.t }, STALE_PRICE_TTL_S)
+    .catch(() => { /* non-fatal */ });
 }
 
 /**
