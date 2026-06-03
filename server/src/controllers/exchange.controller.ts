@@ -295,30 +295,62 @@ export class ExchangeController {
       type TickerRow = { symbol: string; lastPrice: string; priceChangePercent: string; volume: string };
       const allKey = 'search:all_tickers';
       let allTickers = await rGet<TickerRow[]>(allKey);
+      let fromFallback = false;
       if (!allTickers) {
-        const { data } = await axios.get<TickerRow[]>(
-          `${BINANCE_REST}/api/v3/ticker/24hr`,
-          { timeout: 8_000 },
-        );
-        allTickers = data;
-        rSet(allKey, allTickers, 20).catch(() => { /* non-fatal */ });
+        try {
+          const { data } = await axios.get<TickerRow[]>(
+            `${BINANCE_REST}/api/v3/ticker/24hr`,
+            { timeout: 8_000 },
+          );
+          allTickers = data;
+          rSet(allKey, allTickers, 20).catch(() => { /* non-fatal */ });
+        } catch (err) {
+          // Binance is 451/geo-blocked on many production hosts. Don't 500 the
+          // search/asset picker — fall back to a curated supported-asset set
+          // priced via the resilient multi-provider price engine.
+          logger.warn('[exchange.search] Binance ticker list failed — using fallback assets', {
+            status: (err as any)?.response?.status,
+          });
+          fromFallback = true;
+        }
       }
 
-      // ── 3. Filter + rank ──────────────────────────────────────
-      const results = (allTickers as TickerRow[])
-        .filter((t) => t.symbol.endsWith('USDT'))
-        .map((t) => ({
-          symbol:    t.symbol.replace('USDT', ''),
-          price:     parseFloat(t.lastPrice),
-          change24h: parseFloat(t.priceChangePercent),
-          volume24h: parseFloat(t.volume),
-        }))
-        .filter((t) => !q || t.symbol.includes(q))
-        .sort((a, b) => b.volume24h - a.volume24h)
-        .slice(0, 50);
+      let results: Array<{ symbol: string; price: number; change24h: number; volume24h: number }>;
+      if (allTickers && !fromFallback) {
+        // ── 3a. Filter + rank the full Binance list ─────────────
+        results = (allTickers as TickerRow[])
+          .filter((t) => t.symbol.endsWith('USDT'))
+          .map((t) => ({
+            symbol:    t.symbol.replace('USDT', ''),
+            price:     parseFloat(t.lastPrice),
+            change24h: parseFloat(t.priceChangePercent),
+            volume24h: parseFloat(t.volume),
+          }))
+          .filter((t) => !q || t.symbol.includes(q))
+          .sort((a, b) => b.volume24h - a.volume24h)
+          .slice(0, 50);
+      } else {
+        // ── 3b. Fallback: curated supported assets, priced resiliently ──
+        const { getMarketPrice } = await import('../services/exchange/priceEngine.service');
+        const FALLBACK_ASSETS = ['BTC', 'ETH', 'SOL', 'USDT', 'USDC', 'BNB', 'XRP', 'ADA', 'DOGE', 'TRX', 'LINK', 'MATIC', 'DOT', 'AVAX'];
+        const candidates = FALLBACK_ASSETS.filter((a) => !q || a.includes(q));
+        const priced = await Promise.all(
+          candidates.map(async (asset) => {
+            if (asset === 'USDT' || asset === 'USDC') return { symbol: asset, price: 1, change24h: 0, volume24h: 0 };
+            try {
+              const p = await getMarketPrice(`${asset}USDT`);
+              return { symbol: asset, price: p.toNumber(), change24h: 0, volume24h: 0 };
+            } catch {
+              return null; // no price from any provider — drop it
+            }
+          }),
+        );
+        results = priced.filter((r): r is NonNullable<typeof r> => r !== null);
+      }
 
       const payload = { results };
-      rSet(qKey, payload, 10).catch(() => { /* non-fatal */ });
+      // Don't cache the degraded fallback as long as the healthy path.
+      rSet(qKey, payload, fromFallback ? 30 : 10).catch(() => { /* non-fatal */ });
 
       res.setHeader('X-Cache', 'MISS');
       res.json(payload);
