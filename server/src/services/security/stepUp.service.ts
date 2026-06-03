@@ -22,7 +22,7 @@
 import crypto from 'crypto';
 import { prisma } from '../../utils/prisma';
 import { AppError } from '../../middleware/errorHandler';
-import { sendEmail } from '../email';
+import { sendEmail, emailErrorSummary } from '../email';
 import { logger } from '../../utils/logger';
 import { parseUserAgent, geoLocate } from '../../utils/deviceInfo';
 
@@ -158,7 +158,8 @@ export async function issueStepUp(userId: string, action: StepUpAction): Promise
       <p>Confirm your <b>${action}</b> with this code. It expires in 10 minutes.</p>
       <p style="font-size:28px;font-weight:700;letter-spacing:4px">${code}</p>
       <p>If you didn't request this, your account may be at risk — change your password and contact support.</p>`,
-  }).catch((e) => logger.error('[stepUp] email send failed', { err: e }));
+    sender: 'auth',
+  }).catch((e) => logger.error('[stepUp] email send failed', { err: emailErrorSummary(e) }));
   return { method: 'email' };
 }
 

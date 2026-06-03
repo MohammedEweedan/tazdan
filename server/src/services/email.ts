@@ -300,6 +300,21 @@ function isSuppressed(address: string): boolean {
   return SUPPRESSED_DOMAINS.some((d) => domain === d || domain.endsWith(`.${d}`));
 }
 
+/**
+ * Reduce an email-send error to a safe, compact string. Never returns the raw
+ * Axios error — that object carries the request config including the
+ * `Authorization: Bearer <RESEND_API_KEY>` header, which must never reach logs.
+ */
+export function emailErrorSummary(err: any): string {
+  const status = err?.response?.status;
+  const body = err?.response?.data;
+  if (body) {
+    const msg = typeof body === 'string' ? body : body.message || JSON.stringify(body);
+    return status ? `${status} ${msg}` : msg;
+  }
+  return err?.code || err?.message || 'unknown email error';
+}
+
 /** Send via the Resend HTTP API (port 443 — never blocked by host firewalls). */
 async function sendViaResend(opts: { from: string; to: string; subject: string; html: string }) {
   try {
@@ -315,9 +330,9 @@ async function sendViaResend(opts: { from: string; to: string; subject: string; 
       },
     );
   } catch (err: any) {
-    // Surface Resend's error body — usually a clear domain/auth message.
-    const detail = err?.response?.data ?? err?.message;
-    console.error('[email] Resend send failed:', opts.subject, 'to', opts.to, '→', detail);
+    // Surface Resend's error body — usually a clear domain/auth message. Never
+    // log the raw error (its request config contains the API key header).
+    console.error('[email] Resend send failed:', opts.subject, 'to', opts.to, '→', emailErrorSummary(err));
     throw err;
   }
 }
