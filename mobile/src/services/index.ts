@@ -670,6 +670,26 @@ export const cardsService = {
     const { data } = await api.post(`/cards/${id}/transactions`, { ...payload, type: 'PURCHASE' });
     return data.transaction;
   },
+  /** Current physical-card order fee (USD, admin-configurable, min $20). */
+  physicalFee: async (): Promise<{ fee: number; currency: string; min: number }> => {
+    const { data } = await api.get('/cards/physical-fee');
+    return data;
+  },
+  /** Order a physical print of a card. Charges the fee + captures shipping. */
+  orderPhysical: async (id: string, shipping: {
+    shippingName: string; shippingLine1: string; shippingLine2?: string;
+    shippingCity: string; shippingPostcode?: string; shippingCountry: string; shippingPhone?: string;
+  }): Promise<{ card: CardEntity; fee: number }> => {
+    const { data } = await api.post(`/cards/${id}/order-physical`, shipping);
+    return data;
+  },
+  /** Move money from an (unlocked) budget onto the card. If the budget is
+   *  STEP_UP-locked the server returns 401 { requiresStepUp } — prompt for the
+   *  6-digit code and retry with `stepUpCode`. */
+  fundFromBudget: async (id: string, payload: { budgetId: string; amount: number; stepUpCode?: string }): Promise<CardTransaction> => {
+    const { data } = await api.post(`/cards/${id}/fund-from-budget`, payload);
+    return data.transaction;
+  },
 };
 
 export const bankAccountService = {

@@ -3,7 +3,7 @@
  * and optional auto-contribution.
  */
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useRouter } from 'expo-router';
 import { Alert, Pressable, ScrollView, View } from 'react-native';
 import { Text, TextInput } from '@/components/ui/Text';
@@ -15,10 +15,22 @@ import { useThemedPalette, type Palette } from '@/store/themeStore';
 import { useHaptics, useWallets } from '@/hooks';
 import { budgetService, type BudgetLockType } from '@/services';
 import { fiatSymbol } from '@/constants';
+import {
+  etaForContribution, requiredPerPeriod, suggestPlan,
+  humanizeDays, fmtGoalDate, freqAdverb,
+} from '@/utils/budgetMath';
 
 const EMOJIS = ['🎯','🏖️','✈️','🏠','🚗','💍','🎓','🎁','💻','🩺','🐶','⛰️','🍼','💰'];
 const FIATS = ['USD', 'EUR', 'GBP', 'AED', 'SAR', 'EGP', 'LYD'];
 type Freq = 'DAILY' | 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY';
+
+/** dd/mm/yyyy → Date (or null if incomplete/invalid). */
+function parseDdmmyyyy(s: string): Date | null {
+  const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(s);
+  if (!m) return null;
+  const d = new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]));
+  return isNaN(d.getTime()) ? null : d;
+}
 
 export default function NewBudget() {
   const router = useRouter();
@@ -58,8 +70,33 @@ export default function NewBudget() {
   const needsUnlock = lock === 'DATE' || lock === 'DATE_AND_STEP_UP';
   const valid = name.trim().length > 0 && (!needsUnlock || /^\d{2}\/\d{2}\/\d{4}$/.test(unlockDate)) && (!autoOn || Number(autoAmount) > 0);
 
+  // ── Live projection: time-to-goal, required pace, suggested plan ──
+  const targetNum = Number(target) || 0;
+  const goalDate = useMemo(() => parseDdmmyyyy(targetDate), [targetDate]);
+  const eta = useMemo(
+    () => (targetNum > 0 && autoOn && Number(autoAmount) > 0
+      ? etaForContribution(0, targetNum, Number(autoAmount), autoFreq)
+      : null),
+    [targetNum, autoOn, autoAmount, autoFreq],
+  );
+  const needPace = useMemo(
+    () => (targetNum > 0 && goalDate ? requiredPerPeriod(0, targetNum, autoFreq, goalDate) : null),
+    [targetNum, goalDate, autoFreq],
+  );
+  const suggestion = useMemo(
+    () => (targetNum > 0 ? suggestPlan(0, targetNum, goalDate) : null),
+    [targetNum, goalDate],
+  );
+  const applySuggestion = () => {
+    if (!suggestion) return;
+    h.selection();
+    setAutoOn(true);
+    setAutoAmount(String(suggestion.perPeriod));
+    setAutoFreq(suggestion.freq);
+  };
+
   return (
-    <ScreenShell title="New budget">
+    <ScreenShell title="New budget" keyboard>
       {/* Emoji + name */}
       <Text style={label(p)}>NAME</Text>
       <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
@@ -99,6 +136,49 @@ export default function NewBudget() {
         </View>
         <DateField value={targetDate} onChange={setTargetDate} placeholder="by dd/mm/yyyy" palette={p} />
       </View>
+
+      {/* Suggested plan — appears once a goal amount is entered. */}
+      {suggestion && (
+        <Pressable
+          onPress={applySuggestion}
+          style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 12, padding: 14, borderRadius: 14, backgroundColor: p.accentSoft, borderWidth: 1, borderColor: p.accentBorder }}
+        >
+          <Ionicons name="bulb-outline" size={20} color={p.accentText} />
+          <View style={{ flex: 1 }}>
+            <Text style={{ color: p.accentText, fontSize: 13, fontWeight: '700' }}>
+              Save {sym}{suggestion.perPeriod.toLocaleString()} {freqAdverb(suggestion.freq)}
+            </Text>
+            <Text style={{ color: p.fgMuted, fontSize: 12, marginTop: 1 }}>
+              {goalDate ? `Hits ${sym}${targetNum.toLocaleString()} by your date` : `Reaches ${sym}${targetNum.toLocaleString()} in about 6 months`} · tap to use
+            </Text>
+          </View>
+          <Ionicons name="arrow-forward-circle" size={20} color={p.accentText} />
+        </Pressable>
+      )}
+
+      {/* Projection — time to reach the goal at the chosen pace. */}
+      {(eta || needPace) && (
+        <View style={{ marginTop: 12, padding: 14, borderRadius: 14, backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border, gap: 8 }}>
+          {eta && (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+              <Ionicons name="time-outline" size={18} color={p.accent} />
+              <Text style={{ color: p.fg, fontSize: 13, flex: 1 }}>
+                At {sym}{Number(autoAmount).toLocaleString()} {freqAdverb(autoFreq)}, you'll reach {sym}{targetNum.toLocaleString()} in{' '}
+                <Text style={{ fontWeight: '800' }}>{humanizeDays(eta.days)}</Text> ({fmtGoalDate(eta.date)}).
+              </Text>
+            </View>
+          )}
+          {needPace != null && needPace > 0 && (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+              <Ionicons name="calendar-outline" size={18} color={p.accent} />
+              <Text style={{ color: p.fg, fontSize: 13, flex: 1 }}>
+                To hit your date, save about{' '}
+                <Text style={{ fontWeight: '800' }}>{sym}{Math.ceil(needPace).toLocaleString()} {freqAdverb(autoFreq)}</Text>.
+              </Text>
+            </View>
+          )}
+        </View>
+      )}
 
       {/* Lock */}
       <Text style={label(p)}>LOCK</Text>

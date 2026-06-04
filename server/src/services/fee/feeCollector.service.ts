@@ -154,6 +154,7 @@ export type FeeSource =
   | 'p2p_trade'
   | 'swap'
   | 'card_spend'
+  | 'card_order'
   | 'manual';
 
 export interface CollectFeeInput {

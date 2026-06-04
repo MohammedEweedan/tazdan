@@ -800,6 +800,17 @@ export class AdminController {
           description: 'Quote spread as a decimal fraction (0.025 = 2.5%). Marks BUY prices up and SELL prices down.',
         },
       });
+      // Physical-card order fee (USD). Seeded at the $20 product minimum so it
+      // always shows up in the panel and is editable inline.
+      await prisma.platformSettings.upsert({
+        where: { key: 'card_physical_order_fee' },
+        update: {},
+        create: {
+          key: 'card_physical_order_fee',
+          value: '20',
+          description: 'One-off fee (USD) to order a physical card. Minimum 20.',
+        },
+      });
       const settings = await prisma.platformSettings.findMany({ orderBy: { key: 'asc' } });
       res.json({ settings });
     } catch (error) { next(error); }
@@ -815,6 +826,13 @@ export class AdminController {
           const n = Number(value);
           if (!Number.isFinite(n) || n < 0 || n >= 0.5) {
             throw new AppError('quote_spread_pct must be a fraction between 0 and 0.5 (e.g. 0.025 = 2.5%)', 400);
+          }
+        }
+        // The physical-card order fee is floored at the $20 product minimum.
+        if (key === 'card_physical_order_fee') {
+          const n = Number(value);
+          if (!Number.isFinite(n) || n < 20) {
+            throw new AppError('card_physical_order_fee must be a number of at least 20 (USD)', 400);
           }
         }
         await prisma.platformSettings.upsert({

@@ -29,14 +29,14 @@ import {
   FiSend, FiWifi, FiRepeat, FiCreditCard,
   FiStar, FiBell, FiDollarSign, FiMessageCircle, FiUser,
   FiChevronLeft, FiChevronRight, FiMoreHorizontal, FiSmile, FiArrowUp,
-  FiEye, FiSearch, FiChevronDown, FiMaximize2, FiClock,
+  FiEye, FiSearch, FiChevronDown, FiChevronUp, FiMaximize2, FiClock,
   FiLink,
 } from "react-icons/fi";
 import { FaApple, FaGooglePlay, FaApplePay, FaGooglePay, FaCcVisa, FaCcMastercard } from "react-icons/fa";
 import { SiRevolut } from "react-icons/si";
 import {
   motion, useTransform, useMotionValue, useScroll, useSpring,
-  MotionValue, AnimatePresence,
+  MotionValue, AnimatePresence, useAnimationControls,
 } from "framer-motion";
 import { ContainerScroll } from "@/components/ui/container-scroll-animation";
 // Lazy-mount the shader so its WebGL setup runs AFTER LCP. Until it
@@ -228,15 +228,129 @@ function ScreenshotScreen({
 }
 
 /* ═════════════════════════════════════════════════════════════════
-   LOCK SCREEN — monochrome
+   SCREEN MEDIA — plays an uploaded screen *recording* inside the phone.
+   Drop clips in `client/public/recordings/<clip>.mp4` and they auto-play
+   (muted, looped, inline). Until a clip exists the component gracefully
+   falls back to the screenshot slideshow, so the hero never breaks.
+   ═════════════════════════════════════════════════════════════════ */
+function ScreenMedia({
+  clip,
+  images,
+  intervalMs = 3200,
+  priority = false,
+  alt = "tazdan app screen",
+}: {
+  clip?: string;
+  images: string[];
+  intervalMs?: number;
+  priority?: boolean;
+  alt?: string;
+}) {
+  const [failed, setFailed] = useState(false);
+  const ref = useRef<HTMLVideoElement>(null);
+  const pageVisible = usePageVisible();
+
+  useEffect(() => {
+    const v = ref.current;
+    if (!v || failed || !clip) return;
+    if (pageVisible) v.play?.().catch(() => {});
+    else v.pause?.();
+  }, [clip, failed, pageVisible]);
+
+  if (!clip || failed) {
+    return <ScreenshotScreen images={images} intervalMs={intervalMs} priority={priority} alt={alt} />;
+  }
+
+  return (
+    <Box position="absolute" inset={0} bg="#000" overflow="hidden">
+      <video
+        ref={ref}
+        src={`/recordings/${clip}.mp4`}
+        autoPlay
+        loop
+        muted
+        playsInline
+        preload={priority ? "auto" : "metadata"}
+        onError={() => setFailed(true)}
+        aria-label={alt}
+        style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", objectFit: "cover" }}
+      />
+    </Box>
+  );
+}
+
+/* ═════════════════════════════════════════════════════════════════
+   LOCK SCREEN — a real "locked phone" face. Falls back to a rendered
+   lock screen (clock + lock + swipe-up cue) when no `lock.mp4` clip is
+   present. Slides up and fades as `unlockProgress` advances.
    ═════════════════════════════════════════════════════════════════ */
 const LOCK_SLIDE_PX = -4000;
+
+function LockedPhoneFace() {
+  const [now, setNow] = useState<Date | null>(null);
+  useEffect(() => {
+    setNow(new Date());
+    const id = setInterval(() => setNow(new Date()), 20_000);
+    return () => clearInterval(id);
+  }, []);
+  const hh = now ? now.getHours().toString().padStart(2, "0") : "09";
+  const mm = now ? now.getMinutes().toString().padStart(2, "0") : "41";
+  const dateStr = now
+    ? now.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" })
+    : "";
+
+  // Everything sizes off the phone height var (--ph) so the lock face scales
+  // perfectly inside the mockup on every viewport — no awkward overflow on
+  // small mobile phones.
+  const v = (f: number) => `calc(var(--ph) * ${f})`;
+
+  return (
+    <Box position="absolute" inset={0} overflow="hidden" bg="#0A0A0B">
+      {/* Brand wash — soft blue bloom up top, deep charcoal below */}
+      <Box position="absolute" inset={0} style={{ background: "radial-gradient(125% 70% at 50% -6%, rgba(99,161,219,0.30), rgba(20,24,30,0.0) 58%), linear-gradient(180deg, #10141A 0%, #0A0A0B 70%)" }} />
+
+      {/* Status-bar hint line (time-left / battery-right) — pure decoration */}
+      <Flex position="absolute" top={v(0.028)} left={v(0.05)} right={v(0.05)} justify="space-between" align="center" opacity={0.75}>
+        <Text color="#fff" fontWeight="700" style={{ fontSize: v(0.022) }} sx={{ fontVariantNumeric: "tabular-nums" }}>{hh}:{mm}</Text>
+        <Box w={v(0.05)} h={v(0.022)} borderRadius={v(0.006)} border="1px solid rgba(255,255,255,0.55)" position="relative">
+          <Box position="absolute" top="14%" bottom="14%" left="12%" w="68%" bg="rgba(255,255,255,0.85)" borderRadius={v(0.003)} />
+        </Box>
+      </Flex>
+
+      <Flex direction="column" align="center" justify="space-between" position="absolute" inset={0} style={{ paddingTop: v(0.075), paddingBottom: v(0.015) }}>
+        {/* Lock glyph */}
+        <Flex align="center" justify="center" borderRadius="full" bg="rgba(255,255,255,0.12)" style={{ width: v(0.085), height: v(0.085), marginTop: v(0.05) }}>
+          <Icon as={FiLock} color="rgba(255,255,255,0.95)" style={{ width: v(0.04), height: v(0.04) }} />
+        </Flex>
+
+        {/* Clock + date */}
+        <VStack spacing={v(0.004)} mt={v(-0.03)}>
+          <Text fontFamily="'DM Sans', sans-serif" fontWeight="600" color="#fff" lineHeight={0.92}
+            style={{ fontSize: v(0.155) }} sx={{ fontVariantNumeric: "tabular-nums" }} letterSpacing="-0.045em">
+            {hh}:{mm}
+          </Text>
+          <Text fontWeight="500" color="rgba(255,255,255,0.62)" style={{ fontSize: v(0.026) }} textTransform="capitalize">{dateStr}</Text>
+        </VStack>
+
+        {/* Gentle up-cue + slim home-indicator pinned near the very bottom */}
+        <VStack spacing={v(0.022)}>
+          <motion.div animate={{ y: ["0%", "-32%", "0%"], opacity: [0.45, 0.95, 0.45] }} transition={{ duration: 1.9, repeat: Infinity, ease: "easeInOut" }}>
+            <Icon as={FiChevronUp} color="rgba(255,255,255,0.78)" style={{ width: v(0.045), height: v(0.045), display: "block" }} />
+          </motion.div>
+          <Box borderRadius="full" bg="rgba(255,255,255,0.9)" style={{ width: v(0.17), height: v(0.006) }} />
+        </VStack>
+      </Flex>
+    </Box>
+  );
+}
 
 const LockScreen = memo(function LockScreen({
   unlockProgress,
 }: {
   unlockProgress: MotionValue<number>;
 }) {
+  const [failed, setFailed] = useState(false);
+  const ref = useRef<HTMLVideoElement>(null);
   const slideY = useTransform(
     unlockProgress,
     [0, 0.3, 0.7, 1],
@@ -246,6 +360,8 @@ const LockScreen = memo(function LockScreen({
   const lockPointerEvents = useTransform(unlockProgress, (v: number) =>
     v >= 0.8 ? "none" : "auto"
   );
+
+  useEffect(() => { ref.current?.play?.().catch(() => {}); }, [failed]);
 
   return (
     <motion.div
@@ -257,7 +373,20 @@ const LockScreen = memo(function LockScreen({
         borderRadius: "inherit", willChange: "transform, opacity",
       }}
     >
-      <ScreenshotScreen images={TAZDAN_SCREENS.login} priority alt="tazdan login screen" />
+      {failed ? (
+        <LockedPhoneFace />
+      ) : (
+        <Box position="absolute" inset={0} bg="#0A0A0B" overflow="hidden">
+          <video
+            ref={ref}
+            src="/recordings/lock.mp4"
+            autoPlay loop muted playsInline preload="auto"
+            onError={() => setFailed(true)}
+            aria-label="tazdan locked phone"
+            style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", objectFit: "cover" }}
+          />
+        </Box>
+      )}
     </motion.div>
   );
 });
@@ -1807,7 +1936,10 @@ function SectionBand({ children, dark, tone, size }: {
       borderTop="1px solid"
       borderColor={dark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.045)"}
       bg={sectionBg}
-      style={{ contentVisibility: "auto", containIntrinsicSize: size } as React.CSSProperties}
+      // scrollSnapAlign makes each post-hero chapter a gentle snap point
+      // (the document sets `scroll-snap-type: y proximity`, so it only
+      // nudges into place when you settle near a section — never traps).
+      style={{ contentVisibility: "auto", containIntrinsicSize: size, scrollSnapAlign: "start", scrollSnapStop: "normal" } as React.CSSProperties}
     >
       {/* Whole-band scroll reveal — a gentle fade + rise as each chapter
           enters the viewport, layered over the sections' own inner motion. */}
@@ -2042,90 +2174,204 @@ function ClaimLinkStage({ dark, textMain, textSub, youLabel, claimedLabel, amoun
   );
 }
 
+
 /* ═════════════════════════════════════════════════════════════════
-   RECURRING BUY — dollar-cost-average on autopilot. Editorial split:
-   restrained copy on one side, a clean "auto-buy" product card with
-   accumulating bars on the other.
+   GROW & SAVE — two paired views: "Invest on autopilot" (DCA into
+   top-tier crypto) and "Budgets" (save towards a goal). On desktop the
+   section divides into two columns split by a hairline. On mobile the
+   two views become a horizontal swipe (slide to the side to reveal
+   budgets) before the page scrolls down normally.
    ═════════════════════════════════════════════════════════════════ */
-function SectionRecurringBuy() {
+function AutopilotView() {
   const { t } = useTranslate();
   const { colorMode } = useColorMode();
   const isAr = useIsAr();
   const dark = colorMode === "dark";
   const textMain = dark ? "#f5f5f7" : "#1d1d1f";
   const textSub = dark ? "rgba(245,245,247,0.60)" : "rgba(29,29,31,0.58)";
-  const cardBg = dark ? "rgba(255,255,255,0.035)" : "rgba(0,0,0,0.018)";
+  const cardBg = dark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.022)";
   const cardBorder = dark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.07)";
-
   const cadences = [t("rb_cad_daily"), t("rb_cad_weekly"), t("rb_cad_biweekly"), t("rb_cad_monthly")];
   const bars = [40, 55, 48, 70, 62, 85, 78, 96];
 
   return (
-    <Box py={{ base: 32, md: 48 }} px={{ base: 5, md: 10 }} position="relative" overflow="hidden">
-      <Container maxW="1080px" position="relative" zIndex={1}>
-        <SimpleGrid columns={{ base: 1, md: 2 }} spacing={{ base: 14, md: 20 }} alignItems="center">
-          {/* Copy */}
-          <ScrollFade>
-            <VStack spacing={6} align={{ base: "center", md: "start" }} textAlign={{ base: "center", md: "left" }}>
-              <Heading fontFamily="'DM Sans', sans-serif" fontWeight="700"
-                fontSize={{ base: "40px", md: "58px", lg: "66px" }}
-                letterSpacing="-0.045em" color={textMain} lineHeight={isAr ? 1.15 : 1.0} maxW="540px"
-              >
-                <EmphText text={t("rb_title")} />
-              </Heading>
-              <Text fontSize={{ base: "17px", md: "19px" }} color={textSub} maxW="500px" lineHeight={isAr ? 1.75 : 1.55} fontWeight="400">
-                {t("rb_sub")}
-              </Text>
-              <Flex gap={2.5} flexWrap="wrap" justify={{ base: "center", md: "start" }}>
-                {cadences.map((c, i) => (
-                  <HStack key={i} spacing={1.5} px={3.5} h="34px" borderRadius="full"
-                    bg={dark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.035)"}
-                    border="1px solid" borderColor={cardBorder}>
-                    <Icon as={FiClock} boxSize="12px" color={textSub} />
-                    <Text fontSize="13px" fontWeight="600" color={textMain}>{c}</Text>
-                  </HStack>
-                ))}
-              </Flex>
-            </VStack>
-          </ScrollFade>
+    <VStack spacing={7} align={{ base: "center", md: "start" }} textAlign={{ base: "center", md: "left" }} w="100%">
+      <VStack spacing={4} align={{ base: "center", md: "start" }}>
+        <Heading fontFamily="'DM Sans', sans-serif" fontWeight="700"
+          fontSize={{ base: "36px", md: "44px", lg: "52px" }}
+          letterSpacing="-0.045em" color={textMain} lineHeight={isAr ? 1.15 : 1.02} maxW="460px"
+        >
+          <EmphText text={t("rb_title")} />
+        </Heading>
+        <Text fontSize={{ base: "16px", md: "18px" }} color={textSub} maxW="460px" lineHeight={isAr ? 1.75 : 1.55} fontWeight="400">
+          {t("rb_sub")}
+        </Text>
+        <Flex gap={2} flexWrap="wrap" justify={{ base: "center", md: "start" }}>
+          {cadences.map((c, i) => (
+            <HStack key={i} spacing={1.5} px={3} h="32px" borderRadius="full" bg={dark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.035)"} border="1px solid" borderColor={cardBorder}>
+              <Icon as={FiClock} boxSize="12px" color={textSub} />
+              <Text fontSize="13px" fontWeight="600" color={textMain}>{c}</Text>
+            </HStack>
+          ))}
+        </Flex>
+      </VStack>
 
-          {/* Product card — auto-buy with accumulating bars (monochrome) */}
-          <motion.div initial={{ opacity: 0, scale: 0.96 }} whileInView={{ opacity: 1, scale: 1 }} viewport={{ once: true, amount: 0.3 }} transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}>
-            <Box bg={cardBg} border="1px solid" borderColor={cardBorder} borderRadius="30px" p={{ base: 7, md: 9 }}
-              boxShadow={dark ? "0 30px 80px rgba(0,0,0,0.4)" : "0 30px 80px rgba(0,0,0,0.06)"}>
-              <Flex justify="space-between" align="center" mb={7}>
-                <VStack align="start" spacing={0.5}>
-                  <Text fontSize="13px" fontWeight="600" color={textSub}>{t("rb_card_label")}</Text>
-                  <Text fontSize={{ base: "24px", md: "28px" }} fontWeight="700" color={textMain} sx={{ fontVariantNumeric: "tabular-nums" }}>{t("rb_card_amount")}</Text>
-                </VStack>
-                <motion.div
-                  animate={{ rotate: 360 }}
-                  transition={{ duration: 8, repeat: Infinity, ease: "linear" }}
-                >
-                  <Flex w="46px" h="46px" borderRadius="14px" align="center" justify="center"
-                    bg={dark ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.05)"}>
-                    <Icon as={FiRepeat} boxSize="21px" color={textMain} />
-                  </Flex>
-                </motion.div>
-              </Flex>
-              <Flex align="flex-end" justify="space-between" gap={2.5} h={{ base: "130px", md: "160px" }}>
-                {bars.map((h, i) => (
-                  <motion.div key={i}
-                    initial={{ height: "8%" }}
-                    whileInView={{ height: `${h}%` }}
-                    viewport={{ once: true }}
-                    transition={{ duration: 0.8, delay: 0.07 * i, ease: [0.22, 1, 0.36, 1] }}
-                    style={{ flex: 1, borderRadius: 9,
-                      background: i === bars.length - 1
-                        ? (dark ? "#f5f5f7" : "#0a0a0a")
-                        : (dark ? "rgba(255,255,255,0.11)" : "rgba(0,0,0,0.09)") }}
-                  />
-                ))}
-              </Flex>
-              <Text mt={5} fontSize="13px" color={textSub} textAlign="center" lineHeight={isAr ? 1.75 : 1.5}>{t("rb_card_footer")}</Text>
-            </Box>
+      {/* Auto-buy product card */}
+      <Box w="100%" minH={{ base: "auto", md: "330px" }} display="flex" flexDirection="column" justifyContent="space-between" bg={cardBg} border="1px solid" borderColor={cardBorder} borderRadius="26px" p={{ base: 6, md: 7 }}
+        boxShadow={dark ? "0 24px 60px rgba(0,0,0,0.34)" : "0 24px 60px rgba(0,0,0,0.05)"}>
+        <Flex justify="space-between" align="center" mb={6}>
+          <VStack align="start" spacing={0.5}>
+            <Text fontSize="13px" fontWeight="600" color={textSub}>{t("rb_card_label")}</Text>
+            <Text fontSize={{ base: "23px", md: "26px" }} fontWeight="700" color={textMain} sx={{ fontVariantNumeric: "tabular-nums" }}>{t("rb_card_amount")}</Text>
+          </VStack>
+          <motion.div transition={{ duration: 8, repeat: Infinity, ease: "linear" }}>
+            <Flex w="44px" h="44px" borderRadius="13px" align="center" justify="center" bg={dark ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.05)"}>
+              <Icon as={FiRepeat} boxSize="20px" color={textMain} />
+            </Flex>
           </motion.div>
-        </SimpleGrid>
+        </Flex>
+        <Flex align="flex-end" justify="space-between" gap={2} h={{ base: "120px", md: "140px" }}>
+          {bars.map((hh, i) => (
+            <motion.div key={i} initial={{ height: "8%" }} whileInView={{ height: `${hh}%` }} viewport={{ once: true }}
+              transition={{ duration: 0.8, delay: 0.07 * i, ease: [0.22, 1, 0.36, 1] }}
+              style={{ flex: 1, borderRadius: 9, background: i === bars.length - 1 ? (dark ? "#ffffff" : "#63a1db") : (dark ? "#ffffff" : "#63a1db") }}
+            />
+          ))}
+        </Flex>
+        <Text mt={5} fontSize="13px" color={textSub} textAlign="center" lineHeight={isAr ? 1.75 : 1.5}>{t("rb_card_footer")}</Text>
+      </Box>
+    </VStack>
+  );
+}
+
+function BudgetsView() {
+  const { t } = useTranslate();
+  const { colorMode } = useColorMode();
+  const isAr = useIsAr();
+  const dark = colorMode === "dark";
+  const textMain = dark ? "#f5f5f7" : "#1d1d1f";
+  const textSub = dark ? "rgba(245,245,247,0.60)" : "rgba(29,29,31,0.58)";
+  const cardBg = dark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.022)";
+  const cardBorder = dark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.07)";
+  const ACCENT = "#63a1db";
+  const uses = [
+    { label: t("bg_use_trips"), icon: FiGlobe },
+    { label: t("bg_use_expenses"), icon: FiDollarSign },
+    { label: t("bg_use_occasions"), icon: FiStar },
+    { label: t("bg_use_targets"), icon: FiBarChart2 },
+  ];
+
+  return (
+    <VStack spacing={7} align={{ base: "center", md: "start" }} textAlign={{ base: "center", md: "left" }} w="100%" h="100%" justify="space-between">
+      <VStack spacing={4} align={{ base: "center", md: "start" }}>
+        <Heading fontFamily="'DM Sans', sans-serif" fontWeight="700"
+          fontSize={{ base: "36px", md: "44px", lg: "52px" }}
+          letterSpacing="-0.045em" color={textMain} lineHeight={isAr ? 1.15 : 1.02} maxW="460px"
+        >
+          <EmphText text={t("bg_title")} />
+        </Heading>
+        <Text fontSize={{ base: "16px", md: "18px" }} color={textSub} maxW="460px" lineHeight={isAr ? 1.75 : 1.55} fontWeight="400">
+          {t("bg_sub")}
+        </Text>
+        <Flex gap={2} flexWrap="wrap" justify={{ base: "center", md: "start" }}>
+          {uses.map((u, i) => (
+            <HStack key={i} spacing={1.5} px={3} h="32px" borderRadius="full" bg={dark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.035)"} border="1px solid" borderColor={cardBorder}>
+              <Icon as={u.icon} boxSize="12px" color={textSub} />
+              <Text fontSize="13px" fontWeight="600" color={textMain}>{u.label}</Text>
+            </HStack>
+          ))}
+        </Flex>
+      </VStack>
+
+      {/* Savings-goal product card */}
+      <Box w="100%" minH={{ base: "auto", md: "330px" }} display="flex" flexDirection="column" justifyContent="space-between" bg={cardBg} border="1px solid" borderColor={cardBorder} borderRadius="26px" p={{ base: 6, md: 7 }}
+        boxShadow={dark ? "0 24px 60px rgba(0,0,0,0.34)" : "0 24px 60px rgba(0,0,0,0.05)"}>
+        <Flex justify="space-between" align="center" mb={6}>
+          <HStack spacing={3}>
+            <Flex w="44px" h="44px" borderRadius="13px" align="center" justify="center" fontSize="23px" bg={dark ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.05)"}>🏖️</Flex>
+            <VStack align="start" spacing={0.5}>
+              <Text fontSize={{ base: "17px", md: "18px" }} fontWeight="700" color={textMain}>{t("bg_card_name")}</Text>
+              <Text fontSize="13px" fontWeight="600" color={textSub}>{t("bg_card_sub")}</Text>
+            </VStack>
+          </HStack>
+          <HStack spacing={1.5} px={3} h="30px" borderRadius="full" bg={dark ? "rgba(99,161,219,0.12)" : "rgba(99,161,219,0.10)"} border="1px solid" borderColor="rgba(99,161,219,0.30)">
+            <Icon as={FiLock} boxSize="12px" color={ACCENT} />
+            <Text fontSize="12px" fontWeight="700" color={ACCENT}>{t("bg_card_lock")}</Text>
+          </HStack>
+        </Flex>
+        <Box h="14px" borderRadius="full" bg={dark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.07)"} overflow="hidden">
+          <motion.div initial={{ width: "6%" }} whileInView={{ width: "64%" }} viewport={{ once: true }} transition={{ duration: 1.1, ease: [0.22, 1, 0.36, 1] }} style={{ height: "100%", borderRadius: 999, background: ACCENT }} />
+        </Box>
+        <Flex justify="space-between" mt={3}>
+          <Text fontSize="15px" fontWeight="700" color={textMain} sx={{ fontVariantNumeric: "tabular-nums" }}>{t("bg_card_saved")}</Text>
+          <Text fontSize="15px" fontWeight="600" color={textSub} sx={{ fontVariantNumeric: "tabular-nums" }}>{t("bg_card_target")}</Text>
+        </Flex>
+        <Text mt={5} fontSize="13px" color={textSub} textAlign="center" lineHeight={isAr ? 1.75 : 1.5}>{t("bg_card_footer")}</Text>
+      </Box>
+    </VStack>
+  );
+}
+
+function SectionGrowSave() {
+  const { colorMode } = useColorMode();
+  const isAr = useIsAr();
+  const dark = colorMode === "dark";
+  const divider = dark ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.09)";
+
+  const sectionRef = useRef<HTMLDivElement>(null);
+  const trackRef = useRef<HTMLDivElement>(null);
+  // Drive the mobile horizontal track from the section's vertical scroll: as
+  // the visitor scrolls DOWN through the section, the track auto-slides from
+  // autopilot to budgets. Manual side-swipe still works between scrolls.
+  const { scrollYProgress } = useScroll({ target: sectionRef, offset: ["start end", "end start"] });
+  useEffect(() => {
+    const unsub = scrollYProgress.on("change", (p) => {
+      const track = trackRef.current;
+      if (!track) return;
+      // Desktop lays the two views side by side — no auto-scroll there.
+      if (typeof window !== "undefined" && window.matchMedia("(min-width: 48em)").matches) return;
+      const max = track.scrollWidth - track.clientWidth;
+      if (max <= 1) return;
+      // Map the middle band of the section's travel [0.30 → 0.70] onto the full
+      // horizontal sweep, so the reveal happens while the section is centred.
+      const t = Math.max(0, Math.min(1, (p - 0.3) / 0.4));
+      const target = (isAr ? (1 - t) : t) * max;
+      track.scrollLeft = target;
+    });
+    return () => unsub();
+  }, [scrollYProgress, isAr]);
+
+  return (
+    <Box ref={sectionRef} py={{ base: 24, md: 44 }} px={{ base: 0, md: 10 }} position="relative" overflow="hidden">
+      <Container maxW="1180px" position="relative" zIndex={1} px={{ base: 0, md: 4 }}>
+        {/* Desktop: two views side by side, split by a vertical hairline.
+            Mobile: a horizontal track — each view fills ~88% so the next one
+            peeks at the edge. It auto-slides as you scroll down, and you can
+            also swipe it by hand. */}
+        <Flex
+          ref={trackRef}
+          dir={isAr ? "rtl" : "ltr"}
+          align="stretch"
+          gap={{ base: 4, md: 12 }}
+          overflowX={{ base: "auto", md: "visible" }}
+          px={{ base: 5, md: 0 }}
+          sx={{
+            scrollSnapType: { base: "x proximity", md: "none" } as never,
+            WebkitOverflowScrolling: "touch",
+            scrollbarWidth: "none",
+            scrollPaddingInline: "20px",
+            "&::-webkit-scrollbar": { display: "none" },
+          }}
+        >
+          <Box flex={{ base: "0 0 88%", md: "1" }} minW={0} sx={{ scrollSnapAlign: "center" }}>
+            <AutopilotView />
+          </Box>
+          {/* Vertical hairline divider — desktop only */}
+          <Box display={{ base: "none", md: "block" }} w="1px" bg={divider} alignSelf="stretch" />
+          <Box flex={{ base: "0 0 88%", md: "1" }} minW={0} sx={{ scrollSnapAlign: "center" }}>
+            <BudgetsView />
+          </Box>
+        </Flex>
       </Container>
     </Box>
   );
@@ -2953,6 +3199,33 @@ function PhoneJourney() {
   // already close, never hijacks a deliberate scroll past the section.
   useHeroSnap(ref, 7);
 
+  // ── "Scroll to explore" cue ──────────────────────────────────────
+  // The first screen is a locked phone. If the visitor hasn't scrolled
+  // after a beat, the phone gives a little upward "flinch" and a
+  // Scroll-to-explore arrow appears — nudging them to scroll and unlock
+  // the journey. Both vanish the moment they actually scroll.
+  const flinch = useAnimationControls();
+  const [showHint, setShowHint] = useState(false);
+  useEffect(() => {
+    let scrolled = false;
+    let idle: ReturnType<typeof setTimeout>;
+    let repeat: ReturnType<typeof setInterval>;
+    const doFlinch = () => {
+      if (scrolled || (typeof document !== "undefined" && document.hidden)) return;
+      flinch.start({ y: [0, -22, 0], transition: { duration: 0.62, ease: [0.22, 1, 0.36, 1] } });
+    };
+    const arm = () => {
+      idle = setTimeout(() => { if (!scrolled) { setShowHint(true); doFlinch(); } }, 3400);
+      repeat = setInterval(doFlinch, 4600);
+    };
+    const stop = () => { clearTimeout(idle); clearInterval(repeat); };
+    const unsub = rawProgress.on("change", (v) => {
+      if (v > 0.012 && !scrolled) { scrolled = true; setShowHint(false); stop(); flinch.start({ y: 0 }); }
+    });
+    arm();
+    return () => { stop(); unsub(); };
+  }, [flinch, rawProgress]);
+
   return (
     <Box ref={ref} position="relative" h={{ base: "700vh", md: "700vh" }}>
       <Box position="sticky" top={0} h="100vh" w="100%" overflow="hidden"
@@ -3118,6 +3391,9 @@ function PhoneJourney() {
                   </Box>
                 </motion.div>
 
+                {/* Flinch wrapper — gives the locked phone a little upward
+                    bounce when the visitor lingers, nudging them to scroll. */}
+                <motion.div animate={flinch}>
                 <motion.div style={{ rotateX: tiltX, scale: phoneScale, transformOrigin: "50% 60%" }}>
                 <Box
                   position="relative"
@@ -3138,49 +3414,56 @@ function PhoneJourney() {
                       ? "inset 0 0 0 1px rgba(255,255,255,0.04)"
                       : "inset 0 0 0 1px rgba(0,0,0,0.04)"}
                   >
-                    {/* Base: dashboard, always rendered */}
+                    {/* Base: dashboard recording, always rendered (falls back
+                        to the screenshot slideshow until a clip is uploaded). */}
                     <Box position="absolute" inset={0}>
-                      <ScreenshotScreen
+                      <ScreenMedia
+                        clip="dashboard"
                         images={TAZDAN_SCREENS.dashboard}
                         priority
                         intervalMs={3000}
-                        alt="tazdan wallet dashboard screens"
+                        alt="tazdan wallet dashboard recording"
                       />
                     </Box>
-                    {/* Feature screenshots cross-fade above the dashboard */}
+                    {/* Feature recordings cross-fade above the dashboard */}
                     <motion.div style={{ position: "absolute", inset: 0, opacity: opChat, y: yChat, scale: scaleChat, willChange: "opacity, transform" }}>
-                      <ScreenshotScreen
+                      <ScreenMedia
+                        clip="chat"
                         images={TAZDAN_SCREENS.messages}
                         intervalMs={2800}
-                        alt="tazdan payment messages screens"
+                        alt="tazdan payment messages recording"
                       />
                     </motion.div>
                     <motion.div style={{ position: "absolute", inset: 0, opacity: opBuy, y: yBuy, scale: scaleBuy, willChange: "opacity, transform" }}>
-                      <ScreenshotScreen
+                      <ScreenMedia
+                        clip="buy"
                         images={TAZDAN_SCREENS.buy}
                         intervalMs={2600}
-                        alt="tazdan buy flow screens"
+                        alt="tazdan buy flow recording"
                       />
                     </motion.div>
                     <motion.div style={{ position: "absolute", inset: 0, opacity: opSearch, y: ySearch, scale: scaleSearch, willChange: "opacity, transform" }}>
-                      <ScreenshotScreen
+                      <ScreenMedia
+                        clip="markets"
                         images={TAZDAN_SCREENS.markets}
                         intervalMs={2900}
-                        alt="tazdan market detail screens"
+                        alt="tazdan market detail recording"
                       />
                     </motion.div>
                     <motion.div style={{ position: "absolute", inset: 0, opacity: opPay, y: yPay, scale: scalePay, willChange: "opacity, transform" }}>
-                      <ScreenshotScreen
+                      <ScreenMedia
+                        clip="pay"
                         images={[tazdanShot(14), tazdanShot(15), tazdanShot(16), tazdanShot(18)]}
                         intervalMs={2500}
-                        alt="tazdan pay with balance screens"
+                        alt="tazdan pay with balance recording"
                       />
                     </motion.div>
                     <motion.div style={{ position: "absolute", inset: 0, opacity: opCard, y: yCard, scale: scaleCard, willChange: "opacity, transform" }}>
-                      <ScreenshotScreen
+                      <ScreenMedia
+                        clip="cards"
                         images={TAZDAN_SCREENS.cards}
                         intervalMs={2400}
-                        alt="tazdan card screens"
+                        alt="tazdan card recording"
                       />
                     </motion.div>
                     {/* Lock screen sits on top, slides off with unlockProgress */}
@@ -3195,6 +3478,39 @@ function PhoneJourney() {
                   />
                 </Box>
               </motion.div>
+              </motion.div>
+
+              {/* Scroll-to-explore cue — appears if the visitor lingers on the
+                  locked phone, then vanishes the instant they scroll. The outer
+                  Box spans the phone width and flex-centres the cue, so the
+                  motion transform never fights the centering. */}
+              <Box position="absolute" bottom="-13%" left={0} right={0} zIndex={11} display="flex" justifyContent="center" pointerEvents="none">
+                <AnimatePresence>
+                  {showHint && (
+                    <motion.div
+                      key="scroll-hint"
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: 8 }}
+                      transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+                    >
+                      <Flex direction="column" align="center" gap={2}>
+                        <motion.div animate={{ y: [0, -7, 0] }} transition={{ duration: 1.4, repeat: Infinity, ease: "easeInOut" }}>
+                          <Icon as={FiChevronUp} boxSize="22px" color={ACCENT} />
+                        </motion.div>
+                        <Box px={3.5} py={1.5} borderRadius="full" whiteSpace="nowrap"
+                          bg={dark ? "rgba(20,24,30,0.55)" : "rgba(255,255,255,0.65)"}
+                          border="1px solid" borderColor={dark ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.08)"}
+                          style={{ backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)" }}>
+                          <Text fontSize="13px" fontWeight="700" letterSpacing="0.01em" color={textMain}>
+                            {t("hero_scroll_explore")}
+                          </Text>
+                        </Box>
+                      </Flex>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </Box>
               </Box>
             </Flex>
           </SimpleGrid>
@@ -3479,7 +3795,15 @@ export default function LandingPage() {
     if (typeof document === "undefined") return;
     const prev = document.body.style.background;
     document.body.style.background = pageBg;
-    return () => { document.body.style.background = prev; };
+    // Proximity snap for the chapters past the hero — gentle, never traps
+    // scroll (the hero has no snap points so its scroll-driven journey is
+    // untouched). Cleaned up on unmount so other pages scroll normally.
+    const prevSnap = document.documentElement.style.scrollSnapType;
+    document.documentElement.style.scrollSnapType = "y proximity";
+    return () => {
+      document.body.style.background = prev;
+      document.documentElement.style.scrollSnapType = prevSnap;
+    };
   }, [pageBg]);
 
   if (isLoading || isAuthenticated) return null;
@@ -3505,12 +3829,12 @@ export default function LandingPage() {
       <SectionBand dark={dark} tone="plain" size="0 700px"><SectionOnRamp /></SectionBand>
       <SectionBand dark={dark} tone="tint"  size="0 800px"><SectionPrepaidCards /></SectionBand>
       <SectionBand dark={dark} tone="plain" size="0 760px"><SectionClaimLink /></SectionBand>
-      <SectionBand dark={dark} tone="tint"  size="0 700px"><SectionRecurringBuy /></SectionBand>
+      <SectionBand dark={dark} tone="tint"  size="0 820px"><SectionGrowSave /></SectionBand>
       <SectionBand dark={dark} tone="plain" size="0 600px"><SectionSocialProof /></SectionBand>
       <SectionBand dark={dark} tone="tint"  size="0 600px"><SectionBusiness /></SectionBand>
 
       {/* ── Pattern-break closer — sits right above the footer ── */}
-      <Box style={{ contentVisibility: "auto", containIntrinsicSize: "0 800px" } as React.CSSProperties}>
+      <Box style={{ contentVisibility: "auto", containIntrinsicSize: "0 800px", scrollSnapAlign: "start", scrollSnapStop: "normal" } as React.CSSProperties}>
         <SectionPatternBreak />
       </Box>
       <SectionPartners />

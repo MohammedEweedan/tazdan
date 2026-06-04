@@ -136,6 +136,13 @@ export interface CardEntity {
   atmOn?: boolean;
   issuedAt?: string;
   activatedAt?: string;
+  // Physical card order
+  physicalStatus?: 'NONE' | 'REQUESTED' | 'PRINTING' | 'SHIPPED' | 'DELIVERED';
+  physicalOrderedAt?: string | null;
+  physicalFee?: string | null;
+  shippingName?: string | null;
+  shippingCity?: string | null;
+  shippingCountry?: string | null;
 }
 
 export interface BankAccount {
