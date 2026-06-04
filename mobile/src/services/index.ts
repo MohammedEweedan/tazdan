@@ -241,6 +241,71 @@ export const securityService = {
 };
 
 // ───────── Wallets ─────────
+/* ── Budget Wallets ─────────────────────────────────────────────────── */
+export type BudgetLockType = 'NONE' | 'DATE' | 'STEP_UP' | 'DATE_AND_STEP_UP';
+export interface Budget {
+  id: string;
+  name: string;
+  emoji?: string | null;
+  currency: string;
+  balance: string;
+  targetAmount?: string | null;
+  targetDate?: string | null;
+  lockType: BudgetLockType;
+  unlockDate?: string | null;
+  autoEnabled: boolean;
+  autoAmount?: string | null;
+  autoFrequency?: 'DAILY' | 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY' | null;
+  status: 'ACTIVE' | 'COMPLETED' | 'CLOSED';
+  progressPct?: number | null;
+  locked?: boolean;
+  dateLocked?: boolean;
+  needsStepUp?: boolean;
+  contributions?: Array<{ id: string; amount: string; kind: string; createdAt: string }>;
+}
+
+export const budgetService = {
+  list: async (): Promise<Budget[]> => {
+    const { data } = await api.get('/budgets');
+    return data.budgets ?? [];
+  },
+  get: async (id: string): Promise<Budget> => {
+    const { data } = await api.get(`/budgets/${id}`);
+    return data.budget;
+  },
+  create: async (payload: {
+    name: string; emoji?: string; currency: string;
+    targetAmount?: number; targetDate?: string;
+    lockType?: BudgetLockType; unlockDate?: string;
+    auto?: { amount: number; frequency: 'DAILY' | 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY'; sourceCurrency?: string };
+  }): Promise<Budget> => {
+    const { data } = await api.post('/budgets', payload);
+    return data.budget;
+  },
+  update: async (id: string, payload: Partial<{ name: string; emoji: string; targetAmount: number; targetDate: string; lockType: BudgetLockType; unlockDate: string }>): Promise<Budget> => {
+    const { data } = await api.patch(`/budgets/${id}`, payload);
+    return data.budget;
+  },
+  setAuto: async (id: string, enabled: boolean): Promise<Budget> => {
+    const { data } = await api.post(`/budgets/${id}/auto`, { enabled });
+    return data.budget;
+  },
+  contribute: async (id: string, amount: number): Promise<Budget> => {
+    const { data } = await api.post(`/budgets/${id}/contribute`, { amount });
+    return data.budget;
+  },
+  /** Withdraw. If the budget is STEP_UP-locked and no code is supplied, the
+   *  server returns 401 { requiresStepUp, method } — the caller then prompts
+   *  for the 6-digit code and retries with `stepUpCode`. */
+  withdraw: async (id: string, amount?: number, stepUpCode?: string): Promise<Budget> => {
+    const { data } = await api.post(`/budgets/${id}/withdraw`, { amount, stepUpCode });
+    return data.budget;
+  },
+  close: async (id: string, stepUpCode?: string): Promise<void> => {
+    await api.delete(`/budgets/${id}`, { data: { stepUpCode } });
+  },
+};
+
 export const walletService = {
   list: () => withFallback<Wallet[]>(
     async () => {
@@ -514,6 +579,8 @@ export const messageService = {
     type?: 'TEXT' | 'PAYMENT' | 'REQUEST' | 'STICKER' | 'P2P_NOTE';
     metadata?: Record<string, any>;
     tradeId?: string;
+    /** Idempotency key — echoed back so the optimistic placeholder dedups exactly. */
+    clientId?: string;
   }): Promise<ApiMessage> => {
     const { data } = await api.post('/messages', payload);
     return data.message;

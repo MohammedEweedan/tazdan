@@ -10,16 +10,12 @@ import { Alert, Linking, Modal, Pressable, RefreshControl, ScrollView, View } fr
 import { Text, TextInput } from '@/components/ui/Text';
 import { Ionicons } from '@expo/vector-icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useRouter } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { StatusBar } from 'expo-status-bar';
 import { formatRelativeTime } from '@/utils/format';
 
-import { useThemedPalette, useTheme } from '@/store/themeStore';
-import { useAuthStore } from '@/store/authStore';
+import { useThemedPalette } from '@/store/themeStore';
 import { adminService } from '@/services';
 import { LoadingPulse } from '@/components/ui/LoadingPulse';
-import { TopGradient } from '@/components/ui/ScreenShell';
+import { AdminScreen, AdminTabs } from '@/components/admin/AdminScreen';
 
 type KycStatus = 'ALL' | 'PENDING' | 'APPROVED' | 'REJECTED';
 
@@ -41,11 +37,7 @@ function statusBg(s: string) {
 
 export default function AdminKYC() {
   const p = useThemedPalette();
-  const themeMode = useTheme((s) => s.mode);
-  const router = useRouter();
   const qc = useQueryClient();
-  const user = useAuthStore((s) => s.user);
-  const isAdmin = user?.role === 'ADMIN';
 
   const [filter, setFilter] = useState<KycStatus>('ALL');
 
@@ -66,7 +58,6 @@ export default function AdminKYC() {
   const q = useQuery({
     queryKey,
     queryFn: () => adminService.kyc(filter === 'ALL' ? {} : { status: filter }),
-    enabled: isAdmin,
     refetchInterval: 20_000,
   });
 
@@ -101,48 +92,20 @@ export default function AdminKYC() {
 
   const users: any[] = q.data?.users ?? [];
 
-  if (!isAdmin) {
-    return (
-      <View style={{ flex: 1, backgroundColor: p.bg, alignItems: 'center', justifyContent: 'center' }}>
-        <TopGradient />
-        <Text style={{ color: p.fg }}>Admin only</Text>
-      </View>
-    );
-  }
-
   return (
-    <View style={{ flex: 1, backgroundColor: p.bg }}>
-      <StatusBar style={themeMode === 'light' ? 'dark' : 'light'} />
-      <SafeAreaView style={{ flex: 1 }} edges={['top']}>
-        {/* Header */}
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingTop: 8, paddingBottom: 8 }}>
-          <Pressable onPress={() => router.back()} hitSlop={8}>
-            <Ionicons name="chevron-back" size={26} color={p.fg} />
-          </Pressable>
-          <Text style={{ flex: 1, color: p.fg, fontSize: 18, fontWeight: '600', letterSpacing: -0.3 }}>KYC Reviews</Text>
-          <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '700' }}>{q.data?.total ?? users.length}</Text>
-        </View>
+    <AdminScreen
+      title="KYC Reviews"
+      subtitle={`${q.data?.total ?? users.length} ${filter.toLowerCase()}`}
+      refreshControl={<RefreshControl refreshing={q.isFetching} onRefresh={() => q.refetch()} tintColor={p.fg} />}
+    >
+      <AdminTabs<KycStatus>
+        value={filter}
+        onChange={setFilter}
+        tabs={STATUS_FILTERS.map((f) => ({ key: f, label: f.charAt(0) + f.slice(1).toLowerCase() }))}
+      />
 
-        {/* Filter tabs */}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, gap: 8, marginBottom: 10, paddingVertical: 2 }}>
-          {STATUS_FILTERS.map((f) => {
-            const on = filter === f;
-            return (
-              <Pressable
-                key={f}
-                onPress={() => setFilter(f)}
-                style={{ paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10, backgroundColor: on ? p.accent : p.pillBg, borderWidth: 1, borderColor: on ? p.accent : p.border }}
-              >
-                <Text style={{ color: on ? p.accentFg : p.fg, fontSize: 11, fontWeight: '600', letterSpacing: 0.4 }}>{f}</Text>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
-
-        <ScrollView
-          contentContainerStyle={{ padding: 16, paddingBottom: 80 }}
-          refreshControl={<RefreshControl refreshing={q.isFetching} onRefresh={() => q.refetch()} tintColor={p.fg} />}
-        >
+      {(() => (
+        <>
           {q.isLoading ? (
             <View style={{ paddingTop: 80, alignItems: 'center' }}>
               <LoadingPulse size={56} icon="document-text-outline" label="Loading KYC queue…" />
@@ -169,8 +132,8 @@ export default function AdminKYC() {
               />
             ))
           )}
-        </ScrollView>
-      </SafeAreaView>
+        </>
+      ))()}
 
       {/* Reject / Revoke sheet */}
       <Modal visible={!!rejectTarget} transparent animationType="slide" onRequestClose={() => setRejectTarget(null)}>
@@ -334,7 +297,7 @@ export default function AdminKYC() {
           </View>
         </View>
       </Modal>
-    </View>
+    </AdminScreen>
   );
 }
 

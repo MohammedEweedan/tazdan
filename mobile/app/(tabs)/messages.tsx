@@ -29,7 +29,7 @@ import { TopGradient } from '@/components/ui/ScreenShell';
 
 type Filter = 'ALL' | 'UNREAD' | 'PAYMENTS' | 'SUPPORT';
 
-const BRAND_BLUE = '#737373'; // mono accent neutral
+const BRAND_BLUE = '#63a1db'; // soft brand blue (accent for badges, support, avatars)
 
 export default function Messages() {
   const router = useRouter();
@@ -248,7 +248,7 @@ export default function Messages() {
                         marginTop: 6,
                         height: 2,
                         borderRadius: 2,
-                        backgroundColor: p.fg,
+                        backgroundColor: p.accentText,
                       }}
                     />
                   )}
@@ -326,7 +326,7 @@ export default function Messages() {
                       >
                         <View style={{
                           width: 52, height: 52, borderRadius: 26,
-                          backgroundColor: '#7c3aed',
+                          backgroundColor: '#5b86b0',
                           alignItems: 'center', justifyContent: 'center',
                         }}>
                           {c.avatarUrl
@@ -401,7 +401,7 @@ function Row({
     >
       <View style={{
         width: 46, height: 46, borderRadius: 23,
-        backgroundColor: isSupport ? BRAND_BLUE : (c.partner.avatarUrl ? p.bgElev : '#7c3aed'),
+        backgroundColor: isSupport ? BRAND_BLUE : (c.partner.avatarUrl ? p.bgElev : '#5b86b0'),
         alignItems: 'center', justifyContent: 'center',
         borderWidth: !isSupport && c.partner.avatarUrl ? 1 : 0,
         borderColor: p.border,

@@ -104,8 +104,8 @@ function screenTokens(dark: boolean) {
     greenBg:    dark ? "rgba(74,222,128,0.15)" : "rgba(22,163,74,0.10)",
     redFg:      dark ? "#f87171" : "#dc2626",
     redBg:      dark ? "rgba(248,113,113,0.15)" : "rgba(220,38,38,0.10)",
-    accent: "#226dff",
-    accentMuted: "rgba(34,109,255,0.15)",
+    accent: "#63a1db",
+    accentMuted: "rgba(99,161,219,0.15)",
   };
 }
 
@@ -151,6 +151,82 @@ function usePageVisible() {
   return visible;
 }
 
+const tazdanShot = (n: number) => `/screenshots/tazdan/${n}.png`;
+
+const TAZDAN_SCREENS = {
+  login: [tazdanShot(1)],
+  dashboard: [tazdanShot(2), tazdanShot(3), tazdanShot(17)],
+  markets: [tazdanShot(4), tazdanShot(5), tazdanShot(6), tazdanShot(7), tazdanShot(8)],
+  messages: [tazdanShot(9), tazdanShot(10), tazdanShot(11)],
+  profile: [tazdanShot(12), tazdanShot(13)],
+  buy: [tazdanShot(14), tazdanShot(15), tazdanShot(16), tazdanShot(18)],
+  cards: [
+    tazdanShot(19),
+    tazdanShot(20),
+    tazdanShot(21),
+    tazdanShot(22),
+    tazdanShot(23),
+    tazdanShot(24),
+    tazdanShot(25),
+    tazdanShot(26),
+  ],
+};
+
+function ScreenshotScreen({
+  images,
+  intervalMs = 3200,
+  priority = false,
+  alt = "tazdan app screen",
+}: {
+  images: string[];
+  intervalMs?: number;
+  priority?: boolean;
+  alt?: string;
+}) {
+  const pageVisible = usePageVisible();
+  const slides = images.length > 0 ? images : TAZDAN_SCREENS.dashboard;
+  const slidesKey = slides.join("|");
+  const [idx, setIdx] = useState(0);
+
+  useEffect(() => {
+    setIdx(0);
+  }, [slidesKey]);
+
+  useEffect(() => {
+    if (!pageVisible || slides.length < 2) return;
+    const id = setInterval(() => {
+      setIdx((i) => (i + 1) % slides.length);
+    }, intervalMs);
+    return () => clearInterval(id);
+  }, [pageVisible, slides.length, slidesKey, intervalMs]);
+
+  const src = slides[idx % slides.length];
+
+  return (
+    <Box position="absolute" inset={0} bg="#000" overflow="hidden">
+      <AnimatePresence initial={false} mode="wait">
+        <motion.div
+          key={src}
+          initial={{ opacity: 0, scale: 1.012 }}
+          animate={{ opacity: 1, scale: 1 }}
+          exit={{ opacity: 0, scale: 0.992 }}
+          transition={{ duration: 0.72, ease: [0.22, 1, 0.36, 1] }}
+          style={{ position: "absolute", inset: 0, willChange: "opacity, transform" }}
+        >
+          <NextImage
+            src={src}
+            alt={alt}
+            fill
+            priority={priority && idx === 0}
+            sizes="(max-width: 480px) 55vw, (max-width: 1024px) 38vw, 340px"
+            style={{ objectFit: "cover" }}
+          />
+        </motion.div>
+      </AnimatePresence>
+    </Box>
+  );
+}
+
 /* ═════════════════════════════════════════════════════════════════
    LOCK SCREEN — monochrome
    ═════════════════════════════════════════════════════════════════ */
@@ -166,38 +242,10 @@ const LockScreen = memo(function LockScreen({
     [0, 0.3, 0.7, 1],
     [0, LOCK_SLIDE_PX * 0.05, LOCK_SLIDE_PX * 0.6, LOCK_SLIDE_PX],
   );
-  const fadeNotif = useTransform(unlockProgress, [0, 0.55], [1, 0]);
   const lockOpacity = useTransform(unlockProgress, [0, 0.7, 0.8], [1, 1, 0]);
   const lockPointerEvents = useTransform(unlockProgress, (v: number) =>
     v >= 0.8 ? "none" : "auto"
   );
-
-  const s = {
-    timeFont:   "calc(var(--ph) * 0.125)",
-    dateFontSz: "calc(var(--ph) * 0.026)",
-    notifFont:  "calc(var(--ph) * 0.022)",
-    statusFont: "calc(var(--ph) * 0.016)",
-    notifPad:   "calc(var(--ph) * 0.034)",
-    notifGap:   "calc(var(--ph) * 0.008)",
-    avatarSz:   "calc(var(--ph) * 0.058)",
-    avatarR:    "calc(var(--ph) * 0.016)",
-    barW:       "calc(var(--ph) * 0.004)",
-    diH5:       "calc(var(--ph) * 0.009)",
-    diH7:       "calc(var(--ph) * 0.013)",
-    diH9:       "calc(var(--ph) * 0.016)",
-    diH11:      "calc(var(--ph) * 0.020)",
-    batW:       "calc(var(--pw) * 0.07)",
-    batH:       "calc(var(--ph) * 0.017)",
-    swipeW:     "calc(var(--pw) * 0.35)",
-    swipeH:     "calc(var(--ph) * 0.006)",
-    islandW:    "calc(var(--pw) * 0.4)",
-    islandH:    "calc(var(--ph) * 0.038)",
-    topPad:  "calc(var(--ph) * 0.015)",   // was 0.06 — status bar sits just below bezel now
-    timePad: "calc(var(--ph) * 0.08)",   // was 0.10
-    notifTop:   "calc(var(--ph) * 0.38)",
-    notifSide:  "calc(var(--pw) * 0.07)",
-    bottomPad:  "calc(var(--ph) * 0.04)",
-  };
 
   return (
     <motion.div
@@ -209,107 +257,7 @@ const LockScreen = memo(function LockScreen({
         borderRadius: "inherit", willChange: "transform, opacity",
       }}
     >
-      {/* Pure black lock screen background */}
-      <Box position="absolute" inset={0} bg="#000000" />
-
-      {/* Status bar */}
-      <HStack
-        position="absolute"
-        top={s.topPad} left={s.notifSide} right={s.notifSide}
-        justify="space-between" zIndex={2}
-      >
-        <Text style={{ fontSize: s.statusFont }} color="white" fontWeight="700" letterSpacing="0.01em">
-          tazdan
-        </Text>
-        <HStack spacing="calc(var(--pw) * 0.025)">
-          <HStack spacing="calc(var(--pw) * 0.008)" align="flex-end" h={s.diH11}>
-            {[s.diH5, s.diH7, s.diH9, s.diH11].map((h, i) => (
-              <Box key={i} w={s.barW} h={h} bg="white" borderRadius="1px" opacity={i < 3 ? 1 : 0.3} />
-            ))}
-          </HStack>
-          <Icon as={FiWifi} color="white" style={{ width: s.diH9, height: s.diH9 }} />
-          <HStack spacing="1px" align="center">
-            <Box
-              w={s.batW} h={s.batH}
-              border="calc(var(--ph)*0.002) solid white" borderRadius="2px"
-              position="relative" overflow="hidden"
-            >
-              <Box position="absolute" inset="1px" right="2px" bg="white" borderRadius="1px" />
-            </Box>
-          </HStack>
-        </HStack>
-      </HStack>
-
-      {/* Time */}
-      <motion.div style={{
-        opacity: fadeNotif,
-        position: "absolute", top: s.timePad, left: 0, right: 0,
-        textAlign: "center", zIndex: 2,
-      }}>
-        <Box>
-          <Icon as={FiLock} color="rgba(255,255,255,0.5)"
-            style={{ width: s.dateFontSz, height: s.dateFontSz, marginBottom: "calc(var(--ph)*0.01)" }} />
-        </Box>
-        <Text
-          style={{ fontSize: s.timeFont }}
-          fontWeight="200" color="white"
-          letterSpacing="-0.04em" lineHeight={1}
-        >
-          4:44
-        </Text>
-        <Text style={{ fontSize: s.dateFontSz }} color="rgba(255,255,255,0.7)" fontWeight="500" mt={1} letterSpacing="0.01em">
-          Sunday, November 4th
-        </Text>
-      </motion.div>
-
-      {/* Notification */}
-      <motion.div style={{
-        opacity: fadeNotif,
-        position: "absolute", top: s.notifTop,
-        left: s.notifSide, right: s.notifSide, zIndex: 2,
-      }}>
-        <Box
-          bg="rgba(255,255,255,0.12)" borderRadius={s.avatarR}
-          p={s.notifPad}
-          style={{ backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)" }}
-          border="1px solid rgba(255,255,255,0.15)"
-        >
-          <HStack spacing={s.notifGap}>
-            <Flex
-              style={{ width: s.avatarSz, height: s.avatarSz, borderRadius: s.avatarR, flexShrink: 0 }}
-              bg="rgba(255,255,255,0.15)"
-              align="center" justify="center"
-            >
-              <Text style={{ fontSize: `calc(var(--ph) * 0.025)` }}>💸</Text>
-            </Flex>
-            <VStack align="start" spacing={0} flex={1}>
-              <HStack justify="space-between" w="100%">
-                <Text style={{ fontSize: s.statusFont }} color="rgba(255,255,255,0.6)" fontWeight="700" letterSpacing="0.04em" textTransform="uppercase">
-                  tazdan
-                </Text>
-                <Text style={{ fontSize: s.statusFont }} color="rgba(255,255,255,0.4)">1m ago</Text>
-              </HStack>
-              <Text style={{ fontSize: s.notifFont }} color="white" fontWeight="600">
-                @robocop sent you +$1,144.28
-              </Text>
-            </VStack>
-          </HStack>
-        </Box>
-      </motion.div>
-
-      {/* Swipe indicator */}
-      <motion.div style={{
-        opacity: fadeNotif,
-        position: "absolute", bottom: s.bottomPad,
-        left: 0, right: 0, zIndex: 2,
-      }}>
-        <VStack spacing="calc(var(--ph)*0.008)">
-          <Text style={{ fontSize: s.statusFont }} color="white" fontWeight="500">
-            Swipe up to unlock
-          </Text>
-          <Box w={s.swipeW} h={s.swipeH} bg="rgba(255,255,255,0.3)" borderRadius="full" />
-        </VStack>
-      </motion.div>
+      <ScreenshotScreen images={TAZDAN_SCREENS.login} priority alt="tazdan login screen" />
     </motion.div>
   );
 });
@@ -323,7 +271,7 @@ function appTokens(dark: boolean) {
         bg: "#0a0a0c", surface: "#1b1b1f", border: "rgba(255,255,255,0.06)",
         fg: "#ffffff", fgMuted: "#8a8a92", fgFaint: "#5b5b63",
         green: "#3ecf6e", redFg: "#f0564a", redBg: "rgba(240,86,74,0.14)",
-        accent: "#226dff",
+        accent: "#63a1db",
         ink: "#ffffff", inkFg: "#15140f",
         sheetBg: "#161618", sheetCard: "#1f1f23", sheetBorder: "rgba(255,255,255,0.08)",
         sheetFg: "#ffffff", sheetMuted: "#9a9aa2", sheetFaint: "#5b5b63",
@@ -334,7 +282,7 @@ function appTokens(dark: boolean) {
         bg: "#ffffff", surface: "#f1f1f3", border: "rgba(0,0,0,0.07)",
         fg: "#15140f", fgMuted: "#6a6a72", fgFaint: "#a6a6ad",
         green: "#1f9d57", redFg: "#d0463a", redBg: "rgba(208,70,58,0.12)",
-        accent: "#226dff",
+        accent: "#63a1db",
         ink: "#15140f", inkFg: "#ffffff",
         sheetBg: "#f4f2ea", sheetCard: "#fffefb", sheetBorder: "rgba(0,0,0,0.07)",
         sheetFg: "#15140f", sheetMuted: "#8b897e", sheetFaint: "#b6b4a8",
@@ -695,7 +643,7 @@ function SlideCTA({
   label: string;
   seconds?: number;
 }) {
-  const accent = "#226dff";
+  const accent = "#63a1db";
   const critical = seconds !== undefined && seconds <= 10;
   return (
     <Box
@@ -741,7 +689,7 @@ function SlideCTA({
         >
           <Flex
             align="center" justify="center"
-            bg={critical ? "rgba(239,68,68,0.9)" : "rgba(34,109,255,0.92)"}
+            bg={critical ? "rgba(239,68,68,0.9)" : "rgba(99,161,219,0.92)"}
             borderRadius="calc(var(--ph)*0.01)"
             px="calc(var(--pw)*0.035)" py="calc(var(--ph)*0.005)"
           >
@@ -767,7 +715,7 @@ function SlideCTA({
           style={{ width: "calc(var(--ph)*0.05)", height: "calc(var(--ph)*0.05)" }}
           borderRadius="calc(var(--ph)*0.014)"
           bg={accent}
-          boxShadow={`0 calc(var(--ph)*0.004) calc(var(--ph)*0.012) rgba(34,109,255,0.5)`}
+          boxShadow={`0 calc(var(--ph)*0.004) calc(var(--ph)*0.012) rgba(99,161,219,0.5)`}
         >
           <Icon as={FiChevronRight} color="#fff"
             style={{ width: "calc(var(--ph)*0.022)", height: "calc(var(--ph)*0.022)", marginRight: "calc(var(--ph)*-0.012)" }} />
@@ -859,7 +807,7 @@ const ScreenBuy = memo(function ScreenBuy() {
           </AnimatePresence>
           <motion.div animate={{ opacity: [1, 1, 0, 0] }}
             transition={{ duration: 0.9, repeat: Infinity }}
-            style={{ width: "2px", height: fs.big, background: "#226dff" }} />
+            style={{ width: "2px", height: fs.big, background: "#63a1db" }} />
         </HStack>
 
         {/* quick chips */}
@@ -1004,7 +952,7 @@ const ScreenTokenSearch = memo(function ScreenTokenSearch() {
           </Text>
           <motion.div animate={{ opacity: [1, 1, 0, 0] }}
             transition={{ duration: 0.9, repeat: Infinity }}
-            style={{ width: "1.5px", height: "calc(var(--ph)*0.022)", background: "#226dff" }} />
+            style={{ width: "1.5px", height: "calc(var(--ph)*0.022)", background: "#63a1db" }} />
         </HStack>
       </Box>
       <Text flexShrink={0} px={px} pb="calc(var(--ph)*0.008)" style={{ fontSize: fs.label }}
@@ -1234,7 +1182,7 @@ const ScreenChat = memo(function ScreenChat() {
         border: "rgba(255,255,255,0.07)", fg: "#ffffff", muted: "#8a8a92", faint: "#5b5b63" }
     : { bg: "#ffffff", headerBg: "#f6f6f7", surface: "#f0f0f2",
         border: "rgba(0,0,0,0.07)", fg: "#15140f", muted: "#8b897e", faint: "#b6b4a8" };
-  const accent = "#226dff";
+  const accent = "#63a1db";
   const green = "#3ecf6e";
 
   const fs = {
@@ -1535,7 +1483,7 @@ function LiveTxFeed() {
                     : (dark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)")}
                   border="1px solid"
                   borderColor={i === 0
-                    ? (dark ? "rgba(34,109,255,0.35)" : "rgba(34,109,255,0.3)")
+                    ? (dark ? "rgba(99,161,219,0.35)" : "rgba(99,161,219,0.3)")
                     : (dark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)")}
                   borderRadius="14px" px={{ base: 3, lg: 4 }} py={{ base: 2.5, lg: 3 }} spacing={3}
                   boxShadow={i === 0 ? (dark ? "0 8px 24px rgba(0,0,0,0.3)" : "0 8px 24px rgba(0,0,0,0.08)") : "none"}
@@ -1592,9 +1540,9 @@ function SectionSocialFinance() {
   const dark = colorMode === "dark";
   const textMain = dark ? "white" : "#0a0f1e";
   const textSub  = dark ? "rgba(255,255,255,0.6)" : "#64748b";
-  const cardBg   = dark ? "rgba(255,255,255,0.04)" : "#f4f4f4";
+  const cardBg   = dark ? "#242933" : "#FFFFFF";
   const cardBorder = dark ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.10)";
-  const chipBg   = dark ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.05)";
+  const chipBg   = dark ? "#1B2028" : "#F3F5F8";
 
   return (
     <Box position="relative" py={{ base: 16, md: 24 }} px={{ base: 4, md: 10 }} overflow="hidden">
@@ -1621,7 +1569,7 @@ function SectionSocialFinance() {
               <Heading fontFamily="'DM Sans', sans-serif" fontWeight="800" fontSize={{ base: "40px", md: "64px", xl: "80px" }} letterSpacing="-0.04em">
                 <Box as="span" color={textMain}>{t("sec_social_title_1")}</Box>
                 <br />
-                <Box as="span" color={dark ? "rgba(255,255,255,0.4)" : "#226dff"}>{t("sec_social_title_2")}</Box>
+                <Box as="span" color="#63a1db">{t("sec_social_title_2")}</Box>
               </Heading>
               <Text fontSize={{ base: "14.5px", md: "16.5px" }} color={textSub} maxW="460px">{t("sec_social_desc")}</Text>
               <Box w="100%" maxW="460px" bg={cardBg} border="1px solid" borderColor={cardBorder}
@@ -1655,13 +1603,13 @@ function SectionBento() {
   const dark = colorMode === "dark";
   const textMain = dark ? "white" : "#0a0f1e";
   const textSub = dark ? "rgba(255,255,255,0.6)" : "#475569";
-  const cardBg = dark ? "rgba(255,255,255,0.04)" : "#f4f4f4";
+  const cardBg = dark ? "#242933" : "#FFFFFF";
   const cardBorder = dark ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.10)";
-  const brand     = "#226dff";
-  const brandSoft = dark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)";
+  const brand     = "#63a1db";
+  const brandSoft = dark ? "#303744" : "#EEF3F8";
   const heroCardBg = dark
-    ? "linear-gradient(145deg, #1a1a1a 0%, #0a0a0a 100%)"
-    : "linear-gradient(145deg, #111111 0%, #000000 100%)";
+    ? "linear-gradient(145deg, #20242C 0%, #0B0D11 100%)"
+    : "linear-gradient(145deg, #1C2027 0%, #050608 100%)";
 
   const stats = [
     { label: t("bento_security_title"), value: "", sub: t("bento_security_desc"), icon: FiShield, span: 2, hero: true },
@@ -1725,7 +1673,7 @@ function SectionOnRamp() {
   const dark = colorMode === "dark";
   const textMain = dark ? "white" : "#0a0f1e";
   const textSub = dark ? "rgba(255,255,255,0.5)" : "#64748b";
-  const cardBg = dark ? "rgba(255,255,255,0.04)" : "#f8f8f8";
+  const cardBg = dark ? "#222730" : "#FFFFFF";
   const cardBorder = dark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.07)";
   const methods: { label: string; icon?: React.ElementType; iconSize?: number; showLabel?: boolean; color: string; gradient?: [string, string] }[] = [
     { label: "Apple Pay",  icon: FaApplePay,     iconSize: 36, color: "#000000" },
@@ -1747,7 +1695,7 @@ function SectionOnRamp() {
         transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
         style={{ position: "absolute", top: "30%", left: "50%", width: 900, height: 400,
           transform: "translate(-50%,-50%)", borderRadius: "50%",
-          background: "radial-gradient(ellipse, rgba(34,109,255,0.06) 0%, transparent 70%)",
+          background: "radial-gradient(ellipse, rgba(99,161,219,0.06) 0%, transparent 70%)",
           pointerEvents: "none" }}
       />
       <Container maxW="1200px" position="relative" zIndex={1}>
@@ -1812,8 +1760,8 @@ function SectionOnRamp() {
                     <Box position="absolute" inset={0} zIndex={0} pointerEvents="none"
                       style={{
                         background: dark
-                          ? "radial-gradient(circle at 50% 60%, rgba(34,109,255,0.12) 0%, transparent 70%)"
-                          : "radial-gradient(circle at 50% 60%, rgba(34,109,255,0.08) 0%, transparent 70%)",
+                          ? "radial-gradient(circle at 50% 60%, rgba(99,161,219,0.12) 0%, transparent 70%)"
+                          : "radial-gradient(circle at 50% 60%, rgba(99,161,219,0.08) 0%, transparent 70%)",
                       }}
                     />
                     <Box position="relative" zIndex={1} w="100%" h="100%">
@@ -1838,16 +1786,57 @@ function SectionOnRamp() {
   );
 }
 
+/* SectionBand — wraps a landing section to give it a distinct background
+   "chapter" feel. `tone="tint"` gets a faint surface + a soft brand-accent
+   corner glow; `tone="plain"` stays on the page bg. A hairline top rule
+   separates bands. Purely additive — the section's own layout is untouched. */
+function SectionBand({ children, dark, tone, size }: {
+  children: React.ReactNode;
+  dark: boolean;
+  tone: "tint" | "plain";
+  size: string;
+}) {
+  const tint = tone === "tint";
+  const sectionBg = tint
+    ? (dark ? "#1B1F25" : "#F5F7FA")
+    : (dark ? "#16181C" : "#FFFFFF");
+
+  return (
+    <Box
+      position="relative"
+      borderTop="1px solid"
+      borderColor={dark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.045)"}
+      bg={sectionBg}
+      style={{ contentVisibility: "auto", containIntrinsicSize: size } as React.CSSProperties}
+    >
+      {/* Whole-band scroll reveal — a gentle fade + rise as each chapter
+          enters the viewport, layered over the sections' own inner motion. */}
+      <motion.div
+        initial={{ opacity: 0, y: 24 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true, amount: 0.15 }}
+        transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+        style={{ position: "relative", zIndex: 1 }}
+      >
+        {children}
+      </motion.div>
+    </Box>
+  );
+}
+
 /* EmphText — renders a translated string where the word(s) wrapped in
-   *asterisks* become italic serif-ish emphasis. Keeps emphasis i18n-aware:
-   each locale marks its own word. e.g. "Invest on *autopilot*." */
+   *asterisks* become italic emphasis IN THE BRAND ACCENT. Keeps emphasis
+   i18n-aware: each locale marks its own word. e.g. "Invest on *autopilot*." */
 function EmphText({ text }: { text: string }) {
+  const { colorMode } = useColorMode();
+  // Accent the emphasised words — lifted a touch in dark mode for contrast.
+  const accent = colorMode === "dark" ? "#7DB4E4" : "#3E78AE";
   const parts = text.split(/(\*[^*]+\*)/g).filter(Boolean);
   return (
     <>
       {parts.map((p, i) =>
         p.startsWith("*") && p.endsWith("*") ? (
-          <Box as="span" key={i} fontStyle="italic" fontWeight="500">
+          <Box as="span" key={i} fontStyle="italic" fontWeight="600" color={accent}>
             {p.slice(1, -1)}
           </Box>
         ) : (
@@ -2148,22 +2137,27 @@ function SectionRecurringBuy() {
    one oversized line, a slow marquee of every feature, and a single
    restrained CTA. Apple "Hello" closer energy.
    ═════════════════════════════════════════════════════════════════ */
-function SectionPatternBreak({ onWaitlist }: { onWaitlist: () => void }) {
+function SectionPatternBreak() {
   const { t } = useTranslate();
   const isAr = useIsAr();
   const { colorMode } = useColorMode();
   const dark = colorMode === "dark";
-  // Inverted canvas vs. the rest of the page — this is the "break".
-  const onCanvas = "#f5f5f7";
-  const onCanvasSub = "rgba(245,245,247,0.55)";
 
-  // Every shipped capability — one continuous marquee.
-  const features = [
-    t("pb_f_buy"), t("pb_f_sell"), t("pb_f_send"), t("pb_f_claimlink"),
-    t("pb_f_recurring"), t("pb_f_p2p"), t("pb_f_cards"), t("pb_f_multichain"),
-    t("pb_f_selfcustody"), t("pb_f_applepay"), t("pb_f_chat"), t("pb_f_global"),
+  const marqueeItems: { label: string; icon: React.ElementType }[] = [
+    { label: t("pb_f_buy"), icon: FiArrowUp },
+    { label: t("pb_f_sell"), icon: FiChevronDown },
+    { label: t("pb_f_send"), icon: FiSend },
+    { label: t("pb_f_claimlink"), icon: FiLink },
+    { label: t("pb_f_recurring"), icon: FiRepeat },
+    { label: t("pb_f_p2p"), icon: FiRepeat },
+    { label: t("pb_f_cards"), icon: FiCreditCard },
+    { label: t("pb_f_multichain"), icon: FiGlobe },
+    { label: t("pb_f_selfcustody"), icon: FiShield },
+    { label: t("pb_f_applepay"), icon: FaApplePay },
+    { label: t("pb_f_chat"), icon: FiMessageCircle },
+    { label: t("pb_f_global"), icon: FiGlobe },
   ];
-  const loop = [...features, ...features];
+  const loop = [...marqueeItems, ...marqueeItems];
 
   return (
     <Box position="relative" overflow="hidden" py={{ base: 24, md: 36 }}>
@@ -2197,7 +2191,6 @@ function SectionPatternBreak({ onWaitlist }: { onWaitlist: () => void }) {
           Arabic doesn't scroll the wrong direction / stall). The track itself
           is forced LTR so the duplicated halves tile predictably. */}
       <Box position="relative" mt={{ base: 12, md: 16 }} py={{ base: 5, md: 7 }}
-        borderTop="1px solid" borderBottom="1px solid"
         borderColor="rgba(255,255,255,0.08)"
         dir="ltr"
         style={{
@@ -2210,19 +2203,177 @@ function SectionPatternBreak({ onWaitlist }: { onWaitlist: () => void }) {
           transition={{ duration: 34, repeat: Infinity, ease: "linear" }}
           style={{ display: "flex", width: "max-content", gap: 0 }}
         >
-          {loop.map((f, i) => (
-            <HStack key={i} spacing={{ base: 6, md: 10 }} px={{ base: 4, md: 7 }} flexShrink={0}>
-              <Text fontFamily="'DM Sans', sans-serif" fontWeight="700"
-                fontSize={{ base: "26px", md: "40px" }} letterSpacing="-0.03em"
-                whiteSpace="nowrap"
+          {loop.map((item, i) => (
+            <HStack
+              key={`${item.label}-${i}`}
+              spacing={{ base: 2.5, md: 3.5 }}
+              h={{ base: "54px", md: "68px" }}
+              px={{ base: 4, md: 6 }}
+              mx={{ base: 1.5, md: 2 }}
+              flexShrink={0}
+              borderRadius="full"
+              bg={dark ? "#63a1db" : "#63a1db"}
+            >
+              <Flex
+                w={{ base: "30px", md: "36px" }}
+                h={{ base: "30px", md: "36px" }}
+                borderRadius="full"
+                align="center"
+                justify="center"
+                bg={dark ? "#2A303B" : "#F2F5F8"}
+                flexShrink={0}
               >
-                {f}
+                <Icon as={item.icon} boxSize={{ base: "15px", md: "18px" }} color={dark ? "#f5f5f7" : "#0a0a0a"} />
+              </Flex>
+              <Text
+                fontFamily="'DM Sans', sans-serif"
+                fontWeight="850"
+                fontSize={{ base: "19px", md: "28px" }}
+                letterSpacing="-0.03em"
+                whiteSpace="nowrap"
+                color={dark ? "#f5f5f7" : "#0a0a0a"}
+              >
+                {item.label}
               </Text>
-              <Box w="5px" h="5px" borderRadius="full" flexShrink={0} />
             </HStack>
           ))}
         </motion.div>
       </Box>
+    </Box>
+  );
+}
+
+function SectionPartners() {
+  const { t } = useTranslate();
+  const { colorMode } = useColorMode();
+  const isAr = useIsAr();
+  const dark = colorMode === "dark";
+  const textMain = dark ? "#f5f5f7" : "#0a0a0a";
+  const textSub = dark ? "#A7AFBC" : "#5F6874";
+  const sectionBg = dark ? "#16181C" : "#FFFFFF";
+  const cardBg = dark ? "#20252E" : "#FFFFFF";
+  const logoBg = dark ? "#2A303B" : "#F5F7FA";
+  const border = dark ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.09)";
+  const mutedBorder = dark ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.06)";
+
+  const partners = [
+    {
+      name: "Banxa",
+      logo: dark ? "/Banxa-Logo-Light.webp" : "/Banxa-Logo-Dark.webp",
+      role: t("partner_banxa_role"),
+      tagline: t("partner_banxa_tagline"),
+      logoW: 118,
+      logoH: 34,
+    },
+    {
+      name: "Crypto.com",
+      logo: "/crypto.com.png",
+      role: t("partner_crypto_role"),
+      tagline: t("partner_crypto_tagline"),
+      logoW: 62,
+      logoH: 62,
+    },
+    {
+      name: "Visa",
+      logo: "/visa-logo.webp",
+      role: t("partner_visa_role"),
+      tagline: t("partner_visa_tagline"),
+      logoW: 94,
+      logoH: 34,
+    },
+  ];
+
+  return (
+    <Box
+      position="relative"
+      bg={sectionBg}
+      px={{ base: 4, md: 10 }}
+      py={{ base: 14, md: 18 }}
+      overflow="hidden"
+      style={{ contentVisibility: "auto", containIntrinsicSize: "0 520px" } as React.CSSProperties}
+    >
+      <Container maxW="1180px" px={0}>
+        <SimpleGrid columns={{ base: 1, lg: 2 }} spacing={{ base: 8, lg: 12 }} alignItems="center">
+          <motion.div
+            initial={{ opacity: 0, y: 22 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, amount: 0.25 }}
+            transition={{ duration: 0.58, ease: [0.22, 1, 0.36, 1] }}
+          >
+            <VStack align={{ base: "center", lg: "start" }} textAlign={{ base: "center", lg: "start" }} spacing={4}>
+              <Heading
+                fontFamily="'DM Sans', sans-serif"
+                fontWeight="850"
+                fontSize={{ base: "32px", md: "48px" }}
+                letterSpacing="-0.045em"
+                lineHeight={isAr ? 1.18 : 1}
+                color={textMain}
+                maxW="520px"
+              >
+                {t("partners_title")}
+              </Heading>
+              <Text fontSize={{ base: "15px", md: "17px" }} color={textSub} lineHeight={isAr ? 1.75 : 1.6} maxW="560px">
+                {t("partners_sub")}
+              </Text>
+            </VStack>
+          </motion.div>
+
+          <SimpleGrid columns={{ base: 1, sm: 3 }} spacing={3.5}>
+            {partners.map((partner, i) => (
+              <motion.div
+                key={partner.name}
+                initial={{ opacity: 0, y: 24, scale: 0.97 }}
+                whileInView={{ opacity: 1, y: 0, scale: 1 }}
+                viewport={{ once: true, amount: 0.2 }}
+                transition={{ delay: i * 0.06, duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+                whileHover={{ y: -4 }}
+              >
+                <Box
+                  minH={{ base: "190px", sm: "230px" }}
+                  h="100%"
+                  bg={cardBg}
+                  border="1px solid"
+                  borderColor={border}
+                  borderRadius="24px"
+                  p={{ base: 5, md: 5 }}
+                  boxShadow={dark ? "0 22px 54px rgba(0,0,0,0.30)" : "0 22px 54px rgba(0,0,0,0.07)"}
+                >
+                  <VStack h="100%" align="start" justify="space-between" spacing={5}>
+                    <Flex
+                      w="100%"
+                      h="76px"
+                      align="center"
+                      justify="center"
+                    >
+                      <Box position="relative" w={`${partner.logoW}px`} h={`${partner.logoH}px`}>
+                        <NextImage
+                          src={partner.logo}
+                          alt={`${partner.name} logo`}
+                          fill
+                          sizes="190px"
+                          style={{ objectFit: "contain" }}
+                        />
+                      </Box>
+                    </Flex>
+
+                    <VStack align="start" spacing={2}>
+                      <Heading fontFamily="'DM Sans', sans-serif" fontSize="21px" fontWeight="850" color={textMain} letterSpacing="-0.025em">
+                        {partner.name}
+                      </Heading>
+                      <Text fontSize="12px" fontWeight="850" color={textMain} lineHeight={1.25}>
+                        {partner.role}
+                      </Text>
+                      <Text fontSize="12.5px" color={textSub} lineHeight={isAr ? 1.7 : 1.5}>
+                        {partner.tagline}
+                      </Text>
+                    </VStack>
+                  </VStack>
+                </Box>
+              </motion.div>
+            ))}
+          </SimpleGrid>
+        </SimpleGrid>
+      </Container>
     </Box>
   );
 }
@@ -2239,7 +2390,7 @@ function SectionBusiness() {
   const textSub   = dark ? "rgba(255,255,255,0.50)" : "rgba(0,0,0,0.50)";
   const hairline  = dark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)";
   const surface   = dark ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.025)";
-  const ACCENT    = "#226dff";
+  const ACCENT    = "#63a1db";
 
   const pillars = [
     { label: t("biz_f1_title"), value: t("biz_f1_desc") },
@@ -2297,7 +2448,7 @@ function SectionBusiness() {
                   <HStack as="a" spacing={2} px={5} h="46px" borderRadius="12px"
                     bg={ACCENT} color="#fff" cursor="pointer"
                     transition="all 0.22s ease"
-                    _hover={{ transform: "translateY(-1px)", boxShadow: "0 10px 24px rgba(34,109,255,0.40)" }}
+                    _hover={{ transform: "translateY(-1px)", boxShadow: "0 10px 24px rgba(99,161,219,0.40)" }}
                   >
                     <Text fontWeight="800" fontSize="14px">{t("biz_cta_primary")}</Text>
                     <Icon as={FiArrowRight} boxSize="15px" />
@@ -2392,12 +2543,6 @@ function SectionPrepaidCards() {
           {/* LEFT — copy */}
           <ScrollFade>
             <VStack spacing={6} align={{ base: "center", md: "start" }} textAlign={{ base: "center", md: "left" }}>
-              <Text
-                fontSize="11px" fontWeight="800" letterSpacing="0.14em"
-                textTransform="uppercase" color={textSub}
-              >
-                {t("cards_eyebrow")}
-              </Text>
 
               <Heading fontFamily="'DM Sans', sans-serif" fontWeight="700"
                 fontSize={{ base: "40px", md: "58px", lg: "66px" }}
@@ -2422,22 +2567,6 @@ function SectionPrepaidCards() {
                   </HStack>
                 ))}
               </Flex>
-
-              {/* CTA — monochrome, not blue */}
-              <HStack spacing={3} pt={2}>
-                <NextLink href="/dashboard/cards" passHref legacyBehavior>
-                  <HStack as="a" spacing={2} px={5} h="44px" borderRadius="full"
-                    bg={dark ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.06)"}
-                    border="1px solid" borderColor={hairline}
-                    color={textMain} cursor="pointer"
-                    transition="all 0.22s ease"
-                    _hover={{ bg: dark ? "rgba(255,255,255,0.14)" : "rgba(0,0,0,0.10)" }}
-                  >
-                    <Text fontWeight="700" fontSize="14px">{t("cards_cta")}</Text>
-                    <Icon as={FiArrowRight} boxSize="14px" />
-                  </HStack>
-                </NextLink>
-              </HStack>
             </VStack>
           </ScrollFade>
 
@@ -2503,7 +2632,7 @@ function SectionSocialProof() {
           position: "absolute", top: "50%", left: "50%",
           width: 700, height: 700, borderRadius: "50%",
           transform: "translate(-50%,-50%)",
-          background: "radial-gradient(circle, rgba(34,109,255,0.07) 0%, transparent 70%)",
+          background: "radial-gradient(circle, rgba(99,161,219,0.07) 0%, transparent 70%)",
           pointerEvents: "none",
         }}
       />
@@ -2533,7 +2662,7 @@ function SectionSocialProof() {
                     ? "0 16px 48px rgba(0,0,0,0.45), 0 0 0 1px rgba(255,255,255,0.06)"
                     : "0 16px 48px rgba(0,0,0,0.14), 0 0 0 1px rgba(0,0,0,0.04)"}
                   transition="all 0.3s ease"
-                  _hover={{ borderColor: "#226dff", boxShadow: "0 20px 60px rgba(34,109,255,0.25)" }}
+                  _hover={{ borderColor: "#63a1db", boxShadow: "0 20px 60px rgba(99,161,219,0.25)" }}
                   position="relative"
                   bg={dark ? "#111" : "#e8e8e8"}
                 >
@@ -2611,7 +2740,7 @@ function StageOverlay({ stages }: { stages: Stage[] }) {
 
    Easing follows Apple's house curve: cubic-bezier(0.22, 1, 0.36, 1)
    for opacity/position transitions and a slow linear scrub for scroll-
-   driven motion. No gradients on text. Brand accent (#226dff) is used
+   driven motion. No gradients on text. Brand accent (#63a1db) is used
    only as a deliberate pop — one dot, one word, one halo.
    ═════════════════════════════════════════════════════════════════ */
 
@@ -2696,24 +2825,11 @@ function useHeroSnap(ref: React.RefObject<HTMLDivElement>, stages: number) {
     if (!el) return;
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
 
-    // DISABLED ON TOUCH DEVICES: a JS scroll handler that calls
-    // window.scrollTo({behavior:'smooth'}) fights the OS's inertial scroll,
-    // which made the journey both laggy AND non-snapping on phones (the guards
-    // below almost always bailed under touch momentum). On touch we let the
-    // native scroll-driven animation run smoothly with no main-thread snapping.
-    const isTouch = window.matchMedia("(hover: none) and (pointer: coarse)").matches
-      || ("ontouchstart" in window);
-    if (isTouch) return;
-
     let settleTimer: ReturnType<typeof setTimeout> | null = null;
     let snapEndTimer: ReturnType<typeof setTimeout> | null = null;
     let snapping = false;
-    let touching = false;
     let lastY = window.scrollY;
     let lastTime = performance.now();
-
-    const onTouchStart = () => { touching = true; };
-    const onTouchEnd = () => { touching = false; };
 
     const onScroll = () => {
       if (snapping) return;
@@ -2726,7 +2842,6 @@ function useHeroSnap(ref: React.RefObject<HTMLDivElement>, stages: number) {
 
       if (settleTimer) clearTimeout(settleTimer);
       settleTimer = setTimeout(() => {
-        if (touching) return;
         const rect = el.getBoundingClientRect();
         const total = el.offsetHeight - window.innerHeight;
         if (total <= 0) return;
@@ -2736,24 +2851,21 @@ function useHeroSnap(ref: React.RefObject<HTMLDivElement>, stages: number) {
         const idx = Math.round(scrolled / seg);
         const targetScrolled = idx * seg;
         const delta = targetScrolled - scrolled;
-        if (Math.abs(delta) < 6 || Math.abs(delta) > seg * 0.4) return;
-        // Don't snap if we're still coasting fast (inertia)
-        if (velocity > 0.8) return;
+        if (Math.abs(delta) < 4) return;
+        if (Math.abs(delta) > seg * 0.52) return;
+        // Let high-velocity flicks settle before choosing a chapter.
+        if (velocity > 1.4) return;
         snapping = true;
         window.scrollTo({ top: window.scrollY + delta, behavior: "smooth" });
-        const estDuration = Math.min(500, Math.max(150, Math.abs(delta) * 1.5));
+        const estDuration = Math.min(620, Math.max(180, Math.abs(delta) * 1.25));
         if (snapEndTimer) clearTimeout(snapEndTimer);
         snapEndTimer = setTimeout(() => { snapping = false; }, estDuration);
-      }, 180);
+      }, 110);
     };
 
     window.addEventListener("scroll", onScroll, { passive: true });
-    window.addEventListener("touchstart", onTouchStart, { passive: true });
-    window.addEventListener("touchend", onTouchEnd, { passive: true });
     return () => {
       window.removeEventListener("scroll", onScroll);
-      window.removeEventListener("touchstart", onTouchStart);
-      window.removeEventListener("touchend", onTouchEnd);
       if (settleTimer) clearTimeout(settleTimer);
       if (snapEndTimer) clearTimeout(snapEndTimer);
     };
@@ -2778,9 +2890,9 @@ function PhoneJourney() {
   // below glide instead of snapping to each discrete scroll event — this is the
   // fix for the jittery journey. Tuned for a responsive-but-buttery feel.
   const scrollYProgress = useSpring(rawProgress, {
-    stiffness: 120,
-    damping: 28,
-    mass: 0.35,
+    stiffness: 260,
+    damping: 38,
+    mass: 0.24,
     restDelta: 0.0005,
   });
 
@@ -2788,40 +2900,47 @@ function PhoneJourney() {
   const textMuted = dark ? "rgba(255,255,255,0.55)" : "rgba(0,0,0,0.55)";
   const hairline  = dark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)";
   const tileBg    = dark ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)";
-  const ACCENT = "#226dff";
+  const ACCENT = "#63a1db";
 
   /* Stage layout (out of 1 progress).
-     7 stages × ~86vh each fits in 600vh of scroll runway. */
-  // A 0.00 – 0.14  lock → unlock + tilt to upright
-  // B 0.14 – 0.28  dashboard
-  // C 0.28 – 0.43  chat / socialised
-  // D 0.43 – 0.57  buy
-  // E 0.57 – 0.71  search
-  // F 0.71 – 0.86  pay-with
-  // G 0.86 – 1.00  card (Visa)
+     7 exact chapters, each separated by a narrow fade band:
+     0 login, 1 dashboard, 2 messages, 3 buy, 4 market detail,
+     5 pay-with sheet, 6 cards. */
 
   const tiltX          = useTransform(scrollYProgress, [0, 0.12], [22, 0]);
   const unlockProgress = useTransform(scrollYProgress, [0.04, 0.13], [0, 1]);
 
-  // screen cross-fades — dashboard is always the base layer
-  const opChat   = useTransform(scrollYProgress, [0.24, 0.30, 0.41, 0.46], [0, 1, 1, 0]);
-  const opBuy    = useTransform(scrollYProgress, [0.39, 0.45, 0.55, 0.60], [0, 1, 1, 0]);
-  const opSearch = useTransform(scrollYProgress, [0.53, 0.59, 0.69, 0.74], [0, 1, 1, 0]);
-  const opPay    = useTransform(scrollYProgress, [0.67, 0.73, 0.84, 0.88], [0, 1, 1, 0]);
-  const opCard   = useTransform(scrollYProgress, [0.82, 0.88, 1.00, 1.00], [0, 1, 1, 1]);
+  // screen cross-fades — dashboard is always the base layer, other chapters
+  // have compact windows so copy and phone never visually stack together.
+  const opChat   = useTransform(scrollYProgress, [0.265, 0.300, 0.365, 0.400], [0, 1, 1, 0]);
+  const opBuy    = useTransform(scrollYProgress, [0.432, 0.467, 0.532, 0.568], [0, 1, 1, 0]);
+  const opSearch = useTransform(scrollYProgress, [0.598, 0.633, 0.698, 0.735], [0, 1, 1, 0]);
+  const opPay    = useTransform(scrollYProgress, [0.765, 0.800, 0.865, 0.902], [0, 1, 1, 0]);
+  const opCard   = useTransform(scrollYProgress, [0.925, 0.960, 1.000], [0, 1, 1]);
+
+  const yChat   = useTransform(scrollYProgress, [0.265, 0.333, 0.400], [34, 0, -34]);
+  const yBuy    = useTransform(scrollYProgress, [0.432, 0.500, 0.568], [34, 0, -34]);
+  const ySearch = useTransform(scrollYProgress, [0.598, 0.667, 0.735], [34, 0, -34]);
+  const yPay    = useTransform(scrollYProgress, [0.765, 0.833, 0.902], [34, 0, -34]);
+  const yCard   = useTransform(scrollYProgress, [0.925, 1.000], [28, 0]);
+  const scaleChat   = useTransform(scrollYProgress, [0.265, 0.333, 0.400], [1.035, 1, 1.025]);
+  const scaleBuy    = useTransform(scrollYProgress, [0.432, 0.500, 0.568], [1.035, 1, 1.025]);
+  const scaleSearch = useTransform(scrollYProgress, [0.598, 0.667, 0.735], [1.035, 1, 1.025]);
+  const scalePay    = useTransform(scrollYProgress, [0.765, 0.833, 0.902], [1.035, 1, 1.025]);
+  const scaleCard   = useTransform(scrollYProgress, [0.925, 1.000], [1.035, 1]);
   // Visa card slides in from the left (card lives left of the phone on desktop)
   const cardX    = useTransform(scrollYProgress, [0.82, 0.96], [-80,  0]);
   const cardY    = useTransform(scrollYProgress, [0.82, 0.96], [40,   0]);
   const cardRot  = useTransform(scrollYProgress, [0.82, 0.96], [-10, -3]);
 
   // copy cross-fades — slightly lead the matching screen
-  const copyA = useTransform(scrollYProgress, [0,    0.09, 0.15], [1, 1, 0]);
-  const copyB = useTransform(scrollYProgress, [0.11, 0.18, 0.25, 0.31], [0, 1, 1, 0]);
-  const copyC = useTransform(scrollYProgress, [0.27, 0.33, 0.41, 0.47], [0, 1, 1, 0]);
-  const copyD = useTransform(scrollYProgress, [0.41, 0.47, 0.55, 0.61], [0, 1, 1, 0]);
-  const copyE = useTransform(scrollYProgress, [0.55, 0.61, 0.69, 0.75], [0, 1, 1, 0]);
-  const copyF = useTransform(scrollYProgress, [0.69, 0.75, 0.84, 0.89], [0, 1, 1, 0]);
-  const copyG = useTransform(scrollYProgress, [0.84, 0.90, 1.00], [0, 1, 1]);
+  const copyA = useTransform(scrollYProgress, [0.000, 0.070, 0.125, 0.165], [1, 1, 1, 0]);
+  const copyB = useTransform(scrollYProgress, [0.100, 0.135, 0.198, 0.235], [0, 1, 1, 0]);
+  const copyC = useTransform(scrollYProgress, [0.265, 0.300, 0.365, 0.400], [0, 1, 1, 0]);
+  const copyD = useTransform(scrollYProgress, [0.432, 0.467, 0.532, 0.568], [0, 1, 1, 0]);
+  const copyE = useTransform(scrollYProgress, [0.598, 0.633, 0.698, 0.735], [0, 1, 1, 0]);
+  const copyF = useTransform(scrollYProgress, [0.765, 0.800, 0.865, 0.902], [0, 1, 1, 0]);
+  const copyG = useTransform(scrollYProgress, [0.925, 0.960, 1.000], [0, 1, 1]);
 
   // shader background — present at start, fades gently as journey progresses
   const shaderOp = useTransform(scrollYProgress, [0, 0.25, 0.80, 1], [0.85, 0.60, 0.25, 0.08]);
@@ -2835,7 +2954,7 @@ function PhoneJourney() {
   useHeroSnap(ref, 7);
 
   return (
-    <Box ref={ref} position="relative" h={{ base: "600vh", md: "600vh" }}>
+    <Box ref={ref} position="relative" h={{ base: "700vh", md: "700vh" }}>
       <Box position="sticky" top={0} h="100vh" w="100%" overflow="hidden"
         style={{ contain: "layout" } as React.CSSProperties}
       >
@@ -2870,7 +2989,7 @@ function PhoneJourney() {
                 title={
                   <>
                     {t("hero_line1")}{" "}
-                    <Box as="span">{t("hero_line2")}</Box>
+                    <Box as="span" color={ACCENT}>{t("hero_line2")}</Box>
                   </>
                 }
                 desc={t("hero_sub")}
@@ -2881,7 +3000,7 @@ function PhoneJourney() {
               />
               <StageCopy op={copyC} accent={ACCENT} textMain={textMain} textMuted={textMuted} hairline={hairline} tileBg={tileBg} isAr={isAr}
                 eyebrow={t("sec_social_title_1")}
-                title={<>{t("sec_social_title_1")}<br /><Box as="span">{t("sec_social_title_2")}</Box></>}
+                title={<>{t("sec_social_title_1")}<br /><Box as="span" color={ACCENT}>{t("sec_social_title_2")}</Box></>}
                 desc={t("sec_social_desc")}
               />
               <StageCopy op={copyD} accent={ACCENT} textMain={textMain} textMuted={textMuted} hairline={hairline} tileBg={tileBg} isAr={isAr}
@@ -3020,19 +3139,49 @@ function PhoneJourney() {
                       : "inset 0 0 0 1px rgba(0,0,0,0.04)"}
                   >
                     {/* Base: dashboard, always rendered */}
-                    <Box position="absolute" inset={0}><ScreenDashboard /></Box>
-                    {/* Feature screens cross-fade above the dashboard */}
-                    <motion.div style={{ position: "absolute", inset: 0, opacity: opChat, willChange: "opacity" }}>
-                      <ScreenChat />
+                    <Box position="absolute" inset={0}>
+                      <ScreenshotScreen
+                        images={TAZDAN_SCREENS.dashboard}
+                        priority
+                        intervalMs={3000}
+                        alt="tazdan wallet dashboard screens"
+                      />
+                    </Box>
+                    {/* Feature screenshots cross-fade above the dashboard */}
+                    <motion.div style={{ position: "absolute", inset: 0, opacity: opChat, y: yChat, scale: scaleChat, willChange: "opacity, transform" }}>
+                      <ScreenshotScreen
+                        images={TAZDAN_SCREENS.messages}
+                        intervalMs={2800}
+                        alt="tazdan payment messages screens"
+                      />
                     </motion.div>
-                    <motion.div style={{ position: "absolute", inset: 0, opacity: opBuy, willChange: "opacity" }}>
-                      <ScreenBuy />
+                    <motion.div style={{ position: "absolute", inset: 0, opacity: opBuy, y: yBuy, scale: scaleBuy, willChange: "opacity, transform" }}>
+                      <ScreenshotScreen
+                        images={TAZDAN_SCREENS.buy}
+                        intervalMs={2600}
+                        alt="tazdan buy flow screens"
+                      />
                     </motion.div>
-                    <motion.div style={{ position: "absolute", inset: 0, opacity: opSearch, willChange: "opacity" }}>
-                      <ScreenTokenSearch />
+                    <motion.div style={{ position: "absolute", inset: 0, opacity: opSearch, y: ySearch, scale: scaleSearch, willChange: "opacity, transform" }}>
+                      <ScreenshotScreen
+                        images={TAZDAN_SCREENS.markets}
+                        intervalMs={2900}
+                        alt="tazdan market detail screens"
+                      />
                     </motion.div>
-                    <motion.div style={{ position: "absolute", inset: 0, opacity: opPay, willChange: "opacity" }}>
-                      <ScreenPayWith />
+                    <motion.div style={{ position: "absolute", inset: 0, opacity: opPay, y: yPay, scale: scalePay, willChange: "opacity, transform" }}>
+                      <ScreenshotScreen
+                        images={[tazdanShot(14), tazdanShot(15), tazdanShot(16), tazdanShot(18)]}
+                        intervalMs={2500}
+                        alt="tazdan pay with balance screens"
+                      />
+                    </motion.div>
+                    <motion.div style={{ position: "absolute", inset: 0, opacity: opCard, y: yCard, scale: scaleCard, willChange: "opacity, transform" }}>
+                      <ScreenshotScreen
+                        images={TAZDAN_SCREENS.cards}
+                        intervalMs={2400}
+                        alt="tazdan card screens"
+                      />
                     </motion.div>
                     {/* Lock screen sits on top, slides off with unlockProgress */}
                     <LockScreen unlockProgress={unlockProgress} />
@@ -3078,13 +3227,229 @@ function useDeviceOS(): "ios" | "android" | "other" {
   return os;
 }
 
+function FinalCtaSection({
+  dark,
+  deviceOS,
+}: {
+  dark: boolean;
+  deviceOS: "ios" | "android" | "other";
+}) {
+  const { t } = useTranslate();
+  const isAr = useIsAr();
+  const textMain = dark ? "#f5f5f7" : "#0a0a0a";
+  const textSub = dark ? "rgba(245,245,247,0.62)" : "rgba(0,0,0,0.58)";
+  const panelBg = dark ? "#20252E" : "#FFFFFF";
+  const tileBg = dark ? "#2A303B" : "#F5F7FA";
+  const hairline = dark ? "rgba(255,255,255,0.11)" : "rgba(0,0,0,0.09)";
+  const accent = "#63a1db";
+
+  const capabilities = [
+    { icon: FiBarChart2, label: t("cta_cap_spot") },
+    { icon: FiRepeat, label: t("cta_cap_p2p") },
+    { icon: FiSend, label: t("cta_cap_handles") },
+    { icon: FiLink, label: t("cta_cap_claimlinks") },
+    { icon: FiCreditCard, label: t("cta_cap_cards") },
+    { icon: FiShield, label: t("cta_cap_wallets") },
+  ];
+
+  const steps = [
+    {
+      step: "01",
+      title: t("cta_step1_title"),
+      desc: t("cta_step1_desc"),
+    },
+    {
+      step: "02",
+      title: t("cta_step2_title"),
+      desc: t("cta_step2_desc"),
+    },
+    {
+      step: "03",
+      title: t("cta_step3_title"),
+      desc: t("cta_step3_desc"),
+    },
+  ];
+
+  const stores =
+    deviceOS === "ios"
+      ? [{ label: t("cta_on_ios"), icon: FaApple, href: IOS_URL }]
+      : deviceOS === "android"
+        ? [{ label: t("cta_on_android"), icon: FaGooglePlay, href: ANDROID_URL }]
+        : [
+            { label: t("cta_on_ios"), icon: FaApple, href: IOS_URL },
+            { label: t("cta_on_android"), icon: FaGooglePlay, href: ANDROID_URL },
+          ];
+
+  return (
+    <Box px={{ base: 4, md: 10 }} py={{ base: 14, md: 20 }} position="relative" zIndex={1}>
+      <Container maxW="1180px" px={0}>
+        <motion.div
+          initial={{ opacity: 0, y: 26 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, amount: 0.25 }}
+          transition={{ duration: 0.65, ease: [0.22, 1, 0.36, 1] }}
+        >
+          <Box
+            position="relative"
+            overflow="hidden"
+            borderRadius={{ base: "28px", md: "36px" }}
+            border="1px solid"
+            borderColor={hairline}
+            bg={panelBg}
+            boxShadow={dark ? "0 34px 90px rgba(0,0,0,0.36)" : "0 34px 90px rgba(0,0,0,0.10)"}
+            p={{ base: 6, md: 9 }}
+          >
+            <SimpleGrid columns={{ base: 1, lg: 2 }} spacing={{ base: 9, lg: 12 }} position="relative" zIndex={1}>
+              <VStack align={{ base: "center", lg: "start" }} textAlign={{ base: "center", lg: "left" }} spacing={6}>
+
+                <VStack align={{ base: "center", lg: "start" }} spacing={3}>
+                  <Heading
+                    fontFamily="'DM Sans', sans-serif"
+                    fontWeight="850"
+                    fontSize={{ base: "34px", md: "54px", lg: "64px" }}
+                    letterSpacing="-0.05em"
+                    lineHeight={isAr ? 1.18 : 0.96}
+                    color={textMain}
+                    maxW="620px"
+                  >
+                    {t("cta_title")}
+                  </Heading>
+                  <Text fontSize={{ base: "16px", md: "19px" }} color={textSub} lineHeight={isAr ? 1.75 : 1.55} maxW="560px">
+                    {t("cta_desc")}
+                  </Text>
+                </VStack>
+
+                <SimpleGrid columns={{ base: 2, sm: 3 }} spacing={2.5} w="100%" maxW="560px">
+                  {capabilities.map((item, i) => (
+                    <motion.div
+                      key={item.label}
+                      initial={{ opacity: 0, y: 10 }}
+                      whileInView={{ opacity: 1, y: 0 }}
+                      viewport={{ once: true }}
+                      transition={{ delay: i * 0.035, duration: 0.38, ease: [0.22, 1, 0.36, 1] }}
+                    >
+                      <HStack
+                        h="44px"
+                        borderRadius="14px"
+                        px={3}
+                        bg={tileBg}
+                        border="1px solid"
+                        borderColor={hairline}
+                        spacing={2.5}
+                      >
+                        <Icon as={item.icon} boxSize="15px" color={textMain} />
+                        <Text fontSize="13px" fontWeight="800" color={textMain} noOfLines={1}>
+                          {item.label}
+                        </Text>
+                      </HStack>
+                    </motion.div>
+                  ))}
+                </SimpleGrid>
+
+                <Flex gap={3} flexWrap="wrap" justify={{ base: "center", lg: "start" }}>
+                  <NextLink href="/register" passHref legacyBehavior>
+                    <HStack
+                      as="a"
+                      h="48px"
+                      px={5}
+                      borderRadius="full"
+                      bg={accent}
+                      color="#fff"
+                      spacing={2}
+                      fontWeight="850"
+                      _hover={{ transform: "translateY(-1px)", boxShadow: "0 14px 30px rgba(99,161,219,0.36)" }}
+                      transition="all 0.2s ease"
+                    >
+                      <Text fontSize="14px">{t("cta_primary")}</Text>
+                      <Icon as={FiArrowRight} boxSize="15px" />
+                    </HStack>
+                  </NextLink>
+
+                  {stores.map((store) => (
+                    <HStack
+                      key={store.label}
+                      as="a"
+                      href={store.href}
+                      target="_blank"
+                      rel="noopener"
+                      h="48px"
+                      px={4}
+                      borderRadius="full"
+                      bg={dark ? "rgba(255,255,255,0.09)" : "#0a0a0a"}
+                      color={dark ? "#fff" : "#fff"}
+                      border="1px solid"
+                      borderColor={dark ? "rgba(255,255,255,0.15)" : "rgba(0,0,0,0.18)"}
+                      spacing={2.5}
+                      cursor="pointer"
+                      _hover={{ transform: "translateY(-1px)", opacity: 0.88 }}
+                      transition="all 0.2s ease"
+                    >
+                      <Icon as={store.icon} boxSize={store.icon === FaGooglePlay ? "14px" : "17px"} />
+                      <Text fontSize="13px" fontWeight="850">{store.label}</Text>
+                    </HStack>
+                  ))}
+                </Flex>
+              </VStack>
+
+              <VStack align="stretch" spacing={3.5}>
+                {steps.map((item, i) => (
+                  <motion.div
+                    key={item.step}
+                    initial={{ opacity: 0, x: 18 }}
+                    whileInView={{ opacity: 1, x: 0 }}
+                    viewport={{ once: true, amount: 0.35 }}
+                    transition={{ delay: 0.08 + i * 0.08, duration: 0.48, ease: [0.22, 1, 0.36, 1] }}
+                  >
+                    <HStack
+                      align="start"
+                      spacing={4}
+                      p={{ base: 4, md: 5 }}
+                      borderRadius="22px"
+                      bg={tileBg}
+                      border="1px solid"
+                      borderColor={hairline}
+                    >
+                      <Flex
+                        w="42px"
+                        h="42px"
+                        borderRadius="14px"
+                        align="center"
+                        justify="center"
+                        bg={i === 0 ? accent : (dark ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.055)")}
+                        color={i === 0 ? "#fff" : textMain}
+                        flexShrink={0}
+                      >
+                        <Text fontSize="12px" fontWeight="900">{item.step}</Text>
+                      </Flex>
+                      <VStack align="start" spacing={1.5} textAlign="left">
+                        <Text fontSize={{ base: "16px", md: "18px" }} fontWeight="850" color={textMain}>
+                          {item.title}
+                        </Text>
+                        <Text fontSize={{ base: "13.5px", md: "14.5px" }} color={textSub} lineHeight={isAr ? 1.75 : 1.55}>
+                          {item.desc}
+                        </Text>
+                      </VStack>
+                    </HStack>
+                  </motion.div>
+                ))}
+              </VStack>
+            </SimpleGrid>
+          </Box>
+        </motion.div>
+      </Container>
+    </Box>
+  );
+}
+
 /* ═════════════════════════════════════════════════════════════════
    LANDING PAGE
    ═════════════════════════════════════════════════════════════════ */
 export default function LandingPage() {
   const { colorMode } = useColorMode();
   const dark = colorMode === "dark";
-  const pageBg = dark ? "#000000" : "#ffffff";
+  // Dark mode is a soft charcoal (matches the mobile app), not pitch black —
+  // easier on the eyes and lets sections/cards read with depth.
+  const pageBg = dark ? "#16181C" : "#ffffff";
   const { t } = useTranslate();
   const tolgee = useTolgee(["language"]);
   const isAr = tolgee.getLanguage() === "ar";
@@ -3096,7 +3461,7 @@ export default function LandingPage() {
   const textMain = dark ? "#ffffff" : "#0a0a0a";
   const textMuted = dark ? "rgba(255,255,255,0.55)" : "rgba(0,0,0,0.55)";
   const hairline = dark ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.10)";
-  const ACCENT = "#226dff";
+  const ACCENT = "#63a1db";
 
   useEffect(() => { fetchUser(); }, []);
 
@@ -3132,112 +3497,27 @@ export default function LandingPage() {
         <PhoneJourney />
       </Box>
 
-      {/* content-visibility: auto skips layout+paint for off-screen sections */}
-      <Box style={{ contentVisibility: "auto", containIntrinsicSize: "0 700px" } as React.CSSProperties}>
-        <SectionBento />
-      </Box>
-      <Box style={{ contentVisibility: "auto", containIntrinsicSize: "0 700px" } as React.CSSProperties}>
-        <SectionOnRamp />
-      </Box>
-      <Box style={{ contentVisibility: "auto", containIntrinsicSize: "0 800px" } as React.CSSProperties}>
-        <SectionPrepaidCards />
-      </Box>
-      <Box style={{ contentVisibility: "auto", containIntrinsicSize: "0 760px" } as React.CSSProperties}>
-        <SectionClaimLink />
-      </Box>
-      <Box style={{ contentVisibility: "auto", containIntrinsicSize: "0 700px" } as React.CSSProperties}>
-        <SectionRecurringBuy />
-      </Box>
-      <Box style={{ contentVisibility: "auto", containIntrinsicSize: "0 600px" } as React.CSSProperties}>
-        <SectionSocialProof />
-      </Box>
-      <Box style={{ contentVisibility: "auto", containIntrinsicSize: "0 600px" } as React.CSSProperties}>
-        <SectionBusiness />
-      </Box>
+      {/* Alternating background BANDS give each section its own identity — a
+          faint surface tint on every other one, separated by hairline rules,
+          so the page reads as distinct "chapters" instead of one flat scroll.
+          (contentVisibility: auto still skips off-screen layout+paint.) */}
+      <SectionBand dark={dark} tone="tint"  size="0 700px"><SectionBento /></SectionBand>
+      <SectionBand dark={dark} tone="plain" size="0 700px"><SectionOnRamp /></SectionBand>
+      <SectionBand dark={dark} tone="tint"  size="0 800px"><SectionPrepaidCards /></SectionBand>
+      <SectionBand dark={dark} tone="plain" size="0 760px"><SectionClaimLink /></SectionBand>
+      <SectionBand dark={dark} tone="tint"  size="0 700px"><SectionRecurringBuy /></SectionBand>
+      <SectionBand dark={dark} tone="plain" size="0 600px"><SectionSocialProof /></SectionBand>
+      <SectionBand dark={dark} tone="tint"  size="0 600px"><SectionBusiness /></SectionBand>
 
       {/* ── Pattern-break closer — sits right above the footer ── */}
       <Box style={{ contentVisibility: "auto", containIntrinsicSize: "0 800px" } as React.CSSProperties}>
-        <SectionPatternBreak onWaitlist={onWaitlistOpen} />
+        <SectionPatternBreak />
       </Box>
+      <SectionPartners />
 
       {/* ══ FOOTER ══ */}
       <Box position="relative" overflow="hidden">
-        {/* ── Thin waitlist end-bar ─────────────────────────────── */}
-        <Box px={{ base: 4, md: 10 }} py={{ base: 10, md: 14 }} position="relative" zIndex={1}>
-          <Box maxW="1100px" mx="auto"
-            borderRadius="20px"
-            border="1px solid" borderColor={dark ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.10)"}
-            bg={dark ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)"}
-            px={{ base: 6, md: 12 }} py={{ base: 6, md: 7 }}
-          >
-            <Flex align="center" justify="space-between" gap={6} flexWrap="wrap">
-              <VStack align={{ base: "center", md: "start" }} spacing={1} flex={1} minW="200px" textAlign={{ base: "center", md: "left" }}>
-                <Text fontWeight="800" fontSize={{ base: "18px", md: "22px" }} color={dark ? "#fff" : "#0a0a0a"} letterSpacing="-0.02em">
-                  {t("cta_title")}
-                </Text>
-                <Text fontSize={{ base: "13px", md: "14px" }} color={dark ? "rgba(255,255,255,0.5)" : "rgba(0,0,0,0.5)"}>
-                  {t("cta_sub")}
-                </Text>
-              </VStack>
-              <HStack spacing={2.5} flexShrink={0} justify="center" flexWrap="wrap">
-                {/* ── Download App — single button on mobile/iOS/Android,
-                      both store chips on desktop ── */}
-                {deviceOS === "ios" && (
-                  <HStack as="a" href={IOS_URL} target="_blank" rel="noopener"
-                    bg={dark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)"}
-                    border="1px solid" borderColor={dark ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.12)"}
-                    borderRadius="12px" px={4} h="40px" spacing={2} cursor="pointer"
-                    transition="opacity 0.15s" _hover={{ opacity: 0.75 } as any}
-                  >
-                    <Icon as={FaApple} boxSize="16px" color={dark ? "#fff" : "#0a0a0a"} />
-                    <Text fontSize="13px" fontWeight="700" color={dark ? "#fff" : "#0a0a0a"}>
-                      {t("cta_on_ios")}
-                    </Text>
-                  </HStack>
-                )}
-                {deviceOS === "android" && (
-                  <HStack as="a" href={ANDROID_URL} target="_blank" rel="noopener"
-                    bg={dark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)"}
-                    border="1px solid" borderColor={dark ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.12)"}
-                    borderRadius="12px" px={4} h="40px" spacing={2} cursor="pointer"
-                    transition="opacity 0.15s" _hover={{ opacity: 0.75 } as any}
-                  >
-                    <Icon as={FaGooglePlay} boxSize="14px" color={dark ? "#fff" : "#0a0a0a"} />
-                    <Text fontSize="13px" fontWeight="700" color={dark ? "#fff" : "#0a0a0a"}>
-                      {t("cta_on_android")}
-                    </Text>
-                  </HStack>
-                )}
-                {deviceOS === "other" && (
-                  <>
-                    <HStack as="a" href={IOS_URL} target="_blank" rel="noopener"
-                      bg={dark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)"}
-                      border="1px solid" borderColor={dark ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.12)"}
-                      borderRadius="12px" px={4} h="40px" spacing={2} cursor="pointer"
-                      transition="opacity 0.15s" _hover={{ opacity: 0.75 } as any}
-                    >
-                      <Icon as={FaApple} boxSize="16px" color={dark ? "#fff" : "#0a0a0a"} />
-                      <Text fontSize="13px" fontWeight="700" color={dark ? "#fff" : "#0a0a0a"}>
-                        {t("cta_on_ios")}
-                      </Text>
-                    </HStack>
-                    <HStack as="a" href={ANDROID_URL} target="_blank" rel="noopener"
-                      bg={dark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)"}
-                      border="1px solid" borderColor={dark ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.12)"}
-                      borderRadius="12px" px={4} h="40px" spacing={2} cursor="pointer"
-                      transition="opacity 0.15s" _hover={{ opacity: 0.75 } as any}
-                    >
-                      <Icon as={FaGooglePlay} boxSize="14px" color={dark ? "#fff" : "#0a0a0a"} />
-                      <Text fontSize="13px" fontWeight="700" color={dark ? "#fff" : "#0a0a0a"}>
-                        {t("cta_on_android")}
-                      </Text>
-                    </HStack>
-                  </>
-                )}
-              </HStack>
-            </Flex>
-          </Box>
-        </Box>
+        <FinalCtaSection dark={dark} deviceOS={deviceOS} />
 
         {/* ── JSON-LD structured data ──────────────────────────────── */}
         <script

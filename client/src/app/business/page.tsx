@@ -2,7 +2,7 @@
 
 /* ═══════════════════════════════════════════════════════════════════
    /business — tazdan Business marketing page
-   Monochrome palette, #226dff as the only accent.
+   Monochrome palette, #63a1db as the only accent.
    All copy from Tolgee (biz_* namespace).
    ─────────────────────────────────────────────────────────────────── */
 
@@ -23,7 +23,7 @@ import PublicNav from "@/components/ui/PublicNav";
 import PublicFooter from "@/components/ui/PublicFooter";
 import { useIsAr } from "@/hooks/useIsAr";
 
-const ACCENT = "#226dff";
+const ACCENT = "#63a1db";
 const ease = [0.22, 1, 0.36, 1] as const;
 
 /** Use animate (not whileInView) for elements already above the fold */
@@ -325,13 +325,13 @@ function Capabilities() {
                   borderRadius="18px"
                   transition="border-color 0.2s ease, box-shadow 0.2s ease"
                   _hover={{
-                    borderColor: "rgba(34,109,255,0.40)",
-                    boxShadow: `0 12px 32px ${dark ? "rgba(34,109,255,0.12)" : "rgba(34,109,255,0.07)"}`,
+                    borderColor: "rgba(99,161,219,0.40)",
+                    boxShadow: `0 12px 32px ${dark ? "rgba(99,161,219,0.12)" : "rgba(99,161,219,0.07)"}`,
                   }}
                 >
                   <Flex w="40px" h="40px" borderRadius="10px" align="center" justify="center"
-                    bg={dark ? "rgba(34,109,255,0.12)" : "rgba(34,109,255,0.08)"}
-                    border="1px solid" borderColor={dark ? "rgba(34,109,255,0.28)" : "rgba(34,109,255,0.16)"}
+                    bg={dark ? "rgba(99,161,219,0.12)" : "rgba(99,161,219,0.08)"}
+                    border="1px solid" borderColor={dark ? "rgba(99,161,219,0.28)" : "rgba(99,161,219,0.16)"}
                     flexShrink={0}
                   >
                     <Icon as={c.icon} color={ACCENT} boxSize="17px" />
@@ -408,8 +408,8 @@ function UseCases() {
                 >
                   <HStack spacing={3} mb={4}>
                     <Flex w="34px" h="34px" borderRadius="9px" align="center" justify="center"
-                      bg={dark ? "rgba(34,109,255,0.12)" : "rgba(34,109,255,0.08)"}
-                      border="1px solid" borderColor={dark ? "rgba(34,109,255,0.28)" : "rgba(34,109,255,0.16)"}
+                      bg={dark ? "rgba(99,161,219,0.12)" : "rgba(99,161,219,0.08)"}
+                      border="1px solid" borderColor={dark ? "rgba(99,161,219,0.28)" : "rgba(99,161,219,0.16)"}
                       flexShrink={0}
                     >
                       <Icon as={c.icon} color={ACCENT} boxSize="14px" />

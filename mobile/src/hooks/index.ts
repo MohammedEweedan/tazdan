@@ -7,7 +7,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { QUERY_KEYS } from '@/constants';
 import {
   walletService, transactionService, activityService, p2pService, cardsService,
-  swapService, profileService, notificationService,
+  swapService, profileService, notificationService, budgetService,
 } from '@/services';
 
 export { useHaptics } from './useHaptics';
@@ -35,6 +35,21 @@ export const useWallets = () =>
     refetchInterval: 5_000,
     refetchIntervalInBackground: false,
     staleTime: 4_000,
+  });
+
+/* ── Budget Wallets ─── */
+export const useBudgets = () =>
+  useQuery({
+    queryKey: ['budgets'],
+    queryFn: budgetService.list,
+    staleTime: 10_000,
+  });
+
+export const useBudget = (id: string | undefined) =>
+  useQuery({
+    queryKey: ['budget', id ?? '_none'],
+    queryFn: () => budgetService.get(id!),
+    enabled: !!id,
   });
 
 export const useTransactions = (page = 1) =>

@@ -90,6 +90,8 @@ enum TransactionType {
   REFERRAL_BONUS
   ADMIN_CREDIT
   ADMIN_DEBIT
+  BUDGET_CONTRIBUTION
+  BUDGET_RELEASE
 }
 
 enum Currency {
@@ -180,6 +182,66 @@ model RecurringBuy {
 
   @@index([userId])
   @@index([status, nextRunAt])
+}
+
+/// Named savings goal ("Madrid 2026"): set aside money toward a target/date,
+/// optionally auto-contribute on a schedule, optionally lock until a date
+/// and/or behind a step-up (2FA/email) code. Funds are held as frozen on the
+/// user's spendable wallet so net-spendable = balance - frozen stays correct.
+model BudgetWallet {
+  id                 String              @id @default(uuid())
+  userId             String
+  name               String
+  emoji              String?
+  currency           Currency
+  balance            Decimal             @default(0) @db.Decimal(20, 8)
+  targetAmount       Decimal?            @db.Decimal(20, 8)
+  targetDate         DateTime?
+
+  lockType           BudgetLockType      @default(NONE)
+  unlockDate         DateTime?
+
+  autoEnabled        Boolean             @default(false)
+  autoAmount         Decimal?            @db.Decimal(20, 8)
+  autoFrequency      RecurringFrequency?
+  autoSourceCurrency Currency?
+  nextRunAt          DateTime?
+  lastRunAt          DateTime?
+  lastError          String?
+
+  status             BudgetWalletStatus  @default(ACTIVE)
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+
+  user               User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  contributions      BudgetContribution[]
+
+  @@index([userId])
+  @@index([status, autoEnabled, nextRunAt])
+}
+
+model BudgetContribution {
+  id        String       @id @default(uuid())
+  budgetId  String
+  amount    Decimal      @db.Decimal(20, 8)  // negative for withdrawals/releases
+  kind      String                            // MANUAL | AUTO | WITHDRAWAL
+  createdAt DateTime     @default(now())
+  budget    BudgetWallet @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+
+  @@index([budgetId])
+}
+
+enum BudgetLockType {
+  NONE
+  DATE
+  STEP_UP
+  DATE_AND_STEP_UP
+}
+
+enum BudgetWalletStatus {
+  ACTIVE
+  COMPLETED
+  CLOSED
 }
 
 enum CardTier {
@@ -323,6 +385,7 @@ model User {
   withdrawalAddressWhitelist   WithdrawalAddressWhitelist[]
   // Recurring (automated) buys
   recurringBuys                RecurringBuy[]
+  budgetWallets                BudgetWallet[]
   // 1:1 — only present when accountType = BUSINESS
   businessProfile              BusinessProfile?
 

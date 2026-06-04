@@ -33,6 +33,9 @@ export interface ApiMessage {
   deletedAt: string | null;
   tradeId: string | null;
   createdAt: string;
+  /** Transient idempotency key echoed by the server for the sender's own
+   *  message — used to dedup the optimistic placeholder. Absent on most rows. */
+  clientId?: string | null;
 }
 
 export interface ConversationPartner {

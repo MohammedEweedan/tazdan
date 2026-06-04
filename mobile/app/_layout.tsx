@@ -95,7 +95,7 @@ function AuthGate() {
     const inAuthGroup       = segments[0] === '(auth)';
     const inRoleSelect      = segments[0] === 'role-select';
     if (!isAuthenticated && !inAuthGroup) {
-      router.replace(hasOnboarded ? (lastUser ? '/(auth)/welcome-back' : '/(auth)/login') : '/(auth)/onboarding');
+      router.replace(lastUser ? '/(auth)/welcome-back' : hasOnboarded ? '/(auth)/login' : '/(auth)/onboarding');
     } else if (isAuthenticated && inAuthGroup) {
       // Just authenticated — admins get the role chooser, everyone else goes home.
       if (user?.role === 'ADMIN' && needsViewSelection) {
@@ -106,7 +106,7 @@ function AuthGate() {
     } else if (isAuthenticated && needsViewSelection && !inRoleSelect && user?.role === 'ADMIN') {
       router.replace('/role-select' as any);
     }
-  }, [isAuthenticated, isHydrating, segments, router, hasOnboarded, user?.role, needsViewSelection]);
+  }, [isAuthenticated, isHydrating, segments, router, hasOnboarded, lastUser, user?.role, needsViewSelection]);
 
   return null;
 }

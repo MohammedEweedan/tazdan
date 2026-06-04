@@ -11,23 +11,17 @@ import { Text, TextInput } from '@/components/ui/Text';
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { StatusBar } from 'expo-status-bar';
 
-import { useThemedPalette, useTheme } from '@/store/themeStore';
-import { useAuthStore } from '@/store/authStore';
+import { useThemedPalette } from '@/store/themeStore';
 import { useConversations } from '@/hooks';
 import { adminService } from '@/services';
 import { LoadingPulse } from '@/components/ui/LoadingPulse';
 import { formatRelativeTime } from '@/utils/format';
-import { TopGradient } from '@/components/ui/ScreenShell';
+import { AdminScreen } from '@/components/admin/AdminScreen';
 
 export default function AdminSupport() {
   const p = useThemedPalette();
-  const themeMode = useTheme((s) => s.mode);
   const router = useRouter();
-  const user = useAuthStore((s) => s.user);
-  const isAdmin = user?.role === 'ADMIN';
 
   const [search, setSearch] = useState('');
   const [tab, setTab] = useState<'CONVERSATIONS' | 'USERS'>('CONVERSATIONS');
@@ -36,7 +30,7 @@ export default function AdminSupport() {
   const usersQ = useQuery({
     queryKey: ['admin-user-search', search],
     queryFn: () => adminService.users({ search, limit: 30 }),
-    enabled: isAdmin && tab === 'USERS' && search.length >= 2,
+    enabled: tab === 'USERS' && search.length >= 2,
   });
 
   const conversations = convQ.data ?? [];
@@ -51,28 +45,8 @@ export default function AdminSupport() {
     });
   }, [conversations, search]);
 
-  if (!isAdmin) {
-    return <DeniedView p={p} themeMode={themeMode} onBack={() => router.back()} />;
-  }
-
   return (
-    <View style={{ flex: 1, backgroundColor: p.bg }}>
-      <TopGradient />
-      <StatusBar style={themeMode === 'light' ? 'dark' : 'light'} />
-      <SafeAreaView style={{ flex: 1 }} edges={['top']}>
-        {/* Header */}
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingTop: 8, paddingBottom: 8 }}>
-          <Pressable onPress={() => router.back()} hitSlop={8}>
-            <Ionicons name="chevron-back" size={26} color={p.fg} />
-          </Pressable>
-          <View style={{ flex: 1 }}>
-            <Text style={{ color: p.fg, fontSize: 18, fontWeight: '600', letterSpacing: -0.3 }}>Support Chats</Text>
-            <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '700', letterSpacing: 0.5 }}>
-              {conversations.length} ACTIVE
-            </Text>
-          </View>
-        </View>
-
+    <AdminScreen title="Support Chats" subtitle={`${conversations.length} active`} scroll={false}>
         {/* Search */}
         <View style={{ paddingHorizontal: 16, marginTop: 4 }}>
           <View style={{
@@ -179,8 +153,7 @@ export default function AdminSupport() {
             )
           )}
         </ScrollView>
-      </SafeAreaView>
-    </View>
+    </AdminScreen>
   );
 }
 
@@ -233,19 +206,6 @@ function EmptyState({ p, icon, text }: { p: any; icon: any; text: string }) {
     <View style={{ paddingVertical: 56, alignItems: 'center' }}>
       <Ionicons name={icon} size={42} color={p.fgFaint} />
       <Text style={{ color: p.fgMuted, marginTop: 10, fontSize: 13, fontWeight: '600' }}>{text}</Text>
-    </View>
-  );
-}
-
-function DeniedView({ p, themeMode, onBack }: any) {
-  return (
-    <View style={{ flex: 1, backgroundColor: p.bg, alignItems: 'center', justifyContent: 'center', padding: 40 }}>
-      <StatusBar style={themeMode === 'light' ? 'dark' : 'light'} />
-      <Ionicons name="lock-closed-outline" size={48} color={p.fgFaint} />
-      <Text style={{ color: p.fg, fontSize: 18, fontWeight: '600', marginTop: 14 }}>Admin access only</Text>
-      <Pressable onPress={onBack} style={{ marginTop: 24, paddingHorizontal: 18, paddingVertical: 11, borderRadius: 12, backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border }}>
-        <Text style={{ color: p.fg, fontWeight: '700' }}>Back</Text>
-      </Pressable>
     </View>
   );
 }

@@ -833,6 +833,7 @@ export default function Home() {
             {/* Secondary options */}
             <View style={{ paddingVertical: 8 }}>
               {[
+                { icon: 'flag-outline' as const,         label: t('home.budgets'),         onPress: () => { setMoreMenuVisible(false); router.push('/budgets'); } },
                 { icon: 'card-outline' as const,         label: t('home.cards'),           onPress: () => { setMoreMenuVisible(false); router.push('/cards'); } },
                 { icon: 'time-outline' as const,         label: t('home.history'),         onPress: () => { setMoreMenuVisible(false); router.push('/history'); } },
                 { icon: 'document-text-outline' as const, label: 'Statements',              onPress: () => { setMoreMenuVisible(false); router.push('/statements'); } },

@@ -71,6 +71,7 @@ const CLIENT_URL = resolveClientUrl();
 const EMAIL_ASSET_BASE = (process.env.EMAIL_ASSET_BASE || CLIENT_URL).replace(/\/+$/, '');
 const LOGO_BLACK_URI = `${EMAIL_ASSET_BASE}/icon-black.png`;
 const LOGO_WHITE_URI = `${EMAIL_ASSET_BASE}/icon-white.png`;
+const LOGO_COLOR_URI = `${EMAIL_ASSET_BASE}/icon-color.png`;
 
 const hasSmtpCredentials = !!(SMTP_HOST && SMTP_USER && SMTP_PASS);
 const missingSmtpEnv = REQUIRED_SMTP_ENV.filter((key) => !process.env[key]);
@@ -152,6 +153,7 @@ function baseTemplate(title: string, body: string): string {
     .btn-ghost  { color: #18181b !important; border-color: #d4d4d8 !important; }
     .footer-text{ color: #a1a1aa; }
     .logo-light { display: block !important; }
+    .logo-color { display: none !important; }
     .logo-dark  { display: none !important; }
 
     /* ── Dark mode ── */
@@ -171,6 +173,7 @@ function baseTemplate(title: string, body: string): string {
       .btn-ghost  { color: #f4f4f5 !important; border-color: #3f3f46 !important; }
       .footer-text{ color: #52525b !important; }
       .logo-light { display: none !important; }
+      .logo-color { display: none !important; }
       .logo-dark  { display: block !important; }
     }
 
@@ -236,8 +239,7 @@ function baseTemplate(title: string, body: string): string {
 
       <!-- Logo: hosted on the sending domain. Dark/light via media query. -->
       <div class="logo-wrap">
-        <img class="logo-light" src="${LOGO_BLACK_URI}" alt="tazdan" />
-        <img class="logo-dark"  src="${LOGO_WHITE_URI}" alt="tazdan" />
+        <img class="logo-color" src="${LOGO_COLOR_URI}" alt="tazdan" />
       </div>
 
       <div class="card">

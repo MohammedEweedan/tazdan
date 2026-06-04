@@ -20,12 +20,13 @@ import { Ionicons } from '@expo/vector-icons';
 import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 
 import { useHaptics } from '@/hooks';
-import { useTheme } from '@/store/themeStore';
+import { useTheme, type ThemeMode } from '@/store/themeStore';
 import { useI18n, useT, LOCALE_META } from '@/store/i18nStore';
 import { OnboardingHero } from '@/components/ui/OnboardingHero';
 import { LocalePickerModal } from '@/components/ui/LocalePickerModal';
 import { secureStore } from '@/lib/secureStore';
 import { STORAGE_KEYS } from '@/constants';
+import { useAuthStore } from '@/store/authStore';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 
@@ -36,19 +37,48 @@ const SLIDES: Slide[] = [
   { id: 's3', titleKey: 'onboard.permissions.title', variant: 3 },
 ];
 
+const THEME_OPTIONS: { mode: ThemeMode; icon: keyof typeof Ionicons.glyphMap }[] = [
+  { mode: 'light', icon: 'sunny-outline' },
+  { mode: 'dark',  icon: 'moon-outline' },
+  { mode: 'mono',  icon: 'contrast-outline' },
+];
+
 export default function Onboarding() {
   const router = useRouter();
   const h = useHaptics();
   const t = useT();
   const themeMode = useTheme((s) => s.mode);
-  const toggleTheme = useTheme((s) => s.toggle);
+  const setThemeMode = useTheme((s) => s.setMode);
   const locale = useI18n((s) => s.locale);
   const isAr = locale === 'ar';
+  const lastUser = useAuthStore((s) => s.lastUser);
 
   const [page, setPage] = useState(0);
+  const [canShow, setCanShow] = useState(false);
   const [langPickerVisible, setLangPickerVisible] = useState(false);
   const flat = useRef<FlatList<Slide>>(null);
   const last = page === SLIDES.length - 1;
+
+  useEffect(() => {
+    let alive = true;
+    const guardInitialOnboarding = async () => {
+      const onboarded = await secureStore.get(STORAGE_KEYS.onboarded).catch(() => null);
+      if (!alive) return;
+      if (lastUser) {
+        await secureStore.set(STORAGE_KEYS.onboarded, 'true').catch(() => {});
+        router.replace('/(auth)/welcome-back');
+        return;
+      }
+      if (onboarded) {
+        router.replace('/(auth)/login');
+        return;
+      }
+      await secureStore.set(STORAGE_KEYS.onboarded, 'true').catch(() => {});
+      if (alive) setCanShow(true);
+    };
+    guardInitialOnboarding();
+    return () => { alive = false; };
+  }, [lastUser, router]);
 
   const markOnboardedAndNavigate = async (dest: '/register' | '/login') => {
     await secureStore.set(STORAGE_KEYS.onboarded, 'true');
@@ -56,8 +86,6 @@ export default function Onboarding() {
   };
 
   const isDark = themeMode === 'dark';
-  const isLight = themeMode === 'light';
-
   /* Single solid background — no gradients, no tonal shifts */
   const bg      = isDark ? '#16181C' : '#FFFFFF';   // soft charcoal, not pitch black
   const fg      = isDark ? '#ffffff' : '#0a0a0a';
@@ -72,6 +100,10 @@ export default function Onboarding() {
   // Header wordmark reacts to the theme: white on dark, black on light, so it
   // flips live when the user toggles the theme button beside it.
   const logoSrc = require("../../assets/logo-color.png");
+
+  if (!canShow) {
+    return <View style={{ flex: 1, backgroundColor: bg }} />;
+  }
 
   return (
     <View style={{ flex: 1, backgroundColor: bg }}>
@@ -117,19 +149,44 @@ export default function Onboarding() {
               <Text style={{ fontSize: 13, color: fg }}>{LOCALE_META[locale].flag}</Text>
             </Pressable>
 
-            {/* Theme */}
-            <Pressable
-              onPress={() => { h.selection(); toggleTheme(); }}
-              hitSlop={10}
-              style={{
-                width: 36, height: 36, borderRadius: 18,
-                alignItems: 'center', justifyContent: 'center',
-                backgroundColor: chipBg,
-                borderWidth: 1, borderColor: chipBd,
-              }}
-            >
-              <Ionicons name={isDark ? 'sunny' : 'moon'} size={15} color={fg} />
-            </Pressable>
+            <View style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              padding: 3,
+              borderRadius: 20,
+              backgroundColor: chipBg,
+              borderWidth: 1,
+              borderColor: chipBd,
+            }}>
+              {THEME_OPTIONS.map(({ mode, icon }) => {
+                const active = themeMode === mode;
+                const label = mode === 'mono' ? 'Mono' : mode === 'dark' ? t('settings.dark') : t('settings.light');
+                return (
+                  <Pressable
+                    key={mode}
+                    accessibilityLabel={label}
+                    onPress={() => { h.selection(); setThemeMode(mode); }}
+                    hitSlop={8}
+                    style={{
+                      minWidth: 54,
+                      height: 30,
+                      paddingHorizontal: 8,
+                      borderRadius: 15,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexDirection: 'row',
+                      gap: 4,
+                      backgroundColor: active ? ctaBg : 'transparent',
+                    }}
+                  >
+                    <Ionicons name={icon} size={14} color={active ? ctaFg : fg} />
+                    <Text style={{ color: active ? ctaFg : fg, fontSize: 10, fontWeight: active ? '800' : '700' }}>
+                      {label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
           </View>
         </Animated.View>
 

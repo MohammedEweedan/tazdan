@@ -36,7 +36,7 @@ import { REPORT_REASONS, type ApiMessage, type Conversation } from '@/types/mess
 import { TopGradient } from '@/components/ui/ScreenShell';
 import { useTransactionSound } from '@/hooks/useTransactionSound';
 
-const BRAND_BLUE = '#737373'; // mono accent neutral
+const BRAND_BLUE = '#63a1db'; // soft brand blue — my bubbles, send button, accents
 
 export default function MessageThread() {
   const { id: partnerIdParam, openPay } = useLocalSearchParams<{ id: string; openPay?: string }>();
@@ -185,6 +185,10 @@ const { data: messages = [], isLoading } = useThread(partnerId);  const sendMut 
   const send = async () => {
     const body = draft.trim();
     if (!body) return;
+    // Hard guard against a double-fire (button + keyboard "send", or a fast
+    // double-tap before the disabled state re-renders) — that's what caused
+    // duplicate messages.
+    if (sendMut.isPending || editMut.isPending) return;
     h.light();
     stopTypingEmit();
     if (editing) {
@@ -441,7 +445,7 @@ const { data: messages = [], isLoading } = useThread(partnerId);  const sendMut 
             onPress={() => { h.selection(); setProfileSheet(true); }}
             style={{
             width: 32, height: 32, borderRadius: 16,
-            backgroundColor: isSupport ? BRAND_BLUE : (partner?.avatarUrl ? p.bgElev : '#7c3aed'),
+            backgroundColor: isSupport ? BRAND_BLUE : (partner?.avatarUrl ? p.bgElev : '#5b86b0'),
             alignItems: 'center', justifyContent: 'center',
             borderWidth: !isSupport && partner?.avatarUrl ? 1 : 0,
             borderColor: p.border,

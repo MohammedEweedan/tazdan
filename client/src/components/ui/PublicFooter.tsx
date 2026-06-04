@@ -12,7 +12,7 @@ import {
   VStack,
   useColorMode,
 } from "@chakra-ui/react";
-import { FiUserX, FiGithub, FiLinkedin, FiInstagram, FiX } from "react-icons/fi";
+import { FiAlertTriangle, FiGithub, FiInstagram, FiX } from "react-icons/fi";
 import { useTranslate } from "@tolgee/react";
 import Logo from "@/components/ui/Logo";
 
@@ -24,6 +24,16 @@ export default function PublicFooter() {
   const textMain = dark ? "#ffffff" : "#0a0f1e";
   const textSub = dark ? "rgba(255,255,255,0.55)" : "#64748b";
   const border = dark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.08)";
+  const disclosureBg = dark ? "#1E2127" : "#FFFFFF";
+  const disclosureIconBg = dark ? "#262A31" : "#F1F5F9";
+
+  const disclosureItems = [
+    t("footer_disclaimer_loss"),
+    t("footer_disclaimer_protection"),
+    t("footer_disclaimer_advice"),
+    t("footer_disclaimer_transfers"),
+    t("footer_disclaimer_terms"),
+  ];
 
   const cols: { title: string; links: { label: string; href: string }[] }[] = [
     {
@@ -68,12 +78,39 @@ export default function PublicFooter() {
   return (
     <Box
       as="footer"
+      position="relative"
+      overflow="hidden"
+      w="100%"
+      // Full-bleed band: a faint surface + a full-width top hairline so the
+      // footer reads as a distinct edge-to-edge section, not a floating box.
+      bg={dark ? "rgba(255,255,255,0.015)" : "rgba(0,0,0,0.015)"}
+      borderTop="1px solid"
+      borderColor={border}
       pt={{ base: 10, md: 14 }}
       pb={{ base: 6, md: 8 }}
       px={{ base: 5, md: 10 }}
-      borderColor={border}
     >
-      <Box maxW="1280px" mx="auto">
+      {/* Soft brand-blue glow behind the footer — the same static, directional
+          radial aura used behind the mobile balance card. A bright-ish core
+          offset to one side + a faint wash, both fading to nothing. */}
+      <Box aria-hidden position="absolute" inset={0} zIndex={0} pointerEvents="none">
+        {/* Full-bleed glow layer — spans the entire footer (inset 0) so there's
+            no gap at either edge in LTR or RTL. The radial origin is offset
+            left so the aura feels directional like the mobile balance card. */}
+        <Box
+          position="absolute" inset={0}
+          background={dark
+            ? "radial-gradient(ellipse 70% 130% at 30% 25%, rgba(99,161,219,0.18) 0%, rgba(99,161,219,0.05) 42%, transparent 70%)"
+            : "radial-gradient(ellipse 70% 130% at 30% 25%, rgba(99,161,219,0.13) 0%, rgba(99,161,219,0.04) 42%, transparent 70%)"}
+        />
+        {/* Faint secondary wash low-right for depth. */}
+        <Box
+          position="absolute" inset={0}
+          background="radial-gradient(circle 45% at 85% 80%, rgba(99,161,219,0.09) 0%, transparent 60%)"
+        />
+      </Box>
+
+      <Box maxW="1280px" mx="auto" position="relative" zIndex={1}>
         {/* Top row: brand (full width on mobile) */}
         <VStack align="start" spacing={3} mb={{ base: 7, md: 8 }}>
           <Logo h={32} />
@@ -120,6 +157,66 @@ export default function PublicFooter() {
             </VStack>
           ))}
         </SimpleGrid>
+
+        <Box
+          bg={disclosureBg}
+          border="1px solid"
+          borderColor={border}
+          borderRadius="20px"
+          p={{ base: 5, md: 6 }}
+          mb={{ base: 8, md: 10 }}
+        >
+          <HStack spacing={3} align="center" mb={4}>
+            <Flex
+              w="34px"
+              h="34px"
+              borderRadius="full"
+              align="center"
+              justify="center"
+              bg={disclosureIconBg}
+              border="1px solid"
+              borderColor={border}
+              flexShrink={0}
+            >
+              <Icon as={FiAlertTriangle} boxSize={4} color={textMain} />
+            </Flex>
+            <Text fontSize={{ base: "13px", md: "14px" }} fontWeight="800" color={textMain}>
+              {t("footer_disclaimer_title")}
+            </Text>
+          </HStack>
+
+          <SimpleGrid columns={{ base: 1, md: 2 }} spacing={{ base: 3, md: 4 }}>
+            {disclosureItems.map((item) => (
+              <HStack key={item} align="flex-start" spacing={2.5}>
+                <Box
+                  w="5px"
+                  h="5px"
+                  borderRadius="full"
+                  bg={dark ? "rgba(255,255,255,0.45)" : "rgba(10,15,30,0.42)"}
+                  mt="8px"
+                  flexShrink={0}
+                />
+                <Text fontSize={{ base: "11px", md: "12px" }} lineHeight="1.65" color={textSub}>
+                  {item}
+                </Text>
+              </HStack>
+            ))}
+          </SimpleGrid>
+
+          <Box
+            as={NextLink}
+            href="/risk"
+            display="inline-flex"
+            mt={4}
+            fontSize="12px"
+            fontWeight="800"
+            color={dark ? "#8BBCE8" : "#3E78AE"}
+            _hover={{ color: textMain }}
+            transition="color 0.15s"
+          >
+            {t("footer_disclaimer_risk_link")}
+          </Box>
+        </Box>
 
         {/* Bottom bar — single divider, everything in one row */}
         <Flex

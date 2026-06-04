@@ -104,6 +104,10 @@ const sendSchema = z.object({
   /** PAYMENT: { amount, currency, txRef? }. Free-form for other types. */
   metadata:   z.record(z.any()).optional(),
   tradeId:    z.string().uuid().optional(),
+  /** Client-generated idempotency key — echoed back on the socket + HTTP
+   *  payloads so the sender can reliably replace its optimistic placeholder
+   *  (no fragile content-matching). Not persisted. */
+  clientId:   z.string().max(64).optional(),
 });
 
 const editSchema = z.object({
@@ -417,7 +421,9 @@ export class MessageController {
         },
       });
 
-      const wire = toWire(msg);
+      // Echo the client's idempotency key (transient, not stored) so the
+      // sender can match this row to its optimistic placeholder exactly.
+      const wire = { ...toWire(msg), clientId: data.clientId ?? null };
       emit(req, [senderId, data.receiverId], 'message:new', wire);
 
       res.status(201).json({ message: wire });

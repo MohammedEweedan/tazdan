@@ -28,7 +28,7 @@ function toLastUser(user: User): LastUser {
     email: user.email,
     firstName: user.firstName,
     lastName: user.lastName,
-    username: user.username,
+    username: user.username?.replace(/^@/, ''),
     avatarUrl: user.avatarUrl,
     avatarEmoji: user.avatarEmoji,
     role: user.role ?? 'USER',
@@ -82,6 +82,7 @@ interface AuthState {
   }, opts?: { skipStateUpdate?: boolean }) => Promise<{ user: User; accessToken: string; refreshToken: string }>;
   setAuthenticated: (user: User) => void;
   updateUser: (updates: Partial<User>) => void;
+  forgetLastUser: () => Promise<void>;
   logout: () => Promise<void>;
   setViewMode: (mode: ViewMode) => Promise<void>;
   clearViewSelection: () => void;
@@ -108,6 +109,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const lastUser = parseLastUser(lastUserRaw);
       const viewMode = (viewModeRaw === 'admin' || viewModeRaw === 'user') ? viewModeRaw : null;
       set({ biometricEnabled: bioEnabled === 'true', lastUser, viewMode });
+
+      // Refresh token + cached profile means "known user, locked".
+      // Do not silently enter the app from a refresh token alone; the
+      // welcome-back screen should unlock it with Face ID or password.
+      if (!at && rt) {
+        return set({ user: null, isAuthenticated: false, isHydrating: false, lastUser });
+      }
 
       // No tokens at all → definitely signed out.
       if (!at && !rt) {
@@ -186,8 +194,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     // Every account has a @handle. If the login payload came back lean
     // (no username), fetch /me so the handle is present instantly — no
     // "Set @handle" flash, no reload needed to reveal it.
+    const loginIdentifier = email.trim().toLowerCase().replace(/^@/, '');
     if (!user.username) {
       try { user = await authService.me(); } catch { /* keep lean user */ }
+    }
+    if (!user.username && loginIdentifier && !loginIdentifier.includes('@')) {
+      user = { ...user, username: loginIdentifier };
     }
     await cacheLastUser(user);
     // Fresh login always re-prompts admins for which view to enter.
@@ -240,7 +252,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       await secureStore.set(STORAGE_KEYS.refreshToken, refreshToken);
       const user = await authService.me();
       await cacheLastUser(user);
-      set({ user, lastUser: toLastUser(user), isAuthenticated: true });
+      await secureStore.set(BIOMETRIC_KEY, 'true').catch(() => {});
+      set({ user, lastUser: toLastUser(user), isAuthenticated: true, biometricEnabled: true });
       return true;
     } catch (e: any) {
       if (e?.code === 'SESSION_EXPIRED') throw e;
@@ -271,21 +284,35 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }));
   },
 
-  logout: async () => {
-    await authService.logout();
-    // Drop the websocket so the server doesn't keep emitting events
-    // into a dead user room and a fresh JWT is picked up on next login.
-    const { disconnectSocket } = await import('@/lib/socket');
-    disconnectSocket();
-    // CRITICAL: wipe every persisted credential.  Previously only
-    // VIEW_MODE_KEY was removed, so access + refresh tokens stayed
-    // in SecureStore — the next person to open the app rehydrated
-    // straight into the previous user's account.  Clear every
-    // identity-bound key so logout actually logs out.
+  forgetLastUser: async () => {
     await Promise.all([
       secureStore.remove(STORAGE_KEYS.accessToken).catch(() => {}),
       secureStore.remove(STORAGE_KEYS.refreshToken).catch(() => {}),
       secureStore.remove(STORAGE_KEYS.lastUser).catch(() => {}),
+      secureStore.remove(BIOMETRIC_KEY).catch(() => {}),
+      secureStore.remove(VIEW_MODE_KEY).catch(() => {}),
+    ]);
+    set({
+      user: null,
+      lastUser: null,
+      isAuthenticated: false,
+      biometricEnabled: false,
+      viewMode: null,
+      needsViewSelection: false,
+    });
+  },
+
+  logout: async () => {
+    const remembered = get().user ? toLastUser(get().user as User) : get().lastUser;
+    if (get().user) await cacheLastUser(get().user as User);
+    // "Logout" in the consumer app is a lock-screen transition: keep the
+    // cached identity and refresh token so Face ID can unlock the same
+    // account. "Use a different account" calls forgetLastUser() and performs
+    // the full credential wipe.
+    const { disconnectSocket } = await import('@/lib/socket');
+    disconnectSocket();
+    await Promise.all([
+      secureStore.remove(STORAGE_KEYS.accessToken).catch(() => {}),
       secureStore.remove(VIEW_MODE_KEY).catch(() => {}),
     ]);
     set({
@@ -293,10 +320,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       isAuthenticated: false,
       viewMode: null,
       needsViewSelection: false,
-      // Also wipe the in-memory lastUser hint so the lock-screen
-      // doesn't render the previous user's name / avatar after
-      // logout.
-      lastUser: null,
+      lastUser: remembered,
     });
   },
 }));

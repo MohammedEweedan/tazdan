@@ -9,10 +9,13 @@ import * as LocalAuthentication from 'expo-local-authentication';
 
 import { useAuthStore } from '@/store/authStore';
 import { useHaptics } from '@/hooks';
-import { useTheme, useThemedPalette } from '@/store/themeStore';
+import { useTheme, useThemedPalette, type ThemeMode } from '@/store/themeStore';
 import { useT } from '@/store/i18nStore';
 import { LocalePickerModal } from '@/components/ui/LocalePickerModal';
 import { TopGradient } from '@/components/ui/ScreenShell';
+import { avatarMode } from '@/utils/displayUser';
+import { secureStore } from '@/lib/secureStore';
+import { STORAGE_KEYS } from '@/constants';
 
 function extractErrorMessage(e: unknown): string {
   if (typeof e === 'object' && e !== null) {
@@ -23,16 +26,23 @@ function extractErrorMessage(e: unknown): string {
   return 'Please try again.';
 }
 
+const THEME_OPTIONS: { mode: ThemeMode; icon: keyof typeof Ionicons.glyphMap }[] = [
+  { mode: 'light', icon: 'sunny-outline' },
+  { mode: 'dark',  icon: 'moon-outline' },
+  { mode: 'mono',  icon: 'contrast-outline' },
+];
+
 export default function WelcomeBack() {
   const router = useRouter();
   const h = useHaptics();
   const p = useThemedPalette();
   const themeMode = useTheme((s) => s.mode);
+  const setThemeMode = useTheme((s) => s.setMode);
   const t = useT();
   const lastUser = useAuthStore((s) => s.lastUser);
   const login = useAuthStore((s) => s.login);
-  const biometricEnabled = useAuthStore((s) => s.biometricEnabled);
   const triggerBiometricLogin = useAuthStore((s) => s.triggerBiometricLogin);
+  const forgetLastUser = useAuthStore((s) => s.forgetLastUser);
 
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -45,7 +55,10 @@ export default function WelcomeBack() {
     Promise.all([
       LocalAuthentication.hasHardwareAsync(),
       LocalAuthentication.isEnrolledAsync(),
-    ]).then(([hardware, enrolled]) => setBioAvailable(hardware && enrolled)).catch(() => setBioAvailable(false));
+      secureStore.get(STORAGE_KEYS.refreshToken),
+    ]).then(([hardware, enrolled, refreshToken]) => {
+      setBioAvailable(hardware && enrolled && !!refreshToken);
+    }).catch(() => setBioAvailable(false));
   }, []);
 
   useEffect(() => {
@@ -58,11 +71,15 @@ export default function WelcomeBack() {
   // first name, then real @handle, then a generic "there" — but NEVER
   // the email local-part (would expose PII on a sign-in screen anyone
   // walking past the device can see).
-  const handle   = lastUser.username?.trim() || null;
+  const handle   = lastUser.username?.trim().replace(/^@/, '') || null;
   const firstName= lastUser.firstName?.trim() || '';
   const fullName = `${firstName} ${lastUser.lastName ?? ''}`.trim()
     || (handle ? `@${handle}` : 'Welcome back');
   const initial  = (firstName[0] ?? handle?.[0] ?? '?').toUpperCase();
+  const welcomeTitle = handle
+    ? t('auth.welcomeBack', { handle })
+    : 'Welcome back';
+  const avatar = avatarMode(lastUser);
 
   const submitPassword = async () => {
     if (!password) {
@@ -106,14 +123,72 @@ export default function WelcomeBack() {
       <StatusBar style={themeMode === 'light' ? 'dark' : 'light'} />
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <SafeAreaView style={{ flex: 1 }} edges={['top', 'bottom']}>
-          {/* Globe button top-right */}
-          <Pressable
-            onPress={() => { h.selection(); setLangPickerVisible(true); }}
-            hitSlop={12}
-            style={{ position: 'absolute', top: 48, right: 20, zIndex: 10, padding: 6 }}
-          >
-            <Ionicons name="globe-outline" size={22} color={p.fgMuted} />
-          </Pressable>
+          <View style={{
+            position: 'absolute',
+            top: 60,
+            left: 20,
+            right: 20,
+            zIndex: 10,
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'flex-end',
+            gap: 8,
+          }}>
+            <View style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              padding: 3,
+              borderRadius: 22,
+              backgroundColor: p.pillBg,
+              borderWidth: 1,
+              borderColor: p.border,
+            }}>
+              {THEME_OPTIONS.map(({ mode, icon }) => {
+                const active = themeMode === mode;
+                const label = mode === 'mono' ? 'Mono' : mode === 'dark' ? t('settings.dark') : t('settings.light');
+                return (
+                  <Pressable
+                    key={mode}
+                    accessibilityLabel={label}
+                    onPress={() => { h.selection(); setThemeMode(mode); }}
+                    hitSlop={8}
+                    style={{
+                      minWidth: 64,
+                      height: 34,
+                      paddingHorizontal: 9,
+                      borderRadius: 17,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexDirection: 'row',
+                      gap: 5,
+                      backgroundColor: active ? p.ctaBg : 'transparent',
+                    }}
+                  >
+                    <Ionicons name={icon} size={14} color={active ? p.ctaFg : p.fgMuted} />
+                    <Text style={{ color: active ? p.ctaFg : p.fgMuted, fontSize: 11, fontWeight: active ? '800' : '700' }}>
+                      {label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+            <Pressable
+              onPress={() => { h.selection(); setLangPickerVisible(true); }}
+              hitSlop={12}
+              style={{
+                width: 38,
+                height: 38,
+                borderRadius: 19,
+                alignItems: 'center',
+                justifyContent: 'center',
+                backgroundColor: p.pillBg,
+                borderWidth: 1,
+                borderColor: p.border,
+              }}
+            >
+              <Ionicons name="globe-outline" size={19} color={p.fgMuted} />
+            </Pressable>
+          </View>
 
           <ScrollView
             keyboardShouldPersistTaps="handled"
@@ -135,14 +210,20 @@ export default function WelcomeBack() {
                 backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border,
                 alignItems: 'center', justifyContent: 'center',
               }}>
-                {lastUser.avatarUrl ? (
-                  <Text style={{ fontSize: 44 }}>{lastUser.avatarUrl}</Text>
+                {avatar.kind === 'image' ? (
+                  <Image
+                    source={{ uri: avatar.uri }}
+                    style={{ width: 96, height: 96, borderRadius: 48 }}
+                    resizeMode="cover"
+                  />
+                ) : avatar.kind === 'emoji' ? (
+                  <Text style={{ fontSize: 44 }}>{avatar.char}</Text>
                 ) : (
-                  <Text style={{ color: p.fg, fontSize: 38, fontWeight: '600' }}>{initial}</Text>
+                  <Text style={{ color: p.fg, fontSize: 38, fontWeight: '600' }}>{avatar.char || initial}</Text>
                 )}
               </View>
               <Text style={{ color: p.fg, fontSize: 32, fontWeight: '600', letterSpacing: -1, marginTop: 22, textAlign: 'center' }}>
-                {t('auth.welcomeBack', { handle: handle ?? firstName ?? 'there' })}
+                {welcomeTitle}
               </Text>
               <Text style={{ color: p.fgMuted, fontSize: 15, fontWeight: '600', marginTop: 6, textAlign: 'center' }}>
                 {fullName}
@@ -204,7 +285,7 @@ export default function WelcomeBack() {
                 </Text>
               </Pressable>
 
-              {bioAvailable && biometricEnabled && (
+              {bioAvailable && (
                 <Pressable
                   onPress={() => submitBiometric('Face ID')}
                   disabled={bioLoading}
@@ -249,7 +330,11 @@ export default function WelcomeBack() {
               )}
 
               <Pressable
-                onPress={() => { h.selection(); router.replace('/(auth)/login'); }}
+                onPress={async () => {
+                  h.selection();
+                  await forgetLastUser();
+                  router.replace('/(auth)/login');
+                }}
                 hitSlop={8}
                 style={{ alignSelf: 'center', marginTop: 22, paddingVertical: 8, paddingHorizontal: 12 }}
               >

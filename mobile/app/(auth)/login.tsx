@@ -39,6 +39,7 @@ export default function Login() {
   const locale = useI18n((s) => s.locale);
   const cycleLocale = useI18n((s) => s.cycle);
   const login = useAuthStore((s) => s.login);
+  const lastUser = useAuthStore((s) => s.lastUser);
   const biometricEnabled = useAuthStore((s) => s.biometricEnabled);
   const triggerBiometricLogin = useAuthStore((s) => s.triggerBiometricLogin);
 
@@ -60,17 +61,10 @@ export default function Login() {
     ]).then(([hw, enrolled]) => setBioAvailable(hw && enrolled));
   }, []);
 
-  const { control, handleSubmit, formState: { errors }, setValue } = useForm<FormValues>({
+  const { control, handleSubmit, formState: { errors } } = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: { email: '', password: '' },
   });
-
-  // Pre-fill the demo account so the user can tap straight through.
-  const fillDemo = () => {
-    h.selection();
-    setValue('email', 'rayan@tazdan.com');
-    setValue('password', 'Demo123!');
-  };
 
   const onSubmit = async (values: FormValues) => {
     const email = values.email.trim().toLowerCase();
@@ -135,22 +129,25 @@ export default function Login() {
               flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
               paddingTop: 4, marginBottom: 24,
             }}>
-              <Pressable
-                onPress={() => {
-                  h.selection();
-                  if (router.canGoBack()) router.back();
-                  else router.replace('/(auth)/onboarding');
-                }}
-                hitSlop={12}
-                style={{
-                  width: 40, height: 40, borderRadius: 20,
-                  alignItems: 'center', justifyContent: 'center',
-                  backgroundColor: p.pillBg,
-                  borderWidth: 1, borderColor: p.border,
-                }}
-              >
-                <Ionicons name="chevron-back" size={20} color={p.fg} />
-              </Pressable>
+              {lastUser ? (
+                <Pressable
+                  onPress={() => {
+                    h.selection();
+                    router.replace('/(auth)/welcome-back');
+                  }}
+                  hitSlop={12}
+                  style={{
+                    width: 40, height: 40, borderRadius: 20,
+                    alignItems: 'center', justifyContent: 'center',
+                    backgroundColor: p.pillBg,
+                    borderWidth: 1, borderColor: p.border,
+                  }}
+                >
+                  <Ionicons name="chevron-back" size={20} color={p.fg} />
+                </Pressable>
+              ) : (
+                <View style={{ width: 40, height: 40 }} />
+              )}
 
               <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
                 <Pressable
@@ -358,26 +355,6 @@ export default function Login() {
                 </Text>
               </Pressable>
             )}
-
-            {/* Demo helper — one tap to fill credentials */}
-            <Pressable
-              onPress={fillDemo}
-              hitSlop={8}
-              style={{
-                marginTop: 18,
-                alignSelf: 'center',
-                paddingHorizontal: 14,
-                paddingVertical: 8,
-                borderRadius: 14,
-                borderWidth: 1,
-                borderColor: p.border,
-                backgroundColor: p.pillBg,
-              }}
-            >
-              <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '700', letterSpacing: 0.4 }}>
-                USE DEMO ACCOUNT
-              </Text>
-            </Pressable>
 
             {/* Footer */}
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 24, paddingBottom: 8 }}>
