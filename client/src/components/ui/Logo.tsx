@@ -19,15 +19,15 @@ function resolveVariant(variant: LogoVariant, dark: boolean): "color" | "black" 
 }
 
 const LOGO_SRC: Record<"color" | "black" | "white", string> = {
-  color: "/logo-white.png",
-  black: "/logo-black.png",
-  white: "/logo-white.png",
+  color: "/logo-color.png",
+  black: "/logo-color.png",
+  white: "/logo-color.png",
 };
 
 const ICON_SRC: Record<"color" | "black" | "white", string> = {
   color: "/icon-color.png",
-  black: "/icon-white.png",
-  white: "/icon-black.png",
+  black: "/icon-color.png",
+  white: "/icon-color.png",
 };
 
 // Icon-only logo (mobile + compact UI)

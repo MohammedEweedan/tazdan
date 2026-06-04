@@ -40,7 +40,7 @@ function pal(dark: boolean) {
     greenBg:   "rgba(34,197,94,0.12)",
     redFg:     "#ef4444",
     redBg:     "rgba(239,68,68,0.12)",
-    brand:     "#226dff",
+    brand:     "#63a1db",
     cardBg:    dark ? "#0d0d0d" : "#f5f5f7",
     sidebarBg: dark ? "#050505" : "#f8f8f8",
   };
@@ -997,7 +997,7 @@ export default function AuthenticatedHome() {
             transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
           >
             <Box
-              bg="#226dff"
+              bg="#63a1db"
               px={{ base: 6, lg: 10 }}
               pt={{ base: 10, lg: 14 }}
               pb={{ base: 10, lg: 14 }}

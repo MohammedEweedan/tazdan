@@ -11,25 +11,21 @@ import { Text, TextInput } from '@/components/ui/Text';
 import { Ionicons } from '@expo/vector-icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { StatusBar } from 'expo-status-bar';
 import { formatRelativeTime } from '@/utils/format';
 
-import { useThemedPalette, useTheme } from '@/store/themeStore';
+import { useThemedPalette } from '@/store/themeStore';
 import { useAuthStore } from '@/store/authStore';
 import { adminService } from '@/services';
 import { LoadingPulse } from '@/components/ui/LoadingPulse';
-import { TopGradient } from '@/components/ui/ScreenShell';
+import { AdminScreen, AdminTabs } from '@/components/admin/AdminScreen';
 
 type Status = 'OPEN' | 'ASSIGNED' | 'RESOLVED' | 'CLOSED';
 
 export default function AdminEscalations() {
   const p = useThemedPalette();
-  const themeMode = useTheme((s) => s.mode);
   const router = useRouter();
   const qc = useQueryClient();
-  const user = useAuthStore((s) => s.user);
-  const isAdmin = user?.role === 'ADMIN';
+  const meId = useAuthStore((s) => s.user?.id);
 
   const [filter, setFilter] = useState<Status | 'ALL'>('OPEN');
   const [resolving, setResolving] = useState<any | null>(null);
@@ -43,7 +39,6 @@ export default function AdminEscalations() {
       });
       return data;
     },
-    enabled: isAdmin,
     refetchInterval: 20_000,
   });
 
@@ -68,56 +63,20 @@ export default function AdminEscalations() {
   const escalations = q.data?.escalations ?? [];
   const summary = q.data?.summary ?? { open: 0, assigned: 0, resolved: 0 };
 
-  if (!isAdmin) {
-    return <DeniedView p={p} themeMode={themeMode} onBack={() => router.back()} />;
-  }
-
   return (
-    <View style={{ flex: 1, backgroundColor: p.bg }}>
-      <TopGradient />
-      <StatusBar style={themeMode === 'light' ? 'dark' : 'light'} />
-      <SafeAreaView style={{ flex: 1 }} edges={['top']}>
-        {/* Header */}
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingTop: 8, paddingBottom: 12 }}>
-          <Pressable onPress={() => router.back()} hitSlop={8}>
-            <Ionicons name="chevron-back" size={26} color={p.fg} />
-          </Pressable>
-          <View style={{ flex: 1 }}>
-            <Text style={{ color: p.fg, fontSize: 18, fontWeight: '600', letterSpacing: -0.3 }}>Escalations</Text>
-            <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '700', letterSpacing: 0.5 }}>
-              {summary.open} OPEN · {summary.assigned} ASSIGNED · {summary.resolved} RESOLVED
-            </Text>
-          </View>
-        </View>
+    <AdminScreen
+      title="Escalations"
+      subtitle={`${summary.open} open · ${summary.assigned} assigned · ${summary.resolved} resolved`}
+      refreshControl={<RefreshControl refreshing={q.isFetching} onRefresh={q.refetch} tintColor={p.fg} />}
+    >
+      <AdminTabs<Status | 'ALL'>
+        value={filter}
+        onChange={setFilter}
+        tabs={(['OPEN', 'ASSIGNED', 'RESOLVED', 'CLOSED', 'ALL'] as const).map((s) => ({ key: s, label: s.charAt(0) + s.slice(1).toLowerCase() }))}
+      />
 
-        {/* Filters */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{ paddingHorizontal: 16, gap: 8, paddingBottom: 4 }}
-        >
-          {(['OPEN', 'ASSIGNED', 'RESOLVED', 'CLOSED', 'ALL'] as const).map((s) => {
-            const on = filter === s;
-            return (
-              <Pressable
-                key={s}
-                onPress={() => setFilter(s)}
-                style={{
-                  paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10,
-                  backgroundColor: on ? p.accent : p.pillBg,
-                  borderWidth: 1, borderColor: on ? p.accent : p.border,
-                }}
-              >
-                <Text style={{ color: on ? p.accentFg : p.fg, fontSize: 12, fontWeight: '600' }}>{s}</Text>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
-
-        <ScrollView
-          contentContainerStyle={{ padding: 16, paddingBottom: 80 }}
-          refreshControl={<RefreshControl refreshing={q.isFetching} onRefresh={q.refetch} tintColor={p.fg} />}
-        >
+      {(() => (
+        <>
           {q.isLoading && !q.data ? (
             <View style={{ paddingTop: 80, alignItems: 'center' }}>
               <LoadingPulse size={56} icon="warning-outline" label="Loading escalations…" />
@@ -135,17 +94,18 @@ export default function AdminEscalations() {
                 key={e.id}
                 escalation={e}
                 p={p}
-                meId={user?.id}
+                meId={meId}
                 onAssign={() => assignMut.mutate(e.id)}
                 onResolve={() => setResolving(e)}
                 onView={() => router.push(`/messages/${e.raisedById}` as any)}
               />
             ))
           )}
-        </ScrollView>
+        </>
+      ))()}
 
-        {/* Resolve modal */}
-        <Modal visible={!!resolving} animationType="slide" transparent onRequestClose={() => setResolving(null)}>
+      {/* Resolve modal */}
+      <Modal visible={!!resolving} animationType="slide" transparent onRequestClose={() => setResolving(null)}>
           <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' }}>
             <View style={{ backgroundColor: p.bg, borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 20, paddingBottom: 36 }}>
               <View style={{ alignSelf: 'center', width: 36, height: 4, borderRadius: 2, backgroundColor: p.border, marginBottom: 14 }} />
@@ -189,8 +149,7 @@ export default function AdminEscalations() {
             </View>
           </View>
         </Modal>
-      </SafeAreaView>
-    </View>
+    </AdminScreen>
   );
 }
 
@@ -298,15 +257,3 @@ function EscalationCard({ escalation: e, p, meId, onAssign, onResolve, onView }:
   );
 }
 
-function DeniedView({ p, themeMode, onBack }: any) {
-  return (
-    <View style={{ flex: 1, backgroundColor: p.bg, alignItems: 'center', justifyContent: 'center', padding: 40 }}>
-      <StatusBar style={themeMode === 'light' ? 'dark' : 'light'} />
-      <Ionicons name="lock-closed-outline" size={48} color={p.fgFaint} />
-      <Text style={{ color: p.fg, fontSize: 18, fontWeight: '600', marginTop: 14 }}>Admin access only</Text>
-      <Pressable onPress={onBack} style={{ marginTop: 24, paddingHorizontal: 18, paddingVertical: 11, borderRadius: 12, backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border }}>
-        <Text style={{ color: p.fg, fontWeight: '700' }}>Back</Text>
-      </Pressable>
-    </View>
-  );
-}

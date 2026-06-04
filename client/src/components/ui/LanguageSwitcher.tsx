@@ -1,8 +1,10 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback, useLayoutEffect } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { Box, Flex, Text, useColorMode } from "@chakra-ui/react";
+import { useState, useRef, useEffect, useCallback } from "react";
+import {
+  Box, Text, useColorMode,
+  Modal, ModalOverlay, ModalContent, ModalBody, SimpleGrid,
+} from "@chakra-ui/react";
 import { useTolgee } from "@tolgee/react";
 
 const LANGUAGES = [
@@ -23,8 +25,6 @@ export default function LanguageSwitcher() {
   const dark = colorMode === "dark";
 
   const [open, setOpen]     = useState(false);
-  const [mobile, setMobile] = useState(false);
-  const [pos, setPos]       = useState<{ top: number; right: number } | null>(null);
   const triggerRef          = useRef<HTMLButtonElement>(null);
 
   // Monochrome tokens mirroring screenTokens() in app/page.tsx
@@ -40,38 +40,11 @@ export default function LanguageSwitcher() {
     : "0 30px 80px -20px rgba(0,0,0,0.18), 0 0 0 1px rgba(0,0,0,0.05)";
 
   useEffect(() => {
-    const check = () => setMobile(window.innerWidth < 768);
-    check();
-    window.addEventListener("resize", check);
-    return () => window.removeEventListener("resize", check);
-  }, []);
-
-  useEffect(() => {
     if (!open) return;
     const handler = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, [open]);
-
-  // Recalculate position whenever the dropdown opens or the viewport changes
-  useLayoutEffect(() => {
-    if (!open || mobile || !triggerRef.current) return;
-    const recompute = () => {
-      if (!triggerRef.current) return;
-      const rect = triggerRef.current.getBoundingClientRect();
-      setPos({
-        top: rect.bottom + 10,
-        right: Math.max(8, window.innerWidth - rect.right),
-      });
-    };
-    recompute();
-    window.addEventListener("resize", recompute);
-    window.addEventListener("scroll", recompute, true);
-    return () => {
-      window.removeEventListener("resize", recompute);
-      window.removeEventListener("scroll", recompute, true);
-    };
-  }, [open, mobile]);
 
   const handleToggle = useCallback(() => setOpen((v) => !v), []);
 
@@ -95,6 +68,8 @@ export default function LanguageSwitcher() {
         alignItems="center"
         gap={3}
         w="100%"
+        minH="48px"
+        flexShrink={0}
         px={4}
         py={3}
         borderBottom={last ? "none" : "1px solid"}
@@ -179,94 +154,34 @@ export default function LanguageSwitcher() {
         </Box>
       </Box>
 
-      <AnimatePresence>
-        {open && (
-          <>
-            <motion.div
-              key="backdrop"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.16 }}
-              onClick={() => setOpen(false)}
-              style={{
-                position: "fixed",
-                inset: 0,
-                background: mobile ? "rgba(0,0,0,0.7)" : "transparent",
-                backdropFilter: mobile ? "blur(10px)" : "none",
-                WebkitBackdropFilter: mobile ? "blur(10px)" : "none",
-                zIndex: 1400,
-              }}
-            />
-
-            {mobile ? (
-              <motion.div
-                key="sheet"
-                initial={{ y: "100%" }}
-                animate={{ y: 0 }}
-                exit={{ y: "100%" }}
-                transition={{ type: "spring", damping: 30, stiffness: 320 }}
-                style={{
-                  position: "fixed",
-                  bottom: 0, left: 0, right: 0,
-                  zIndex: 1401,
-                }}
-              >
-                <Box
-                  bg={bg}
-                  borderTopRadius="28px"
-                  borderTop="1px solid"
-                  borderLeft="1px solid"
-                  borderRight="1px solid"
-                  borderColor={border}
-                  boxShadow={shadow}
-                  pb="env(safe-area-inset-bottom, 16px)"
-                  overflow="hidden"
-                >
-                  <Flex justify="center" pt={3} pb={3}>
-                    <Box w="36px" h="4px" borderRadius="full" bg={fgFaint} />
-                  </Flex>
-                  <Box>
-                    {LANGUAGES.map((lang, i) => (
-                      <LangRow key={lang.code} lang={lang} last={i === LANGUAGES.length - 1} />
-                    ))}
-                  </Box>
-                </Box>
-              </motion.div>
-            ) : pos ? (
-              <motion.div
-                key="dropdown"
-                initial={{ opacity: 0, scale: 0.96, y: -4 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.97, y: -2 }}
-                transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
-                style={{
-                  position: "fixed",
-                  top: pos.top,
-                  right: pos.right,
-                  zIndex: 1401,
-                  width: "240px",
-                  transformOrigin: "top right",
-                }}
-                role="listbox"
-              >
-                <Box
-                  bg={bg}
-                  border="1px solid"
-                  borderColor={border}
-                  borderRadius="16px"
-                  boxShadow={shadow}
-                  overflow="hidden"
-                >
-                  {LANGUAGES.map((lang, i) => (
-                    <LangRow key={lang.code} lang={lang} last={i === LANGUAGES.length - 1} />
-                  ))}
-                </Box>
-              </motion.div>
-            ) : null}
-          </>
-        )}
-      </AnimatePresence>
+      {/* One CENTERED modal for every screen size, with a blurred backdrop
+          (matches the waitlist modal). Mobile used to slide up from the bottom
+          and desktop was a corner dropdown that skewed left/right; a single
+          centered modal is consistent and direction-agnostic (EN + AR). */}
+      <Modal isOpen={open} onClose={() => setOpen(false)} isCentered size="sm" motionPreset="scale">
+        <ModalOverlay bg="rgba(0,0,0,0.6)" backdropFilter="blur(8px)" />
+        <ModalContent
+          bg={bg}
+          border="1px solid"
+          borderColor={border}
+          borderRadius="20px"
+          boxShadow={shadow}
+          overflow="hidden"
+          mx={4}
+        >
+          <ModalBody p={0}>
+            <Text px={5} pt={4} pb={2} fontSize="11px" fontWeight="800" letterSpacing="0.12em" color={fgFaint}>
+              {(currentLang === "ar" ? "اللغة" : "LANGUAGE")}
+            </Text>
+            {/* 2 columns on desktop, 1 on small screens. */}
+            <SimpleGrid columns={{ base: 1, sm: 2 }} spacing={0}>
+              {LANGUAGES.map((lang) => (
+                <LangRow key={lang.code} lang={lang} last />
+              ))}
+            </SimpleGrid>
+          </ModalBody>
+        </ModalContent>
+      </Modal>
     </>
   );
 }

@@ -12,7 +12,7 @@ function RotatingMark({ size, mono }: { size: number; mono: boolean }) {
   const spin = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     const loop = Animated.loop(
-      Animated.timing(spin, { toValue: 1, duration: 10000, easing: Easing.linear, useNativeDriver: true }),
+      Animated.timing(spin, { toValue: 1, duration: 9000, easing: Easing.linear, useNativeDriver: true }),
     );
     loop.start();
     return () => loop.stop();

@@ -365,7 +365,7 @@ function LegalModal({
       >
         <Flex justify="space-between" align="center" mb="20px">
           <Box>
-            <Text fontSize="12px" fontWeight="700" color="#226dff" letterSpacing="0.08em" textTransform="uppercase">
+            <Text fontSize="12px" fontWeight="700" color="#63a1db" letterSpacing="0.08em" textTransform="uppercase">
               {eyebrow}
             </Text>
             <Heading fontSize="20px" fontWeight="800" color={p.fg} mt="4px">

@@ -239,7 +239,7 @@ export default function DashboardPage() {
               {userEmoji}
             </Flex>
           ) : (
-            <Avatar size="sm" name={initial} bg="linear-gradient(135deg, #7c3aed, #226dff)" color="white" fontWeight="800" />
+            <Avatar size="sm" name={initial} bg="linear-gradient(135deg, #7c3aed, #63a1db)" color="white" fontWeight="800" />
           )}
           <Text fontSize="17px" fontWeight="700" color={tok.textMain}>@{handle}</Text>
         </HStack>

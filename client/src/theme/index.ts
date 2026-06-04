@@ -19,7 +19,7 @@ const theme = extendTheme({
       200: '#5f74ff',
       300: '#286df7',
       400: '#286df7',
-      500: '#226dff', // periwinkle — main brand color
+      500: '#63a1db', // periwinkle — main brand color
       600: '#194ed4',
       700: '#135ba3',
       800: '#0d2475',
@@ -31,7 +31,7 @@ const theme = extendTheme({
       200: '#b9a5ff',
       300: '#286df7',
       400: '#286df7',
-      500: '#226dff', // periwinkle
+      500: '#63a1db', // periwinkle
       600: '#4419d4',
       700: '#3413a3',
       800: '#250d75',
@@ -41,7 +41,9 @@ const theme = extendTheme({
   styles: {
     global: (props: any) => ({
       body: {
-        bg: props.colorMode === 'dark' ? 'gray.900' : 'gray.50',
+        // Soft charcoal in dark mode (matches the mobile app), not Chakra's
+        // default near-black gray.900 — easier on the eyes.
+        bg: props.colorMode === 'dark' ? '#16181C' : 'gray.50',
         color: props.colorMode === 'dark' ? 'white' : 'gray.800',
       },
       "html[lang='ar'] *, html[dir='rtl'] *": {

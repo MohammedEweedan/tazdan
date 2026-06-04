@@ -332,7 +332,9 @@ export class AuthController {
       res.json({
         user: {
           id: user.id, email: user.email, firstName: user.firstName,
-          lastName: user.lastName, role: user.role, kycStatus: user.kycStatus,
+          lastName: user.lastName, username: user.username,
+          avatarUrl: user.avatarUrl, profilePublic: user.profilePublic,
+          role: user.role, kycStatus: user.kycStatus,
           twoFactorEnabled: user.twoFactorEnabled, referralCode: user.referralCode,
         },
         ...tokens,

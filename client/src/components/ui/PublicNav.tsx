@@ -65,7 +65,7 @@ export default function PublicNav() {
     : "transparent";
   const textMain = dark ? "#ffffff" : "#0a0f1e";
   const textSub  = dark ? "rgba(255,255,255,0.6)" : "#475569";
-  const ctaBg    =  "#226dff";
+  const ctaBg    =  "#63a1db";
   const ctaFg    = dark ? "#0a0f1e" : "white";
 
   const NAV_LINKS = [
@@ -146,12 +146,16 @@ export default function PublicNav() {
           </HStack>
 
           {/* Right cluster */}
-          <HStack spacing={2} ms="auto">
-            <Box display={{ base: "none", md: "flex" }} gap={2} alignItems="center">
+          <HStack spacing={{ base: 1, md: 2 }} ms="auto">
+            {/* Theme + locale — now visible on mobile too (was hidden under
+                the hamburger). Locale collapses to a compact flag+code chip and
+                its picker opens as a bottom sheet on small screens. */}
+            <HStack spacing={{ base: 0.5, md: 2 }} alignItems="center">
               <LanguageSwitcher />
               <ColorModeToggle />
-            </Box>
-            {/* Join Waitlist CTA */}
+            </HStack>
+            {/* Join Waitlist CTA — hide the label on the smallest screens to
+                keep the bar from crowding once theme+locale are present. */}
             <Button
               onClick={onWaitlistOpen}
               size="sm"
@@ -160,11 +164,12 @@ export default function PublicNav() {
               borderRadius="full"
               fontWeight="700"
               fontSize="13px"
-              px={{ base: 4, md: 5 }}
+              px={{ base: 3.5, md: 5 }}
               h={{ base: "34px", md: "36px" }}
               _hover={{ opacity: 0.88, transform: "translateY(-1px)" }}
               transition="all 0.15s ease"
               flexShrink={0}
+              display={{ base: "none", sm: "inline-flex" }}
             >
               {t("nav_join_waitlist")}
             </Button>
@@ -223,13 +228,11 @@ export default function PublicNav() {
 
               <Box flex={1} />
 
+              {/* Theme + locale live in the top bar now (visible on mobile),
+                  so the drawer doesn't duplicate them. */}
               <Divider borderColor={dark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)"} />
-              <HStack px={6} py={4} spacing={3}>
-                <LanguageSwitcher />
-                <ColorModeToggle />
-              </HStack>
 
-              <Box px={6} pb={8}>
+              <Box px={6} pt={4} pb={8}>
                 <Button
                   onClick={() => { onClose(); onWaitlistOpen(); }}
                   w="100%"

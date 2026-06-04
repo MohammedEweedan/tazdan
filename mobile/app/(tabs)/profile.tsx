@@ -282,7 +282,7 @@ export default function Profile() {
           icon: 'log-out-outline',
           label: t('profile.row.logout'),
           danger: true,
-          onPress: async () => { h.warning(); await logout(); router.replace('/(auth)/login'); },
+          onPress: async () => { h.warning(); await logout(); router.replace('/(auth)/welcome-back'); },
         },
       ],
     },

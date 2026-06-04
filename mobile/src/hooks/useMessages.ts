@@ -43,7 +43,11 @@ export const useThread = (userId: string | undefined) =>
     queryKey: ['thread', userId ?? '_none'] as const,
     queryFn:  () => messageService.thread(userId!),
     enabled:  !!userId,
-    refetchInterval: 8_000,
+    // Websockets deliver messages live (see useMessageRealtime). The poll is
+    // just a slow safety net for a missed socket event — an 8s poll fought the
+    // socket and clobbered optimistic bubbles (the jank). 30s is plenty.
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: true,
   });
 
 export const useBlocks = () =>
@@ -55,17 +59,29 @@ export const useBlocks = () =>
 
 // ── Mutations ──────────────────────────────────────────────────────
 
+/** Stable-ish unique id for this client's optimistic message. */
+function makeClientId(): string {
+  return `c_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
 export const useSendMessage = (partnerId: string) => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: messageService.send,
+    // Attach a clientId idempotency key so the placeholder, the HTTP response,
+    // and the websocket echo all reference the SAME logical message — no more
+    // fragile content-matching that double-posts on repeated text.
+    mutationFn: (vars: Parameters<typeof messageService.send>[0] & { clientId?: string }) =>
+      messageService.send(vars),
     onMutate: async (vars) => {
+      const clientId = vars.clientId ?? makeClientId();
+      vars.clientId = clientId;   // ensure the network payload carries it
       // Optimistic append — make the bubble appear instantly so the UI
       // never has to wait for the round-trip.
       await qc.cancelQueries({ queryKey: QUERY_KEYS.thread(partnerId) });
       const prev = qc.getQueryData<ApiMessage[]>(QUERY_KEYS.thread(partnerId)) ?? [];
       const placeholder: ApiMessage = {
-        id:         `local_${Date.now()}`,
+        id:         `local_${clientId}`,
+        clientId,
         senderId:   'me',
         receiverId: vars.receiverId,
         content:    vars.content,
@@ -79,19 +95,25 @@ export const useSendMessage = (partnerId: string) => {
         createdAt:  new Date().toISOString(),
       };
       qc.setQueryData<ApiMessage[]>(QUERY_KEYS.thread(partnerId), [...prev, placeholder]);
-      return { prev, placeholderId: placeholder.id };
+      return { prev, clientId };
     },
     onError: (_err, _vars, ctx) => {
       if (ctx?.prev) qc.setQueryData(QUERY_KEYS.thread(partnerId), ctx.prev);
     },
     onSuccess: (real, _vars, ctx) => {
       qc.setQueryData<ApiMessage[]>(QUERY_KEYS.thread(partnerId), (cur = []) => {
-        // If the websocket already pushed this message, just remove the placeholder.
-        if (cur.some((m) => m.id === real.id)) {
-          return cur.filter((m) => m.id !== ctx?.placeholderId);
-        }
-        // Otherwise replace the optimistic placeholder with the server row.
-        return cur.map((m) => (m.id === ctx?.placeholderId ? real : m));
+        // Drop any row that's already the real one (the ws echo may have
+        // landed first), then replace OUR placeholder (matched by clientId)
+        // with the server row. Guard against the real id appearing twice.
+        const withoutDupes = cur.filter(
+          (m) => !(m.id === real.id && m.clientId !== ctx?.clientId),
+        );
+        const hasReal = withoutDupes.some((m) => m.id === real.id);
+        return withoutDupes
+          .map((m) => (m.clientId && m.clientId === ctx?.clientId
+            ? (hasReal ? null : real)   // if real already present, mark placeholder for removal
+            : m))
+          .filter(Boolean) as ApiMessage[];
       });
       qc.invalidateQueries({ queryKey: QUERY_KEYS.conversations });
     },
@@ -178,18 +200,18 @@ export function useMessageRealtime(currentUserId: string | undefined) {
       socket = await getSocket();
       if (cancelled) return;
 
-      const onNew = (m: ApiMessage) => {
+      const onNew = (m: ApiMessage & { clientId?: string | null }) => {
         const partnerId = m.senderId === currentUserId ? m.receiverId : m.senderId;
         qc.setQueryData<ApiMessage[]>(QUERY_KEYS.thread(partnerId), (cur = []) => {
+          // Already have the real row → no-op (the HTTP onSuccess beat us here).
           if (cur.some((x) => x.id === m.id)) return cur;
-          // If there's a local placeholder with the same content, replace it
-          // instead of appending (avoids duplicates when ws races with mutation).
-          const placeholderIdx = cur.findIndex(
-            (x) => x.id.startsWith('local_') && x.content === m.content && x.senderId === 'me',
-          );
-          if (placeholderIdx !== -1) {
-            return cur.map((x, i) => (i === placeholderIdx ? m : x));
+          // Our own echo: replace the optimistic placeholder by its clientId —
+          // exact, never content-based, so repeated text can't duplicate.
+          if (m.clientId) {
+            const idx = cur.findIndex((x) => x.clientId === m.clientId);
+            if (idx !== -1) return cur.map((x, i) => (i === idx ? m : x));
           }
+          // Genuinely new inbound message → append.
           return [...cur, m];
         });
         qc.invalidateQueries({ queryKey: QUERY_KEYS.conversations });

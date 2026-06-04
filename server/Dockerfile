@@ -20,4 +20,9 @@ COPY --from=build /app/dist ./dist
 COPY package.json ./
 RUN mkdir -p uploads
 EXPOSE 5000
-CMD ["node", "dist/index.js"]
+# Apply any pending DB migrations BEFORE starting the server. Previously the
+# container only ran `node dist/index.js`, so a deploy that shipped a schema
+# change without a manual `migrate deploy` left the code querying columns the
+# DB didn't have → the server crashed on the first query (502 for everything).
+# Running migrate-then-start makes every deploy self-migrating and idempotent.
+CMD ["sh", "-c", "npx prisma migrate deploy && node dist/index.js"]

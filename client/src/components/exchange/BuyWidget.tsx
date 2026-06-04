@@ -40,7 +40,7 @@ import { cryptoExchangeAPI, type CryptoAsset, type CryptoQuote } from '@/lib/api
 import { useAuthStore } from '@/stores/authStore';
 import { walletAPI } from '@/lib/api';
 
-const BRAND = '#226dff';
+const BRAND = '#63a1db';
 const BRAND_LIGHT = '#7649ff';
 const SUCCESS_GREEN = '#22c55e';
 
