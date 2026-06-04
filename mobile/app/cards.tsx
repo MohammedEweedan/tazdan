@@ -9,12 +9,12 @@
  */
 
 import { useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Animated, Dimensions, Image, Modal, Platform, Pressable, ScrollView, View } from 'react-native';
+import { ActivityIndicator, Alert, Animated, Dimensions, Image, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, View } from 'react-native';
 import { Text, TextInput } from '@/components/ui/Text';
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Circle, Path, Rect } from 'react-native-svg';
 import { Ionicons } from '@expo/vector-icons';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
@@ -778,6 +778,122 @@ function TopUpModal({
 }
 
 /* ─────────────────────────────────────────────────────────────────
+   ORDER PHYSICAL CARD MODAL — shipping address + fee, then submit.
+   ───────────────────────────────────────────────────────────────── */
+function OrderPhysicalModal({
+  card, palette: p, t, fee, onClose, onSuccess,
+}: {
+  card: CardEntity | null;
+  palette: Palette;
+  t: (k: string) => string;
+  fee: number;
+  onClose: () => void;
+  onSuccess: () => void;
+}) {
+  const [name, setName]         = useState('');
+  const [line1, setLine1]       = useState('');
+  const [line2, setLine2]       = useState('');
+  const [city, setCity]         = useState('');
+  const [postcode, setPostcode] = useState('');
+  const [country, setCountry]   = useState('');
+  const [phone, setPhone]       = useState('');
+  const [loading, setLoading]   = useState(false);
+
+  // Reset fields whenever a different card opens the sheet.
+  const prevCard = useRef<string | null>(null);
+  if (card?.id !== prevCard.current) {
+    prevCard.current = card?.id ?? null;
+    if (name || line1 || city || country) { setName(''); setLine1(''); setLine2(''); setCity(''); setPostcode(''); setCountry(''); setPhone(''); }
+  }
+
+  const valid = name.trim().length >= 2 && line1.trim().length >= 2 && city.trim() && country.trim().length >= 2;
+
+  const submit = async () => {
+    if (!card || !valid) return;
+    setLoading(true);
+    try {
+      await cardsService.orderPhysical(card.id, {
+        shippingName: name.trim(), shippingLine1: line1.trim(),
+        shippingLine2: line2.trim() || undefined, shippingCity: city.trim(),
+        shippingPostcode: postcode.trim() || undefined, shippingCountry: country.trim(),
+        shippingPhone: phone.trim() || undefined,
+      });
+      onSuccess();
+    } catch (e: any) {
+      Alert.alert('Order failed', e?.response?.data?.error ?? e?.message ?? 'Try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const field = (placeholder: string, value: string, set: (v: string) => void, opts?: { keyboardType?: any }) => (
+    <View style={{ height: 52, borderRadius: 14, paddingHorizontal: 16, backgroundColor: p.bgElev, borderWidth: 1, borderColor: value ? p.accent : p.border, justifyContent: 'center' }}>
+      <TextInput
+        value={value} onChangeText={set} placeholder={placeholder} placeholderTextColor={p.fgFaint}
+        keyboardType={opts?.keyboardType} style={{ color: p.fg, fontSize: 15, fontWeight: '600' }}
+      />
+    </View>
+  );
+
+  return (
+    <Modal visible={!!card} transparent animationType="slide" onRequestClose={onClose}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
+        <Pressable onPress={onClose} style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)' }}>
+          <Pressable
+            onPress={(e) => e.stopPropagation()}
+            style={{ marginTop: 'auto', backgroundColor: p.bg, borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: '88%' }}
+          >
+            <ScrollView contentContainerStyle={{ padding: 24, paddingBottom: 40, gap: 12 }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+              <View style={{ alignItems: 'center', marginBottom: 4 }}>
+                <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: p.border }} />
+              </View>
+              <Text style={{ color: p.fg, fontSize: 20, fontWeight: '700', letterSpacing: -0.4 }}>{t('cards.orderPhysical')}</Text>
+              {card && (
+                <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '500', marginTop: -6 }}>
+                  •••• {card.last4} — {card.tier}
+                </Text>
+              )}
+
+              {field(t('cards.shipName'), name, setName)}
+              {field(t('cards.shipLine1'), line1, setLine1)}
+              {field(t('cards.shipLine2'), line2, setLine2)}
+              <View style={{ flexDirection: 'row', gap: 10 }}>
+                <View style={{ flex: 2 }}>{field(t('cards.shipCity'), city, setCity)}</View>
+                <View style={{ flex: 1 }}>{field(t('cards.shipPostcode'), postcode, setPostcode)}</View>
+              </View>
+              {field(t('cards.shipCountry'), country, setCountry)}
+              {field(t('cards.shipPhone'), phone, setPhone, { keyboardType: 'phone-pad' })}
+
+              {/* Fee summary */}
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 14, borderRadius: 14, backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border, marginTop: 2 }}>
+                <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '600' }}>{t('cards.orderFee')}</Text>
+                <Text style={{ color: p.fg, fontSize: 16, fontWeight: '800', fontVariant: ['tabular-nums'] }}>${fee.toFixed(2)}</Text>
+              </View>
+
+              <Pressable
+                onPress={submit}
+                disabled={!valid || loading}
+                style={({ pressed }) => ({
+                  height: 56, borderRadius: 28, marginTop: 4,
+                  backgroundColor: valid ? p.ctaBg : p.border,
+                  alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8,
+                  opacity: pressed || loading ? 0.85 : 1,
+                })}
+              >
+                {loading && <ActivityIndicator size="small" color={p.ctaFg} />}
+                <Text style={{ color: valid ? p.ctaFg : p.fgMuted, fontSize: 16, fontWeight: '700' }}>
+                  {loading ? t('cards.ordering') : `${t('cards.placeOrder')} · $${fee.toFixed(0)}`}
+                </Text>
+              </Pressable>
+            </ScrollView>
+          </Pressable>
+        </Pressable>
+      </KeyboardAvoidingView>
+    </Modal>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────────────
    PIN MODAL
    ───────────────────────────────────────────────────────────────── */
 function PinModal({ card, palette: p, onClose }: { card: CardEntity | null; palette: Palette; onClose: () => void }) {
@@ -1171,6 +1287,11 @@ export default function Cards() {
   const [showTxFor, setShowTxFor]       = useState<string | null>(null);
   const [topupCard, setTopupCard]       = useState<CardEntity | null>(null);
   const [simulateCard, setSimulateCard] = useState<CardEntity | null>(null);
+  const [orderCard, setOrderCard]       = useState<CardEntity | null>(null);
+
+  // Physical-card order fee (admin-configurable, min $20).
+  const { data: physInfo } = useQuery({ queryKey: ['card-physical-fee'], queryFn: cardsService.physicalFee, staleTime: 60_000 });
+  const physFee = physInfo?.fee ?? 20;
 
   const scrollRef  = useRef<ScrollView>(null);
   const activeCard = allCards[activeIdx] ?? null;
@@ -1423,6 +1544,42 @@ export default function Cards() {
                     <AddToWalletButton card={activeCard} palette={p} />
                   </View>
 
+                  {/* ── PHYSICAL CARD ── order a real card, or track its status. */}
+                  {(!activeCard.physicalStatus || activeCard.physicalStatus === 'NONE') ? (
+                    <Pressable
+                      onPress={() => { h.medium(); setOrderCard(activeCard); }}
+                      disabled={activeCard.status === 'CANCELLED'}
+                      style={({ pressed }) => ({
+                        marginHorizontal: 24, marginTop: 10, padding: 16, borderRadius: 16,
+                        flexDirection: 'row', alignItems: 'center', gap: 12,
+                        backgroundColor: pressed ? p.bgRaised : p.bgElev,
+                        borderWidth: 1, borderColor: p.border,
+                        opacity: activeCard.status === 'CANCELLED' ? 0.5 : 1,
+                      })}
+                    >
+                      <View style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: p.accentSoft, borderWidth: 1, borderColor: p.accentBorder, alignItems: 'center', justifyContent: 'center' }}>
+                        <Ionicons name="card-outline" size={20} color={p.accentText} />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ color: p.fg, fontSize: 14, fontWeight: '700' }}>{t('cards.orderPhysical')}</Text>
+                        <Text style={{ color: p.fgMuted, fontSize: 12, marginTop: 1 }}>
+                          {t('cards.orderPhysicalSub')} · ${physFee.toFixed(0)}
+                        </Text>
+                      </View>
+                      <Ionicons name="chevron-forward" size={16} color={p.fgFaint} />
+                    </Pressable>
+                  ) : (
+                    <View style={{ marginHorizontal: 24, marginTop: 10, padding: 16, borderRadius: 16, flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: p.accentSoft, borderWidth: 1, borderColor: p.accentBorder }}>
+                      <Ionicons name="airplane" size={20} color={p.accentText} />
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ color: p.fg, fontSize: 14, fontWeight: '700' }}>{t('cards.physicalOnTheWay')}</Text>
+                        <Text style={{ color: p.fgMuted, fontSize: 12, marginTop: 1 }}>
+                          {physStatusLabel(activeCard.physicalStatus!, t)}{activeCard.shippingCity ? ` · ${activeCard.shippingCity}` : ''}
+                        </Text>
+                      </View>
+                    </View>
+                  )}
+
                   {/* ── TRANSACTIONS ── */}
                   <View style={{ marginHorizontal: 24, marginTop: 24 }}>
                     <Text style={{ color: p.fg, fontSize: 16, fontWeight: '600', letterSpacing: -0.3, marginBottom: 12 }}>
@@ -1503,6 +1660,31 @@ export default function Cards() {
           qc.invalidateQueries({ queryKey: QUERY_KEYS.cards });
         }}
       />
+
+      <OrderPhysicalModal
+        card={orderCard}
+        palette={p}
+        t={t}
+        fee={physFee}
+        onClose={() => setOrderCard(null)}
+        onSuccess={() => {
+          h.success();
+          setOrderCard(null);
+          qc.invalidateQueries({ queryKey: QUERY_KEYS.cards });
+          qc.invalidateQueries({ queryKey: QUERY_KEYS.wallets });
+        }}
+      />
     </View>
   );
+}
+
+/** Maps the physical-order status enum to a short user-facing label. */
+function physStatusLabel(status: string, t: (k: string) => string): string {
+  switch (status) {
+    case 'REQUESTED': return t('cards.physRequested');
+    case 'PRINTING':  return t('cards.physPrinting');
+    case 'SHIPPED':   return t('cards.physShipped');
+    case 'DELIVERED': return t('cards.physDelivered');
+    default:          return t('cards.physRequested');
+  }
 }

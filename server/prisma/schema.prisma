@@ -266,6 +266,14 @@ enum CardTxType {
   WITHDRAWAL
 }
 
+enum CardOrderStatus {
+  NONE      // virtual only — no physical card requested
+  REQUESTED // user paid the fee, awaiting print
+  PRINTING
+  SHIPPED
+  DELIVERED
+}
+
 model User {
   id                           String                       @id @default(uuid())
   email                        String                       @unique
@@ -1532,6 +1540,18 @@ model Card {
   issuedAt        DateTime?
   activatedAt     DateTime?
   cancelledAt     DateTime?
+  // Physical card order — a virtual card can request a physical print for a
+  // platform fee (admin-configured, min $20). Shipping captured at order time.
+  physicalStatus    CardOrderStatus @default(NONE)
+  physicalOrderedAt DateTime?
+  physicalFee       Decimal?        @db.Decimal(20, 8)
+  shippingName      String?
+  shippingLine1     String?
+  shippingLine2     String?
+  shippingCity      String?
+  shippingPostcode  String?
+  shippingCountry   String?
+  shippingPhone     String?
   createdAt       DateTime          @default(now())
   updatedAt       DateTime          @updatedAt
   user            User              @relation(fields: [userId], references: [id], onDelete: Cascade)

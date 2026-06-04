@@ -27,7 +27,7 @@ import * as Clipboard from 'expo-clipboard';
 
 import { useAuthStore } from '@/store/authStore';
 import { realHandle, avatarMode } from '@/utils/displayUser';
-import { useWallets, useHaptics, useTransactions, useActivities, useActivityRealtime, useNotificationRealtime, useUnreadCount, useMarkets, useDisplayCurrency } from '@/hooks';
+import { useWallets, useHaptics, useTransactions, useActivities, useActivityRealtime, useNotificationRealtime, useUnreadCount, useMarkets, useDisplayCurrency, useBudgets } from '@/hooks';
 import { useTheme, useThemedPalette, isMonochrome, type Palette } from '@/store/themeStore';
 import { useT, useI18n } from '@/store/i18nStore';
 import { Sparkline } from '@/components/ui/Sparkline';
@@ -54,6 +54,7 @@ export default function Home() {
   const insets = useSafeAreaInsets();
   const user = useAuthStore((s) => s.user);
   const { data: wallets, refetch: refetchWallets } = useWallets();
+  const { data: budgets = [] } = useBudgets();
   // `useTransactions` still feeds screens that need the raw Transaction
   // ledger. The home Activity tab uses the unified `useActivities` feed
   // so P2P trades, card spend, deposits, withdrawals, ramps, and crypto
@@ -611,6 +612,75 @@ export default function Home() {
                   ))}
                 </View>
               )}
+
+              {/* Savings / Budgets Section — named goals (trips, gifts, rainy
+                  day). Tap a goal to open it, or "New goal" to start one. */}
+              <View style={{ marginTop: 24 }}>
+                <Pressable
+                  onPress={() => { h.selection(); router.push('/budgets'); }}
+                  style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 24, marginBottom: 10 }}
+                >
+                  <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '700', letterSpacing: 1 }}>
+                    {t('home.savings').toUpperCase()}
+                  </Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    {budgets.length > 0 && (
+                      <Text style={{ color: p.fgFaint, fontSize: 12, fontWeight: '600' }}>
+                        {budgets.length} {budgets.length === 1 ? t('home.goal') : t('home.goals')}
+                      </Text>
+                    )}
+                    <Ionicons name="chevron-forward" size={14} color={p.fgFaint} />
+                  </View>
+                </Pressable>
+
+                {budgets.slice(0, 4).map((bud) => {
+                  const bsym = fiatSymbol(bud.currency as any);
+                  const bsaved = Number(bud.balance);
+                  const btarget = bud.targetAmount != null ? Number(bud.targetAmount) : null;
+                  const bpct = bud.progressPct != null
+                    ? Math.min(100, Math.round(bud.progressPct))
+                    : (btarget ? Math.min(100, Math.round((bsaved / btarget) * 100)) : 100);
+                  const bdone = bud.status === 'COMPLETED';
+                  return (
+                    <Pressable
+                      key={bud.id}
+                      onPress={() => { h.selection(); router.push(`/budgets/${bud.id}`); }}
+                      style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 24, paddingVertical: 10, backgroundColor: pressed ? p.bgElev : 'transparent' })}
+                    >
+                      <View style={{ width: 38, height: 38, borderRadius: 12, backgroundColor: p.pillBg, borderWidth: 1, borderColor: p.border, alignItems: 'center', justifyContent: 'center' }}>
+                        <Text style={{ fontSize: 18 }}>{bud.emoji ?? '🎯'}</Text>
+                      </View>
+                      <View style={{ flex: 1, minWidth: 0 }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                          <Text style={{ color: p.fg, fontSize: 14, fontWeight: '700' }} numberOfLines={1}>{bud.name}</Text>
+                          {bud.locked && <Ionicons name="lock-closed" size={11} color={p.fgMuted} />}
+                          {bdone && <Ionicons name="checkmark-circle" size={13} color={p.greenFg} />}
+                        </View>
+                        {/* Progress bar */}
+                        <View style={{ height: 5, borderRadius: 3, backgroundColor: p.border, marginTop: 6, overflow: 'hidden' }}>
+                          <View style={{ width: `${bpct}%`, height: '100%', borderRadius: 3, backgroundColor: bdone ? p.greenFg : p.accent }} />
+                        </View>
+                      </View>
+                      <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '600', fontVariant: ['tabular-nums'] }}>
+                        {showBalance ? `${bsym}${bsaved.toLocaleString('en-US', { maximumFractionDigits: 0 })}` : '****'}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+
+                <Pressable
+                  onPress={() => { h.medium(); router.push('/budgets/new'); }}
+                  style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 24, paddingVertical: 12, backgroundColor: pressed ? p.bgElev : 'transparent' })}
+                >
+                  <View style={{ width: 38, height: 38, borderRadius: 12, backgroundColor: p.accentSoft, borderWidth: 1, borderColor: p.accentBorder, alignItems: 'center', justifyContent: 'center' }}>
+                    <Ionicons name="add" size={20} color={p.accentText} />
+                  </View>
+                  <Text style={{ color: p.fg, fontSize: 14, fontWeight: '600', flex: 1 }}>
+                    {budgets.length > 0 ? t('home.newGoal') : t('home.startSaving')}
+                  </Text>
+                  <Ionicons name="chevron-forward" size={14} color={p.fgFaint} />
+                </Pressable>
+              </View>
             </>
           ) : (
             <View style={{ paddingVertical: 56, alignItems: 'center', paddingHorizontal: 24 }}>

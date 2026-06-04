@@ -1,32 +1,20 @@
-import { useEffect, useRef } from 'react';
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { Animated, Easing, Platform, Pressable, Text, View, ActionSheetIOS, Alert } from 'react-native';
+import { Platform, Pressable, Text, View, ActionSheetIOS, Alert, Image } from 'react-native';
 import { useThemedPalette } from '@/store/themeStore';
 import { useAuthStore } from '@/store/authStore';
 import { useT } from '@/store/i18nStore';
 import { useMessageRealtime } from '@/hooks';
 
-/** The brand asterisk in the centre FAB, rotating slowly + continuously. */
-function RotatingMark({ size, mono }: { size: number; mono: boolean }) {
-  const spin = useRef(new Animated.Value(0)).current;
-  useEffect(() => {
-    const loop = Animated.loop(
-      Animated.timing(spin, { toValue: 1, duration: 9000, easing: Easing.linear, useNativeDriver: true }),
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [spin]);
-  const rotate = spin.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
-  // Mono → the white mark on the (constant) white disc reads as a debossed
-  // asterisk; non-mono → the true-blue colour mark.
+function BrandMark({ size, mono }: { size: number; mono: boolean }) {
   const src = mono
     ? require('../../assets/icon-white.png')
     : require('../../assets/icon-color.png');
+
   return (
-    <Animated.Image
+    <Image
       source={src}
-      style={{ width: size, height: size, transform: [{ rotate }] }}
+      style={{ width: size, height: size }}
       resizeMode="contain"
     />
   );
@@ -39,7 +27,7 @@ const ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   messages: 'chatbubble-ellipses',
 };
 
-const FAB_SIZE = 66;
+const FAB_SIZE = 69;
 
 export default function TabsLayout() {
   const p = useThemedPalette();
@@ -145,7 +133,7 @@ export default function TabsLayout() {
                   elevation: 10,
                 }}
               >
-                <RotatingMark size={FAB_SIZE - 22} mono={isMono} />
+                <BrandMark size={FAB_SIZE - 22} mono={isMono} />
               </View>
             </Pressable>
           ),

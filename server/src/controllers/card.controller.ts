@@ -7,6 +7,18 @@ import { AppError } from '../middleware/errorHandler';
 import { AuthRequest } from '../types';
 import { collectFee } from '../services/fee/feeCollector.service';
 import { emitActivity } from '../utils/realtime';
+import { isDateLocked, requiresStepUp } from '../services/budget.service';
+import { issueStepUp, verifyStepUp } from '../services/security/stepUp.service';
+
+/** Physical card order fee (USD). Admin-configurable via PlatformSettings,
+ *  floored at the $20 minimum the product requires. */
+export const PHYSICAL_CARD_FEE_KEY = 'card_physical_order_fee';
+const PHYSICAL_CARD_FEE_MIN = 20;
+async function getPhysicalCardFee(): Promise<number> {
+  const row = await prisma.platformSettings.findUnique({ where: { key: PHYSICAL_CARD_FEE_KEY } });
+  const v = parseFloat(row?.value ?? '');
+  return Math.max(PHYSICAL_CARD_FEE_MIN, Number.isFinite(v) ? v : PHYSICAL_CARD_FEE_MIN);
+}
 
 /* ── Tier config ─────────────────────────────────────────────
    Centralised so limits / cashback are in one place and can be
@@ -372,6 +384,156 @@ export class CardController {
     } catch (error) {
       next(error);
     }
+  }
+
+  /* GET /api/cards/physical-fee — the current physical-card order fee (USD). */
+  static async physicalFee(_req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      res.json({ fee: await getPhysicalCardFee(), currency: 'USD', min: PHYSICAL_CARD_FEE_MIN });
+    } catch (error) { next(error); }
+  }
+
+  /* POST /api/cards/:id/order-physical — request a physical print of a card.
+     Charges the admin-configured fee (min $20) from the user's spendable
+     balance (card currency first, else USD), records it in the fee ledger,
+     captures the shipping address, and flags the card REQUESTED. */
+  static async orderPhysical(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const ship = z.object({
+        shippingName:     z.string().min(2).max(120),
+        shippingLine1:    z.string().min(2).max(160),
+        shippingLine2:    z.string().max(160).optional(),
+        shippingCity:     z.string().min(1).max(80),
+        shippingPostcode: z.string().max(20).optional(),
+        shippingCountry:  z.string().min(2).max(60),
+        shippingPhone:    z.string().max(32).optional(),
+      }).parse(req.body);
+
+      const userId = req.user!.id;
+      const card = await prisma.card.findFirst({ where: { id: req.params.id, userId } });
+      if (!card)                       throw new AppError('Card not found', 404);
+      if (card.status === 'CANCELLED') throw new AppError('Card is cancelled', 400);
+      if (card.physicalStatus !== 'NONE') throw new AppError('A physical card is already on the way', 400);
+
+      const fee = await getPhysicalCardFee();
+
+      // Pick the funding wallet: the card's currency first, then USD, then USDT.
+      const candidates = [card.currency as string, 'USD', 'USDT'];
+      let funding: { id: string; currency: string } | null = null;
+      for (const cur of candidates) {
+        const w = await prisma.wallet.findFirst({ where: { userId, currency: cur as any } });
+        if (w && Number(w.balance) - Number(w.frozen ?? 0) >= fee) { funding = { id: w.id, currency: cur }; break; }
+      }
+      if (!funding) throw new AppError(`Insufficient balance — the physical card costs $${fee.toFixed(2)}`, 400);
+
+      const updated = await prisma.$transaction(async (tx) => {
+        await tx.wallet.update({ where: { id: funding!.id }, data: { balance: { decrement: fee } } });
+        await tx.cardTransaction.create({
+          data: {
+            cardId: card.id, userId, type: 'FEE', merchant: 'Physical card',
+            amount: fee, currency: funding!.currency as any, cashback: 0, declined: false,
+            reference: genRef(), metadata: { kind: 'physical_card_order' } as any,
+          },
+        });
+        return tx.card.update({
+          where: { id: card.id },
+          data: {
+            physicalStatus: 'REQUESTED', physicalOrderedAt: new Date(), physicalFee: fee,
+            shippingName: ship.shippingName, shippingLine1: ship.shippingLine1,
+            shippingLine2: ship.shippingLine2 ?? null, shippingCity: ship.shippingCity,
+            shippingPostcode: ship.shippingPostcode ?? null, shippingCountry: ship.shippingCountry,
+            shippingPhone: ship.shippingPhone ?? null,
+          },
+        });
+      });
+
+      await collectFee({
+        source: 'card_order', sourceId: card.id, payerId: userId,
+        amount: fee, currency: funding.currency,
+        description: `Physical card order · •••• ${card.last4}`,
+        metadata: { cardId: card.id, city: ship.shippingCity, country: ship.shippingCountry },
+      }).catch((e) => console.warn('[card] order fee collect failed', e));
+
+      await prisma.notification.create({
+        data: {
+          userId, type: 'card',
+          title: 'Physical card ordered',
+          message: `Your physical card ending ${card.last4} is being printed and will ship to ${ship.shippingCity}. A $${fee.toFixed(2)} fee was charged.`,
+          metadata: { cardId: card.id } as any,
+        },
+      }).catch(() => null);
+
+      emitActivity(req, [userId], { kind: 'card', cardId: card.id });
+      res.status(201).json({ card: updated, fee });
+    } catch (error) { next(error); }
+  }
+
+  /* POST /api/cards/:id/fund-from-budget — move money from a budget onto the
+     card (lets the card "spend out of" a savings goal once it's unlocked).
+     Enforces the budget lock: a DATE lock blocks until the unlock date and a
+     STEP_UP lock requires the 6-digit code. Atomic: releases the budget hold
+     and loads the card in one transaction. */
+  static async fundFromBudget(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const { budgetId, amount, stepUpCode } = z.object({
+        budgetId:   z.string().uuid(),
+        amount:     z.number().positive(),
+        stepUpCode: z.string().regex(/^\d{6}$/).optional(),
+      }).parse(req.body);
+
+      const userId = req.user!.id;
+      const card = await prisma.card.findFirst({ where: { id: req.params.id, userId } });
+      if (!card)                       throw new AppError('Card not found', 404);
+      if (card.status === 'CANCELLED') throw new AppError('Card is cancelled', 400);
+
+      const budget = await prisma.budgetWallet.findFirst({ where: { id: budgetId, userId } });
+      if (!budget) throw new AppError('Budget not found', 404);
+      if (budget.currency !== card.currency) {
+        throw new AppError(`Budget is in ${budget.currency} but the card is ${card.currency}`, 400);
+      }
+      if (Number(budget.balance) < amount) throw new AppError('Amount exceeds budget balance', 400);
+
+      // Lock enforcement — identical rules to a normal budget withdrawal.
+      if (isDateLocked(budget)) {
+        throw new AppError(`Locked until ${new Date(budget.unlockDate!).toISOString().slice(0, 10)}`, 403);
+      }
+      if (requiresStepUp(budget)) {
+        if (!stepUpCode) {
+          const { method } = await issueStepUp(userId, 'withdrawal');
+          return res.status(401).json({ requiresStepUp: true, method });
+        }
+        await verifyStepUp(userId, 'withdrawal', stepUpCode);
+      }
+
+      const amt = new Decimal(amount);
+      const result = await prisma.$transaction(async (tx) => {
+        // Release the budget hold AND move the money off the wallet onto the card.
+        await tx.wallet.update({
+          where: { userId_currency: { userId, currency: budget.currency } },
+          data: { frozen: { decrement: amt }, balance: { decrement: amt } },
+        });
+        await tx.budgetWallet.update({ where: { id: budget.id }, data: { balance: { decrement: amt } } });
+        await tx.budgetContribution.create({ data: { budgetId: budget.id, amount: amt.neg(), kind: 'WITHDRAWAL' } });
+        const ctx = await tx.cardTransaction.create({
+          data: {
+            cardId: card.id, userId, type: 'TOPUP', merchant: `Budget · ${budget.name}`,
+            amount: amt, currency: card.currency, cashback: 0, declined: false,
+            reference: genRef(), metadata: { budgetId: budget.id, kind: 'budget_to_card' } as any,
+          },
+        });
+        await tx.transaction.create({
+          data: {
+            userId, type: 'BUDGET_RELEASE', currency: budget.currency, amount: amt,
+            balanceBefore: 0, balanceAfter: 0,
+            description: `Loaded "${budget.name}" onto card •••• ${card.last4}`,
+          },
+        }).catch(() => null);
+        return ctx;
+      });
+
+      emitActivity(req, [userId], { kind: 'card', cardId: card.id });
+      res.status(201).json({ transaction: result });
+    } catch (error) { next(error); }
   }
 
   /* GET /api/cards/tiers — public tier catalogue (used on landing + dashboard) */

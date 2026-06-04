@@ -10,7 +10,9 @@
       "Bash(npx tsc *)",
       "Bash(echo \"MOBILE_EXIT=$?\")",
       "Read(//tmp/**)",
-      "Bash(npm run *)"
+      "Bash(npm run *)",
+      "Bash(sed -n '/model PlatformSettings/,/^}/p' server/prisma/schema.prisma)",
+      "Bash(sed -n '756,800p' server/prisma/schema.prisma)"
     ]
   }
 }

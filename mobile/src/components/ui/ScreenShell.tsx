@@ -8,7 +8,7 @@
  */
 
 import { ReactNode } from 'react';
-import { Platform, Pressable, ScrollView, View, type StyleProp, type ViewStyle } from 'react-native';
+import { KeyboardAvoidingView, Platform, Pressable, ScrollView, View, type StyleProp, type ViewStyle } from 'react-native';
 import { Text } from './Text';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -165,12 +165,16 @@ interface Props {
   right?: ReactNode;
   /** Wrap content in a vertical ScrollView (default true). */
   scroll?: boolean;
+  /** Opt-in keyboard handling for form screens — lifts content above the
+   *  keyboard and keeps the bottom inputs/CTA reachable. Default false so
+   *  existing screens are unaffected. */
+  keyboard?: boolean;
   contentStyle?: StyleProp<ViewStyle>;
   children: ReactNode;
 }
 
 export function ScreenShell({
-  title, subtitle, back = true, right, scroll = true, contentStyle, children,
+  title, subtitle, back = true, right, scroll = true, keyboard = false, contentStyle, children,
 }: Props) {
   const router    = useRouter();
   const h         = useHaptics();
@@ -184,11 +188,19 @@ export function ScreenShell({
   // hidden under the bar on first paint.
   const stickyH = insets.top + 18 + 38 + 10;
 
+  // In keyboard mode pad the bottom generously so the last field/CTA clears
+  // the on-screen keyboard even before the KeyboardAvoidingView lifts.
+  const bottomPad = keyboard ? insets.bottom + 120 : 64;
   const bodyPadStyle = scroll
-    ? { paddingTop: stickyH, paddingHorizontal: 24, paddingBottom: 64 }
+    ? { paddingTop: stickyH, paddingHorizontal: 24, paddingBottom: bottomPad }
     : { paddingTop: stickyH, paddingHorizontal: 24, flex: 1 };
   const bodyProps = scroll
-    ? { showsVerticalScrollIndicator: false, style: { flex: 1 }, contentContainerStyle: [bodyPadStyle, contentStyle] }
+    ? {
+        showsVerticalScrollIndicator: false,
+        style: { flex: 1 },
+        contentContainerStyle: [bodyPadStyle, contentStyle],
+        ...(keyboard ? { keyboardShouldPersistTaps: 'handled' as const, keyboardDismissMode: 'interactive' as const } : {}),
+      }
     : { style: [bodyPadStyle, contentStyle] };
 
   const header = (
@@ -234,8 +246,18 @@ export function ScreenShell({
       <StatusBar style={themeMode === 'light' ? 'dark' : 'light'} />
 
       {/* Scrollable body — under the sticky bar in the stacking
-          order. Content scrolls behind the frosted nav. */}
-      {scroll ? (
+          order. Content scrolls behind the frosted nav. In keyboard
+          mode the whole body is wrapped in a KeyboardAvoidingView so
+          the bottom inputs/CTA stay visible above the keyboard. */}
+      {keyboard ? (
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          keyboardVerticalOffset={0}
+        >
+          {scroll ? <ScrollView {...bodyProps}>{children}</ScrollView> : <View {...bodyProps}>{children}</View>}
+        </KeyboardAvoidingView>
+      ) : scroll ? (
         <ScrollView {...bodyProps}>{children}</ScrollView>
       ) : (
         <View {...bodyProps}>{children}</View>
