@@ -149,14 +149,20 @@ export default function AdminScreen() {
   const isAdmin = user?.role === 'ADMIN';
   const [period, setPeriod] = useState<Period>('today');
   const [scrolling, setScrolling] = useState(false);
+  const scrollingRef = useRef(false);
+  const [manualRefreshing, setManualRefreshing] = useState(false);
   const scrollSettleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const markScrolling = () => {
     if (scrollSettleTimer.current) clearTimeout(scrollSettleTimer.current);
-    setScrolling(true);
+    if (!scrollingRef.current) {
+      scrollingRef.current = true;
+      setScrolling(true);
+    }
   };
   const settleScrolling = (delay = 0) => {
     if (scrollSettleTimer.current) clearTimeout(scrollSettleTimer.current);
     scrollSettleTimer.current = setTimeout(() => {
+      scrollingRef.current = false;
       setScrolling(false);
       scrollSettleTimer.current = null;
     }, delay);
@@ -239,6 +245,13 @@ export default function AdminScreen() {
   const fx = fxQ.data;
   const fund = fundQ.data;
   const stats: PeriodStats | undefined = d?.[period];
+  const lastSyncAt = Math.max(
+    dashQ.dataUpdatedAt || 0,
+    metricsQ.dataUpdatedAt || 0,
+    exposureQ.dataUpdatedAt || 0,
+    fxQ.dataUpdatedAt || 0,
+    fundQ.dataUpdatedAt || 0,
+  );
 
   // Live pulse for the realtime dot
   const pulse = useRef(new Animated.Value(0)).current;
@@ -257,7 +270,12 @@ export default function AdminScreen() {
   const dotOpacity = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 0.3] });
 
   const onRefresh = async () => {
-    await Promise.all([dashQ.refetch(), metricsQ.refetch(), exposureQ.refetch(), fxQ.refetch(), fundQ.refetch()]);
+    setManualRefreshing(true);
+    try {
+      await Promise.all([dashQ.refetch(), metricsQ.refetch(), exposureQ.refetch(), fxQ.refetch(), fundQ.refetch()]);
+    } finally {
+      setManualRefreshing(false);
+    }
   };
 
   const switchToUser = async () => {
@@ -314,10 +332,11 @@ export default function AdminScreen() {
           contentContainerStyle={{ paddingBottom: 60 }}
           automaticallyAdjustContentInsets={false}
           contentInsetAdjustmentBehavior="never"
+          scrollEventThrottle={16}
           onScrollBeginDrag={markScrolling}
           onMomentumScrollEnd={() => settleScrolling()}
           onScrollEndDrag={() => settleScrolling(900)}
-          refreshControl={<RefreshControl refreshing={dashQ.isFetching || metricsQ.isFetching} onRefresh={onRefresh} tintColor={p.fg} />}
+          refreshControl={<RefreshControl refreshing={manualRefreshing} onRefresh={onRefresh} tintColor={p.fg} />}
         >
           {/* Top bar */}
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 12, paddingBottom: 6 }}>
@@ -341,6 +360,20 @@ export default function AdminScreen() {
             <Text style={{ color: p.fgMuted, fontSize: 13, marginTop: 4 }}>
               {user?.firstName ?? 'Admin'} · {user?.role}
             </Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10, backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border }}>
+                <Ionicons name="sync-outline" size={13} color={p.fgMuted} />
+                <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '700' }}>
+                  {lastSyncAt ? `Synced ${new Date(lastSyncAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'Waiting for sync'}
+                </Text>
+              </View>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10, backgroundColor: fund?.tradingHalted ? p.redBg : p.greenBg, borderWidth: 1, borderColor: fund?.tradingHalted ? p.redFg : p.greenFg }}>
+                <Ionicons name={fund?.tradingHalted ? 'warning-outline' : 'shield-checkmark-outline'} size={13} color={fund?.tradingHalted ? p.redFg : p.greenFg} />
+                <Text style={{ color: fund?.tradingHalted ? p.redFg : p.greenFg, fontSize: 11, fontWeight: '800' }}>
+                  {fund?.tradingHalted ? 'Trading halted' : 'Controls healthy'}
+                </Text>
+              </View>
+            </View>
           </View>
 
           {/* Period picker */}

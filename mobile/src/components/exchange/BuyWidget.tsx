@@ -4,7 +4,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { ActivityIndicator, Alert, Keyboard, Pressable, ScrollView, View, TextInput as RNTextInput, Modal } from 'react-native';
+import { ActivityIndicator, Alert, Keyboard, Platform, Pressable, ScrollView, View, TextInput as RNTextInput, Modal } from 'react-native';
 import { Text, TextInput } from '@/components/ui/Text';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
@@ -14,11 +14,13 @@ import { useT } from '@/store/i18nStore';
 import { SlideToConfirm } from '@/components/ui/SlideToConfirm';
 import { StatusBanner } from '@/components/ui/StatusBanner';
 import { StepUpModal } from '@/components/ui/StepUpModal';
+import { SuccessModal, type TxSuccessData } from '@/components/ui/SuccessModal';
 import { ExpressPayButton } from '@/components/ui/ExpressPayButton';
 import { useWallets, useCards, useMarkets, useTransactionSound } from '@/hooks';
 import * as LocalAuthentication from 'expo-local-authentication';
 import { CoinAvatar } from '@/components/ui/CoinAvatar';
 import { cryptoExchangeAPI, type CryptoQuote, type AssetSearchResult } from '@/lib/cryptoApi';
+import { STRIPE } from '@/constants';
 
 // ── Static metadata for well-known coins ─────────────────────────────────────
 // Everything else gets a generated colour from its ticker symbol.
@@ -141,6 +143,12 @@ type PayMethod =
   | { type: 'fiat';   currency: string; balance: number }
   | { type: 'crypto'; asset: string; balance: number };
 
+const FIAT_FLAGS: Record<string, string> = {
+  USD: '🇺🇸', EUR: '🇪🇺', GBP: '🇬🇧', AED: '🇦🇪',
+  SAR: '🇸🇦', EGP: '🇪🇬', LYD: '🇱🇾', CAD: '🇨🇦',
+  AUD: '🇦🇺', CHF: '🇨🇭', JPY: '🇯🇵', CNY: '🇨🇳',
+};
+
 function methodId(m: PayMethod) {
   if (m.type === 'card')   return `card_${m.last4}`;
   if (m.type === 'fiat')   return `fiat_${m.currency}`;
@@ -201,14 +209,12 @@ export function BuyWidget({ defaultAsset, lockAsset = false }: BuyWidgetProps = 
   const [exec,     setExec]     = useState(false);
   const [error,    setError]    = useState<string | null>(null);
   const [stepUpOpen, setStepUpOpen] = useState(false);
-  const [success,  setSuccess]  = useState<string | null>(null);
   const [seconds,  setSeconds]  = useState(0);
-  const [showFees, setShowFees] = useState(false);
-  const [intent,   setIntent]   = useState<'buy' | 'send'>('buy');
-  const [sendAddr, setSendAddr] = useState('');
+  const [showFees,         setShowFees]         = useState(false);
   const [paySheetOpen,     setPaySheetOpen]     = useState(false);
   const [networkSheetOpen, setNetworkSheetOpen] = useState(false);
-  const [payMethod, setPayMethod] = useState<PayMethod | null>(null);
+  const [payMethod,        setPayMethod]        = useState<PayMethod | null>(null);
+  const [successModal,     setSuccessModal]     = useState<TxSuccessData | null>(null);
   const idemRef = useRef(`ord_${Date.now()}`);
 
   // ── Payment methods — exclude the asset being bought ─────────────
@@ -325,7 +331,7 @@ export function BuyWidget({ defaultAsset, lockAsset = false }: BuyWidgetProps = 
   // ── Quote fetching ────────────────────────────────────────────────
   useEffect(() => {
     const amt = parseFloat(fiat);
-    if (!amt || amt <= 0) { setQuote(null); return; }
+    if (!amt || amt <= 0 || !payMethod) { setQuote(null); return; }
     const id = setTimeout(async () => {
       setLoading(true); setError(null);
       try {
@@ -358,14 +364,10 @@ export function BuyWidget({ defaultAsset, lockAsset = false }: BuyWidgetProps = 
     return () => clearInterval(iv);
   }, [quote]);
 
-  // ── Confirm ───────────────────────────────────────────────────────
-  async function onConfirm(stepUpCode?: string) {
-    if (!quote) return;
-    if (intent === 'send' && !sendAddr.trim()) { setError(tr('buy.enterRecipient')); return; }
+  // ── Execute order — called with the chosen payment method ─────────
+  async function doExecute(method: PayMethod | null, stepUpCode?: string) {
+    if (!quote || !method) { setExec(false); return; }
 
-    // Face ID confirmation for the purchase (when enabled + enrolled). On a
-    // trusted device the server accepts this in lieu of a code; on a new device
-    // it'll still 401 and we fall back to the code modal below.
     let biometricVerified = false;
     if (!stepUpCode && biometricEnabled) {
       try {
@@ -378,31 +380,40 @@ export function BuyWidget({ defaultAsset, lockAsset = false }: BuyWidgetProps = 
           if (!r.success) { setError(tr('common.verificationCancelled')); setExec(false); return; }
           biometricVerified = true;
         }
-      } catch { /* biometric unavailable → server will require a code */ }
+      } catch {}
     }
 
     setExec(true); setError(null);
+    const snapQuote = quote; // capture before any state resets
     try {
-      await cryptoExchangeAPI.execute({
-        quoteId: quote.id, confirmedByUser: true, idempotencyKey: idemRef.current,
+      const result = await cryptoExchangeAPI.execute({
+        quoteId: snapQuote.id, confirmedByUser: true, idempotencyKey: idemRef.current,
         ...(stepUpCode ? { stepUpCode } : {}),
         ...(biometricVerified ? { biometricVerified: true } : {}),
-        ...(intent === 'send' ? { recipientAddress: sendAddr.trim() } : {}),
-      } as any);
+      } as any) as any;
       playSuccess('buy');
       setStepUpOpen(false);
-      setSuccess(`${fmt(quote.cryptoAmount, 8)} ${asset} ${intent === 'send' ? tr('buy.sent') : tr('buy.purchased')} ✓`);
-      setQuote(null); setFiat(''); setSendAddr('');
-      setTimeout(() => setSuccess(null), 4000);
+      setQuote(null); setFiat('');
+      const txRef = result?.data?.txRef ?? result?.data?.orderId ?? result?.data?.id ?? `#${idemRef.current}`;
+      const rate = Number(snapQuote.totalUserPays) / Math.max(Number(snapQuote.cryptoAmount), 1e-18);
+      const creditedWallet = `${asset} Wallet`;
+      const debitedWallet  = method.type === 'fiat'   ? `${method.currency} Wallet`
+                           : method.type === 'crypto' ? `${method.asset} Wallet`
+                           : `${fundingCurrency} (Card)`;
+      setSuccessModal({
+        type: 'buy', asset,
+        cryptoAmount: Number(snapQuote.cryptoAmount),
+        settledCurrency: fundingCurrency,
+        txRef, rate, creditedWallet, debitedWallet,
+        timestamp: new Date(),
+      });
     } catch (e: any) {
-      // 401 with a step-up message → prompt for the 6-digit code.
       const msg = e?.response?.data?.error ?? '';
       if (e?.response?.status === 401 && /security|verification|code|device/i.test(msg) && !stepUpCode) {
         setStepUpOpen(true);
-        return; // modal will re-call onConfirm(code)
+        return;
       }
       playError();
-      // If the modal is open, rethrow so the modal shows the error (bad code).
       if (stepUpCode) throw e;
       setError(msg || tr('buy.errOrder'));
     } finally { setExec(false); }
@@ -414,15 +425,16 @@ export function BuyWidget({ defaultAsset, lockAsset = false }: BuyWidgetProps = 
   const livePrice  = tickerBase === 'USDT' ? 1 : (tickers?.find((t) => t.base === tickerBase)?.price ?? searchResults.find((r) => r.symbol === tickerBase)?.price ?? 0);
   const change24h  = searchResults.find((r) => r.symbol === tickerBase)?.change24h;
   const timerCritical = seconds > 0 && seconds < 8;
-  const canConfirm    = !!quote && !exec && seconds > 0;
+  const canConfirm    = !!quote && !!payMethod && !exec && seconds > 0;
 
   // Instant price estimate: shown while no quote exists but amount + livePrice are known
   const fiatNum       = parseFloat(fiat) || 0;
   const priceEstimate = livePrice > 0 && fiatNum > 0 ? fiatNum / Number(livePrice) : null;
 
-  // Slider label — clean, no embedded seconds (badge handles that)
-  const slideLabel = canConfirm
-    ? (intent === 'send' ? tr('buy.slideToSend').replace('{asset}', asset) : tr('buy.slideToBuy').replace('{asset}', asset))
+  const slideLabel = !payMethod
+    ? 'Select a payment method'
+    : canConfirm
+    ? tr('buy.slideToBuy').replace('{asset}', asset)
     : tr('buy.enterAmount');
 
   // Top gainers: top 5 by 24h change from tickers
@@ -453,6 +465,22 @@ export function BuyWidget({ defaultAsset, lockAsset = false }: BuyWidgetProps = 
 
   // Displayed list in picker: search results if query, else empty (sections render separately)
   const displayList: AssetSearchResult[] = searchResults.length > 0 ? searchResults : [];
+  const handleExpressPaySuccess = () => {
+    const ca = Number(quote?.cryptoAmount ?? priceEstimate ?? 0);
+    const rate = ca > 0 ? fiatNum / ca : 0;
+    setSuccessModal({
+      type: 'buy', asset, cryptoAmount: ca,
+      settledCurrency: fundingCurrency,
+      txRef: `#${idemRef.current}`,
+      rate, creditedWallet: `${asset} Wallet`,
+      debitedWallet: `${fundingCurrency} (Card)`,
+      timestamp: new Date(),
+    });
+    setQuote(null);
+    setFiat('');
+    setPaySheetOpen(false);
+  };
+  const showExpressPay = fiatNum > 0 && !!STRIPE.publishableKey && (Platform.OS === 'ios' || Platform.OS === 'android');
 
   return (
     <View style={{ paddingHorizontal: 20, paddingBottom: 8 }}>
@@ -477,26 +505,15 @@ export function BuyWidget({ defaultAsset, lockAsset = false }: BuyWidgetProps = 
             <Text style={{ color: p.fg, fontSize: 17, fontWeight: '600' }}>{meta.label}</Text>
             <Text style={{ color: p.fgFaint, fontSize: 12, fontWeight: '500' }}>{asset}</Text>
           </View>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 3 }}>
-            {/* Show OUR price (the quoted, marked-up rate in the funding
-                currency) when a quote exists; otherwise the live reference. */}
-            {quote ? (
-              <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '500', fontVariant: ['tabular-nums'] }}>
-                {sym(fundingCurrency)}{fmtPrice(Number(quote.settlementAmount ?? quote.fiatAmount) / Math.max(Number(quote.cryptoAmount), 1e-18))} · your price
-              </Text>
-            ) : livePrice > 0 ? (
-              <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '500', fontVariant: ['tabular-nums'] }}>
-                {sym(baseCurrency)}{fmtPrice(Number(livePrice))}
-              </Text>
-            ) : null}
-            {change24h !== undefined && (
+          {change24h !== undefined && (
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
               <View style={{ paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6, backgroundColor: change24h >= 0 ? p.greenBg : p.redBg }}>
                 <Text style={{ color: change24h >= 0 ? p.greenFg : p.redFg, fontSize: 11, fontWeight: '700' }}>
                   {change24h >= 0 ? '+' : ''}{change24h.toFixed(2)}%
                 </Text>
               </View>
-            )}
-          </View>
+            </View>
+          )}
         </View>
         {!lockAsset && (
           <View style={{
@@ -536,6 +553,37 @@ export function BuyWidget({ defaultAsset, lockAsset = false }: BuyWidgetProps = 
         );
       })()}
 
+      {/* ── Pay with ── required before a quote can be fetched */}
+      <Pressable
+        onPress={() => { Haptics.selectionAsync(); setPaySheetOpen(true); }}
+        style={({ pressed }) => ({
+          flexDirection: 'row', alignItems: 'center', gap: 12,
+          backgroundColor: p.bgElev, borderRadius: 16,
+          borderWidth: 1.5, borderColor: payMethod ? p.accentBorder : p.border,
+          paddingHorizontal: 14, paddingVertical: 12, marginBottom: 14,
+          opacity: pressed ? 0.8 : 1,
+        })}
+      >
+        {payMethod ? (
+          <View style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: p.bgRaised, alignItems: 'center', justifyContent: 'center' }}>
+            <Text style={{ fontSize: payMethod.type === 'fiat' ? 18 : 14 }}>
+              {payMethod.type === 'card' ? '💳' : payMethod.type === 'fiat' ? (FIAT_FLAGS[payMethod.currency] ?? '🏦') : assetMeta(payMethod.asset).icon}
+            </Text>
+          </View>
+        ) : (
+          <View style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: p.accentSoft, alignItems: 'center', justifyContent: 'center' }}>
+            <Ionicons name="wallet-outline" size={15} color={p.accentText} />
+          </View>
+        )}
+        <View style={{ flex: 1 }}>
+          <Text style={{ color: p.fgFaint, fontSize: 10, fontWeight: '700', letterSpacing: 0.5 }}>PAY WITH</Text>
+          <Text style={{ color: payMethod ? p.fg : p.accentText, fontSize: 13, fontWeight: '600', marginTop: 1 }}>
+            {payMethod ? methodLabel(payMethod) : 'Select payment method'}
+          </Text>
+        </View>
+        <Ionicons name="chevron-down" size={15} color={p.fgMuted} />
+      </Pressable>
+
       {/* ── Amount input ──
           Label + price-estimate share a row. The estimate can be long
           (e.g. "≈ 0.000034 BTC") and was pushing the YOU PAY label
@@ -564,25 +612,25 @@ export function BuyWidget({ defaultAsset, lockAsset = false }: BuyWidgetProps = 
       </View>
       <View style={{
         flexDirection: 'row', alignItems: 'center',
-        backgroundColor: p.bgElev, borderRadius: 20,
-        borderWidth: 1.5, borderColor: error ? p.redFg : (fiatNum > 0 ? brandAccent : p.border),
+        backgroundColor: p.bgRaised, borderRadius: 24,
+        borderWidth: 1.5, borderColor: error ? p.redFg : (fiatNum > 0 ? p.accentBorder : p.border),
         paddingHorizontal: 18, marginBottom: 12,
       }}>
-        <Text style={{ color: p.fgMuted, fontSize: 24, fontWeight: '500', marginRight: 6 }}>{sym(fundingCurrency)}</Text>
+        <Text style={{ color: p.fgMuted, fontSize: 34, fontWeight: '600', marginRight: 6 }}>{sym(fundingCurrency)}</Text>
         <TextInput
           value={fiat}
           onChangeText={(v) => {
             const clean = v.replace(/[^0-9.]/g, '').replace(/(\..*)\./g, '$1');
-            setFiat(clean); setQuote(null); setError(null); setSuccess(null); setShowFees(false);
+            setFiat(clean); setQuote(null); setError(null); setShowFees(false);
           }}
           placeholder="0.00"
           placeholderTextColor={p.fgFaint}
           keyboardType="decimal-pad"
           returnKeyType="done"
           onSubmitEditing={Keyboard.dismiss}
-          style={{ flex: 1, color: p.fg, fontSize: 36, fontWeight: '600', paddingVertical: 18, fontVariant: ['tabular-nums'], letterSpacing: -0.5 }}
+          style={{ flex: 1, color: p.fg, fontSize: 52, fontWeight: '700', paddingVertical: 18, fontVariant: ['tabular-nums'], letterSpacing: 0 }}
         />
-        <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '700', letterSpacing: 0.5 }}>{fundingCurrency}</Text>
+        <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '800', letterSpacing: 0.5 }}>{fundingCurrency}</Text>
       </View>
 
       {/* Quick amounts */}
@@ -629,11 +677,11 @@ export function BuyWidget({ defaultAsset, lockAsset = false }: BuyWidgetProps = 
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
               <View>
                 <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '500', letterSpacing: 0.5, marginBottom: 4 }}>
-                  {intent === 'send' ? tr('buy.recipientReceives') : tr('buy.youReceive')}
+                  {tr('buy.youReceive')}
                 </Text>
-                <Text style={{ color: p.fg, fontSize: 26, fontWeight: '500', letterSpacing: 0 }}>
+                <Text style={{ color: p.fg, fontSize: 26, fontWeight: '700', letterSpacing: -0.5 }}>
                   {fmt(quote.cryptoAmount, 8)}{' '}
-                  <Text style={{ color: meta.color, fontSize: 18 }}>{asset}</Text>
+                  <Text style={{ color: meta.color, fontSize: 17, fontWeight: '600' }}>{asset}</Text>
                 </Text>
               </View>
               <View style={{
@@ -643,7 +691,7 @@ export function BuyWidget({ defaultAsset, lockAsset = false }: BuyWidgetProps = 
                 borderWidth: 1, borderColor: timerCritical ? p.redFg : p.border,
               }}>
                 <Ionicons name="timer-outline" size={13} color={timerCritical ? p.redFg : p.fgMuted} />
-                <Text style={{ color: timerCritical ? p.redFg : p.fgMuted, fontSize: 12, fontWeight: '500' }}>{seconds}s</Text>
+                <Text style={{ color: timerCritical ? p.redFg : p.fgMuted, fontSize: 12, fontWeight: '600' }}>{seconds}s</Text>
               </View>
             </View>
             <Pressable
@@ -651,39 +699,31 @@ export function BuyWidget({ defaultAsset, lockAsset = false }: BuyWidgetProps = 
               style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 12, paddingTop: 10, borderTopWidth: 1, borderTopColor: p.border }}
             >
               <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '500' }}>
-                Fee  {sym(fundingCurrency)}{fmt(Number(quote.platformFeeSettlement ?? quote.platformFee) + Number(quote.networkFeeSettlement ?? quote.networkFee), 2)}
+                Fee · {sym(fundingCurrency)}{fmt(Number(quote.platformFeeSettlement ?? quote.platformFee) + Number(quote.networkFeeSettlement ?? quote.networkFee), 2)}
               </Text>
               <Ionicons name={showFees ? 'chevron-up' : 'chevron-down'} size={14} color={p.fgMuted} />
             </Pressable>
             {showFees && (
-              <View style={{ marginTop: 8, gap: 5 }}>
-                {[
-                  { label: tr('buy.platformFee'), value: fmt(quote.platformFeeSettlement ?? quote.platformFee, 2) },
-                  { label: tr('buy.networkFee'),  value: fmt(quote.networkFeeSettlement ?? quote.networkFee, 2) },
-                  { label: tr('buy.exchangeRate'), value: `1 ${asset} = ${sym(fundingCurrency)}${fmtPrice(Number(quote.settlementAmount ?? quote.fiatAmount) / Math.max(Number(quote.cryptoAmount), 1e-18))}` },
-                  { label: tr('common.spread'), value: `${(Number(quote.spreadPct) * 100).toFixed(2)}%` },
-                  { label: tr('buy.totalYouPay'), value: fmt(quote.totalUserPays, 2), bold: true },
-                ].map(({ label, value, bold }) => (
-                  <View key={label} style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                    <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: bold ? '700' : '500' }}>{label}</Text>
-                    <Text style={{ color: bold ? p.fg : p.fgMuted, fontSize: 12, fontWeight: bold ? '800' : '500' }}>
-                      {bold ? `${sym(fundingCurrency)}${value}` : value}
-                    </Text>
+              <View style={{ marginTop: 10, gap: 8, backgroundColor: p.bgRaised, borderRadius: 12, padding: 12 }}>
+                {([
+                  { label: tr('buy.platformFee'), value: `${sym(fundingCurrency)}${fmt(quote.platformFeeSettlement ?? quote.platformFee, 2)}` },
+                  { label: tr('buy.networkFee'),  value: `${sym(fundingCurrency)}${fmt(quote.networkFeeSettlement ?? quote.networkFee, 2)}` },
+                  { label: tr('buy.totalYouPay'), value: `${sym(fundingCurrency)}${fmt(quote.totalUserPays, 2)}`, bold: true },
+                ] as { label: string; value: string; bold?: boolean }[]).map(({ label, value, bold }) => (
+                  <View key={label} style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Text style={{ color: bold ? p.fgMuted : p.fgFaint, fontSize: 12, fontWeight: bold ? '600' : '500' }}>{label}</Text>
+                    <Text style={{ color: bold ? p.fg : p.fgMuted, fontSize: 12, fontWeight: bold ? '700' : '500' }}>{value}</Text>
                   </View>
                 ))}
-                <Text style={{ color: p.fgFaint, fontSize: 11, marginTop: 2 }}>
-                  Our price already includes the {(Number(quote.spreadPct) * 100).toFixed(1)}% spread.
-                </Text>
               </View>
             )}
           </>
         ) : priceEstimate ? (
-          // Instant price estimate from live ticker — before full quote arrives
           <View>
             <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '500', letterSpacing: 0.5, marginBottom: 4 }}>
-              {intent === 'send' ? tr('buy.recipientReceivesEst') : tr('buy.youReceiveEst')}
+              {tr('buy.youReceiveEst')}
             </Text>
-            <Text style={{ color: p.fgFaint, fontSize: 24, fontWeight: '500' }}>
+            <Text style={{ color: p.fgFaint, fontSize: 24, fontWeight: '600' }}>
               ≈ {fmt(priceEstimate, 8)}{' '}
               <Text style={{ color: meta.color, fontSize: 16 }}>{asset}</Text>
             </Text>
@@ -698,82 +738,15 @@ export function BuyWidget({ defaultAsset, lockAsset = false }: BuyWidgetProps = 
         )}
       </View>
 
-      {/* ── Pay with ── */}
-      <Pressable
-        onPress={() => { Haptics.selectionAsync(); setPaySheetOpen(true); }}
-        style={({ pressed }) => ({
-          flexDirection: 'row', alignItems: 'center',
-          backgroundColor: p.bgElev, borderRadius: 18,
-          borderWidth: 1, borderColor: p.border,
-          padding: 14, marginBottom: 14, opacity: pressed ? 0.8 : 1,
-        })}
-      >
-        <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '500', flex: 1 }}>{tr('buy.payWith')}</Text>
-        {payMethod && (
-          <Text style={{ color: p.fg, fontSize: 13, fontWeight: '500' }} numberOfLines={1}>{methodLabel(payMethod)}</Text>
-        )}
-        <Ionicons name="chevron-forward" size={15} color={p.fgFaint} style={{ marginLeft: 6 }} />
-      </Pressable>
-
-      {/* Intent toggle */}
-      <View style={{
-        flexDirection: 'row', backgroundColor: p.bgElev, borderRadius: 16,
-        padding: 4, borderWidth: 1, borderColor: p.border, marginBottom: 16,
-      }}>
-        {(['buy', 'send'] as const).map((v) => (
-          <Pressable
-            key={v}
-            onPress={() => { Haptics.selectionAsync(); setIntent(v); setQuote(null); setError(null); setSuccess(null); }}
-            style={{
-              flex: 1, paddingVertical: 10, borderRadius: 12,
-              alignItems: 'center',
-              backgroundColor: intent === v ? brandAccent : 'transparent',
-              shadowColor: intent === v ? brandAccent : 'transparent',
-              shadowOpacity: intent === v ? 0.18 : 0,
-              shadowOffset: { width: 0, height: 3 },
-              shadowRadius: 8,
-            }}
-          >
-            <Text style={{
-              // p.accentFg is the palette's "text on accent" colour —
-              // in dark mode the accent is white so accentFg is black;
-              // in light mode the accent is black so accentFg is white.
-              // Using the token instead of an inline ternary keeps this
-              // in sync if the brand palette ever shifts.
-              color: intent === v ? p.accentFg : p.fgMuted,
-              fontSize: 13, fontWeight: '700',
-            }}>
-              {v === 'buy' ? tr('buy.toMyWallet') : tr('buy.toAddress')}
-            </Text>
-          </Pressable>
-        ))}
-      </View>
-
-      {/* Send address */}
-      {intent === 'send' && (
-        <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: p.bgElev, borderRadius: 14, borderWidth: 1, borderColor: p.border, paddingHorizontal: 14, paddingVertical: 12, marginBottom: 14 }}>
-          <Ionicons name="wallet-outline" size={16} color={p.fgMuted} />
-          <TextInput
-            value={sendAddr} onChangeText={setSendAddr}
-            placeholder={tr('buy.addressPlaceholder').replace('{asset}', asset)} placeholderTextColor={p.fgFaint}
-            style={{ flex: 1, color: p.fg, fontSize: 13, marginLeft: 10 }}
-            autoCapitalize="none" autoCorrect={false}
-          />
-        </View>
-      )}
-
-      {/* ── Express pay (Apple/Google) — appears for "buy to my wallet" only ── */}
-      {intent === 'buy' && fiatNum > 0 && payMethod?.type === 'card' && (
+      {/* Express pay — card payments only */}
+      {fiatNum > 0 && payMethod?.type === 'card' && (
         <View style={{ marginBottom: 12 }}>
           <ExpressPayButton
             amount={fiatNum}
             currency={fundingCurrency}
             cryptoCurrency={serverAsset(asset)}
-            enabled={!exec && !success}
-            onSuccess={() => {
-              setSuccess(`${fmt(quote?.cryptoAmount ?? priceEstimate ?? 0, 8)} ${asset} ${tr('buy.purchased')} ✓`);
-              setQuote(null); setFiat('');
-            }}
+            enabled={!exec}
+            onSuccess={handleExpressPaySuccess}
             onError={(m) => setError(m)}
           />
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 12, marginBottom: 2 }}>
@@ -784,20 +757,16 @@ export function BuyWidget({ defaultAsset, lockAsset = false }: BuyWidgetProps = 
         </View>
       )}
 
-      {/* ── Status banner (error / success) ── */}
+      {/* ── Status banner (errors only; success shown inside slider) ── */}
       <StatusBanner kind="error" message={error} onDismiss={() => setError(null)} />
-      <StatusBanner kind="success" message={success} />
 
-      {/* ── CTA — slide to confirm ── */}
+      {/* ── CTA ── */}
       <SlideToConfirm
         label={slideLabel}
-        onConfirm={() => { if (canConfirm && !error && !success) onConfirm(); }}
-        enabled={canConfirm && !error && !success}
-        status={exec ? 'loading' : success ? 'success' : error ? 'error' : 'idle'}
-        successLabel={success || undefined}
+        onConfirm={() => { if (canConfirm && !error && !exec) doExecute(payMethod); }}
+        enabled={canConfirm && !error}
+        status={exec ? 'loading' : error ? 'error' : 'idle'}
         errorLabel={error || undefined}
-        // Confirm slider wears the brand blue so the primary action carries
-        // the brand colour.
         accent={brandAccent}
         accentFg={p.accentFg}
         trackBg={p.bgElev}
@@ -812,7 +781,7 @@ export function BuyWidget({ defaultAsset, lockAsset = false }: BuyWidgetProps = 
         visible={stepUpOpen}
         action="buy"
         subtitle={quote ? `${fmt(quote.cryptoAmount, 6)} ${asset}` : undefined}
-        onSubmit={(code) => onConfirm(code)}
+        onSubmit={(code) => doExecute(payMethod, code)}
         onCancel={() => { setStepUpOpen(false); setExec(false); }}
       />
 
@@ -1057,6 +1026,29 @@ export function BuyWidget({ defaultAsset, lockAsset = false }: BuyWidgetProps = 
               <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: p.border }} />
             </View>
             <Text style={{ color: p.fg, fontSize: 20, fontWeight: '500', paddingHorizontal: 20, marginBottom: 16 }}>{tr('buy.payWith')}</Text>
+            {showExpressPay && (
+              <View style={{ paddingHorizontal: 20, marginBottom: 16 }}>
+                <View style={{ backgroundColor: p.bgElev, borderRadius: 18, borderWidth: 1, borderColor: p.border, padding: 14 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                    <View>
+                      <Text style={{ color: p.fg, fontSize: 14, fontWeight: '700' }}>Fast checkout</Text>
+                      <Text style={{ color: p.fgMuted, fontSize: 12, marginTop: 2 }}>
+                        {sym(fundingCurrency)}{fmt(fiatNum, 2)} for {serverAsset(asset)}
+                      </Text>
+                    </View>
+                    <Ionicons name="flash-outline" size={18} color={p.accentText} />
+                  </View>
+                  <ExpressPayButton
+                    amount={fiatNum}
+                    currency={fundingCurrency}
+                    cryptoCurrency={serverAsset(asset)}
+                    enabled={!exec}
+                    onSuccess={handleExpressPaySuccess}
+                    onError={(m) => setError(m)}
+                  />
+                </View>
+              </View>
+            )}
             <ScrollView style={{ maxHeight: 400 }} contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 8 }}>
               {payMethods.map((m) => {
                 const selected = payMethod ? methodId(m) === methodId(payMethod) : false;
@@ -1066,7 +1058,12 @@ export function BuyWidget({ defaultAsset, lockAsset = false }: BuyWidgetProps = 
                 return (
                   <Pressable
                     key={methodId(m)}
-                    onPress={() => { Haptics.selectionAsync(); setPayMethod(m); setPaySheetOpen(false); setQuote(null); }}
+                    onPress={() => {
+                      Haptics.selectionAsync();
+                      setPayMethod(m);
+                      setPaySheetOpen(false);
+                      setQuote(null); // requote with new funding currency
+                    }}
                     style={({ pressed }) => ({
                       flexDirection: 'row', alignItems: 'center', gap: 14,
                       padding: 14, borderRadius: 16, marginBottom: 8,
@@ -1075,9 +1072,19 @@ export function BuyWidget({ defaultAsset, lockAsset = false }: BuyWidgetProps = 
                       opacity: pressed ? 0.8 : 1,
                     })}
                   >
-                    <Text style={{ fontSize: 22, width: 40, textAlign: 'center' }}>
-                      {m.type === 'card' ? '💳' : m.type === 'fiat' ? '💵' : assetMeta(m.type === 'crypto' ? m.asset : '').icon}
-                    </Text>
+                    <View style={{
+                      width: 40, height: 40, borderRadius: 20,
+                      backgroundColor: selected ? `${mc}22` : p.bgRaised,
+                      alignItems: 'center', justifyContent: 'center',
+                    }}>
+                      <Text style={{ fontSize: m.type === 'fiat' ? 22 : 18 }}>
+                        {m.type === 'card'
+                          ? '💳'
+                          : m.type === 'fiat'
+                          ? (FIAT_FLAGS[m.currency] ?? '🏦')
+                          : assetMeta(m.asset).icon}
+                      </Text>
+                    </View>
                     <View style={{ flex: 1 }}>
                       <Text style={{ color: p.fg, fontSize: 14, fontWeight: '500' }}>{methodLabel(m)}</Text>
                       <Text style={{ color: p.fgMuted, fontSize: 11, marginTop: 2 }}>
@@ -1092,6 +1099,11 @@ export function BuyWidget({ defaultAsset, lockAsset = false }: BuyWidgetProps = 
           </Pressable>
         </Pressable>
       </Modal>
+
+      <SuccessModal
+        data={successModal}
+        onClose={() => setSuccessModal(null)}
+      />
     </View>
   );
 }

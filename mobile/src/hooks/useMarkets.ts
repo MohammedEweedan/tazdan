@@ -29,12 +29,18 @@ interface FallbackMarket {
   sparkline_in_7d: { price: number[] } | null;
 }
 
+function fetchWithTimeout(url: string, ms: number): Promise<Response> {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), ms);
+  return fetch(url, { signal: controller.signal }).finally(() => clearTimeout(id));
+}
+
 // Fetch from CoinGecko (primary)
 async function fetchFromCoinGecko(): Promise<CoinGeckoMarket[]> {
   try {
-    const res = await fetch(
+    const res = await fetchWithTimeout(
       `${COINGECKO_BASE}/coins/markets?vs_currency=usd&ids=${COIN_IDS.join(',')}&sparkline=true&price_change_percentage=1h,24h,7d,30d`,
-      { signal: AbortSignal.timeout(10000) },
+      10000,
     );
     if (!res.ok) throw new Error('CoinGecko fetch failed');
     const data = await res.json();
@@ -54,9 +60,9 @@ async function fetchFromBinance(): Promise<FallbackMarket[]> {
       return sym ? `${sym.toLowerCase()}usdt` : null;
     }).filter(Boolean) as string[];
 
-    const res = await fetch(
+    const res = await fetchWithTimeout(
       `${BINANCE_BASE}/ticker/24hr?symbols=${symbols.join(',')}`,
-      { signal: AbortSignal.timeout(8000) },
+      8000,
     );
     if (!res.ok) throw new Error('Binance fetch failed');
     const data = await res.json();
@@ -90,20 +96,13 @@ function enrichWithSparkline(data: FallbackMarket[]): CoinGeckoMarket[] {
     market_cap: 0,
     circulating_supply: 0,
     ath: 0,
-    sparkline_in_7d: m.sparkline_in_7d || {
-      price: Array(168).fill(0).map((_, i) => {
-        const change = m.price_change_percentage_24h / 100;
-        const base = m.current_price;
-        const trend = (i / 168) * change;
-        return base * (1 - change + trend);
-      }),
-    },
+    sparkline_in_7d: m.sparkline_in_7d ?? { price: [] },
   }));
 }
 
 export function useMarkets() {
   return useQuery({
-    queryKey: ['markets'],
+    queryKey: ['cg-markets'],
     queryFn: async () => {
       let data = await fetchFromCoinGecko();
       if (data && data.length > 0) return data;
@@ -116,8 +115,9 @@ export function useMarkets() {
       console.error('All price sources failed');
       return [];
     },
-    refetchInterval: 60_000,
-    staleTime: 30_000,
+    refetchInterval: 5 * 60_000,
+    staleTime: 5 * 60_000,
+    gcTime: 30 * 60_000,
     retry: 2,
   });
 }

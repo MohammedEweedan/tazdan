@@ -93,9 +93,11 @@ export const Text = forwardRef<RNText, TextProps>((props, ref) => {
 
 export const TextInput = forwardRef<RNTextInput, TextInputProps>((props, ref) => {
   const locale = useI18n((s) => s.locale);
-  // For inputs we can't know the typed value's script ahead of time; keep the
-  // locale-driven family (Cairo in Arabic) so placeholders/labels read right.
-  const resolvedStyle = resolveFontFamily(props.style, locale === 'ar');
+  // Numeric/currency inputs should match rendered balances (Outfit), including
+  // in Arabic. Empty inputs still use the locale-driven placeholder family.
+  const typedValue = typeof props.value === 'string' ? props.value : '';
+  const inspectable = typedValue.length > 0 ? typedValue : props.placeholder;
+  const resolvedStyle = resolveFontFamily(props.style, locale === 'ar' && !isNumericContent(inspectable));
   const placeholder = translateLiteral(props.placeholder, locale);
   return <RNTextInput {...props} ref={ref} placeholder={placeholder ?? undefined} style={resolvedStyle} />;
 });

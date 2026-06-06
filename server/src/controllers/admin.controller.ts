@@ -386,13 +386,35 @@ export class AdminController {
       }
 
       await prisma.$transaction(async (tx: any) => {
+        const fresh = await tx.deposit.findUnique({ where: { id: deposit.id } });
+        if (!fresh || !['WAITING_CONFIRMATION', 'PENDING'].includes(fresh.status)) {
+          throw new AppError('Deposit already processed', 409);
+        }
+
         await tx.deposit.update({ where: { id: deposit.id }, data: { status: 'CONFIRMED', confirmedAt: new Date(), confirmedBy: req.user!.id, adminNotes: req.body.notes } });
         const wallet = await tx.wallet.findUnique({ where: { userId_currency: { userId: deposit.userId, currency: deposit.currency } } });
         const balanceBefore = parseFloat(wallet?.balance.toString() || '0');
-        const amount = parseFloat(deposit.amount.toString());
-        await tx.wallet.update({ where: { userId_currency: { userId: deposit.userId, currency: deposit.currency } }, data: { balance: { increment: deposit.amount } } });
-        await tx.transaction.create({ data: { userId: deposit.userId, type: 'DEPOSIT', currency: deposit.currency, amount: deposit.amount, balanceBefore, balanceAfter: balanceBefore + amount, reference: deposit.reference, description: `Deposit confirmed via ${deposit.paymentMethod}` } });
-        await tx.notification.create({ data: { userId: deposit.userId, title: 'Deposit Confirmed', message: `Your deposit of ${amount} ${deposit.currency} has been confirmed.`, type: 'deposit' } });
+        const amount = new Decimal(deposit.amount.toString());
+        await tx.wallet.upsert({
+          where: { userId_currency: { userId: deposit.userId, currency: deposit.currency } },
+          update: { balance: { increment: amount } },
+          create: { userId: deposit.userId, currency: deposit.currency, balance: amount },
+        });
+
+        if (isLedgerCurrency(deposit.currency)) {
+          await postLedger(tx, {
+            refType: 'deposit',
+            refId: deposit.id,
+            memo: `Admin-confirmed deposit ${deposit.currency}`,
+            legs: [
+              { type: 'SYSTEM_ONRAMP', currency: deposit.currency as any, amount: amount.neg() },
+              { type: 'USER', userId: deposit.userId, currency: deposit.currency as any, amount },
+            ],
+          });
+        }
+
+        await tx.transaction.create({ data: { userId: deposit.userId, type: 'DEPOSIT', currency: deposit.currency, amount: deposit.amount, balanceBefore, balanceAfter: new Decimal(balanceBefore).add(amount), reference: deposit.reference, description: `Deposit confirmed via ${deposit.paymentMethod}` } });
+        await tx.notification.create({ data: { userId: deposit.userId, title: 'Deposit Confirmed', message: `Your deposit of ${amount.toString()} ${deposit.currency} has been confirmed.`, type: 'deposit' } });
       });
       res.json({ message: 'Deposit confirmed and funds credited' });
     } catch (error) { next(error); }
@@ -1615,23 +1637,38 @@ export class AdminController {
 
       const dec = new Decimal(amount);
       const cur = currency as any;
-      const wallet = await prisma.wallet.upsert({
-        where:  { userId_currency: { userId, currency: cur } },
-        create: { userId, currency: cur, balance: dec },
-        update: { balance: { increment: dec } },
-      });
-      await prisma.transaction.create({
-        data: {
-          userId,
-          type:          'DEPOSIT',
-          currency:      cur,
-          amount:        dec,
-          fee:           new Decimal(0),
-          balanceBefore: Number(wallet.balance) - amount,
-          balanceAfter:  Number(wallet.balance),
-          description:   '[simulator] seed balance',
-          reference:     `SIM-${Date.now()}`,
-        },
+      const reference = `SIM-${Date.now()}`;
+      const wallet = await prisma.$transaction(async (tx: any) => {
+        const updated = await tx.wallet.upsert({
+          where:  { userId_currency: { userId, currency: cur } },
+          create: { userId, currency: cur, balance: dec },
+          update: { balance: { increment: dec } },
+        });
+        if (isLedgerCurrency(currency)) {
+          await postLedger(tx, {
+            refType: 'sim_seed_credit',
+            refId: reference,
+            memo: '[simulator] seed balance',
+            legs: [
+              { type: 'SYSTEM_ONRAMP', currency: cur, amount: dec.neg() },
+              { type: 'USER', userId, currency: cur, amount: dec },
+            ],
+          });
+        }
+        await tx.transaction.create({
+          data: {
+            userId,
+            type:          'DEPOSIT',
+            currency:      cur,
+            amount:        dec,
+            fee:           new Decimal(0),
+            balanceBefore: new Decimal(updated.balance).minus(dec),
+            balanceAfter:  updated.balance,
+            description:   '[simulator] seed balance',
+            reference,
+          },
+        });
+        return updated;
       });
       res.json({ ok: true, currency, amount, newBalance: wallet.balance });
     } catch (error) { next(error); }

@@ -233,7 +233,6 @@ export function SellWidget({ defaultAsset, lockAsset = false }: SellWidgetProps 
     [holdings, asset],
   );
   const balance   = currentHolding?.balance ?? 0;
-  const livePrice = tickers?.find((t) => t.base === asset)?.price ?? 0;
   const change24h = tickers?.find((t) => t.base === asset)?.changePct24h;
   const networks  = ASSET_NETWORKS[asset] ?? [{ label: asset, network: defaultNetwork(asset) }];
   const multiChain= networks.length > 1;
@@ -328,8 +327,8 @@ export function SellWidget({ defaultAsset, lockAsset = false }: SellWidgetProps 
   const canConfirm = !!quote && !exec && seconds > 0 && !overspend;
 
   const slideLabel = canConfirm
-    ? `Slide to sell ${asset}`
-    : overspend ? 'Insufficient balance' : 'Enter amount to get a quote';
+    ? tr('sell.slideToSell').replace('{asset}', asset)
+    : overspend ? tr('sell.insufficient') : tr('sell.enterAmountToSell');
 
   // Holdings filtered by search for the asset sheet
   const filteredHoldings = useMemo(() => {
@@ -347,11 +346,6 @@ export function SellWidget({ defaultAsset, lockAsset = false }: SellWidgetProps 
 
   return (
     <View style={{ paddingHorizontal: 20, paddingBottom: 8 }}>
-
-      {/* ── You Sell ─────────────────────────────────────────────── */}
-      <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '700', letterSpacing: 0.6, marginBottom: 10 }}>
-        YOU SELL
-      </Text>
 
       {/* Asset selector */}
       <Pressable
@@ -371,22 +365,15 @@ export function SellWidget({ defaultAsset, lockAsset = false }: SellWidgetProps 
             <Text style={{ color: p.fg, fontSize: 16, fontWeight: '600' }}>{meta.label}</Text>
             <Text style={{ color: p.fgFaint, fontSize: 12 }}>{asset}</Text>
           </View>
-          {/* Show OUR price (the quoted rate in the receive currency) once a
-              quote exists; otherwise the live reference price + 24h change. */}
-          {quote && receiveTo ? (
-            <Text style={{ color: p.fgMuted, fontSize: 13, marginTop: 2 }}>
-              {currSym(receiveTo.currency)}{fmtPrice(Number(quote.settlementAmount ?? quote.fiatAmount) / Math.max(Number(quote.cryptoAmount), 1e-18))} · your price
-            </Text>
-          ) : livePrice > 0 ? (
-            <Text style={{ color: p.fgMuted, fontSize: 13, marginTop: 2 }}>
-              {currSym(baseCurrency)}{fmtPrice(Number(livePrice))}
-              {change24h !== undefined && (
-                <Text style={{ color: Number(change24h) >= 0 ? p.greenFg : p.redFg }}>
-                  {'  '}{Number(change24h) >= 0 ? '+' : ''}{Number(change24h).toFixed(2)}%
+          {change24h !== undefined && (
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
+              <View style={{ paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6, backgroundColor: Number(change24h) >= 0 ? p.greenBg : p.redBg }}>
+                <Text style={{ color: Number(change24h) >= 0 ? p.greenFg : p.redFg, fontSize: 11, fontWeight: '700' }}>
+                  {Number(change24h) >= 0 ? '+' : ''}{Number(change24h).toFixed(2)}%
                 </Text>
-              )}
-            </Text>
-          ) : null}
+              </View>
+            </View>
+          )}
         </View>
         {!lockAsset && <Ionicons name="chevron-down" size={16} color={p.fgMuted} />}
       </Pressable>
@@ -413,7 +400,7 @@ export function SellWidget({ defaultAsset, lockAsset = false }: SellWidgetProps 
       {/* Amount input */}
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, gap: 12 }}>
         <Text numberOfLines={1} ellipsizeMode="tail" style={{ color: p.fgFaint, fontSize: 11, fontWeight: '700', letterSpacing: 0.5, flexShrink: 1 }}>
-          AMOUNT
+          {tr('sell.amount')}
         </Text>
         <Pressable
           onPress={() => { Haptics.selectionAsync(); setCryptoAmt(String(balance)); setQuote(null); setError(null); }}
@@ -425,8 +412,8 @@ export function SellWidget({ defaultAsset, lockAsset = false }: SellWidgetProps 
       </View>
       <View style={{
         flexDirection: 'row', alignItems: 'center',
-        backgroundColor: p.bgElev, borderRadius: 18,
-        borderWidth: 1.5, borderColor: overspend || error ? p.redFg : (parseFloat(cryptoAmt) > 0 ? brandAccent : p.border),
+        backgroundColor: p.bgRaised, borderRadius: 24,
+        borderWidth: 1.5, borderColor: overspend || error ? p.redFg : (parseFloat(cryptoAmt) > 0 ? p.accentBorder : p.border),
         paddingHorizontal: 18, marginBottom: 6,
       }}>
         <TextInput
@@ -440,136 +427,124 @@ export function SellWidget({ defaultAsset, lockAsset = false }: SellWidgetProps 
           keyboardType="decimal-pad"
           returnKeyType="done"
           onSubmitEditing={Keyboard.dismiss}
-          style={{ flex: 1, color: p.fg, fontSize: 32, fontWeight: '600', paddingVertical: 18, fontVariant: ['tabular-nums'], letterSpacing: -0.5 }}
+          style={{ flex: 1, color: p.fg, fontSize: 48, fontWeight: '700', paddingVertical: 18, fontVariant: ['tabular-nums'], letterSpacing: 0 }}
         />
-        <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '700' }}>{asset}</Text>
+        <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '800' }}>{asset}</Text>
       </View>
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 20 }}>
         <Text style={{ color: overspend ? p.redFg : p.fgMuted, fontSize: 12, fontWeight: '500' }}>
           {overspend
-            ? `Over by ${(parseFloat(cryptoAmt) - balance).toLocaleString(undefined, { maximumFractionDigits: 8 })} ${asset}`
-            : `Balance: ${balance.toLocaleString(undefined, { maximumFractionDigits: 8 })} ${asset}`}
+            ? tr('sell.overBy').replace('{amount}', (parseFloat(cryptoAmt) - balance).toLocaleString(undefined, { maximumFractionDigits: 8 })).replace('{asset}', asset)
+            : tr('sell.balance').replace('{balance}', balance.toLocaleString(undefined, { maximumFractionDigits: 8 })).replace('{asset}', asset)}
         </Text>
       </View>
 
-      {/* ── You Receive ──────────────────────────────────────────── */}
-      <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '700', letterSpacing: 0.6, marginBottom: 10 }}>
-        YOU RECEIVE
-      </Text>
-
-      {/* Receive-to wallet picker */}
-      <Pressable
-        onPress={() => { Haptics.selectionAsync(); setReceiveSheetOpen(true); }}
-        style={({ pressed }) => ({
-          flexDirection: 'row', alignItems: 'center', gap: 12,
-          backgroundColor: p.bgElev, borderRadius: 18,
-          borderWidth: 1, borderColor: p.border,
-          padding: 14, marginBottom: 14,
-          opacity: pressed ? 0.85 : 1,
-        })}
-      >
-        {receiveTo ? (
-          <>
-            <View style={{
-              width: 44, height: 44, borderRadius: 22,
-              backgroundColor: receiveTo.isFiat ? p.pillBg : assetMeta(receiveTo.currency).color + '22',
-              alignItems: 'center', justifyContent: 'center',
-            }}>
-              <Text style={{ fontSize: 20 }}>
-                {receiveTo.isFiat
-                  ? (receiveTo.currency === 'USD' ? '🇺🇸' : receiveTo.currency === 'EUR' ? '🇪🇺' : receiveTo.currency === 'GBP' ? '🇬🇧' : receiveTo.currency === 'AED' ? '🇦🇪' : '💵')
-                  : assetMeta(receiveTo.currency).icon}
-              </Text>
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={{ color: p.fg, fontSize: 15, fontWeight: '600' }}>
-                {receiveTo.label}
-              </Text>
-              <Text style={{ color: p.fgMuted, fontSize: 12, marginTop: 2 }}>
-                {receiveTo.isFiat ? `${receiveTo.currency} Wallet` : `${receiveTo.currency} Balance`}
-                {receiveTo.balance > 0 && ` · ${currSym(receiveTo.currency)}${fmt(receiveTo.balance, 2)}`}
-              </Text>
-            </View>
-          </>
-        ) : (
-          <Text style={{ color: p.fgMuted, fontSize: 14, flex: 1 }}>Select receive wallet…</Text>
-        )}
-        <Ionicons name="chevron-down" size={16} color={p.fgMuted} />
-      </Pressable>
-
-      {/* ── Quote panel ──────────────────────────────────────────── */}
+      {/* ── YOU RECEIVE — unified card: wallet picker + amount + fees ── */}
       <View style={{
-        backgroundColor: p.bgElev, borderRadius: 18,
+        backgroundColor: p.bgElev, borderRadius: 20,
         borderWidth: 1, borderColor: p.border,
-        padding: 16, marginBottom: 14, minHeight: 72, justifyContent: 'center',
+        marginBottom: 14, overflow: 'hidden',
       }}>
-        {loading ? (
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-            <ActivityIndicator size="small" color={meta.color} />
-            <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '500' }}>Getting best price…</Text>
-          </View>
-        ) : quote && receiveTo ? (
-          <>
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-              <View>
-                <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '600', letterSpacing: 0.5, marginBottom: 4 }}>
-                  YOU RECEIVE
+        {/* Wallet picker row */}
+        <Pressable
+          onPress={() => { Haptics.selectionAsync(); setReceiveSheetOpen(true); }}
+          style={({ pressed }) => ({
+            flexDirection: 'row', alignItems: 'center', gap: 12,
+            padding: 16, opacity: pressed ? 0.8 : 1,
+          })}
+        >
+          {receiveTo ? (
+            <>
+              <View style={{
+                width: 40, height: 40, borderRadius: 20,
+                backgroundColor: receiveTo.isFiat ? p.pillBg : assetMeta(receiveTo.currency).color + '22',
+                alignItems: 'center', justifyContent: 'center',
+              }}>
+                <Text style={{ fontSize: 18 }}>
+                  {receiveTo.isFiat
+                    ? (receiveTo.currency === 'USD' ? '🇺🇸' : receiveTo.currency === 'EUR' ? '🇪🇺' : receiveTo.currency === 'GBP' ? '🇬🇧' : receiveTo.currency === 'AED' ? '🇦🇪' : '💵')
+                    : assetMeta(receiveTo.currency).icon}
                 </Text>
-                <Text style={{ color: p.fg, fontSize: 28, fontWeight: '600', letterSpacing: -0.5 }}>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: p.fg, fontSize: 14, fontWeight: '600', marginTop: 1 }}>{receiveTo.label}</Text>
+                {receiveTo.balance > 0 && (
+                  <Text style={{ color: p.fgMuted, fontSize: 11, marginTop: 1 }}>
+                    Balance: {currSym(receiveTo.currency)}{fmt(receiveTo.balance, 2)}
+                  </Text>
+                )}
+              </View>
+            </>
+          ) : (
+            <Text style={{ color: p.fgMuted, fontSize: 14, flex: 1 }}>{tr('sell.selectReceiveWallet')}</Text>
+          )}
+          <Ionicons name="chevron-down" size={16} color={p.fgMuted} />
+        </Pressable>
+
+        {/* Divider */}
+        <View style={{ height: 1, backgroundColor: p.border, marginHorizontal: 16 }} />
+
+        {/* Amount / quote / loading */}
+        <View style={{ padding: 16, minHeight: 64, justifyContent: 'center' }}>
+          {loading ? (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+              <ActivityIndicator size="small" color={meta.color} />
+              <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '500' }}>{tr('sell.gettingBestPrice')}</Text>
+            </View>
+          ) : quote && receiveTo ? (
+            <>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                <Text style={{ color: p.fg, fontSize: 28, fontWeight: '700', letterSpacing: -0.5 }}>
                   {receiveTo.isFiat
                     ? `${currSym(receiveTo.currency)}${fmt(quote.settlementAmount ?? quote.fiatAmount, 2)}`
                     : `${fmt(quote.settlementAmount ?? quote.fiatAmount, 6)}`}
                   {'  '}
                   <Text style={{ color: p.fgMuted, fontSize: 16, fontWeight: '500' }}>{receiveTo.currency}</Text>
                 </Text>
+                <View style={{
+                  flexDirection: 'row', alignItems: 'center', gap: 4,
+                  paddingHorizontal: 10, paddingVertical: 5, borderRadius: 12,
+                  backgroundColor: timerCritical ? 'rgba(239,68,68,0.12)' : p.pillBg,
+                  borderWidth: 1, borderColor: timerCritical ? p.redFg : p.border,
+                }}>
+                  <Ionicons name="timer-outline" size={13} color={timerCritical ? p.redFg : p.fgMuted} />
+                  <Text style={{ color: timerCritical ? p.redFg : p.fgMuted, fontSize: 12, fontWeight: '600' }}>{seconds}s</Text>
+                </View>
               </View>
-              <View style={{
-                flexDirection: 'row', alignItems: 'center', gap: 4,
-                paddingHorizontal: 10, paddingVertical: 5, borderRadius: 12,
-                backgroundColor: timerCritical ? 'rgba(239,68,68,0.12)' : p.pillBg,
-                borderWidth: 1, borderColor: timerCritical ? p.redFg : p.border,
-              }}>
-                <Ionicons name="timer-outline" size={13} color={timerCritical ? p.redFg : p.fgMuted} />
-                <Text style={{ color: timerCritical ? p.redFg : p.fgMuted, fontSize: 12, fontWeight: '500' }}>{seconds}s</Text>
-              </View>
-            </View>
-            <Pressable
-              onPress={() => setShowFees(!showFees)}
-              style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 12, paddingTop: 10, borderTopWidth: 1, borderTopColor: p.border }}
-            >
-              <Text style={{ color: p.fgMuted, fontSize: 12 }}>
-                Fee  {currSym(receiveTo.currency)}{fmt(Number(quote.platformFeeSettlement ?? quote.platformFee) + Number(quote.networkFeeSettlement ?? quote.networkFee), 2)}
-              </Text>
-              <Ionicons name={showFees ? 'chevron-up' : 'chevron-down'} size={14} color={p.fgMuted} />
-            </Pressable>
-            {showFees && (
-              <View style={{ marginTop: 10, gap: 6 }}>
-                {([
-                  ['Platform fee',   `${currSym(receiveTo.currency)}${fmt(quote.platformFeeSettlement ?? quote.platformFee, 2)}`],
-                  ['Network fee',    `${currSym(receiveTo.currency)}${fmt(quote.networkFeeSettlement ?? quote.networkFee, 2)}`],
-                  ['Spread',         `${(Number(quote.spreadPct) * 100).toFixed(2)}%`],
-                ] as [string, string][]).map(([k, v]) => (
-                  <View key={k} style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                    <Text style={{ color: p.fgMuted, fontSize: 12 }}>{k}</Text>
-                    <Text style={{ color: p.fg, fontSize: 12, fontWeight: '500' }}>{v}</Text>
-                  </View>
-                ))}
-                <Text style={{ color: p.fgFaint, fontSize: 11, marginTop: 2 }}>
-                  Our price already includes the {(Number(quote.spreadPct) * 100).toFixed(1)}% spread.
+              <Pressable
+                onPress={() => setShowFees(!showFees)}
+                style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 12, paddingTop: 10, borderTopWidth: 1, borderTopColor: p.border }}
+              >
+                <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '500' }}>
+                  Fee · {currSym(receiveTo.currency)}{fmt(Number(quote.platformFeeSettlement ?? quote.platformFee) + Number(quote.networkFeeSettlement ?? quote.networkFee), 2)}
                 </Text>
-              </View>
-            )}
-          </>
-        ) : (
-          <Text style={{ color: p.fgFaint, fontSize: 14, textAlign: 'center' }}>
-            {parseFloat(cryptoAmt) > 0 && !overspend ? 'Fetching quote…' : 'Enter an amount to see what you\'ll receive'}
-          </Text>
-        )}
+                <Ionicons name={showFees ? 'chevron-up' : 'chevron-down'} size={14} color={p.fgMuted} />
+              </Pressable>
+              {showFees && (
+                <View style={{ marginTop: 10, gap: 8, backgroundColor: p.bgRaised, borderRadius: 12, padding: 12 }}>
+                  {([
+                    { label: tr('sell.platformFee'), value: `${currSym(receiveTo.currency)}${fmt(quote.platformFeeSettlement ?? quote.platformFee, 2)}` },
+                    { label: tr('sell.networkFee'),  value: `${currSym(receiveTo.currency)}${fmt(quote.networkFeeSettlement ?? quote.networkFee, 2)}` },
+                    { label: tr('sell.youReceiveLabel'), value: receiveTo.isFiat ? `${currSym(receiveTo.currency)}${fmt(quote.settlementAmount ?? quote.fiatAmount, 2)}` : `${fmt(quote.settlementAmount ?? quote.fiatAmount, 6)} ${receiveTo.currency}`, bold: true },
+                  ] as { label: string; value: string; bold?: boolean }[]).map(({ label, value, bold }) => (
+                    <View key={label} style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <Text style={{ color: bold ? p.fgMuted : p.fgFaint, fontSize: 12, fontWeight: bold ? '600' : '500' }}>{label}</Text>
+                      <Text style={{ color: bold ? p.fg : p.fgMuted, fontSize: 12, fontWeight: bold ? '700' : '500' }}>{value}</Text>
+                    </View>
+                  ))}
+                </View>
+              )}
+            </>
+          ) : (
+            <Text style={{ color: p.fgFaint, fontSize: 13, fontWeight: '500', textAlign: 'center' }}>
+              {parseFloat(cryptoAmt) > 0 && !overspend ? tr('sell.fetchingQuote') : tr('sell.enterAmountToReceive')}
+            </Text>
+          )}
+        </View>
       </View>
 
-      {/* ── Status banner (error / success) ──────────────────────── */}
+      {/* ── Status banner (errors only; success shown inside slider) ── */}
       <StatusBanner kind="error" message={error} onDismiss={() => setError(null)} />
-      <StatusBanner kind="success" message={success} />
 
       {/* ── CTA ──────────────────────────────────────────────────── */}
       <SlideToConfirm
@@ -579,8 +554,6 @@ export function SellWidget({ defaultAsset, lockAsset = false }: SellWidgetProps 
         status={exec ? 'loading' : success ? 'success' : error ? 'error' : 'idle'}
         successLabel={success || undefined}
         errorLabel={error || undefined}
-        // Confirm slider wears the brand blue so the primary action carries
-        // the brand colour.
         accent={brandAccent}
         accentFg={p.accentFg}
         trackBg={p.bgElev}
@@ -624,7 +597,7 @@ export function SellWidget({ defaultAsset, lockAsset = false }: SellWidgetProps 
             </View>
           )}
           <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '700', letterSpacing: 0.5, marginHorizontal: 20, marginTop: 8, marginBottom: 8 }}>
-            YOUR HOLDINGS
+            {tr('sell.yourHoldings')}
           </Text>
           <ScrollView keyboardShouldPersistTaps="handled">
             {filteredHoldings.map((holding) => {
@@ -674,10 +647,10 @@ export function SellWidget({ defaultAsset, lockAsset = false }: SellWidgetProps 
               <View style={{ paddingHorizontal: 24, paddingVertical: 48, alignItems: 'center', gap: 10 }}>
                 <Ionicons name="wallet-outline" size={32} color={p.fgMuted} />
                 <Text style={{ color: p.fg, fontSize: 15, fontWeight: '700', textAlign: 'center' }}>
-                  {searchQuery.trim() ? 'No matches' : 'Nothing to sell'}
+                  {searchQuery.trim() ? tr('sell.noMatching') : tr('sell.nothingToSell')}
                 </Text>
                 <Text style={{ color: p.fgMuted, fontSize: 13, textAlign: 'center', lineHeight: 18, maxWidth: 260 }}>
-                  {searchQuery.trim() ? 'Try a different search term.' : 'Buy or deposit crypto first, then you can sell it here.'}
+                  {searchQuery.trim() ? tr('sell.noMatchHint').replace('{query}', searchQuery.trim()) : tr('sell.nothingToSellHint')}
                 </Text>
               </View>
             )}
@@ -693,10 +666,10 @@ export function SellWidget({ defaultAsset, lockAsset = false }: SellWidgetProps 
               <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: p.border }} />
             </View>
             <Text style={{ color: p.fg, fontSize: 18, fontWeight: '600', paddingHorizontal: 20, marginBottom: 6 }}>
-              Select network
+              {tr('sell.selectNetwork')}
             </Text>
             <Text style={{ color: p.fgMuted, fontSize: 13, paddingHorizontal: 20, marginBottom: 16 }}>
-              Make sure the network matches where you're sending from.
+              {tr('sell.selectNetworkHint')}
             </Text>
             {networks.map((n) => {
               const selected = n.network === network;
@@ -738,17 +711,17 @@ export function SellWidget({ defaultAsset, lockAsset = false }: SellWidgetProps 
               <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: p.border }} />
             </View>
             <Text style={{ color: p.fg, fontSize: 18, fontWeight: '600', paddingHorizontal: 20, marginBottom: 4 }}>
-              Receive proceeds to
+              {tr('sell.receiveProceeds')}
             </Text>
             <Text style={{ color: p.fgMuted, fontSize: 13, paddingHorizontal: 20, marginBottom: 16 }}>
-              Your sale proceeds will be credited to this wallet.
+              {tr('sell.receiveProceedsHint')}
             </Text>
             <ScrollView style={{ maxHeight: 420 }} contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 8 }}>
               {validReceiveOptions.length === 0 ? (
                 <View style={{ paddingVertical: 32, alignItems: 'center', gap: 8 }}>
                   <Ionicons name="wallet-outline" size={28} color={p.fgFaint} />
                   <Text style={{ color: p.fgMuted, fontSize: 14, textAlign: 'center' }}>
-                    No eligible receive wallets found.
+                    {tr('sell.noEligibleWallets')}
                   </Text>
                 </View>
               ) : (
@@ -778,7 +751,7 @@ export function SellWidget({ defaultAsset, lockAsset = false }: SellWidgetProps 
                         </Text>
                         <Text style={{ color: p.fgMuted, fontSize: 12, marginTop: 2 }}>
                           {opt.currency}
-                          {opt.balance > 0 && ` · ${currSym(opt.currency)}${fmt(opt.balance, 2)} balance`}
+                          {opt.balance > 0 && ` · ${tr('sell.balanceShort').replace('{balance}', `${currSym(opt.currency)}${fmt(opt.balance, 2)}`)}`}
                         </Text>
                       </View>
                       {selected && <Ionicons name="checkmark-circle" size={22} color={iconColor} />}

@@ -31,6 +31,7 @@ import {
 } from '../services/email';
 import { pushCopy, pushTxEvent } from '../services/push.service';
 import { Currency, ClaimLinkStatus } from '@prisma/client';
+import { isLedgerCurrency, postLedger } from '../services/ledger/ledger.service';
 
 const SUPPORTED_ASSETS = [
   'USDT', 'USD', 'LYD', 'BTC', 'ETH', 'BNB', 'SOL', 'XRP',
@@ -320,8 +321,23 @@ export class ClaimLinkController {
           create: { userId: claimerId, currency: link.asset, balance: link.amount },
         });
 
-        // Ledger rows on both sides — paired by claim link id.
+        // Double-entry mirror: reserved funds leave the sender and credit
+        // the claiming user. The reservation itself only changes `frozen`;
+        // the real balance movement happens here.
         const ref = `CLM-${link.id.slice(0, 10).toUpperCase()}`;
+        if (isLedgerCurrency(link.asset)) {
+          await postLedger(tx, {
+            refType: 'claim_link',
+            refId: link.id,
+            memo: `Claim link ${link.asset}`,
+            legs: [
+              { type: 'USER', userId: link.senderId, currency: link.asset as any, amount: new Decimal(link.amount.toString()).neg() },
+              { type: 'USER', userId: claimerId, currency: link.asset as any, amount: new Decimal(link.amount.toString()) },
+            ],
+          }, { allowNegativeUser: true });
+        }
+
+        // Activity rows on both sides — paired by claim link id.
         const senderBalanceBefore = parseFloat(senderWallet.balance.toString());
         await tx.transaction.createMany({
           data: [
