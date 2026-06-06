@@ -53,9 +53,10 @@ import { colors as theme } from '@/theme';
 
 export type SlideStatus = 'idle' | 'loading' | 'success' | 'error';
 
-const TRACK_H        = 72;
-const THUMB          = 60;
-const PAD            = 6;
+const TRACK_H        = 56;
+const THUMB_W        = 96;
+const THUMB_H        = 48;
+const PAD            = 4;
 const DANGER_CUTOFF  = 10;
 const COMMIT_RATIO   = 0.80;
 const TICK_RATIO     = 0.55;
@@ -113,7 +114,7 @@ export function SlideToConfirm({
   /* ── State / shared values ───────────────────────────────────────── */
   const [w, setW] = useState(0);
   const [reduceMotion, setReduceMotion] = useState(false);
-  const travel = Math.max(0, w - THUMB - PAD * 2);
+  const travel = Math.max(0, w - THUMB_W - PAD * 2);
 
   const x          = useSharedValue(0);
   const startX     = useSharedValue(0);
@@ -227,7 +228,7 @@ export function SlideToConfirm({
   // Solid mono fill — appears once the thumb passes ~15% drag so the
   // empty state stays calm. Width tracks the thumb.
   const fillStyle = useAnimatedStyle(() => ({
-    width: Math.max(THUMB + PAD * 2, x.value + THUMB + PAD * 2),
+    width: Math.max(THUMB_W + PAD * 2, x.value + THUMB_W + PAD * 2),
     opacity: interpolate(
       x.value,
       [0, travel * 0.15, travel],
@@ -355,8 +356,8 @@ export function SlideToConfirm({
             {
               alignItems: 'center',
               justifyContent: 'center',
-              paddingLeft: THUMB + PAD * 2 + 12,
-              paddingRight: 56,
+              paddingLeft: THUMB_W + PAD * 2 + 12,
+              paddingRight: 32,
               flexDirection: 'row',
               gap: 8,
             },
@@ -387,7 +388,7 @@ export function SlideToConfirm({
             style={[
               {
                 position: 'absolute',
-                right: THUMB + PAD * 2 + 8,
+                right: 22,
                 top: 0, bottom: 0,
                 alignItems: 'center', justifyContent: 'center',
                 flexDirection: 'row',
@@ -407,14 +408,14 @@ export function SlideToConfirm({
               style={[
                 {
                   position: 'absolute', left: PAD, top: PAD,
-                  width: THUMB, height: THUMB, borderRadius: THUMB / 2,
+                  width: THUMB_W, height: THUMB_H, borderRadius: THUMB_H / 2,
                   alignItems: 'center', justifyContent: 'center',
                   backgroundColor: _accent,
                   shadowColor: '#000000',
-                  shadowOffset: { width: 0, height: 4 },
-                  shadowOpacity: 0.22,
-                  shadowRadius: 14,
-                  elevation: 6,
+                  shadowOffset: { width: 0, height: 3 },
+                  shadowOpacity: 0.18,
+                  shadowRadius: 10,
+                  elevation: 4,
                   zIndex: 3,
                 },
                 thumbStyle,
@@ -423,7 +424,7 @@ export function SlideToConfirm({
               {status === 'loading'
                 ? <ActivityIndicator color={_accentFg} size="small" />
                 : (
-                  <Ionicons name="chevron-forward" size={22} color={_accentFg} />
+                  <Ionicons name="chevron-forward" size={24} color={_accentFg} />
                 )}
             </Animated.View>
           </GestureDetector>
@@ -437,9 +438,9 @@ export function SlideToConfirm({
               position: 'absolute',
               right: PAD,
               top: PAD,
-              width: THUMB,
-              height: THUMB,
-              borderRadius: THUMB / 2,
+              width: THUMB_W,
+              height: THUMB_H,
+              borderRadius: THUMB_H / 2,
               backgroundColor: _greenBg,
               borderWidth: 1,
               borderColor: _greenFg,
@@ -459,9 +460,9 @@ export function SlideToConfirm({
               position: 'absolute',
               right: PAD,
               top: PAD,
-              width: THUMB,
-              height: THUMB,
-              borderRadius: THUMB / 2,
+              width: THUMB_W,
+              height: THUMB_H,
+              borderRadius: THUMB_H / 2,
               backgroundColor: _redBg,
               borderWidth: 1,
               borderColor: _redFg,

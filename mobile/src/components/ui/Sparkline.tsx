@@ -3,7 +3,10 @@
  * and crypto wallet cards.
  */
 
+import { useRef } from 'react';
 import Svg, { Path, Defs, LinearGradient as SvgGradient, Stop } from 'react-native-svg';
+
+let _uid = 0;
 
 interface Props {
   data: number[];
@@ -20,6 +23,11 @@ export function Sparkline({
   color = '#737373',
   strokeWidth = 1.5,
 }: Props) {
+  // Stable unique ID per component instance — avoids SVG gradient collisions
+  // when multiple Sparklines render on the same screen.
+  const idRef = useRef(`sl-${++_uid}`);
+  const id = idRef.current;
+
   if (data.length < 2) return null;
   const min = Math.min(...data);
   const max = Math.max(...data);
@@ -28,7 +36,7 @@ export function Sparkline({
 
   const points = data.map((v, i) => {
     const x = i * stepX;
-    const y = height - ((v - min) / range) * (height - 2) - 1;
+    const y = height - ((v - min) / range) * (height - 4) - 2;
     return [x, y] as const;
   });
 
@@ -36,13 +44,12 @@ export function Sparkline({
     .map(([x, y], i) => (i === 0 ? `M${x},${y}` : `L${x},${y}`))
     .join(' ');
   const fill = `${stroke} L${width},${height} L0,${height} Z`;
-  const id = `sl-${Math.round(data[0] * 1000)}`;
 
   return (
     <Svg width={width} height={height}>
       <Defs>
         <SvgGradient id={id} x1="0" y1="0" x2="0" y2="1">
-          <Stop offset="0%"  stopColor={color} stopOpacity="0.35" />
+          <Stop offset="0%"   stopColor={color} stopOpacity="0.4" />
           <Stop offset="100%" stopColor={color} stopOpacity="0" />
         </SvgGradient>
       </Defs>

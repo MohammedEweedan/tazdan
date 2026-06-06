@@ -68,15 +68,23 @@ const BINANCE_LIMITS: Record<Range, number> = {
   '1H': 60, '24H': 96, '7D': 42, '30D': 30,
 };
 
+function fetchWithTimeout(url: string, ms: number): Promise<Response> {
+  const ctrl = new AbortController();
+  const id = setTimeout(() => ctrl.abort(), ms);
+  return fetch(url, { signal: ctrl.signal }).finally(() => clearTimeout(id));
+}
+
 function useBinanceChart(sym: string, range: Range, enabled: boolean) {
   return useQuery({
     queryKey: ['binance-chart', sym, range],
     enabled: enabled && sym !== 'USDT' && sym !== 'USDT_ERC20' && sym !== 'USDT_TRC20',
+    staleTime: 2 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
     queryFn: async () => {
       const base = sym.replace(/_ERC20|_TRC20/, '');
-      const res = await fetch(
+      const res = await fetchWithTimeout(
         `https://api.binance.com/api/v3/klines?symbol=${base}USDT&interval=${BINANCE_INTERVALS[range]}&limit=${BINANCE_LIMITS[range]}`,
-        { signal: AbortSignal.timeout(8000) },
+        8000,
       );
       if (!res.ok) throw new Error(`klines ${res.status}`);
       const data: any[] = await res.json();
@@ -1360,7 +1368,8 @@ function formatPrice(n: number): string {
   return n.toFixed(10);
 }
 
-function fmtUsdCompact(n: number): string {
+function fmtUsdCompact(n: number | null | undefined): string {
+  if (n == null || !isFinite(n)) return '—';
   if (n >= 1e12) return `$${(n / 1e12).toFixed(2)}T`;
   if (n >= 1e9)  return `$${(n / 1e9).toFixed(2)}B`;
   if (n >= 1e6)  return `$${(n / 1e6).toFixed(2)}M`;

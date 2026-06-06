@@ -14,10 +14,10 @@ import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { cryptoWalletAPI } from '@/lib/cryptoApi';
 import { TopGradient } from '@/components/ui/ScreenShell';
-import { ActivityIndicator, Animated, Dimensions, Image, KeyboardAvoidingView, Modal, PanResponder, Platform, Pressable, RefreshControl, ScrollView, Share, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Animated, Dimensions, Image, KeyboardAvoidingView, Modal, PanResponder, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { Text, TextInput } from '@/components/ui/Text';
-import BalanceSvg, { Path as SvgPath, Defs as SvgDefs, LinearGradient as SvgLinearGradient, RadialGradient as SvgRadialGradient, Rect as SvgRect, Stop as SvgStop, Line as SvgLine, Circle as SvgCircle } from 'react-native-svg';
+import BalanceSvg, { Path as SvgPath, Defs as SvgDefs, LinearGradient as SvgLinearGradient, Stop as SvgStop, Line as SvgLine, Circle as SvgCircle } from 'react-native-svg';
 import QRCode from 'react-native-qrcode-svg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -28,6 +28,7 @@ import * as Clipboard from 'expo-clipboard';
 import { useAuthStore } from '@/store/authStore';
 import { realHandle, avatarMode } from '@/utils/displayUser';
 import { useWallets, useHaptics, useTransactions, useActivities, useActivityRealtime, useNotificationRealtime, useUnreadCount, useMarkets, useDisplayCurrency, useBudgets } from '@/hooks';
+import { useMarkets as useCoinGeckoMarkets, ID_TO_SYM } from '@/hooks/useMarkets';
 import { useTheme, useThemedPalette, isMonochrome, type Palette } from '@/store/themeStore';
 import { useT, useI18n } from '@/store/i18nStore';
 import { Sparkline } from '@/components/ui/Sparkline';
@@ -43,6 +44,7 @@ import { DepositWidget } from '@/components/exchange/DepositWidget';
 import { RecurringBuyWidget } from '@/components/exchange/RecurringBuyWidget';
 import { PressableScale } from '@/components/ui/Motion';
 import { AnnouncementBanner } from '@/components/ui/AnnouncementBanner';
+import { F } from '@/theme';
 import type { Wallet } from '@/types';
 
 type Tab = 'ASSETS' | 'ACTIVITY';
@@ -107,6 +109,9 @@ export default function Home() {
   // these so the home balance fluctuates in real time exactly like the
   // asset detail screen.
   const { data: tickers, refetch: refetchMarkets } = useMarkets();
+  const { data: cgMarkets } = useCoinGeckoMarkets();
+  const [showSparkline, setShowSparkline] = useState(true);
+
 
   // Pull-to-refresh — refetches every live data source the home screen
   // depends on. Triggers a haptic tap on release for that polished feel.
@@ -150,20 +155,21 @@ export default function Home() {
     return map;
   }, [tickers]);
 
-  // Per-asset 7d sparkline (from backend ticker) so each asset row
-  // can render a mini chart between the name and the price.
+  // Per-asset 7d sparkline from CoinGecko — the same source as the asset
+  // detail chart, so the data is real and per-asset (not synthesised).
   const sparklineMap = useMemo(() => {
     const map: Record<string, number[]> = {};
-    if (Array.isArray(tickers)) {
-      tickers.forEach((m) => {
-        const points = m.sparkline;
-        if (!Array.isArray(points) || points.length < 2) return;
-        const stride = Math.max(1, Math.floor(points.length / 32));
-        map[m.base] = points.filter((_, i) => i % stride === 0);
-      });
-    }
+    if (!Array.isArray(cgMarkets)) return map;
+    cgMarkets.forEach((m) => {
+      const sym = ID_TO_SYM[m.id];
+      if (!sym) return;
+      const pts = m.sparkline_in_7d?.price;
+      if (!Array.isArray(pts) || pts.length < 2) return;
+      const stride = Math.max(1, Math.floor(pts.length / 32));
+      map[sym] = pts.filter((_, i) => i % stride === 0);
+    });
     return map;
-  }, [tickers]);
+  }, [cgMarkets]);
 
   // 24h change map — colors the sparkline green/red per-asset.
   const changeMap = useMemo(() => {
@@ -185,21 +191,37 @@ export default function Home() {
   // Fiat currencies — everything else is treated as crypto
   const FIAT_CURRENCIES = new Set(['USD', 'EUR', 'GBP', 'AED', 'SAR', 'EGP', 'LYD', 'CAD', 'AUD', 'CHF', 'JPY', 'CNY']);
 
-  const cryptoAssets = useMemo(
-    () => ownedAssets.filter((w) => !FIAT_CURRENCIES.has(w.currency)),
-    [ownedAssets],
-  );
-  const fiatAssets = useMemo(
-    () => ownedAssets.filter((w) => FIAT_CURRENCIES.has(w.currency)),
-    [ownedAssets],
-  );
-
   // Normalize a wallet currency to its Binance ticker base.
   // USDT_ERC20 / USDT_TRC20 both track as USDT (pegged $1).
   function tickerKey(currency: string): string {
     if (currency === 'USDT_ERC20' || currency === 'USDT_TRC20') return 'USDT';
     return currency;
   }
+
+  const cryptoAssets = useMemo(
+    () => ownedAssets.filter((w) => {
+      if (FIAT_CURRENCIES.has(w.currency)) return false;
+      const tk = tickerKey(w.currency);
+      const price = priceMap[tk] ?? (tk === 'USDT' ? 1 : 0);
+      return Number(w.balance) * price > 0;
+    }),
+    [ownedAssets, priceMap],
+  );
+  const dustAssets = useMemo(
+    () => ownedAssets.filter((w) => {
+      if (FIAT_CURRENCIES.has(w.currency)) return false;
+      const tk = tickerKey(w.currency);
+      const price = priceMap[tk] ?? (tk === 'USDT' ? 1 : 0);
+      const usdVal = Number(w.balance) * price;
+      return usdVal > 0 && usdVal < 5;
+    }),
+    [ownedAssets, priceMap],
+  );
+  const fiatAssets = useMemo(
+    () => ownedAssets.filter((w) => FIAT_CURRENCIES.has(w.currency)),
+    [ownedAssets],
+  );
+  const [dustPromptDismissed, setDustPromptDismissed] = useState(false);
 
   const totalUsd = useMemo(() => {
     return list.reduce((sum, w) => {
@@ -243,9 +265,9 @@ export default function Home() {
   // Buy, Sell, Top up (deposit). Withdraw + everything else lives
   // in the More (···) modal.
   const ACTIONS: ActionDef[] = [
-    { key: 'buy',     icon: 'arrow-up-outline',          label: t('action.buy'),    tone: 'white', onPress: () => setBuyModalVisible(true) },
-    { key: 'sell',    icon: 'arrow-down-outline',        label: t('action.sell'),   tone: 'grey',  onPress: () => setSellModalVisible(true) },
-    { key: 'topup',   icon: 'arrow-down-circle-outline', label: t('action.topup'),  tone: 'black', onPress: () => setDepositModalVisible(true) },
+    { key: 'buy',   icon: 'trending-up-outline',   label: t('action.buy'),   tone: 'white', onPress: () => setBuyModalVisible(true) },
+    { key: 'sell',  icon: 'trending-down-outline', label: t('action.sell'),  tone: 'grey',  onPress: () => setSellModalVisible(true) },
+    { key: 'topup', icon: 'download-outline',      label: t('action.topup'), tone: 'black', onPress: () => setDepositModalVisible(true) },
   ];
 
   return (
@@ -254,7 +276,7 @@ export default function Home() {
       <TopGradient />
         <Animated.ScrollView
           showsVerticalScrollIndicator={false}
-          style={{ backgroundColor: 'transparent' }}
+          style={{ backgroundColor: 'transparent', borderRadius: 10, borderWidth: 1, borderColor: p.border }}
           contentContainerStyle={{ paddingBottom: 140 }}
           stickyHeaderIndices={[0]}
           scrollEventThrottle={16}
@@ -282,18 +304,14 @@ export default function Home() {
               separation. The block carries its own `paddingTop:
               insets.top` so the avatar / icon row never tucks under
               the Dynamic Island while the block is pinned. */}
-          <View>
-          {/* Gradient layer — covers the full block including safe-area.
-              The BlurView + gradient now extend all the way to the top
-              of the screen so the battery / Dynamic Island / clock sit
-              on the glass, not on raw bg. */}
+          <View style={{ borderBottomLeftRadius: 32, borderBottomRightRadius: 32, overflow: 'hidden' }}>
+          {/* Gradient layer — covers the full block including safe-area. */}
           <Animated.View
             pointerEvents="none"
             style={{
               position: 'absolute',
               top: 0, left: 0, right: 0, bottom: 0,
               opacity: gradientOpacity,
-              overflow: 'hidden',
             }}
           >
             <BreathingGradient mode={themeMode} />
@@ -384,11 +402,6 @@ export default function Home() {
                   )}
                 </View>
                 <View style={{ flexShrink: 1, minWidth: 0 }}>
-                  {/* Every account has a @handle, so the header always greets
-                      "Hi, @handle" — no "Set @handle" state exists. */}
-                  <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '500', letterSpacing: 0.2 }} numberOfLines={1}>
-                    {t('home.greeting')}
-                  </Text>
                   <Text
                     style={{
                       color: p.fg,
@@ -544,14 +557,14 @@ export default function Home() {
               {/* Crypto Assets Section */}
               {cryptoAssets.length > 0 && (
                 <View style={{ marginTop: 16 }}>
-                  <Pressable
-                    onPress={() => setCryptoOpen((v) => !v)}
-                    style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 24, marginBottom: 10 }}
-                  >
-                    <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '700', letterSpacing: 1 }}>
-                      {t('home.cryptoAssets').toUpperCase()}
-                    </Text>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 24, marginBottom: 10 }}>
+                    <Pressable onPress={() => setCryptoOpen((v) => !v)} style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
+                      <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '700', letterSpacing: 1 }}>
+                        {t('home.cryptoAssets').toUpperCase()}
+                      </Text>
+                      <Ionicons name={cryptoOpen ? 'chevron-up' : 'chevron-down'} size={12} color={p.fgFaint} />
+                    </Pressable>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
                       <Text style={{ color: p.fgFaint, fontSize: 12, fontWeight: '600', fontVariant: ['tabular-nums'] }}>
                         {showBalance ? dc.fmt(cryptoAssets.reduce((s, w) => {
                           const tk = tickerKey(w.currency);
@@ -559,9 +572,15 @@ export default function Home() {
                           return s + Number(w.balance) * price;
                         }, 0)) : '****'}
                       </Text>
-                      <Ionicons name={cryptoOpen ? 'chevron-up' : 'chevron-down'} size={14} color={p.fgFaint} />
+                      <Pressable
+                        onPress={() => { h.selection(); setShowSparkline((v) => !v); }}
+                        hitSlop={8}
+                        style={{ opacity: showSparkline ? 1 : 0.4 }}
+                      >
+                        <Ionicons name="pulse-outline" size={15} color={p.fgFaint} />
+                      </Pressable>
                     </View>
-                  </Pressable>
+                  </View>
                   {cryptoOpen && cryptoAssets.map((w) => {
                     const tk = tickerKey(w.currency);
                     const price = priceMap[tk] ?? (tk === 'USDT' ? 1 : undefined);
@@ -572,12 +591,43 @@ export default function Home() {
                         palette={p}
                         sparkline={sparklineMap[tk]}
                         changePct={changeMap[tk]}
+                        unitPrice={price}
                         liveUsd={price !== undefined ? Number(w.balance) * price : undefined}
                         showBalance={showBalance}
+                        showSparkline={showSparkline}
                         onPress={() => { h.selection(); router.push(`/asset/${w.currency}`); }}
                       />
                     );
                   })}
+                  {/* Dust prompt — shown when ≥1 holding is worth < $5 */}
+                  {cryptoOpen && dustAssets.length > 0 && !dustPromptDismissed && (
+                    <Pressable
+                      onPress={() => { h.selection(); setDustPromptDismissed(true); router.push('/?tab=buy'); }}
+                      style={({ pressed }) => ({
+                        marginHorizontal: 16, marginTop: 8, marginBottom: 4,
+                        paddingHorizontal: 16, paddingVertical: 12,
+                        borderRadius: 16, borderWidth: 1,
+                        borderColor: p.accentBorder,
+                        backgroundColor: pressed ? p.bgElev : p.accentSoft,
+                        flexDirection: 'row', alignItems: 'center', gap: 12,
+                      })}
+                    >
+                      <Ionicons name="swap-horizontal-outline" size={18} color={p.accentText} />
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ color: p.accentText, fontSize: 13, fontWeight: '700' }}>
+                          {dustAssets.length === 1
+                            ? `${dustAssets[0].currency} dust — convert it?`
+                            : `${dustAssets.length} small balances under $5 — convert them?`}
+                        </Text>
+                        <Text style={{ color: p.accentText, fontSize: 11, opacity: 0.7, marginTop: 2 }}>
+                          Tap to swap into another crypto
+                        </Text>
+                      </View>
+                      <Pressable onPress={(e) => { e.stopPropagation(); setDustPromptDismissed(true); }} hitSlop={10}>
+                        <Ionicons name="close" size={16} color={p.accentText} style={{ opacity: 0.6 }} />
+                      </Pressable>
+                    </Pressable>
+                  )}
                 </View>
               )}
 
@@ -1280,36 +1330,63 @@ function BalanceHistoryModal({
  * `mono` stays a flat charcoal (no colour, by design).
  */
 const BreathingGradient = memo(function BreathingGradient({ mode }: { mode: 'dark' | 'light' | 'mono' }) {
+  // Two LinearGradient layers cross-fade via native-driver opacity animation.
+  // No SVG radial re-renders, no JS-thread rAF, no setInterval state. The
+  // Animated.loop drives opacity on the native thread at true 60fps.
+  const shimmer = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(shimmer, { toValue: 1, duration: 7000, useNativeDriver: true }),
+        Animated.timing(shimmer, { toValue: 0, duration: 7000, useNativeDriver: true }),
+      ])
+    ).start();
+    return () => shimmer.stopAnimation();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   if (mode === 'mono') {
     return <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#161617' }} />;
   }
 
-  // Two radial stops per theme: a bright-ish blue core fading into the page bg.
-  // `core` carries the #63a1db tint; `edge` is the surrounding surface so the
-  // glow melts seamlessly into the scroll body below.
-  const core = mode === 'dark' ? '#3C5E80' : '#BCD6EE';
-  const edge = mode === 'dark' ? '#16181C' : '#FAFAF7';
+  const isDark = mode === 'dark';
+
+  // Base: deep charcoal-navy → dark teal, top-to-bottom
+  // Shimmer layer: diagonal accent glow that cross-fades in/out
+  const { LinearGradient } = require('expo-linear-gradient');
 
   return (
-    <BalanceSvg width="100%" height="100%" style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}>
-      <SvgDefs>
-        {/* Primary glow — offset up-left of centre so the light feels
-            directional, not a flat spotlight. */}
-        <SvgRadialGradient id="cardGlow" cx="38%" cy="30%" r="95%">
-          <SvgStop offset="0%"   stopColor={core} stopOpacity={mode === 'dark' ? 0.9 : 0.8} />
-          <SvgStop offset="55%"  stopColor={core} stopOpacity={mode === 'dark' ? 0.28 : 0.22} />
-          <SvgStop offset="100%" stopColor={edge} stopOpacity={1} />
-        </SvgRadialGradient>
-        {/* Secondary cool accent — a faint #63a1db wash low-right for depth. */}
-        <SvgRadialGradient id="cardGlowAccent" cx="82%" cy="78%" r="70%">
-          <SvgStop offset="0%"   stopColor="#63A1DB" stopOpacity={mode === 'dark' ? 0.16 : 0.10} />
-          <SvgStop offset="100%" stopColor="#63A1DB" stopOpacity={0} />
-        </SvgRadialGradient>
-      </SvgDefs>
-      <SvgRect x="0" y="0" width="100%" height="100%" fill={edge} />
-      <SvgRect x="0" y="0" width="100%" height="100%" fill="url(#cardGlow)" />
-      <SvgRect x="0" y="0" width="100%" height="100%" fill="url(#cardGlowAccent)" />
-    </BalanceSvg>
+    <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}>
+      {/* Base layer — always visible */}
+      <LinearGradient
+        colors={isDark
+          ? ['#0b1220', '#0f1c2e', '#111f35']
+          : ['#e8f2fb', '#daeaf8', '#cce1f5']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
+      />
+      {/* Shimmer layer — cross-fades over base */}
+      <Animated.View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, opacity: shimmer }}>
+        <LinearGradient
+          colors={isDark
+            ? ['#0f1c2e', '#163354', '#1a4070', '#0f1c2e']
+            : ['#daeaf8', '#b8d9f4', '#9dc8ef', '#cce1f5']}
+          start={{ x: 0.1, y: 0 }}
+          end={{ x: 0.9, y: 1 }}
+          style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
+        />
+      </Animated.View>
+      {/* Persistent top-edge accent glow */}
+      <LinearGradient
+        colors={isDark
+          ? ['#63a1db18', '#63a1db08', 'transparent']
+          : ['#63a1db22', '#63a1db0a', 'transparent']}
+        start={{ x: 0.3, y: 0 }}
+        end={{ x: 0.7, y: 0.6 }}
+        style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
+      />
+    </View>
   );
 });
 
@@ -1370,35 +1447,74 @@ function AnimatedTotal({
 
   const converted = dc.convert(displayed);
   const totalStr = converted.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: dc.isCrypto ? 6 : 2 });
+  const visibleTotal = showBalance ? totalStr : totalStr.replace(/[0-9]/g, '*');
   const digitCount = totalStr.replace(/[^0-9]/g, '').length;
-  const fontSize = digitCount <= 7 ? 52 : digitCount <= 9 ? 44 : digitCount <= 11 ? 36 : 30;
+  const amountSize = digitCount <= 7 ? 58 : digitCount <= 9 ? 51 : digitCount <= 11 ? 28 : 28;
+  const symbolSize = Math.max(28, Math.round(amountSize * 0.28));
+  const fractionSize = Math.max(21, Math.round(amountSize * 0.54));
+  const lineHeight = Math.round(amountSize * 1.06);
 
-  // Split into the whole part and the cents so the fraction can render
-  // smaller/dimmer — a small touch that makes the balance read like a
-  // premium fintech figure rather than one flat number.
-  const [whole, frac] = (showBalance ? totalStr : totalStr.replace(/[0-9]/g, '*')).split('.');
+  // One clean numeric lockup: all parts use Outfit with tabular numerals,
+  // zero tracking, and a restrained fraction so the balance matches the rest
+  // of the app instead of reading like a separate display treatment.
+  const [whole, frac] = visibleTotal.split('.');
 
   return (
-    <View style={{ alignItems: 'center', paddingHorizontal: 24, paddingTop: 6, paddingBottom: 2 }}>
+    <View style={{ alignItems: 'center', paddingHorizontal: 24, paddingTop: 8, paddingBottom: 2 }}>
       {/* Balance centers cleanly — the show/hide eye now lives pinned in
           the sticky block's top-right corner, not beside the number. */}
-      <Pressable onPress={onPress} hitSlop={12} style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
-        {/* Currency symbol — smaller + muted, raised like a superscript. */}
+      <Pressable
+        onPress={onPress}
+        hitSlop={12}
+        accessibilityRole="button"
+        accessibilityLabel={t('home.totalBalance')}
+        style={{
+          flexDirection: 'row',
+          alignItems: 'flex-start',
+          justifyContent: 'center',
+          maxWidth: '100%',
+          paddingHorizontal: 6,
+        }}
+      >
         <Text style={{
-          color: p.fgMuted, fontSize: fontSize * 0.5, fontWeight: '600',
-          marginTop: fontSize * 0.12, marginRight: 2, letterSpacing: -0.5,
+          color: p.fgMuted,
+          fontFamily: F.semibold,
+          fontSize: symbolSize,
+          lineHeight,
+          marginTop: Math.max(0.5, amountSize * 0.06),
+          marginRight: 3,
+          letterSpacing: 0,
+          fontVariant: ['tabular-nums'],
         }}>
           {dc.symbol}
         </Text>
-        <Text style={{
-          color: p.fg,
-          fontSize, fontWeight: '700', letterSpacing: -1.2,
-          textAlign: 'center',
-          fontVariant: ['tabular-nums'],
-        }}>
+        <Text
+          numberOfLines={1}
+          adjustsFontSizeToFit
+          minimumFontScale={0.78}
+          style={{
+            color: p.fg,
+            fontFamily: F.bold,
+            fontWeight: '800',
+            fontSize: amountSize,
+            lineHeight,
+            letterSpacing: 0,
+            textAlign: 'center',
+            fontVariant: ['tabular-nums'],
+            includeFontPadding: false,
+          }}
+        >
           {whole}
           {frac != null && (
-            <Text style={{ color: p.fgMuted, fontSize: fontSize * 0.56, fontWeight: '700', letterSpacing: -0.6 }}>
+            <Text style={{
+              color: p.fgMuted,
+              fontFamily: F.semibold,
+              fontSize: fractionSize,
+              lineHeight,
+              letterSpacing: 0,
+              fontVariant: ['tabular-nums'],
+              includeFontPadding: false,
+            }}>
               .{frac}
             </Text>
           )}
@@ -1437,12 +1553,12 @@ function actionLook(tone: ActionTone, p: Palette, mono: boolean): ActionLook {
     return m[tone];
   }
   switch (tone) {
-    case 'white': // Buy — the one coloured pill. Solid brand blue, white ink, soft blue glow.
+    case 'white': // Buy — solid brand blue, white ink, blue glow.
       return { bg: p.accent, fg: '#FFFFFF', glow: p.accent };
-    case 'grey':  // Sell — neutral elevated surface, full-contrast ink + hairline.
-      return { bg: p.bgElev, fg: p.fg, border: p.divider };
-    case 'black': // Top up — fg inverse for the third distinct weight.
-      return { bg: p.fg, fg: p.bg };
+    case 'grey':  // Sell — raised surface so it reads clearly above the gradient card.
+      return { bg: p.bgRaised, fg: p.fg, border: p.divider };
+    case 'black': // Top up — soft brand-blue tint (deposit = additive, blue family).
+      return { bg: p.accentSoft, fg: p.accentText, border: p.accentBorder };
   }
 }
 
@@ -1473,9 +1589,9 @@ function ActionButton({
   return (
     <PressableScale onPress={handlePress} style={{ flex: 1 }}>
       <View style={{
-        height: 46,
-        borderRadius: 23,
-        paddingHorizontal: 12,
+        height: 44,
+        borderRadius: 22,
+        paddingHorizontal: 14,
         alignItems: 'center',
         justifyContent: 'center',
         flexDirection: 'row',
@@ -1483,14 +1599,13 @@ function ActionButton({
         backgroundColor: look.bg,
         borderWidth: look.border ? 1 : 0,
         borderColor: look.border,
-        // Only the Buy hero casts a soft brand-blue glow; the others sit flat.
         shadowColor: look.glow ?? '#000000',
         shadowOffset: { width: 0, height: glowing ? 5 : 2 },
-        shadowOpacity: glowing ? 0.28 : 0.10,
-        shadowRadius: glowing ? 12 : 5,
+        shadowOpacity: glowing ? 0.28 : 0.08,
+        shadowRadius: glowing ? 12 : 4,
         elevation: glowing ? 5 : 1,
       }}>
-        {icon && <Ionicons name={icon} size={15} color={look.fg} />}
+        {icon && <Ionicons name={icon} size={17} color={look.fg} />}
         <Text style={{ color: look.fg, fontSize: 14, fontWeight: '700', letterSpacing: -0.2 }}>
           {label}
         </Text>
@@ -1505,10 +1620,10 @@ function MoreActionButton({ palette: p, onPress }: { palette: Palette; onPress: 
   return (
     <PressableScale onPress={onPress}>
       <View style={{
-        width: 46, height: 46,
-        borderRadius: 23,
-        backgroundColor: p.pillBg,
-        borderWidth: 1, borderColor: p.border,
+        width: 44, height: 44,
+        borderRadius: 22,
+        backgroundColor: p.bgRaised,
+        borderWidth: 1, borderColor: p.divider,
         alignItems: 'center',
         justifyContent: 'center',
       }}>
@@ -2533,14 +2648,16 @@ function useDepositAddress(currency: string, enabled: boolean) {
 }
 
 /* ── Asset row ─── */
-function AssetRow({ wallet, palette: p, onPress, liveUsd, sparkline, changePct, showBalance = true }: {
+function AssetRow({ wallet, palette: p, onPress, liveUsd, unitPrice, sparkline, changePct, showBalance = true, showSparkline = true }: {
   wallet: Wallet;
   palette: Palette;
   onPress?: () => void;
   liveUsd?: number;
+  unitPrice?: number;
   sparkline?: number[];
   changePct?: number;
   showBalance?: boolean;
+  showSparkline?: boolean;
 }) {
   const dc = useDisplayCurrency();
   const meta = ASSET_META[wallet.currency] ?? { title: wallet.currency, subDecimals: 6 };
@@ -2549,9 +2666,14 @@ function AssetRow({ wallet, palette: p, onPress, liveUsd, sparkline, changePct, 
   const sparkColor = positive ? p.greenFg : p.redFg;
   const maxDec = Math.min(meta.subDecimals, 8);
   const balanceStr = Number(wallet.balance).toLocaleString('en-US', { maximumFractionDigits: maxDec });
-  const usdStr = dc.fmt(usd);
+  // Crypto rows show unit market price; fiat rows show holding value
+  const rightStr = unitPrice !== undefined
+    ? unitPrice >= 1
+      ? '$' + unitPrice.toLocaleString('en-US', { maximumFractionDigits: 2 })
+      : '$' + unitPrice.toLocaleString('en-US', { maximumFractionDigits: 6 })
+    : dc.fmt(usd);
   const maskedBalance = balanceStr.replace(/[0-9]/g, '*');
-  const maskedUsd = usdStr.replace(/[0-9]/g, '*');
+  const maskedRight = rightStr.replace(/[0-9]/g, '*');
 
   return (
     <Pressable
@@ -2575,17 +2697,9 @@ function AssetRow({ wallet, palette: p, onPress, liveUsd, sparkline, changePct, 
             {showBalance ? balanceStr : maskedBalance} {wallet.currency}
           </Text>
         </View>
-
-        {/* Mid: sparkline sits between name and value for rhythm */}
-        {sparkline && sparkline.length >= 2 && (
-          <View style={{ marginHorizontal: 10, opacity: 0.85 }}>
-            <Sparkline data={sparkline} width={62} height={28} color={sparkColor} strokeWidth={1.6} />
-          </View>
-        )}
-
         <View style={{ alignItems: 'flex-end', minWidth: 72 }}>
           <Text style={{ color: p.fg, fontSize: 15, fontWeight: '700', fontVariant: ['tabular-nums'], letterSpacing: -0.2 }} numberOfLines={1}>
-            {showBalance ? usdStr : maskedUsd}
+            {showBalance ? rightStr : maskedRight}
           </Text>
           {changePct !== undefined && (
             <View style={{
@@ -2603,6 +2717,13 @@ function AssetRow({ wallet, palette: p, onPress, liveUsd, sparkline, changePct, 
           )}
         </View>
       </View>
+
+      {/* Sparkline below the row */}
+      {showSparkline && sparkline && sparkline.length >= 2 && (
+        <View style={{ marginTop: 10, opacity: 0.75 }}>
+          <Sparkline data={sparkline} width={Dimensions.get('window').width - 60} height={34} color={sparkColor} strokeWidth={1.5} />
+        </View>
+      )}
     </Pressable>
   );
 }

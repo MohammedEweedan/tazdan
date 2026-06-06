@@ -19,6 +19,14 @@ function makeFakeTx() {
 
   const findAccount = (type: string, userId: string | null, currency: string) =>
     accounts.find((a) => a.type === type && a.userId === userId && a.currency === currency);
+  const dec = (value: any) => new Decimal(value.toString());
+  const applyBalanceUpdate = (account: any, balanceUpdate: any) => {
+    if (balanceUpdate && typeof balanceUpdate === 'object' && 'increment' in balanceUpdate) {
+      account.balance = dec(account.balance).plus(dec(balanceUpdate.increment));
+    } else {
+      account.balance = dec(balanceUpdate);
+    }
+  };
 
   const tx = {
     ledgerAccount: {
@@ -33,8 +41,17 @@ function makeFakeTx() {
       },
       update: async ({ where, data }: any) => {
         const a = accounts.find((x) => x.id === where.id);
-        a.balance = data.balance;
+        applyBalanceUpdate(a, data.balance);
         return a;
+      },
+      updateMany: async ({ where, data }: any) => {
+        const a = accounts.find((x) => x.id === where.id);
+        if (!a) return { count: 0 };
+        if (where.balance?.gte !== undefined && dec(a.balance).lt(dec(where.balance.gte))) {
+          return { count: 0 };
+        }
+        applyBalanceUpdate(a, data.balance);
+        return { count: 1 };
       },
     },
     ledgerEntry: {
@@ -82,6 +99,7 @@ describe('postLedger — conservation invariant', () => {
         refType: 'buy',
         legs: [
           { type: 'USER', userId: 'alice', currency: 'USDT', amount: '-100' },
+          { type: 'SYSTEM_CHAIN', currency: 'USDT', amount: '100' },
           { type: 'USER', userId: 'alice', currency: 'BTC', amount: '0.002' }, // BTC leg unbalanced
         ],
       }),

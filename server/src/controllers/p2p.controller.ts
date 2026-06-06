@@ -717,18 +717,17 @@ export class P2PController {
   /** Raise a dispute */
   static async raiseDispute(req: AuthRequest, res: Response, next: NextFunction) {
     try {
-      // Strict validation: cap length, strip control chars. Reason is
-      // shown to admins via notifications and stored — unsanitised
-      // input becomes a stored-XSS vector.
+      // Strict validation: cap length and strip control chars. The reason is
+      // shown to admins via notifications, so keep it plain text.
       const { reason: rawReason } = z
         .object({ reason: z.string().trim().min(10).max(1000) })
         .parse(req.body);
 
-      // Drop anything outside printable ASCII + common Unicode letters/digits.
+      // Drop anything outside printable ASCII.
       // eslint-disable-next-line no-control-regex
-      const reason = rawReason.replace(/[ -]/g, '').slice(0, 1000);
+      const reason = rawReason.replace(/[^\x20-\x7E]/g, '').slice(0, 1000);
       if (reason.length < 10) {
-        throw new AppError('Reason must be 10–1000 characters', 400);
+        throw new AppError('Reason must be 10-1000 characters', 400);
       }
 
       const trade = await (prisma as any).p2PTrade.findFirst({

@@ -156,7 +156,7 @@ export default function WalletScreen() {
           {/* Header */}
           <View style={{
             flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-            paddingHorizontal: 24, paddingTop: 18, paddingBottom: 8,
+            paddingHorizontal: 24, paddingTop: 18,
           }}>
             <Text style={{ color: p.fg, fontSize: 22, fontWeight: '700', letterSpacing: -0.4 }}>
               {t('wallet.title') || 'Wallets'}
@@ -177,10 +177,10 @@ export default function WalletScreen() {
           </View>
 
           {/* Net worth with swipe gesture */}
-          <GestureDetector gesture={swipeGesture}>
+          {/* <GestureDetector gesture={swipeGesture}>
             <Pressable
               onPress={() => { h.light(); setBreakdownVisible(true); }}
-              style={{ paddingHorizontal: 24, paddingTop: 24, paddingBottom: 24 }}
+              style={{ paddingHorizontal: 24, paddingVertical: 18, alignItems: 'center' }}
             >
               <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '600', marginBottom: 8 }}>
                 {t('home.totalBalance')}
@@ -209,11 +209,8 @@ export default function WalletScreen() {
                   </Text>
                 </View>
               </View>
-              <Text style={{ color: p.fgMuted, fontSize: 11, marginTop: 8 }}>
-                {t('wallet.swipeBreakdown')}
-              </Text>
             </Pressable>
-          </GestureDetector>
+          </GestureDetector> */}
 
           {/* Segmented filter */}
           <View style={{
@@ -254,7 +251,6 @@ export default function WalletScreen() {
             }}>
               <BucketTile palette={p} icon="logo-bitcoin" label={t('wallet.crypto')} usd={cryptoUsd} count={(wallets ?? []).filter((w) => getCurrencyMeta(w.currency)?.kind === 'crypto').length} accent="#f7931a" />
               <BucketTile palette={p} icon="cash-outline" label={t('wallet.fiat')}   usd={fiatUsd}   count={(wallets ?? []).filter((w) => getCurrencyMeta(w.currency)?.kind === 'fiat').length}   accent="#22c55e" />
-              <BucketTile palette={p} icon="card-outline" label={t('home.cards')}  usd={cardsUsd}  count={cards?.length ?? 0} accent="#7c3aed" />
             </View>
           )}
 
@@ -604,7 +600,7 @@ function SectionHeader({
         </Text>
         <Ionicons
           name={open ? 'chevron-up' : 'chevron-down'}
-          size={13}
+          size={10}
           color={p.fg}
         />
       </Pressable>
@@ -642,7 +638,7 @@ function AssetRow({
         {isCrypto ? (
           <CoinIcon symbol={w.currency} size={42} />
         ) : (
-          <Text style={{ color: p.fg, fontSize: 28, lineHeight: 42, width: 42, textAlign: 'center' }}>
+          <Text style={{ color: p.fg, fontSize: 18, lineHeight: 42, width: 42, textAlign: 'center' }}>
             {meta.flagOrIcon}
           </Text>
         )}

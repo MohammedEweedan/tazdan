@@ -12,7 +12,9 @@
       "Read(//tmp/**)",
       "Bash(npm run *)",
       "Bash(sed -n '/model PlatformSettings/,/^}/p' server/prisma/schema.prisma)",
-      "Bash(sed -n '756,800p' server/prisma/schema.prisma)"
+      "Bash(sed -n '756,800p' server/prisma/schema.prisma)",
+      "Bash(curl -s \"https://api.binance.com/api/v3/ticker/price?symbol=MATICUSDT\")",
+      "Bash(curl -s \"https://api.binance.com/api/v3/ticker/price?symbol=POLUSDT\")"
     ]
   }
 }

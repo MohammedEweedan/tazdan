@@ -5,9 +5,13 @@ const withPWA = require('next-pwa')({
   disable: process.env.NODE_ENV === 'development',
 });
 
-const API_ORIGIN = process.env.NEXT_PUBLIC_API_URL
-  ? new URL(process.env.NEXT_PUBLIC_API_URL).origin
-  : 'https://api.Fortuni.com';
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://api.promrkts.com';
+const API_URL = new URL(API_BASE);
+const API_ORIGIN = API_URL.origin;
+const API_PATH = API_URL.pathname.replace(/\/$/, '');
+const API_REWRITE_BASE = API_URL.hostname === 'api.promrkts.com'
+  ? API_ORIGIN
+  : `${API_ORIGIN}${API_PATH || '/api'}`;
 
 // Dev API origin for local server (used in CSP connect-src)
 const DEV_API_ORIGIN = 'http://localhost:5001';
@@ -101,7 +105,7 @@ const nextConfig = {
     return [
       {
         source: '/api/:path*',
-        destination: 'https://api.Fortuni.com/:path*',
+        destination: `${API_REWRITE_BASE}/:path*`,
       },
     ];
   },
