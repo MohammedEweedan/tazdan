@@ -767,8 +767,8 @@ export default function RegisterPage() {
     }
   };
 
-  const skipKyc = () => router.push("/dashboard/kyc");
-  const goToDashboard = () => router.push("/dashboard");
+  // No web app — after signup the user continues in the mobile app.
+  const goHome = () => router.push("/");
 
   const back = () => {
     setError("");
@@ -1370,7 +1370,7 @@ export default function RegisterPage() {
               <Box
                 as="button"
                 type="button"
-                onClick={skipKyc}
+                onClick={() => setStep(4)}
                 style={{
                   background: "none",
                   border: "none",
@@ -1409,24 +1409,18 @@ export default function RegisterPage() {
                 You're all set.
               </Heading>
               <Text color={p.fgMuted} fontSize="15px" lineHeight="22px" mt="8px" maxW="340px">
-                Your KYC is being reviewed. You'll get a notification once it's approved — usually within a few hours.
+                Your account is ready. Download the tazdan app to verify your identity, fund your wallet, and start trading.
               </Text>
             </Box>
 
-            <PrimaryCTA label="Go to dashboard" onClick={goToDashboard} p={p} />
+            <PrimaryCTA label="Back to home" onClick={goHome} p={p} />
           </Flex>
         )}
 
-        {/* ── Footer ── */}
+        {/* ── Footer ── Already-registered users sign in via the mobile app,
+            so the web login link is gone. */}
         <Flex align="center" justify="center" mt="28px" pb="8px" gap="4px">
-          <Text color={p.fgMuted} fontSize="14px">{t("auth_already_have_account")}</Text>
-          <Box
-            as={NextLink}
-            href="/login"
-            style={{ color: p.fg, fontSize: "14px", fontWeight: "800", textDecoration: "none" }}
-          >
-            {t("auth_sign_in")}
-          </Box>
+          <Text color={p.fgMuted} fontSize="14px">Already registered? Sign in on the tazdan mobile app.</Text>
         </Flex>
       </Box>
 

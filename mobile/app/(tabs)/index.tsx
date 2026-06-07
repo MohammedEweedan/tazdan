@@ -201,19 +201,22 @@ export default function Home() {
   const cryptoAssets = useMemo(
     () => ownedAssets.filter((w) => {
       if (FIAT_CURRENCIES.has(w.currency)) return false;
-      const tk = tickerKey(w.currency);
-      const price = priceMap[tk] ?? (tk === 'USDT' ? 1 : 0);
-      return Number(w.balance) * price > 0;
+      // Hide ONLY wallets with a truly zero crypto balance. A coin with real
+      // balance but a missing price (price=0) must still be shown — never
+      // treat "price not loaded yet" as "$0 value".
+      return Number(w.balance) > 0;
     }),
-    [ownedAssets, priceMap],
+    [ownedAssets],
   );
   const dustAssets = useMemo(
     () => ownedAssets.filter((w) => {
       if (FIAT_CURRENCIES.has(w.currency)) return false;
+      if (Number(w.balance) <= 0) return false;
       const tk = tickerKey(w.currency);
       const price = priceMap[tk] ?? (tk === 'USDT' ? 1 : 0);
+      if (price <= 0) return false; // unknown price → can't judge dust yet
       const usdVal = Number(w.balance) * price;
-      return usdVal > 0 && usdVal < 5;
+      return usdVal < 5;
     }),
     [ownedAssets, priceMap],
   );
@@ -599,10 +602,12 @@ export default function Home() {
                       />
                     );
                   })}
-                  {/* Dust prompt — shown when ≥1 holding is worth < $5 */}
+                  {/* Dust prompt — shown when ≥1 holding is worth < $5. Tapping
+                      it deep-links into that asset's sell sheet so the user can
+                      actually convert the dust. Only the X dismisses it. */}
                   {cryptoOpen && dustAssets.length > 0 && !dustPromptDismissed && (
                     <Pressable
-                      onPress={() => { h.selection(); setDustPromptDismissed(true); router.push('/?tab=buy'); }}
+                      onPress={() => { h.selection(); router.push(`/asset/${dustAssets[0].currency}?action=sell`); }}
                       style={({ pressed }) => ({
                         marginHorizontal: 16, marginTop: 8, marginBottom: 4,
                         paddingHorizontal: 16, paddingVertical: 12,
@@ -620,10 +625,10 @@ export default function Home() {
                             : `${dustAssets.length} small balances under $5 — convert them?`}
                         </Text>
                         <Text style={{ color: p.accentText, fontSize: 11, opacity: 0.7, marginTop: 2 }}>
-                          Tap to swap into another crypto
+                          {dustAssets.length === 1 ? 'Tap to sell or swap it' : `Tap to convert ${dustAssets[0].currency} first`}
                         </Text>
                       </View>
-                      <Pressable onPress={(e) => { e.stopPropagation(); setDustPromptDismissed(true); }} hitSlop={10}>
+                      <Pressable onPress={() => setDustPromptDismissed(true)} hitSlop={10}>
                         <Ionicons name="close" size={16} color={p.accentText} style={{ opacity: 0.6 }} />
                       </Pressable>
                     </Pressable>

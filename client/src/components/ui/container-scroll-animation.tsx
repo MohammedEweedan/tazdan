@@ -1,6 +1,6 @@
 "use client";
 import React, { useRef } from "react";
-import { useScroll, useTransform, motion, MotionValue } from "framer-motion";
+import { useScroll, useTransform, useSpring, motion, MotionValue } from "framer-motion";
 
 export const ContainerScroll = ({
   titleComponent,
@@ -12,6 +12,9 @@ export const ContainerScroll = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const { scrollYProgress } = useScroll({
     target: containerRef,
+    // Map the animation to the element entering→leaving the viewport so the
+    // first scroll doesn't start mid-transform (a big cause of the "jump").
+    offset: ["start end", "end start"],
   });
   const [isMobile, setIsMobile] = React.useState(false);
 
@@ -20,7 +23,7 @@ export const ContainerScroll = ({
       setIsMobile(window.innerWidth <= 768);
     };
     checkMobile();
-    window.addEventListener("resize", checkMobile);
+    window.addEventListener("resize", checkMobile, { passive: true });
     return () => {
       window.removeEventListener("resize", checkMobile);
     };
@@ -30,9 +33,12 @@ export const ContainerScroll = ({
     return isMobile ? [0.7, 0.9] : [1.05, 1];
   };
 
-  const rotate = useTransform(scrollYProgress, [0, 1], [20, 0]);
-  const scale = useTransform(scrollYProgress, [0, 1], scaleDimensions());
-  const translate = useTransform(scrollYProgress, [0, 1], [0, -100]);
+  // Spring-smooth the raw scroll progress so the transforms ease instead of
+  // tracking every jittery scroll delta 1:1 — this is the main jank fix.
+  const smooth = useSpring(scrollYProgress, { stiffness: 120, damping: 30, mass: 0.4 });
+  const rotate = useTransform(smooth, [0, 0.5], [20, 0]);
+  const scale = useTransform(smooth, [0, 0.5], scaleDimensions());
+  const translate = useTransform(smooth, [0, 0.5], [0, -100]);
 
   return (
     <div
@@ -59,6 +65,7 @@ export const Header = ({ translate, titleComponent }: any) => {
     <motion.div
       style={{
         translateY: translate,
+        willChange: "transform",
       }}
       className="max-w-5xl mx-auto text-center"
     >
@@ -81,6 +88,9 @@ export const Card = ({
       style={{
         rotateX: rotate,
         scale,
+        willChange: "transform",
+        transformStyle: "preserve-3d",
+        backfaceVisibility: "hidden",
         boxShadow:
           "0 0 #0000004d, 0 9px 20px #0000004a, 0 37px 37px #00000042, 0 84px 50px #00000026, 0 149px 60px #0000000a, 0 233px 65px #00000003",
       }}

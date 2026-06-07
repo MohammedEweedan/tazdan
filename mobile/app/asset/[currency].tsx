@@ -37,9 +37,10 @@ import { formatMoney } from '@/utils/format';
 import { CurrencyBadge } from '@/components/ui/CurrencyBadge';
 import { AssetTxRow, txBelongsToAsset } from '@/components/transactions/AssetTxRow';
 
-type Range = '1H' | '24H' | '7D' | '30D';
+type Range = '1H' | '24H' | '7D' | '30D' | '1Y' | 'ALL';
 type Tab = 'overview' | 'news';
 type ChartType = 'line' | 'candle';
+interface TradeMarker { ts: number; price: number; side: 'BUY' | 'SELL' }
 
 const FIAT_CODES = new Set(['USD','EUR','GBP','AED','SAR','EGP','LYD','CAD','AUD','CHF','JPY','CNY']);
 
@@ -63,9 +64,13 @@ function friendlyName(sym: string): string {
 
 const BINANCE_INTERVALS: Record<Range, string> = {
   '1H': '1m', '24H': '15m', '7D': '4h', '30D': '1d',
+  // 1Y: daily candles (~365). ALL: weekly candles (Binance returns from listing,
+  // capped at 1000 weeks which comfortably covers every asset's full history).
+  '1Y': '1d', 'ALL': '1w',
 };
 const BINANCE_LIMITS: Record<Range, number> = {
   '1H': 60, '24H': 96, '7D': 42, '30D': 30,
+  '1Y': 365, 'ALL': 1000,
 };
 
 function fetchWithTimeout(url: string, ms: number): Promise<Response> {
@@ -78,7 +83,6 @@ function useBinanceChart(sym: string, range: Range, enabled: boolean) {
   return useQuery({
     queryKey: ['binance-chart', sym, range],
     enabled: enabled && sym !== 'USDT' && sym !== 'USDT_ERC20' && sym !== 'USDT_TRC20',
-    staleTime: 2 * 60 * 1000,
     gcTime: 10 * 60 * 1000,
     queryFn: async () => {
       const base = sym.replace(/_ERC20|_TRC20/, '');
@@ -122,7 +126,7 @@ function useBinancePrice(sym: string, enabled: boolean) {
 }
 
 export default function AssetDetail() {
-  const { currency } = useLocalSearchParams<{ currency: string }>();
+  const { currency, action } = useLocalSearchParams<{ currency: string; action?: string }>();
   const sym = (currency ?? 'BTC').toUpperCase();
   const router = useRouter();
   const h = useHaptics();
@@ -135,7 +139,9 @@ export default function AssetDetail() {
   const [range, setRange] = useState<Range>('24H');
   const [tab, setTab] = useState<Tab>('overview');
   const [buyOpen, setBuyOpen] = useState(false);
-  const [sellOpen, setSellOpen] = useState(false);
+  // Deep-link: /asset/DOGE?action=sell opens straight into the sell sheet
+  // (used by the dust-convert prompt on the home screen).
+  const [sellOpen, setSellOpen] = useState(action === 'sell');
   const [hoverPrice, setHoverPrice] = useState<number | null>(null);
 
   const isFiat = FIAT_CODES.has(sym);
@@ -156,23 +162,24 @@ export default function AssetDetail() {
 
   const isLive = wsPrice !== null && !isFiat && sym !== 'USDT';
 
-  const change = useMemo(() => {
-    if (market) {
-      switch (range) {
-        case '1H':  return market.price_change_percentage_1h_in_currency  ?? 0;
-        case '24H': return market.price_change_percentage_24h             ?? 0;
-        case '7D':  return market.price_change_percentage_7d_in_currency  ?? 0;
-        case '30D': return market.price_change_percentage_30d_in_currency ?? 0;
-      }
-    }
-    return binanceData?.change24h ?? 0;
-  }, [market, binanceData, range]);
-  const positive = change >= 0;
-
-  const { data: cgOhlc, isLoading: cgLoading } = useOHLC(coinId, range);
+  const { data: cgOhlc, isLoading: cgLoading, isError: cgError } = useOHLC(coinId, range);
   const { data: cgCandles } = useOHLCCandles(coinId, range);
-  const { data: binanceChart, isLoading: binanceChartLoading } = useBinanceChart(sym, range, needsBinance);
+  const { data: binanceChart, isLoading: binanceChartLoading, isError: binanceError } = useBinanceChart(sym, range, needsBinance);
   const [chartType, setChartType] = useState<ChartType>('line');
+
+  // ALL availability: if the ALL fetch errors or comes back empty (asset has
+  // < the full history CoinGecko can serve), hide the ALL button and snap back
+  // to 1Y so the chart never sits spinning forever.
+  const [allUnavailable, setAllUnavailable] = useState(false);
+  useEffect(() => {
+    if (range !== 'ALL') return;
+    const failed = (cgError && binanceError) ||
+      (!cgLoading && !binanceChartLoading && !cgOhlc?.length && !binanceChart?.prices?.length);
+    if (failed) {
+      setAllUnavailable(true);
+      setRange('1Y');
+    }
+  }, [range, cgError, binanceError, cgLoading, binanceChartLoading, cgOhlc, binanceChart]);
 
   const chartPoints: import('@/hooks/useOHLC').ChartPoint[] = useMemo(() => {
     if (cgOhlc) return cgOhlc;
@@ -185,6 +192,29 @@ export default function AssetDetail() {
     return [];
   }, [cgOhlc, binanceChart]);
 
+  const change = useMemo(() => {
+    // 1Y / ALL have no precomputed CoinGecko percentage — derive from the
+    // chart's own first→last close so the header % matches the visible range.
+    if (range === '1Y' || range === 'ALL') {
+      if (chartPoints.length >= 2) {
+        const first = chartPoints[0].price;
+        const last = chartPoints[chartPoints.length - 1].price;
+        if (first > 0) return ((last - first) / first) * 100;
+      }
+      return 0;
+    }
+    if (market) {
+      switch (range) {
+        case '1H':  return market.price_change_percentage_1h_in_currency  ?? 0;
+        case '24H': return market.price_change_percentage_24h             ?? 0;
+        case '7D':  return market.price_change_percentage_7d_in_currency  ?? 0;
+        case '30D': return market.price_change_percentage_30d_in_currency ?? 0;
+      }
+    }
+    return binanceData?.change24h ?? 0;
+  }, [market, binanceData, range, chartPoints]);
+  const positive = change >= 0;
+
   const candles: Candle[] = useMemo(() => {
     if (cgCandles?.length) return cgCandles;
     if (binanceChart?.candles?.length) return binanceChart.candles;
@@ -193,6 +223,38 @@ export default function AssetDetail() {
 
   const chartLoading = cgLoading || binanceChartLoading;
   const hasChart = !isFiat && sym !== 'USDT' && sym !== 'USDT_ERC20' && sym !== 'USDT_TRC20';
+
+  // ── User's own buy/sell trades for this asset → chart markers ──────────────
+  // Pulls completed orders and keeps only those for this symbol within the
+  // visible time window, so the markers line up with the rendered range.
+  const { data: ordersResp } = useQuery({
+    queryKey: ['asset-orders', sym],
+    enabled: hasChart,
+    queryFn: async () => {
+      const r = await api.get<{ orders: any[] }>('/exchange/orders?page=1&limit=100');
+      return r.data?.orders ?? [];
+    },
+    staleTime: 60_000,
+  });
+
+  const tradeMarkers = useMemo(() => {
+    if (!Array.isArray(ordersResp) || chartPoints.length < 2) return [];
+    const tStart = chartPoints[0].timestamp;
+    const tEnd = chartPoints[chartPoints.length - 1].timestamp;
+    return ordersResp
+      .filter((o) =>
+        String(o.asset).toUpperCase() === sym &&
+        o.status === 'EXECUTED') // CryptoOrderStatus: PENDING|EXECUTED|FAILED|REFUNDED
+      .map((o) => {
+        const ts = new Date(o.executedAt ?? o.createdAt).getTime();
+        return {
+          ts,
+          price: Number(o.quotedPrice ?? o.marketPrice ?? 0),
+          side: (o.type === 'SELL' ? 'SELL' : 'BUY') as 'BUY' | 'SELL',
+        };
+      })
+      .filter((m) => m.price > 0 && m.ts >= tStart && m.ts <= tEnd);
+  }, [ordersResp, sym, chartPoints]);
 
   const wallet = wallets?.find((w) => w.currency === sym);
   const balance = wallet ? Number(wallet.balance) : 0;
@@ -449,6 +511,8 @@ export default function AssetDetail() {
             chartLoading={chartLoading}
             chartPoints={chartPoints}
             candles={candles}
+            tradeMarkers={tradeMarkers}
+            allUnavailable={allUnavailable}
             chartType={chartType}
             setChartType={setChartType}
             positive={positive}
@@ -480,7 +544,7 @@ export default function AssetDetail() {
 
 /* ── Overview tab ─────────────────────────────────────────────────── */
 function OverviewTab({
-  sym, p, h, hasChart, chartLoading, chartPoints, candles, chartType, setChartType, positive, color,
+  sym, p, h, hasChart, chartLoading, chartPoints, candles, tradeMarkers, allUnavailable, chartType, setChartType, positive, color,
   range, setRange, onHoverPrice, isLive, wsPrice,
   market, binanceData, wallet, balance, holdingsUsd, holdingsDelta, change,
 }: {
@@ -489,6 +553,8 @@ function OverviewTab({
   hasChart: boolean; chartLoading: boolean;
   chartPoints: import('@/hooks/useOHLC').ChartPoint[];
   candles: Candle[];
+  tradeMarkers: TradeMarker[];
+  allUnavailable: boolean;
   chartType: ChartType; setChartType: (t: ChartType) => void;
   positive: boolean; color: string; range: Range;
   setRange: (r: Range) => void;
@@ -520,6 +586,7 @@ function OverviewTab({
               upColor={p.greenFg}
               downColor={p.redFg}
               onHoverPrice={onHoverPrice}
+              markers={tradeMarkers}
             />
           ) : (
             <SparklineChart
@@ -528,6 +595,7 @@ function OverviewTab({
               palette={p}
               onHoverPrice={onHoverPrice}
               livePrice={isLive ? wsPrice : null}
+              markers={tradeMarkers}
             />
           )}
           {/* Line / candle toggle */}
@@ -556,7 +624,9 @@ function OverviewTab({
             borderWidth: 1, borderColor: p.border,
             gap: 4,
           }}>
-            {(['1H', '24H', '7D', '30D'] as Range[]).map((r) => (
+            {(['1H', '24H', '7D', '30D', '1Y', 'ALL'] as Range[])
+              .filter((r) => !(r === 'ALL' && allUnavailable))
+              .map((r) => (
               <Pressable
                 key={r}
                 onPress={() => { h.selection(); setRange(r); }}
@@ -1003,12 +1073,13 @@ function monotoneCubicPath(pts: { x: number; y: number }[]): string {
   return d;
 }
 
-function SparklineChart({ points, color, palette: p, onHoverPrice, livePrice }: {
+function SparklineChart({ points, color, palette: p, onHoverPrice, livePrice, markers }: {
   points: import('@/hooks/useOHLC').ChartPoint[];
   color: string;
   palette: Palette;
   onHoverPrice?: (price: number | null) => void;
   livePrice?: number | null;
+  markers?: TradeMarker[];
 }) {
   const W = 320;
   const H = 168;
@@ -1047,8 +1118,21 @@ function SparklineChart({ points, color, palette: p, onHoverPrice, livePrice }: 
     const linePath = monotoneCubicPath(pts);
     const areaPath = `${linePath} L ${last.x} ${H - PAD} L ${pts[0].x} ${H - PAD} Z`;
     const grid = [0.25, 0.5, 0.75].map((f) => PAD + (H - PAD * 2) * f);
-    return { pts, step, last, linePath, areaPath, grid };
-  }, [series]);
+
+    // Project trade markers onto chart coords. X from timestamp (interpolated
+    // across the series span), Y from the marker's execution price.
+    const tFirst = series[0]?.timestamp ?? 0;
+    const tLast = series[series.length - 1]?.timestamp ?? 1;
+    const tSpan = tLast - tFirst || 1;
+    const markerPts = (markers ?? []).map((m) => ({
+      x: HPAD + ((m.ts - tFirst) / tSpan) * (W - HPAD * 2),
+      y: PAD + (H - PAD * 2) * (1 - (m.price - min) / spread),
+      side: m.side,
+      price: m.price,
+    })).filter((mp) => mp.x >= 0 && mp.x <= W);
+
+    return { pts, step, last, linePath, areaPath, grid, markerPts };
+  }, [series, markers]);
 
   const isLive = livePrice != null && Number.isFinite(livePrice);
 
@@ -1129,7 +1213,7 @@ function SparklineChart({ points, color, palette: p, onHoverPrice, livePrice }: 
     );
   }
 
-  const { last, linePath, areaPath, grid } = chart;
+  const { last, linePath, areaPath, grid, markerPts } = chart;
 
   return (
     <GestureDetector gesture={pan}>
@@ -1172,6 +1256,31 @@ function SparklineChart({ points, color, palette: p, onHoverPrice, livePrice }: 
               }}
             />
           )}
+          {/* Buy/Sell trade markers — RN views so they stay circular under
+              the non-uniform SVG scale, same trick as the tip dot. */}
+          {svgPxW > 0 && markerPts.map((m, i) => {
+            const isBuy = m.side === 'BUY';
+            const dotColor = isBuy ? p.greenFg : p.redFg;
+            const SZ = 16;
+            return (
+              <View
+                key={i}
+                pointerEvents="none"
+                style={{
+                  position: 'absolute',
+                  left: (m.x / W) * svgPxW + CARD_INSET - SZ / 2,
+                  top:  m.y + CARD_INSET - SZ / 2,
+                  width: SZ, height: SZ, borderRadius: SZ / 2,
+                  backgroundColor: dotColor,
+                  borderWidth: 2, borderColor: p.bgElev,
+                  alignItems: 'center', justifyContent: 'center',
+                  shadowColor: dotColor, shadowOpacity: 0.4, shadowRadius: 3, shadowOffset: { width: 0, height: 0 }, elevation: 3,
+                }}
+              >
+                <Ionicons name={isBuy ? 'arrow-down' : 'arrow-up'} size={9} color={p.accentFg} />
+              </View>
+            );
+          })}
           <Animated.View style={lineStyle} />
           <Animated.View style={cursorStyle} />
           {hoverPriceLabel && (
@@ -1193,12 +1302,13 @@ function SparklineChart({ points, color, palette: p, onHoverPrice, livePrice }: 
   );
 }
 
-function CandleChart({ candles, palette: p, upColor, downColor, onHoverPrice }: {
+function CandleChart({ candles, palette: p, upColor, downColor, onHoverPrice, markers }: {
   candles: Candle[];
   palette: Palette;
   upColor: string;
   downColor: string;
   onHoverPrice?: (price: number | null) => void;
+  markers?: TradeMarker[];
 }) {
   const W = 320;
   const H = 168;
@@ -1232,8 +1342,20 @@ function CandleChart({ candles, palette: p, upColor, downColor, onHoverPrice }: 
         close: c.close, ts: c.timestamp,
       };
     });
-    return { bars, slot, bodyW };
-  }, [candles]);
+
+    // Project trade markers onto candle coords. X via timestamp across the
+    // candle span; Y via the marker's execution price.
+    const tFirst = candles[0]?.timestamp ?? 0;
+    const tLast = candles[candles.length - 1]?.timestamp ?? 1;
+    const tSpan = tLast - tFirst || 1;
+    const markerPts = (markers ?? []).map((m) => ({
+      x: PAD + ((m.ts - tFirst) / tSpan) * innerW,
+      y: yOf(m.price),
+      side: m.side,
+    })).filter((mp) => mp.x >= 0 && mp.x <= W);
+
+    return { bars, slot, bodyW, markerPts };
+  }, [candles, markers]);
 
   const pxToVB = (px: number) => svgPxW <= 0 ? NaN : ((px - CARD_INSET) * W) / svgPxW;
 
@@ -1285,7 +1407,7 @@ function CandleChart({ candles, palette: p, upColor, downColor, onHoverPrice }: 
     );
   }
 
-  const { bars, bodyW } = chart;
+  const { bars, bodyW, markerPts } = chart;
 
   return (
     <GestureDetector gesture={pan}>
@@ -1316,6 +1438,30 @@ function CandleChart({ candles, palette: p, upColor, downColor, onHoverPrice }: 
               );
             })}
           </Svg>
+          {/* Buy/Sell trade markers — RN views to stay circular under scale. */}
+          {svgPxW > 0 && markerPts.map((m, i) => {
+            const isBuy = m.side === 'BUY';
+            const dotColor = isBuy ? upColor : downColor;
+            const SZ = 16;
+            return (
+              <View
+                key={i}
+                pointerEvents="none"
+                style={{
+                  position: 'absolute',
+                  left: (m.x / W) * svgPxW + CARD_INSET - SZ / 2,
+                  top:  m.y + CARD_INSET - SZ / 2,
+                  width: SZ, height: SZ, borderRadius: SZ / 2,
+                  backgroundColor: dotColor,
+                  borderWidth: 2, borderColor: p.bgElev,
+                  alignItems: 'center', justifyContent: 'center',
+                  shadowColor: dotColor, shadowOpacity: 0.4, shadowRadius: 3, shadowOffset: { width: 0, height: 0 }, elevation: 3,
+                }}
+              >
+                <Ionicons name={isBuy ? 'arrow-down' : 'arrow-up'} size={9} color={p.accentFg} />
+              </View>
+            );
+          })}
           <Animated.View style={lineStyle} />
           {hoverDate && (
             <Text style={{

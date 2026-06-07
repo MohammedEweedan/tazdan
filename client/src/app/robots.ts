@@ -8,9 +8,9 @@ export default function robots(): MetadataRoute.Robots {
       {
         userAgent: '*',
         allow: '/',
-        // Keep admin / dashboard / auth flows out of search results —
-        // they aren't useful as landing pages and they leak product state.
-        disallow: ['/admin', '/dashboard', '/api', '/login', '/register', '/reset-password', '/forgot-password', '/verify-email'],
+        // The web app is marketing-only now (landing + register + content
+        // pages). Only the API namespace stays out of search results.
+        disallow: ['/api'],
       },
     ],
     sitemap: `${SITE_URL}/sitemap.xml`,

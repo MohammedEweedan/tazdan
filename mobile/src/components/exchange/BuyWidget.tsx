@@ -20,7 +20,7 @@ import { useWallets, useCards, useMarkets, useTransactionSound } from '@/hooks';
 import * as LocalAuthentication from 'expo-local-authentication';
 import { CoinAvatar } from '@/components/ui/CoinAvatar';
 import { cryptoExchangeAPI, type CryptoQuote, type AssetSearchResult } from '@/lib/cryptoApi';
-import { STRIPE } from '@/constants';
+import { STRIPE, getCurrencyMeta } from '@/constants';
 
 // ── Static metadata for well-known coins ─────────────────────────────────────
 // Everything else gets a generated colour from its ticker symbol.
@@ -224,14 +224,20 @@ export function BuyWidget({ defaultAsset, lockAsset = false }: BuyWidgetProps = 
   const buyingBase = serverAsset(asset); // normalised symbol (no _ERC20 suffix)
   const payMethods = useMemo<PayMethod[]>(() => {
     const out: PayMethod[] = [];
-    const CRYPTO_PAY = new Set(['BTC','ETH','USDT','USDC','SOL','BNB','XRP']);
     wallets?.forEach((w) => {
       const wBase = ASSET_SYMBOL[w.currency] ?? w.currency;
       // Skip if it's the same asset the user is buying
       if (wBase === buyingBase) return;
-      if (CRYPTO_PAY.has(w.currency) && Number(w.balance) > 0) {
-        out.push({ type: 'crypto', asset: w.currency, balance: Number(w.balance) });
-      } else if (!CRYPTO_PAY.has(w.currency)) {
+      // Classify by the currency's real kind, not a hardcoded allowlist —
+      // otherwise any crypto outside the list (DOGE, ADA, dust coins…) gets
+      // mislabelled as a fiat wallet.
+      const isCrypto = getCurrencyMeta(wBase)?.kind === 'crypto';
+      if (isCrypto) {
+        // Only offer crypto you actually hold as a funding source.
+        if (Number(w.balance) > 0) {
+          out.push({ type: 'crypto', asset: w.currency, balance: Number(w.balance) });
+        }
+      } else {
         out.push({ type: 'fiat', currency: w.currency, balance: Number(w.balance) });
       }
     });
