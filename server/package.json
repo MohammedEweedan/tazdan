@@ -20,6 +20,7 @@
     "simulate:full": "ts-node --transpile-only scripts/simulate-full-activity.ts",
     "simulate:full:v": "ts-node --transpile-only scripts/simulate-full-activity.ts --verbose",
     "simulate:full:heavy": "ts-node --transpile-only scripts/simulate-full-activity.ts --users=10 --rounds=5 --verbose",
+    "simulate:live": "ts-node --transpile-only scripts/simulate-live-demo.ts",
     "backfill:fees-usd": "ts-node --transpile-only scripts/backfill-platform-fee-usd.ts",
     "backfill:fees-history": "ts-node --transpile-only scripts/seed-fees-from-history.ts",
     "preflight": "ts-node --transpile-only scripts/preflight.ts",
@@ -32,13 +33,16 @@
     "test:coverage": "jest --coverage",
     "test:watch": "jest --watch"
   },
+  "overrides": {
+    "axios": "^1.17.0"
+  },
   "dependencies": {
     "@aws-sdk/client-kms": "^3.700.0",
     "@prisma/client": "^5.22.0",
     "@sentry/node": "^10.53.1",
     "@solana/web3.js": "^1.98.4",
     "@types/compression": "^1.8.1",
-    "axios": "^1.6.7",
+    "axios": "^1.17.0",
     "bcryptjs": "^2.4.3",
     "bip32": "^5.0.1",
     "bip39": "^3.1.0",
@@ -57,7 +61,7 @@
     "helmet": "^7.1.0",
     "jsonwebtoken": "^9.0.2",
     "multer": "^1.4.5-lts.1",
-    "nodemailer": "^6.9.13",
+    "nodemailer": "^8.0.10",
     "qrcode": "^1.5.3",
     "redis": "^5.12.1",
     "sentry": "^0.34.0",
@@ -80,7 +84,7 @@
     "@types/jsonwebtoken": "^9.0.6",
     "@types/multer": "^1.4.11",
     "@types/node": "^20.11.19",
-    "@types/nodemailer": "^6.4.15",
+    "@types/nodemailer": "^8.0.0",
     "@types/qrcode": "^1.5.5",
     "@types/speakeasy": "^2.0.10",
     "@types/supertest": "^6.0.2",

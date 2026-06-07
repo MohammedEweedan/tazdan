@@ -228,14 +228,18 @@ export class WithdrawalController {
       if (!withdrawal) throw new AppError('Withdrawal not found', 404);
       if (withdrawal.status !== 'PENDING') throw new AppError('Only pending withdrawals can be cancelled', 400);
 
-      await prisma.wallet.update({
-        where: { userId_currency: { userId: req.user!.id, currency: withdrawal.currency } },
-        data: { frozen: { decrement: withdrawal.amount } },
-      });
-
-      await prisma.withdrawal.update({
-        where: { id: withdrawal.id },
-        data: { status: 'CANCELLED' },
+      // Unfreeze + cancel atomically. No ledger leg: cancelling only releases
+      // the `frozen` reservation — no real balance moved (settlement is the
+      // only ledgered step, and a PENDING withdrawal never settled).
+      await prisma.$transaction(async (tx) => {
+        await tx.wallet.update({
+          where: { userId_currency: { userId: req.user!.id, currency: withdrawal.currency } },
+          data: { frozen: { decrement: withdrawal.amount } },
+        });
+        await tx.withdrawal.update({
+          where: { id: withdrawal.id },
+          data: { status: 'CANCELLED' },
+        });
       });
 
       res.json({ message: 'Withdrawal cancelled' });

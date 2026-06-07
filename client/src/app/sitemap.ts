@@ -27,9 +27,8 @@ const PUBLIC_ROUTES: { path: string; changeFrequency: 'daily' | 'weekly' | 'mont
   { path: '/contact',    changeFrequency: 'monthly', priority: 0.6  },
   { path: '/partners',   changeFrequency: 'monthly', priority: 0.5  },
   { path: '/careers',    changeFrequency: 'weekly',  priority: 0.6  },
-  { path: '/pay',        changeFrequency: 'weekly',  priority: 0.8  },
-  { path: '/cards',      changeFrequency: 'weekly',  priority: 0.8  },
   { path: '/business',   changeFrequency: 'weekly',  priority: 0.7  },
+  { path: '/register',   changeFrequency: 'monthly', priority: 0.9  },
 ];
 
 const LOCALES = ['en', 'ar', 'fr', 'es', 'de', 'nl', 'ru'] as const;

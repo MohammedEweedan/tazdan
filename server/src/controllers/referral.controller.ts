@@ -1,7 +1,9 @@
 import { Response, NextFunction } from 'express';
+import { Decimal } from '@prisma/client/runtime/library';
 import { prisma } from '../utils/prisma';
 import { AuthRequest } from '../types';
 import { AppError } from '../middleware/errorHandler';
+import { postLedger, isLedgerCurrency } from '../services/ledger/ledger.service';
 
 // Tiered commission rates
 const TIERS = [
@@ -89,18 +91,33 @@ export class ReferralController {
         totalByCurrency[c] = (totalByCurrency[c] || 0) + parseFloat(r.amount.toString());
       });
 
-      // Credit wallets and mark as paid
-      for (const [currency, amount] of Object.entries(totalByCurrency)) {
-        await prisma.wallet.upsert({
-          where: { userId_currency: { userId, currency: currency as any } },
-          create: { userId, currency: currency as any, balance: amount },
-          update: { balance: { increment: amount } },
-        });
-      }
+      // Credit wallets, mirror to the ledger, and mark paid — all atomic so a
+      // crash can't credit a wallet without recording the payout (or vice-versa).
+      await prisma.$transaction(async (tx) => {
+        for (const [currency, amount] of Object.entries(totalByCurrency)) {
+          await tx.wallet.upsert({
+            where: { userId_currency: { userId, currency: currency as any } },
+            create: { userId, currency: currency as any, balance: amount },
+            update: { balance: { increment: amount } },
+          });
+          // Double-entry: the platform funds the referral incentive.
+          if (isLedgerCurrency(currency)) {
+            await postLedger(tx, {
+              refType: 'referral_reward',
+              refId: userId,
+              memo: `Referral reward ${currency}`,
+              legs: [
+                { type: 'PLATFORM', currency: currency as any, amount: new Decimal(-amount) },
+                { type: 'USER', userId, currency: currency as any, amount: new Decimal(amount) },
+              ],
+            }, { allowNegativeUser: true });
+          }
+        }
 
-      await prisma.referralReward.updateMany({
-        where: { referrerId: userId, paid: false },
-        data: { paid: true, paidAt: new Date() },
+        await tx.referralReward.updateMany({
+          where: { referrerId: userId, paid: false },
+          data: { paid: true, paidAt: new Date() },
+        });
       });
 
       res.json({ message: 'Rewards claimed successfully', claimed: totalByCurrency });

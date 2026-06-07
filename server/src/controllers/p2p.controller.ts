@@ -7,6 +7,7 @@ import { generateReference } from '../utils/helpers';
 import { AuthRequest } from '../types';
 import { redisGet, redisSet, redisDel } from '../utils/redis';
 import { collectFee } from '../services/fee/feeCollector.service';
+import { postLedger, isLedgerCurrency } from '../services/ledger/ledger.service';
 import { emitActivity } from '../utils/realtime';
 import { sendP2PTradeUpdate } from '../services/email';
 import { pushP2PTradeUpdate } from '../services/push.service';
@@ -362,17 +363,32 @@ export class P2PController {
 
       const isEnumCrypto = ENUM_CURRENCIES.has(realTicker);
 
-      // Lock escrow from seller's wallet
+      // Lock escrow from seller's wallet. Wrapped in a transaction so the
+      // `frozen` reservation and its double-entry ledger leg (seller USER →
+      // SYSTEM_ESCROW) commit atomically — they can never drift apart.
       if (isEnumCrypto) {
-        const sellerWallet = await prisma.wallet.findUnique({
-          where: { userId_currency: { userId: sellerId, currency: realTicker as any } },
-        });
-        if (!sellerWallet) throw new AppError('Seller wallet not found', 404);
-        const available = parseFloat(sellerWallet.balance.toString()) - parseFloat(sellerWallet.frozen.toString());
-        if (data.amount > available) throw new AppError('Seller has insufficient balance for escrow', 400);
-        await prisma.wallet.update({
-          where: { userId_currency: { userId: sellerId, currency: realTicker as any } },
-          data: { frozen: { increment: new Decimal(data.amount) } },
+        await prisma.$transaction(async (tx) => {
+          const sellerWallet = await tx.wallet.findUnique({
+            where: { userId_currency: { userId: sellerId, currency: realTicker as any } },
+          });
+          if (!sellerWallet) throw new AppError('Seller wallet not found', 404);
+          const available = parseFloat(sellerWallet.balance.toString()) - parseFloat(sellerWallet.frozen.toString());
+          if (data.amount > available) throw new AppError('Seller has insufficient balance for escrow', 400);
+          await tx.wallet.update({
+            where: { userId_currency: { userId: sellerId, currency: realTicker as any } },
+            data: { frozen: { increment: new Decimal(data.amount) } },
+          });
+          if (isLedgerCurrency(realTicker)) {
+            await postLedger(tx, {
+              refType: 'p2p_escrow_lock',
+              refId: listing.id,
+              memo: `P2P escrow lock ${realTicker}`,
+              legs: [
+                { type: 'USER', userId: sellerId, currency: realTicker as any, amount: new Decimal(data.amount).neg() },
+                { type: 'SYSTEM_ESCROW', currency: realTicker as any, amount: new Decimal(data.amount) },
+              ],
+            });
+          }
         });
       } else {
         const uw = await prisma.userWallet.findUnique({ where: { userId: sellerId } });
@@ -491,6 +507,19 @@ export class P2PController {
             update: { balance: { increment: trade.cryptoAmount } },
             create: { userId: trade.buyerId, currency: realTicker, balance: trade.cryptoAmount },
           });
+          // Release escrow in the ledger: SYSTEM_ESCROW → buyer USER. Pairs
+          // with the p2p_escrow_lock group; escrow nets back to zero.
+          if (isLedgerCurrency(realTicker)) {
+            await postLedger(tx, {
+              refType: 'p2p_escrow_release',
+              refId: trade.id,
+              memo: `P2P escrow release ${realTicker}`,
+              legs: [
+                { type: 'SYSTEM_ESCROW', currency: realTicker as any, amount: new Decimal(trade.escrowAmount.toString()).neg() },
+                { type: 'USER', userId: trade.buyerId, currency: realTicker as any, amount: new Decimal(trade.cryptoAmount.toString()) },
+              ],
+            }, { allowNegativeUser: true });
+          }
         } else {
           const [sellerUW, buyerUW] = await Promise.all([
             tx.userWallet.findUnique({ where: { userId: trade.sellerId } }),
@@ -680,13 +709,28 @@ export class P2PController {
         throw new AppError('Cannot cancel trade after payment is sent. Raise a dispute instead.', 400);
       }
 
-      // Unfreeze escrow if it was funded
+      // Unfreeze escrow if it was funded. The `frozen` release and the ledger
+      // refund (SYSTEM_ESCROW → seller USER) commit atomically; this pairs with
+      // the p2p_escrow_lock group so escrow nets back to zero on cancel.
       if (trade.status === 'ESCROW_FUNDED') {
         const realTicker = (trade.baseAsset ?? trade.currency) as string;
         if (ENUM_CURRENCIES.has(realTicker)) {
-          await prisma.wallet.update({
-            where: { userId_currency: { userId: trade.sellerId, currency: realTicker as any } },
-            data: { frozen: { decrement: trade.escrowAmount } },
+          await prisma.$transaction(async (tx) => {
+            await tx.wallet.update({
+              where: { userId_currency: { userId: trade.sellerId, currency: realTicker as any } },
+              data: { frozen: { decrement: trade.escrowAmount } },
+            });
+            if (isLedgerCurrency(realTicker)) {
+              await postLedger(tx, {
+                refType: 'p2p_escrow_refund',
+                refId: trade.id,
+                memo: `P2P escrow refund ${realTicker}`,
+                legs: [
+                  { type: 'SYSTEM_ESCROW', currency: realTicker as any, amount: new Decimal(trade.escrowAmount.toString()).neg() },
+                  { type: 'USER', userId: trade.sellerId, currency: realTicker as any, amount: new Decimal(trade.escrowAmount.toString()) },
+                ],
+              }, { allowNegativeUser: true });
+            }
           });
         }
         // For altcoins: escrow was validated but not hard-frozen in altBalances; nothing to unfreeze.

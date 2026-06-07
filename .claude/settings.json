@@ -14,7 +14,16 @@
       "Bash(sed -n '/model PlatformSettings/,/^}/p' server/prisma/schema.prisma)",
       "Bash(sed -n '756,800p' server/prisma/schema.prisma)",
       "Bash(curl -s \"https://api.binance.com/api/v3/ticker/price?symbol=MATICUSDT\")",
-      "Bash(curl -s \"https://api.binance.com/api/v3/ticker/price?symbol=POLUSDT\")"
+      "Bash(curl -s \"https://api.binance.com/api/v3/ticker/price?symbol=POLUSDT\")",
+      "Bash(pg_isready -h localhost -p 5432)",
+      "Bash(echo \"---pg exit: $?---\")",
+      "Bash(npm audit *)",
+      "Bash(npx jest *)",
+      "Bash(node -e \"const p=require\\('./package.json'\\); console.log\\('node engines:', JSON.stringify\\(p.engines\\)||'none'\\)\")",
+      "Bash(npm ls *)",
+      "Bash(rm -rf login dashboard forgot-password reset-password verify-email cards pay asset claim admin)",
+      "Bash(ls -d */)",
+      "Bash(head-20)"
     ]
   }
 }

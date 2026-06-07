@@ -208,15 +208,29 @@ function withinSanity(base: string, quote: string, mid: number): boolean {
  * lives in PlatformSettings under `fx_spread_pct.{base}_{quote}` (or
  * `fx_spread_pct.default` as a fallback) and is expressed as a
  * decimal percent (e.g. "1.5" → 1.5%).
+ *
+ * Markup floor: the effective spread is clamped UP to a configured minimum
+ * (`fx_spread_floor_pct.{base}_{quote}` or `.default`). This guarantees the
+ * platform keeps the same minimum margin in BOTH directions — on the way down
+ * (LYD strengthening) exactly as on the way up — so a too-low spread setting
+ * during volatile periods can never erode our markup below the floor.
  */
 async function applySpread(base: string, quote: string, mid: number): Promise<{ buy: string; sell: string }> {
-  const key = `fx_spread_pct.${base}_${quote}`;
-  const def = 'fx_spread_pct.default';
-  const [pair, fallback] = await Promise.all([
+  const key       = `fx_spread_pct.${base}_${quote}`;
+  const def       = 'fx_spread_pct.default';
+  const floorKey  = `fx_spread_floor_pct.${base}_${quote}`;
+  const floorDef  = 'fx_spread_floor_pct.default';
+  const [pair, fallback, floorPair, floorFallback] = await Promise.all([
     prisma.platformSettings.findUnique({ where: { key } }),
     prisma.platformSettings.findUnique({ where: { key: def } }),
+    prisma.platformSettings.findUnique({ where: { key: floorKey } }),
+    prisma.platformSettings.findUnique({ where: { key: floorDef } }),
   ]);
-  const pct = new Decimal(pair?.value ?? fallback?.value ?? '1.0');
+  const configured = new Decimal(pair?.value ?? fallback?.value ?? '1.0');
+  // Floor defaults to 0 (no-op) unless configured, so existing pairs are unaffected.
+  const floor = new Decimal(floorPair?.value ?? floorFallback?.value ?? '0');
+  // Effective spread is never below the floor — symmetric on rises and drops.
+  const pct = Decimal.max(configured, floor);
   const midDec = new Decimal(mid);
   const half = pct.div(2).div(100);
   // Spread is symmetric around the mid: buy = mid * (1 - half), sell = mid * (1 + half)

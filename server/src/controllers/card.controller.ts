@@ -6,6 +6,7 @@ import { prisma } from '../utils/prisma';
 import { AppError } from '../middleware/errorHandler';
 import { AuthRequest } from '../types';
 import { collectFee } from '../services/fee/feeCollector.service';
+import { postLedger, isLedgerCurrency } from '../services/ledger/ledger.service';
 import { emitActivity } from '../utils/realtime';
 import { isDateLocked, requiresStepUp } from '../services/budget.service';
 import { issueStepUp, verifyStepUp } from '../services/security/stepUp.service';
@@ -364,6 +365,19 @@ export class CardController {
           where: { id: wallet.id },
           data:  { balance: { decrement: amount } },
         });
+        // Double-entry: funds leave the user's wallet onto the card spend rail
+        // (SYSTEM_OFFRAMP is the off-platform counterparty).
+        if (isLedgerCurrency(currency)) {
+          await postLedger(prismaTx, {
+            refType: 'card_topup',
+            refId: card.id,
+            memo: `Card top-up ${currency}`,
+            legs: [
+              { type: 'USER', userId, currency: currency as any, amount: new Decimal(-amount) },
+              { type: 'SYSTEM_OFFRAMP', currency: currency as any, amount: new Decimal(amount) },
+            ],
+          });
+        }
         return prismaTx.cardTransaction.create({
           data: {
             cardId:    card.id,
@@ -428,6 +442,18 @@ export class CardController {
 
       const updated = await prisma.$transaction(async (tx) => {
         await tx.wallet.update({ where: { id: funding!.id }, data: { balance: { decrement: fee } } });
+        // Double-entry: physical-card fee leaves the user to the platform.
+        if (isLedgerCurrency(funding!.currency)) {
+          await postLedger(tx, {
+            refType: 'card_physical_fee',
+            refId: card.id,
+            memo: 'Physical card order fee',
+            legs: [
+              { type: 'USER', userId, currency: funding!.currency as any, amount: new Decimal(-fee) },
+              { type: 'PLATFORM', currency: funding!.currency as any, amount: new Decimal(fee) },
+            ],
+          });
+        }
         await tx.cardTransaction.create({
           data: {
             cardId: card.id, userId, type: 'FEE', merchant: 'Physical card',
@@ -512,6 +538,18 @@ export class CardController {
           where: { userId_currency: { userId, currency: budget.currency } },
           data: { frozen: { decrement: amt }, balance: { decrement: amt } },
         });
+        // Double-entry: budget funds leave the user's wallet onto the card rail.
+        if (isLedgerCurrency(budget.currency)) {
+          await postLedger(tx, {
+            refType: 'card_budget_load',
+            refId: card.id,
+            memo: `Budget → card ${budget.currency}`,
+            legs: [
+              { type: 'USER', userId, currency: budget.currency as any, amount: amt.neg() },
+              { type: 'SYSTEM_OFFRAMP', currency: budget.currency as any, amount: amt },
+            ],
+          });
+        }
         await tx.budgetWallet.update({ where: { id: budget.id }, data: { balance: { decrement: amt } } });
         await tx.budgetContribution.create({ data: { budgetId: budget.id, amount: amt.neg(), kind: 'WITHDRAWAL' } });
         const ctx = await tx.cardTransaction.create({

@@ -3,7 +3,6 @@
 import { useRef, useEffect, useState, memo, useMemo, useCallback } from "react";
 import { useTranslate, useTolgee } from "@tolgee/react";
 import dynamic from "next/dynamic";
-import { useRouter } from "next/navigation";
 import NextLink from "next/link";
 import NextImage from "next/image";
 import {
@@ -22,7 +21,6 @@ import {
   useBreakpointValue,
   useDisclosure,
 } from "@chakra-ui/react";
-import { useAuthStore } from "@/stores/authStore";
 import {
   FiArrowRight, FiZap, FiGlobe, FiShield, FiCheck,
   FiBarChart2, FiActivity, FiLock,
@@ -394,29 +392,32 @@ const LockScreen = memo(function LockScreen({
 /* ═════════════════════════════════════════════════════════════════
    APP SCREEN PALETTE — theme-reactive (follows the landing colour mode)
    ═════════════════════════════════════════════════════════════════ */
+// Mirrors the real mobile app's Palette (mobile/src/store/themeStore.ts) 1:1 so
+// the rendered phone screens match the shipping app exactly — warm charcoal
+// ramp on dark, paper off-white on light, #63A1DB brand accent.
 function appTokens(dark: boolean) {
   return dark
     ? {
-        bg: "#0a0a0c", surface: "#1b1b1f", border: "rgba(255,255,255,0.06)",
-        fg: "#ffffff", fgMuted: "#8a8a92", fgFaint: "#5b5b63",
-        green: "#3ecf6e", redFg: "#f0564a", redBg: "rgba(240,86,74,0.14)",
-        accent: "#63a1db",
-        ink: "#ffffff", inkFg: "#15140f",
-        sheetBg: "#161618", sheetCard: "#1f1f23", sheetBorder: "rgba(255,255,255,0.08)",
-        sheetFg: "#ffffff", sheetMuted: "#9a9aa2", sheetFaint: "#5b5b63",
-        sheetGreen: "#3ecf6e", sheetGreenBg: "rgba(62,207,110,0.15)", sheetGreenBd: "#34a96a",
-        sheetChip: "#2a2a2f",
+        bg: "#16181C", surface: "#1E2127", border: "rgba(255,255,255,0.09)",
+        fg: "#F4F5F7", fgMuted: "rgba(244,245,247,0.62)", fgFaint: "rgba(244,245,247,0.36)",
+        green: "#3FCF8E", redFg: "#F87171", redBg: "rgba(248,113,113,0.14)",
+        accent: "#63A1DB",
+        ink: "#F4F5F7", inkFg: "#16181C",
+        sheetBg: "#1E2127", sheetCard: "#262A31", sheetBorder: "rgba(255,255,255,0.09)",
+        sheetFg: "#F4F5F7", sheetMuted: "rgba(244,245,247,0.62)", sheetFaint: "rgba(244,245,247,0.36)",
+        sheetGreen: "#3FCF8E", sheetGreenBg: "rgba(63,207,142,0.14)", sheetGreenBd: "rgba(63,207,142,0.42)",
+        sheetChip: "rgba(255,255,255,0.07)",
       }
     : {
-        bg: "#ffffff", surface: "#f1f1f3", border: "rgba(0,0,0,0.07)",
-        fg: "#15140f", fgMuted: "#6a6a72", fgFaint: "#a6a6ad",
-        green: "#1f9d57", redFg: "#d0463a", redBg: "rgba(208,70,58,0.12)",
-        accent: "#63a1db",
-        ink: "#15140f", inkFg: "#ffffff",
-        sheetBg: "#f4f2ea", sheetCard: "#fffefb", sheetBorder: "rgba(0,0,0,0.07)",
-        sheetFg: "#15140f", sheetMuted: "#8b897e", sheetFaint: "#b6b4a8",
-        sheetGreen: "#1f9d57", sheetGreenBg: "#e3f1e6", sheetGreenBd: "#34a96a",
-        sheetChip: "#eceae1",
+        bg: "#FAFAF7", surface: "#F1F0EB", border: "rgba(10,10,11,0.08)",
+        fg: "#0A0A0B", fgMuted: "rgba(10,10,11,0.62)", fgFaint: "rgba(10,10,11,0.38)",
+        green: "#1F8F58", redFg: "#C0272D", redBg: "rgba(192,39,45,0.10)",
+        accent: "#4F8BC4",
+        ink: "#0A0A0B", inkFg: "#FAFAFA",
+        sheetBg: "#F1F0EB", sheetCard: "#FFFFFF", sheetBorder: "rgba(10,10,11,0.08)",
+        sheetFg: "#0A0A0B", sheetMuted: "rgba(10,10,11,0.62)", sheetFaint: "rgba(10,10,11,0.38)",
+        sheetGreen: "#1F8F58", sheetGreenBg: "rgba(31,143,88,0.10)", sheetGreenBd: "rgba(31,143,88,0.42)",
+        sheetChip: "rgba(10,10,11,0.06)",
       };
 }
 
@@ -3771,22 +3772,15 @@ export default function LandingPage() {
   const isAr = tolgee.getLanguage() === "ar";
   const deviceOS = useDeviceOS();
 
-  const { isAuthenticated, isLoading, fetchUser } = useAuthStore();
-  const router = useRouter();
-
   const textMain = dark ? "#ffffff" : "#0a0a0a";
   const textMuted = dark ? "rgba(255,255,255,0.55)" : "rgba(0,0,0,0.55)";
   const hairline = dark ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.10)";
   const ACCENT = "#63a1db";
 
-  useEffect(() => { fetchUser(); }, []);
-
   const { isOpen: isWaitlistOpen, onOpen: onWaitlistOpen, onClose: onWaitlistClose } = useDisclosure();
 
-  // Redirect authenticated users to the dashboard instead of showing the home screen
-  useEffect(() => {
-    if (!isLoading && isAuthenticated) router.replace("/dashboard");
-  }, [isLoading, isAuthenticated, router]);
+  // No web app to redirect into — the landing page is marketing-only. Banking
+  // lives in the mobile app; the only CTA is "register".
 
   // Force body to match page background so blank gaps never show Chakra's
   // default surface colour through. (overflowX:clip was breaking sticky
@@ -3805,8 +3799,6 @@ export default function LandingPage() {
       document.documentElement.style.scrollSnapType = prevSnap;
     };
   }, [pageBg]);
-
-  if (isLoading || isAuthenticated) return null;
 
   return (
     <Box minH="100vh" color={textMain} bg={pageBg}>

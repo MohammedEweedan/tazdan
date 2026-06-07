@@ -547,9 +547,14 @@ export class AdminController {
       if (!withdrawal) throw new AppError('Withdrawal not found', 404);
       if (withdrawal.status !== 'PENDING') throw new AppError('Withdrawal is not pending', 400);
 
-      await prisma.wallet.update({ where: { userId_currency: { userId: withdrawal.userId, currency: withdrawal.currency } }, data: { frozen: { decrement: withdrawal.amount } } });
-      await prisma.withdrawal.update({ where: { id: withdrawal.id }, data: { status: 'REJECTED', adminNotes: req.body.reason || 'Rejected by admin', processedBy: req.user!.id } });
-      await prisma.notification.create({ data: { userId: withdrawal.userId, title: 'Withdrawal Rejected', message: `Your withdrawal has been rejected. Reason: ${req.body.reason || 'N/A'}`, type: 'withdrawal' } });
+      // Unfreeze + mark rejected atomically. No ledger leg: rejecting only
+      // releases the `frozen` reservation — no real balance ever moved (the
+      // settlement, which does move money, is the only ledgered withdrawal step).
+      await prisma.$transaction(async (tx) => {
+        await tx.wallet.update({ where: { userId_currency: { userId: withdrawal.userId, currency: withdrawal.currency } }, data: { frozen: { decrement: withdrawal.amount } } });
+        await tx.withdrawal.update({ where: { id: withdrawal.id }, data: { status: 'REJECTED', adminNotes: req.body.reason || 'Rejected by admin', processedBy: req.user!.id } });
+        await tx.notification.create({ data: { userId: withdrawal.userId, title: 'Withdrawal Rejected', message: `Your withdrawal has been rejected. Reason: ${req.body.reason || 'N/A'}`, type: 'withdrawal' } });
+      });
       res.json({ message: 'Withdrawal rejected and funds unfrozen' });
     } catch (error) { next(error); }
   }
