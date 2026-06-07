@@ -13,7 +13,6 @@ import { motion } from 'framer-motion';
 import { useColorMode } from '@chakra-ui/react';
 import PublicNav from '@/components/ui/PublicNav';
 import PublicFooter from '@/components/ui/PublicFooter';
-import WaitlistSection from '@/components/ui/WaitlistSection';
 
 const MotionBox = motion(Box as any);
 
@@ -295,7 +294,6 @@ export default function CareersPage() {
         </Container>
       </Box>
 
-      <WaitlistSection />
       <PublicFooter />
     </Box>
   );

@@ -359,6 +359,7 @@ model User {
   // Messages
   sentMessages                 Message[]                    @relation("MessageSender")
   receivedMessages             Message[]                    @relation("MessageReceiver")
+  assetDiscussionPosts         AssetDiscussionPost[]
   blocksMade                   UserBlock[]                  @relation("BlocksMade")
   blocksAgainst                UserBlock[]                  @relation("BlocksAgainst")
   reportsFiled                 MessageReport[]              @relation("ReportsFiled")
@@ -403,6 +404,29 @@ model User {
   @@index([country])
   @@index([kycTier])
   @@index([accountType])
+}
+
+enum AssetDiscussionTag {
+  BULLISH
+  BEARISH
+  WATCH
+}
+
+model AssetDiscussionPost {
+  id        String             @id @default(uuid())
+  symbol    String
+  userId    String
+  body      String
+  tag       AssetDiscussionTag @default(WATCH)
+  deletedAt DateTime?
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+
+  user      User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([symbol, createdAt])
+  @@index([userId])
+  @@index([deletedAt])
 }
 
 /// One-to-one extension of User for BUSINESS accounts.
@@ -1899,4 +1923,18 @@ model PlatformBankAccount {
   @@index([currency])
   @@index([country])
   @@index([isActive])
+}
+
+/// Pre-launch waitlist signups from the marketing site. Captured so we can
+/// email everyone when the app goes live on the App Store / Play Store.
+model WaitlistEntry {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  source    String?  // where they signed up, e.g. "landing", "business"
+  locale    String?  // page language at signup (en/ar/…)
+  notified  Boolean  @default(false) // set true once the launch email is sent
+  createdAt DateTime @default(now())
+
+  @@index([notified])
+  @@index([createdAt])
 }

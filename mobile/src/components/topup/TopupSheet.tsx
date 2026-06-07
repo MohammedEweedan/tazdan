@@ -13,7 +13,7 @@
  */
 
 import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, ScrollView, View, useWindowDimensions } from 'react-native';
 import { Text, TextInput } from '@/components/ui/Text';
 import { Ionicons } from '@expo/vector-icons';
 import * as WebBrowser from 'expo-web-browser';
@@ -23,12 +23,17 @@ import { BottomSheet, SheetSection } from '@/components/ui/BottomSheet';
 import { CurrencyBadge } from '@/components/ui/CurrencyBadge';
 import { FeeBreakdown } from '@/components/ui/FeeBreakdown';
 import { PressableScale, FadeIn } from '@/components/ui/Motion';
+import { AmountDisplay } from '@/components/ui/AmountDisplay';
+import { CurrencyPicker, type CurrencyItem } from '@/components/ui/CurrencyPicker';
+import { NumericKeypad } from '@/components/ui/NumericKeypad';
+import { SlideToConfirm } from '@/components/ui/SlideToConfirm';
 import { useThemedPalette, type Palette } from '@/store/themeStore';
 import { useHaptics, useStepUpAuth, StepUpDeniedError } from '@/hooks';
 import { useAuthStore } from '@/store/authStore';
 import { useForexRates } from '@/hooks/useForexRates';
 import { depositService } from '@/services';
 import { formatMoney } from '@/utils/format';
+import { fiatSymbol as fiatGlyph, getCurrencyMeta } from '@/constants';
 import {
   methodsForCountry, fiatsForCountry,
   type PaymentMethod,
@@ -47,6 +52,7 @@ export interface TopupSheetProps {
 export function TopupSheet({ visible, onClose, initialCurrency }: TopupSheetProps) {
   const p = useThemedPalette();
   const country = useAuthStore((s) => s.user?.country ?? null);
+  const { height } = useWindowDimensions();
 
   return (
     <BottomSheet
@@ -56,6 +62,7 @@ export function TopupSheet({ visible, onClose, initialCurrency }: TopupSheetProp
       subtitle={country ? `Available methods for your country (${country})` : undefined}
       scroll={false}
       maxHeightPct={94}
+      contentStyle={{ paddingHorizontal: 0, height: Math.round(height * 0.74) }}
     >
       <TopupBody
         palette={p}
@@ -87,7 +94,7 @@ export function TopupBody({
   const fiats   = useMemo(() => fiatsForCountry(country), [country]);
 
   const [step, setStep]         = useState<Step>('METHOD');
-  const [method, setMethod]     = useState<PaymentMethod | null>(null);
+  const [method, setMethod]     = useState<PaymentMethod | null>(methods[0] ?? null);
   const [currency, setCurrency] = useState<Currency>(initialCurrency ?? fiats[0]);
   const [amount, setAmount]     = useState('');
   const [busy, setBusy]         = useState(false);
@@ -96,11 +103,15 @@ export function TopupBody({
   const [errorLabel, setErrorLabel] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!method && methods.length > 0) {
+      setMethod(methods[0]);
+      return;
+    }
     if (!method) return;
     if (!method.currencies.includes(currency)) {
       setCurrency(method.currencies[0] ?? fiats[0]);
     }
-  }, [method, currency, fiats]);
+  }, [method, methods, currency, fiats]);
 
   const numeric = Number(amount || 0);
   const usdEquivalent = useMemo(() => {
@@ -158,13 +169,22 @@ export function TopupBody({
 
   const submit = async () => {
     if (!method || numeric <= 0) return;
+    if (method.minUsd && usdEquivalent < method.minUsd) {
+      Alert.alert('Below minimum', `${method.name} requires at least $${method.minUsd} equivalent.`);
+      return;
+    }
+    if (method.maxUsd && usdEquivalent > method.maxUsd) {
+      Alert.alert('Above limit', `${method.name} accepts up to $${method.maxUsd} per transaction.`);
+      return;
+    }
+    setBusy(true);
+    setCtaState('idle');
+    setErrorLabel(null);
     try {
       await stepUp.guard({
         usdValue: usdEquivalent,
         reason: `Confirm ${formatMoney(numeric, currency, { showSymbol: true })} top-up`,
       });
-
-      setBusy(true);
 
       if (method.serverMethod === 'CARD' || method.serverMethod === 'APPLE_PAY') {
         const { quote, providerName } = await depositService.gatewayQuote({
@@ -226,49 +246,158 @@ export function TopupBody({
     }
   };
 
+  const { height } = useWindowDimensions();
+  const tight = height < 700;
+  const compact = height < 780;
+  const amountMaxSize = tight ? 48 : compact ? 56 : 64;
+  const keypadHeight = tight ? 42 : compact ? 48 : 56;
+  const keypadFont = tight ? 22 : compact ? 24 : 27;
+  const selectedMethod = method ?? methods[0] ?? null;
+  const meta = getCurrencyMeta(currency);
+  const symbol = meta?.kind === 'fiat' ? fiatGlyph(currency) : (meta?.symbol ?? currency);
+  const currencyItems = useMemo<CurrencyItem[]>(
+    () => (selectedMethod?.currencies ?? fiats).map((c) => {
+      const m = getCurrencyMeta(c);
+      const isFiat = m?.kind !== 'crypto';
+      return {
+        currency: c,
+        balance: 0,
+        label: m?.name ?? c,
+        icon: isFiat ? fiatGlyph(c) : (m?.symbol ?? c),
+        color: isFiat ? p.fg : p.accent,
+        bg: p.bgElev,
+        kind: isFiat ? 'fiat' : 'crypto',
+        isFiat,
+        showBalance: false,
+      };
+    }),
+    [selectedMethod, fiats, p.accent, p.bgElev, p.fg],
+  );
+  const slideLabel = !selectedMethod
+    ? 'Choose a method'
+    : numeric > 0
+    ? `Slide to top up ${formatMoney(numeric, currency, { showSymbol: true })}`
+    : 'Enter amount';
+
   return (
-    <View style={{ flex: 0, paddingHorizontal: 20, paddingBottom: 10 }}>
+    <ScrollView
+      style={{ flex: 1 }}
+      showsVerticalScrollIndicator={false}
+      keyboardShouldPersistTaps="handled"
+      contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 28 }}
+    >
       <FadeIn>
-        <Stepper step={step} palette={p} />
+        <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '700', letterSpacing: 0.6, marginBottom: 8 }}>
+          METHOD
+        </Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingBottom: 12 }}>
+          {methods.map((m) => {
+            const on = selectedMethod?.id === m.id;
+            return (
+              <Pressable
+                key={m.id}
+                disabled={!m.enabled}
+                onPress={() => { if (!m.enabled) return; h.selection(); setMethod(m); setAmount(''); setCtaState('idle'); }}
+                style={({ pressed }) => ({
+                  minWidth: 130,
+                  paddingHorizontal: 12,
+                  paddingVertical: 10,
+                  borderRadius: 16,
+                  backgroundColor: on ? p.fg : p.bgElev,
+                  borderWidth: 1,
+                  borderColor: on ? p.fg : p.border,
+                  opacity: !m.enabled ? 0.45 : pressed ? 0.85 : 1,
+                })}
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <Ionicons name={m.icon as any} size={16} color={on ? p.bg : p.fg} />
+                  <Text style={{ color: on ? p.bg : p.fg, fontSize: 13, fontWeight: '700' }} numberOfLines={1}>
+                    {m.name}
+                  </Text>
+                </View>
+                <Text style={{ color: on ? p.bg : p.fgMuted, fontSize: 11, fontWeight: '500', marginTop: 3 }} numberOfLines={1}>
+                  {m.speed} · {m.feeSummary}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
 
-        {step === 'METHOD' && (
-          <MethodList methods={methods} onPick={goToAmount} palette={p} />
-        )}
-
-        {step === 'AMOUNT' && method && (
-          <AmountStep
-            method={method}
-            currency={currency}
-            amount={amount}
-            onChangeAmount={setAmount}
-            onChangeCurrency={setCurrency}
-            feeRows={feeRows}
-            onBack={() => { h.selection(); setStep('METHOD'); }}
-            onContinue={goToConfirm}
+        <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '700', letterSpacing: 0.6, marginBottom: 8 }}>
+          CURRENCY
+        </Text>
+        <View style={{ marginBottom: compact ? 10 : 14 }}>
+          <CurrencyPicker
+            items={currencyItems}
+            value={currency}
+            onChange={(c) => { setCurrency(c as Currency); setAmount(''); setCtaState('idle'); }}
             palette={p}
-            stepUpThreshold={stepUp.threshold}
-            usdEquivalent={usdEquivalent}
           />
-        )}
+        </View>
 
-        {step === 'CONFIRM' && method && feeRows && (
-          <ConfirmStep
-            method={method}
-            currency={currency}
-            amount={numeric}
-            feeRows={feeRows}
-            busy={busy}
-            ctaState={ctaState}
-            successLabel={successLabel ?? undefined}
-            errorLabel={errorLabel ?? undefined}
-            onBack={() => { h.selection(); setStep('AMOUNT'); }}
-            onSubmit={submit}
-            requiresBiometric={usdEquivalent >= stepUp.threshold}
-            palette={p}
-          />
+        <View style={{ alignItems: 'center', marginBottom: 8 }}>
+          <AmountDisplay value={amount} symbol={symbol} palette={p} maxSize={amountMaxSize} />
+        </View>
+
+        <View style={{
+          backgroundColor: p.bgElev,
+          borderRadius: 14,
+          borderWidth: 1,
+          borderColor: p.border,
+          paddingHorizontal: 14,
+          paddingVertical: compact ? 9 : 11,
+          marginBottom: compact ? 8 : 12,
+        }}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '600' }}>{selectedMethod?.name ?? 'Method'}</Text>
+            <Text style={{ color: p.fg, fontSize: 13, fontWeight: '700' }}>
+              {feeRows ? formatMoney(feeRows.total.amount, currency, { showSymbol: true }) : selectedMethod?.feeSummary ?? ''}
+            </Text>
+          </View>
+          {selectedMethod && (
+            <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '500', marginTop: 4 }} numberOfLines={1}>
+              {selectedMethod.speed} · {selectedMethod.description}
+            </Text>
+          )}
+        </View>
+
+        {usdEquivalent >= stepUp.threshold && numeric > 0 && (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: p.amberBg, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 9, marginBottom: 8 }}>
+            <Ionicons name="finger-print" size={15} color={p.amberFg} />
+            <Text style={{ color: p.amberFg, fontSize: 12, fontWeight: '600', flex: 1 }}>
+              Face ID required
+            </Text>
+          </View>
         )}
       </FadeIn>
-    </View>
+
+      <View style={{ marginBottom: 14, marginTop: 4 }}>
+        <NumericKeypad
+          value={amount}
+          onChange={(v) => { setAmount(v); setCtaState('idle'); setErrorLabel(null); }}
+          palette={p}
+          maxDecimals={meta?.decimals ?? 2}
+          keyHeight={keypadHeight}
+          fontSize={keypadFont}
+        />
+      </View>
+
+      <SlideToConfirm
+        label={slideLabel}
+        onConfirm={() => { if (selectedMethod && numeric > 0 && !busy) submit(); }}
+        enabled={!!selectedMethod && numeric > 0 && !busy}
+        status={busy ? 'loading' : ctaState}
+        successLabel={successLabel ?? undefined}
+        errorLabel={errorLabel ?? undefined}
+        accent={p.accent}
+        accentFg={p.accentFg}
+        trackBg={p.bgElev}
+        trackFg={p.fg}
+        border={p.border}
+        greenBg={p.greenBg} greenFg={p.greenFg}
+        redBg={p.redBg} redFg={p.redFg}
+      />
+    </ScrollView>
   );
 }
 

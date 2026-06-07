@@ -20,14 +20,15 @@ export default function FeesPage() {
   const { colorMode } = useColorMode();
   const dark = colorMode === "dark";
 
-  const pageBg    = dark ? "#000000" : "#ffffff";
+  // Charcoal dark mode (matches the app) + #63a1db brand accent on CTAs.
+  const pageBg    = dark ? "#16181C" : "#ffffff";
   const textMain  = dark ? "#ffffff" : "#0a0f1e";
   const textSub   = dark ? "rgba(255,255,255,0.6)" : "#64748b";
   const cardBg    = dark ? "rgba(255,255,255,0.04)" : "#f4f4f4";
   const cardBorder = dark ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.10)";
   const rowBorder  = dark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)";
-  const ctaBg     = dark ? "#ffffff" : "#0a0f1e";
-  const ctaFg     = dark ? "#000000" : "#ffffff";
+  const ctaBg     = "#63a1db";
+  const ctaFg     = "#ffffff";
 
   const titleGradient = dark
     ? "linear(to-b, #ffffff 0%, rgba(255,255,255,0.85) 60%, rgba(255,255,255,0.3) 100%)"

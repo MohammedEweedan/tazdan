@@ -40,7 +40,6 @@ import { SellWidget } from '@/components/exchange/SellWidget';
 import { SendWidget } from '@/components/exchange/SendWidget';
 import { ReceiveWidget } from '@/components/exchange/ReceiveWidget';
 import { WithdrawWidget } from '@/components/exchange/WithdrawWidget';
-import { DepositWidget } from '@/components/exchange/DepositWidget';
 import { RecurringBuyWidget } from '@/components/exchange/RecurringBuyWidget';
 import { PressableScale } from '@/components/ui/Motion';
 import { AnnouncementBanner } from '@/components/ui/AnnouncementBanner';
@@ -96,7 +95,6 @@ export default function Home() {
   const [sendModalVisible, setSendModalVisible] = useState(false);
   const [receiveModalVisible, setReceiveModalVisible] = useState(false);
   const [recurringModalVisible, setRecurringModalVisible] = useState(false);
-  const [depositModalVisible, setDepositModalVisible] = useState(false);
   const [swapModalVisible, setSwapModalVisible] = useState(false);
   const [withdrawModalVisible, setWithdrawModalVisible] = useState(false);
   const [moreMenuVisible, setMoreMenuVisible] = useState(false);
@@ -264,13 +262,13 @@ export default function Home() {
   const av = avatarMode(user);
   const initial = av.kind === 'initials' ? av.char : (user?.firstName?.[0] ?? '?').toUpperCase();
 
-  // Primary actions sit directly under the balance. Three pills —
-  // Buy, Sell, Top up (deposit). Withdraw + everything else lives
-  // in the More (···) modal.
+  // Primary actions sit directly under the balance — Buy, Sell, Send, Top up,
+  // then the More (···) overflow. Everything else lives in the More modal.
   const ACTIONS: ActionDef[] = [
     { key: 'buy',   icon: 'trending-up-outline',   label: t('action.buy'),   tone: 'white', onPress: () => setBuyModalVisible(true) },
     { key: 'sell',  icon: 'trending-down-outline', label: t('action.sell'),  tone: 'grey',  onPress: () => setSellModalVisible(true) },
-    { key: 'topup', icon: 'download-outline',      label: t('action.topup'), tone: 'black', onPress: () => setDepositModalVisible(true) },
+    { key: 'send',  icon: 'paper-plane-outline',   label: t('action.send'),  tone: 'grey',  onPress: () => setSendModalVisible(true) },
+    { key: 'topup', icon: 'download-outline',      label: t('action.topup'), tone: 'black', onPress: () => router.push('/topup' as any) },
   ];
 
   return (
@@ -519,11 +517,11 @@ export default function Home() {
           </View>
 
           {/* ── PRIMARY ACTIONS ── */}
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingHorizontal: 24, marginTop: 18 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 6, paddingHorizontal: 16, marginTop: 18 }}>
             {ACTIONS.map((a) => (
               <ActionButton key={a.key} label={a.label} icon={a.icon} to={a.to} tone={a.tone} onPress={a.onPress} palette={p} />
             ))}
-            <MoreActionButton palette={p} onPress={() => { h.selection(); setMoreMenuVisible(true); }} />
+            <MoreActionButton palette={p} label={t('home.more')} onPress={() => { h.selection(); setMoreMenuVisible(true); }} />
           </View>
 
           {/* Spacer between the action pills and the Assets/Activity
@@ -765,7 +763,7 @@ export default function Home() {
                   <Text style={{ color: p.ctaFg, fontSize: 13, fontWeight: '600' }}>{t('home.buyCrypto')}</Text>
                 </Pressable>
                 <Pressable
-                  onPress={() => { h.medium(); setDepositModalVisible(true); }}
+                  onPress={() => { h.medium(); router.push('/topup' as any); }}
                   style={({ pressed }) => ({
                     paddingHorizontal: 20, paddingVertical: 12, borderRadius: 22,
                     backgroundColor: p.pillBg, borderWidth: 1, borderColor: p.border,
@@ -783,55 +781,54 @@ export default function Home() {
 
 
       {/* Buy Widget Modal */}
-      <Modal visible={buyModalVisible} transparent animationType="slide" onRequestClose={() => setBuyModalVisible(false)}>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-          <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' }} onPress={() => setBuyModalVisible(false)}>
-            <Pressable style={{ backgroundColor: p.bg, borderTopLeftRadius: 28, borderTopRightRadius: 28, maxHeight: '85%' }} onPress={(e) => e.stopPropagation()}>
-              <View style={{ alignItems: 'center', paddingTop: 10, paddingBottom: 2 }}>
-              </View>
-              <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: insets.bottom + 8 }}>
-                <BuyWidget />
-              </ScrollView>
+      <Modal visible={buyModalVisible} animationType="slide" presentationStyle="fullScreen" onRequestClose={() => setBuyModalVisible(false)}>
+        <View style={{ flex: 1, backgroundColor: p.bg, paddingTop: insets.top }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 10 }}>
+            <Text style={{ color: p.fg, fontSize: 20, fontWeight: '700', letterSpacing: -0.4 }}>{t('action.buy')}</Text>
+            <Pressable onPress={() => setBuyModalVisible(false)} hitSlop={8} style={{ width: 34, height: 34, borderRadius: 17, backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border, alignItems: 'center', justifyContent: 'center' }}>
+              <Ionicons name="close" size={18} color={p.fg} />
             </Pressable>
-          </Pressable>
-        </KeyboardAvoidingView>
+          </View>
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+            <View style={{ flex: 1, paddingBottom: insets.bottom + 16 }}>
+              <BuyWidget />
+            </View>
+          </KeyboardAvoidingView>
+        </View>
       </Modal>
 
       {/* Sell Widget Modal */}
-      <Modal visible={sellModalVisible} transparent animationType="slide" onRequestClose={() => setSellModalVisible(false)}>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-          <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' }} onPress={() => setSellModalVisible(false)}>
-            <Pressable style={{ backgroundColor: p.bg, borderTopLeftRadius: 28, borderTopRightRadius: 28, maxHeight: '85%' }} onPress={(e) => e.stopPropagation()}>
-              <View style={{ alignItems: 'center', paddingTop: 10, paddingBottom: 2 }}>
-              </View>
-              <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: insets.bottom + 8 }}>
-                <SellWidget />
-              </ScrollView>
+      <Modal visible={sellModalVisible} animationType="slide" presentationStyle="fullScreen" onRequestClose={() => setSellModalVisible(false)}>
+        <View style={{ flex: 1, backgroundColor: p.bg, paddingTop: insets.top }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 10 }}>
+            <Text style={{ color: p.fg, fontSize: 20, fontWeight: '700', letterSpacing: -0.4 }}>{t('action.sell')}</Text>
+            <Pressable onPress={() => setSellModalVisible(false)} hitSlop={8} style={{ width: 34, height: 34, borderRadius: 17, backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border, alignItems: 'center', justifyContent: 'center' }}>
+              <Ionicons name="close" size={18} color={p.fg} />
             </Pressable>
-          </Pressable>
-        </KeyboardAvoidingView>
+          </View>
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+            <View style={{ flex: 1, paddingBottom: insets.bottom + 16 }}>
+              <SellWidget />
+            </View>
+          </KeyboardAvoidingView>
+        </View>
       </Modal>
 
       {/* Send Widget Modal */}
-      <Modal visible={sendModalVisible} transparent animationType="slide" onRequestClose={() => setSendModalVisible(false)}>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-          <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' }} onPress={() => setSendModalVisible(false)}>
-            <Pressable style={{ backgroundColor: p.bg, borderTopLeftRadius: 28, borderTopRightRadius: 28, maxHeight: '85%' }} onPress={(e) => e.stopPropagation()}>
-              <View style={{ alignItems: 'center', paddingTop: 10, paddingBottom: 2 }}>
-                <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: p.border }} />
-              </View>
-              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 24, paddingTop: 8, paddingBottom: 4 }}>
-                <Text style={{ color: p.fg, fontSize: 20, fontWeight: '600', letterSpacing: -0.4 }}>{t('home.sendMoney')}</Text>
-                <Pressable onPress={() => setSendModalVisible(false)} hitSlop={8} style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border, alignItems: 'center', justifyContent: 'center' }}>
-                  <Ionicons name="close" size={16} color={p.fg} />
-                </Pressable>
-              </View>
-              <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: insets.bottom + 8 }}>
-                <SendWidget />
-              </ScrollView>
+      <Modal visible={sendModalVisible} animationType="slide" presentationStyle="fullScreen" onRequestClose={() => setSendModalVisible(false)}>
+        <View style={{ flex: 1, backgroundColor: p.bg, paddingTop: insets.top }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 10 }}>
+            <Text style={{ color: p.fg, fontSize: 20, fontWeight: '700', letterSpacing: -0.4 }}>{t('home.sendMoney')}</Text>
+            <Pressable onPress={() => setSendModalVisible(false)} hitSlop={8} style={{ width: 34, height: 34, borderRadius: 17, backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border, alignItems: 'center', justifyContent: 'center' }}>
+              <Ionicons name="close" size={18} color={p.fg} />
             </Pressable>
-          </Pressable>
-        </KeyboardAvoidingView>
+          </View>
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+            <View style={{ flex: 1, paddingBottom: insets.bottom + 16 }}>
+              <SendWidget />
+            </View>
+          </KeyboardAvoidingView>
+        </View>
       </Modal>
 
       {/* Withdraw Widget Modal */}
@@ -898,22 +895,6 @@ export default function Home() {
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* Deposit Widget Modal */}
-      <Modal visible={depositModalVisible} transparent animationType="slide" onRequestClose={() => setDepositModalVisible(false)}>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-          <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' }} onPress={() => setDepositModalVisible(false)}>
-            <Pressable style={{ backgroundColor: p.bg, borderTopLeftRadius: 28, borderTopRightRadius: 28, maxHeight: '85%' }} onPress={(e) => e.stopPropagation()}>
-              <View style={{ alignItems: 'center', paddingTop: 10, paddingBottom: 2 }}>
-                <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: p.border }} />
-              </View>
-              <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: insets.bottom + 8 }}>
-                <DepositWidget />
-              </ScrollView>
-            </Pressable>
-          </Pressable>
-        </KeyboardAvoidingView>
-      </Modal>
-
       {/* More Menu Modal */}
       <Modal
         visible={moreMenuVisible}
@@ -935,7 +916,7 @@ export default function Home() {
               {[
                 { icon: 'arrow-up-circle-outline' as const, label: t('action.withdraw'), onPress: () => { setMoreMenuVisible(false); setWithdrawModalVisible(true); } },
                 { icon: 'swap-horizontal-outline' as const, label: t('action.swap'),     onPress: () => { setMoreMenuVisible(false); router.push('/transfer'); } },
-                { icon: 'paper-plane-outline' as const,   label: t('action.send'),     onPress: () => { setMoreMenuVisible(false); setSendModalVisible(true); } },
+                { icon: 'qr-code-outline' as const,       label: t('action.receive'),  onPress: () => { setMoreMenuVisible(false); setReceiveModalVisible(true); } },
               ].map((item) => (
                 <Pressable
                   key={item.label}
@@ -1375,7 +1356,7 @@ const BreathingGradient = memo(function BreathingGradient({ mode }: { mode: 'dar
       <Animated.View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, opacity: shimmer }}>
         <LinearGradient
           colors={isDark
-            ? ['#0f1c2e', '#163354', '#1a4070', '#0f1c2e']
+            ? ['#1b355b', '#64b6f9', '#3b79b0', '#0f1c2e']
             : ['#daeaf8', '#b8d9f4', '#9dc8ef', '#cce1f5']}
           start={{ x: 0.1, y: 0 }}
           end={{ x: 0.9, y: 1 }}
@@ -1454,9 +1435,9 @@ function AnimatedTotal({
   const totalStr = converted.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: dc.isCrypto ? 6 : 2 });
   const visibleTotal = showBalance ? totalStr : totalStr.replace(/[0-9]/g, '*');
   const digitCount = totalStr.replace(/[^0-9]/g, '').length;
-  const amountSize = digitCount <= 7 ? 58 : digitCount <= 9 ? 51 : digitCount <= 11 ? 28 : 28;
-  const symbolSize = Math.max(28, Math.round(amountSize * 0.28));
-  const fractionSize = Math.max(21, Math.round(amountSize * 0.54));
+  const amountSize = digitCount <= 7 ? 66 : digitCount <= 9 ? 58 : digitCount <= 11 ? 40 : 32;
+  const symbolSize = Math.max(30, Math.round(amountSize * 0.30));
+  const fractionSize = Math.max(24, Math.round(amountSize * 0.54));
   const lineHeight = Math.round(amountSize * 1.06);
 
   // One clean numeric lockup: all parts use Outfit with tabular numerals,
@@ -1499,11 +1480,11 @@ function AnimatedTotal({
           minimumFontScale={0.78}
           style={{
             color: p.fg,
-            fontFamily: F.bold,
-            fontWeight: '800',
+            fontFamily: F.semibold,
+            fontWeight: '600',
             fontSize: amountSize,
             lineHeight,
-            letterSpacing: 0,
+            letterSpacing: -0.5,
             textAlign: 'center',
             fontVariant: ['tabular-nums'],
             includeFontPadding: false,
@@ -1591,16 +1572,14 @@ function ActionButton({
   };
 
   const glowing = !!look.glow;
+  // Vertical layout: circular icon chip + label underneath. The label lives on
+  // its own line so any locale (nl/ru/de/fr/es/ar) fits — it just shrinks and
+  // truncates within the column instead of pushing the row off the sides.
   return (
-    <PressableScale onPress={handlePress} style={{ flex: 1 }}>
+    <PressableScale onPress={handlePress} style={{ flex: 1, minWidth: 0, alignItems: 'center' }}>
       <View style={{
-        height: 44,
-        borderRadius: 22,
-        paddingHorizontal: 14,
-        alignItems: 'center',
-        justifyContent: 'center',
-        flexDirection: 'row',
-        gap: 6,
+        width: 52, height: 52, borderRadius: 26,
+        alignItems: 'center', justifyContent: 'center',
         backgroundColor: look.bg,
         borderWidth: look.border ? 1 : 0,
         borderColor: look.border,
@@ -1610,30 +1589,41 @@ function ActionButton({
         shadowRadius: glowing ? 12 : 4,
         elevation: glowing ? 5 : 1,
       }}>
-        {icon && <Ionicons name={icon} size={17} color={look.fg} />}
-        <Text style={{ color: look.fg, fontSize: 14, fontWeight: '700', letterSpacing: -0.2 }}>
-          {label}
-        </Text>
+        {icon && <Ionicons name={icon} size={22} color={look.fg} />}
       </View>
+      <Text
+        numberOfLines={1}
+        adjustsFontSizeToFit
+        minimumFontScale={0.7}
+        style={{ color: p.fgMuted, fontSize: 11.5, fontWeight: '600', letterSpacing: -0.1, marginTop: 6, maxWidth: '100%' }}
+      >
+        {label}
+      </Text>
     </PressableScale>
   );
 }
 
-function MoreActionButton({ palette: p, onPress }: { palette: Palette; onPress: () => void }) {
-  // Neutral square pill — sized to match the action row (46px) so the four
-  // controls line up. Stays neutral so the three coloured actions lead.
+function MoreActionButton({ palette: p, onPress, label }: { palette: Palette; onPress: () => void; label: string }) {
+  // Matches the vertical action columns — neutral chip + label so it lines up
+  // with Buy/Sell/Send/Top up regardless of locale.
   return (
-    <PressableScale onPress={onPress}>
+    <PressableScale onPress={onPress} style={{ flex: 1, minWidth: 0, alignItems: 'center' }}>
       <View style={{
-        width: 44, height: 44,
-        borderRadius: 22,
+        width: 52, height: 52, borderRadius: 26,
         backgroundColor: p.bgRaised,
         borderWidth: 1, borderColor: p.divider,
-        alignItems: 'center',
-        justifyContent: 'center',
+        alignItems: 'center', justifyContent: 'center',
       }}>
-        <Ionicons name="ellipsis-horizontal" size={18} color={p.fg} />
+        <Ionicons name="ellipsis-horizontal" size={20} color={p.fg} />
       </View>
+      <Text
+        numberOfLines={1}
+        adjustsFontSizeToFit
+        minimumFontScale={0.7}
+        style={{ color: p.fgMuted, fontSize: 11.5, fontWeight: '600', letterSpacing: -0.1, marginTop: 6, maxWidth: '100%' }}
+      >
+        {label}
+      </Text>
     </PressableScale>
   );
 }
