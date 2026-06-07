@@ -42,7 +42,6 @@ export default function PublicFooter() {
         { label: t("nav_features"), href: "/#features" },
         { label: t("nav_fees"), href: "/fees" },
         { label: t("footer_cards"), href: "/#cta" },
-        { label: t("nav_business"), href: "/business" },
       ],
     },
     {

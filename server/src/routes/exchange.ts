@@ -49,6 +49,9 @@ exchangeRouter.get('/rates/:base/:quote', ExchangeController.getRatePair);
 // → external API → stale fallback inside the service layer.
 exchangeRouter.get('/fx/:base/:quote', ExchangeController.getFxRate);
 
+// Public disclosed quote spread — mobile charts mark up prices with this.
+exchangeRouter.get('/spread', ExchangeController.getSpread);
+
 // Custody trading (fiat ↔ crypto via Binance liquidity).
 exchangeRouter.post('/quote',       authenticate, quoteLimiter,   ExchangeController.createQuote);
 exchangeRouter.post('/execute',     authenticate, executeLimiter, ExchangeController.executeOrder);

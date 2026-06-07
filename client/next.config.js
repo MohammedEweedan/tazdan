@@ -3,6 +3,34 @@ const withPWA = require('next-pwa')({
   register: true,
   skipWaiting: true,
   disable: process.env.NODE_ENV === 'development',
+  // Don't let the service worker serve a cached SPA shell for unknown URLs —
+  // that hijacks navigation and shows a stale page instead of Next's real 404.
+  // With no document fallback, unmatched routes hit the network and Next
+  // renders not-found.tsx correctly in production.
+  fallbacks: {},
+  // Network-first for page navigations so a deploy's new 404 (and fresh pages)
+  // win over any previously-cached document.
+  runtimeCaching: [
+    {
+      urlPattern: ({ request }) => request.mode === 'navigate',
+      handler: 'NetworkFirst',
+      options: {
+        cacheName: 'pages',
+        networkTimeoutSeconds: 10,
+        expiration: { maxEntries: 64, maxAgeSeconds: 24 * 60 * 60 },
+      },
+    },
+    {
+      urlPattern: /\/_next\/static\/.*/i,
+      handler: 'CacheFirst',
+      options: { cacheName: 'next-static', expiration: { maxEntries: 256, maxAgeSeconds: 31536000 } },
+    },
+    {
+      urlPattern: /\.(?:png|jpg|jpeg|svg|gif|webp|avif|ico|woff2?)$/i,
+      handler: 'StaleWhileRevalidate',
+      options: { cacheName: 'assets', expiration: { maxEntries: 256, maxAgeSeconds: 30 * 24 * 60 * 60 } },
+    },
+  ],
 });
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://api.promrkts.com';

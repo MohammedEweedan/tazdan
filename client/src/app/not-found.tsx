@@ -87,17 +87,17 @@ export default function NotFound() {
   const dark = colorMode === "dark";
   const status = useServerStatus();
 
-  // Monochrome surface tokens — matches the mobile theme.
-  const bg          = dark ? "#0A0A0B" : "#FAFAF7";
-  const bgElev      = dark ? "#141416" : "#F1F0EB";
-  const bgRaised    = dark ? "#1C1C1F" : "#FFFFFF";
-  const line        = dark ? "rgba(255,255,255,0.08)" : "rgba(10,10,11,0.08)";
-  const lineStrong  = dark ? "rgba(255,255,255,0.14)" : "rgba(10,10,11,0.14)";
-  const fg          = dark ? "#FAFAFA" : "#0A0A0B";
-  const fgMuted     = dark ? "rgba(250,250,250,0.62)" : "rgba(10,10,11,0.62)";
-  const fgFaint     = dark ? "rgba(250,250,250,0.36)" : "rgba(10,10,11,0.36)";
-  const accent      = dark ? "#FAFAFA" : "#0A0A0B";
-  const accentFg    = dark ? "#0A0A0B" : "#FAFAFA";
+  // Charcoal surface tokens (match the app) + #63a1db brand accent on the CTA.
+  const bg          = dark ? "#16181C" : "#FAFAF7";
+  const bgElev      = dark ? "#1E2127" : "#F1F0EB";
+  const bgRaised    = dark ? "#262A31" : "#FFFFFF";
+  const line        = dark ? "rgba(255,255,255,0.09)" : "rgba(10,10,11,0.08)";
+  const lineStrong  = dark ? "rgba(255,255,255,0.15)" : "rgba(10,10,11,0.14)";
+  const fg          = dark ? "#F4F5F7" : "#0A0A0B";
+  const fgMuted     = dark ? "rgba(244,245,247,0.62)" : "rgba(10,10,11,0.62)";
+  const fgFaint     = dark ? "rgba(244,245,247,0.36)" : "rgba(10,10,11,0.36)";
+  const accent      = "#63a1db";
+  const accentFg    = "#FFFFFF";
   const greenBg     = "rgba(43,179,111,0.14)";
   const greenFg     = "#3FCF8E";
   const amberBg     = "rgba(232,163,58,0.14)";

@@ -69,8 +69,8 @@ const CLIENT_URL = resolveClientUrl();
 // (client/public/icon-*.png → https://tazdan.com/icon-*.png). Override the
 // base with EMAIL_ASSET_BASE if assets live elsewhere (e.g. a CDN/subdomain).
 const EMAIL_ASSET_BASE = (process.env.EMAIL_ASSET_BASE || CLIENT_URL).replace(/\/+$/, '');
-const LOGO_BLACK_URI = `${EMAIL_ASSET_BASE}/icon-black.png`;
-const LOGO_WHITE_URI = `${EMAIL_ASSET_BASE}/icon-white.png`;
+// Single colour logo only — the black/white variants caused two icons to show
+// side by side in some clients. We ship just the colour mark on every email.
 const LOGO_COLOR_URI = `${EMAIL_ASSET_BASE}/icon-color.png`;
 
 const hasSmtpCredentials = !!(SMTP_HOST && SMTP_USER && SMTP_PASS);
@@ -107,7 +107,7 @@ export function getEmailStatus() {
 
 /**
  * Base template — reacts to dark/light mode via prefers-color-scheme.
- * Logo switches between logo-white.png (dark) and logo-black.png (light).
+ * The header shows a single colour logo (icon-color.png) in every mode.
  */
 function baseTemplate(title: string, body: string): string {
   return `<!DOCTYPE html>
@@ -152,8 +152,9 @@ function baseTemplate(title: string, body: string): string {
     .btn        { background-color: #18181b; background-image: linear-gradient(120deg, #000000 0%, #3f3f46 100%); color: #ffffff !important; }
     .btn-ghost  { color: #18181b !important; border-color: #d4d4d8 !important; }
     .footer-text{ color: #a1a1aa; }
-    .logo-light { display: block !important; }
-    .logo-color { display: none !important; }
+    /* Always show the single COLOUR logo — never the black/white variants. */
+    .logo-color { display: block !important; }
+    .logo-light { display: none !important; }
     .logo-dark  { display: none !important; }
 
     /* ── Dark mode ── */
@@ -172,9 +173,10 @@ function baseTemplate(title: string, body: string): string {
       .btn        { background-color: #fafafa !important; background-image: linear-gradient(120deg, #ffffff 0%, #d4d4d8 100%) !important; color: #09090b !important; }
       .btn-ghost  { color: #f4f4f5 !important; border-color: #3f3f46 !important; }
       .footer-text{ color: #52525b !important; }
+      /* Keep the colour logo in dark mode too — it reads on any background. */
+      .logo-color { display: block !important; }
       .logo-light { display: none !important; }
-      .logo-color { display: none !important; }
-      .logo-dark  { display: block !important; }
+      .logo-dark  { display: none !important; }
     }
 
     /* ── Layout ── */
@@ -456,21 +458,29 @@ export async function sendVerificationEmail({
 ───────────────────────────────────────────────────────────── */
 export async function sendWaitlistConfirmation({ to }: { to: string }) {
   const html = baseTemplate(
-    "You're on the waitlist — tazdan",
-    `<h1 class="text-main">You're on the list.</h1>
-    <p class="text-muted">Thanks for joining the tazdan early-access waitlist. You'll be among the first to know when we open your region — and you'll get <strong class="text-main">0% fees for your first 6 months</strong>.</p>
+    "You're a tazdan pioneer 🚀",
+    `<h1 class="text-main">You're in. And you're early.</h1>
+    <p class="text-muted">This is the part most people never get: a front-row seat before launch. You just became one of tazdan's <strong class="text-main">founding pioneers</strong> — the people we're building this for, and the people who get the best deal we'll ever offer.</p>
+
+    <div style="margin:22px 0; padding:18px 20px; border-radius:14px; background-image:linear-gradient(120deg, rgba(99,161,219,0.14), rgba(99,161,219,0.04)); border:1px solid rgba(99,161,219,0.30);">
+      <p class="text-main" style="font-weight:800; font-size:22px; margin:0 0 4px; letter-spacing:-0.02em;">0% fees. 6 months.</p>
+      <p class="text-muted" style="margin:0; font-size:14px;">Your pioneer perk: every buy, sell, and transfer — completely free for your first six months. No catch. It's our thank-you for betting on us early.</p>
+    </div>
+
+    <p class="text-main" style="font-weight:700; font-size:15px; margin-bottom:6px;">What you're getting early access to</p>
+    <p class="text-muted">The real exchange rate on every corridor. Instant transfers to anyone — even if they don't have the app yet. Crypto, fiat, and cards in one place. The whole thing, in your pocket, the moment we go live on the App Store and Google Play.</p>
 
     <div class="divider"></div>
 
     <p class="text-main" style="font-weight:700; font-size:15px; margin-bottom:6px;">What happens next?</p>
-    <p class="text-muted">We're onboarding users region by region. When your spot is ready you'll receive an invitation with a direct link to create your account.</p>
-    <p class="text-muted">In the meantime, share your link with friends — each referral moves you up the queue automatically.</p>
+    <p class="text-muted">We're opening the doors region by region. The second your spot is ready, you'll get a direct invite to claim your account and your 0% pioneer window starts ticking.</p>
+    <p class="text-muted">Want to jump the line? Share tazdan with friends — every person you bring moves you up the queue.</p>
 
     <div class="divider"></div>
 
-    <p class="text-muted" style="font-size:13px; margin:0;">Questions? Reply to this email or visit <a href="${CLIENT_URL}/faq" style="color:inherit;">tazdan.com/faq</a>.</p>`,
+    <p class="text-muted" style="font-size:13px; margin:0;">Questions? Just reply to this email, or visit <a href="${CLIENT_URL}/faq" style="color:inherit;">tazdan.com/faq</a>. Welcome aboard. 🛫</p>`,
   );
-  await sendEmail({ to, subject: "You're on the tazdan waitlist", html, sender: 'welcome' });
+  await sendEmail({ to, subject: "🚀 You're a tazdan pioneer — 0% fees for 6 months", html, sender: 'welcome' });
 }
 
 /* ─────────────────────────────────────────────────────────────

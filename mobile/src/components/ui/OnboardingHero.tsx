@@ -403,11 +403,13 @@ export const OnboardingHero = memo(function OnboardingHero({ bg, variant = 1 }: 
     );
   }
 
-  // Variant 1
+  // Variant 1 — rows drift in ALTERNATING directions for visual rhythm, with
+  // staggered speeds for parallax depth. The whole carousel is skewed to lean
+  // right for a dynamic, premium look.
   return (
     <View style={sharedStyles.root}>
       <BrandGlow isDark={isDark} />
-      <View style={sharedStyles.rows}>
+      <View style={sharedStyles.skewedRows}>
         <ScrollRow coins={ROW_A} reverse={false} getIconUrl={getIconUrl} speed={32000} />
         <View style={{ height: GAP }} />
         <ScrollRow coins={ROW_B} reverse getIconUrl={getIconUrl} speed={26000} />
@@ -415,6 +417,8 @@ export const OnboardingHero = memo(function OnboardingHero({ bg, variant = 1 }: 
         <ScrollRow coins={ROW_C} reverse={false} getIconUrl={getIconUrl} speed={36000} />
         <View style={{ height: GAP }} />
         <ScrollRow coins={ROW_D} reverse getIconUrl={getIconUrl} speed={28000} />
+        <View style={{ height: GAP }} />
+        <ScrollRow coins={ROW_E} reverse={false} getIconUrl={getIconUrl} speed={30000} />
       </View>
       {edgeLeft}{edgeRight}
     </View>
@@ -432,6 +436,20 @@ const sharedStyles = StyleSheet.create({
     width: '100%',
     alignItems: 'flex-start',
     justifyContent: 'center',
+  },
+  // Skewed marquee — leans the rows to the right for a dynamic diagonal.
+  // scale 1.4 + extra width over-fills so the skew never reveals blank
+  // corners. rotate adds the lean; skewX deepens the right-leaning shear.
+  skewedRows: {
+    width: '160%',
+    left: '-30%',
+    alignItems: 'flex-start',
+    justifyContent: 'center',
+    transform: [
+      { rotate: '-12deg' },
+      { skewX: '-15deg' },
+      { scale: 1.35 },
+    ],
   },
   edgeMask: {
     position: 'absolute',

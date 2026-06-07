@@ -15,7 +15,6 @@ import {
 } from "react-icons/fi";
 import PublicNav from "@/components/ui/PublicNav";
 import PublicFooter from "@/components/ui/PublicFooter";
-import WaitlistSection from "@/components/ui/WaitlistSection";
 import WaitlistModal from "@/components/ui/WaitlistModal";
 
 export default function FAQPage() {
@@ -25,14 +24,15 @@ export default function FAQPage() {
   const [q, setQ] = useState("");
   const { isOpen: isWaitlistOpen, onOpen: onWaitlistOpen, onClose: onWaitlistClose } = useDisclosure();
 
-  const pageBg    = dark ? "#000000" : "#ffffff";
+  // Charcoal dark mode (matches the app) + #63a1db brand accent on CTAs.
+  const pageBg    = dark ? "#16181C" : "#ffffff";
   const textMain  = dark ? "#ffffff" : "#0a0f1e";
   const textSub   = dark ? "rgba(255,255,255,0.6)" : "#64748b";
   const cardBg    = dark ? "rgba(255,255,255,0.04)" : "#f4f4f4";
   const cardBorder = dark ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.10)";
   const inputBg   = dark ? "rgba(255,255,255,0.04)" : "#f4f4f4";
-  const ctaBg     = dark ? "#ffffff" : "#0a0f1e";
-  const ctaFg     = dark ? "#000000" : "#ffffff";
+  const ctaBg     = "#63a1db";
+  const ctaFg     = "#ffffff";
 
   const titleGradient = dark
     ? "linear(to-b, #ffffff 0%, rgba(255,255,255,0.85) 60%, rgba(255,255,255,0.3) 100%)"
@@ -257,7 +257,6 @@ export default function FAQPage() {
         </Box>
       </Container>
 
-      <WaitlistSection />
       <WaitlistModal isOpen={isWaitlistOpen} onClose={onWaitlistClose} />
       <PublicFooter />
     </Box>

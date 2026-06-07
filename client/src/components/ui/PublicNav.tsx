@@ -73,7 +73,6 @@ export default function PublicNav() {
     { labelKey: "nav_faq",     href: "/faq" },
     { labelKey: "nav_contact", href: "/contact" },
     { labelKey: "nav_about",   href: "/about" },
-    { labelKey: "nav_business", href: "/business" },
   ];
 
   const isActive = (href: string) => {

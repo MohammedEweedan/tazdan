@@ -66,6 +66,7 @@ import { cryptoWithdrawalRouter } from './routes/cryptoWithdrawal';
 import { recurringBuyRouter } from './routes/recurringBuy';
 import { startRecurringBuyScheduler } from './services/recurringBuy.service';
 import { budgetRouter } from './routes/budget';
+import { assetDiscussionRouter } from './routes/assetDiscussion';
 import { startBudgetScheduler } from './services/budget.service';
 import { startLydSampler } from './services/exchange/lydOrderBook.service';
 import { startReconciliation } from './services/ledger/reconcile.service';
@@ -276,6 +277,7 @@ app.use('/api/withdrawal', cryptoWithdrawalRouter);
 app.use('/api/rates', ratesRouter);
 app.use('/api/recurring-buys', recurringBuyRouter);
 app.use('/api/budgets', budgetRouter);
+app.use('/api/asset-discussions', assetDiscussionRouter);
 app.use('/api/waitlist', waitlistRouter);
 
 // Health check

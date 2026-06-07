@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { sendWaitlistConfirmation } from '../services/email';
+import { prisma } from '../utils/prisma';
 
 export const waitlistRouter = Router();
 
@@ -33,13 +34,23 @@ waitlistRouter.post('/', async (req: Request, res: Response) => {
     const email = typeof req.body?.email === 'string'
       ? req.body.email.trim().toLowerCase()
       : '';
+    const source = typeof req.body?.source === 'string' ? req.body.source.slice(0, 40) : null;
+    const locale = typeof req.body?.locale === 'string' ? req.body.locale.slice(0, 10) : null;
 
     if (!email || !email.includes('@') || email.length > 254) {
       return res.status(400).json({ error: 'Invalid email' });
     }
 
-    await addToMailchimp(email);
+    // Persist to our own DB first — this is the source of truth for the
+    // launch-day mailout. Idempotent: a repeat signup just no-ops.
+    await prisma.waitlistEntry.upsert({
+      where: { email },
+      create: { email, source, locale },
+      update: {}, // already on the list — keep the original signup timestamp
+    });
 
+    // Best-effort external sync + confirmation; never block the signup on them.
+    addToMailchimp(email).catch((err) => console.error('[waitlist] Mailchimp failed:', err));
     sendWaitlistConfirmation({ to: email }).catch((err) =>
       console.error('[waitlist] confirmation email failed:', err),
     );

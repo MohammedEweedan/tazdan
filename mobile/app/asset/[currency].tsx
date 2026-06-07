@@ -5,14 +5,14 @@
  */
 
 import { Fragment, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Image, KeyboardAvoidingView, Linking, Modal, Platform, Pressable, ScrollView, View } from 'react-native';
+import { ActivityIndicator, Image, KeyboardAvoidingView, Linking, Modal, Platform, Pressable, ScrollView, TextInput, View } from 'react-native';
 import { Text } from '@/components/ui/Text';
 import { LoadingPulse } from '@/components/ui/LoadingPulse';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import Svg, { Defs, LinearGradient as SvgLinearGradient, Path, Stop, Line as SvgLine, Rect } from 'react-native-svg';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as Clipboard from 'expo-clipboard';
 import { CoinIcon } from '@/components/ui/CoinIcon';
 import { BuyWidget } from '@/components/exchange/BuyWidget';
@@ -38,9 +38,9 @@ import { CurrencyBadge } from '@/components/ui/CurrencyBadge';
 import { AssetTxRow, txBelongsToAsset } from '@/components/transactions/AssetTxRow';
 
 type Range = '1H' | '24H' | '7D' | '30D' | '1Y' | 'ALL';
-type Tab = 'overview' | 'news';
+type Tab = 'activity' | 'news' | 'discussion';
 type ChartType = 'line' | 'candle';
-interface TradeMarker { ts: number; price: number; side: 'BUY' | 'SELL' }
+interface TradeMarker { ts: number; price: number; actualPrice?: number; side: 'BUY' | 'SELL' }
 
 const FIAT_CODES = new Set(['USD','EUR','GBP','AED','SAR','EGP','LYD','CAD','AUD','CHF','JPY','CNY']);
 
@@ -137,8 +137,9 @@ export default function AssetDetail() {
   const { data: markets } = useMarkets();
   const { data: wallets } = useWallets();
   const [range, setRange] = useState<Range>('24H');
-  const [tab, setTab] = useState<Tab>('overview');
+  const [tab, setTab] = useState<Tab>('activity');
   const [buyOpen, setBuyOpen] = useState(false);
+  const [depositOpen, setDepositOpen] = useState(false);
   // Deep-link: /asset/DOGE?action=sell opens straight into the sell sheet
   // (used by the dust-convert prompt on the home screen).
   const [sellOpen, setSellOpen] = useState(action === 'sell');
@@ -181,7 +182,20 @@ export default function AssetDetail() {
     }
   }, [range, cgError, binanceError, cgLoading, binanceChartLoading, cgOhlc, binanceChart]);
 
-  const chartPoints: import('@/hooks/useOHLC').ChartPoint[] = useMemo(() => {
+  // Quote spread (e.g. 0.025 = 2.5%). Charts mark up raw market prices by this
+  // so the line/candles and the buy/sell markers (which use marked-up execution
+  // prices) all sit in the same price space the user actually transacts at.
+  const { data: spreadResp } = useQuery({
+    queryKey: ['quote-spread'],
+    queryFn: async () => {
+      const r = await api.get<{ spreadPct: string }>('/exchange/spread');
+      return Number(r.data?.spreadPct ?? 0);
+    },
+    staleTime: 5 * 60_000,
+  });
+  const markup = 1 + (Number.isFinite(spreadResp) ? (spreadResp ?? 0) : 0);
+
+  const rawChartPoints: import('@/hooks/useOHLC').ChartPoint[] = useMemo(() => {
     if (cgOhlc) return cgOhlc;
     if (binanceChart) {
       return binanceChart.prices.map((price, i) => ({
@@ -191,6 +205,11 @@ export default function AssetDetail() {
     }
     return [];
   }, [cgOhlc, binanceChart]);
+  // Apply the markup so the chart shows the user-facing (marked-up) price.
+  const chartPoints = useMemo(
+    () => markup === 1 ? rawChartPoints : rawChartPoints.map((p) => ({ ...p, price: p.price * markup })),
+    [rawChartPoints, markup],
+  );
 
   const change = useMemo(() => {
     // 1Y / ALL have no precomputed CoinGecko percentage — derive from the
@@ -216,10 +235,19 @@ export default function AssetDetail() {
   const positive = change >= 0;
 
   const candles: Candle[] = useMemo(() => {
-    if (cgCandles?.length) return cgCandles;
-    if (binanceChart?.candles?.length) return binanceChart.candles;
-    return [];
-  }, [cgCandles, binanceChart]);
+    const raw = cgCandles?.length ? cgCandles
+      : binanceChart?.candles?.length ? binanceChart.candles
+      : [];
+    if (markup === 1) return raw;
+    // Mark up OHLC so candles match the marked-up line + markers.
+    return raw.map((c) => ({
+      ...c,
+      open: c.open * markup,
+      high: c.high * markup,
+      low: c.low * markup,
+      close: c.close * markup,
+    }));
+  }, [cgCandles, binanceChart, markup]);
 
   const chartLoading = cgLoading || binanceChartLoading;
   const hasChart = !isFiat && sym !== 'USDT' && sym !== 'USDT_ERC20' && sym !== 'USDT_TRC20';
@@ -247,14 +275,19 @@ export default function AssetDetail() {
         o.status === 'EXECUTED') // CryptoOrderStatus: PENDING|EXECUTED|FAILED|REFUNDED
       .map((o) => {
         const ts = new Date(o.executedAt ?? o.createdAt).getTime();
+        // Position the marker on the same marked-up basis as the chart line
+        // (raw market price × markup) so it lands ON the curve. The label still
+        // shows the user's real executed price (`quotedPrice`).
+        const rawMarket = Number(o.marketPrice ?? o.quotedPrice ?? 0);
         return {
           ts,
-          price: Number(o.quotedPrice ?? o.marketPrice ?? 0),
+          price: rawMarket * markup,
+          actualPrice: Number(o.quotedPrice ?? rawMarket),
           side: (o.type === 'SELL' ? 'SELL' : 'BUY') as 'BUY' | 'SELL',
         };
       })
       .filter((m) => m.price > 0 && m.ts >= tStart && m.ts <= tEnd);
-  }, [ordersResp, sym, chartPoints]);
+  }, [ordersResp, sym, chartPoints, markup]);
 
   const wallet = wallets?.find((w) => w.currency === sym);
   const balance = wallet ? Number(wallet.balance) : 0;
@@ -262,19 +295,21 @@ export default function AssetDetail() {
   const holdingsDelta = change !== 0 ? (holdingsUsd * change) / (100 + Math.abs(change)) : 0;
 
   const displayName = market?.name ?? friendlyName(sym);
+  const visiblePrice = hoverPrice !== null ? hoverPrice : price;
+  const changeUsd = Math.abs((visiblePrice || 0) * (change / 100));
 
   // ── Modals ──
   const buyModal = (
     <Modal visible={buyOpen} transparent animationType="slide" onRequestClose={() => setBuyOpen(false)}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
         <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' }} onPress={() => setBuyOpen(false)}>
-          <Pressable style={{ backgroundColor: p.bg, borderTopLeftRadius: 28, borderTopRightRadius: 28, maxHeight: '85%' }} onPress={(e) => e.stopPropagation()}>
+          <Pressable style={{ backgroundColor: p.bg, borderTopLeftRadius: 28, borderTopRightRadius: 28, height: '92%' }} onPress={(e) => e.stopPropagation()}>
             <View style={{ alignItems: 'center', paddingTop: 10, paddingBottom: 2 }}>
               <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: p.border }} />
             </View>
-            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 24 }}>
+            <View style={{ flex: 1, paddingBottom: Math.max(insets.bottom, 12) }}>
               <BuyWidget defaultAsset={sym} lockAsset={!isFiat} />
-            </ScrollView>
+            </View>
           </Pressable>
         </Pressable>
       </KeyboardAvoidingView>
@@ -285,13 +320,13 @@ export default function AssetDetail() {
     <Modal visible={sellOpen} transparent animationType="slide" onRequestClose={() => setSellOpen(false)}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
         <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' }} onPress={() => setSellOpen(false)}>
-          <Pressable style={{ backgroundColor: p.bg, borderTopLeftRadius: 28, borderTopRightRadius: 28, maxHeight: '85%' }} onPress={(e) => e.stopPropagation()}>
+          <Pressable style={{ backgroundColor: p.bg, borderTopLeftRadius: 28, borderTopRightRadius: 28, height: '92%' }} onPress={(e) => e.stopPropagation()}>
             <View style={{ alignItems: 'center', paddingTop: 10, paddingBottom: 2 }}>
               <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: p.border }} />
             </View>
-            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 24 }}>
+            <View style={{ flex: 1, paddingBottom: Math.max(insets.bottom, 12) }}>
               <SellWidget defaultAsset={sym} lockAsset={!isFiat} />
-            </ScrollView>
+            </View>
           </Pressable>
         </Pressable>
       </KeyboardAvoidingView>
@@ -309,18 +344,6 @@ export default function AssetDetail() {
       borderTopWidth: 1, borderTopColor: p.border,
     }}>
       <Pressable
-        onPress={() => { h.medium(); setBuyOpen(true); }}
-        style={({ pressed }) => ({
-          flex: 1, height: 52, borderRadius: 26,
-          backgroundColor: pressed ? p.fgMuted : p.ctaBg,
-          alignItems: 'center', justifyContent: 'center',
-          flexDirection: 'row', gap: 6,
-        })}
-      >
-        <Ionicons name="add" size={16} color={p.ctaFg} />
-        <Text style={{ color: p.ctaFg, fontSize: 15, fontWeight: '600' }}>Buy</Text>
-      </Pressable>
-      <Pressable
         onPress={() => { h.medium(); setSellOpen(true); }}
         disabled={!wallet || balance <= 0}
         style={({ pressed }) => ({
@@ -334,6 +357,18 @@ export default function AssetDetail() {
       >
         <Ionicons name="remove" size={16} color={p.fg} />
         <Text style={{ color: p.fg, fontSize: 15, fontWeight: '600' }}>Sell</Text>
+      </Pressable>
+      <Pressable
+        onPress={() => { h.medium(); setBuyOpen(true); }}
+        style={({ pressed }) => ({
+          flex: 1, height: 52, borderRadius: 26,
+          backgroundColor: pressed ? p.fgMuted : p.ctaBg,
+          alignItems: 'center', justifyContent: 'center',
+          flexDirection: 'row', gap: 6,
+        })}
+      >
+        <Ionicons name="add" size={16} color={p.ctaFg} />
+        <Text style={{ color: p.ctaFg, fontSize: 15, fontWeight: '600' }}>Buy</Text>
       </Pressable>
     </View>
   );
@@ -389,164 +424,200 @@ export default function AssetDetail() {
     <View style={{ flex: 1, backgroundColor: p.bg }}>
       <StatusBar style={themeMode === 'light' ? 'dark' : 'light'} />
 
-      {/* ── Custom header — coin icon fully visible ── */}
+      {/* ── Screenshot-style top block ── */}
       <View style={{
-        paddingTop: insets.top + 6,
+        paddingTop: insets.top + 8,
         paddingHorizontal: 20,
-        paddingBottom: 16,
+        paddingBottom: 8,
         backgroundColor: p.bg,
-        borderBottomWidth: 1,
-        borderBottomColor: p.border,
         overflow: 'hidden',
       }}>
-        <TopGradient height={insets.top + 100} />
-        {/* Back + name row */}
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 18 }}>
+        <TopGradient height={insets.top + 88} />
+        <View style={{ height: 44, justifyContent: 'center' }}>
           <Pressable
             onPress={() => router.back()}
             hitSlop={10}
             style={({ pressed }) => ({
+              position: 'absolute',
+              left: -6,
               width: 38, height: 38, borderRadius: 19,
-              backgroundColor: pressed ? p.bgElev : p.pillBg,
-              borderWidth: 1, borderColor: p.border,
+              backgroundColor: pressed ? p.bgElev : 'transparent',
               alignItems: 'center', justifyContent: 'center',
             })}
           >
-            <Ionicons name="chevron-back" size={20} color={p.fg} />
+            <Ionicons name="chevron-back" size={26} color={p.fg} />
           </Pressable>
-          <View style={{ flex: 1 }}>
-            <Text style={{ color: p.fg, fontSize: 17, fontWeight: '700', letterSpacing: -0.3 }} numberOfLines={1}>
-              {displayName}
-            </Text>
-            <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '500', marginTop: 1 }}>{sym} / USD</Text>
-          </View>
-          {/* Live badge */}
-          {isLive && (
-            <View style={{
-              flexDirection: 'row', alignItems: 'center', gap: 4,
-              paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8,
-              backgroundColor: p.greenBg,
-            }}>
-              <View style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: p.greenFg }} />
-              <Text style={{ color: p.greenFg, fontSize: 9, fontWeight: '700', letterSpacing: 0.6 }}>LIVE</Text>
-            </View>
-          )}
-        </View>
-
-        {/* Coin icon + price row */}
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16 }}>
-          <CoinIcon symbol={sym} size={60} />
-          <View style={{ flex: 1 }}>
-            <Text style={{
-              color: p.fg, fontSize: 34, fontWeight: '700',
-              letterSpacing: -1, fontVariant: ['tabular-nums'], lineHeight: 38,
-            }}>
-              ${formatPrice(hoverPrice !== null ? hoverPrice : price)}
-            </Text>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 }}>
-              <View style={{
-                flexDirection: 'row', alignItems: 'center', gap: 3,
-                paddingHorizontal: 7, paddingVertical: 3, borderRadius: 7,
-                backgroundColor: positive ? p.greenBg : 'rgba(239,68,68,0.14)',
-              }}>
-                <Ionicons
-                  name={positive ? 'caret-up' : 'caret-down'}
-                  size={9}
-                  color={positive ? p.greenFg : p.redFg}
-                />
-                <Text style={{ color: positive ? p.greenFg : p.redFg, fontSize: 12, fontWeight: '700' }}>
-                  {positive ? '+' : ''}{change.toFixed(2)}%
-                </Text>
-              </View>
-              <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '500' }}>{range}</Text>
-            </View>
-          </View>
-        </View>
-      </View>
-
-      {/* ── Tab bar ── */}
-      <View style={{
-        flexDirection: 'row',
-        backgroundColor: p.bg,
-        borderBottomWidth: 1,
-        borderBottomColor: p.border,
-        paddingHorizontal: 20,
-      }}>
-        {(['overview', 'news'] as Tab[]).map((t) => (
-          <Pressable
-            key={t}
-            onPress={() => { h.selection(); setTab(t); }}
-            style={{ marginRight: 24, paddingVertical: 12, position: 'relative' }}
+          <Text
+            style={{ color: p.fg, fontSize: 17, fontWeight: '800', textAlign: 'center' }}
+            numberOfLines={1}
           >
+            {displayName}
+          </Text>
+          <View style={{ position: 'absolute', right: -2, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <Pressable
+              onPress={() => { h.selection(); setDepositOpen(true); }}
+              disabled={!wallet}
+              hitSlop={10}
+              style={({ pressed }) => ({
+                width: 38, height: 38, borderRadius: 19,
+                backgroundColor: pressed ? p.bgElev : 'transparent',
+                alignItems: 'center', justifyContent: 'center',
+                opacity: wallet ? 1 : 0.36,
+              })}
+            >
+              <Ionicons name="qr-code-outline" size={22} color={p.fgMuted} />
+            </Pressable>
+            <ChartModeToggle chartType={chartType} setChartType={setChartType} p={p} h={h} />
+          </View>
+        </View>
+        <View style={{ alignItems: 'center', paddingTop: 12, paddingBottom: 8 }}>
+          <Text style={{
+            color: p.fg,
+            fontSize: 48,
+            lineHeight: 56,
+            fontWeight: '800',
+            fontVariant: ['tabular-nums'],
+            textAlign: 'center',
+          }}>
+            ${formatPrice(visiblePrice)}
+          </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6 }}>
+            <Ionicons
+              name={positive ? 'arrow-up' : 'arrow-down'}
+              size={22}
+              color={positive ? p.greenFg : p.redFg}
+            />
             <Text style={{
-              color: tab === t ? p.accentText : p.fgMuted,
-              fontSize: 14,
-              fontWeight: tab === t ? '700' : '500',
-              textTransform: 'capitalize',
+              color: positive ? p.greenFg : p.redFg,
+              fontSize: 18,
+              fontWeight: '800',
+              fontVariant: ['tabular-nums'],
             }}>
-              {t}
+              {positive ? '+' : '-'} ${formatPrice(changeUsd)} ({Math.abs(change).toFixed(2)}%)
             </Text>
-            {tab === t && (
-              <View style={{
-                position: 'absolute', bottom: 0, left: 0, right: 0,
-                height: 2, borderRadius: 1, backgroundColor: p.fg,
-              }} />
-            )}
-          </Pressable>
-        ))}
+          </View>
+        </View>
       </View>
 
-      {/* ── Scrollable content ── */}
       <ScrollView
         style={{ flex: 1 }}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 20, paddingBottom: 32 }}
+        contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 6, paddingBottom: 32, gap: 16 }}
       >
-        {tab === 'overview' ? (
-          <OverviewTab
-            sym={sym}
-            p={p}
-            h={h}
-            hasChart={hasChart}
-            chartLoading={chartLoading}
-            chartPoints={chartPoints}
-            candles={candles}
-            tradeMarkers={tradeMarkers}
-            allUnavailable={allUnavailable}
-            chartType={chartType}
-            setChartType={setChartType}
-            positive={positive}
-            color={positive ? p.greenFg : p.redFg}
-            range={range}
-            setRange={setRange}
-            onHoverPrice={setHoverPrice}
-            isLive={isLive}
-            wsPrice={wsPrice}
-            market={market}
-            binanceData={binanceData}
-            wallet={wallet}
-            balance={balance}
-            holdingsUsd={holdingsUsd}
-            holdingsDelta={holdingsDelta}
-            change={change}
-          />
-        ) : (
+        <AssetChartPanel
+          sym={sym}
+          p={p}
+          h={h}
+          hasChart={hasChart}
+          chartLoading={chartLoading}
+          chartPoints={chartPoints}
+          candles={candles}
+          tradeMarkers={tradeMarkers}
+          allUnavailable={allUnavailable}
+          chartType={chartType}
+          color={positive ? p.fg : p.redFg}
+          range={range}
+          setRange={setRange}
+          onHoverPrice={setHoverPrice}
+          isLive={isLive}
+          wsPrice={wsPrice}
+        />
+
+        <AssetIdentityRow
+          sym={sym}
+          name={displayName}
+          p={p}
+          wallet={wallet}
+          balance={balance}
+          holdingsUsd={holdingsUsd}
+          holdingsDelta={holdingsDelta}
+          positive={positive}
+        />
+
+        <AssetStatsGrid
+          sym={sym}
+          p={p}
+          market={market}
+          binanceData={binanceData}
+        />
+
+        <AssetBottomTabs tab={tab} setTab={setTab} h={h} p={p} />
+
+        {tab === 'activity' ? (
+          <View style={{ gap: 14 }}>
+            <AssetTransactions sym={sym} p={p} />
+          </View>
+        ) : tab === 'news' ? (
           <NewsTab p={p} sym={sym} />
+        ) : (
+          <AssetDiscussionTab sym={sym} p={p} h={h} />
         )}
       </ScrollView>
 
       {actionBar}
       {buyModal}
       {sellModal}
+      <DepositAddressModal
+        visible={depositOpen}
+        onClose={() => setDepositOpen(false)}
+        sym={sym}
+        wallet={wallet}
+        p={p}
+        h={h}
+      />
     </View>
   );
 }
 
-/* ── Overview tab ─────────────────────────────────────────────────── */
-function OverviewTab({
-  sym, p, h, hasChart, chartLoading, chartPoints, candles, tradeMarkers, allUnavailable, chartType, setChartType, positive, color,
+function ChartModeToggle({
+  chartType, setChartType, p, h,
+}: {
+  chartType: ChartType;
+  setChartType: (type: ChartType) => void;
+  p: Palette;
+  h: { selection: () => void };
+}) {
+  return (
+    <View style={{
+      flexDirection: 'row',
+      padding: 3,
+      borderRadius: 18,
+      borderWidth: 1,
+      borderColor: p.border,
+      backgroundColor: p.bgElev,
+      gap: 2,
+    }}>
+      {([
+        ['line', 'pulse-outline'],
+        ['candle', 'stats-chart-outline'],
+      ] as [ChartType, keyof typeof Ionicons.glyphMap][]).map(([type, icon]) => {
+        const active = chartType === type;
+        return (
+          <Pressable
+            key={type}
+            onPress={() => { h.selection(); setChartType(type); }}
+            hitSlop={6}
+            style={{
+              width: 30,
+              height: 30,
+              borderRadius: 15,
+              alignItems: 'center',
+              justifyContent: 'center',
+              backgroundColor: active ? p.fg : 'transparent',
+            }}
+          >
+            <Ionicons name={icon} size={15} color={active ? p.bg : p.fgMuted} />
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+/* ── Chart panel ─────────────────────────────────────────────────── */
+function AssetChartPanel({
+  sym, p, h, hasChart, chartLoading, chartPoints, candles, tradeMarkers, allUnavailable, chartType, color,
   range, setRange, onHoverPrice, isLive, wsPrice,
-  market, binanceData, wallet, balance, holdingsUsd, holdingsDelta, change,
 }: {
   sym: string; p: Palette;
   h: { selection: () => void; medium: () => void; light: () => void };
@@ -555,26 +626,22 @@ function OverviewTab({
   candles: Candle[];
   tradeMarkers: TradeMarker[];
   allUnavailable: boolean;
-  chartType: ChartType; setChartType: (t: ChartType) => void;
-  positive: boolean; color: string; range: Range;
+  chartType: ChartType;
+  color: string; range: Range;
   setRange: (r: Range) => void;
   onHoverPrice: (v: number | null) => void;
   isLive: boolean; wsPrice: number | null;
-  market: CoinGeckoMarket | undefined;
-  binanceData: { price: number; change24h: number; volume24h: number } | null | undefined;
-  wallet: Wallet | undefined; balance: number;
-  holdingsUsd: number; holdingsDelta: number; change: number;
 }) {
   return (
     <View style={{ gap: 16 }}>
       {/* Chart */}
       {hasChart ? (
         <View>
+          <View style={{ marginHorizontal: -16 }}>
           {chartLoading ? (
             <View style={{
-              height: 168, borderRadius: 16,
-              backgroundColor: p.bgElev,
-              borderWidth: 1, borderColor: p.border,
+              height: 220,
+              backgroundColor: 'transparent',
               alignItems: 'center', justifyContent: 'center',
             }}>
               <LoadingPulse size={48} icon="trending-up-outline" />
@@ -598,27 +665,11 @@ function OverviewTab({
               markers={tradeMarkers}
             />
           )}
-          {/* Line / candle toggle */}
-          <View style={{ flexDirection: 'row', alignSelf: 'flex-start', marginTop: 22, gap: 4, padding: 4, borderRadius: 12, backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border }}>
-            {([['line', 'pulse-outline'], ['candle', 'stats-chart-outline']] as [ChartType, keyof typeof Ionicons.glyphMap][]).map(([t, icon]) => (
-              <Pressable key={t} onPress={() => { h.selection(); setChartType(t); }}>
-                <View style={{
-                  flexDirection: 'row', alignItems: 'center', gap: 5,
-                  paddingHorizontal: 12, paddingVertical: 7, borderRadius: 9,
-                  backgroundColor: chartType === t ? p.accent : 'transparent',
-                }}>
-                  <Ionicons name={icon} size={13} color={chartType === t ? p.accentFg : p.fgMuted} />
-                  <Text style={{ color: chartType === t ? p.accentFg : p.fgMuted, fontWeight: '700', fontSize: 11, letterSpacing: 0.4 }}>
-                    {t === 'line' ? 'Line' : 'Candles'}
-                  </Text>
-                </View>
-              </Pressable>
-            ))}
           </View>
           {/* Range selector */}
           <View style={{
             flexDirection: 'row', justifyContent: 'space-between',
-            marginTop: 10, padding: 4,
+            marginTop: 8, padding: 4,
             borderRadius: 14,
             backgroundColor: p.bgElev,
             borderWidth: 1, borderColor: p.border,
@@ -660,80 +711,384 @@ function OverviewTab({
         </View>
       )}
 
-      {/* Holdings */}
+    </View>
+  );
+}
+
+function PositionPill({
+  label, count, color, icon, p,
+}: {
+  label: string;
+  count: number;
+  color: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  p: Palette;
+}) {
+  return (
+    <View style={{
+      flex: 1,
+      minHeight: 46,
+      borderRadius: 14,
+      borderWidth: 1,
+      borderColor: p.border,
+      backgroundColor: p.bgElev,
+      paddingHorizontal: 12,
+      paddingVertical: 9,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 9,
+    }}>
       <View style={{
-        borderRadius: 16, backgroundColor: p.bgElev,
-        borderWidth: 1, borderColor: p.border, padding: 16,
+        width: 24,
+        height: 24,
+        borderRadius: 12,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: color === p.greenFg ? p.greenBg : 'rgba(239,68,68,0.14)',
       }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-          <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '700', letterSpacing: 0.6 }}>
-            YOUR HOLDINGS
-          </Text>
-          {wallet && balance > 0 && change !== 0 && (
-            <View style={{
-              flexDirection: 'row', alignItems: 'center', gap: 3,
-              paddingHorizontal: 7, paddingVertical: 3, borderRadius: 7,
-              backgroundColor: positive ? p.greenBg : 'rgba(239,68,68,0.14)',
-            }}>
-              <Ionicons name={positive ? 'caret-up' : 'caret-down'} size={8} color={positive ? p.greenFg : p.redFg} />
-              <Text style={{ color: positive ? p.greenFg : p.redFg, fontSize: 10, fontWeight: '600' }}>
-                {positive ? '+' : ''}${Math.abs(holdingsDelta).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              </Text>
-            </View>
-          )}
-        </View>
-        {wallet && balance > 0 ? (
-          <>
-            <Text style={{
-              color: p.fg, fontSize: 28, fontWeight: '700',
-              fontVariant: ['tabular-nums'], letterSpacing: -0.6,
-            }}>
-              ${holdingsUsd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-            </Text>
-            <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '500', marginTop: 3 }}>
-              {balance.toLocaleString('en-US', { maximumFractionDigits: 8 })} {sym}
-            </Text>
-          </>
-        ) : (
-          <Text style={{ color: p.fgMuted, fontSize: 14, fontWeight: '500' }}>
-            You don't own any {sym} yet.
+        <Ionicons name={icon} size={13} color={color} />
+      </View>
+      <View style={{ flex: 1 }}>
+        <Text style={{ color: p.fg, fontSize: 13, fontWeight: '800', fontVariant: ['tabular-nums'] }}>
+          {count}
+        </Text>
+        <Text style={{ color: p.fgMuted, fontSize: 10, fontWeight: '700' }} numberOfLines={1}>
+          {label}
+        </Text>
+      </View>
+    </View>
+  );
+}
+
+function AssetIdentityRow({
+  sym, name, p, wallet, balance, holdingsUsd, holdingsDelta, positive,
+}: {
+  sym: string;
+  name: string;
+  p: Palette;
+  wallet: Wallet | undefined;
+  balance: number;
+  holdingsUsd: number;
+  holdingsDelta: number;
+  positive: boolean;
+}) {
+  const hasHoldings = !!wallet && balance > 0;
+
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: 2, paddingVertical: 2 }}>
+      <CoinIcon symbol={sym} size={54} />
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Text style={{ color: p.fg, fontSize: 18, fontWeight: '800' }} numberOfLines={1}>
+          {name}
+        </Text>
+        <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '600', marginTop: 2 }} numberOfLines={1}>
+          {sym}
+        </Text>
+      </View>
+      <View style={{ alignItems: 'flex-end', minWidth: 108 }}>
+        <Text style={{ color: p.fg, fontSize: 17, fontWeight: '800', fontVariant: ['tabular-nums'] }}>
+          ${holdingsUsd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+        </Text>
+        <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '600', marginTop: 2 }} numberOfLines={1}>
+          {hasHoldings ? balance.toLocaleString('en-US', { maximumFractionDigits: 8 }) : '0'} {sym}
+        </Text>
+        {hasHoldings && holdingsDelta !== 0 && (
+          <Text style={{ color: positive ? p.greenFg : p.redFg, fontSize: 11, fontWeight: '700', marginTop: 3 }}>
+            {positive ? '+' : '-'}${Math.abs(holdingsDelta).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </Text>
         )}
       </View>
-
-      {/* Stat grid */}
-      <View style={{ flexDirection: 'row', gap: 10 }}>
-        <StatTile
-          label="24H VOLUME"
-          value={market ? fmtUsdCompact(market.total_volume) : binanceData?.volume24h ? fmtUsdCompact(binanceData.volume24h) : '—'}
-          icon="pulse-outline" palette={p}
-        />
-        <StatTile
-          label="MARKET CAP"
-          value={market ? fmtUsdCompact(market.market_cap) : '—'}
-          icon="layers-outline" palette={p}
-        />
-      </View>
-      <View style={{ flexDirection: 'row', gap: 10 }}>
-        <StatTile
-          label="CIRC. SUPPLY"
-          value={market?.circulating_supply ? fmtSupply(market.circulating_supply, sym) : '—'}
-          icon="infinite-outline" palette={p}
-        />
-        <StatTile
-          label="ALL-TIME HIGH"
-          value={market?.ath ? `$${formatPrice(market.ath)}` : '—'}
-          icon="trending-up-outline" palette={p}
-        />
-      </View>
-
-      {/* Recent transactions */}
-      <AssetTransactions sym={sym} p={p} />
-
-      {/* Deposit QR */}
-      <CryptoDepositSection sym={sym} wallet={wallet} p={p} h={h} />
     </View>
   );
+}
+
+function AssetStatsGrid({
+  sym, p, market, binanceData,
+}: {
+  sym: string;
+  p: Palette;
+  market: CoinGeckoMarket | undefined;
+  binanceData: { price: number; change24h: number; volume24h: number } | null | undefined;
+}) {
+  const volume = market?.total_volume || binanceData?.volume24h || 0;
+
+  return (
+    <View style={{
+      flexDirection: 'row',
+      alignItems: 'stretch',
+      borderTopWidth: 1,
+      borderBottomWidth: 1,
+      borderColor: p.border,
+      paddingVertical: 11,
+    }}>
+      <InlineStat label="Market Cap" value={market ? fmtUsdCompact(market.market_cap) : '—'} p={p} />
+      <InlineStat label="Volume" value={volume ? fmtUsdCompact(volume) : '—'} p={p} />
+      <InlineStat label="Supply" value={market?.circulating_supply ? fmtSupply(market.circulating_supply, sym) : '—'} p={p} />
+      <InlineStat label="ATH" value={market?.ath ? `$${formatPrice(market.ath)}` : '—'} p={p} last />
+    </View>
+  );
+}
+
+function InlineStat({ label, value, p, last }: { label: string; value: string; p: Palette; last?: boolean }) {
+  return (
+    <View style={{
+      flex: 1,
+      minWidth: 0,
+      paddingHorizontal: 6,
+      borderRightWidth: last ? 0 : 1,
+      borderRightColor: p.border,
+    }}>
+      <Text style={{ color: p.fgMuted, fontSize: 9, fontWeight: '800' }} numberOfLines={1}>
+        {label}
+      </Text>
+      <Text style={{ color: p.fg, fontSize: 11, fontWeight: '800', marginTop: 4, fontVariant: ['tabular-nums'] }} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.72}>
+        {value}
+      </Text>
+    </View>
+  );
+}
+
+function AssetBottomTabs({
+  tab, setTab, h, p,
+}: {
+  tab: Tab;
+  setTab: (tab: Tab) => void;
+  h: { selection: () => void };
+  p: Palette;
+}) {
+  const tabs: [Tab, string][] = [
+    ['activity', 'Activity'],
+    ['news', 'News'],
+    ['discussion', 'Discussions'],
+  ];
+
+  return (
+    <View style={{
+      flexDirection: 'row',
+      gap: 6,
+      padding: 5,
+      borderRadius: 22,
+      backgroundColor: p.pillBg,
+    }}>
+      {tabs.map(([value, label]) => {
+        const active = tab === value;
+        return (
+          <Pressable
+            key={value}
+            onPress={() => { h.selection(); setTab(value); }}
+            style={({ pressed }) => ({
+              flex: 1,
+              height: 42,
+              borderRadius: 18,
+              alignItems: 'center',
+              justifyContent: 'center',
+              backgroundColor: active ? p.fg : pressed ? p.bgElev : 'transparent',
+            })}
+          >
+            <Text style={{ color: active ? p.bg : p.fgMuted, fontSize: 12, fontWeight: '800' }} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
+              {label}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+type DiscussionPost = {
+  id: string;
+  author: {
+    displayName: string;
+    username?: string | null;
+    avatarUrl?: string | null;
+  };
+  tag: 'BULLISH' | 'BEARISH' | 'WATCH';
+  body: string;
+  createdAt: string | number | Date;
+};
+
+function AssetDiscussionTab({ sym, p, h }: {
+  sym: string;
+  p: Palette;
+  h: { selection: () => void };
+}) {
+  const queryClient = useQueryClient();
+  const [draft, setDraft] = useState('');
+  const [tag, setTag] = useState<DiscussionPost['tag']>('WATCH');
+  const key = ['asset-discussions', sym];
+  const { data, isLoading, isError } = useQuery({
+    queryKey: key,
+    queryFn: async () => {
+      const r = await api.get<{ posts: DiscussionPost[] }>(`/asset-discussions/${encodeURIComponent(sym)}`);
+      return r.data.posts ?? [];
+    },
+    staleTime: 20_000,
+  });
+  const posts = data ?? [];
+  const mutation = useMutation({
+    mutationFn: async () => {
+      const r = await api.post<{ post: DiscussionPost }>(`/asset-discussions/${encodeURIComponent(sym)}`, {
+        body: draft.trim(),
+        tag,
+      });
+      return r.data.post;
+    },
+    onSuccess: (post) => {
+      queryClient.setQueryData<DiscussionPost[]>(key, (current = []) => [post, ...current.filter((p0) => p0.id !== post.id)]);
+      setDraft('');
+      setTag('WATCH');
+    },
+  });
+
+  const submit = () => {
+    if (!draft.trim() || mutation.isPending) return;
+    h.selection();
+    mutation.mutate();
+  };
+
+  return (
+    <View style={{ gap: 12 }}>
+      <View style={{
+        borderRadius: 16,
+        borderWidth: 1,
+        borderColor: p.border,
+        backgroundColor: p.bgElev,
+        padding: 12,
+        gap: 10,
+      }}>
+        <TextInput
+          value={draft}
+          onChangeText={setDraft}
+          placeholder={`Discuss a potential ${sym} move`}
+          placeholderTextColor={p.fgFaint}
+          multiline
+          style={{
+            minHeight: 46,
+            maxHeight: 96,
+            color: p.fg,
+            fontSize: 14,
+            fontWeight: '600',
+            padding: 0,
+            textAlignVertical: 'top',
+          }}
+        />
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7 }}>
+          {(['BULLISH', 'WATCH', 'BEARISH'] as DiscussionPost['tag'][]).map((value) => {
+            const active = tag === value;
+            const tint = value === 'BULLISH' ? p.greenFg : value === 'BEARISH' ? p.redFg : p.fgMuted;
+            return (
+              <Pressable
+                key={value}
+                onPress={() => { h.selection(); setTag(value); }}
+                style={({ pressed }) => ({
+                  paddingHorizontal: 10,
+                  height: 30,
+                  borderRadius: 15,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  backgroundColor: active ? (value === 'BULLISH' ? p.greenBg : value === 'BEARISH' ? p.redBg : p.pillBg) : 'transparent',
+                  borderWidth: 1,
+                  borderColor: active ? tint : p.border,
+                  opacity: pressed ? 0.75 : 1,
+                })}
+              >
+                <Text style={{ color: active ? tint : p.fgMuted, fontSize: 10, fontWeight: '800' }}>
+                  {tagLabel(value)}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+        <Pressable
+          onPress={submit}
+          disabled={!draft.trim() || mutation.isPending}
+          style={({ pressed }) => ({
+            alignSelf: 'flex-end',
+            width: 40,
+            height: 40,
+            borderRadius: 20,
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundColor: p.ctaBg,
+            opacity: !draft.trim() || mutation.isPending ? 0.35 : pressed ? 0.75 : 1,
+          })}
+        >
+          {mutation.isPending ? <ActivityIndicator color={p.ctaFg} /> : <Ionicons name="send" size={16} color={p.ctaFg} />}
+        </Pressable>
+      </View>
+
+      {isLoading && (
+        <View style={{ paddingVertical: 26, alignItems: 'center' }}>
+          <ActivityIndicator color={p.fgMuted} />
+        </View>
+      )}
+      {isError && (
+        <View style={{ paddingVertical: 26, alignItems: 'center', gap: 8 }}>
+          <Ionicons name="cloud-offline-outline" size={24} color={p.fgFaint} />
+          <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '600' }}>
+            Could not load discussions.
+          </Text>
+        </View>
+      )}
+      {!isLoading && !isError && posts.length === 0 && (
+        <View style={{ paddingVertical: 30, alignItems: 'center', gap: 8 }}>
+          <Ionicons name="chatbubble-ellipses-outline" size={26} color={p.fgFaint} />
+          <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '600', textAlign: 'center' }}>
+            Start the first public {sym} discussion.
+          </Text>
+        </View>
+      )}
+      {posts.map((post) => (
+        <View
+          key={post.id}
+          style={{
+            borderRadius: 16,
+            borderWidth: 1,
+            borderColor: p.border,
+            backgroundColor: p.bgElev,
+            padding: 14,
+            gap: 8,
+          }}
+        >
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <Text style={{ color: p.fg, fontSize: 13, fontWeight: '800' }}>{post.author.displayName}</Text>
+            <View style={{
+              paddingHorizontal: 7,
+              paddingVertical: 3,
+              borderRadius: 8,
+              backgroundColor:
+                post.tag === 'BULLISH' ? p.greenBg :
+                post.tag === 'BEARISH' ? 'rgba(239,68,68,0.14)' : p.pillBg,
+              borderWidth: 1,
+              borderColor: post.tag === 'WATCH' ? p.border : 'transparent',
+            }}>
+              <Text style={{
+                color:
+                  post.tag === 'BULLISH' ? p.greenFg :
+                  post.tag === 'BEARISH' ? p.redFg : p.fgMuted,
+                fontSize: 10,
+                fontWeight: '800',
+              }}>
+                {tagLabel(post.tag)}
+              </Text>
+            </View>
+            <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '600', marginLeft: 'auto' as any }}>
+              {formatRelativeTime(post.createdAt)}
+            </Text>
+          </View>
+          <Text style={{ color: p.fg, fontSize: 14, lineHeight: 20, fontWeight: '500' }}>
+            {post.body}
+          </Text>
+        </View>
+      ))}
+    </View>
+  );
+}
+
+function tagLabel(tag: DiscussionPost['tag']): string {
+  if (tag === 'BULLISH') return 'Bullish';
+  if (tag === 'BEARISH') return 'Bearish';
+  return 'Watch';
 }
 
 /* ── News tab ─────────────────────────────────────────────────────── */
@@ -746,7 +1101,8 @@ function NewsTab({ p, sym }: { p: Palette; sym: string }) {
 }
 
 /* ── Deposit QR ─── */
-function CryptoDepositSection({ sym, wallet, p, h }: {
+function DepositAddressModal({ visible, onClose, sym, wallet, p, h }: {
+  visible: boolean; onClose: () => void;
   sym: string; wallet: Wallet | undefined; p: Palette;
   h: { selection: () => void; medium: () => void; light: () => void };
 }) {
@@ -756,69 +1112,111 @@ function CryptoDepositSection({ sym, wallet, p, h }: {
 
   const network = sym.replace(/_ERC20|_TRC20/, '');
   useEffect(() => {
-    if (!wallet) return;
+    if (!visible || !wallet) return;
     setLoading(true);
     cryptoWalletAPI.depositAddress(sym, network)
       .then((res) => setAddr(res.data.address))
       .catch(() => setAddr(null))
       .finally(() => setLoading(false));
-  }, [sym, wallet]);
-
-  if (!wallet) return null;
+  }, [sym, wallet, network, visible]);
 
   const qrUrl = addr
     ? `https://api.qrserver.com/v1/create-qr-code/?size=300x300&margin=8&data=${encodeURIComponent(addr)}&bgcolor=ffffff&color=000000`
     : null;
 
   return (
-    <View style={{
-      borderRadius: 16, backgroundColor: p.bgElev,
-      borderWidth: 1, borderColor: p.border, padding: 16,
-    }}>
-      <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '700', letterSpacing: 0.6, marginBottom: 14 }}>
-        DEPOSIT {sym}
-      </Text>
-      {loading ? (
-        <View style={{ paddingVertical: 24, alignItems: 'center' }}>
-          <LoadingPulse size={36} icon="qr-code-outline" />
-        </View>
-      ) : addr ? (
-        <>
-          {qrUrl && (
-            <View style={{ alignItems: 'center', marginBottom: 14 }}>
-              <View style={{ padding: 10, backgroundColor: '#fff', borderRadius: 14 }}>
-                <Image source={{ uri: qrUrl }} style={{ width: 160, height: 160, borderRadius: 4 }} resizeMode="contain" />
-              </View>
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <Pressable
+        onPress={onClose}
+        style={{
+          flex: 1,
+          backgroundColor: 'rgba(0,0,0,0.58)',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: 24,
+        }}
+      >
+        <Pressable
+          onPress={(e) => e.stopPropagation()}
+          style={{
+            width: '100%',
+            maxWidth: 360,
+            borderRadius: 24,
+            backgroundColor: p.bg,
+            borderWidth: 1,
+            borderColor: p.border,
+            padding: 18,
+          }}
+        >
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 16 }}>
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: p.fg, fontSize: 18, fontWeight: '800' }}>Deposit {sym}</Text>
+              <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '600', marginTop: 2 }}>
+                Copy your address or scan the QR code.
+              </Text>
             </View>
-          )}
-          <Pressable
-            onPress={() => {
-              Clipboard.setStringAsync(addr);
-              h.selection();
-              setCopied(true);
-              setTimeout(() => setCopied(false), 2000);
-            }}
-            style={({ pressed }) => ({
-              flexDirection: 'row', alignItems: 'center', gap: 10,
-              padding: 12, borderRadius: 12,
-              backgroundColor: p.pillBg,
-              borderWidth: 1, borderColor: copied ? p.greenFg : p.border,
-              opacity: pressed ? 0.8 : 1,
-            })}
-          >
-            <Ionicons name={copied ? 'checkmark-circle' : 'copy-outline'} size={18} color={copied ? p.greenFg : p.fgMuted} />
-            <Text style={{ color: p.fg, fontSize: 12, fontWeight: '500', flex: 1, fontFamily: 'monospace' }} numberOfLines={1}>{addr}</Text>
-            <Text style={{ color: copied ? p.greenFg : p.fgMuted, fontSize: 11, fontWeight: '600' }}>
-              {copied ? 'Copied!' : 'Copy'}
+            <Pressable
+              onPress={onClose}
+              hitSlop={10}
+              style={({ pressed }) => ({
+                width: 36,
+                height: 36,
+                borderRadius: 18,
+                alignItems: 'center',
+                justifyContent: 'center',
+                backgroundColor: pressed ? p.bgElev : p.pillBg,
+              })}
+            >
+              <Ionicons name="close" size={19} color={p.fg} />
+            </Pressable>
+          </View>
+          {!wallet ? (
+            <Text style={{ color: p.fgMuted, fontSize: 13, textAlign: 'center', paddingVertical: 18 }}>
+              Create a {sym} wallet before depositing.
             </Text>
-          </Pressable>
-        </>
-      ) : (
-        <Text style={{ color: p.fgMuted, fontSize: 13, textAlign: 'center', paddingVertical: 12 }}>
-          Unable to load deposit address
-        </Text>
-      )}
-    </View>
+          ) : loading ? (
+            <View style={{ paddingVertical: 34, alignItems: 'center' }}>
+              <LoadingPulse size={42} icon="qr-code-outline" />
+            </View>
+          ) : addr ? (
+            <>
+              {qrUrl && (
+                <View style={{ alignItems: 'center', marginBottom: 16 }}>
+                  <View style={{ padding: 10, backgroundColor: '#fff', borderRadius: 18 }}>
+                    <Image source={{ uri: qrUrl }} style={{ width: 188, height: 188, borderRadius: 6 }} resizeMode="contain" />
+                  </View>
+                </View>
+              )}
+              <Pressable
+                onPress={() => {
+                  Clipboard.setStringAsync(addr);
+                  h.selection();
+                  setCopied(true);
+                  setTimeout(() => setCopied(false), 2000);
+                }}
+                style={({ pressed }) => ({
+                  flexDirection: 'row', alignItems: 'center', gap: 10,
+                  padding: 12, borderRadius: 14,
+                  backgroundColor: p.pillBg,
+                  borderWidth: 1, borderColor: copied ? p.greenFg : p.border,
+                  opacity: pressed ? 0.8 : 1,
+                })}
+              >
+                <Ionicons name={copied ? 'checkmark-circle' : 'copy-outline'} size={18} color={copied ? p.greenFg : p.fgMuted} />
+                <Text style={{ color: p.fg, fontSize: 12, fontWeight: '600', flex: 1, fontFamily: 'monospace' }} numberOfLines={1}>{addr}</Text>
+                <Text style={{ color: copied ? p.greenFg : p.fgMuted, fontSize: 11, fontWeight: '800' }}>
+                  {copied ? 'Copied' : 'Copy'}
+                </Text>
+              </Pressable>
+            </>
+          ) : (
+            <Text style={{ color: p.fgMuted, fontSize: 13, textAlign: 'center', paddingVertical: 18 }}>
+              Unable to load deposit address
+            </Text>
+          )}
+        </Pressable>
+      </Pressable>
+    </Modal>
   );
 }
 
@@ -832,8 +1230,6 @@ function AssetTransactions({ sym, p }: { sym: string; p: Palette }) {
     return all.filter((t) => txBelongsToAsset(t, sym)).slice(0, 6);
   }, [txData, sym]);
 
-  if (!isLoading && txs.length === 0) return null;
-
   return (
     <View style={{
       borderRadius: 16, backgroundColor: p.bgElev,
@@ -845,7 +1241,7 @@ function AssetTransactions({ sym, p }: { sym: string; p: Palette }) {
         borderBottomWidth: 1, borderBottomColor: p.border,
       }}>
         <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '700', letterSpacing: 0.6 }}>
-          {sym} ACTIVITY
+          RECENT ACTIVITY
         </Text>
         <Pressable
           onPress={() => router.push('/history')}
@@ -860,6 +1256,13 @@ function AssetTransactions({ sym, p }: { sym: string; p: Palette }) {
       {isLoading ? (
         <View style={{ paddingVertical: 20, alignItems: 'center' }}>
           <ActivityIndicator color={p.fgMuted} />
+        </View>
+      ) : txs.length === 0 ? (
+        <View style={{ paddingVertical: 28, alignItems: 'center', gap: 8 }}>
+          <Ionicons name="receipt-outline" size={26} color={p.fgFaint} />
+          <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '600' }}>
+            No {sym} activity yet.
+          </Text>
         </View>
       ) : (
         txs.map((t: any, i: number) => (
@@ -1082,10 +1485,10 @@ function SparklineChart({ points, color, palette: p, onHoverPrice, livePrice, ma
   markers?: TradeMarker[];
 }) {
   const W = 320;
-  const H = 168;
-  const PAD = 6;        // vertical inset only — keeps peaks/troughs off the edge
-  const HPAD = 0;       // horizontal inset — 0 so the line fills the box edge-to-edge
-  const CARD_INSET = 8; // matches the chart card's `padding: 8`
+  const H = 220;
+  const PAD = 0;
+  const HPAD = 0;
+  const CARD_INSET = 0;
   const [hoverDate, setHoverDate]   = useState<string | null>(null);
   const [hoverPriceLabel, setHoverPriceLabel] = useState<string | null>(null);
   const [svgPxW, setSvgPxW]         = useState(0);
@@ -1117,7 +1520,6 @@ function SparklineChart({ points, color, palette: p, onHoverPrice, livePrice, ma
     const last = pts[pts.length - 1];
     const linePath = monotoneCubicPath(pts);
     const areaPath = `${linePath} L ${last.x} ${H - PAD} L ${pts[0].x} ${H - PAD} Z`;
-    const grid = [0.25, 0.5, 0.75].map((f) => PAD + (H - PAD * 2) * f);
 
     // Project trade markers onto chart coords. X from timestamp (interpolated
     // across the series span), Y from the marker's execution price.
@@ -1131,7 +1533,7 @@ function SparklineChart({ points, color, palette: p, onHoverPrice, livePrice, ma
       price: m.price,
     })).filter((mp) => mp.x >= 0 && mp.x <= W);
 
-    return { pts, step, last, linePath, areaPath, grid, markerPts };
+    return { pts, step, last, linePath, areaPath, markerPts };
   }, [series, markers]);
 
   const isLive = livePrice != null && Number.isFinite(livePrice);
@@ -1185,21 +1587,14 @@ function SparklineChart({ points, color, palette: p, onHoverPrice, livePrice, ma
     ],
     position: 'absolute', left: -6, top: -6,
     width: 12, height: 12, borderRadius: 6,
-    backgroundColor: color, borderWidth: 2, borderColor: p.bgElev,
+    backgroundColor: color, borderWidth: 2, borderColor: p.bg,
     shadowColor: color, shadowOpacity: 0.5, shadowRadius: 4, shadowOffset: { width: 0, height: 0 }, elevation: 4,
-  }));
-
-  const lineStyle = useAnimatedStyle(() => ({
-    opacity: hoverOpacity.value,
-    transform: [{ translateX: hoverX.value * vbToPxScale + CARD_INSET }],
-    position: 'absolute', left: 0, top: PAD + CARD_INSET,
-    width: 1, height: H - PAD * 2, backgroundColor: p.border,
   }));
 
   const tagStyle = useAnimatedStyle(() => ({
     opacity: hoverOpacity.value,
     transform: [{ translateX: hoverX.value * vbToPxScale + CARD_INSET - 28 }],
-    position: 'absolute', top: -2, left: 0,
+    position: 'absolute', top: 4, left: 0,
     minWidth: 56, paddingHorizontal: 8, paddingVertical: 3,
     borderRadius: 8, backgroundColor: p.fg,
     alignItems: 'center', justifyContent: 'center',
@@ -1207,20 +1602,19 @@ function SparklineChart({ points, color, palette: p, onHoverPrice, livePrice, ma
 
   if (!chart) {
     return (
-      <View style={{ width: '100%', height: H, borderRadius: 16, backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border, alignItems: 'center', justifyContent: 'center' }}>
+      <View style={{ width: '100%', height: H, alignItems: 'center', justifyContent: 'center' }}>
         <LoadingPulse size={48} icon="trending-up-outline" />
       </View>
     );
   }
 
-  const { last, linePath, areaPath, grid, markerPts } = chart;
+  const { last, linePath, areaPath, markerPts } = chart;
 
   return (
     <GestureDetector gesture={pan}>
       <View style={{ position: 'relative' }}>
         <Animated.View style={{
-          borderRadius: 16, backgroundColor: p.bgElev,
-          borderWidth: 1, borderColor: p.border, padding: 8, overflow: 'hidden',
+          height: H, overflow: 'visible',
         }}>
           <Svg
             width="100%" height={H} viewBox={`0 0 ${W} ${H}`}
@@ -1236,9 +1630,6 @@ function SparklineChart({ points, color, palette: p, onHoverPrice, livePrice, ma
                 <Stop offset="1" stopColor={color} stopOpacity="0" />
               </SvgLinearGradient>
             </Defs>
-            {grid.map((y, i) => (
-              <SvgLine key={i} x1={0} x2={W} y1={y} y2={y} stroke={p.border} strokeWidth={1} strokeDasharray="3,4" />
-            ))}
             <Path d={areaPath} fill="url(#grad)" />
             <Path d={linePath} stroke={color} strokeWidth={2.2} fill="none" strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
           </Svg>
@@ -1272,16 +1663,15 @@ function SparklineChart({ points, color, palette: p, onHoverPrice, livePrice, ma
                   top:  m.y + CARD_INSET - SZ / 2,
                   width: SZ, height: SZ, borderRadius: SZ / 2,
                   backgroundColor: dotColor,
-                  borderWidth: 2, borderColor: p.bgElev,
+                  borderWidth: 2, borderColor: p.bg,
                   alignItems: 'center', justifyContent: 'center',
                   shadowColor: dotColor, shadowOpacity: 0.4, shadowRadius: 3, shadowOffset: { width: 0, height: 0 }, elevation: 3,
                 }}
               >
-                <Ionicons name={isBuy ? 'arrow-down' : 'arrow-up'} size={9} color={p.accentFg} />
+                <Ionicons name={isBuy ? 'arrow-up' : 'arrow-down'} size={9} color="#FFFFFF" />
               </View>
             );
           })}
-          <Animated.View style={lineStyle} />
           <Animated.View style={cursorStyle} />
           {hoverPriceLabel && (
             <Animated.View style={tagStyle} pointerEvents="none">
@@ -1311,14 +1701,14 @@ function CandleChart({ candles, palette: p, upColor, downColor, onHoverPrice, ma
   markers?: TradeMarker[];
 }) {
   const W = 320;
-  const H = 168;
-  const PAD = 6;
-  const CARD_INSET = 8; // matches the chart card's `padding: 8`
+  const H = 220;
+  const PAD = 0;
+  const CARD_INSET = 0;
   const [hoverDate, setHoverDate] = useState<string | null>(null);
   const [hoverPriceLabel, setHoverPriceLabel] = useState<string | null>(null);
+  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   const [svgPxW, setSvgPxW] = useState(0);
 
-  const hoverX = useSharedValue(-1);
   const hoverOpacity = useSharedValue(0);
 
   const chart = useMemo(() => {
@@ -1364,6 +1754,7 @@ function CandleChart({ candles, palette: p, upColor, downColor, onHoverPrice, ma
       if (onHoverPrice) onHoverPrice(null);
       setHoverDate(null);
       setHoverPriceLabel(null);
+      setHoveredIndex(null);
       hoverOpacity.value = withTiming(0, { duration: 150 });
       return;
     }
@@ -1372,12 +1763,13 @@ function CandleChart({ candles, palette: p, upColor, downColor, onHoverPrice, ma
       if (onHoverPrice) onHoverPrice(null);
       setHoverDate(null);
       setHoverPriceLabel(null);
+      setHoveredIndex(null);
       hoverOpacity.value = withTiming(0, { duration: 150 });
       return;
     }
     const idx = Math.min(chart.bars.length - 1, Math.max(0, Math.floor((vbX - PAD) / chart.slot)));
     const bar = chart.bars[idx];
-    hoverX.value = bar.cx;
+    setHoveredIndex(idx);
     hoverOpacity.value = withTiming(1, { duration: 50 });
     if (onHoverPrice) onHoverPrice(bar.close);
     const d = new Date(bar.ts);
@@ -1390,18 +1782,9 @@ function CandleChart({ candles, palette: p, upColor, downColor, onHoverPrice, ma
     .onChange((e: any) => { runOnJS(handleHover)(e.x); })
     .onFinalize(()     => { runOnJS(handleHover)(-1); });
 
-  const vbToPxScale = svgPxW > 0 ? svgPxW / W : 1;
-
-  const lineStyle = useAnimatedStyle(() => ({
-    opacity: hoverOpacity.value,
-    transform: [{ translateX: hoverX.value * vbToPxScale + CARD_INSET }],
-    position: 'absolute', left: 0, top: PAD + CARD_INSET,
-    width: 1, height: H - PAD * 2, backgroundColor: p.border,
-  }));
-
   if (!chart) {
     return (
-      <View style={{ width: '100%', height: H, borderRadius: 16, backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border, alignItems: 'center', justifyContent: 'center' }}>
+      <View style={{ width: '100%', height: H, alignItems: 'center', justifyContent: 'center' }}>
         <LoadingPulse size={48} icon="stats-chart-outline" />
       </View>
     );
@@ -1413,8 +1796,7 @@ function CandleChart({ candles, palette: p, upColor, downColor, onHoverPrice, ma
     <GestureDetector gesture={pan}>
       <View style={{ position: 'relative' }}>
         <Animated.View style={{
-          borderRadius: 16, backgroundColor: p.bgElev,
-          borderWidth: 1, borderColor: p.border, padding: 8, overflow: 'hidden',
+          height: H, overflow: 'visible',
         }}>
           <Svg
             width="100%" height={H} viewBox={`0 0 ${W} ${H}`}
@@ -1424,16 +1806,32 @@ function CandleChart({ candles, palette: p, upColor, downColor, onHoverPrice, ma
               if (w > 0 && Math.abs(w - svgPxW) > 0.5) setSvgPxW(w);
             }}
           >
-            {[0.25, 0.5, 0.75].map((f, i) => {
-              const y = PAD + (H - PAD * 2) * f;
-              return <SvgLine key={i} x1={PAD} x2={W - PAD} y1={y} y2={y} stroke={p.border} strokeWidth={1} strokeDasharray="3,4" />;
-            })}
             {bars.map((b, i) => {
               const c = b.up ? upColor : downColor;
+              const active = hoveredIndex === i;
+              const glowX = b.cx - Math.max(bodyW * 1.65, 5) / 2;
+              const glowW = Math.max(bodyW * 1.65, 5);
+              const glowY = Math.max(0, b.wickTop - 10);
+              const glowH = Math.min(H - glowY, b.wickBottom - b.wickTop + 20);
               return (
                 <Fragment key={i}>
-                  <SvgLine x1={b.cx} x2={b.cx} y1={b.wickTop} y2={b.wickBottom} stroke={c} strokeWidth={1} />
-                  <Rect x={b.cx - bodyW / 2} y={b.bodyTop} width={bodyW} height={b.bodyH} fill={c} rx={0.5} />
+                  {active && (
+                    <>
+                      <Rect x={glowX} y={glowY} width={glowW} height={glowH} fill={c} opacity={0.18} rx={4} />
+                      <Rect x={glowX - 2} y={glowY - 2} width={glowW + 4} height={glowH + 4} fill={c} opacity={0.08} rx={6} />
+                    </>
+                  )}
+                  <SvgLine x1={b.cx} x2={b.cx} y1={b.wickTop} y2={b.wickBottom} stroke={c} strokeWidth={active ? 2.5 : 1} opacity={active ? 1 : 0.92} />
+                  <Rect
+                    x={b.cx - bodyW / 2}
+                    y={b.bodyTop}
+                    width={bodyW}
+                    height={b.bodyH}
+                    fill={c}
+                    rx={0.5}
+                    stroke={active ? c : undefined}
+                    strokeWidth={active ? 1.2 : 0}
+                  />
                 </Fragment>
               );
             })}
@@ -1453,16 +1851,15 @@ function CandleChart({ candles, palette: p, upColor, downColor, onHoverPrice, ma
                   top:  m.y + CARD_INSET - SZ / 2,
                   width: SZ, height: SZ, borderRadius: SZ / 2,
                   backgroundColor: dotColor,
-                  borderWidth: 2, borderColor: p.bgElev,
+                  borderWidth: 2, borderColor: p.bg,
                   alignItems: 'center', justifyContent: 'center',
                   shadowColor: dotColor, shadowOpacity: 0.4, shadowRadius: 3, shadowOffset: { width: 0, height: 0 }, elevation: 3,
                 }}
               >
-                <Ionicons name={isBuy ? 'arrow-down' : 'arrow-up'} size={9} color={p.accentFg} />
+                <Ionicons name={isBuy ? 'arrow-up' : 'arrow-down'} size={9} color="#FFFFFF" />
               </View>
             );
           })}
-          <Animated.View style={lineStyle} />
           {hoverDate && (
             <Text style={{
               position: 'absolute', bottom: 6, left: 0, right: 0,
@@ -1503,6 +1900,15 @@ function StatTile({ label, value, icon, palette: p }: {
       </Text>
     </View>
   );
+}
+
+function formatRelativeTime(ts: number | string | Date): string {
+  const time = typeof ts === 'number' ? ts : new Date(ts).getTime();
+  const mins = Math.max(1, Math.round((Date.now() - time) / 60_000));
+  if (mins < 60) return `${mins}m`;
+  const hours = Math.round(mins / 60);
+  if (hours < 24) return `${hours}h`;
+  return `${Math.round(hours / 24)}d`;
 }
 
 function formatPrice(n: number): string {

@@ -342,12 +342,21 @@ function LockedPhoneFace() {
   );
 }
 
+// Optional lock-screen video. Ships disabled because no clip exists in
+// /public/recordings — when missing, a <video> that 404s renders an opaque
+// black box in production (onError doesn't always fire reliably across hosts),
+// which is exactly the "black phone frame" bug. We default to the fully
+// rendered LockedPhoneFace and only attempt the video when a real clip is
+// dropped in AND this flag is flipped on.
+const LOCK_VIDEO_SRC: string | null = null; // e.g. "/recordings/lock.mp4"
+
 const LockScreen = memo(function LockScreen({
   unlockProgress,
 }: {
   unlockProgress: MotionValue<number>;
 }) {
-  const [failed, setFailed] = useState(false);
+  // Start in the rendered-face state; only show the video if it actually loads.
+  const [useVideo, setUseVideo] = useState(false);
   const ref = useRef<HTMLVideoElement>(null);
   const slideY = useTransform(
     unlockProgress,
@@ -359,7 +368,7 @@ const LockScreen = memo(function LockScreen({
     v >= 0.8 ? "none" : "auto"
   );
 
-  useEffect(() => { ref.current?.play?.().catch(() => {}); }, [failed]);
+  useEffect(() => { if (useVideo) ref.current?.play?.().catch(() => {}); }, [useVideo]);
 
   return (
     <motion.div
@@ -371,15 +380,16 @@ const LockScreen = memo(function LockScreen({
         borderRadius: "inherit", willChange: "transform, opacity",
       }}
     >
-      {failed ? (
-        <LockedPhoneFace />
-      ) : (
+      {/* Rendered lock face is ALWAYS the base layer — never a black box. */}
+      <LockedPhoneFace />
+      {LOCK_VIDEO_SRC && useVideo && (
         <Box position="absolute" inset={0} bg="#0A0A0B" overflow="hidden">
           <video
             ref={ref}
-            src="/recordings/lock.mp4"
+            src={LOCK_VIDEO_SRC}
             autoPlay loop muted playsInline preload="auto"
-            onError={() => setFailed(true)}
+            onError={() => setUseVideo(false)}
+            onCanPlay={() => setUseVideo(true)}
             aria-label="tazdan locked phone"
             style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", objectFit: "cover" }}
           />
@@ -940,22 +950,6 @@ const ScreenBuy = memo(function ScreenBuy() {
             style={{ width: "2px", height: fs.big, background: "#63a1db" }} />
         </HStack>
 
-        {/* quick chips */}
-        <HStack spacing="calc(var(--pw)*0.022)">
-          {["£25", "£50", "£100", "£250", "£500"].map((c) => {
-            const active = c === `£${step.amt}`;
-            return (
-              <Flex key={c} flex={1} h="calc(var(--ph)*0.04)" borderRadius="full"
-                align="center" justify="center"
-                bg={active ? APP.ink : APP.sheetCard}
-                border={`1px solid ${active ? APP.ink : APP.sheetBorder}`}>
-                <Text style={{ fontSize: fs.chip }} fontWeight="700"
-                  color={active ? APP.inkFg : APP.sheetFg}>{c}</Text>
-              </Flex>
-            );
-          })}
-        </HStack>
-
         {/* you receive */}
         <VStack align="stretch" spacing="calc(var(--ph)*0.008)" bg={APP.sheetCard}
           border={`1px solid ${APP.sheetBorder}`} borderRadius={fs.card}
@@ -1026,6 +1020,159 @@ const ScreenBuy = memo(function ScreenBuy() {
         <SlideCTA APP={APP} label="Slide to buy BTC" seconds={secs} />
       </VStack>
     </SheetScreen>
+  );
+});
+
+/* ═════════════════════════════════════════════════════════════════
+   ASSET DETAIL SCREEN — matches the redesigned in-app currency page
+   ═════════════════════════════════════════════════════════════════ */
+const ScreenAssetDetail = memo(function ScreenAssetDetail() {
+  const APP = appTokens(usePhoneDark());
+  const fs = {
+    statusH: "calc(var(--ph) * 0.052)",
+    px: "calc(var(--pw) * 0.065)",
+    title: "calc(var(--ph) * 0.022)",
+    price: "calc(var(--ph) * 0.056)",
+    gain: "calc(var(--ph) * 0.021)",
+    chartH: "calc(var(--ph) * 0.245)",
+    name: "calc(var(--ph) * 0.022)",
+    sub: "calc(var(--ph) * 0.016)",
+    stat: "calc(var(--ph) * 0.013)",
+    statVal: "calc(var(--ph) * 0.0145)",
+    tab: "calc(var(--ph) * 0.015)",
+    btn: "calc(var(--ph) * 0.052)",
+  };
+  const tabs = ["Activity", "News", "Discussions"];
+
+  return (
+    <VStack h="100%" w="100%" align="stretch" spacing={0} bg={APP.bg} overflow="hidden">
+      <Box style={{ height: fs.statusH }} flexShrink={0} />
+
+      <HStack px={fs.px} h="calc(var(--ph)*0.056)" align="center" justify="space-between" flexShrink={0}>
+        <Icon as={FiChevronLeft} color={APP.fg} style={{ width: "calc(var(--ph)*0.026)", height: "calc(var(--ph)*0.026)" }} />
+        <Text style={{ fontSize: fs.title }} color={APP.fg} fontWeight="900">Bitcoin</Text>
+        <HStack spacing="calc(var(--pw)*0.018)">
+          <Flex w="calc(var(--ph)*0.036)" h="calc(var(--ph)*0.036)" borderRadius="full" align="center" justify="center" bg={APP.surface}>
+            <QrGlyph size="calc(var(--ph)*0.017)" color={APP.fg} />
+          </Flex>
+          <HStack p="calc(var(--ph)*0.003)" borderRadius="full" bg={APP.surface} border={`1px solid ${APP.border}`}>
+            <Flex w="calc(var(--ph)*0.027)" h="calc(var(--ph)*0.027)" borderRadius="full" bg={APP.ink} align="center" justify="center">
+              <Icon as={FiActivity} color={APP.inkFg} style={{ width: "calc(var(--ph)*0.014)", height: "calc(var(--ph)*0.014)" }} />
+            </Flex>
+            <Flex w="calc(var(--ph)*0.027)" h="calc(var(--ph)*0.027)" borderRadius="full" align="center" justify="center">
+              <Icon as={FiBarChart2} color={APP.fgMuted} style={{ width: "calc(var(--ph)*0.014)", height: "calc(var(--ph)*0.014)" }} />
+            </Flex>
+          </HStack>
+        </HStack>
+      </HStack>
+
+      <VStack align="center" spacing="calc(var(--ph)*0.006)" px={fs.px} pt="calc(var(--ph)*0.01)" flexShrink={0}>
+        <Text style={{ fontSize: fs.price }} color={APP.fg} fontWeight="900" letterSpacing="-0.06em" lineHeight={1}>
+          $107,612.62
+        </Text>
+        <HStack spacing="calc(var(--pw)*0.02)">
+          <Text style={{ fontSize: fs.gain }} color={APP.green} fontWeight="900">↑ $2,406.22 (2.29%)</Text>
+        </HStack>
+      </VStack>
+
+      <Box h={fs.chartH} w="100%" pt="calc(var(--ph)*0.018)" flexShrink={0}>
+        <svg viewBox="0 0 320 160" width="100%" height="100%" preserveAspectRatio="none">
+          <defs>
+            <linearGradient id="assetHeroLine" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={APP.fg} stopOpacity="0.18" />
+              <stop offset="100%" stopColor={APP.fg} stopOpacity="0" />
+            </linearGradient>
+          </defs>
+          <path
+            d="M0 118 C14 118 12 70 28 72 C42 74 38 98 54 88 C72 78 70 110 88 112 C105 114 104 92 120 98 C139 105 134 52 152 58 C170 64 165 82 184 76 C202 70 198 44 218 36 C236 28 232 15 250 24 C268 33 262 74 282 70 C300 66 300 86 320 76 L320 160 L0 160 Z"
+            fill="url(#assetHeroLine)"
+          />
+          <path
+            d="M0 118 C14 118 12 70 28 72 C42 74 38 98 54 88 C72 78 70 110 88 112 C105 114 104 92 120 98 C139 105 134 52 152 58 C170 64 165 82 184 76 C202 70 198 44 218 36 C236 28 232 15 250 24 C268 33 262 74 282 70 C300 66 300 86 320 76"
+            stroke={APP.fg}
+            strokeWidth="2.2"
+            fill="none"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      </Box>
+
+      <HStack px={fs.px} justify="space-between" flexShrink={0} pb="calc(var(--ph)*0.016)">
+        {["1H", "24H", "7D", "30D", "1Y", "ALL"].map((r) => (
+          <Flex key={r} minW="calc(var(--pw)*0.10)" h="calc(var(--ph)*0.032)" borderRadius="full"
+            align="center" justify="center" bg={r === "24H" ? APP.ink : "transparent"}>
+            <Text style={{ fontSize: fs.sub }} color={r === "24H" ? APP.inkFg : APP.fgMuted} fontWeight="900">{r}</Text>
+          </Flex>
+        ))}
+      </HStack>
+
+      <HStack px={fs.px} py="calc(var(--ph)*0.014)" spacing="calc(var(--pw)*0.04)" flexShrink={0}>
+        <Flex style={{ width: "calc(var(--ph)*0.056)", height: "calc(var(--ph)*0.056)", borderRadius: "50%" }}
+          align="center" justify="center" flexShrink={0}>
+          <Text style={{ fontSize: "calc(var(--ph)*0.044)" }} fontWeight="900" color="#F7931A">₿</Text>
+        </Flex>
+        <VStack align="start" spacing={0} flex={1} minW={0}>
+          <Text style={{ fontSize: fs.name }} color={APP.fg} fontWeight="900">Bitcoin</Text>
+          <Text style={{ fontSize: fs.sub }} color={APP.fgMuted} fontWeight="600">BTC</Text>
+        </VStack>
+        <VStack align="end" spacing={0}>
+          <Text style={{ fontSize: fs.name }} color={APP.fg} fontWeight="900">$238.37</Text>
+          <Text style={{ fontSize: fs.sub }} color={APP.fgMuted} fontWeight="600">0.00306776 BTC</Text>
+        </VStack>
+      </HStack>
+
+      <HStack mx={fs.px} py="calc(var(--ph)*0.012)" borderTop={`1px solid ${APP.border}`} borderBottom={`1px solid ${APP.border}`} flexShrink={0}>
+        {[
+          ["Market Cap", "$2.13T"],
+          ["Volume", "$48.2B"],
+          ["Supply", "19.8M"],
+          ["ATH", "$111K"],
+        ].map(([label, value], i) => (
+          <VStack key={label} flex={1} align="start" spacing="calc(var(--ph)*0.004)"
+            px="calc(var(--pw)*0.012)" borderRight={i === 3 ? "0" : `1px solid ${APP.border}`}>
+            <Text style={{ fontSize: fs.stat }} color={APP.fgMuted} fontWeight="900" whiteSpace="nowrap">{label}</Text>
+            <Text style={{ fontSize: fs.statVal }} color={APP.fg} fontWeight="900" whiteSpace="nowrap">{value}</Text>
+          </VStack>
+        ))}
+      </HStack>
+
+      <HStack mx={fs.px} mt="calc(var(--ph)*0.014)" p="calc(var(--ph)*0.004)" borderRadius="full" bg={APP.surface} flexShrink={0}>
+        {tabs.map((tab, i) => (
+          <Flex key={tab} flex={1} h="calc(var(--ph)*0.038)" borderRadius="full"
+            align="center" justify="center" bg={i === 0 ? APP.ink : "transparent"}>
+            <Text style={{ fontSize: fs.tab }} color={i === 0 ? APP.inkFg : APP.fgMuted} fontWeight="900">{tab}</Text>
+          </Flex>
+        ))}
+      </HStack>
+
+      <VStack flex={1} px={fs.px} pt="calc(var(--ph)*0.012)" spacing="calc(var(--ph)*0.01)" overflow="hidden">
+        {[
+          ["Buy BTC", "+0.0012 BTC", "Today"],
+          ["Sell BTC", "-0.0004 BTC", "Yesterday"],
+        ].map(([title, amt, time], i) => (
+          <HStack key={title} w="100%" py="calc(var(--ph)*0.01)" borderBottom={`1px solid ${APP.border}`}>
+            <Flex w="calc(var(--ph)*0.036)" h="calc(var(--ph)*0.036)" borderRadius="full" bg={i === 0 ? APP.sheetGreenBg : APP.redBg} align="center" justify="center">
+              <Icon as={i === 0 ? FiArrowUp : FiArrowRight} color={i === 0 ? APP.green : APP.redFg} style={{ width: "calc(var(--ph)*0.016)", height: "calc(var(--ph)*0.016)" }} />
+            </Flex>
+            <VStack align="start" flex={1} spacing={0} pl="calc(var(--pw)*0.025)">
+              <Text style={{ fontSize: fs.sub }} color={APP.fg} fontWeight="800">{title}</Text>
+              <Text style={{ fontSize: fs.stat }} color={APP.fgMuted} fontWeight="600">{time}</Text>
+            </VStack>
+            <Text style={{ fontSize: fs.sub }} color={i === 0 ? APP.green : APP.redFg} fontWeight="900">{amt}</Text>
+          </HStack>
+        ))}
+      </VStack>
+
+      <HStack px={fs.px} py="calc(var(--ph)*0.014)" spacing="calc(var(--pw)*0.03)" flexShrink={0}>
+        <Flex flex={1} h={fs.btn} borderRadius="full" bg={APP.surface} align="center" justify="center">
+          <Text style={{ fontSize: fs.name }} color={APP.fg} fontWeight="900">Sell</Text>
+        </Flex>
+        <Flex flex={1} h={fs.btn} borderRadius="full" bg={APP.ink} align="center" justify="center">
+          <Text style={{ fontSize: fs.name }} color={APP.inkFg} fontWeight="900">Buy</Text>
+        </Flex>
+      </HStack>
+    </VStack>
   );
 });
 
@@ -1937,10 +2084,10 @@ function SectionBand({ children, dark, tone, size }: {
       borderTop="1px solid"
       borderColor={dark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.045)"}
       bg={sectionBg}
-      // scrollSnapAlign makes each post-hero chapter a gentle snap point
-      // (the document sets `scroll-snap-type: y proximity`, so it only
-      // nudges into place when you settle near a section — never traps).
-      style={{ contentVisibility: "auto", containIntrinsicSize: size, scrollSnapAlign: "start", scrollSnapStop: "normal" } as React.CSSProperties}
+      // contentVisibility defers offscreen paint for perf. No CSS scroll-snap
+      // here — native momentum scrolling is smoother and reveals are driven by
+      // framer-motion as each band enters the viewport.
+      style={{ contentVisibility: "auto", containIntrinsicSize: size } as React.CSSProperties}
     >
       {/* Whole-band scroll reveal — a gentle fade + rise as each chapter
           enters the viewport, layered over the sections' own inner motion. */}
@@ -2626,137 +2773,6 @@ function SectionPartners() {
 }
 
 /* ═════════════════════════════════════════════════════════════════
-   tazdan BUSINESS — B2B landing teaser linking to /business
-   ═════════════════════════════════════════════════════════════════ */
-function SectionBusiness() {
-  const { t } = useTranslate();
-  const { colorMode } = useColorMode();
-  const isAr = useIsAr();
-  const dark = colorMode === "dark";
-  const textMain  = dark ? "#ffffff" : "#0a0a0a";
-  const textSub   = dark ? "rgba(255,255,255,0.50)" : "rgba(0,0,0,0.50)";
-  const hairline  = dark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)";
-  const surface   = dark ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.025)";
-  const ACCENT    = "#63a1db";
-
-  const pillars = [
-    { label: t("biz_f1_title"), value: t("biz_f1_desc") },
-    { label: t("biz_f2_title"), value: t("biz_f2_desc") },
-    { label: t("biz_f3_title"), value: t("biz_f3_desc") },
-    { label: t("biz_f4_title"), value: t("biz_f4_desc") },
-  ];
-
-  return (
-    <Box
-      position="relative" overflow="hidden"
-      py={{ base: 24, md: 36 }} px={{ base: 5, md: 10 }}
-      borderTop="1px solid" borderColor={hairline}
-    >
-      <Container maxW="1200px">
-        {/* ── Two-col editorial layout ── */}
-        <SimpleGrid columns={{ base: 1, lg: 2 }} spacing={{ base: 14, lg: 20 }}>
-
-          {/* LEFT — headline + CTA */}
-          <motion.div
-            initial={{ opacity: 0, y: 28 }} whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, amount: 0.25 }}
-            transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
-          >
-            <VStack align="start" spacing={{ base: 6, md: 8 }} h="100%" justify="space-between">
-              <VStack align="start" spacing={5}>
-                {/* Eyebrow label */}
-                <Text
-                  fontSize="11px" fontWeight="800" letterSpacing="0.14em"
-                  textTransform="uppercase"
-                >
-                  tazdan Business
-                </Text>
-
-                <Heading
-                  fontFamily="'DM Sans', sans-serif" fontWeight="800"
-                  fontSize={{ base: "36px", md: "52px", lg: "64px" }}
-                  letterSpacing="-0.04em" lineHeight={isAr ? 1.2 : 1.00} color={textMain}
-                >
-                  {t("biz_headline_1")}{" "}
-                  <Box as="span"><EmphText text={t("biz_headline_2")} /></Box>
-                </Heading>
-
-                <Text
-                  fontSize={{ base: "15px", md: "17px" }} color={textSub}
-                  lineHeight={isAr ? 1.75 : 1.65} maxW="480px"
-                >
-                  {t("biz_sub")}
-                </Text>
-              </VStack>
-
-              {/* CTAs */}
-              <HStack spacing={3} flexWrap="wrap">
-                <NextLink href="/business" passHref legacyBehavior>
-                  <HStack as="a" spacing={2} px={5} h="46px" borderRadius="12px"
-                    bg={ACCENT} color="#fff" cursor="pointer"
-                    transition="all 0.22s ease"
-                    _hover={{ transform: "translateY(-1px)", boxShadow: "0 10px 24px rgba(99,161,219,0.40)" }}
-                  >
-                    <Text fontWeight="800" fontSize="14px">{t("biz_cta_primary")}</Text>
-                    <Icon as={FiArrowRight} boxSize="15px" />
-                  </HStack>
-                </NextLink>
-                <NextLink href="/register?type=business" passHref legacyBehavior>
-                  <Box as="a" cursor="pointer">
-                    <HStack spacing={1.5} color={textSub}
-                      _hover={{ color: textMain }}
-                      transition="color 0.2s ease"
-                    >
-                      <Text fontWeight="700" fontSize="14px">{t("biz_cta_secondary")}</Text>
-                      <Icon as={FiArrowRight} boxSize="13px" />
-                    </HStack>
-                  </Box>
-                </NextLink>
-              </HStack>
-            </VStack>
-          </motion.div>
-
-          {/* RIGHT — feature list */}
-          <VStack align="stretch" spacing={0} divider={<Box h="1px" bg={hairline} />}>
-            {pillars.map((p, i) => (
-              <motion.div
-                key={p.label}
-                initial={{ opacity: 0, x: 16 }} whileInView={{ opacity: 1, x: 0 }}
-                viewport={{ once: true, amount: 0.2 }}
-                transition={{ duration: 0.5, delay: i * 0.07, ease: [0.22, 1, 0.36, 1] }}
-              >
-                <Box
-                  py={{ base: 5, md: 6 }}
-                  _hover={{ "& .biz-label": { color: textMain } }}
-                  transition="all 0.2s ease"
-                  cursor="default"
-                >
-                  <HStack align="start" spacing={6}>
-                    <Text
-                      className="biz-label"
-                      fontSize={{ base: "13px", md: "14px" }} fontWeight="800"
-                      color={textSub} letterSpacing="-0.01em"
-                      minW={{ base: "120px", md: "160px" }}
-                      transition="color 0.2s ease"
-                    >
-                      {p.label}
-                    </Text>
-                    <Text fontSize={{ base: "13px", md: "14px" }} color={textSub} lineHeight={isAr ? 1.75 : 1.6} flex={1}>
-                      {p.value}
-                    </Text>
-                  </HStack>
-                </Box>
-              </motion.div>
-            ))}
-          </VStack>
-
-        </SimpleGrid>
-      </Container>
-    </Box>
-  );
-}
-
-/* ═════════════════════════════════════════════════════════════════
    PREPAID CARDS — virtual & physical Visa cards.
    Monochrome, editorial: one line, one paragraph, one CTA. The image
    and the wallet sketch do the rest.
@@ -3066,57 +3082,17 @@ function StageCopy({ op, title, desc, features, textMain, textMuted, hairline, t
  * style: it never fires mid-scroll, respects reduced-motion, and bails if
  * the user is already moving away.
  */
-function useHeroSnap(ref: React.RefObject<HTMLDivElement>, stages: number) {
+function useHeroSnap(_ref: React.RefObject<HTMLDivElement>, _stages: number) {
   useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-
-    let settleTimer: ReturnType<typeof setTimeout> | null = null;
-    let snapEndTimer: ReturnType<typeof setTimeout> | null = null;
-    let snapping = false;
-    let lastY = window.scrollY;
-    let lastTime = performance.now();
-
-    const onScroll = () => {
-      if (snapping) return;
-
-      const now = performance.now();
-      const currentY = window.scrollY;
-      const velocity = Math.abs((currentY - lastY) / Math.max(1, now - lastTime));
-      lastY = currentY;
-      lastTime = now;
-
-      if (settleTimer) clearTimeout(settleTimer);
-      settleTimer = setTimeout(() => {
-        const rect = el.getBoundingClientRect();
-        const total = el.offsetHeight - window.innerHeight;
-        if (total <= 0) return;
-        const scrolled = -rect.top;
-        if (scrolled < 0 || scrolled > total) return;
-        const seg = total / (stages - 1);
-        const idx = Math.round(scrolled / seg);
-        const targetScrolled = idx * seg;
-        const delta = targetScrolled - scrolled;
-        if (Math.abs(delta) < 4) return;
-        if (Math.abs(delta) > seg * 0.52) return;
-        // Let high-velocity flicks settle before choosing a chapter.
-        if (velocity > 1.4) return;
-        snapping = true;
-        window.scrollTo({ top: window.scrollY + delta, behavior: "smooth" });
-        const estDuration = Math.min(620, Math.max(180, Math.abs(delta) * 1.25));
-        if (snapEndTimer) clearTimeout(snapEndTimer);
-        snapEndTimer = setTimeout(() => { snapping = false; }, estDuration);
-      }, 110);
-    };
-
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => {
-      window.removeEventListener("scroll", onScroll);
-      if (settleTimer) clearTimeout(settleTimer);
-      if (snapEndTimer) clearTimeout(snapEndTimer);
-    };
-  }, [ref, stages]);
+    // Intentionally a no-op. The previous implementation called
+    // `window.scrollTo({ behavior: "smooth" })` mid-scroll to snap to the
+    // nearest journey chapter. It fought the user's own momentum AND collided
+    // with the document-level CSS `scroll-snap-type: y proximity`, producing
+    // the jittery, "fighting back" feel. The journey's spring-smoothed
+    // scrollYProgress already eases the screen transitions, so no discrete
+    // JS snapping is needed — removing it is the fix.
+    return;
+  }, []);
 }
 
 /**
@@ -3415,57 +3391,26 @@ function PhoneJourney() {
                       ? "inset 0 0 0 1px rgba(255,255,255,0.04)"
                       : "inset 0 0 0 1px rgba(0,0,0,0.04)"}
                   >
-                    {/* Base: dashboard recording, always rendered (falls back
-                        to the screenshot slideshow until a clip is uploaded). */}
+                    {/* Base: the REAL rendered dashboard UI (matches the app
+                        1:1). No screenshots, no video — live React screens. */}
                     <Box position="absolute" inset={0}>
-                      <ScreenMedia
-                        clip="dashboard"
-                        images={TAZDAN_SCREENS.dashboard}
-                        priority
-                        intervalMs={3000}
-                        alt="tazdan wallet dashboard recording"
-                      />
+                      <ScreenDashboard />
                     </Box>
-                    {/* Feature recordings cross-fade above the dashboard */}
+                    {/* Feature screens cross-fade above the dashboard */}
                     <motion.div style={{ position: "absolute", inset: 0, opacity: opChat, y: yChat, scale: scaleChat, willChange: "opacity, transform" }}>
-                      <ScreenMedia
-                        clip="chat"
-                        images={TAZDAN_SCREENS.messages}
-                        intervalMs={2800}
-                        alt="tazdan payment messages recording"
-                      />
+                      <ScreenChat />
                     </motion.div>
                     <motion.div style={{ position: "absolute", inset: 0, opacity: opBuy, y: yBuy, scale: scaleBuy, willChange: "opacity, transform" }}>
-                      <ScreenMedia
-                        clip="buy"
-                        images={TAZDAN_SCREENS.buy}
-                        intervalMs={2600}
-                        alt="tazdan buy flow recording"
-                      />
+                      <ScreenBuy />
                     </motion.div>
                     <motion.div style={{ position: "absolute", inset: 0, opacity: opSearch, y: ySearch, scale: scaleSearch, willChange: "opacity, transform" }}>
-                      <ScreenMedia
-                        clip="markets"
-                        images={TAZDAN_SCREENS.markets}
-                        intervalMs={2900}
-                        alt="tazdan market detail recording"
-                      />
+                      <ScreenAssetDetail />
                     </motion.div>
                     <motion.div style={{ position: "absolute", inset: 0, opacity: opPay, y: yPay, scale: scalePay, willChange: "opacity, transform" }}>
-                      <ScreenMedia
-                        clip="pay"
-                        images={[tazdanShot(14), tazdanShot(15), tazdanShot(16), tazdanShot(18)]}
-                        intervalMs={2500}
-                        alt="tazdan pay with balance recording"
-                      />
+                      <ScreenPayWith />
                     </motion.div>
                     <motion.div style={{ position: "absolute", inset: 0, opacity: opCard, y: yCard, scale: scaleCard, willChange: "opacity, transform" }}>
-                      <ScreenMedia
-                        clip="cards"
-                        images={TAZDAN_SCREENS.cards}
-                        intervalMs={2400}
-                        alt="tazdan card recording"
-                      />
+                      <ScreenDashboard />
                     </motion.div>
                     {/* Lock screen sits on top, slides off with unlockProgress */}
                     <LockScreen unlockProgress={unlockProgress} />
@@ -3789,14 +3734,12 @@ export default function LandingPage() {
     if (typeof document === "undefined") return;
     const prev = document.body.style.background;
     document.body.style.background = pageBg;
-    // Proximity snap for the chapters past the hero — gentle, never traps
-    // scroll (the hero has no snap points so its scroll-driven journey is
-    // untouched). Cleaned up on unmount so other pages scroll normally.
-    const prevSnap = document.documentElement.style.scrollSnapType;
-    document.documentElement.style.scrollSnapType = "y proximity";
+    // NOTE: document-level `scroll-snap-type: y proximity` was removed — it
+    // collided with the hero's scroll-driven journey and the JS snap, causing
+    // jank. Native momentum scrolling is smoother; section reveals are handled
+    // by framer-motion + contentVisibility, not CSS snap.
     return () => {
       document.body.style.background = prev;
-      document.documentElement.style.scrollSnapType = prevSnap;
     };
   }, [pageBg]);
 
@@ -3823,7 +3766,6 @@ export default function LandingPage() {
       <SectionBand dark={dark} tone="plain" size="0 760px"><SectionClaimLink /></SectionBand>
       <SectionBand dark={dark} tone="tint"  size="0 820px"><SectionGrowSave /></SectionBand>
       <SectionBand dark={dark} tone="plain" size="0 600px"><SectionSocialProof /></SectionBand>
-      <SectionBand dark={dark} tone="tint"  size="0 600px"><SectionBusiness /></SectionBand>
 
       {/* ── Pattern-break closer — sits right above the footer ── */}
       <Box style={{ contentVisibility: "auto", containIntrinsicSize: "0 800px", scrollSnapAlign: "start", scrollSnapStop: "normal" } as React.CSSProperties}>

@@ -20,12 +20,14 @@ export default function AboutPage() {
   const { colorMode } = useColorMode();
   const dark = colorMode === "dark";
 
-  const pageBg     = dark ? "#000000" : "#ffffff";
+  // Charcoal dark mode (matches the app) + #63a1db brand accent.
+  const pageBg     = dark ? "#16181C" : "#ffffff";
   const textMain   = dark ? "#ffffff" : "#0a0f1e";
   const textSub    = dark ? "rgba(255,255,255,0.6)" : "#64748b";
   const cardBg     = dark ? "rgba(255,255,255,0.04)" : "#f4f4f4";
   const cardBorder = dark ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.10)";
-  const iconBg     = dark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)";
+  const iconBg     = dark ? "rgba(99,161,219,0.14)" : "rgba(99,161,219,0.10)";
+  const accent     = "#63a1db";
 
   const titleGradient = dark
     ? "linear(to-b, #ffffff 0%, rgba(255,255,255,0.85) 60%, rgba(255,255,255,0.3) 100%)"
@@ -353,7 +355,7 @@ export default function AboutPage() {
                   bg={iconBg} border="1px solid" borderColor={cardBorder}
                   borderRadius="14px" align="center" justify="center" mb={5}
                 >
-                  <Icon as={v.icon} color={textMain} boxSize={5} />
+                  <Icon as={v.icon} color={accent} boxSize={5} />
                 </Flex>
                 <Heading fontSize={{ base: "19px", md: "22px" }} fontWeight="800" color={textMain} letterSpacing="-0.02em" mb={2}>
                   {v.title}
@@ -403,7 +405,7 @@ export default function AboutPage() {
                     bg={iconBg} border="1px solid" borderColor={cardBorder}
                     borderRadius="12px" align="center" justify="center" mb={5}
                   >
-                    <Icon as={p.icon} color={textMain} boxSize={5} />
+                    <Icon as={p.icon} color={accent} boxSize={5} />
                   </Flex>
                   <Heading fontSize="17px" fontWeight="800" color={textMain} letterSpacing="-0.02em" mb={2}>
                     {p.title}

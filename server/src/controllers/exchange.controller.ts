@@ -8,6 +8,7 @@ import axios from 'axios';
 import {
   buildQuote,
   getQuote,
+  getConfiguredSpread,
   type SupportedAsset,
 } from '../services/exchange/priceEngine.service';
 import { executeQuote } from '../services/exchange/orderExecution.service';
@@ -60,6 +61,21 @@ export class ExchangeController {
         where: { baseCurrency_quoteCurrency: { baseCurrency: base.toUpperCase() as any, quoteCurrency: quote.toUpperCase() as any } },
       });
       res.json({ rate });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * GET /api/exchange/spread
+   * Public — the disclosed quote spread fraction (e.g. 0.025 = 2.5%). The
+   * mobile charts use it to render marked-up prices so the line/candles and
+   * the buy/sell markers all live in the same price space the user transacts at.
+   */
+  static async getSpread(_req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const spread = await getConfiguredSpread();
+      res.json({ spreadPct: spread.toString() });
     } catch (error) {
       next(error);
     }
