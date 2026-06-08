@@ -484,6 +484,64 @@ export async function sendWaitlistConfirmation({ to }: { to: string }) {
 }
 
 /* ─────────────────────────────────────────────────────────────
+   Waitlist Launch Announcement — the launch-day blast
+
+   Sent to every waitlist entry from the admin panel when we go
+   live. The admin can override the heading / body / CTA, but the
+   defaults read as a polished "we're live" announcement.
+───────────────────────────────────────────────────────────── */
+export async function sendWaitlistLaunchEmail({
+  to,
+  subject,
+  heading,
+  body,
+  ctaLabel,
+  ctaUrl,
+}: {
+  to: string;
+  subject?: string;
+  heading?: string;
+  body?: string;
+  ctaLabel?: string;
+  ctaUrl?: string;
+}) {
+  const finalSubject = subject?.trim() || "🎉 tazdan is live — your pioneer access is ready";
+  const finalHeading = heading?.trim() || "We're live. Your seat is ready.";
+  const finalCtaLabel = ctaLabel?.trim() || 'Open tazdan';
+  const finalCtaUrl = ctaUrl?.trim() || CLIENT_URL;
+
+  // Body is admin-authored plain text → render paragraphs, preserving line breaks.
+  const defaultBody =
+    "The day you signed up for is here. tazdan is now live on the App Store and Google Play, " +
+    "and your founding-pioneer perk is locked in: 0% fees for your first six months — every buy, " +
+    "sell, and transfer, completely free.\n\n" +
+    "Download the app, claim your account with this email, and start moving money at the real rate.";
+
+  const paragraphs = (body?.trim() || defaultBody)
+    .split(/\n{2,}/)
+    .map(
+      (para) =>
+        `<p class="text-muted">${para.replace(/\n/g, '<br/>')}</p>`,
+    )
+    .join('\n');
+
+  const html = baseTemplate(
+    finalSubject,
+    `<h1 class="text-main">${finalHeading}</h1>
+    ${paragraphs}
+
+    <div class="btn-wrap" style="margin-top:24px;">
+      <a href="${finalCtaUrl}" class="btn">${finalCtaLabel}</a>
+    </div>
+
+    <div class="divider"></div>
+
+    <p class="text-muted" style="font-size:13px; margin:0;">Questions? Just reply to this email, or visit <a href="${CLIENT_URL}/faq" style="color:inherit;">tazdan.com/faq</a>. Welcome aboard. 🛫</p>`,
+  );
+  await sendEmail({ to, subject: finalSubject, html, sender: 'welcome' });
+}
+
+/* ─────────────────────────────────────────────────────────────
    Password Reset
 ───────────────────────────────────────────────────────────── */
 export async function sendPasswordResetEmail({

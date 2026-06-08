@@ -808,6 +808,7 @@ export default function AdminScreen() {
               <NavTile icon="gift-outline"              label="Referrals"      onPress={() => router.push('/admin/referrals' as any)} p={p} />
               <NavTile icon="key-outline"               label="Sessions"       onPress={() => router.push('/admin/sessions' as any)} p={p} />
               <NavTile icon="notifications-outline"     label="Notifications"  onPress={() => router.push('/admin/notifications' as any)} p={p} />
+              <NavTile icon="mail-outline"              label="Waitlist"       onPress={() => router.push('/admin/waitlist' as any)} p={p} />
               <NavTile icon="business-outline"          label="Platform Banks" onPress={() => router.push('/admin/platform-banks' as any)} p={p} />
             </View>
           </View>
