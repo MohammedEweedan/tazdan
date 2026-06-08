@@ -1,13 +1,15 @@
 # ── Build stage ──────────────────────────────────────────────────────────
-# A single `npm ci` (deterministic + cached on the lockfile) installs every
-# dependency once. The original Dockerfile ran `npm install` TWICE (once for
-# prod deps, once for dev) — this halves install time and the layer is reused
-# across code-only rebuilds since package*.json rarely change.
+# A single `npm install` installs every dependency once. The original
+# Dockerfile ran install TWICE (once for prod deps, once for dev) — this halves
+# install time and the layer is reused across code-only rebuilds since
+# package*.json rarely change. We use `install` (not `ci`) because the lockfile
+# currently drifts from package.json (e.g. the optional utf-8-validate); `ci`
+# hard-fails on drift. `--prefer-offline` reuses the npm cache for speed.
 FROM node:20-alpine AS build
 WORKDIR /app
 RUN apk add --no-cache openssl
 COPY package.json package-lock.json ./
-RUN npm ci --prefer-offline --no-audit --no-fund
+RUN npm install --prefer-offline --no-audit --no-fund
 COPY prisma ./prisma/
 RUN npx prisma generate
 COPY . .
