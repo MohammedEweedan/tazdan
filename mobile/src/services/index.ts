@@ -1259,6 +1259,33 @@ export const adminService = {
     const { data } = await api.post('/admin/notifications/broadcast', payload);
     return data;
   },
+  // ── Waitlist ──────────────────────────────────────────────────
+  waitlist: (params?: { page?: number; limit?: number; search?: string; filter?: 'pending' | 'notified' }) =>
+    withFallback<{
+      items: Array<{ id: string; email: string; source: string | null; locale: string | null; notified: boolean; createdAt: string }>;
+      total: number; page: number; totalPages: number;
+      stats: { total: number; notified: number; pending: number };
+      email: { transport: string; canSend: boolean; smtpConfigured: boolean; resendConfigured: boolean };
+    }>(
+      async () => (await api.get('/admin/waitlist', { params })).data,
+      { items: [], total: 0, page: 1, totalPages: 1, stats: { total: 0, notified: 0, pending: 0 }, email: { transport: 'none', canSend: false, smtpConfigured: false, resendConfigured: false } },
+    ),
+  waitlistLaunch: async (payload: {
+    subject?: string; heading?: string; body?: string;
+    ctaLabel?: string; ctaUrl?: string;
+    audience?: 'pending' | 'all'; limit?: number;
+  }): Promise<{ sent: number; failed: number; total: number; errors: Array<{ email: string; error: string }> }> => {
+    const { data } = await api.post('/admin/waitlist/launch', payload);
+    return data;
+  },
+  resendWaitlistConfirmation: async (id: string): Promise<{ ok: boolean; email: string }> => {
+    const { data } = await api.post(`/admin/waitlist/${id}/resend`);
+    return data;
+  },
+  deleteWaitlistEntry: async (id: string): Promise<{ ok: boolean }> => {
+    const { data } = await api.delete(`/admin/waitlist/${id}`);
+    return data;
+  },
   uploadMedia: async (file: { uri: string; name: string; type: string }) => {
     // Must use fetch, NOT axios — axios's default Content-Type:application/json header
     // overrides the multipart boundary, breaking multer server-side.

@@ -33,16 +33,26 @@ async function pushToMailchimp(email: string): Promise<void> {
   }
 }
 
-async function pushToBackend(email: string, source: string | null, locale: string | null): Promise<void> {
+// Returns true only when the backend persisted the signup. The backend is the
+// source of truth for the launch mailout AND triggers the confirmation email,
+// so a failure here must surface to the caller (don't swallow it) — otherwise
+// the form shows a false "success" while nothing is saved and no email sends.
+async function pushToBackend(email: string, source: string | null, locale: string | null): Promise<boolean> {
   try {
     const base = API_BASE.endsWith('/api') ? API_BASE : `${API_BASE}/api`;
-    await fetch(`${base}/waitlist`, {
+    const res = await fetch(`${base}/waitlist`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, source, locale }),
     });
+    if (!res.ok) {
+      console.error('[waitlist] backend responded', res.status, await res.text().catch(() => ''));
+      return false;
+    }
+    return true;
   } catch (err) {
     console.error('[waitlist] backend fetch failed', err);
+    return false;
   }
 }
 
@@ -57,7 +67,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid email' }, { status: 400 });
     }
 
-    await Promise.allSettled([pushToBackend(email, source, locale), pushToMailchimp(email)]);
+    // Mailchimp is best-effort (fire-and-forget). The backend save is required:
+    // it persists the signup and fires the confirmation email.
+    pushToMailchimp(email).catch(() => {});
+    const saved = await pushToBackend(email, source, locale);
+
+    if (!saved) {
+      return NextResponse.json(
+        { error: 'Could not save your signup right now. Please try again.' },
+        { status: 502 },
+      );
+    }
 
     return NextResponse.json({ success: true });
   } catch {

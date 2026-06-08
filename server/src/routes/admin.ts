@@ -107,6 +107,12 @@ adminRouter.get('/withdrawal-whitelist', X.listWithdrawalWhitelist);
 
 adminRouter.get('/transfers',        X.listTransfers);
 
+// Waitlist — view signups, send the launch blast, resend confirmations
+adminRouter.get('/waitlist',                X.listWaitlist);
+adminRouter.post('/waitlist/launch',        X.broadcastWaitlist);
+adminRouter.post('/waitlist/:id/resend',    X.resendWaitlistConfirmation);
+adminRouter.delete('/waitlist/:id',         X.deleteWaitlistEntry);
+
 adminRouter.get('/notifications',                          X.listNotifications);
 adminRouter.post('/notifications/broadcast',               X.broadcastNotification);
 adminRouter.get('/notifications/:broadcastId/recipients',  X.getBroadcastRecipients);

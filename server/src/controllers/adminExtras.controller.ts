@@ -14,6 +14,12 @@ import { prisma } from '../utils/prisma';
 import { AppError } from '../middleware/errorHandler';
 import { AuthRequest } from '../types';
 import { emitNotification } from '../utils/realtime';
+import {
+  getEmailStatus,
+  sendWaitlistLaunchEmail,
+  sendWaitlistConfirmation,
+  emailErrorSummary,
+} from '../services/email';
 
 function pageLimit(req: AuthRequest): { page: number; limit: number; skip: number } {
   const page  = Math.max(1, parseInt(String(req.query.page ?? '1'),  10) || 1);
@@ -739,6 +745,120 @@ export class AdminExtrasController {
         }),
       ]);
       res.json({ ...packPage(items, total, page, limit), totalsByCurrency: totals });
+    } catch (e) { next(e); }
+  }
+
+  // ── Waitlist ─────────────────────────────────────────────────────
+  // GET /admin/waitlist — paginated entries + stats + email transport health
+  static async listWaitlist(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const { page, limit, skip } = pageLimit(req);
+      const search = String(req.query.search ?? '').trim();
+      // 'pending' = not yet emailed the launch blast, 'notified' = already emailed
+      const filter = req.query.filter ? String(req.query.filter) : undefined;
+
+      const where: any = {};
+      if (search) where.email = { contains: search, mode: 'insensitive' };
+      if (filter === 'pending') where.notified = false;
+      if (filter === 'notified') where.notified = true;
+
+      const [items, total, totalAll, notifiedCount] = await Promise.all([
+        prisma.waitlistEntry.findMany({ where, skip, take: limit, orderBy: { createdAt: 'desc' } }),
+        prisma.waitlistEntry.count({ where }),
+        prisma.waitlistEntry.count(),
+        prisma.waitlistEntry.count({ where: { notified: true } }),
+      ]);
+
+      res.json({
+        ...packPage(items, total, page, limit),
+        stats: {
+          total: totalAll,
+          notified: notifiedCount,
+          pending: totalAll - notifiedCount,
+        },
+        // Surface transport health so the admin can see WHY confirmations may
+        // not be landing (e.g. no RESEND_API_KEY / SMTP configured).
+        email: getEmailStatus(),
+      });
+    } catch (e) { next(e); }
+  }
+
+  // POST /admin/waitlist/launch — send the launch blast to all (or only the
+  // not-yet-notified) entries. Sends sequentially with per-recipient error
+  // capture so one bad address never aborts the run, and marks each success
+  // as notified so re-runs don't double-send.
+  static async broadcastWaitlist(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const parsed = z.object({
+        subject:   z.string().max(160).optional(),
+        heading:   z.string().max(160).optional(),
+        body:      z.string().max(8000).optional(),
+        ctaLabel:  z.string().max(60).optional(),
+        ctaUrl:    z.string().url().max(500).optional(),
+        // 'pending' (default) only emails entries not yet notified; 'all' re-sends to everyone.
+        audience:  z.enum(['pending', 'all']).optional(),
+        // Optional: limit a run for testing (e.g. send to the first 5).
+        limit:     z.number().int().positive().max(100000).optional(),
+      }).parse(req.body);
+
+      const where = parsed.audience === 'all' ? {} : { notified: false };
+      const entries = await prisma.waitlistEntry.findMany({
+        where,
+        orderBy: { createdAt: 'asc' },
+        take: parsed.limit,
+        select: { id: true, email: true },
+      });
+
+      if (entries.length === 0) {
+        return res.json({ sent: 0, failed: 0, total: 0, errors: [] });
+      }
+
+      let sent = 0;
+      let failed = 0;
+      const errors: Array<{ email: string; error: string }> = [];
+
+      for (const entry of entries) {
+        try {
+          await sendWaitlistLaunchEmail({
+            to:       entry.email,
+            subject:  parsed.subject,
+            heading:  parsed.heading,
+            body:     parsed.body,
+            ctaLabel: parsed.ctaLabel,
+            ctaUrl:   parsed.ctaUrl,
+          });
+          await prisma.waitlistEntry.update({ where: { id: entry.id }, data: { notified: true } });
+          sent++;
+        } catch (err) {
+          failed++;
+          if (errors.length < 25) errors.push({ email: entry.email, error: emailErrorSummary(err) });
+        }
+      }
+
+      res.json({ sent, failed, total: entries.length, errors });
+    } catch (e) {
+      if (e instanceof z.ZodError) return next(new AppError('Invalid payload', 400));
+      next(e);
+    }
+  }
+
+  // POST /admin/waitlist/:id/resend — re-send the signup confirmation to one entry
+  static async resendWaitlistConfirmation(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const entry = await prisma.waitlistEntry.findUnique({ where: { id: req.params.id } });
+      if (!entry) return next(new AppError('Waitlist entry not found', 404));
+      await sendWaitlistConfirmation({ to: entry.email });
+      res.json({ ok: true, email: entry.email });
+    } catch (e) {
+      next(new AppError(`Send failed: ${emailErrorSummary(e)}`, 502));
+    }
+  }
+
+  // DELETE /admin/waitlist/:id — remove an entry (spam / bad address)
+  static async deleteWaitlistEntry(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      await prisma.waitlistEntry.delete({ where: { id: req.params.id } });
+      res.json({ ok: true });
     } catch (e) { next(e); }
   }
 }
