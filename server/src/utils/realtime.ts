@@ -59,12 +59,13 @@ export function emitNotification(
 /**
  * Broadcast a discussion event to everyone viewing an asset's discussion feed.
  * Clients join the `discussion:<SYMBOL>` room when the tab is open and leave it
- * when they close it. `event` is e.g. 'discussion:new' | 'discussion:removed'.
+ * when they close it. `event` is e.g. 'discussion:new' | 'discussion:updated' |
+ * 'discussion:removed'.
  */
 export function emitDiscussion(
   source: IOSource,
   symbol: string,
-  event: 'discussion:new' | 'discussion:removed',
+  event: 'discussion:new' | 'discussion:updated' | 'discussion:removed',
   payload?: Record<string, any>,
 ) {
   const io = resolveIo(source);

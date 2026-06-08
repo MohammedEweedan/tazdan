@@ -5,6 +5,7 @@ import { AppError } from '../middleware/errorHandler';
 import { emitDiscussion } from '../utils/realtime';
 
 const TAGS = new Set(['BULLISH', 'BEARISH', 'WATCH']);
+const EMOJI_AVATARS = ['🟦', '🟩', '🟧', '🟪', '🟨', '💎', '🚀', '⚡', '🌙', '🔥', '🧠', '🪙', '📈', '🛡️'];
 
 function cleanSymbol(input: unknown): string {
   const symbol = String(input ?? '').trim().toUpperCase().replace(/[^A-Z0-9_]/g, '');
@@ -24,22 +25,86 @@ function cleanTag(input: unknown): 'BULLISH' | 'BEARISH' | 'WATCH' {
   return TAGS.has(tag) ? tag as 'BULLISH' | 'BEARISH' | 'WATCH' : 'WATCH';
 }
 
-function shapePost(row: any) {
+function looksLikeUrl(v?: string | null): boolean {
+  if (!v) return false;
+  return /^https?:\/\//i.test(v) || v.startsWith('/') || v.includes('://');
+}
+
+function looksLikeEmoji(v?: string | null): boolean {
+  if (!v || looksLikeUrl(v)) return false;
+  return /[^\u0020-\u007E]/.test(v);
+}
+
+function hashSeed(input: string): number {
+  let h = 0;
+  for (let i = 0; i < input.length; i++) h = ((h << 5) - h + input.charCodeAt(i)) | 0;
+  return Math.abs(h);
+}
+
+function emojiForUser(user: any): string {
+  const stored = String(user.avatarEmoji ?? user.avatarUrl ?? '').trim();
+  if (looksLikeEmoji(stored)) return stored;
+  const seed = String(user.id ?? user.username ?? user.firstName ?? 'trader');
+  return EMOJI_AVATARS[hashSeed(seed) % EMOJI_AVATARS.length];
+}
+
+const postInclude = {
+  user: {
+    select: {
+      id: true,
+      username: true,
+      firstName: true,
+      lastName: true,
+      avatarUrl: true,
+    },
+  },
+  _count: { select: { replies: true } },
+} as const;
+
+const replyInclude = postInclude;
+
+function shapePost(row: any, viewerId?: string | null) {
   const user = row.user ?? {};
   const name = [user.firstName, user.lastName].filter(Boolean).join(' ').trim();
+  const likedBy: string[] = Array.isArray(row.likedBy) ? row.likedBy : [];
+  const replies = Array.isArray(row.replies)
+    ? row.replies.map((reply: any) => shapePost(reply, viewerId))
+    : undefined;
   return {
     id: row.id,
     symbol: row.symbol,
+    parentId: row.parentId ?? null,
     body: row.body,
     tag: row.tag,
     createdAt: row.createdAt,
+    likeCount: Number(row.likeCount ?? likedBy.length ?? 0),
+    likedByMe: viewerId ? likedBy.includes(viewerId) : false,
+    replyCount: Number(row._count?.replies ?? replies?.length ?? 0),
+    replies,
     author: {
       id: user.id,
       username: user.username,
       displayName: user.username ? `@${user.username}` : name || 'Trader',
-      avatarUrl: user.avatarUrl ?? null,
+      avatarUrl: looksLikeUrl(user.avatarUrl) ? user.avatarUrl : null,
+      avatarEmoji: emojiForUser(user),
     },
   };
+}
+
+async function loadPostForShape(id: string, viewerId?: string | null) {
+  const row = await (prisma as any).assetDiscussionPost.findUnique({
+    where: { id },
+    include: {
+      ...postInclude,
+      replies: {
+        where: { deletedAt: null, hiddenByMod: false },
+        orderBy: { createdAt: 'asc' },
+        take: 3,
+        include: replyInclude,
+      },
+    },
+  });
+  return row ? shapePost(row, viewerId) : null;
 }
 
 export class AssetDiscussionController {
@@ -48,22 +113,20 @@ export class AssetDiscussionController {
       const symbol = cleanSymbol(req.params.symbol);
       const limit = Math.min(Math.max(Number(req.query.limit ?? 30) || 30, 1), 50);
       const rows = await (prisma as any).assetDiscussionPost.findMany({
-        where: { symbol, deletedAt: null, hiddenByMod: false },
+        where: { symbol, parentId: null, deletedAt: null, hiddenByMod: false },
         orderBy: { createdAt: 'desc' },
         take: limit,
         include: {
-          user: {
-            select: {
-              id: true,
-              username: true,
-              firstName: true,
-              lastName: true,
-              avatarUrl: true,
-            },
+          ...postInclude,
+          replies: {
+            where: { deletedAt: null, hiddenByMod: false },
+            orderBy: { createdAt: 'asc' },
+            take: 3,
+            include: replyInclude,
           },
         },
       });
-      res.json({ posts: rows.map(shapePost) });
+      res.json({ posts: rows.map((row: any) => shapePost(row, req.user?.id)) });
     } catch (err) {
       next(err);
     }
@@ -83,20 +146,69 @@ export class AssetDiscussionController {
           userId: req.user.id,
         },
         include: {
-          user: {
-            select: {
-              id: true,
-              username: true,
-              firstName: true,
-              lastName: true,
-              avatarUrl: true,
-            },
-          },
+          ...postInclude,
         },
       });
-      const post = shapePost(row);
+      const post = shapePost(row, req.user.id);
       emitDiscussion(req, symbol, 'discussion:new', { post });
       res.status(201).json({ post });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async reply(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      if (!req.user) throw new AppError('Authentication required', 401);
+      const symbol = cleanSymbol(req.params.symbol);
+      const parentId = String(req.params.id ?? '');
+      const body = cleanBody(req.body?.body);
+      const parent = await (prisma as any).assetDiscussionPost.findUnique({ where: { id: parentId } });
+      if (!parent || parent.deletedAt || parent.hiddenByMod || parent.symbol !== symbol) {
+        throw new AppError('Post not found', 404);
+      }
+      const row = await (prisma as any).assetDiscussionPost.create({
+        data: {
+          symbol,
+          body,
+          tag: parent.tag ?? 'WATCH',
+          userId: req.user.id,
+          parentId,
+        },
+        include: replyInclude,
+      });
+      const reply = shapePost(row, req.user.id);
+      const parentPost = await loadPostForShape(parentId, req.user.id);
+      emitDiscussion(req, symbol, 'discussion:new', { post: reply });
+      if (parentPost) emitDiscussion(req, symbol, 'discussion:updated', { post: parentPost });
+      res.status(201).json({ reply, post: parentPost });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async toggleLike(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      if (!req.user) throw new AppError('Authentication required', 401);
+      const symbol = cleanSymbol(req.params.symbol);
+      const id = String(req.params.id ?? '');
+      const post = await (prisma as any).assetDiscussionPost.findUnique({ where: { id } });
+      if (!post || post.deletedAt || post.hiddenByMod || post.symbol !== symbol) {
+        throw new AppError('Post not found', 404);
+      }
+      const likedBy: string[] = Array.isArray(post.likedBy) ? post.likedBy : [];
+      const liked = likedBy.includes(req.user.id);
+      const nextLikedBy = liked ? likedBy.filter((uid) => uid !== req.user!.id) : [...likedBy, req.user.id];
+      await (prisma as any).assetDiscussionPost.update({
+        where: { id },
+        data: {
+          likedBy: nextLikedBy,
+          likeCount: nextLikedBy.length,
+        },
+      });
+      const shaped = await loadPostForShape(id, req.user.id);
+      if (shaped) emitDiscussion(req, symbol, 'discussion:updated', { post: shaped });
+      res.json({ post: shaped });
     } catch (err) {
       next(err);
     }
@@ -117,6 +229,10 @@ export class AssetDiscussionController {
         data: { deletedAt: new Date() },
       });
       emitDiscussion(req, post.symbol, 'discussion:removed', { id });
+      if (post.parentId) {
+        const parentPost = await loadPostForShape(post.parentId, req.user.id);
+        if (parentPost) emitDiscussion(req, post.symbol, 'discussion:updated', { post: parentPost });
+      }
       res.json({ ok: true });
     } catch (err) {
       next(err);
@@ -162,7 +278,7 @@ export class AssetDiscussionController {
           user: { select: { id: true, username: true, firstName: true, lastName: true, avatarUrl: true } },
         },
       });
-      res.json({ posts: rows.map((r: any) => ({ ...shapePost(r), reportCount: r.reportCount, hiddenByMod: r.hiddenByMod })) });
+      res.json({ posts: rows.map((r: any) => ({ ...shapePost(r, req.user?.id), reportCount: r.reportCount, hiddenByMod: r.hiddenByMod })) });
     } catch (err) {
       next(err);
     }
