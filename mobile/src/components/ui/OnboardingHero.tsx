@@ -1,82 +1,113 @@
 /**
- * OnboardingHero — premium visual backdrops for onboarding slides.
+ * OnboardingHero - premium visual backdrops for onboarding slides.
  *
- *   Variant 1: Four rows of crypto logos drifting in alternating directions.
- *   Variant 2: Animated phone mockup replicating the client landing-page
- *              chat screen — sequential message reveals, typing indicators,
- *              payment cards, live composer cursor.
- *   Variant 3: Minimal breathing brand glow for the CTA page.
- *
- *   The hero is transparent; the parent page owns the solid background.
+ * The parent route owns the solid page background. This component never paints
+ * a competing full-screen gradient/glow, so the hero and content remain one
+ * continuous surface in every theme.
  */
 
 import { memo, useEffect, useRef, useState } from 'react';
-import { View, Image, Dimensions, StyleSheet, Text } from 'react-native';
+import { View, Image, Dimensions, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
 import Animated, {
-  useSharedValue,
+  Easing,
   useAnimatedStyle,
+  useSharedValue,
   withRepeat,
   withTiming,
-  withSpring,
-  Easing,
 } from 'react-native-reanimated';
 import { useCoinIcons } from '@/hooks/useCoinIcons';
-import { brand } from '@/store/themeStore';
+import { useT } from '@/store/i18nStore';
 import { ShaderLines } from './ShaderLines';
+import { Text } from './Text';
 
-/** Brand accent (soft pantone blue #63a1db) used for the "Join" word. */
 const ACCENT = '#63A1DB';
-
+const GREEN = '#35C77A';
+const GOLD = '#F6B344';
 const { width: W } = Dimensions.get('window');
+
+function bgLuminance(hex: string): number {
+  const h = hex.replace('#', '');
+  const full = h.length === 3 ? h.split('').map((ch) => ch + ch).join('') : h;
+  const r = parseInt(full.slice(0, 2), 16) || 0;
+  const g = parseInt(full.slice(2, 4), 16) || 0;
+  const b = parseInt(full.slice(4, 6), 16) || 0;
+  return (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+}
 
 interface Props {
   bg: string;
   variant?: 1 | 2 | 3;
 }
 
-/* ═══════════════════════════════════════════════════════════════════
-   VARIANT 1 — Crypto carousel
-   ═══════════════════════════════════════════════════════════════════ */
+type Translate = ReturnType<typeof useT>;
 
-const COINS_A = ['BTC','ETH','SOL','BNB','XRP','ADA','DOGE','AVAX','DOT','MATIC','LINK','UNI','INJ','RENDER','IMX','GRT'];
-const COINS_B = ['LTC','ATOM','TRX','NEAR','FIL','ALGO','VET','XLM','AAVE','ARB','OP','SUI','SEI','TIA','WLD','RON'];
-const COINS_C = ['ICP','APT','FET','ENA','STRK','JUP','PYTH','BEAM','ZRO','ARKM','LDO','SAND','MANA','FLOW','XTZ','EGLD'];
-const COINS_D = ['FTM','KAS','BONK','PEPE','SHIB','FLOKI','WIF','BOME','TIA','MKR','COMP','CRV','SNX','YFI','ENS','DYDX'];
-const COINS_E = ['SUI','SEI','TIA','WLD','RON','ICP','APT','FET','ENA','STRK','JUP','PYTH','BEAM','ZRO','ARKM','LDO'];
+function palette(isDark: boolean, bg: string) {
+  return {
+    bg,
+    fg: isDark ? '#F7F8FA' : '#08090A',
+    muted: isDark ? 'rgba(247,248,250,0.64)' : 'rgba(8,9,10,0.58)',
+    faint: isDark ? 'rgba(247,248,250,0.34)' : 'rgba(8,9,10,0.34)',
+    surface: isDark ? 'rgba(255,255,255,0.070)' : 'rgba(255,255,255,0.88)',
+    raised: isDark ? 'rgba(255,255,255,0.105)' : '#FFFFFF',
+    inset: isDark ? 'rgba(255,255,255,0.050)' : 'rgba(8,9,10,0.040)',
+    border: isDark ? 'rgba(255,255,255,0.125)' : 'rgba(8,9,10,0.095)',
+    shadow: isDark ? 0.28 : 0.12,
+  };
+}
 
-const ROW_A = [...COINS_A, ...COINS_A];
-const ROW_B = [...COINS_B, ...COINS_B];
-const ROW_C = [...COINS_C, ...COINS_C];
-const ROW_D = [...COINS_D, ...COINS_D];
-const ROW_E = [...COINS_E, ...COINS_E];
+/* -------------------------------------------------------------------------- */
+/* Variant 1 - crypto carousel                                                */
+/* -------------------------------------------------------------------------- */
 
-const TILE_W = 56;
-const GAP = 14;
+// Conservative jsDelivr cryptocurrency-icons symbols. If an image still fails,
+// the tile disappears instead of showing a fallback letter/digit placeholder.
+const COINS_A = ['BTC', 'ETH', 'USDT', 'USDC', 'BNB', 'XRP', 'ADA', 'DOGE'];
+const COINS_B = ['LTC', 'BCH', 'XLM', 'TRX', 'EOS', 'XMR', 'DASH', 'ZEC'];
+const COINS_C = ['LINK', 'NEO', 'ETC', 'VET', 'XTZ', 'QTUM', 'ICX', 'ZIL'];
+const COINS_D = ['DAI', 'BAT', 'ZRX', 'OMG', 'WAVES', 'REP', 'KNC', 'BNT'];
+
+const COPIES = 3;
+const ROW_A = [...COINS_A, ...COINS_A, ...COINS_A];
+const ROW_B = [...COINS_B, ...COINS_B, ...COINS_B];
+const ROW_C = [...COINS_C, ...COINS_C, ...COINS_C];
+const ROW_D = [...COINS_D, ...COINS_D, ...COINS_D];
+
+const TILE_W = 64;
+const GAP = 16;
 const ITEM_W = TILE_W + GAP;
 
 function CoinTile({ sym, getIconUrl }: { sym: string; getIconUrl: (s: string) => string }) {
+  const uri = getIconUrl(sym);
+  const [failed, setFailed] = useState(false);
+
+  if (!uri || failed) {
+    return <View style={[tileStyles.tile, tileStyles.blankTile]} />;
+  }
+
   return (
     <View style={tileStyles.tile}>
-      <Image source={{ uri: getIconUrl(sym) }} style={tileStyles.icon} resizeMode="contain" />
+      <Image source={{ uri }} style={tileStyles.icon} resizeMode="contain" onError={() => setFailed(true)} />
     </View>
   );
 }
 
 function ScrollRow({ coins, reverse, getIconUrl, speed }: {
-  coins: string[]; reverse: boolean; getIconUrl: (s: string) => string; speed: number;
+  coins: string[];
+  reverse: boolean;
+  getIconUrl: (s: string) => string;
+  speed: number;
 }) {
-  const loopW = (coins.length / 2) * ITEM_W;
-  const x = useSharedValue(reverse ? -loopW : 0);
+  const copyW = (coins.length / COPIES) * ITEM_W;
+  const x = useSharedValue(-copyW);
   const started = useRef(false);
 
   useEffect(() => {
     if (started.current) return;
     started.current = true;
-    const target = reverse ? 0 : -loopW;
+    const target = reverse ? 0 : -copyW * 2;
     x.value = withRepeat(withTiming(target, { duration: speed, easing: Easing.linear }), -1, false);
-  }, [loopW, reverse, speed, x]);
+  }, [copyW, reverse, speed, x]);
 
   const style = useAnimatedStyle(() => ({ transform: [{ translateX: x.value }] }));
 
@@ -95,332 +126,426 @@ const tileStyles = StyleSheet.create({
   rowClip: { width: '100%', overflow: 'hidden' },
   row: { flexDirection: 'row', paddingVertical: 4 },
   tile: { width: TILE_W, height: TILE_W, marginRight: GAP, alignItems: 'center', justifyContent: 'center' },
-  icon: { width: 44, height: 44, opacity: 0.9 },
+  blankTile: { opacity: 0 },
+  icon: { width: 54, height: 54, opacity: 0.92 },
 });
 
-/* ═══════════════════════════════════════════════════════════════════
-   VARIANT 2 — Animated phone mockup (matches client ScreenChat)
-   ═══════════════════════════════════════════════════════════════════ */
+/* -------------------------------------------------------------------------- */
+/* Variant 2 - premium fintech capability showcase                            */
+/* -------------------------------------------------------------------------- */
 
-type ChatItem =
-  | { type: 'day'; text: string; delay: number }
-  | { type: 'in' | 'out'; text: string; time: string; delay: number }
-  | { type: 'typing'; delay: number }
-  | { type: 'emoji'; text: string; delay: number }
-  | { type: 'card'; big: string; unit: string; sub: string; ref: string; time: string; delay: number };
+function MiniIcon({
+  name,
+  color,
+  bg,
+}: {
+  name: keyof typeof Ionicons.glyphMap;
+  color: string;
+  bg: string;
+}) {
+  return (
+    <View style={{ width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: bg }}>
+      <Ionicons name={name} size={15} color={color} />
+    </View>
+  );
+}
 
-const CHAT_TIMELINE: ChatItem[] = [
-  { type: 'day', text: 'TODAY', delay: 400 },
-  { type: 'in', text: 'Can you send me $50 for dinner?', time: '9:41 AM', delay: 800 },
-  { type: 'typing', delay: 1000 },
-  { type: 'card', big: '$50.00', unit: 'USD', sub: 'You received a payment from Jack Green', ref: 'Completed', time: '9:42 AM', delay: 1600 },
-  { type: 'out', text: 'On my way! 🍕', time: '9:42 AM', delay: 1200 },
-  { type: 'emoji', text: '🙏', delay: 600 },
-];
+function FintechShowcase({ isDark, bg, t }: { isDark: boolean; bg: string; t: Translate }) {
+  const tone = palette(isDark, bg);
+  const float = useSharedValue(0);
+  const pulse = useSharedValue(1);
 
-function PhoneMockup({ isDark }: { isDark: boolean }) {
-  /* Color tokens — exact match to client ScreenChat */
-  const c = isDark
-    ? { bg: '#0e0e10', headerBg: '#161618', surface: '#1f1f23',
-        border: 'rgba(255,255,255,0.07)', fg: '#ffffff', muted: '#8a8a92', faint: '#5b5b63' }
-    : { bg: '#ffffff', headerBg: '#f6f6f7', surface: '#f0f0f2',
-        border: 'rgba(0,0,0,0.07)', fg: '#15140f', muted: '#8b897e', faint: '#b6b4a8' };
-  const accent = '#226dff';
-  const green = '#3ecf6e';
-
-  /* Sequential reveal */
-  const [n, setN] = useState(0);
   useEffect(() => {
-    const atEnd = n >= CHAT_TIMELINE.length;
-    const delay = atEnd ? 3000 : CHAT_TIMELINE[n].delay;
-    const id = setTimeout(() => setN(atEnd ? 0 : n + 1), delay);
-    return () => clearTimeout(id);
-  }, [n]);
+    float.value = withRepeat(withTiming(1, { duration: 3800, easing: Easing.inOut(Easing.quad) }), -1, true);
+    pulse.value = withRepeat(withTiming(1.012, { duration: 2800, easing: Easing.inOut(Easing.quad) }), -1, true);
+  }, [float, pulse]);
 
-  /* Reanimated entrance values */
-  const msgOp = useSharedValue(0);
-  const msgY = useSharedValue(10);
-  useEffect(() => {
-    msgOp.value = 0;
-    msgY.value = 10;
-    msgOp.value = withSpring(1, { damping: 18, stiffness: 200 });
-    msgY.value = withSpring(0, { damping: 18, stiffness: 200 });
-  }, [n, msgOp, msgY]);
-
-  const msgStyle = useAnimatedStyle(() => ({
-    opacity: msgOp.value,
-    transform: [{ translateY: msgY.value }],
+  const phoneFloat = useAnimatedStyle(() => ({
+    transform: [{ translateY: -4 * float.value }, { scale: pulse.value }],
   }));
-
-  const renderItem = (it: ChatItem, i: number) => {
-    if (it.type === 'day') {
-      return (
-        <Animated.View key={`day-${i}`} style={[{ alignSelf: 'center' }, msgStyle]}>
-          <View style={{
-            backgroundColor: c.surface, borderWidth: 1, borderColor: c.border,
-            borderRadius: 100, paddingHorizontal: 10, paddingVertical: 3,
-          }}>
-            <Text style={{ fontSize: 8, color: c.muted, fontWeight: '800', letterSpacing: 0.6 }}>{it.text}</Text>
-          </View>
-        </Animated.View>
-      );
-    }
-    if (it.type === 'emoji') {
-      return (
-        <Animated.View key={`emoji-${i}`} style={[{ alignSelf: 'flex-start' }, msgStyle]}>
-          <Text style={{ fontSize: 22, lineHeight: 26 }}>{it.text}</Text>
-        </Animated.View>
-      );
-    }
-    if (it.type === 'typing') {
-      return (
-        <Animated.View key={`typing-${i}`} style={[{ alignSelf: 'flex-start' }, msgStyle]}>
-          <View style={{
-            backgroundColor: c.surface, borderWidth: 1, borderColor: c.border,
-            borderRadius: 14, borderBottomLeftRadius: 4,
-            paddingHorizontal: 12, paddingVertical: 10, flexDirection: 'row', gap: 4,
-          }}>
-            {[0, 1, 2].map((d) => (
-              <View key={d} style={{
-                width: 5, height: 5, borderRadius: 2.5, backgroundColor: c.muted,
-                opacity: 0.4 + d * 0.3,
-              }} />
-            ))}
-          </View>
-        </Animated.View>
-      );
-    }
-    if (it.type === 'card') {
-      return (
-        <Animated.View key={`card-${i}`} style={[{ alignSelf: 'flex-start', width: '78%' }, msgStyle]}>
-          <View style={{
-            backgroundColor: c.surface, borderWidth: 1, borderColor: c.border,
-            borderRadius: 14, padding: 10, gap: 8,
-          }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-              <View style={{
-                width: 28, height: 28, borderRadius: 14,
-                backgroundColor: isDark ? 'rgba(62,207,110,0.12)' : 'rgba(62,207,110,0.14)',
-                borderWidth: 2, borderColor: green,
-                alignItems: 'center', justifyContent: 'center',
-              }}>
-                <Ionicons name="checkmark" size={14} color={green} />
-              </View>
-              <View>
-                <Text style={{ fontSize: 7, color: c.muted, fontWeight: '800', letterSpacing: 0.5 }}>YOU RECEIVED</Text>
-                <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 4 }}>
-                  <Text style={{ fontSize: 14, color: c.fg, fontWeight: '800' }}>{it.big}</Text>
-                  <Text style={{ fontSize: 9, color: c.muted, fontWeight: '700' }}>{it.unit}</Text>
-                </View>
-              </View>
-            </View>
-            <Text style={{ fontSize: 9, color: c.fg, fontWeight: '700' }}>{it.sub}</Text>
-            <View style={{ height: 1, backgroundColor: c.border }} />
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
-                <View style={{ width: 5, height: 5, borderRadius: 2.5, backgroundColor: green }} />
-                <Text style={{ fontSize: 7, color: c.faint, fontWeight: '700', letterSpacing: 0.4 }}>{it.ref}</Text>
-              </View>
-              <Text style={{ fontSize: 7, color: c.faint, fontWeight: '700' }}>{it.time}</Text>
-            </View>
-          </View>
-        </Animated.View>
-      );
-    }
-    return (
-      <Animated.View key={`msg-${i}`} style={[{ alignSelf: it.type === 'out' ? 'flex-end' : 'flex-start', maxWidth: '82%' }, msgStyle]}>
-        <View style={{ gap: 2 }}>
-          <View style={{
-            backgroundColor: it.type === 'out' ? accent : c.surface,
-            borderWidth: it.type === 'in' ? 1 : 0,
-            borderColor: it.type === 'in' ? c.border : 'transparent',
-            borderRadius: 14,
-            borderBottomRightRadius: it.type === 'out' ? 4 : 14,
-            borderBottomLeftRadius: it.type === 'in' ? 4 : 14,
-            paddingHorizontal: 11, paddingVertical: 8,
-          }}>
-            <Text style={{
-              fontSize: 10, color: it.type === 'out' ? '#fff' : c.fg,
-              fontWeight: '500', lineHeight: 14,
-            }}>{it.text}</Text>
-          </View>
-          <Text style={{ fontSize: 7, color: c.faint, paddingHorizontal: 3, alignSelf: it.type === 'out' ? 'flex-end' : 'flex-start' }}>
-            {it.time}
-          </Text>
-        </View>
-      </Animated.View>
-    );
-  };
+  const cardFloat = useAnimatedStyle(() => ({ transform: [{ translateY: 3 * float.value }, { rotate: '-2deg' }] }));
+  const chatFloat = useAnimatedStyle(() => ({ transform: [{ translateY: -2 + 4 * float.value }] }));
 
   return (
-    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-      <View style={{
-        width: 220, height: 340, borderRadius: 36,
-        backgroundColor: c.bg,
-        borderWidth: 1.5,
-        borderColor: isDark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.08)',
-        overflow: 'hidden',
-        shadowColor: '#000',
-        shadowOpacity: isDark ? 0.55 : 0.10,
-        shadowOffset: { width: 0, height: 20 },
-        shadowRadius: 40,
-        elevation: 8,
-      }}>
-        {/* Thread — bubbles only, no header, no composer */}
-        <View style={{ flex: 1, paddingHorizontal: 12, paddingVertical: 8, justifyContent: 'flex-end', gap: 6 }}>
-          {CHAT_TIMELINE.slice(0, n).map((it, i) => renderItem(it, i))}
+    <View style={showcaseStyles.wrap}>
+      <Animated.View
+        style={[
+          showcaseStyles.phone,
+          phoneFloat,
+          {
+            backgroundColor: bg,
+            borderColor: tone.border,
+            shadowOpacity: tone.shadow,
+          },
+        ]}
+      >
+        <View style={showcaseStyles.appHeader}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7 }}>
+            <Image source={require('../../../assets/icon-color.png')} style={{ width: 20, height: 20 }} resizeMode="contain" />
+            <View>
+              <Text style={{ color: tone.fg, fontSize: 12, fontWeight: '900', letterSpacing: 0 }}>tazdan</Text>
+              <Text style={{ color: tone.faint, fontSize: 8.5, fontWeight: '700', letterSpacing: 0 }}>@nasser</Text>
+            </View>
+          </View>
+          <View style={[showcaseStyles.avatar, { backgroundColor: tone.surface, borderColor: tone.border }]}>
+            <Text style={{ color: tone.fg, fontSize: 10, fontWeight: '900', letterSpacing: 0 }}>NM</Text>
+          </View>
         </View>
 
+        <View style={showcaseStyles.balanceBlock}>
+          <Text style={{ color: tone.muted, fontSize: 10.5, fontWeight: '700', letterSpacing: 0 }}>
+            {t('home.totalBalance')}
+          </Text>
+          <Text style={{ color: tone.fg, fontSize: 33, fontWeight: '900', letterSpacing: 0, fontVariant: ['tabular-nums'] }}>
+            $12,840
+            <Text style={{ color: tone.muted, fontSize: 19, fontWeight: '800', letterSpacing: 0 }}>.92</Text>
+          </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+            <Text style={{ color: tone.faint, fontSize: 9.5, fontWeight: '700', letterSpacing: 0 }}>+$360.24</Text>
+            <View style={[showcaseStyles.deltaPill, { backgroundColor: `${GREEN}1F`, borderColor: `${GREEN}40` }]}>
+              <Ionicons name="caret-up" size={8} color={GREEN} />
+              <Text style={{ color: GREEN, fontSize: 9.5, fontWeight: '900', letterSpacing: 0 }}>2.88%</Text>
+            </View>
+          </View>
+        </View>
+
+        <View style={showcaseStyles.actionRow}>
+          <MockAction icon="trending-up-outline" label={t('action.buy')} bg={ACCENT} fg="#FFFFFF" />
+          <MockAction icon="trending-down-outline" label={t('action.sell')} bg={tone.raised} fg={tone.fg} border={tone.border} />
+          <MockAction icon="paper-plane-outline" label={t('action.send')} bg={tone.raised} fg={tone.fg} border={tone.border} />
+          <MockAction icon="download-outline" label={t('action.topup')} bg={`${ACCENT}22`} fg={isDark ? '#8BBCE8' : '#3E78AE'} border={`${ACCENT}55`} />
+        </View>
+
+        <View style={showcaseStyles.middleRow}>
+          <Animated.View style={[showcaseStyles.cardPreview, cardFloat, { backgroundColor: isDark ? '#20242B' : '#111214' }]}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Text style={{ color: '#FAFAFA', fontSize: 10, fontWeight: '900', letterSpacing: 0 }}>{t('wallet.cards')}</Text>
+              <Ionicons name="wifi" size={14} color="rgba(250,250,250,0.78)" />
+            </View>
+            <View style={{ width: 25, height: 18, borderRadius: 4, backgroundColor: GOLD, opacity: 0.85 }} />
+            <Text style={{ color: 'rgba(250,250,250,0.70)', fontSize: 9.5, fontWeight: '800', letterSpacing: 0 }}>**** 0488</Text>
+          </Animated.View>
+
+          <Animated.View style={[showcaseStyles.payPreview, chatFloat, { backgroundColor: tone.surface, borderColor: tone.border }]}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7 }}>
+              <MiniIcon name="chatbubble-ellipses" color={ACCENT} bg={`${ACCENT}22`} />
+              <View style={{ flex: 1 }}>
+                <Text numberOfLines={1} style={{ color: tone.fg, fontSize: 10.5, fontWeight: '900', letterSpacing: 0 }}>
+                  {t('nav.messages')}
+                </Text>
+                <Text numberOfLines={1} style={{ color: tone.muted, fontSize: 8.5, fontWeight: '700', letterSpacing: 0 }}>
+                  {t('action.send')} $120
+                </Text>
+              </View>
+            </View>
+            <View style={{ alignSelf: 'flex-end', paddingHorizontal: 9, height: 22, borderRadius: 11, alignItems: 'center', justifyContent: 'center', backgroundColor: ACCENT }}>
+              <Text style={{ color: '#FFFFFF', fontSize: 9, fontWeight: '900', letterSpacing: 0 }}>{t('action.send')}</Text>
+            </View>
+          </Animated.View>
+        </View>
+
+        <View style={[showcaseStyles.assetsPanel, { backgroundColor: tone.surface, borderColor: tone.border }]}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 7 }}>
+            <Text style={{ color: tone.fg, fontSize: 12, fontWeight: '900', letterSpacing: 0 }}>{t('home.assets')}</Text>
+            <Text style={{ color: tone.muted, fontSize: 9, fontWeight: '800', letterSpacing: 0 }}>{t('onboard.feature.realRate')}</Text>
+          </View>
+          <AssetPreview symbol="BTC" icon="logo-bitcoin" iconColor={GOLD} name="Bitcoin" value="$8,420.00" change="+4.12%" tone={tone} />
+          <AssetPreview symbol="USDT" icon="logo-usd" iconColor={GREEN} name="Tether" value="$3,200.00" change="+0.01%" tone={tone} />
+        </View>
+      </Animated.View>
+    </View>
+  );
+}
+
+function MockAction({
+  icon,
+  label,
+  bg,
+  fg,
+  border,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  bg: string;
+  fg: string;
+  border?: string;
+}) {
+  return (
+    <View style={{ flex: 1, minWidth: 0, alignItems: 'center' }}>
+      <View style={{ width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', backgroundColor: bg, borderWidth: border ? 1 : 0, borderColor: border }}>
+        <Ionicons name={icon} size={16} color={fg} />
+      </View>
+      <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.72} style={{ maxWidth: '100%', marginTop: 4, color: fg === '#FFFFFF' ? 'rgba(247,248,250,0.86)' : fg, fontSize: 9, fontWeight: '800', letterSpacing: 0 }}>
+        {label}
+      </Text>
+    </View>
+  );
+}
+
+function AssetPreview({
+  symbol,
+  icon,
+  iconColor,
+  name,
+  value,
+  change,
+  tone,
+}: {
+  symbol: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  iconColor: string;
+  name: string;
+  value: string;
+  change: string;
+  tone: ReturnType<typeof palette>;
+}) {
+  return (
+    <View style={showcaseStyles.assetRow}>
+      <MiniIcon name={icon} color={iconColor} bg={`${iconColor}20`} />
+      <View style={{ flex: 1 }}>
+        <Text style={{ color: tone.fg, fontSize: 11, fontWeight: '900', letterSpacing: 0 }}>{symbol}</Text>
+        <Text style={{ color: tone.muted, fontSize: 8.5, fontWeight: '700', letterSpacing: 0 }}>{name}</Text>
+      </View>
+      <View style={{ alignItems: 'flex-end' }}>
+        <Text style={{ color: tone.fg, fontSize: 10.5, fontWeight: '900', letterSpacing: 0 }}>{value}</Text>
+        <Text style={{ color: GREEN, fontSize: 8.5, fontWeight: '900', letterSpacing: 0 }}>{change}</Text>
       </View>
     </View>
   );
 }
 
-/* ═══════════════════════════════════════════════════════════════════
-   BRAND ICON — large tazdan icon with breathing pulse
-   ═══════════════════════════════════════════════════════════════════ */
+const showcaseStyles = StyleSheet.create({
+  wrap: {
+    width: Math.min(W - 58, 292),
+    height: 404,
+    alignSelf: 'center',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  phone: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 34,
+    padding: 14,
+    borderWidth: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 18 },
+    shadowRadius: 32,
+    elevation: 8,
+    overflow: 'hidden',
+  },
+  appHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  avatar: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  balanceBlock: {
+    alignItems: 'center',
+    marginTop: 16,
+    gap: 3,
+  },
+  deltaPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    paddingHorizontal: 6,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: 1,
+  },
+  actionRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 15,
+  },
+  middleRow: {
+    flexDirection: 'row',
+    gap: 9,
+    marginTop: 14,
+  },
+  cardPreview: {
+    flex: 0.94,
+    height: 76,
+    borderRadius: 20,
+    padding: 11,
+    justifyContent: 'space-between',
+  },
+  payPreview: {
+    flex: 1,
+    height: 76,
+    borderRadius: 20,
+    borderWidth: 1,
+    padding: 9,
+    justifyContent: 'space-between',
+  },
+  assetsPanel: {
+    marginTop: 12,
+    borderRadius: 22,
+    borderWidth: 1,
+    padding: 11,
+    gap: 2,
+  },
+  assetRow: {
+    minHeight: 37,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 9,
+  },
+});
 
-function BrandIcon({ isDark }: { isDark: boolean }) {
+/* -------------------------------------------------------------------------- */
+/* Variant 3 - final launch moment                                            */
+/* -------------------------------------------------------------------------- */
+
+function LaunchPanel({ isDark, bg, t }: { isDark: boolean; bg: string; t: Translate }) {
+  const tone = palette(isDark, bg);
   const pulse = useSharedValue(1);
-  // The brand MARK in its true blue (icon-color) — sits under the "Join"
-  // word for the final onboarding lockup.
-  const iconSrc = require('../../../assets/icon-color.png');
 
   useEffect(() => {
-    pulse.value = withRepeat(
-      withTiming(1.08, { duration: 2200, easing: Easing.inOut(Easing.quad) }),
-      -1, true,
-    );
+    pulse.value = withRepeat(withTiming(1.035, { duration: 2800, easing: Easing.inOut(Easing.quad) }), -1, true);
   }, [pulse]);
 
-  const animatedStyle = useAnimatedStyle(() => ({
+  const panelStyle = useAnimatedStyle(() => ({
     transform: [{ scale: pulse.value }],
   }));
 
   return (
-    <Animated.View style={animatedStyle}>
-      <Image
-        source={iconSrc}
-        style={{ width: 84, height: 84 }}
-        resizeMode="contain"
-      />
-    </Animated.View>
+    <View style={launchStyles.wrap}>
+      <View pointerEvents="none" style={launchStyles.shaderBed}>
+        <ShaderLines opacity={isDark ? 0.10 : 0.08} style={launchStyles.shaderLayer} />
+      </View>
+
+      <Animated.View
+        style={[
+          launchStyles.panel,
+          panelStyle,
+          {
+            backgroundColor: isDark ? 'rgba(255,255,255,0.075)' : 'rgba(255,255,255,0.84)',
+            borderColor: tone.border,
+            shadowOpacity: tone.shadow,
+          },
+        ]}
+      >
+        <View style={[launchStyles.iconPlate, { backgroundColor: isDark ? 'rgba(255,255,255,0.10)' : '#FFFFFF', borderColor: tone.border }]}>
+          <Image source={require('../../../assets/icon-color.png')} style={{ width: 72, height: 72 }} resizeMode="contain" />
+        </View>
+        <View style={{ alignItems: 'center', gap: 9 }}>
+          <Text style={{ color: tone.fg, fontSize: 30, fontWeight: '900', letterSpacing: 0, textAlign: 'center' }}>
+            {t('onboard.title.3')}
+          </Text>
+          <Text style={{ color: tone.muted, fontSize: 15, fontWeight: '700', lineHeight: 20, letterSpacing: 0, textAlign: 'center', paddingHorizontal: 6 }}>
+            {t('onboard.slogan')}
+          </Text>
+        </View>
+        <View style={{ flexDirection: 'row', gap: 8, marginTop: 4 }}>
+          {[t('onboard.feature.buySell'), t('onboard.feature.transfer'), t('onboard.feature.cards')].map((label) => (
+            <View key={label} style={[launchStyles.launchPill, { backgroundColor: tone.inset, borderColor: tone.border }]}>
+              <Text numberOfLines={1} style={{ color: tone.fg, fontSize: 10.5, fontWeight: '800', letterSpacing: 0 }}>
+                {label}
+              </Text>
+            </View>
+          ))}
+        </View>
+      </Animated.View>
+    </View>
   );
 }
 
-/* ═══════════════════════════════════════════════════════════════════
-   VARIANT 3 — Breathing brand glow
-   ═══════════════════════════════════════════════════════════════════ */
-
-function BrandGlow({ isDark }: { isDark: boolean }) {
-  const opacity = useSharedValue(isDark ? 0.22 : 0.12);
-  useEffect(() => {
-    const lo = isDark ? 0.18 : 0.08;
-    const hi = isDark ? 0.32 : 0.18;
-    opacity.value = lo;
-    opacity.value = withRepeat(
-      withTiming(hi, { duration: 3200, easing: Easing.inOut(Easing.quad) }),
-      -1, true,
-    );
-  }, [isDark, opacity]);
-
-  const style = useAnimatedStyle(() => ({ opacity: opacity.value }));
-
-  return (
-    <Animated.View pointerEvents="none" style={[glowStyles.glow, style]}>
-      <LinearGradient
-        colors={[brand.primaryDark, `${brand.primaryDark}00`]}
-        style={StyleSheet.absoluteFill}
-        start={{ x: 0.5, y: 0.5 }}
-        end={{ x: 1, y: 1 }}
-      />
-    </Animated.View>
-  );
-}
-
-const glowStyles = StyleSheet.create({
-  glow: {
+const launchStyles = StyleSheet.create({
+  wrap: {
+    width: Math.min(W - 42, 360),
+    height: 386,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  shaderBed: {
     position: 'absolute',
-    width: W * 1.6,
-    height: W * 1.6,
-    borderRadius: W * 0.8,
-    top: -W * 0.45,
+    width: W * 1.55,
+    height: W * 1.12,
+    borderRadius: W,
+    overflow: 'hidden',
+    opacity: 0.9,
+    transform: [{ scale: 1.18 }],
+  },
+  shaderLayer: {
+    transform: [{ scale: 1.45 }],
+  },
+  panel: {
+    width: '100%',
+    borderRadius: 34,
+    borderWidth: 1,
+    paddingHorizontal: 22,
+    paddingVertical: 26,
+    alignItems: 'center',
+    gap: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 22 },
+    shadowRadius: 38,
+    elevation: 9,
+  },
+  iconPlate: {
+    width: 112,
+    height: 112,
+    borderRadius: 34,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  launchPill: {
+    maxWidth: 98,
+    height: 30,
+    paddingHorizontal: 10,
+    borderRadius: 15,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });
 
-/* ═══════════════════════════════════════════════════════════════════
-   Exported hero
-   ═══════════════════════════════════════════════════════════════════ */
+/* -------------------------------------------------------------------------- */
+/* Exported hero                                                              */
+/* -------------------------------------------------------------------------- */
 
 export const OnboardingHero = memo(function OnboardingHero({ bg, variant = 1 }: Props) {
   const getIconUrl = useCoinIcons();
-  const normalizedBg = bg.toLowerCase();
-  const isDark = normalizedBg === '#000000' || normalizedBg === '#0a0a0b' || normalizedBg === '#111111';
-  const edgeMaskColor = bg;
-
-  const edgeLeft = (
-    <LinearGradient pointerEvents="none"
-      colors={[edgeMaskColor, `${edgeMaskColor}00`]}
-      start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }}
-      style={[sharedStyles.edgeMask, { left: 0 }]} />
-  );
-  const edgeRight = (
-    <LinearGradient pointerEvents="none"
-      colors={[`${edgeMaskColor}00`, edgeMaskColor]}
-      start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }}
-      style={[sharedStyles.edgeMask, { right: 0 }]} />
-  );
+  const t = useT();
+  const isDark = bgLuminance(bg) < 0.5;
 
   if (variant === 2) {
     return (
-      <View style={sharedStyles.root}>
-        <BrandGlow isDark={isDark} />
-        <PhoneMockup isDark={isDark} />
-        {edgeLeft}{edgeRight}
+      <View style={[sharedStyles.root, { backgroundColor: bg }]}>
+        <FintechShowcase isDark={isDark} bg={bg} t={t} />
       </View>
     );
   }
 
   if (variant === 3) {
     return (
-      <View style={sharedStyles.root}>
-        {/* Shader lines as a subtle backdrop — kept dim from the start so they
-            never fight the foreground lockup for contrast. */}
-        <ShaderLines opacity={0.28} />
-
-        {/* Centered lockup: "Join" (accent) stacked ABOVE the brand mark. */}
-        <View style={{ alignItems: 'center', justifyContent: 'center', zIndex: 2 }}>
-          <Text style={{
-            fontSize: 30, fontWeight: '800', color: ACCENT, letterSpacing: -0.8, marginBottom: 12,
-          }}>
-            Join
-          </Text>
-          <BrandIcon isDark={isDark} />
-        </View>
-
-        {edgeLeft}{edgeRight}
+      <View style={[sharedStyles.root, { backgroundColor: bg }]}>
+        <LaunchPanel isDark={isDark} bg={bg} t={t} />
       </View>
     );
   }
 
-  // Variant 1 — rows drift in ALTERNATING directions for visual rhythm, with
-  // staggered speeds for parallax depth. The whole carousel is skewed to lean
-  // right for a dynamic, premium look.
   return (
-    <View style={sharedStyles.root}>
-      <BrandGlow isDark={isDark} />
+    <View style={[sharedStyles.root, { backgroundColor: bg }]}>
       <View style={sharedStyles.skewedRows}>
-        <ScrollRow coins={ROW_A} reverse={false} getIconUrl={getIconUrl} speed={32000} />
+        <ScrollRow coins={ROW_A} reverse={false} getIconUrl={getIconUrl} speed={36000} />
         <View style={{ height: GAP }} />
-        <ScrollRow coins={ROW_B} reverse getIconUrl={getIconUrl} speed={26000} />
+        <ScrollRow coins={ROW_B} reverse getIconUrl={getIconUrl} speed={30000} />
         <View style={{ height: GAP }} />
-        <ScrollRow coins={ROW_C} reverse={false} getIconUrl={getIconUrl} speed={36000} />
+        <ScrollRow coins={ROW_C} reverse={false} getIconUrl={getIconUrl} speed={40000} />
         <View style={{ height: GAP }} />
-        <ScrollRow coins={ROW_D} reverse getIconUrl={getIconUrl} speed={28000} />
-        <View style={{ height: GAP }} />
-        <ScrollRow coins={ROW_E} reverse={false} getIconUrl={getIconUrl} speed={30000} />
+        <ScrollRow coins={ROW_D} reverse getIconUrl={getIconUrl} speed={33000} />
       </View>
-      {edgeLeft}{edgeRight}
     </View>
   );
 });
@@ -432,14 +557,6 @@ const sharedStyles = StyleSheet.create({
     justifyContent: 'center',
     overflow: 'hidden',
   },
-  rows: {
-    width: '100%',
-    alignItems: 'flex-start',
-    justifyContent: 'center',
-  },
-  // Skewed marquee — leans the rows to the right for a dynamic diagonal.
-  // scale 1.4 + extra width over-fills so the skew never reveals blank
-  // corners. rotate adds the lean; skewX deepens the right-leaning shear.
   skewedRows: {
     width: '160%',
     left: '-30%',
@@ -450,11 +567,6 @@ const sharedStyles = StyleSheet.create({
       { skewX: '-15deg' },
       { scale: 1.35 },
     ],
-  },
-  edgeMask: {
-    position: 'absolute',
-    top: 0, bottom: 0,
-    width: W * 0.12,
   },
 });
 

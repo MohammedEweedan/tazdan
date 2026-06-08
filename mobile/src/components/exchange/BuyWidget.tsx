@@ -4,7 +4,8 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { ActivityIndicator, Alert, Keyboard, Platform, Pressable, ScrollView, View, TextInput as RNTextInput, Modal, useWindowDimensions } from 'react-native';
+import { ActivityIndicator, Alert, Keyboard, KeyboardAvoidingView, Platform, Pressable, ScrollView, View, TextInput as RNTextInput, Modal, useWindowDimensions } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text, TextInput } from '@/components/ui/Text';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
@@ -176,6 +177,7 @@ export function BuyWidget({ defaultAsset, lockAsset = false }: BuyWidgetProps = 
   const tr = useT();
   const p = useThemedPalette();
   const locale = useI18n((s) => s.locale);
+  const insets = useSafeAreaInsets();
   const { height } = useWindowDimensions();
   const tight = height < 700;
   const compact = height < 780;
@@ -544,50 +546,41 @@ export function BuyWidget({ defaultAsset, lockAsset = false }: BuyWidgetProps = 
         const multiChain = !!networks && networks.length > 1;
         const currentLabel = networks?.find((n) => n.network === network)?.label ?? network;
         return (
-          <View style={{ flexDirection: 'row', gap: 10, marginBottom: 16 }}>
-            {/* Crypto picker — half */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 18 }}>
+            {/* Crypto picker — minimal, borderless */}
             <Pressable
               disabled={lockAsset}
               onPress={() => { if (lockAsset) return; Haptics.selectionAsync(); setAssetSheetOpen(true); }}
               style={({ pressed }) => ({
                 flex: 1, minWidth: 0,
-                flexDirection: 'row', alignItems: 'center', gap: 10,
-                backgroundColor: p.bgElev, borderRadius: 16,
-                borderWidth: 1, borderColor: p.border,
-                paddingHorizontal: 12, paddingVertical: 11,
-                opacity: pressed && !lockAsset ? 0.85 : 1,
+                flexDirection: 'row', alignItems: 'center', gap: 9,
+                paddingVertical: 4,
+                opacity: pressed && !lockAsset ? 0.6 : 1,
               })}
             >
-              <CoinAvatar sym={asset} size={30} color={meta.color} />
+              <CoinAvatar sym={asset} size={32} color={meta.color} />
               <View style={{ flex: 1, minWidth: 0 }}>
-                <Text style={{ color: p.fgFaint, fontSize: 10, fontWeight: '700', letterSpacing: 0.5 }}>{tr('buy.asset') || 'ASSET'}</Text>
-                <Text numberOfLines={1} style={{ color: p.fg, fontSize: 14, fontWeight: '700' }}>{asset}</Text>
+                <Text numberOfLines={1} style={{ color: p.fg, fontSize: 16, fontWeight: '700', letterSpacing: -0.3 }}>{asset}</Text>
+                <Text numberOfLines={1} style={{ color: p.fgFaint, fontSize: 11, fontWeight: '500' }}>{meta.label}</Text>
               </View>
-              {!lockAsset && <Ionicons name="chevron-down" size={14} color={p.fgMuted} />}
+              {!lockAsset && <Ionicons name="chevron-down" size={15} color={p.fgMuted} />}
             </Pressable>
 
-            {/* Chain selector — half */}
-            <Pressable
-              disabled={!multiChain}
-              onPress={() => { if (!multiChain) return; Haptics.selectionAsync(); setNetworkSheetOpen(true); }}
-              style={({ pressed }) => ({
-                flex: 1, minWidth: 0,
-                flexDirection: 'row', alignItems: 'center', gap: 10,
-                backgroundColor: p.bgElev, borderRadius: 16,
-                borderWidth: 1, borderColor: p.border,
-                paddingHorizontal: 12, paddingVertical: 11,
-                opacity: pressed && multiChain ? 0.85 : multiChain ? 1 : 0.7,
-              })}
-            >
-              <View style={{ width: 30, height: 30, borderRadius: 15, backgroundColor: p.bgRaised, alignItems: 'center', justifyContent: 'center' }}>
-                <Ionicons name="git-branch-outline" size={15} color={p.fgMuted} />
-              </View>
-              <View style={{ flex: 1, minWidth: 0 }}>
-                <Text style={{ color: p.fgFaint, fontSize: 10, fontWeight: '700', letterSpacing: 0.5 }}>{tr('common.network').toUpperCase()}</Text>
-                <Text numberOfLines={1} style={{ color: p.fg, fontSize: 14, fontWeight: '700' }}>{currentLabel}</Text>
-              </View>
-              {multiChain && <Ionicons name="chevron-down" size={14} color={p.fgMuted} />}
-            </Pressable>
+            {/* Chain selector — minimal chip, only when multi-chain */}
+            {multiChain && (
+              <Pressable
+                onPress={() => { Haptics.selectionAsync(); setNetworkSheetOpen(true); }}
+                style={({ pressed }) => ({
+                  flexDirection: 'row', alignItems: 'center', gap: 5,
+                  paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999,
+                  backgroundColor: p.pillBg,
+                  opacity: pressed ? 0.7 : 1,
+                })}
+              >
+                <Text numberOfLines={1} style={{ color: p.fgMuted, fontSize: 12, fontWeight: '600' }}>{currentLabel}</Text>
+                <Ionicons name="chevron-down" size={13} color={p.fgMuted} />
+              </Pressable>
+            )}
           </View>
         );
       })()}
@@ -631,11 +624,9 @@ export function BuyWidget({ defaultAsset, lockAsset = false }: BuyWidgetProps = 
 
       <View style={{ height: 10 }} />
 
-      {/* ── Quote panel — compact: one tight row + collapsible fees ── */}
+      {/* ── Quote line — minimal, borderless ── */}
       <View style={{
-        backgroundColor: p.bgElev, borderRadius: 14,
-        borderWidth: 1, borderColor: p.border,
-        paddingHorizontal: 14, paddingVertical: 10, marginBottom: 10,
+        paddingHorizontal: 4, paddingVertical: 6, marginBottom: 6,
       }}>
         {loading ? (
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
@@ -802,21 +793,19 @@ export function BuyWidget({ defaultAsset, lockAsset = false }: BuyWidgetProps = 
       {/* ══════════════════════════════════════════════════════════════
           ASSET PICKER — full Binance search
       ══════════════════════════════════════════════════════════════ */}
-      <Modal visible={assetSheetOpen} transparent animationType="slide" onRequestClose={() => setAssetSheetOpen(false)}>
-        <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' }} onPress={() => setAssetSheetOpen(false)}>
-          <Pressable
-            style={{ backgroundColor: p.bg, borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingTop: 10, maxHeight: '90%' }}
-            onPress={(e) => e.stopPropagation()}
-          >
-            {/* Handle */}
-            <View style={{ alignItems: 'center', marginBottom: 12 }}>
-              <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: p.border }} />
-            </View>
-
-            <Text style={{ color: p.fg, fontSize: 20, fontWeight: '500', letterSpacing: 0, paddingHorizontal: 20, marginBottom: 16 }}>
-              Search any token
+      <Modal visible={assetSheetOpen} animationType="slide" presentationStyle="fullScreen" onRequestClose={() => setAssetSheetOpen(false)}>
+        <View style={{ flex: 1, backgroundColor: p.bg, paddingTop: insets.top }}>
+          {/* Header: title + close */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 10 }}>
+            <Text style={{ color: p.fg, fontSize: 20, fontWeight: '700', letterSpacing: -0.4 }}>
+              {tr('buy.searchTitle') || 'Search any token'}
             </Text>
+            <Pressable onPress={() => setAssetSheetOpen(false)} hitSlop={8} style={{ width: 34, height: 34, borderRadius: 17, backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border, alignItems: 'center', justifyContent: 'center' }}>
+              <Ionicons name="close" size={18} color={p.fg} />
+            </Pressable>
+          </View>
 
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
             {/* Search bar */}
             <View style={{ flexDirection: 'row', alignItems: 'center', marginHorizontal: 20, marginBottom: 4, backgroundColor: p.bgElev, borderRadius: 16, paddingHorizontal: 14, paddingVertical: 12, borderWidth: 1, borderColor: p.border, gap: 10 }}>
               <Ionicons name="search" size={18} color={p.fgMuted} />
@@ -900,9 +889,9 @@ export function BuyWidget({ defaultAsset, lockAsset = false }: BuyWidgetProps = 
                       marginHorizontal: isSelected ? -10 : 0,
                     })}
                   >
-                    <CoinAvatar sym={item.symbol} size={46} color={m.color} />
-                    <View style={{ flex: 1 }}>
-                      <Text style={{ color: p.fg, fontSize: 15, fontWeight: '500' }}>{m.label}</Text>
+                    <CoinAvatar sym={item.symbol} size={42} color={m.color} />
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <Text numberOfLines={1} style={{ color: p.fg, fontSize: 15, fontWeight: '600' }}>{(item as AssetSearchResult).name ?? m.label}</Text>
                       <Text style={{ color: p.fgMuted, fontSize: 12, marginTop: 1 }}>{item.symbol}</Text>
                     </View>
                     <View style={{ alignItems: 'flex-end', gap: 4 }}>
@@ -979,8 +968,8 @@ export function BuyWidget({ defaultAsset, lockAsset = false }: BuyWidgetProps = 
                 </View>
               )}
             </ScrollView>
-          </Pressable>
-        </Pressable>
+          </KeyboardAvoidingView>
+        </View>
       </Modal>
 
       {/* ══════════════════════════════════════════════════════════════

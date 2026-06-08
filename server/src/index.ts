@@ -363,6 +363,19 @@ io.on('connection', (socket) => {
 
   socket.on('subscribe:prices', () => socket.join('prices'));
 
+  // Asset-discussion live feed — join/leave the per-symbol room as the user
+  // opens/closes the Discussions tab on an asset page.
+  socket.on('discussion:join', (symbol: string) => {
+    if (typeof symbol === 'string' && symbol.length <= 24) {
+      socket.join(`discussion:${symbol.toUpperCase()}`);
+    }
+  });
+  socket.on('discussion:leave', (symbol: string) => {
+    if (typeof symbol === 'string' && symbol.length <= 24) {
+      socket.leave(`discussion:${symbol.toUpperCase()}`);
+    }
+  });
+
   // Legacy explicit subscribe (kept for backward compat with older clients).
   socket.on('subscribe:orders', (userId: string) => socket.join(`user:${userId}`));
 

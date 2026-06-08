@@ -10,9 +10,6 @@ const VERT = `
 `;
 
 const FRAG = `
-  #define TWO_PI 6.2831853072
-  #define PI 3.14159265359
-
   precision highp float;
   uniform vec2 resolution;
   uniform float time;
@@ -29,17 +26,19 @@ const FRAG = `
     uv.x = floor(uv.x * vScreenSize.x / fMosaicScal.x) / (vScreenSize.x / fMosaicScal.x);
     uv.y = floor(uv.y * vScreenSize.y / fMosaicScal.y) / (vScreenSize.y / fMosaicScal.y);
 
-    float t = time * 0.06 + random(uv.x) * 0.4;
-    float lineWidth = 0.004;
+    float t = time * 0.04 + random(uv.x) * 0.4;
+    float lineWidth = 0.0028;
 
-    vec3 color = vec3(0.0);
+    float intensity = 0.0;
     for (int j = 0; j < 3; j++) {
       for (int i = 0; i < 5; i++) {
-        color[j] += lineWidth * float(i * i) / abs(fract(t - 0.01 * float(j) + float(i) * 0.01) * 1.0 - length(uv));
+        intensity += lineWidth * float(i * i) / abs(fract(t - 0.01 * float(j) + float(i) * 0.01) - length(uv));
       }
     }
 
-    gl_FragColor = vec4(color[2], color[1], color[0], 1.0);
+    intensity = clamp(intensity * 0.18, 0.0, 0.24);
+    vec3 lineColor = vec3(0.388, 0.631, 0.859);
+    gl_FragColor = vec4(lineColor, intensity);
   }
 `;
 
@@ -54,9 +53,10 @@ function compileShader(gl: WebGLRenderingContext, type: number, src: string): We
 }
 
 /**
- * Animated shader lines (original RGB colours).
- *  - `dimAfterMs` fades the whole layer down to `dimTo` opacity after a delay
- *    (used on onboarding so the shader recedes after the first few seconds).
+ * Animated shader lines.
+ *
+ * The shader emits transparent accent strokes only. It intentionally does not
+ * paint an opaque canvas background, which keeps onboarding backgrounds uniform.
  */
 export function ShaderLines({
   style,
@@ -95,6 +95,9 @@ export function ShaderLines({
     gl.attachShader(program, frag);
     gl.linkProgram(program);
     gl.useProgram(program);
+    gl.clearColor(0, 0, 0, 0);
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 
     const positionAttr = gl.getAttribLocation(program, 'position');
     const timeLoc = gl.getUniformLocation(program, 'time');
@@ -114,6 +117,7 @@ export function ShaderLines({
       rafRef.current = requestAnimationFrame(render);
       t += 0.05;
       gl.uniform1f(timeLoc, t);
+      gl.clear(gl.COLOR_BUFFER_BIT);
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
       gl.endFrameEXP();
     };

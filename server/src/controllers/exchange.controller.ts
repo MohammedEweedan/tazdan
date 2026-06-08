@@ -331,7 +331,7 @@ export class ExchangeController {
         }
       }
 
-      let results: Array<{ symbol: string; price: number; change24h: number; volume24h: number }>;
+      let results: Array<{ symbol: string; price: number; change24h: number; volume24h: number; name?: string }>;
       if (allTickers && !fromFallback) {
         // ── 3a. Filter + rank the full Binance list ─────────────
         results = (allTickers as TickerRow[])
@@ -345,6 +345,30 @@ export class ExchangeController {
           .filter((t) => !q || t.symbol.includes(q))
           .sort((a, b) => b.volume24h - a.volume24h)
           .slice(0, 50);
+
+        // ── 3a-bis. Broaden coverage with CoinGecko search — it aggregates
+        //   listings across EVERY exchange, so tokens not on Binance still
+        //   surface. Merge any coins the Binance list missed (no live price
+        //   from CG search; the price engine fills it on selection). Only when
+        //   the user has typed a query (CG search needs a term). ───
+        if (q && q.length >= 2) {
+          try {
+            const cg = await axios.get<{ coins: Array<{ symbol: string; name: string; market_cap_rank: number | null }> }>(
+              `https://api.coingecko.com/api/v3/search?query=${encodeURIComponent(q)}`,
+              { timeout: 6_000 },
+            );
+            const have = new Set(results.map((r) => r.symbol));
+            const extra = (cg.data?.coins ?? [])
+              .map((c) => ({ symbol: c.symbol.toUpperCase(), name: c.name, rank: c.market_cap_rank ?? 9e9 }))
+              .filter((c) => c.symbol.includes(q) && !have.has(c.symbol))
+              .sort((a, b) => a.rank - b.rank)
+              .slice(0, 25)
+              .map((c) => ({ symbol: c.symbol, price: 0, change24h: 0, volume24h: 0, name: c.name }));
+            results = [...results, ...extra];
+          } catch {
+            /* CG is best-effort — Binance results already returned */
+          }
+        }
       } else {
         // ── 3b. Fallback: curated supported assets, priced resiliently ──
         const { getMarketPrice } = await import('../services/exchange/priceEngine.service');
@@ -362,6 +386,27 @@ export class ExchangeController {
           }),
         );
         results = priced.filter((r): r is NonNullable<typeof r> => r !== null);
+
+        // When Binance is blocked, still give broad coverage via CoinGecko's
+        // cross-exchange search so the picker isn't limited to 14 assets.
+        if (q && q.length >= 2) {
+          try {
+            const cg = await axios.get<{ coins: Array<{ symbol: string; name: string; market_cap_rank: number | null }> }>(
+              `https://api.coingecko.com/api/v3/search?query=${encodeURIComponent(q)}`,
+              { timeout: 6_000 },
+            );
+            const have = new Set(results.map((r) => r.symbol));
+            const extra = (cg.data?.coins ?? [])
+              .map((c) => ({ symbol: c.symbol.toUpperCase(), name: c.name, rank: c.market_cap_rank ?? 9e9 }))
+              .filter((c) => c.symbol.includes(q) && !have.has(c.symbol))
+              .sort((a, b) => a.rank - b.rank)
+              .slice(0, 25)
+              .map((c) => ({ symbol: c.symbol, price: 0, change24h: 0, volume24h: 0, name: c.name }));
+            results = [...results, ...extra];
+          } catch {
+            /* best-effort */
+          }
+        }
       }
 
       const payload = { results };

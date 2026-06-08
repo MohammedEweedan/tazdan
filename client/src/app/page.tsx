@@ -28,7 +28,7 @@ import {
   FiStar, FiBell, FiDollarSign, FiMessageCircle, FiUser,
   FiChevronLeft, FiChevronRight, FiMoreHorizontal, FiSmile, FiArrowUp,
   FiEye, FiSearch, FiChevronDown, FiChevronUp, FiMaximize2, FiClock,
-  FiLink,
+  FiLink, FiTrendingUp, FiTrendingDown, FiDownload,
 } from "react-icons/fi";
 import { FaApple, FaGooglePlay, FaApplePay, FaGooglePay, FaCcVisa, FaCcMastercard } from "react-icons/fa";
 import { SiRevolut } from "react-icons/si";
@@ -551,8 +551,8 @@ const ScreenDashboard = memo(function ScreenDashboard() {
   ];
 
   const fiat = [
-    { name: "US Dollar", amt: "991,357 USD", val: "$991,357.00", flag: "🇺🇸" },
-    { name: "Euro", amt: "8,797 EUR", val: "$9,500.76", flag: "🇪🇺" },
+    { name: "US Dollar", amt: "991,357 USD", val: "$991,357.00", flag: "$" },
+    { name: "Euro", amt: "8,797 EUR", val: "$9,500.76", flag: "€" },
   ];
 
   return (
@@ -587,8 +587,8 @@ const ScreenDashboard = memo(function ScreenDashboard() {
             <motion.div key={tick}
               initial={{ y: "55%", opacity: 0 }} animate={{ y: 0, opacity: 1 }}
               exit={{ y: "-55%", opacity: 0 }} transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}>
-              <Text style={{ fontSize: fs.balance }} color={APP.fg} fontWeight="800"
-                letterSpacing="-0.04em" lineHeight={1}>{snap.bal}</Text>
+              <Text style={{ fontSize: fs.balance }} color={APP.fg} fontWeight="600"
+                letterSpacing="-0.02em" lineHeight={1}>{snap.bal}</Text>
             </motion.div>
           </AnimatePresence>
         </Box>
@@ -617,25 +617,33 @@ const ScreenDashboard = memo(function ScreenDashboard() {
         </AnimatePresence>
       </HStack>
 
-      {/* Action buttons */}
-      <HStack px={fs.px} pb="calc(var(--ph)*0.026)" spacing="calc(var(--pw)*0.03)"
-        justify="center" flexShrink={0}>
-        {["Buy", "Sell", "Top up"].map((b) => (
-          <Flex key={b} style={{ height: fs.actH }} flex={1} bg={APP.ink} borderRadius="full"
-            align="center" justify="center" px="calc(var(--pw)*0.02)">
-            <Text style={{ fontSize: fs.actLabel }} color={APP.inkFg} fontWeight="700">{b}</Text>
-          </Flex>
-        ))}
-        <Flex style={{ width: fs.actH, height: fs.actH, borderRadius: "50%" }} bg={APP.ink}
-          align="center" justify="center" flexShrink={0}>
-          <Icon as={FiMoreHorizontal} color={APP.inkFg}
-            style={{ width: "calc(var(--ph)*0.024)", height: "calc(var(--ph)*0.024)" }} />
-        </Flex>
+      {/* Action buttons — vertical icon chips + labels (matches the app) */}
+      <HStack px={fs.px} pb="calc(var(--ph)*0.026)" spacing="calc(var(--pw)*0.02)"
+        justify="space-between" align="flex-start" flexShrink={0}>
+        {[
+          { label: "Buy",    icon: FiTrendingUp,   tone: "accent" },
+          { label: "Sell",   icon: FiTrendingDown, tone: "raised" },
+          { label: "Send",   icon: FiSend,         tone: "raised" },
+          { label: "Top up", icon: FiDownload,     tone: "accentSoft" },
+          { label: "More",   icon: FiMoreHorizontal, tone: "raised" },
+        ].map((b) => {
+          const bg = b.tone === "accent" ? APP.accent : b.tone === "accentSoft" ? "rgba(99,161,219,0.16)" : APP.surface;
+          const fg = b.tone === "accent" ? "#FFFFFF" : b.tone === "accentSoft" ? "#8BBCE8" : APP.fg;
+          return (
+            <VStack key={b.label} spacing="calc(var(--ph)*0.008)" flex={1} minW={0} align="center">
+              <Flex style={{ width: "calc(var(--ph)*0.062)", height: "calc(var(--ph)*0.062)", borderRadius: "50%" }}
+                bg={bg} align="center" justify="center">
+                <Icon as={b.icon} color={fg} style={{ width: "calc(var(--ph)*0.026)", height: "calc(var(--ph)*0.026)" }} />
+              </Flex>
+              <Text style={{ fontSize: "calc(var(--ph)*0.0145)", whiteSpace: "nowrap" }} color={APP.fgMuted} fontWeight="600">{b.label}</Text>
+            </VStack>
+          );
+        })}
       </HStack>
 
       {/* Tabs */}
       <HStack px={fs.px} spacing="calc(var(--pw)*0.06)" flexShrink={0}>
-        {["Assets", "Wallets", "Activity"].map((tab, i) => (
+        {["Assets", "Activity"].map((tab, i) => (
           <VStack key={tab} spacing="calc(var(--ph)*0.007)" align="center">
             <Text style={{ fontSize: fs.tab }} color={i === 0 ? APP.fg : APP.fgFaint}
               fontWeight={i === 0 ? 800 : 600}>{tab}</Text>
@@ -688,7 +696,7 @@ const ScreenDashboard = memo(function ScreenDashboard() {
             spacing="calc(var(--pw)*0.04)" borderTop={`1px solid ${APP.border}`}>
             <Flex style={{ width: fs.coinIcon, height: fs.coinIcon }}
               align="center" justify="center" flexShrink={0}>
-              <Text style={{ fontSize: "calc(var(--ph)*0.03)" }}>{a.flag}</Text>
+              <Text style={{ fontSize: "calc(var(--ph)*0.032)" }} color={APP.fg} fontWeight="700">{a.flag}</Text>
             </Flex>
             <VStack align="start" spacing="calc(var(--ph)*0.002)" flex={1} minW={0}>
               <Text style={{ fontSize: fs.asset }} color={APP.fg} fontWeight="700">{a.name}</Text>
@@ -1177,97 +1185,6 @@ const ScreenAssetDetail = memo(function ScreenAssetDetail() {
 });
 
 /* ═════════════════════════════════════════════════════════════════
-   TOKEN SEARCH SCREEN — matches the in-app "Search any token" sheet
-   ═════════════════════════════════════════════════════════════════ */
-const ScreenTokenSearch = memo(function ScreenTokenSearch() {
-  const APP = appTokens(usePhoneDark());
-  const px = "calc(var(--pw)*0.07)";
-  const fs = {
-    name:  "calc(var(--ph)*0.021)",
-    sym:   "calc(var(--ph)*0.0155)",
-    price: "calc(var(--ph)*0.019)",
-    pct:   "calc(var(--ph)*0.0135)",
-    label: "calc(var(--ph)*0.0135)",
-    input: "calc(var(--ph)*0.018)",
-  };
-  const tokens = [
-    { name: "Pepe",      sym: "PEPE",  price: "£0.00000381", pct: "+2.42%", up: true,  bg: "#dcefcf", emoji: "🐸" },
-    { name: "BONK",      sym: "BONK",  price: "£0.00000625", pct: "+2.80%", up: true,  bg: "#5fd6d3" },
-    { name: "Shiba Inu", sym: "SHIB",  price: "£0.00000584", pct: "+0.86%", up: true,  bg: "#f3d9d4", emoji: "🐕" },
-    { name: "BTTC",      sym: "BTTC",  price: "£0.00000032", pct: "-3.03%", up: false, bg: "#4cd07d" },
-    { name: "LUNC",      sym: "LUNC",  price: "£0.00007937", pct: "+3.32%", up: true,  bg: "#cf5b4e" },
-    { name: "FLOKI",     sym: "FLOKI", price: "£0.00003079", pct: "+2.19%", up: true,  bg: "#8fd36b" },
-    { name: "DOGS",      sym: "DOGS",  price: "£0.00005830", pct: "-1.69%", up: false, bg: "#6fcf97" },
-  ];
-
-  /* staggered result reveal loop */
-  const [shown, setShown] = useState(0);
-  useEffect(() => {
-    const atEnd = shown >= tokens.length;
-    const id = setTimeout(() => setShown(atEnd ? 0 : shown + 1), atEnd ? 2600 : 230);
-    return () => clearTimeout(id);
-  }, [shown, tokens.length]);
-
-  /* live-typing search query */
-  const SQ = "Pepe coin (PEPE)".split("");
-  const [si, setSi] = useState(0);
-  useEffect(() => {
-    const id = setTimeout(() => setSi((s) => (s > SQ.length + 9 ? 0 : s + 1)), 135);
-    return () => clearTimeout(id);
-  }, [si]);
-  const query = SQ.slice(0, Math.min(si, SQ.length));
-
-  return (
-    <SheetScreen title="Search any token" heightFrac={0.88}>
-      <Box flexShrink={0} px={px} pb="calc(var(--ph)*0.016)">
-        <HStack bg={APP.sheetCard} border={`1px solid ${APP.sheetBorder}`} borderRadius="full"
-          px="calc(var(--ph)*0.016)" py="calc(var(--ph)*0.013)" spacing="calc(var(--pw)*0.03)">
-          <Icon as={FiSearch} color={APP.sheetFaint}
-            style={{ width: "calc(var(--ph)*0.02)", height: "calc(var(--ph)*0.02)" }} />
-          <Text style={{ fontSize: fs.input }} color={query ? APP.sheetFg : APP.sheetFaint} fontWeight="500">
-            {query || "Bitcoin, ETH, SHIB, PEPE…"}
-          </Text>
-          <motion.div animate={{ opacity: [1, 1, 0, 0] }}
-            transition={{ duration: 0.9, repeat: Infinity }}
-            style={{ width: "1.5px", height: "calc(var(--ph)*0.022)", background: "#63a1db" }} />
-        </HStack>
-      </Box>
-      <Text flexShrink={0} px={px} pb="calc(var(--ph)*0.008)" style={{ fontSize: fs.label }}
-        color={APP.sheetFaint} fontWeight="800" letterSpacing="0.08em">FEATURED</Text>
-      <VStack align="stretch" spacing={0} flex={1} overflow="hidden">
-        <AnimatePresence initial={false}>
-          {tokens.slice(0, shown).map((tk) => (
-            <motion.div key={tk.sym} layout
-              initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}>
-              <HStack px={px} py="calc(var(--ph)*0.013)"
-                spacing="calc(var(--pw)*0.04)" borderTop={`1px solid ${APP.sheetBorder}`}>
-                <Flex style={{ width: "calc(var(--ph)*0.05)", height: "calc(var(--ph)*0.05)", borderRadius: "50%" }}
-                  bg={tk.bg} align="center" justify="center" flexShrink={0}>
-                  {tk.emoji && <Text style={{ fontSize: "calc(var(--ph)*0.026)" }}>{tk.emoji}</Text>}
-                </Flex>
-                <VStack align="start" spacing={0} flex={1} minW={0}>
-                  <Text style={{ fontSize: fs.name }} color={APP.sheetFg} fontWeight="800">{tk.name}</Text>
-                  <Text style={{ fontSize: fs.sym }} color={APP.sheetMuted} fontWeight="500">{tk.sym}</Text>
-                </VStack>
-                <VStack align="end" spacing="calc(var(--ph)*0.005)" flexShrink={0}>
-                  <Text style={{ fontSize: fs.price }} color={APP.sheetFg} fontWeight="700">{tk.price}</Text>
-                  <Box bg={tk.up ? APP.sheetGreenBg : "#fadfdb"} borderRadius="full"
-                    px="calc(var(--pw)*0.03)" py="calc(var(--ph)*0.003)">
-                    <Text style={{ fontSize: fs.pct }} fontWeight="700"
-                      color={tk.up ? APP.sheetGreen : "#d0463a"}>{tk.pct}</Text>
-                  </Box>
-                </VStack>
-              </HStack>
-            </motion.div>
-          ))}
-        </AnimatePresence>
-      </VStack>
-    </SheetScreen>
-  );
-});
-
-/* ═════════════════════════════════════════════════════════════════
    PAY WITH SCREEN — matches the in-app "Pay with" sheet
    ═════════════════════════════════════════════════════════════════ */
 const ScreenPayWith = memo(function ScreenPayWith() {
@@ -1337,51 +1254,6 @@ const ScreenPayWith = memo(function ScreenPayWith() {
         })}
       </VStack>
     </SheetScreen>
-  );
-});
-
-/* ═════════════════════════════════════════════════════════════════
-   PHONE FRAME — screens perfectly inset to match iphone-frame.png
-   ═════════════════════════════════════════════════════════════════ */
-const PhoneFrame = memo(function PhoneFrame({
-  unlockProgress,
-}: {
-  unlockProgress: MotionValue<number>;
-}) {
-  const dark = usePhoneDark();
-
-  return (
-    <Box
-      position="relative"
-      style={{ ...phoneVars, width: "var(--pw)", height: "var(--ph)" } as React.CSSProperties}
-      mx="auto"
-    >
-      {/* Screen sits perfectly flush inside the phone frame image */}
-      <Box
-        position="absolute"
-        style={screenInset as React.CSSProperties}
-        overflow="hidden"
-        bg={dark ? "#000000" : "#ffffff"}
-        /* shadow gives depth between screen and frame */
-        boxShadow={dark
-          ? "inset 0 0 0 1px rgba(255,255,255,0.04)"
-          : "inset 0 0 0 1px rgba(0,0,0,0.04)"}
-      >
-        <Box position="absolute" inset={0}>
-          <ScreenDashboard />
-        </Box>
-        <LockScreen unlockProgress={unlockProgress} />
-      </Box>
-
-      <NextImage
-        src="/iphone-frame.png"
-        alt=""
-        fill
-        priority
-        sizes="(max-width: 480px) 46vw, (max-width: 768px) 38vw, (max-width: 1024px) 28vw, 340px"
-        style={{ objectFit: "contain", pointerEvents: "none", zIndex: 10 }}
-      />
-    </Box>
   );
 });
 

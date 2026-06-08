@@ -1419,7 +1419,7 @@ export default function Cards() {
               {activeCard && (
                 <>
                   {/* ── CARD STATS ── */}
-                  <View style={{ marginHorizontal: 24, marginTop: 24, padding: 20, backgroundColor: p.bgElev, borderRadius: 20, borderWidth: 1, borderColor: p.border }}>
+                  <View style={{ marginHorizontal: 24, marginTop: 24, padding: 20, backgroundColor: p.bgElev, borderRadius: 18, borderWidth: 0 }}>
                     <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 16 }}>
                       <View>
                         <Text style={{ color: p.fgFaint, fontSize: 10, fontWeight: '700', letterSpacing: 0.8, marginBottom: 4 }}>{t('cards.cashbackEarned').toUpperCase()}</Text>
@@ -1585,7 +1585,7 @@ export default function Cards() {
                     <Text style={{ color: p.fg, fontSize: 16, fontWeight: '600', letterSpacing: -0.3, marginBottom: 12 }}>
                       {t('cards.recentSpending')}
                     </Text>
-                    <View style={{ backgroundColor: p.bgElev, borderRadius: 20, borderWidth: 1, borderColor: p.border, overflow: 'hidden' }}>
+                    <View style={{ backgroundColor: p.bgElev, borderRadius: 18, borderWidth: 0, overflow: 'hidden' }}>
                       {txsLoading ? (
                         <View style={{ padding: 24, alignItems: 'center' }}>
                           <ActivityIndicator color={p.fg} />

@@ -161,49 +161,8 @@ function SplashOverlay() {
         locations={[0, 0.5, 1]}
         style={StyleSheet.absoluteFillObject}
       />
-
       {/* WebGL shader lines — exact port of the web ShaderAnimation */}
       <ShaderLines />
-
-      {/* Moving scan beam */}
-      <Animated.View
-        style={[
-          {
-            position: 'absolute',
-            left: 0,
-            right: 0,
-            top: SH * 0.5,
-            height: SH * 0.5,
-          },
-          scanStyle,
-        ]}
-        pointerEvents="none"
-      >
-        <LinearGradient
-          colors={['transparent', 'rgba(255,255,255,0.08)', 'rgba(255,255,255,0.18)', 'rgba(255,255,255,0.08)', 'transparent']}
-          locations={[0, 0.3, 0.5, 0.7, 1]}
-          style={{ flex: 1 }}
-        />
-      </Animated.View>
-
-      {/* Logo */}
-      <Animated.View
-        entering={FadeIn.duration(600).delay(100)}
-        style={{
-          position: 'absolute',
-          top: 0, left: 0, right: 0, bottom: 0,
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 10,
-        }}
-        pointerEvents="none"
-      >
-        <Image
-          source={dark ? require('../assets/icon-white.png') : require('../assets/icon-black.png')}
-          style={{ width: 160, height: 64 }}
-          resizeMode="contain"
-        />
-      </Animated.View>
     </Animated.View>
   );
 }

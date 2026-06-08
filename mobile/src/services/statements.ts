@@ -107,11 +107,23 @@ export async function fetchStatementJson(filter: StatementFilter): Promise<State
 
 /* ── PDF rendering ───────────────────────────────────────────────── */
 
-const brandIconUri = Image.resolveAssetSource(require('../../assets/icon-white.png'))?.uri ?? '';
-const outfitRegularUri = Image.resolveAssetSource(require('@expo-google-fonts/outfit/400Regular/Outfit_400Regular.ttf'))?.uri ?? '';
-const outfitBoldUri = Image.resolveAssetSource(require('@expo-google-fonts/outfit/700Bold/Outfit_700Bold.ttf'))?.uri ?? '';
-const cairoRegularUri = Image.resolveAssetSource(require('@expo-google-fonts/cairo/400Regular/Cairo_400Regular.ttf'))?.uri ?? '';
-const cairoBoldUri = Image.resolveAssetSource(require('@expo-google-fonts/cairo/700Bold/Cairo_700Bold.ttf'))?.uri ?? '';
+// `Image.resolveAssetSource` only exists on native — on react-native-web it's
+// undefined and throws at import time, crashing the whole app. Guard it so the
+// module loads everywhere; the PDF/statements feature is native-only anyway.
+function assetUri(mod: number): string {
+  try {
+    const resolve = (Image as any)?.resolveAssetSource;
+    return typeof resolve === 'function' ? (resolve(mod)?.uri ?? '') : '';
+  } catch {
+    return '';
+  }
+}
+
+const brandIconUri = assetUri(require('../../assets/icon-white.png'));
+const outfitRegularUri = assetUri(require('@expo-google-fonts/outfit/400Regular/Outfit_400Regular.ttf'));
+const outfitBoldUri = assetUri(require('@expo-google-fonts/outfit/700Bold/Outfit_700Bold.ttf'));
+const cairoRegularUri = assetUri(require('@expo-google-fonts/cairo/400Regular/Cairo_400Regular.ttf'));
+const cairoBoldUri = assetUri(require('@expo-google-fonts/cairo/700Bold/Cairo_700Bold.ttf'));
 
 function cssFor(locale: Locale): string {
   const face = locale === 'ar'

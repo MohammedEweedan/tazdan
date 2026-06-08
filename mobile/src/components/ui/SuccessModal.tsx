@@ -4,10 +4,7 @@ import { Text } from '@/components/ui/Text';
 import { Ionicons } from '@expo/vector-icons';
 import { useThemedPalette } from '@/store/themeStore';
 
-const { width: W, height: H } = Dimensions.get('window');
-
-const EMOJIS = ['🎉', '✨', '🎊', '⭐', '💫', '🌟', '💎', '🚀', '🎁', '🔥', '🏆', '🌈'];
-const N = 18;
+const { height: H } = Dimensions.get('window');
 
 const CURRENCY_SYMBOLS: Record<string, string> = { USD: '$', EUR: '€', GBP: '£', AED: 'د.إ', SAR: '﷼' };
 function sym(c: string) { return CURRENCY_SYMBOLS[c] ?? (c + ' '); }
@@ -43,45 +40,16 @@ export const SuccessModal = memo(function SuccessModal({
   const slideY = useRef(new Animated.Value(H)).current;
   const backdropA = useRef(new Animated.Value(0)).current;
 
-  const particles = useRef(
-    Array.from({ length: N }, (_, i) => ({
-      y:       new Animated.Value(-80),
-      opacity: new Animated.Value(0),
-      x: (i / N) * W + (i % 2 === 0 ? 12 : -12),
-      emoji: EMOJIS[i % EMOJIS.length],
-      size:  16 + (i % 5) * 5,
-      delay: i * 75 + Math.floor(i * 40),
-      dur:   1800 + (i % 4) * 400,
-    }))
-  ).current;
-
   useEffect(() => {
     if (!data) {
       slideY.setValue(H);
       backdropA.setValue(0);
       return;
     }
-
-    particles.forEach((pt) => { pt.y.setValue(-80); pt.opacity.setValue(0); });
-
     Animated.parallel([
       Animated.spring(slideY,   { toValue: 0, tension: 62, friction: 11, useNativeDriver: true }),
       Animated.timing(backdropA, { toValue: 1, duration: 220, useNativeDriver: true }),
     ]).start();
-
-    particles.forEach((pt) => {
-      Animated.sequence([
-        Animated.delay(pt.delay),
-        Animated.parallel([
-          Animated.timing(pt.y, { toValue: H + 100, duration: pt.dur, useNativeDriver: true }),
-          Animated.sequence([
-            Animated.timing(pt.opacity, { toValue: 0.92, duration: 140, useNativeDriver: true }),
-            Animated.delay(pt.dur - 290),
-            Animated.timing(pt.opacity, { toValue: 0, duration: 150, useNativeDriver: true }),
-          ]),
-        ]),
-      ]).start();
-    });
   }, [data?.txRef]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!data) return null;
@@ -102,25 +70,6 @@ export const SuccessModal = memo(function SuccessModal({
 
   return (
     <Modal visible={!!data} transparent animationType="none" statusBarTranslucent onRequestClose={onClose}>
-      {/* Confetti layer */}
-      <View style={[StyleSheet.absoluteFill, { zIndex: 10 }]} pointerEvents="none">
-        {particles.map((pt, i) => (
-          <Animated.Text
-            key={i}
-            style={{
-              position: 'absolute',
-              left: pt.x,
-              top: 0,
-              fontSize: pt.size,
-              transform: [{ translateY: pt.y }],
-              opacity: pt.opacity,
-            }}
-          >
-            {pt.emoji}
-          </Animated.Text>
-        ))}
-      </View>
-
       {/* Dimmed backdrop */}
       <Animated.View style={[StyleSheet.absoluteFill, { opacity: backdropA }]}>
         <Pressable
@@ -134,51 +83,42 @@ export const SuccessModal = memo(function SuccessModal({
         style={{ position: 'absolute', bottom: 0, left: 0, right: 0, zIndex: 5, transform: [{ translateY: slideY }] }}
       >
         <Pressable
-          style={{ backgroundColor: p.bg, borderTopLeftRadius: 32, borderTopRightRadius: 32, paddingTop: 12, paddingBottom: 48, paddingHorizontal: 24 }}
+          style={{ backgroundColor: p.bg, borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingTop: 12, paddingBottom: 40, paddingHorizontal: 24 }}
           onPress={(e) => e.stopPropagation()}
         >
           {/* Handle */}
+          <View style={{ alignItems: 'center', marginBottom: 26 }}>
+            <View style={{ width: 38, height: 4, borderRadius: 2, backgroundColor: p.border }} />
+          </View>
+
+          {/* Minimal check + title — no heavy ringed badge */}
           <View style={{ alignItems: 'center', marginBottom: 24 }}>
-            <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: p.border }} />
-          </View>
-
-          {/* Check icon + title */}
-          <View style={{ alignItems: 'center', marginBottom: 22 }}>
-            <View style={{
-              width: 76, height: 76, borderRadius: 38,
-              backgroundColor: p.greenBg,
-              alignItems: 'center', justifyContent: 'center',
-              marginBottom: 16,
-              borderWidth: 1.5,
-              borderColor: p.greenFg + '44',
-            }}>
-              <Ionicons name="checkmark" size={40} color={p.greenFg} />
-            </View>
-            <Text style={{ color: p.fg, fontSize: 22, fontWeight: '700', letterSpacing: -0.5 }}>
-              {isBuy ? 'Purchase Complete' : 'Sale Complete'}
+            <Ionicons name="checkmark-circle" size={44} color={p.greenFg} style={{ marginBottom: 14 }} />
+            <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '600', letterSpacing: 0.4, marginBottom: 8 }}>
+              {isBuy ? 'PURCHASE COMPLETE' : 'SALE COMPLETE'}
             </Text>
-            <Text style={{ color: p.fgMuted, fontSize: 13, marginTop: 6, textAlign: 'center', lineHeight: 19 }}>
-              {isBuy
-                ? `${data.cryptoAmount.toLocaleString(undefined, { maximumFractionDigits: 8 })} ${data.asset} added to your wallet`
-                : `${data.cryptoAmount.toLocaleString(undefined, { maximumFractionDigits: 8 })} ${data.asset} sold`}
+            {/* Big amount figure — same treatment as the trade widgets */}
+            <Text style={{ color: p.fg, fontSize: 38, fontWeight: '600', letterSpacing: -1 }} numberOfLines={1} adjustsFontSizeToFit>
+              {data.cryptoAmount.toLocaleString(undefined, { maximumFractionDigits: 8 })}
+              <Text style={{ color: p.fgMuted, fontSize: 22, fontWeight: '600' }}> {data.asset}</Text>
             </Text>
           </View>
 
-          {/* Transaction details */}
-          <View style={{ backgroundColor: p.bgElev, borderRadius: 20, borderWidth: 1, borderColor: p.border, overflow: 'hidden', marginBottom: 20 }}>
+          {/* Transaction details — borderless, divider-only rows */}
+          <View style={{ marginBottom: 22 }}>
             {rows.map(({ label, value, green }, idx) => (
               <View
                 key={label}
                 style={{
                   flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-                  paddingHorizontal: 16, paddingVertical: 13,
-                  borderBottomWidth: idx < rows.length - 1 ? 1 : 0,
-                  borderBottomColor: p.border,
+                  paddingVertical: 11,
+                  borderTopWidth: idx === 0 ? 0 : 1,
+                  borderTopColor: p.border,
                 }}
               >
-                <Text style={{ color: p.fgFaint, fontSize: 12, fontWeight: '500' }}>{label}</Text>
+                <Text style={{ color: p.fgFaint, fontSize: 12.5, fontWeight: '500' }}>{label}</Text>
                 <Text
-                  style={{ color: green ? p.greenFg : p.fg, fontSize: 12, fontWeight: '600', textAlign: 'right', flexShrink: 1, marginLeft: 16 }}
+                  style={{ color: green ? p.greenFg : p.fg, fontSize: 12.5, fontWeight: '600', textAlign: 'right', flexShrink: 1, marginLeft: 16 }}
                   numberOfLines={1}
                   adjustsFontSizeToFit
                 >
@@ -188,16 +128,16 @@ export const SuccessModal = memo(function SuccessModal({
             ))}
           </View>
 
+          {/* White pill CTA — matches the widgets' confirm button */}
           <Pressable
             onPress={onClose}
             style={({ pressed }) => ({
-              backgroundColor: p.greenBg,
-              borderRadius: 22, paddingVertical: 16,
-              alignItems: 'center', opacity: pressed ? 0.8 : 1,
-              borderWidth: 1, borderColor: p.greenFg + '55',
+              backgroundColor: p.ctaBg,
+              borderRadius: 28, paddingVertical: 17,
+              alignItems: 'center', opacity: pressed ? 0.85 : 1,
             })}
           >
-            <Text style={{ color: p.greenFg, fontSize: 16, fontWeight: '700' }}>Done</Text>
+            <Text style={{ color: p.ctaFg, fontSize: 16, fontWeight: '700' }}>Done</Text>
           </Pressable>
         </Pressable>
       </Animated.View>

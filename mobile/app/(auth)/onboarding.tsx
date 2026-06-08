@@ -2,12 +2,11 @@
  * Onboarding — premium three-slide flow.
  *
  *   Slide 1: Four-row drifting crypto carousel + "One wallet for the world."
- *   Slide 2: Dynamic phone mockup (animated chat, typing, payment card)
- *            + "Send to anyone, anywhere."
- *   Slide 3: Minimal glow + "Join tazdan" CTA.
+ *   Slide 2: Compact in-app finance mockup + "Money, movement, and markets."
+ *   Slide 3: Premium launch panel + localized CTA.
  *
  *   Layout: hero pinned to top 58%, title + CTAs in bottom 42%.
- *   Background: single solid colour — pure black or pure white.
+ *   Background: single solid colour from the onboarding theme surface.
  */
 
 import { useRef, useState, useEffect } from 'react';
@@ -34,7 +33,7 @@ interface Slide { id: string; titleKey: string; variant: 1 | 2 | 3 }
 const SLIDES: Slide[] = [
   { id: 's1', titleKey: 'onboard.title.1', variant: 1 },
   { id: 's2', titleKey: 'onboard.title.2', variant: 2 },
-  { id: 's3', titleKey: 'onboard.permissions.title', variant: 3 },
+  { id: 's3', titleKey: 'onboard.title.3', variant: 3 },
 ];
 
 const THEME_OPTIONS: { mode: ThemeMode; icon: keyof typeof Ionicons.glyphMap }[] = [
@@ -60,34 +59,41 @@ export default function Onboarding() {
   const last = page === SLIDES.length - 1;
 
   useEffect(() => {
-    let alive = true;
-    const guardInitialOnboarding = async () => {
-      const onboarded = await secureStore.get(STORAGE_KEYS.onboarded).catch(() => null);
-      if (!alive) return;
-      if (lastUser) {
-        await secureStore.set(STORAGE_KEYS.onboarded, 'true').catch(() => {});
-        router.replace('/(auth)/welcome-back');
-        return;
-      }
-      if (onboarded) {
-        router.replace('/(auth)/login');
-        return;
-      }
-      await secureStore.set(STORAGE_KEYS.onboarded, 'true').catch(() => {});
-      if (alive) setCanShow(true);
-    };
-    guardInitialOnboarding();
-    return () => { alive = false; };
-  }, [lastUser, router]);
+  let alive = true;
+
+  const guardInitialOnboarding = async () => {
+    const onboarded = await secureStore.get(STORAGE_KEYS.onboarded).catch(() => null);
+
+    if (!alive) return;
+
+    if (lastUser) {
+      router.replace('/(auth)/welcome-back');
+      return;
+    }
+
+    if (onboarded) {
+      router.replace('/(auth)/login');
+      return;
+    }
+
+    setCanShow(true);
+  };
+
+  guardInitialOnboarding();
+
+  return () => {
+    alive = false;
+  };
+}, [lastUser, router]);
 
   const markOnboardedAndNavigate = async (dest: '/register' | '/login') => {
     await secureStore.set(STORAGE_KEYS.onboarded, 'true');
     router.push(dest);
   };
 
-  const isDark = themeMode === 'dark';
+  const isDark = themeMode !== 'light';
   /* Single solid background — no gradients, no tonal shifts */
-  const bg      = isDark ? '#16181C' : '#FFFFFF';   // soft charcoal, not pitch black
+  const bg      = themeMode === 'dark' ? '#16181C' : themeMode === 'mono' ? '#0C0C0D' : '#FAFAF7';
   const fg      = isDark ? '#ffffff' : '#0a0a0a';
   const fgFaint = isDark ? 'rgba(255,255,255,0.30)' : 'rgba(0,0,0,0.25)';
   const chipBg  = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)';
@@ -204,7 +210,7 @@ export default function Onboarding() {
           renderItem={({ item, index }) => {
             const active = index === page;
             const isLast = index === SLIDES.length - 1;
-            const title = isLast ? 'Join tazdan' : t(item.titleKey);
+            const title = t(item.titleKey);
             return (
               <View
                 style={{
@@ -241,22 +247,6 @@ export default function Onboarding() {
 
         {/* ── Footer — page dots + CTAs ── */}
         <View style={{ paddingHorizontal: 14, paddingBottom: 8, paddingTop: 18 }}>
-          {/* Slogan — fades in on the final page, sitting just above the CTAs.
-              Matches the big bold title style used on the previous slides. */}
-          {last && (
-            <Typewriter
-              key="slogan"
-              text={t('common.slogan')}
-              style={{
-                textAlign: 'center', marginBottom: 24,
-                color: fg,
-                fontSize: isAr ? 34 : 38,
-                fontWeight: '800',
-                letterSpacing: isAr ? 0 : -1.3,
-                lineHeight: isAr ? 56 : 44,
-              }}
-            />
-          )}
           {/* Page dots */}
           <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 6, marginBottom: 28 }}>
             {SLIDES.map((s, i) => (
@@ -296,7 +286,7 @@ export default function Onboarding() {
             })}
           >
             <Text style={{ color: ctaFg, fontSize: 16, fontWeight: '700', letterSpacing: -0.2 }}>
-              {last ? 'Join tazdan' : t('onboard.continue')}
+              {last ? t('onboard.join') : t('onboard.continue')}
             </Text>
             {/* Forward arrow — points the way reading flows: right in LTR,
                 left in Arabic (RTL). row-reverse above puts it on the
@@ -331,41 +321,5 @@ export default function Onboarding() {
 
       <LocalePickerModal visible={langPickerVisible} onClose={() => setLangPickerVisible(false)} />
     </View>
-  );
-}
-
-/**
- * Typewriter — reveals `text` one character at a time with a blinking caret,
- * as if being typed live. Uses the shared <Text> so the brand font applies.
- */
-function Typewriter({ text, style }: { text: string; style?: any }) {
-  const [count, setCount] = useState(0);
-  const [caretOn, setCaretOn] = useState(true);
-
-  // Type the characters in.
-  useEffect(() => {
-    setCount(0);
-    if (!text) return;
-    let i = 0;
-    const id = setInterval(() => {
-      i += 1;
-      setCount(i);
-      if (i >= text.length) clearInterval(id);
-    }, 70);
-    return () => clearInterval(id);
-  }, [text]);
-
-  // Blink the caret.
-  useEffect(() => {
-    const id = setInterval(() => setCaretOn((c) => !c), 480);
-    return () => clearInterval(id);
-  }, []);
-
-  const done = count >= text.length;
-  return (
-    <Text style={style}>
-      {text.slice(0, count)}
-      <Text style={{ opacity: done ? 0 : caretOn ? 0.9 : 0 }}>|</Text>
-    </Text>
   );
 }

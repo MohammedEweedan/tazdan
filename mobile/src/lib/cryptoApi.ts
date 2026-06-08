@@ -64,6 +64,8 @@ export interface AssetSearchResult {
   price: number;
   change24h: number;
   volume24h: number;
+  /** Present for broad cross-exchange (CoinGecko) results without a live price. */
+  name?: string;
 }
 
 export const cryptoExchangeAPI = {

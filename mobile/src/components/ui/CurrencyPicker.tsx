@@ -40,20 +40,22 @@ function CurrencyGlyph({ item, size, palette: p }: { item: CurrencyItem; size: n
   if (kind === 'card') {
     return (
       <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
-        <Text
-          numberOfLines={1}
-          adjustsFontSizeToFit
-          style={{ color: p.fg, fontSize: size * 0.34, fontWeight: '800', letterSpacing: 0 }}
-        >
-          {item.icon || 'CARD'}
-        </Text>
+        <Ionicons name="card" size={size * 0.72} color={p.fg} />
       </View>
     );
   }
   if (kind === 'fiat') {
+    // Currency symbol in theme foreground (black on light, white on dark),
+    // sized to fill the glyph box like a coin logo would.
     return (
       <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
-        <Text style={{ color: p.fg, fontSize: size * 0.6, fontWeight: '700' }}>{item.icon}</Text>
+        <Text
+          numberOfLines={1}
+          adjustsFontSizeToFit
+          style={{ color: p.fg, fontSize: size * 0.66, fontWeight: '700', lineHeight: size }}
+        >
+          {item.icon}
+        </Text>
       </View>
     );
   }
@@ -107,34 +109,32 @@ export const CurrencyPicker = memo(function CurrencyPicker({
         {...pan.panHandlers}
         style={{
           flexDirection: 'row', alignItems: 'center',
-          backgroundColor: p.bgElev, borderRadius: 18,
-          borderWidth: 1, borderColor: p.border,
-          paddingHorizontal: 8, paddingVertical: 8,
+          backgroundColor: p.pillBg, borderRadius: 14,
+          paddingHorizontal: 6, paddingVertical: 7,
         }}
       >
         {/* prev */}
         <Pressable onPress={() => cycle(-1)} hitSlop={10} disabled={items.length < 2}
-          style={{ padding: 6, opacity: items.length < 2 ? 0.25 : 0.6 }}>
-          <Ionicons name="chevron-back" size={18} color={p.fg} />
+          style={{ padding: 6, opacity: items.length < 2 ? 0.2 : 0.5 }}>
+          <Ionicons name="chevron-back" size={16} color={p.fg} />
         </Pressable>
 
         {/* current — tap to open the full list */}
         <Pressable
           onPress={() => { h.selection(); setListOpen(true); }}
-          style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, paddingVertical: 4 }}
+          style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9, paddingVertical: 2 }}
         >
-          <CurrencyGlyph item={current} size={30} palette={p} />
-          <View style={{ alignItems: 'flex-start' }}>
-            <Text style={{ color: p.fg, fontSize: 15, fontWeight: '700' }}>{current.displayCode ?? current.currency}</Text>
-            <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '500' }} numberOfLines={1}>{current.label}</Text>
-          </View>
-          <Ionicons name="chevron-down" size={14} color={p.fgMuted} style={{ marginLeft: 2 }} />
+          <CurrencyGlyph item={current} size={26} palette={p} />
+          <Text style={{ color: p.fg, fontSize: 15, fontWeight: '700', letterSpacing: -0.2 }} numberOfLines={1}>
+            {current.displayCode ?? current.currency}
+          </Text>
+          <Ionicons name="chevron-down" size={13} color={p.fgMuted} />
         </Pressable>
 
         {/* next */}
         <Pressable onPress={() => cycle(1)} hitSlop={10} disabled={items.length < 2}
-          style={{ padding: 6, opacity: items.length < 2 ? 0.25 : 0.6 }}>
-          <Ionicons name="chevron-forward" size={18} color={p.fg} />
+          style={{ padding: 6, opacity: items.length < 2 ? 0.2 : 0.5 }}>
+          <Ionicons name="chevron-forward" size={16} color={p.fg} />
         </Pressable>
       </View>
 

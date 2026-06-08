@@ -378,51 +378,42 @@ export function SellWidget({ defaultAsset, lockAsset = false }: SellWidgetProps 
   return (
     <View style={{ flex: 1, paddingHorizontal: 20, paddingBottom: 8 }}>
 
-      {/* ── Top row: asset (½) + network (½) ── */}
-      <View style={{ flexDirection: 'row', gap: 10, marginBottom: 16 }}>
-        {/* Asset — half */}
+      {/* ── Top row: asset + network (minimal, matches Buy) ── */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 18 }}>
+        {/* Asset — borderless */}
         <Pressable
           disabled={lockAsset}
           onPress={() => { if (lockAsset) return; Haptics.selectionAsync(); setAssetSheetOpen(true); }}
           style={({ pressed }) => ({
             flex: 1, minWidth: 0,
-            flexDirection: 'row', alignItems: 'center', gap: 10,
-            backgroundColor: p.bgElev, borderRadius: 16,
-            borderWidth: 1, borderColor: p.border,
-            paddingHorizontal: 12, paddingVertical: 11,
-            opacity: pressed && !lockAsset ? 0.85 : 1,
+            flexDirection: 'row', alignItems: 'center', gap: 9,
+            paddingVertical: 4,
+            opacity: pressed && !lockAsset ? 0.6 : 1,
           })}
         >
-          <CoinAvatar sym={asset} color={meta.color} size={30} />
+          <CoinAvatar sym={asset} color={meta.color} size={32} />
           <View style={{ flex: 1, minWidth: 0 }}>
-            <Text style={{ color: p.fgFaint, fontSize: 10, fontWeight: '700', letterSpacing: 0.5 }}>{tr('sell.amount')}</Text>
-            <Text numberOfLines={1} style={{ color: p.fg, fontSize: 14, fontWeight: '700' }}>{asset}</Text>
+            <Text numberOfLines={1} style={{ color: p.fg, fontSize: 16, fontWeight: '700', letterSpacing: -0.3 }}>{asset}</Text>
+            <Text numberOfLines={1} style={{ color: p.fgFaint, fontSize: 11, fontWeight: '500' }}>{meta.label}</Text>
           </View>
-          {!lockAsset && <Ionicons name="chevron-down" size={14} color={p.fgMuted} />}
+          {!lockAsset && <Ionicons name="chevron-down" size={15} color={p.fgMuted} />}
         </Pressable>
 
-        {/* Network — half */}
-        <Pressable
-          disabled={!multiChain}
-          onPress={() => { if (!multiChain) return; Haptics.selectionAsync(); setNetworkSheetOpen(true); }}
-          style={({ pressed }) => ({
-            flex: 1, minWidth: 0,
-            flexDirection: 'row', alignItems: 'center', gap: 10,
-            backgroundColor: p.bgElev, borderRadius: 16,
-            borderWidth: 1, borderColor: p.border,
-            paddingHorizontal: 12, paddingVertical: 11,
-            opacity: pressed && multiChain ? 0.85 : multiChain ? 1 : 0.7,
-          })}
-        >
-          <View style={{ width: 30, height: 30, borderRadius: 15, backgroundColor: p.bgRaised, alignItems: 'center', justifyContent: 'center' }}>
-            <Ionicons name="git-branch-outline" size={15} color={p.fgMuted} />
-          </View>
-          <View style={{ flex: 1, minWidth: 0 }}>
-            <Text style={{ color: p.fgFaint, fontSize: 10, fontWeight: '700', letterSpacing: 0.5 }}>{tr('common.network').toUpperCase()}</Text>
-            <Text numberOfLines={1} style={{ color: p.fg, fontSize: 14, fontWeight: '700' }}>{currentNetworkLabel}</Text>
-          </View>
-          {multiChain && <Ionicons name="chevron-down" size={14} color={p.fgMuted} />}
-        </Pressable>
+        {/* Network — minimal chip, only when multi-chain */}
+        {multiChain && (
+          <Pressable
+            onPress={() => { Haptics.selectionAsync(); setNetworkSheetOpen(true); }}
+            style={({ pressed }) => ({
+              flexDirection: 'row', alignItems: 'center', gap: 5,
+              paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999,
+              backgroundColor: p.pillBg,
+              opacity: pressed ? 0.7 : 1,
+            })}
+          >
+            <Text numberOfLines={1} style={{ color: p.fgMuted, fontSize: 12, fontWeight: '600' }}>{currentNetworkLabel}</Text>
+            <Ionicons name="chevron-down" size={13} color={p.fgMuted} />
+          </Pressable>
+        )}
       </View>
 
       {/* ── CREDIT TO — same picker position as Buy's payment source ── */}
@@ -458,70 +449,59 @@ export function SellWidget({ defaultAsset, lockAsset = false }: SellWidgetProps 
           : tr('sell.balance').replace('{balance}', balance.toLocaleString(undefined, { maximumFractionDigits: 8 })).replace('{asset}', asset)}
       </Text>
 
-      {/* ── YOU RECEIVE — quote amount + fees ── */}
-      <View style={{
-        backgroundColor: p.bgElev, borderRadius: 20,
-        borderWidth: 1, borderColor: p.border,
-        marginBottom: 14, overflow: 'hidden',
-      }}>
-
-        {/* Amount / quote / loading */}
-        <View style={{ padding: 16, minHeight: 64, justifyContent: 'center' }}>
-          {loading ? (
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-              <ActivityIndicator size="small" color={meta.color} />
-              <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '500' }}>{tr('sell.gettingBestPrice')}</Text>
-            </View>
-          ) : quote && receiveTo ? (
-            <>
-              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                <Text style={{ color: p.fg, fontSize: 28, fontWeight: '700', letterSpacing: -0.5 }}>
+      {/* ── Quote line — minimal, borderless (matches Buy) ── */}
+      <View style={{ paddingHorizontal: 4, paddingVertical: 6, marginBottom: 6 }}>
+        {loading ? (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <ActivityIndicator size="small" color={meta.color} />
+            <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '500' }}>{tr('sell.gettingBestPrice')}</Text>
+          </View>
+        ) : quote && receiveTo ? (
+          <>
+            {/* You receive + timer — single compact row */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+              <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '600' }}>{tr('sell.youReceiveLabel')}</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Text style={{ color: p.fg, fontSize: 16, fontWeight: '700', letterSpacing: -0.3 }} numberOfLines={1}>
                   {receiveTo.isFiat
                     ? `${currSym(receiveTo.currency, locale)}${fmt(quote.settlementAmount ?? quote.fiatAmount, 2)}`
-                    : `${fmt(quote.settlementAmount ?? quote.fiatAmount, 6)}`}
-                  {'  '}
-                  <Text style={{ color: p.fgMuted, fontSize: 16, fontWeight: '500' }}>{receiveTo.currency}</Text>
+                    : fmt(quote.settlementAmount ?? quote.fiatAmount, 6)}
+                  {' '}<Text style={{ color: p.fgMuted, fontSize: 13 }}>{receiveTo.currency}</Text>
                 </Text>
-                <View style={{
-                  flexDirection: 'row', alignItems: 'center', gap: 4,
-                  paddingHorizontal: 10, paddingVertical: 5, borderRadius: 12,
-                  backgroundColor: timerCritical ? 'rgba(239,68,68,0.12)' : p.pillBg,
-                  borderWidth: 1, borderColor: timerCritical ? p.redFg : p.border,
-                }}>
-                  <Ionicons name="timer-outline" size={13} color={timerCritical ? p.redFg : p.fgMuted} />
-                  <Text style={{ color: timerCritical ? p.redFg : p.fgMuted, fontSize: 12, fontWeight: '600' }}>{seconds}s</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8, backgroundColor: timerCritical ? 'rgba(239,68,68,0.12)' : p.pillBg }}>
+                  <Ionicons name="timer-outline" size={11} color={timerCritical ? p.redFg : p.fgMuted} />
+                  <Text style={{ color: timerCritical ? p.redFg : p.fgMuted, fontSize: 11, fontWeight: '600' }}>{seconds}s</Text>
                 </View>
               </View>
-              <Pressable
-                onPress={() => setShowFees(!showFees)}
-                style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 12, paddingTop: 10, borderTopWidth: 1, borderTopColor: p.border }}
-              >
-                <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '500' }}>
-                  Fee · {currSym(receiveTo.currency, locale)}{fmt(Number(quote.platformFeeSettlement ?? quote.platformFee) + Number(quote.networkFeeSettlement ?? quote.networkFee), 2)}
-                </Text>
-                <Ionicons name={showFees ? 'chevron-up' : 'chevron-down'} size={14} color={p.fgMuted} />
-              </Pressable>
-              {showFees && (
-                <View style={{ marginTop: 10, gap: 8, backgroundColor: p.bgRaised, borderRadius: 12, padding: 12 }}>
-                  {([
-                    { label: tr('sell.platformFee'), value: `${currSym(receiveTo.currency, locale)}${fmt(quote.platformFeeSettlement ?? quote.platformFee, 2)}` },
-                    { label: tr('sell.networkFee'),  value: `${currSym(receiveTo.currency, locale)}${fmt(quote.networkFeeSettlement ?? quote.networkFee, 2)}` },
-                    { label: tr('sell.youReceiveLabel'), value: receiveTo.isFiat ? `${currSym(receiveTo.currency, locale)}${fmt(quote.settlementAmount ?? quote.fiatAmount, 2)}` : `${fmt(quote.settlementAmount ?? quote.fiatAmount, 6)} ${receiveTo.currency}`, bold: true },
-                  ] as { label: string; value: string; bold?: boolean }[]).map(({ label, value, bold }) => (
-                    <View key={label} style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <Text style={{ color: bold ? p.fgMuted : p.fgFaint, fontSize: 12, fontWeight: bold ? '600' : '500' }}>{label}</Text>
-                      <Text style={{ color: bold ? p.fg : p.fgMuted, fontSize: 12, fontWeight: bold ? '700' : '500' }}>{value}</Text>
-                    </View>
-                  ))}
-                </View>
-              )}
-            </>
-          ) : (
-            <Text style={{ color: p.fgFaint, fontSize: 13, fontWeight: '500', textAlign: 'center' }}>
-              {parseFloat(cryptoAmt) > 0 && !overspend ? tr('sell.fetchingQuote') : tr('sell.enterAmountToReceive')}
-            </Text>
-          )}
-        </View>
+            </View>
+            <Pressable
+              onPress={() => setShowFees(!showFees)}
+              style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: p.border }}
+            >
+              <Text style={{ color: p.fgMuted, fontSize: 11.5, fontWeight: '500' }}>
+                {tr('sell.youReceiveLabel')} · {currSym(receiveTo.currency, locale)}{fmt(quote.settlementAmount ?? quote.fiatAmount, 2)}
+              </Text>
+              <Ionicons name={showFees ? 'chevron-up' : 'chevron-down'} size={13} color={p.fgMuted} />
+            </Pressable>
+            {showFees && (
+              <View style={{ marginTop: 8, gap: 6 }}>
+                {([
+                  { label: tr('sell.platformFee'), value: `${currSym(receiveTo.currency, locale)}${fmt(quote.platformFeeSettlement ?? quote.platformFee, 2)}` },
+                  { label: tr('sell.networkFee'),  value: `${currSym(receiveTo.currency, locale)}${fmt(quote.networkFeeSettlement ?? quote.networkFee, 2)}` },
+                ] as { label: string; value: string }[]).map(({ label, value }) => (
+                  <View key={label} style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Text style={{ color: p.fgFaint, fontSize: 11.5, fontWeight: '500' }}>{label}</Text>
+                    <Text style={{ color: p.fgMuted, fontSize: 11.5, fontWeight: '500' }}>{value}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+          </>
+        ) : (
+          <Text style={{ color: p.fgFaint, fontSize: 12, fontWeight: '500', textAlign: 'center' }}>
+            {parseFloat(cryptoAmt) > 0 && !overspend ? tr('sell.fetchingQuote') : tr('sell.enterAmountToReceive')}
+          </Text>
+        )}
       </View>
 
       {/* ── Status banner (errors only; success shown inside slider) ── */}
