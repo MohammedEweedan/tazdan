@@ -47,8 +47,11 @@ async function pushToMailchimp(email: string): Promise<void> {
 // the form shows a false "success" while nothing is saved and no email sends.
 async function pushToBackend(email: string, source: string | null, locale: string | null): Promise<boolean> {
   try {
-    const base = API_BASE.endsWith('/api') ? API_BASE : `${API_BASE}/api`;
-    const res = await fetch(`${base}/waitlist`, {
+    // The host nginx on api.promrkts.com AUTO-PREFIXES /api (it rewrites
+    // `/<path>` → `/api/<path>`). So we call the BARE path `/waitlist` — nginx
+    // turns it into `/api/waitlist`, the backend's actual route. Appending /api
+    // here would double it to `/api/api/waitlist` → 404 (the original bug).
+    const res = await fetch(`${API_BASE}/waitlist`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, source, locale }),
