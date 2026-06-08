@@ -39,34 +39,14 @@ services:
     networks:
       - app
 
-  # NOTE: the marketing/web client is hosted on Vercel — it is intentionally
-  # NOT built or run on the droplet. The droplet only runs the API (+ redis +
-  # nginx). This keeps deploys lightweight and fast (no Next.js build here).
-
-  nginx:
-    image: nginx:1.27-alpine
-    container_name: tazdan-nginx
-    restart: unless-stopped
-    depends_on:
-      - server
-    ports:
-      - '80:80'
-      - '443:443'
-    volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./nginx/conf.d:/etc/nginx/conf.d:ro
-      - certbot-www:/var/www/certbot:ro
-      - certbot-certs:/etc/letsencrypt:ro
-    networks:
-      - app
-
-  certbot:
-    image: certbot/certbot:latest
-    container_name: tazdan-certbot
-    volumes:
-      - certbot-www:/var/www/certbot
-      - certbot-certs:/etc/letsencrypt
-    entrypoint: /bin/sh -c "trap exit TERM; while :; do certbot renew --webroot -w /var/www/certbot --quiet; sleep 12h & wait $${!}; done"
+  # NOTE: the marketing/web client is hosted on Vercel — NOT built or run here.
+  #
+  # TLS termination + reverse proxy is handled by a HOST-level nginx (systemd)
+  # on the droplet, which owns ports 80/443 and proxies api.promrkts.com →
+  # 127.0.0.1:5000 (this server's published port). A containerised nginx would
+  # collide on those ports, so there is intentionally no nginx/certbot service
+  # here. Host nginx config + certs live at /etc/nginx and /etc/letsencrypt on
+  # the host. The droplet stack is just: redis + server.
 
 networks:
   app:
@@ -75,5 +55,3 @@ networks:
 volumes:
   redisdata:
   uploads:
-  certbot-www:
-  certbot-certs:
