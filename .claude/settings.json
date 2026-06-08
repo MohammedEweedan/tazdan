@@ -23,7 +23,8 @@
       "Bash(npm ls *)",
       "Bash(rm -rf login dashboard forgot-password reset-password verify-email cards pay asset claim admin)",
       "Bash(ls -d */)",
-      "Bash(head-20)"
+      "Bash(head-20)",
+      "Bash(perl -0pi -e 's/backgroundColor: p\\\\.bgElev, borderRadius: 14, borderWidth: 1, borderColor: p\\\\.border, padding: 20/backgroundColor: p.pillBg, borderRadius: 16, borderWidth: 0, padding: 20/g; s/backgroundColor: p\\\\.bgElev, borderRadius: 14, borderWidth: 1, borderColor: p\\\\.border, padding: 16/backgroundColor: p.pillBg, borderRadius: 16, borderWidth: 0, padding: 16/g' src/components/exchange/WithdrawWidget.tsx)"
     ]
   }
 }

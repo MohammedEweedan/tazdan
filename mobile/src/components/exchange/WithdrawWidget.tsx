@@ -93,7 +93,7 @@ function BankAccountForm({
       <Text style={{ color: p.fgFaint, fontSize: 10, fontWeight: '700', letterSpacing: 0.7, marginBottom: 6 }}>
         {label}{opts?.optional ? ' (optional)' : ''}
       </Text>
-      <View style={{ backgroundColor: p.bgElev, borderRadius: 12, borderWidth: 1, borderColor: p.border, paddingHorizontal: 14 }}>
+      <View style={{ backgroundColor: p.pillBg, borderRadius: 14, borderWidth: 0, paddingHorizontal: 14 }}>
         <TextInput
           value={value}
           onChangeText={onChange}
@@ -117,7 +117,7 @@ function BankAccountForm({
         <Text style={{ color: p.fgFaint, fontSize: 10, fontWeight: '700', letterSpacing: 0.7, marginBottom: 6 }}>
           COUNTRY (ISO CODE)
         </Text>
-        <View style={{ backgroundColor: p.bgElev, borderRadius: 12, borderWidth: 1, borderColor: p.border, paddingHorizontal: 14 }}>
+        <View style={{ backgroundColor: p.pillBg, borderRadius: 14, borderWidth: 0, paddingHorizontal: 14 }}>
           <TextInput
             value={country}
             onChangeText={(v) => {
@@ -145,7 +145,7 @@ function BankAccountForm({
         <Text style={{ color: p.fgFaint, fontSize: 10, fontWeight: '700', letterSpacing: 0.7, marginBottom: 6 }}>
           BANK NAME
         </Text>
-        <View style={{ backgroundColor: p.bgElev, borderRadius: 12, borderWidth: 1, borderColor: p.border, paddingHorizontal: 14, flexDirection: 'row', alignItems: 'center' }}>
+        <View style={{ backgroundColor: p.pillBg, borderRadius: 14, borderWidth: 0, paddingHorizontal: 14, flexDirection: 'row', alignItems: 'center' }}>
           <TextInput
             value={bankSearch}
             onChangeText={(v) => {
@@ -170,7 +170,7 @@ function BankAccountForm({
         {/* Bank dropdown */}
         {showBankDropdown && filteredBanks.length > 0 && (
           <View style={{
-            backgroundColor: p.bgElev, borderRadius: 12, borderWidth: 1, borderColor: p.border,
+            backgroundColor: p.pillBg, borderRadius: 14, borderWidth: 0,
             maxHeight: 200, marginTop: 4, overflow: 'hidden',
           }}>
             <FlatList
@@ -418,7 +418,7 @@ export function WithdrawWidget() {
         {loadingBanks ? (
           <ActivityIndicator color={p.fgMuted} style={{ marginVertical: 20 }} />
         ) : bankAccounts.length === 0 ? (
-          <View style={{ backgroundColor: p.bgElev, borderRadius: 14, borderWidth: 1, borderColor: p.border, padding: 20, alignItems: 'center', marginBottom: 14 }}>
+          <View style={{ backgroundColor: p.pillBg, borderRadius: 16, borderWidth: 0, padding: 20, alignItems: 'center', marginBottom: 14 }}>
             <Ionicons name="business-outline" size={28} color={p.fgFaint} />
             <Text style={{ color: p.fgMuted, fontSize: 14, fontWeight: '600', marginTop: 10 }}>No bank accounts saved</Text>
             <Text style={{ color: p.fgFaint, fontSize: 12, marginTop: 4, textAlign: 'center' }}>Add a bank account to withdraw funds</Text>
@@ -567,7 +567,7 @@ export function WithdrawWidget() {
       </Pressable>
 
       {/* Balance */}
-      <View style={{ backgroundColor: p.bgElev, borderRadius: 14, borderWidth: 1, borderColor: p.border, padding: 16, marginBottom: 20 }}>
+      <View style={{ backgroundColor: p.pillBg, borderRadius: 16, borderWidth: 0, padding: 16, marginBottom: 20 }}>
         <Text style={{ color: p.fgFaint, fontSize: 10, fontWeight: '700', letterSpacing: 0.6 }}>AVAILABLE BALANCE</Text>
         <Text style={{ color: p.fg, fontSize: 26, fontWeight: '600', letterSpacing: -1, marginTop: 4 }}>
           {balance.toLocaleString('en-US', { maximumFractionDigits: isFiat ? 2 : 8 })} {currency}
@@ -591,7 +591,7 @@ export function WithdrawWidget() {
           </View>
 
           <Text style={{ color: p.fgFaint, fontSize: 10, fontWeight: '700', letterSpacing: 0.7, marginBottom: 8 }}>WALLET ADDRESS</Text>
-          <View style={{ backgroundColor: p.bgElev, borderRadius: 12, borderWidth: 1, borderColor: p.border, paddingHorizontal: 14, marginBottom: 20 }}>
+          <View style={{ backgroundColor: p.pillBg, borderRadius: 14, borderWidth: 0, paddingHorizontal: 14, marginBottom: 20 }}>
             <TextInput
               value={walletAddress}
               onChangeText={setWalletAddress}

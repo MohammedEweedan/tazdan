@@ -342,6 +342,24 @@ export default function WelcomeBack() {
                   {t('auth.differentAccount')}
                 </Text>
               </Pressable>
+              <Pressable
+                onPress={async () => {
+                  h.selection();
+
+                  await forgetLastUser();
+
+                  await secureStore.remove(STORAGE_KEYS.onboarded);
+                  await secureStore.remove(STORAGE_KEYS.refreshToken);
+
+                  router.replace('/(auth)/onboarding');
+                }}
+                hitSlop={8}
+                style={{ alignSelf: 'center', marginTop: 22, paddingVertical: 8, paddingHorizontal: 12 }}
+              >
+                <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '700' }}>
+                  Go to onboarding
+                </Text>
+              </Pressable>
             </View>
           </ScrollView>
         </SafeAreaView>

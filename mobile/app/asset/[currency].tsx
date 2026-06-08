@@ -5,8 +5,10 @@
  */
 
 import { Fragment, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Image, KeyboardAvoidingView, Linking, Modal, Platform, Pressable, ScrollView, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, Image, KeyboardAvoidingView, Linking, Modal, Platform, Pressable, ScrollView, TextInput, View } from 'react-native';
 import { Text } from '@/components/ui/Text';
+import { useAuthStore } from '@/store/authStore';
+import { useDiscussionRealtime } from '@/hooks/useDiscussionRealtime';
 import { LoadingPulse } from '@/components/ui/LoadingPulse';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -898,6 +900,7 @@ function AssetBottomTabs({
 type DiscussionPost = {
   id: string;
   author: {
+    id?: string;
     displayName: string;
     username?: string | null;
     avatarUrl?: string | null;
@@ -913,6 +916,9 @@ function AssetDiscussionTab({ sym, p, h }: {
   h: { selection: () => void };
 }) {
   const queryClient = useQueryClient();
+  const currentUser = useAuthStore((s) => s.user);
+  const isAdmin = currentUser?.role === 'ADMIN';
+  useDiscussionRealtime(sym);
   const [draft, setDraft] = useState('');
   const [tag, setTag] = useState<DiscussionPost['tag']>('WATCH');
   const key = ['asset-discussions', sym];
@@ -944,6 +950,41 @@ function AssetDiscussionTab({ sym, p, h }: {
     if (!draft.trim() || mutation.isPending) return;
     h.selection();
     mutation.mutate();
+  };
+
+  // ── Moderation: delete (author/admin) + report (others) ──
+  const removePost = (id: string) => {
+    queryClient.setQueryData<DiscussionPost[]>(key, (cur = []) => cur.filter((x) => x.id !== id));
+    api.delete(`/asset-discussions/${encodeURIComponent(sym)}/${id}`).catch(() => {
+      // Roll back on failure by refetching the source of truth.
+      queryClient.invalidateQueries({ queryKey: key });
+    });
+  };
+  const reportPost = (id: string) => {
+    api.post(`/asset-discussions/${encodeURIComponent(sym)}/${id}/report`).catch(() => {});
+  };
+  const onPostMenu = (post: DiscussionPost) => {
+    h.selection();
+    const mine = !!currentUser && post.author.id === currentUser.id;
+    if (mine || isAdmin) {
+      Alert.alert(
+        'Post options',
+        undefined,
+        [
+          { text: 'Delete', style: 'destructive', onPress: () => removePost(post.id) },
+          { text: 'Cancel', style: 'cancel' },
+        ],
+      );
+    } else {
+      Alert.alert(
+        'Report this post?',
+        'Our team will review it. Posts with multiple reports are hidden automatically.',
+        [
+          { text: 'Report', style: 'destructive', onPress: () => reportPost(post.id) },
+          { text: 'Cancel', style: 'cancel' },
+        ],
+      );
+    }
   };
 
   return (
@@ -1075,6 +1116,9 @@ function AssetDiscussionTab({ sym, p, h }: {
             <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '600', marginLeft: 'auto' as any }}>
               {formatRelativeTime(post.createdAt)}
             </Text>
+            <Pressable onPress={() => onPostMenu(post)} hitSlop={10} style={{ marginLeft: 8 }}>
+              <Ionicons name="ellipsis-horizontal" size={16} color={p.fgFaint} />
+            </Pressable>
           </View>
           <Text style={{ color: p.fg, fontSize: 14, lineHeight: 20, fontWeight: '500' }}>
             {post.body}
