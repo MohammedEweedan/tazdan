@@ -1,8 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-// Real backend base — falls back to the production API. Persists waitlist
-// signups to our own DB (WaitlistEntry) so we can email everyone at launch.
-const API_BASE = (process.env.NEXT_PUBLIC_API_URL || 'https://api.promrkts.com').replace(/\/$/, '');
+// Real backend base — persists waitlist signups to our own DB (WaitlistEntry)
+// so we can email everyone at launch.
+//
+// This route runs SERVER-SIDE inside the `client` container. Reaching the
+// backend via the public `https://api.promrkts.com` from inside the droplet
+// usually fails (hairpin-NAT: a host can't loop back to its own public IP),
+// which silently drops every signup. So prefer the internal Docker-network
+// address `http://server:5000` (the same upstream nginx uses) via
+// API_INTERNAL_URL. Public NEXT_PUBLIC_API_URL is only a last-resort fallback.
+const API_BASE = (
+  process.env.API_INTERNAL_URL ||
+  process.env.NEXT_PUBLIC_API_URL ||
+  'http://server:5000'
+).replace(/\/$/, '');
 
 const MAILCHIMP_API_KEY = process.env.MAILCHIMP_API_KEY ?? '';
 const MAILCHIMP_LIST_ID = process.env.MAILCHIMP_LIST_ID ?? '';

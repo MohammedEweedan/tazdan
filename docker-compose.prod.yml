@@ -52,6 +52,10 @@ services:
       NODE_ENV: production
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://api.promrkts.com/api}
       NEXT_PUBLIC_WS_URL: ${NEXT_PUBLIC_WS_URL:-https://api.promrkts.com}
+      # Server-side route handlers (e.g. /api/waitlist) reach the backend over
+      # the internal Docker network — never the public domain, which fails on
+      # hairpin-NAT from inside the droplet and silently drops signups.
+      API_INTERNAL_URL: ${API_INTERNAL_URL:-http://server:5000}
     networks:
       - app
 
