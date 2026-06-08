@@ -28,7 +28,7 @@ import {
   FiStar, FiBell, FiDollarSign, FiMessageCircle, FiUser,
   FiChevronLeft, FiChevronRight, FiMoreHorizontal, FiSmile, FiArrowUp,
   FiEye, FiSearch, FiChevronDown, FiChevronUp, FiMaximize2, FiClock,
-  FiLink, FiTrendingUp, FiTrendingDown, FiDownload,
+  FiLink, FiTrendingUp, FiTrendingDown, FiDownload, FiCamera,
 } from "react-icons/fi";
 import { FaApple, FaGooglePlay, FaApplePay, FaGooglePay, FaCcVisa, FaCcMastercard } from "react-icons/fa";
 import { SiRevolut } from "react-icons/si";
@@ -41,7 +41,7 @@ import { ContainerScroll } from "@/components/ui/container-scroll-animation";
 // hydrates the hero shows a static gradient (handled in CSS), keeping
 // LCP image-driven instead of canvas-driven.
 const ShaderAnimation = dynamic(
-  () => import("@/components/ui/shader-lines").then((m) => m.ShaderAnimation),
+  () => import("@/components/ui/shader-lines").then((m) => m.ShaderLines),
   { ssr: false, loading: () => null },
 );
 import { IconLogo } from "@/components/ui/Logo";
@@ -150,24 +150,23 @@ function usePageVisible() {
 }
 
 const tazdanShot = (n: number) => `/screenshots/tazdan/${n}.png`;
+const tazdanNewShot = (n: number) => `/screenshots/tazdan/IMG_${n}.PNG`;
 
 const TAZDAN_SCREENS = {
   login: [tazdanShot(1)],
-  dashboard: [tazdanShot(2), tazdanShot(3), tazdanShot(17)],
-  markets: [tazdanShot(4), tazdanShot(5), tazdanShot(6), tazdanShot(7), tazdanShot(8)],
-  messages: [tazdanShot(9), tazdanShot(10), tazdanShot(11)],
-  profile: [tazdanShot(12), tazdanShot(13)],
-  buy: [tazdanShot(14), tazdanShot(15), tazdanShot(16), tazdanShot(18)],
-  cards: [
-    tazdanShot(19),
-    tazdanShot(20),
-    tazdanShot(21),
-    tazdanShot(22),
-    tazdanShot(23),
-    tazdanShot(24),
-    tazdanShot(25),
-    tazdanShot(26),
-  ],
+  dashboard: [tazdanNewShot(2134), tazdanNewShot(2135)],
+  dashboardLight: [tazdanNewShot(2134)],
+  dashboardDark: [tazdanNewShot(2135)],
+  messages: [tazdanNewShot(2143)],
+  buy: [tazdanNewShot(2136)],
+  asset: [tazdanNewShot(2137), tazdanNewShot(2138), tazdanNewShot(2139)],
+  budgets: [tazdanNewShot(2140), tazdanNewShot(2141)],
+  topup: [tazdanNewShot(2142)],
+  cardMain: [tazdanNewShot(2145)],
+  cardPin: [tazdanNewShot(2146)],
+  markets: [tazdanNewShot(2137), tazdanNewShot(2138), tazdanNewShot(2139)],
+  profile: [tazdanNewShot(2140), tazdanNewShot(2141)],
+  cards: [tazdanNewShot(2145), tazdanNewShot(2146)],
 };
 
 function ScreenshotScreen({
@@ -182,9 +181,18 @@ function ScreenshotScreen({
   alt?: string;
 }) {
   const pageVisible = usePageVisible();
-  const slides = images.length > 0 ? images : TAZDAN_SCREENS.dashboard;
-  const slidesKey = slides.join("|");
+  const slides = useMemo(() => (images.length > 0 ? images : TAZDAN_SCREENS.dashboard), [images]);
+  const slidesKey = useMemo(() => slides.join("|"), [slides]);
   const [idx, setIdx] = useState(0);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    slides.forEach((src) => {
+      const img = new window.Image();
+      img.decoding = "async";
+      img.src = src;
+    });
+  }, [slidesKey, slides]);
 
   useEffect(() => {
     setIdx(0);
@@ -200,22 +208,39 @@ function ScreenshotScreen({
 
   const src = slides[idx % slides.length];
 
+  if (slides.length === 1) {
+    return (
+      <Box position="absolute" inset={0} bg="#000" overflow="hidden">
+        <NextImage
+          src={src}
+          alt={alt}
+          fill
+          priority={priority}
+          loading={priority ? undefined : "eager"}
+          sizes="(max-width: 480px) 55vw, (max-width: 1024px) 38vw, 340px"
+          style={{ objectFit: "cover" }}
+        />
+      </Box>
+    );
+  }
+
   return (
     <Box position="absolute" inset={0} bg="#000" overflow="hidden">
       <AnimatePresence initial={false} mode="wait">
         <motion.div
           key={src}
-          initial={{ opacity: 0, scale: 1.012 }}
-          animate={{ opacity: 1, scale: 1 }}
-          exit={{ opacity: 0, scale: 0.992 }}
-          transition={{ duration: 0.72, ease: [0.22, 1, 0.36, 1] }}
-          style={{ position: "absolute", inset: 0, willChange: "opacity, transform" }}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.42, ease: [0.22, 1, 0.36, 1] }}
+          style={{ position: "absolute", inset: 0, willChange: "opacity" }}
         >
           <NextImage
             src={src}
             alt={alt}
             fill
             priority={priority && idx === 0}
+            loading={priority && idx === 0 ? undefined : "eager"}
             sizes="(max-width: 480px) 55vw, (max-width: 1024px) 38vw, 340px"
             style={{ objectFit: "cover" }}
           />
@@ -224,6 +249,57 @@ function ScreenshotScreen({
     </Box>
   );
 }
+
+const ScreenHomeShot = memo(function ScreenHomeShot({ priority = false }: { priority?: boolean }) {
+  const phoneDark = usePhoneDark();
+  const images = useMemo(
+    () => (phoneDark ? TAZDAN_SCREENS.dashboardDark : TAZDAN_SCREENS.dashboardLight),
+    [phoneDark],
+  );
+  return (
+    <ScreenshotScreen
+      images={images}
+      intervalMs={5000}
+      priority={priority}
+      alt="tazdan home screen"
+    />
+  );
+});
+
+const ScreenChatShot = memo(function ScreenChatShot() {
+  const images = useMemo(() => TAZDAN_SCREENS.messages, []);
+  return <ScreenshotScreen images={images} intervalMs={7000} alt="tazdan chat screen" />;
+});
+
+const ScreenBuyShot = memo(function ScreenBuyShot() {
+  const images = useMemo(() => TAZDAN_SCREENS.buy, []);
+  return <ScreenshotScreen images={images} intervalMs={7000} alt="tazdan buy screen" />;
+});
+
+const ScreenAssetShot = memo(function ScreenAssetShot() {
+  const images = useMemo(() => [TAZDAN_SCREENS.asset[0]], []);
+  return <ScreenshotScreen images={images} alt="tazdan asset detail screen" />;
+});
+
+const ScreenTopUpShot = memo(function ScreenTopUpShot() {
+  const images = useMemo(() => TAZDAN_SCREENS.topup, []);
+  return <ScreenshotScreen images={images} intervalMs={7000} alt="tazdan top up screen" />;
+});
+
+const ScreenCardMainShot = memo(function ScreenCardMainShot() {
+  const images = useMemo(() => TAZDAN_SCREENS.cardMain, []);
+  return <ScreenshotScreen images={images} alt="tazdan cards screen" />;
+});
+
+const ScreenCardPinShot = memo(function ScreenCardPinShot() {
+  const images = useMemo(() => TAZDAN_SCREENS.cardPin, []);
+  return <ScreenshotScreen images={images} alt="tazdan card PIN screen" />;
+});
+
+const ScreenBudgetShot = memo(function ScreenBudgetShot() {
+  const images = useMemo(() => TAZDAN_SCREENS.budgets, []);
+  return <ScreenshotScreen images={images} intervalMs={9000} alt="tazdan budgets screen" />;
+});
 
 /* ═════════════════════════════════════════════════════════════════
    SCREEN MEDIA — plays an uploaded screen *recording* inside the phone.
@@ -284,6 +360,21 @@ function ScreenMedia({
    ═════════════════════════════════════════════════════════════════ */
 const LOCK_SLIDE_PX = -4000;
 
+function IosFlashlightIcon({ color, size }: { color: string; size: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 28 28" fill="none" aria-hidden>
+      <path
+        d="M10.4 3.9h7.2c.65 0 1.18.53 1.18 1.18v2.38c0 .55-.38 1.02-.91 1.15l-.75.18v2.1c0 .75-.2 1.48-.58 2.12l-.88 1.48a4.14 4.14 0 0 0-.58 2.12v5.35a2.08 2.08 0 0 1-4.16 0v-5.35c0-.75-.2-1.48-.58-2.12l-.88-1.48a4.14 4.14 0 0 1-.58-2.12v-2.1l-.75-.18a1.18 1.18 0 0 1-.91-1.15V5.08c0-.65.53-1.18 1.18-1.18Z"
+        stroke={color}
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path d="M9.35 8.7h9.3M10.9 12.35h6.2" stroke={color} strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 function LockedPhoneFace() {
   const [now, setNow] = useState<Date | null>(null);
   useEffect(() => {
@@ -291,53 +382,142 @@ function LockedPhoneFace() {
     const id = setInterval(() => setNow(new Date()), 20_000);
     return () => clearInterval(id);
   }, []);
-  const hh = now ? now.getHours().toString().padStart(2, "0") : "09";
+  const h = now ? now.getHours() : 9;
+  const hh = (h % 12 || 12).toString();
   const mm = now ? now.getMinutes().toString().padStart(2, "0") : "41";
-  const dateStr = now
-    ? now.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" })
-    : "";
+  const dateOptions = useMemo<Intl.DateTimeFormatOptions>(
+    () => ({ weekday: "long", day: "numeric", month: "long" }),
+    [],
+  );
+  const dateStr = useMemo(
+    () => (now ? now.toLocaleDateString(undefined, dateOptions) : "Monday, 8 June"),
+    [dateOptions, now],
+  );
 
   // Everything sizes off the phone height var (--ph) so the lock face scales
   // perfectly inside the mockup on every viewport — no awkward overflow on
   // small mobile phones.
   const v = (f: number) => `calc(var(--ph) * ${f})`;
+  const statusIcon = "rgba(255,255,255,0.96)";
+  const statusBars = useMemo(() => [0.010, 0.014, 0.018, 0.023], []);
+  const lockControlStyle = useMemo(
+    () => ({
+      width: v(0.058),
+      height: v(0.058),
+      backdropFilter: "blur(18px)",
+      WebkitBackdropFilter: "blur(18px)",
+    }) as React.CSSProperties,
+    [],
+  );
 
   return (
-    <Box position="absolute" inset={0} overflow="hidden" bg="#0A0A0B">
-      {/* Brand wash — soft blue bloom up top, deep charcoal below */}
-      <Box position="absolute" inset={0} style={{ background: "radial-gradient(125% 70% at 50% -6%, rgba(99,161,219,0.30), rgba(20,24,30,0.0) 58%), linear-gradient(180deg, #10141A 0%, #0A0A0B 70%)" }} />
+    <Box position="absolute" inset={0} overflow="hidden" bg="#111216">
+      <Box
+        position="absolute"
+        inset={0}
+        style={{
+          background:
+            "linear-gradient(180deg, rgba(255,255,255,0.035) 0%, rgba(255,255,255,0.005) 42%, rgba(0,0,0,0.18) 100%)",
+        }}
+      />
 
-      {/* Status-bar hint line (time-left / battery-right) — pure decoration */}
-      <Flex position="absolute" top={v(0.028)} left={v(0.05)} right={v(0.05)} justify="space-between" align="center" opacity={0.75}>
-        <Text color="#fff" fontWeight="700" style={{ fontSize: v(0.022) }} sx={{ fontVariantNumeric: "tabular-nums" }}>{hh}:{mm}</Text>
-        <Box w={v(0.05)} h={v(0.022)} borderRadius={v(0.006)} border="1px solid rgba(255,255,255,0.55)" position="relative">
-          <Box position="absolute" top="14%" bottom="14%" left="12%" w="68%" bg="rgba(255,255,255,0.85)" borderRadius={v(0.003)} />
+      {/* iOS-style status cluster: lock screens keep the large clock, so only
+          the connectivity/battery cluster sits at the top-right. */}
+      <HStack
+        position="absolute"
+        top={v(0.030)}
+        right={v(0.042)}
+        spacing={v(0.009)}
+        align="center"
+        color={statusIcon}
+      >
+        <HStack spacing={v(0.003)} align="flex-end">
+          {statusBars.map((height, i) => (
+            <Box
+              key={height}
+              w={v(0.005)}
+              h={v(height)}
+              borderRadius="full"
+              bg={statusIcon}
+              opacity={i === 0 ? 0.7 : 1}
+            />
+          ))}
+        </HStack>
+        <Icon as={FiWifi} style={{ width: v(0.027), height: v(0.027) }} />
+        <Box
+          position="relative"
+          w={v(0.047)}
+          h={v(0.022)}
+          borderRadius={v(0.006)}
+          bg="rgba(255,255,255,0.88)"
+          color="#111216"
+          display="flex"
+          alignItems="center"
+          justifyContent="center"
+          sx={{ fontVariantNumeric: "tabular-nums" }}
+        >
+          <Text fontSize={v(0.012)} fontWeight="900" lineHeight={1}>66</Text>
+          <Box
+            position="absolute"
+            right={v(-0.004)}
+            top="28%"
+            w={v(0.003)}
+            h="44%"
+            borderRadius="full"
+            bg="rgba(255,255,255,0.55)"
+          />
         </Box>
-      </Flex>
+      </HStack>
 
-      <Flex direction="column" align="center" justify="space-between" position="absolute" inset={0} style={{ paddingTop: v(0.075), paddingBottom: v(0.015) }}>
-        {/* Lock glyph */}
-        <Flex align="center" justify="center" borderRadius="full" bg="rgba(255,255,255,0.12)" style={{ width: v(0.085), height: v(0.085), marginTop: v(0.05) }}>
-          <Icon as={FiLock} color="rgba(255,255,255,0.95)" style={{ width: v(0.04), height: v(0.04) }} />
-        </Flex>
-
-        {/* Clock + date */}
-        <VStack spacing={v(0.004)} mt={v(-0.03)}>
-          <Text fontFamily="'DM Sans', sans-serif" fontWeight="600" color="#fff" lineHeight={0.92}
-            style={{ fontSize: v(0.155) }} sx={{ fontVariantNumeric: "tabular-nums" }} letterSpacing="-0.045em">
+      <VStack position="absolute" top={v(0.086)} left={0} right={0} spacing={v(0.018)}>
+        <Icon as={FiLock} color="rgba(255,255,255,0.92)" style={{ width: v(0.021), height: v(0.021) }} />
+        <VStack spacing={v(0.004)}>
+          <Text
+            fontFamily="'DM Sans', sans-serif"
+            fontWeight="700"
+            color="#fff"
+            lineHeight={0.86}
+            style={{ fontSize: v(0.126) }}
+            sx={{ fontVariantNumeric: "tabular-nums" }}
+            letterSpacing="-0.055em"
+          >
             {hh}:{mm}
           </Text>
-          <Text fontWeight="500" color="rgba(255,255,255,0.62)" style={{ fontSize: v(0.026) }} textTransform="capitalize">{dateStr}</Text>
+          <Text fontWeight="650" color="rgba(255,255,255,0.78)" style={{ fontSize: v(0.020) }}>
+            {dateStr}
+          </Text>
         </VStack>
+      </VStack>
 
-        {/* Gentle up-cue + slim home-indicator pinned near the very bottom */}
-        <VStack spacing={v(0.022)}>
-          <motion.div animate={{ y: ["0%", "-32%", "0%"], opacity: [0.45, 0.95, 0.45] }} transition={{ duration: 1.9, repeat: Infinity, ease: "easeInOut" }}>
-            <Icon as={FiChevronUp} color="rgba(255,255,255,0.78)" style={{ width: v(0.045), height: v(0.045), display: "block" }} />
-          </motion.div>
-          <Box borderRadius="full" bg="rgba(255,255,255,0.9)" style={{ width: v(0.17), height: v(0.006) }} />
-        </VStack>
+      <Flex position="absolute" left={v(0.056)} right={v(0.056)} bottom={v(0.064)} justify="space-between" align="center">
+        <Flex
+          align="center"
+          justify="center"
+          borderRadius="full"
+          bg="rgba(0,0,0,0.36)"
+          border="1px solid rgba(255,255,255,0.12)"
+          style={lockControlStyle}
+        >
+          <IosFlashlightIcon color="rgba(255,255,255,0.92)" size={v(0.030)} />
+        </Flex>
+        <Flex
+          align="center"
+          justify="center"
+          borderRadius="full"
+          bg="rgba(0,0,0,0.36)"
+          border="1px solid rgba(255,255,255,0.12)"
+          style={lockControlStyle}
+        >
+          <Icon as={FiCamera} color="rgba(255,255,255,0.92)" style={{ width: v(0.025), height: v(0.025) }} />
+        </Flex>
       </Flex>
+
+      <VStack position="absolute" left={0} right={0} bottom={v(0.014)} spacing={v(0.008)}>
+        <Text color="rgba(255,255,255,0.68)" fontSize={v(0.014)} fontWeight="700">
+          Swipe up to open
+        </Text>
+        <Box borderRadius="full" bg="rgba(255,255,255,0.92)" style={{ width: v(0.15), height: v(0.005) }} />
+      </VStack>
     </Box>
   );
 }
@@ -408,10 +588,11 @@ const LockScreen = memo(function LockScreen({
 function appTokens(dark: boolean) {
   return dark
     ? {
-        bg: "#16181C", surface: "#1E2127", border: "rgba(255,255,255,0.09)",
+        bg: "#16181C", surface: "#1E2127", bgRaised: "#262A31", border: "rgba(255,255,255,0.09)", divider: "rgba(255,255,255,0.15)",
         fg: "#F4F5F7", fgMuted: "rgba(244,245,247,0.62)", fgFaint: "rgba(244,245,247,0.36)",
         green: "#3FCF8E", redFg: "#F87171", redBg: "rgba(248,113,113,0.14)",
-        accent: "#63A1DB",
+        accent: "#63A1DB", accentFg: "#16181C", accentSoft: "rgba(99,161,219,0.16)", accentBorder: "rgba(99,161,219,0.42)", accentText: "#8BBCE8",
+        ctaBg: "#F4F5F7", ctaFg: "#16181C", pillBg: "rgba(255,255,255,0.07)",
         ink: "#F4F5F7", inkFg: "#16181C",
         sheetBg: "#1E2127", sheetCard: "#262A31", sheetBorder: "rgba(255,255,255,0.09)",
         sheetFg: "#F4F5F7", sheetMuted: "rgba(244,245,247,0.62)", sheetFaint: "rgba(244,245,247,0.36)",
@@ -419,10 +600,11 @@ function appTokens(dark: boolean) {
         sheetChip: "rgba(255,255,255,0.07)",
       }
     : {
-        bg: "#FAFAF7", surface: "#F1F0EB", border: "rgba(10,10,11,0.08)",
+        bg: "#FAFAF7", surface: "#F1F0EB", bgRaised: "#FFFFFF", border: "rgba(10,10,11,0.08)", divider: "rgba(10,10,11,0.14)",
         fg: "#0A0A0B", fgMuted: "rgba(10,10,11,0.62)", fgFaint: "rgba(10,10,11,0.38)",
         green: "#1F8F58", redFg: "#C0272D", redBg: "rgba(192,39,45,0.10)",
-        accent: "#4F8BC4",
+        accent: "#4F8BC4", accentFg: "#FFFFFF", accentSoft: "rgba(79,139,196,0.12)", accentBorder: "rgba(79,139,196,0.38)", accentText: "#3E78AE",
+        ctaBg: "#0A0A0B", ctaFg: "#FAFAFA", pillBg: "rgba(10,10,11,0.06)",
         ink: "#0A0A0B", inkFg: "#FAFAFA",
         sheetBg: "#F1F0EB", sheetCard: "#FFFFFF", sheetBorder: "rgba(10,10,11,0.08)",
         sheetFg: "#0A0A0B", sheetMuted: "rgba(10,10,11,0.62)", sheetFaint: "rgba(10,10,11,0.38)",
@@ -470,6 +652,33 @@ function Spark({ id, line, area, h, color = "#3ecf6e" }: {
           strokeLinejoin="round" strokeLinecap="round" />
       </svg>
     </Box>
+  );
+}
+
+const CRYPTO_ICON_BASE = "https://cdn.jsdelivr.net/npm/cryptocurrency-icons@0.18.1/128/color";
+
+function WebCoinIcon({ symbol, size = "calc(var(--ph)*0.052)" }: { symbol: string; size?: string }) {
+  return (
+    <Box position="relative" style={{ width: size, height: size }} flexShrink={0}>
+      <NextImage
+        src={`${CRYPTO_ICON_BASE}/${symbol.toLowerCase()}.png`}
+        alt={`${symbol} icon`}
+        fill
+        unoptimized
+        sizes="64px"
+        style={{ objectFit: "contain" }}
+      />
+    </Box>
+  );
+}
+
+function WebFiatSymbol({ symbol, color, size = "calc(var(--ph)*0.052)" }: { symbol: string; color: string; size?: string }) {
+  return (
+    <Flex style={{ width: size, height: size }} align="center" justify="center" flexShrink={0}>
+      <Text style={{ fontSize: `calc(${size} * 0.62)` }} color={color} fontWeight="900" lineHeight={1}>
+        {symbol}
+      </Text>
+    </Flex>
   );
 }
 
@@ -1705,7 +1914,7 @@ function SectionSocialFinance() {
               transition={{ duration: 0.75, ease: [0.22, 1, 0.36, 1] }}
             >
               <StaticPhone phOverride="clamp(320px, 42vh, 640px)">
-                <ScreenChat />
+                <ScreenChatShot />
               </StaticPhone>
             </motion.div>
           </Flex>
@@ -3000,42 +3209,47 @@ function PhoneJourney() {
   /* Stage layout (out of 1 progress).
      7 exact chapters, each separated by a narrow fade band:
      0 login, 1 dashboard, 2 messages, 3 buy, 4 market detail,
-     5 pay-with sheet, 6 cards. */
+     5 top up, 6 card/top-up close. */
+  const journeyTiming = useMemo(() => ({
+    unlock: [0.04, 0.13],
+    introCopy: [0.000, 0.035, 0.130, 0.180],
+    homeCopy: [0.145, 0.185, 0.280, 0.325],
+    chat: [0.305, 0.345, 0.455, 0.495],
+    buy: [0.475, 0.515, 0.625, 0.665],
+    asset: [0.645, 0.685, 0.795, 0.835],
+    topUp: [0.815, 0.855, 0.930, 0.965],
+    card: [0.955, 0.982, 1.000],
+  }), []);
+  const stageLayerStyle = useMemo(
+    () => ({ position: "absolute", inset: 0, willChange: "opacity" }) as const,
+    [],
+  );
 
   const tiltX          = useTransform(scrollYProgress, [0, 0.12], [22, 0]);
-  const unlockProgress = useTransform(scrollYProgress, [0.04, 0.13], [0, 1]);
+  const unlockProgress = useTransform(scrollYProgress, journeyTiming.unlock, [0, 1]);
 
-  // screen cross-fades — dashboard is always the base layer, other chapters
-  // have compact windows so copy and phone never visually stack together.
-  const opChat   = useTransform(scrollYProgress, [0.265, 0.300, 0.365, 0.400], [0, 1, 1, 0]);
-  const opBuy    = useTransform(scrollYProgress, [0.432, 0.467, 0.532, 0.568], [0, 1, 1, 0]);
-  const opSearch = useTransform(scrollYProgress, [0.598, 0.633, 0.698, 0.735], [0, 1, 1, 0]);
-  const opPay    = useTransform(scrollYProgress, [0.765, 0.800, 0.865, 0.902], [0, 1, 1, 0]);
-  const opCard   = useTransform(scrollYProgress, [0.925, 0.960, 1.000], [0, 1, 1]);
-
-  const yChat   = useTransform(scrollYProgress, [0.265, 0.333, 0.400], [34, 0, -34]);
-  const yBuy    = useTransform(scrollYProgress, [0.432, 0.500, 0.568], [34, 0, -34]);
-  const ySearch = useTransform(scrollYProgress, [0.598, 0.667, 0.735], [34, 0, -34]);
-  const yPay    = useTransform(scrollYProgress, [0.765, 0.833, 0.902], [34, 0, -34]);
-  const yCard   = useTransform(scrollYProgress, [0.925, 1.000], [28, 0]);
-  const scaleChat   = useTransform(scrollYProgress, [0.265, 0.333, 0.400], [1.035, 1, 1.025]);
-  const scaleBuy    = useTransform(scrollYProgress, [0.432, 0.500, 0.568], [1.035, 1, 1.025]);
-  const scaleSearch = useTransform(scrollYProgress, [0.598, 0.667, 0.735], [1.035, 1, 1.025]);
-  const scalePay    = useTransform(scrollYProgress, [0.765, 0.833, 0.902], [1.035, 1, 1.025]);
-  const scaleCard   = useTransform(scrollYProgress, [0.925, 1.000], [1.035, 1]);
-  // Visa card slides in from the left (card lives left of the phone on desktop)
+  // screen cross-fades — dashboard is the base layer during unlock/home,
+  // then fades to black so feature screenshots sit on a black canvas.
+  const opHome   = useTransform(scrollYProgress, journeyTiming.chat, [1, 1, 0, 0]);
+  const opChat   = useTransform(scrollYProgress, journeyTiming.chat, [0, 1, 1, 0]);
+  const opBuy    = useTransform(scrollYProgress, journeyTiming.buy, [0, 1, 1, 0]);
+  const opSearch = useTransform(scrollYProgress, journeyTiming.asset, [0, 1, 1, 0]);
+  const opPay    = useTransform(scrollYProgress, journeyTiming.topUp, [0, 1, 1, 0]);
+  const opCard   = useTransform(scrollYProgress, journeyTiming.card, [0, 1, 1]);
+  // Legacy floating card transforms are kept inert; the real card/top-up UI now
+  // lives inside the screenshot stage so the mockup matches the app.
   const cardX    = useTransform(scrollYProgress, [0.82, 0.96], [-80,  0]);
   const cardY    = useTransform(scrollYProgress, [0.82, 0.96], [40,   0]);
   const cardRot  = useTransform(scrollYProgress, [0.82, 0.96], [-10, -3]);
 
   // copy cross-fades — slightly lead the matching screen
-  const copyA = useTransform(scrollYProgress, [0.000, 0.070, 0.125, 0.165], [1, 1, 1, 0]);
-  const copyB = useTransform(scrollYProgress, [0.100, 0.135, 0.198, 0.235], [0, 1, 1, 0]);
-  const copyC = useTransform(scrollYProgress, [0.265, 0.300, 0.365, 0.400], [0, 1, 1, 0]);
-  const copyD = useTransform(scrollYProgress, [0.432, 0.467, 0.532, 0.568], [0, 1, 1, 0]);
-  const copyE = useTransform(scrollYProgress, [0.598, 0.633, 0.698, 0.735], [0, 1, 1, 0]);
-  const copyF = useTransform(scrollYProgress, [0.765, 0.800, 0.865, 0.902], [0, 1, 1, 0]);
-  const copyG = useTransform(scrollYProgress, [0.925, 0.960, 1.000], [0, 1, 1]);
+  const copyA = useTransform(scrollYProgress, journeyTiming.introCopy, [1, 1, 1, 0]);
+  const copyB = useTransform(scrollYProgress, journeyTiming.homeCopy, [0, 1, 1, 0]);
+  const copyC = useTransform(scrollYProgress, journeyTiming.chat, [0, 1, 1, 0]);
+  const copyD = useTransform(scrollYProgress, journeyTiming.buy, [0, 1, 1, 0]);
+  const copyE = useTransform(scrollYProgress, journeyTiming.asset, [0, 1, 1, 0]);
+  const copyF = useTransform(scrollYProgress, journeyTiming.topUp, [0, 1, 1, 0]);
+  const copyG = useTransform(scrollYProgress, journeyTiming.card, [0, 1, 1]);
 
   // shader background — present at start, fades gently as journey progresses
   const shaderOp = useTransform(scrollYProgress, [0, 0.25, 0.80, 1], [0.85, 0.60, 0.25, 0.08]);
@@ -3076,7 +3290,7 @@ function PhoneJourney() {
   }, [flinch, rawProgress]);
 
   return (
-    <Box ref={ref} position="relative" h={{ base: "700vh", md: "700vh" }}>
+    <Box ref={ref} position="relative" h={{ base: "1180vh", md: "1180vh" }}>
       <Box position="sticky" top={0} h="100vh" w="100%" overflow="hidden"
         style={{ contain: "layout" } as React.CSSProperties}
       >
@@ -3089,8 +3303,8 @@ function PhoneJourney() {
           }}
         >
           {/* Shader has transparent bg — normal blend works for both light & dark */}
-          <Box position="absolute" inset={0}>
-            <ShaderAnimation />
+         <Box position="absolute" inset={0}>
+            <ShaderAnimation mode={colorMode === "dark" ? "dark" : "light"} />
           </Box>
         </motion.div>
 
@@ -3180,11 +3394,13 @@ function PhoneJourney() {
               pb={{ base: 2, lg: 0 }}
             >
               <Box position="relative" mx="auto" w="fit-content">
-                {/* ── Floating Visa card — large, slides in to the LEFT of phone during stage G ── */}
+                {/* The old floating Visa art is hidden: screenshot stages now
+                    carry the exact in-app card/top-up UI. */}
                 <motion.div
                   aria-hidden
                   style={{
                     position: "absolute",
+                    display: "none",
                     /* right: 102% puts the card's right edge flush with phone's left edge */
                     right: "108%",
                     top: "16%",
@@ -3216,6 +3432,7 @@ function PhoneJourney() {
                   aria-hidden
                   style={{
                     position: "absolute",
+                    display: "none",
                     bottom: "-26%",
                     left: "50%",
                     transform: "translateX(-50%)",
@@ -3258,31 +3475,29 @@ function PhoneJourney() {
                     position="absolute"
                     style={screenInset as React.CSSProperties}
                     overflow="hidden"
-                    bg={phoneDark ? "#000000" : "#ffffff"}
-                    boxShadow={phoneDark
-                      ? "inset 0 0 0 1px rgba(255,255,255,0.04)"
-                      : "inset 0 0 0 1px rgba(0,0,0,0.04)"}
+                    bg="#000000"
+                    boxShadow="inset 0 0 0 1px rgba(255,255,255,0.04)"
                   >
-                    {/* Base: the REAL rendered dashboard UI (matches the app
-                        1:1). No screenshots, no video — live React screens. */}
-                    <Box position="absolute" inset={0}>
-                      <ScreenDashboard />
-                    </Box>
+                    {/* Dashboard fades to black after the home section so gaps
+                        between feature stages never flash the home screen. */}
+                    <motion.div style={{ ...stageLayerStyle, opacity: opHome }}>
+                      <ScreenHomeShot priority />
+                    </motion.div>
                     {/* Feature screens cross-fade above the dashboard */}
-                    <motion.div style={{ position: "absolute", inset: 0, opacity: opChat, y: yChat, scale: scaleChat, willChange: "opacity, transform" }}>
-                      <ScreenChat />
+                    <motion.div style={{ ...stageLayerStyle, opacity: opChat }}>
+                      <ScreenChatShot />
                     </motion.div>
-                    <motion.div style={{ position: "absolute", inset: 0, opacity: opBuy, y: yBuy, scale: scaleBuy, willChange: "opacity, transform" }}>
-                      <ScreenBuy />
+                    <motion.div style={{ ...stageLayerStyle, opacity: opBuy }}>
+                      <ScreenBuyShot />
                     </motion.div>
-                    <motion.div style={{ position: "absolute", inset: 0, opacity: opSearch, y: ySearch, scale: scaleSearch, willChange: "opacity, transform" }}>
-                      <ScreenAssetDetail />
+                    <motion.div style={{ ...stageLayerStyle, opacity: opSearch }}>
+                      <ScreenAssetShot />
                     </motion.div>
-                    <motion.div style={{ position: "absolute", inset: 0, opacity: opPay, y: yPay, scale: scalePay, willChange: "opacity, transform" }}>
-                      <ScreenPayWith />
+                    <motion.div style={{ ...stageLayerStyle, opacity: opPay }}>
+                      <ScreenTopUpShot />
                     </motion.div>
-                    <motion.div style={{ position: "absolute", inset: 0, opacity: opCard, y: yCard, scale: scaleCard, willChange: "opacity, transform" }}>
-                      <ScreenDashboard />
+                    <motion.div style={{ ...stageLayerStyle, opacity: opCard }}>
+                      <ScreenCardMainShot />
                     </motion.div>
                     {/* Lock screen sits on top, slides off with unlockProgress */}
                     <LockScreen unlockProgress={unlockProgress} />

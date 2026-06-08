@@ -2,8 +2,8 @@
  * Root layout — SafeAreaProvider, GestureHandler, React Query, auth bootstrap.
  */
 
-import { useEffect, useState } from 'react';
-import { AppState, Image, I18nManager, Dimensions, StyleSheet, useColorScheme } from 'react-native';
+import { useEffect, useState, useCallback } from 'react';
+import { AppState, Image, I18nManager, Dimensions, StyleSheet, useColorScheme, Pressable, View } from 'react-native';
 import { Text, TextInput } from '@/components/ui/Text';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';

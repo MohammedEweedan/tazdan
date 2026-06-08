@@ -8,5 +8,7 @@ assetDiscussionRouter.use(authenticate);
 assetDiscussionRouter.get('/moderation/queue', AssetDiscussionController.moderationQueue);
 assetDiscussionRouter.get('/:symbol', AssetDiscussionController.list);
 assetDiscussionRouter.post('/:symbol', AssetDiscussionController.create);
+assetDiscussionRouter.post('/:symbol/:id/replies', AssetDiscussionController.reply);
+assetDiscussionRouter.post('/:symbol/:id/like', AssetDiscussionController.toggleLike);
 assetDiscussionRouter.post('/:symbol/:id/report', AssetDiscussionController.report);
 assetDiscussionRouter.delete('/:symbol/:id', AssetDiscussionController.remove);

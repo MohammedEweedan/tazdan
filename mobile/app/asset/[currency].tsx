@@ -899,16 +899,54 @@ function AssetBottomTabs({
 
 type DiscussionPost = {
   id: string;
+  parentId?: string | null;
   author: {
     id?: string;
     displayName: string;
     username?: string | null;
     avatarUrl?: string | null;
+    avatarEmoji?: string | null;
   };
   tag: 'BULLISH' | 'BEARISH' | 'WATCH';
   body: string;
   createdAt: string | number | Date;
+  likeCount?: number;
+  likedByMe?: boolean;
+  replyCount?: number;
+  replies?: DiscussionPost[];
 };
+
+const DISCUSSION_EMOJIS = ['🟦', '🟩', '🟧', '🟪', '💎', '🚀', '⚡', '🌙', '🔥', '🧠', '📈', '🪙'];
+
+function looksLikeRemoteImage(v?: string | null): boolean {
+  if (!v) return false;
+  return /^https?:\/\//i.test(v) || v.startsWith('/') || v.includes('://');
+}
+
+function discussionEmoji(author: DiscussionPost['author']): string {
+  const explicit = author.avatarEmoji?.trim() || (!looksLikeRemoteImage(author.avatarUrl) ? author.avatarUrl?.trim() : '');
+  if (explicit && /[^\u0020-\u007E]/.test(explicit)) return explicit;
+  const seed = author.id || author.username || author.displayName || 'trader';
+  let hash = 0;
+  for (let i = 0; i < seed.length; i++) hash = ((hash << 5) - hash + seed.charCodeAt(i)) | 0;
+  return DISCUSSION_EMOJIS[Math.abs(hash) % DISCUSSION_EMOJIS.length];
+}
+
+function patchDiscussionPost(list: DiscussionPost[], post: DiscussionPost): DiscussionPost[] {
+  if (post.parentId) {
+    return list.map((item) => {
+      if (item.id !== post.parentId) return item;
+      const replies = item.replies ?? [];
+      const nextReplies = replies.some((reply) => reply.id === post.id)
+        ? replies.map((reply) => reply.id === post.id ? { ...reply, ...post } : reply)
+        : [...replies, post];
+      return { ...item, replies: nextReplies, replyCount: Math.max(item.replyCount ?? 0, nextReplies.length) };
+    });
+  }
+  return list.some((item) => item.id === post.id)
+    ? list.map((item) => item.id === post.id ? { ...item, ...post } : item)
+    : [post, ...list];
+}
 
 function AssetDiscussionTab({ sym, p, h }: {
   sym: string;
@@ -920,6 +958,8 @@ function AssetDiscussionTab({ sym, p, h }: {
   const isAdmin = currentUser?.role === 'ADMIN';
   useDiscussionRealtime(sym);
   const [draft, setDraft] = useState('');
+  const [replyDraft, setReplyDraft] = useState('');
+  const [replyingTo, setReplyingTo] = useState<string | null>(null);
   const [tag, setTag] = useState<DiscussionPost['tag']>('WATCH');
   const key = ['asset-discussions', sym];
   const { data, isLoading, isError } = useQuery({
@@ -945,11 +985,68 @@ function AssetDiscussionTab({ sym, p, h }: {
       setTag('WATCH');
     },
   });
+  const replyMutation = useMutation({
+    mutationFn: async ({ parentId, body }: { parentId: string; body: string }) => {
+      const r = await api.post<{ reply: DiscussionPost; post?: DiscussionPost | null }>(
+        `/asset-discussions/${encodeURIComponent(sym)}/${parentId}/replies`,
+        { body },
+      );
+      return r.data;
+    },
+    onSuccess: ({ reply, post }) => {
+      queryClient.setQueryData<DiscussionPost[]>(key, (current = []) =>
+        post ? patchDiscussionPost(current, post) : patchDiscussionPost(current, reply),
+      );
+      setReplyDraft('');
+      setReplyingTo(null);
+    },
+  });
+  const likeMutation = useMutation({
+    mutationFn: async (postId: string) => {
+      const r = await api.post<{ post: DiscussionPost }>(`/asset-discussions/${encodeURIComponent(sym)}/${postId}/like`);
+      return r.data.post;
+    },
+    onMutate: async (postId) => {
+      await queryClient.cancelQueries({ queryKey: key });
+      const previous = queryClient.getQueryData<DiscussionPost[]>(key);
+      queryClient.setQueryData<DiscussionPost[]>(key, (current = []) => current.map((post) => {
+        if (post.id === postId) {
+          const liked = !post.likedByMe;
+          return { ...post, likedByMe: liked, likeCount: Math.max(0, (post.likeCount ?? 0) + (liked ? 1 : -1)) };
+        }
+        return {
+          ...post,
+          replies: (post.replies ?? []).map((reply) => {
+            if (reply.id !== postId) return reply;
+            const liked = !reply.likedByMe;
+            return { ...reply, likedByMe: liked, likeCount: Math.max(0, (reply.likeCount ?? 0) + (liked ? 1 : -1)) };
+          }),
+        };
+      }));
+      return { previous };
+    },
+    onError: (_err, _postId, ctx) => {
+      if (ctx?.previous) queryClient.setQueryData(key, ctx.previous);
+    },
+    onSuccess: (post) => {
+      if (post) queryClient.setQueryData<DiscussionPost[]>(key, (current = []) => patchDiscussionPost(current, post));
+    },
+  });
 
   const submit = () => {
     if (!draft.trim() || mutation.isPending) return;
     h.selection();
     mutation.mutate();
+  };
+  const submitReply = (parentId: string) => {
+    const body = replyDraft.trim();
+    if (!body || replyMutation.isPending) return;
+    h.selection();
+    replyMutation.mutate({ parentId, body });
+  };
+  const likePost = (postId: string) => {
+    h.selection();
+    likeMutation.mutate(postId);
   };
 
   // ── Moderation: delete (author/admin) + report (others) ──
@@ -1080,51 +1177,303 @@ function AssetDiscussionTab({ sym, p, h }: {
         </View>
       )}
       {posts.map((post) => (
-        <View
+        <DiscussionThread
           key={post.id}
-          style={{
-            borderRadius: 16,
-            borderWidth: 1,
-            borderColor: p.border,
-            backgroundColor: p.bgElev,
-            padding: 14,
-            gap: 8,
+          post={post}
+          p={p}
+          replyingTo={replyingTo}
+          replyDraft={replyDraft}
+          replyPending={replyMutation.isPending}
+          onReplyDraft={setReplyDraft}
+          onReply={(id) => {
+            h.selection();
+            setReplyDraft('');
+            setReplyingTo(replyingTo === id ? null : id);
           }}
+          onSubmitReply={submitReply}
+          onLike={likePost}
+          onMenu={onPostMenu}
+        />
+      ))}
+    </View>
+  );
+}
+
+function DiscussionAvatar({ post, p, small = false }: { post: DiscussionPost; p: Palette; small?: boolean }) {
+  const size = small ? 30 : 38;
+  const imageUrl = looksLikeRemoteImage(post.author.avatarUrl) ? post.author.avatarUrl! : null;
+  return (
+    <View style={{
+      width: size,
+      height: size,
+      borderRadius: size / 2,
+      backgroundColor: p.pillBg,
+      borderWidth: 1,
+      borderColor: p.border,
+      alignItems: 'center',
+      justifyContent: 'center',
+      overflow: 'hidden',
+    }}>
+      {imageUrl ? (
+        <Image source={{ uri: imageUrl }} style={{ width: size, height: size }} resizeMode="cover" />
+      ) : (
+        <Text style={{ fontSize: small ? 16 : 20, lineHeight: small ? 22 : 26 }}>
+          {discussionEmoji(post.author)}
+        </Text>
+      )}
+    </View>
+  );
+}
+
+function TagPill({ tag, p }: { tag: DiscussionPost['tag']; p: Palette }) {
+  const color = tag === 'BULLISH' ? p.greenFg : tag === 'BEARISH' ? p.redFg : p.fgMuted;
+  return (
+    <View style={{
+      paddingHorizontal: 7,
+      height: 22,
+      borderRadius: 11,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: tag === 'BULLISH' ? p.greenBg : tag === 'BEARISH' ? p.redBg : p.pillBg,
+      borderWidth: 1,
+      borderColor: tag === 'WATCH' ? p.border : 'transparent',
+    }}>
+      <Text style={{ color, fontSize: 9.5, fontWeight: '900' }}>{tagLabel(tag)}</Text>
+    </View>
+  );
+}
+
+function DiscussionAction({
+  icon,
+  label,
+  active,
+  color,
+  onPress,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  active?: boolean;
+  color: string;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      hitSlop={8}
+      style={({ pressed }) => ({
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 5,
+        opacity: pressed ? 0.62 : 1,
+      })}
+    >
+      <Ionicons name={icon} size={16} color={color} />
+      <Text style={{ color, fontSize: 12, fontWeight: active ? '900' : '700', fontVariant: ['tabular-nums'] }}>
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
+function DiscussionReplyComposer({
+  post,
+  p,
+  value,
+  pending,
+  onChange,
+  onSubmit,
+}: {
+  post: DiscussionPost;
+  p: Palette;
+  value: string;
+  pending: boolean;
+  onChange: (text: string) => void;
+  onSubmit: (parentId: string) => void;
+}) {
+  return (
+    <View style={{
+      flexDirection: 'row',
+      gap: 9,
+      paddingTop: 8,
+      paddingBottom: 2,
+    }}>
+      <DiscussionAvatar post={post} p={p} small />
+      <View style={{
+        flex: 1,
+        borderRadius: 18,
+        borderWidth: 1,
+        borderColor: p.border,
+        backgroundColor: p.pillBg,
+        paddingHorizontal: 12,
+        paddingVertical: 9,
+        gap: 8,
+      }}>
+        <TextInput
+          value={value}
+          onChangeText={onChange}
+          placeholder={`Reply to ${post.author.displayName}`}
+          placeholderTextColor={p.fgFaint}
+          multiline
+          style={{
+            minHeight: 34,
+            maxHeight: 82,
+            color: p.fg,
+            fontSize: 13.5,
+            fontWeight: '600',
+            padding: 0,
+            textAlignVertical: 'top',
+          }}
+        />
+        <Pressable
+          onPress={() => onSubmit(post.id)}
+          disabled={!value.trim() || pending}
+          style={({ pressed }) => ({
+            alignSelf: 'flex-end',
+            height: 30,
+            paddingHorizontal: 12,
+            borderRadius: 15,
+            backgroundColor: p.ctaBg,
+            alignItems: 'center',
+            justifyContent: 'center',
+            opacity: !value.trim() || pending ? 0.34 : pressed ? 0.74 : 1,
+          })}
         >
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <Text style={{ color: p.fg, fontSize: 13, fontWeight: '800' }}>{post.author.displayName}</Text>
-            <View style={{
-              paddingHorizontal: 7,
-              paddingVertical: 3,
-              borderRadius: 8,
-              backgroundColor:
-                post.tag === 'BULLISH' ? p.greenBg :
-                post.tag === 'BEARISH' ? 'rgba(239,68,68,0.14)' : p.pillBg,
-              borderWidth: 1,
-              borderColor: post.tag === 'WATCH' ? p.border : 'transparent',
-            }}>
-              <Text style={{
-                color:
-                  post.tag === 'BULLISH' ? p.greenFg :
-                  post.tag === 'BEARISH' ? p.redFg : p.fgMuted,
-                fontSize: 10,
-                fontWeight: '800',
-              }}>
-                {tagLabel(post.tag)}
-              </Text>
-            </View>
-            <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '600', marginLeft: 'auto' as any }}>
+          {pending ? (
+            <ActivityIndicator color={p.ctaFg} />
+          ) : (
+            <Text style={{ color: p.ctaFg, fontSize: 12, fontWeight: '900' }}>Reply</Text>
+          )}
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
+function DiscussionThread({
+  post,
+  p,
+  replyingTo,
+  replyDraft,
+  replyPending,
+  onReplyDraft,
+  onReply,
+  onSubmitReply,
+  onLike,
+  onMenu,
+}: {
+  post: DiscussionPost;
+  p: Palette;
+  replyingTo: string | null;
+  replyDraft: string;
+  replyPending: boolean;
+  onReplyDraft: (text: string) => void;
+  onReply: (postId: string) => void;
+  onSubmitReply: (parentId: string) => void;
+  onLike: (postId: string) => void;
+  onMenu: (post: DiscussionPost) => void;
+}) {
+  const replies = post.replies ?? [];
+  const likeCount = post.likeCount ?? 0;
+  const replyCount = post.replyCount ?? replies.length;
+  return (
+    <View style={{
+      borderBottomWidth: 1,
+      borderBottomColor: p.border,
+      paddingBottom: 14,
+    }}>
+      <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 11 }}>
+        <View style={{ alignItems: 'center' }}>
+          <DiscussionAvatar post={post} p={p} />
+          {(replyCount > 0 || replyingTo === post.id) && (
+            <View style={{ width: 2, flex: 1, minHeight: 42, marginTop: 8, borderRadius: 1, backgroundColor: p.border }} />
+          )}
+        </View>
+
+        <View style={{ flex: 1, minWidth: 0, gap: 7 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7 }}>
+            <Text style={{ color: p.fg, fontSize: 14, fontWeight: '900', flexShrink: 1 }} numberOfLines={1}>
+              {post.author.displayName}
+            </Text>
+            <TagPill tag={post.tag} p={p} />
+            <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '700', marginLeft: 'auto' as any }}>
               {formatRelativeTime(post.createdAt)}
             </Text>
-            <Pressable onPress={() => onPostMenu(post)} hitSlop={10} style={{ marginLeft: 8 }}>
-              <Ionicons name="ellipsis-horizontal" size={16} color={p.fgFaint} />
+            <Pressable onPress={() => onMenu(post)} hitSlop={10}>
+              <Ionicons name="ellipsis-horizontal" size={17} color={p.fgFaint} />
             </Pressable>
           </View>
-          <Text style={{ color: p.fg, fontSize: 14, lineHeight: 20, fontWeight: '500' }}>
+
+          <Text style={{ color: p.fg, fontSize: 14.5, lineHeight: 21, fontWeight: '500' }}>
             {post.body}
           </Text>
+
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 18, paddingTop: 3 }}>
+            <DiscussionAction
+              icon={post.likedByMe ? 'heart' : 'heart-outline'}
+              label={likeCount > 0 ? String(likeCount) : 'Like'}
+              active={post.likedByMe}
+              color={post.likedByMe ? p.redFg : p.fgMuted}
+              onPress={() => onLike(post.id)}
+            />
+            <DiscussionAction
+              icon="chatbubble-outline"
+              label={replyCount > 0 ? `${replyCount}` : 'Reply'}
+              color={p.fgMuted}
+              onPress={() => onReply(post.id)}
+            />
+            <DiscussionAction
+              icon="repeat-outline"
+              label="Comment"
+              color={p.fgMuted}
+              onPress={() => onReply(post.id)}
+            />
+          </View>
+
+          {replies.length > 0 && (
+            <View style={{ gap: 12, paddingTop: 8 }}>
+              {replies.map((reply) => (
+                <View key={reply.id} style={{ flexDirection: 'row', gap: 9 }}>
+                  <DiscussionAvatar post={reply} p={p} small />
+                  <View style={{ flex: 1, minWidth: 0, gap: 5 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <Text style={{ color: p.fg, fontSize: 13, fontWeight: '900', flexShrink: 1 }} numberOfLines={1}>
+                        {reply.author.displayName}
+                      </Text>
+                      <Text style={{ color: p.fgFaint, fontSize: 10.5, fontWeight: '700' }}>
+                        {formatRelativeTime(reply.createdAt)}
+                      </Text>
+                      <Pressable onPress={() => onMenu(reply)} hitSlop={8} style={{ marginLeft: 'auto' as any }}>
+                        <Ionicons name="ellipsis-horizontal" size={15} color={p.fgFaint} />
+                      </Pressable>
+                    </View>
+                    <Text style={{ color: p.fg, fontSize: 13.5, lineHeight: 19, fontWeight: '500' }}>{reply.body}</Text>
+                    <View style={{ flexDirection: 'row', gap: 16 }}>
+                      <DiscussionAction
+                        icon={reply.likedByMe ? 'heart' : 'heart-outline'}
+                        label={(reply.likeCount ?? 0) > 0 ? String(reply.likeCount) : 'Like'}
+                        active={reply.likedByMe}
+                        color={reply.likedByMe ? p.redFg : p.fgMuted}
+                        onPress={() => onLike(reply.id)}
+                      />
+                    </View>
+                  </View>
+                </View>
+              ))}
+            </View>
+          )}
+
+          {replyingTo === post.id && (
+            <DiscussionReplyComposer
+              post={post}
+              p={p}
+              value={replyDraft}
+              pending={replyPending}
+              onChange={onReplyDraft}
+              onSubmit={onSubmitReply}
+            />
+          )}
         </View>
-      ))}
+      </View>
     </View>
   );
 }

@@ -1,230 +1,327 @@
-"use client";
+'use client';
 
-/**
- * tazdan background shader — raw WebGL port of the mobile splash shader
- * in mobile/src/components/ui/ShaderLines.tsx.
- *
- * Why raw WebGL (not three.js):
- *   • three.js ships ~150 KB gzipped just to draw a single fullscreen quad.
- *     A full-bleed background shader doesn't need a scene graph, geometry
- *     loader, material system, or render targets.
- *   • The mobile splash already does it in ~40 lines of raw GL via expo-gl.
- *     The fragment shader is identical, so the visual matches exactly.
- *
- * Perf budget (matches mobile choices):
- *   • DPR locked to 1.0 — at 2× the lines hash to sub-pixel widths the eye
- *     can't see anyway and you double the fill cost.
- *   • IntersectionObserver pauses the rAF loop the instant the canvas is
- *     fully off-screen (scrolled past hero) — zero GPU when invisible.
- *   • visibilitychange pauses when the tab is hidden (battery-friendly).
- *   • prefers-reduced-motion → render one static frame and stop the loop.
- *
- * Render order on the landing page: the component renders absolutely
- * positioned at inset:0 with pointer-events:none, alpha-clear. The hero
- * markup behind/in front of it is unaffected.
- */
+import { useEffect, useRef } from 'react';
 
-import { useEffect, useRef } from "react";
+const VERT = `
+  attribute vec2 position;
 
-const VERT = `attribute vec2 position;void main(){gl_Position=vec4(position,0.0,1.0);}`;
+  void main() {
+    gl_Position = vec4(position, 0.0, 1.0);
+  }
+`;
 
-// Fragment shader — verbatim port of the mobile splash shader. Same
-// constants, same loop, same `random(uv.x)` per-pixel seed, same
-// `lineWidth = 0.004`. The fade-after-18s envelope is web-only and lets
-// the shader settle into a quiet background after the first reveal.
 const FRAG = `
   precision highp float;
-  uniform vec2  resolution;
+
+  uniform vec2 resolution;
   uniform float time;
+  uniform float themeMode;
 
-  float random(in float x){ return fract(sin(x) * 1e4); }
+  float random(in float x) {
+    return fract(sin(x) * 1e4);
+  }
 
-  void main(){
+  void main() {
     vec2 uv = (gl_FragCoord.xy * 2.0 - resolution.xy)
-              / min(resolution.x, resolution.y);
+      / min(resolution.x, resolution.y);
 
     vec2 fMosaicScal = vec2(4.0, 2.0);
     vec2 vScreenSize = vec2(256.0, 256.0);
+
     uv.x = floor(uv.x * vScreenSize.x / fMosaicScal.x) / (vScreenSize.x / fMosaicScal.x);
     uv.y = floor(uv.y * vScreenSize.y / fMosaicScal.y) / (vScreenSize.y / fMosaicScal.y);
 
     float t = time * 0.06 + random(uv.x) * 0.4;
     float lineWidth = 0.004;
 
-    vec3 color = vec3(0.0);
+    vec3 raw = vec3(0.0);
+
     for (int j = 0; j < 3; j++) {
       for (int i = 0; i < 5; i++) {
-        color[j] += lineWidth * float(i * i) / abs(fract(t - 0.01 * float(j) + float(i) * 0.01) * 1.0 - length(uv));
+        raw[j] += lineWidth * float(i * i)
+          / abs(fract(t - 0.01 * float(j) + float(i) * 0.01) - length(uv));
       }
     }
 
-    float a = 1.0;
-    if (time > 18.0) {
-      a = mix(1.0, 0.15, smoothstep(18.0, 24.0, time));
-    }
-    gl_FragColor = vec4(color[2], color[1], color[0], a);
+    float fade = 1.0;
+
+    vec2 screenUV = gl_FragCoord.xy / resolution.xy;
+    float grad = (screenUV.x + screenUV.y) * 0.5;
+
+    vec3 darkBaseA = vec3(0.043, 0.071, 0.125);
+    vec3 darkBaseB = vec3(0.059, 0.110, 0.180);
+    vec3 darkBaseC = vec3(0.067, 0.122, 0.208);
+
+    vec3 darkBlueA = vec3(0.106, 0.208, 0.357);
+    vec3 darkBlueB = vec3(0.392, 0.714, 0.976);
+    vec3 darkBlueC = vec3(0.231, 0.475, 0.690);
+
+    // Light mode: BreathingGradient palette — light-blue base fill (#e8f2fb →
+    // #cce1f5) with medium-blue lines (#4a8fd0 / #63a1db / #3b79b0) woven in.
+    vec3 lightBaseA = vec3(0.910, 0.949, 0.984);
+    vec3 lightBaseB = vec3(0.855, 0.918, 0.973);
+    vec3 lightBaseC = vec3(0.800, 0.882, 0.961);
+
+    vec3 lightBlueA = vec3(0.290, 0.560, 0.820);
+    vec3 lightBlueB = vec3(0.388, 0.631, 0.859);
+    vec3 lightBlueC = vec3(0.231, 0.475, 0.690);
+
+    vec3 baseA = mix(darkBaseA, lightBaseA, themeMode);
+    vec3 baseB = mix(darkBaseB, lightBaseB, themeMode);
+    vec3 baseC = mix(darkBaseC, lightBaseC, themeMode);
+
+    vec3 blueA = mix(darkBlueA, lightBlueA, themeMode);
+    vec3 blueB = mix(darkBlueB, lightBlueB, themeMode);
+    vec3 blueC = mix(darkBlueC, lightBlueC, themeMode);
+
+    vec3 base = mix(baseA, baseB, smoothstep(0.0, 0.55, grad));
+    base = mix(base, baseC, smoothstep(0.45, 1.0, grad));
+
+    vec3 accent = mix(blueA, blueB, smoothstep(0.0, 0.55, grad));
+    accent = mix(accent, blueC, smoothstep(0.45, 1.0, grad));
+
+    float mask = clamp((raw.r + raw.g + raw.b) * 0.18, 0.0, 1.0);
+    vec3 color = mix(base, accent, mask);
+
+    // Dark: faint line overlay so the bg shows through (alpha floor near zero).
+    // Light: near-solid blue fill like the BreathingGradient — base covers the
+    // whole surface, brighter lines woven in on top.
+    float darkAlpha = clamp(mask, 0.08, 0.65);
+    float lightAlpha = clamp(0.85 + mask * 0.15, 0.85, 1.0);
+    float alpha = mix(darkAlpha, lightAlpha, themeMode) * fade;
+
+    gl_FragColor = vec4(color, alpha);
   }
 `;
 
-function compile(gl: WebGLRenderingContext, type: number, src: string): WebGLShader | null {
-  const sh = gl.createShader(type);
-  if (!sh) return null;
-  gl.shaderSource(sh, src);
-  gl.compileShader(sh);
-  if (process.env.NODE_ENV !== "production" && !gl.getShaderParameter(sh, gl.COMPILE_STATUS)) {
-    // eslint-disable-next-line no-console
-    console.error("[ShaderAnimation] compile error:", gl.getShaderInfoLog(sh));
-    gl.deleteShader(sh);
+function compile(
+  gl: WebGLRenderingContext,
+  type: number,
+  src: string
+): WebGLShader | null {
+  const shader = gl.createShader(type);
+
+  if (!shader) return null;
+
+  gl.shaderSource(shader, src);
+  gl.compileShader(shader);
+
+  if (
+    process.env.NODE_ENV !== 'production' &&
+    !gl.getShaderParameter(shader, gl.COMPILE_STATUS)
+  ) {
+    console.error('[ShaderLines] compile error:', gl.getShaderInfoLog(shader));
+    gl.deleteShader(shader);
     return null;
   }
-  return sh;
+
+  return shader;
 }
 
-export function ShaderAnimation() {
-  const containerRef = useRef<HTMLDivElement>(null);
+type ShaderLinesProps = {
+  mode?: 'dark' | 'light';
+};
+
+export function ShaderLines({ mode = 'dark' }: ShaderLinesProps) {
+  const rootRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
+    const root = rootRef.current;
+    if (!root) return;
 
-    const canvas = document.createElement("canvas");
-    canvas.style.cssText =
-      "position:absolute;inset:0;width:100%;height:100%;pointer-events:none;display:block;transition:filter 2s ease;";
-    container.appendChild(canvas);
+    root.dataset.shaderMode = mode;
+  }, [mode]);
 
-    const blurTimer = setTimeout(() => {
-      canvas.style.filter = "blur(40px)";
-    }, 6000);
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root) return;
 
-    // Antialias off — the shader is hand-tuned around aliased fill, not
-    // smoothed geometry. preserveDrawingBuffer off — we never read back.
+    const canvas = document.createElement('canvas');
+    canvas.style.cssText = [
+      'position:absolute',
+      'inset:0',
+      'width:100%',
+      'height:100%',
+      'display:block',
+      'pointer-events:none',
+    ].join(';');
+
+    root.appendChild(canvas);
+
     const gl =
-      (canvas.getContext("webgl", {
+      (canvas.getContext('webgl', {
         alpha: true,
         antialias: false,
         depth: false,
         stencil: false,
         premultipliedAlpha: true,
-        powerPreference: "low-power",
+        powerPreference: 'low-power',
       }) as WebGLRenderingContext | null) ||
-      (canvas.getContext("experimental-webgl") as WebGLRenderingContext | null);
+      (canvas.getContext('experimental-webgl') as WebGLRenderingContext | null);
 
     if (!gl) {
-      // Graceful no-op when WebGL is unavailable — the page still renders.
       return () => {
-        if (canvas.parentNode === container) container.removeChild(canvas);
+        canvas.remove();
       };
     }
 
     const vert = compile(gl, gl.VERTEX_SHADER, VERT);
     const frag = compile(gl, gl.FRAGMENT_SHADER, FRAG);
+
     if (!vert || !frag) {
-      if (canvas.parentNode === container) container.removeChild(canvas);
+      canvas.remove();
       return;
     }
 
-    const program = gl.createProgram()!;
+    const program = gl.createProgram();
+
+    if (!program) {
+      canvas.remove();
+      return;
+    }
+
     gl.attachShader(program, vert);
     gl.attachShader(program, frag);
     gl.linkProgram(program);
+
+    if (
+      process.env.NODE_ENV !== 'production' &&
+      !gl.getProgramParameter(program, gl.LINK_STATUS)
+    ) {
+      console.error('[ShaderLines] link error:', gl.getProgramInfoLog(program));
+      canvas.remove();
+      return;
+    }
+
     gl.useProgram(program);
 
-    const positionAttr = gl.getAttribLocation(program, "position");
-    const timeLoc = gl.getUniformLocation(program, "time");
-    const resLoc = gl.getUniformLocation(program, "resolution");
+    const positionAttr = gl.getAttribLocation(program, 'position');
+    const timeLoc = gl.getUniformLocation(program, 'time');
+    const resLoc = gl.getUniformLocation(program, 'resolution');
 
-    const vertices = new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]);
-    const buf = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+    const vertices = new Float32Array([
+      -1, -1,
+       1, -1,
+      -1,  1,
+       1,  1,
+    ]);
+
+    const buffer = gl.createBuffer();
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
     gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW);
     gl.enableVertexAttribArray(positionAttr);
     gl.vertexAttribPointer(positionAttr, 2, gl.FLOAT, false, 0, 0);
 
     gl.clearColor(0, 0, 0, 0);
     gl.disable(gl.DEPTH_TEST);
+    gl.disable(gl.CULL_FACE);
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 
-    // DPR locked to 1 — the effect is subtle, 2× DPR halves throughput
-    // with zero perceptible benefit on this fragment program.
-    const resize = () => {
-      const rect = container.getBoundingClientRect();
-      const w = Math.max(1, Math.floor(rect.width  || window.innerWidth));
-      const h = Math.max(1, Math.floor(rect.height || window.innerHeight));
-      if (canvas.width !== w)  canvas.width  = w;
-      if (canvas.height !== h) canvas.height = h;
-      gl.viewport(0, 0, w, h);
-      gl.uniform2f(resLoc, w, h);
-    };
-    resize();
-
-    // ── Animation loop with pause-when-offscreen + pause-when-hidden ──
     let rafId: number | null = null;
     let paused = false;
     let time = 1.0;
 
-    // Reduce-motion: render one static frame, never start the loop.
-    const reduceMotion =
-      typeof window !== "undefined" &&
-      window.matchMedia &&
-      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const resize = () => {
+      const rect = root.getBoundingClientRect();
 
-    const frame = () => {
+      const width = Math.max(1, Math.floor(rect.width || window.innerWidth));
+      const height = Math.max(1, Math.floor(rect.height || window.innerHeight));
+
+      if (canvas.width !== width) canvas.width = width;
+      if (canvas.height !== height) canvas.height = height;
+
+      gl.viewport(0, 0, width, height);
+      gl.uniform2f(resLoc, width, height);
+    };
+
+    const render = () => {
       if (paused) {
         rafId = null;
         return;
       }
-      rafId = requestAnimationFrame(frame);
+
+      rafId = requestAnimationFrame(render);
+
       time += 0.05;
+
+      gl.clear(gl.COLOR_BUFFER_BIT);
       gl.uniform1f(timeLoc, time);
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     };
+
+    const themeModeLoc = gl.getUniformLocation(program, 'themeMode');
+
+    const themeValue = mode === 'light' ? 1.0 : 0.0;
+
+    gl.uniform1f(themeModeLoc, themeValue);
+
+    resize();
+
+    const reduceMotion =
+      window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
 
     if (reduceMotion) {
       gl.uniform1f(timeLoc, time);
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     } else {
-      frame();
+      render();
     }
 
-    const onResize = () => resize();
-    window.addEventListener("resize", onResize, { passive: true });
+    const resizeObserver = new ResizeObserver(resize);
+    resizeObserver.observe(root);
 
-    const io = new IntersectionObserver(
-      (entries) => {
-        for (const e of entries) {
-          const visible = e.isIntersecting;
-          paused = !visible || document.hidden;
-          if (!paused && rafId === null && !reduceMotion) frame();
+    const onVisibilityChange = () => {
+      paused = document.hidden;
+
+      if (!paused && rafId === null && !reduceMotion) {
+        render();
+      }
+    };
+
+    document.addEventListener('visibilitychange', onVisibilityChange);
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        paused = !entry.isIntersecting || document.hidden;
+
+        if (!paused && rafId === null && !reduceMotion) {
+          render();
         }
       },
       { threshold: 0 }
     );
-    io.observe(container);
 
-    const onVisibility = () => {
-      paused = document.hidden;
-      if (!paused && rafId === null && !reduceMotion) frame();
-    };
-    document.addEventListener("visibilitychange", onVisibility, { passive: true });
+    observer.observe(root);
 
     return () => {
-      clearTimeout(blurTimer);
-      if (rafId !== null) cancelAnimationFrame(rafId);
-      window.removeEventListener("resize", onResize);
-      document.removeEventListener("visibilitychange", onVisibility);
-      io.disconnect();
-      gl.deleteBuffer(buf);
+      paused = true;
+
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId);
+      }
+
+      resizeObserver.disconnect();
+      observer.disconnect();
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+
+      if (buffer) gl.deleteBuffer(buffer);
       gl.deleteProgram(program);
       gl.deleteShader(vert);
       gl.deleteShader(frag);
-      if (canvas.parentNode === container) container.removeChild(canvas);
+
+      canvas.remove();
     };
   }, []);
 
   return (
     <div
-      ref={containerRef}
+      ref={rootRef}
       aria-hidden
-      style={{ position: "absolute", inset: 0, width: "100%", height: "100%", overflow: "hidden" }}
+      className="pointer-events-none absolute inset-0 h-full w-full overflow-hidden"
     />
   );
 }
+
+export default ShaderLines;
