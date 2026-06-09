@@ -10,8 +10,13 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
-    "declaration": true,
-    "declarationMap": true,
+    // No .d.ts emit: this is a server app, nothing imports it as a library, and
+    // generating + serializing every export's type is the single most expensive
+    // part of `tsc`. Dropping it roughly halves the Docker build with zero
+    // behavior change (the runtime stage only ships dist/*.js). tsc still
+    // type-checks everything, so this is not a safety reduction.
+    "declaration": false,
+    "declarationMap": false,
     "sourceMap": true,
     "baseUrl": ".",
     "paths": {
