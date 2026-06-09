@@ -855,6 +855,7 @@ export interface AdminFxCurrency {
 
 export interface AdminFxStatus {
   lydParallelScraped: Record<string, number>;  // e.g. { USD: 8.32, EUR: 9.79, ... } LYD per unit (scrape fallback)
+  fulusCached?: Record<string, { rate: number; ageMs: number; source: string }>;
   lydOrderBook: { netUsd: number; skewPct: number; maxSkewPct: number; refUsd: number };
   usdLydHistory: Array<{ t: number; price: number; volumeUsd: number; skewPct: number }>;
   currencies?: AdminFxCurrency[]; // per-currency live rate + history for the sparkline strip

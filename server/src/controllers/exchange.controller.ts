@@ -134,11 +134,30 @@ export class ExchangeController {
           logger.info('[fulus.webhook] bank rate (not yet priced)', { bank: d.bank_name, currency: d.currency, rate });
         } else if (Number.isFinite(rate)) {
           const accepted = noteFulusRate(d.currency, rate, 'webhook');
-          // Drop the FX memory cache so the next quote reflects the new rate at once.
+          // Drop every cache that can surface the old rate so the next quote,
+          // public rates map, and admin panel reflect the webhook immediately.
           if (accepted) {
-            const { invalidateRate } = await import('../services/exchange/fxRateProvider.service');
-            invalidateRate(d.currency.toUpperCase(), 'LYD');
-            logger.info('[fulus.webhook] cash rate updated', { currency: d.currency, rate });
+            const code = d.currency.toUpperCase();
+            const { getRate, invalidateRate } = await import('../services/exchange/fxRateProvider.service');
+            invalidateRate(code, 'LYD');
+            invalidateRate('LYD', code);
+            const { invalidateRatesCache } = await import('../routes/rates');
+            invalidateRatesCache();
+
+            // Force one fresh pricing pass. This persists the Fulus-backed
+            // buy/sell row as isActive=false, so admin storage follows the
+            // live feed without creating a manual override.
+            const fresh = await getRate(code, 'LYD').catch(() => null);
+
+            const io = req.app.get('io') as IOServer | undefined;
+            io?.to('prices').emit('price:update', {
+              baseCurrency: code,
+              quoteCurrency: 'LYD',
+              buyPrice: fresh?.buyPrice,
+              sellPrice: fresh?.sellPrice,
+              source: fresh?.source ?? 'live:fulus',
+            });
+            logger.info('[fulus.webhook] cash rate updated', { currency: code, rate, source: fresh?.source });
           }
         }
       }
