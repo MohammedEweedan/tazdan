@@ -7,6 +7,7 @@ import {
   fulusEnabled,
   fulusCachedRates,
 } from '../services/exchange/fulus.service';
+// backfillHistory is imported dynamically in tests that mock prisma.
 
 const OLD_ENV = process.env;
 beforeEach(() => {
@@ -67,6 +68,49 @@ describe('noteFulusRate sanity bounds', () => {
 
   it('rejects a non-finite rate', () => {
     expect(noteFulusRate('EUR', NaN, 'webhook')).toBe(false);
+  });
+});
+
+describe('backfillHistory', () => {
+  const realFetch = global.fetch;
+  afterEach(() => { global.fetch = realFetch; });
+
+  it('inserts a tick per sane data point and skips out-of-range rates', async () => {
+    process.env.FULUS_API_TOKEN = 'tok_test';
+    // Mock the prisma module used inside backfillHistory.
+    const created: any[] = [];
+    jest.doMock('../utils/prisma', () => ({
+      prisma: {
+        fxRateTick: {
+          findFirst: jest.fn().mockResolvedValue(null),
+          create: jest.fn((args: any) => { created.push(args.data); return Promise.resolve(args.data); }),
+        },
+      },
+    }));
+    // Re-import so the mock is picked up.
+    const { backfillHistory } = await import('../services/exchange/fulus.service');
+
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: [
+        { rate: 8.37, timestamp: '2026-06-08T14:00:00+02:00' },  // sane → inserted
+        { rate: 99,   timestamp: '2026-06-08T09:00:00+02:00' },  // out of bounds → skipped
+        { rate: 8.40 },                                          // no timestamp → skipped
+      ] }),
+    }) as any;
+
+    const n = await backfillHistory('USD', 1);
+    expect(n).toBe(1);
+    expect(created).toHaveLength(1);
+    expect(created[0].pair).toBe('USD/LYD');
+    expect(created[0].price).toBe('8.37000000');
+    jest.dontMock('../utils/prisma');
+  });
+
+  it('no-ops without a token', async () => {
+    delete process.env.FULUS_API_TOKEN;
+    const { backfillHistory } = await import('../services/exchange/fulus.service');
+    expect(await backfillHistory('USD', 7)).toBe(0);
   });
 });
 

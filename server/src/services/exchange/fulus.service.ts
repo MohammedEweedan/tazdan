@@ -20,6 +20,13 @@
  * Rate direction: Fulus `rate` is LYD per 1 unit of the currency (e.g.
  * USD 6.85 = 6.85 LYD per 1 USD), matching our `<CODE>/LYD` mid convention.
  *
+ * HTTP note: Fulus's responses are slightly non-compliant (a header terminated
+ * with LF instead of CRLF), which Node's strict undici `fetch` parser REJECTS
+ * with "Missing expected CR after header value" — so a plain fetch silently
+ * fails and the rate never updates. We therefore call Fulus via axios with
+ * `insecureHTTPParser: true`, which tolerates the malformed header (curl does
+ * too, which is why manual curl tests passed while the app saw nothing).
+ *
  * Env:
  *   FULUS_API_TOKEN          Bearer token from the Fulus dashboard (required to enable).
  *   FULUS_WEBHOOK_SECRET     Secret for X-Webhook-Signature HMAC-SHA256 verification.
@@ -27,6 +34,32 @@
  *   FULUS_CACHE_TTL_MS       Fresh-cache window per pair, ms (default 600000 = 10 min).
  */
 import crypto from 'crypto';
+import axios from 'axios';
+
+/**
+ * GET a Fulus endpoint, tolerating its LF-terminated headers. Returns the
+ * parsed JSON body or null on any failure (timeout, non-2xx, network). Never
+ * throws — callers fall back to cache/scraper.
+ */
+async function fulusGet<T = any>(path: string, timeoutMs = 5000): Promise<T | null> {
+  const token = process.env.FULUS_API_TOKEN;
+  if (!token) return null;
+  try {
+    const res = await axios.get<T>(`${BASE_URL}${path}`, {
+      headers: { Authorization: `Bearer ${token}`, accept: 'application/json' },
+      timeout: timeoutMs,
+      // Tolerate Fulus's non-CRLF headers (see file header note).
+      ...({ insecureHTTPParser: true } as Record<string, unknown>),
+    });
+    return res.data;
+  } catch (err: any) {
+    if (err?.response?.status === 429) {
+      // eslint-disable-next-line no-console
+      console.warn('[fulus] rate limit hit (429) — relying on cache/scraper');
+    }
+    return null;
+  }
+}
 
 const BASE_URL = process.env.FULUS_BASE_URL || 'https://fulus.ly/api/v1';
 // A webhook-fed rate stays fresh for this long before the poll fallback
@@ -94,28 +127,13 @@ export function fulusCachedRates(): Record<string, { rate: number; ageMs: number
  * upstream can't stall a quote — the caller falls through to the scraper.
  */
 async function pollCurrent(currency: string): Promise<number | null> {
-  const token = process.env.FULUS_API_TOKEN;
-  if (!token) return null;
-  const url = `${BASE_URL}/rates/current?currency=${encodeURIComponent(currency)}&rate_type=cash`;
-  try {
-    const ctrl = new AbortController();
-    const t = setTimeout(() => ctrl.abort(), 4000);
-    const res = await fetch(url, {
-      signal: ctrl.signal,
-      headers: { Authorization: `Bearer ${token}`, accept: 'application/json' },
-    });
-    clearTimeout(t);
-    if (!res.ok) {
-      if (res.status === 429) console.warn('[fulus] rate limit hit (429) — relying on cache/scraper');
-      return null;
-    }
-    const json = (await res.json()) as { data?: { rate?: number } };
-    const v = json?.data?.rate;
-    if (typeof v === 'number' && noteFulusRate(currency, v, 'poll')) return v;
-    return null;
-  } catch {
-    return null;
-  }
+  const json = await fulusGet<{ data?: { rate?: number } }>(
+    `/rates/current?currency=${encodeURIComponent(currency)}&rate_type=cash`,
+    4000,
+  );
+  const v = json?.data?.rate;
+  if (typeof v === 'number' && noteFulusRate(currency, v, 'poll')) return v;
+  return null;
 }
 
 /**
@@ -138,6 +156,74 @@ export async function getFulusLydRate(currency: string): Promise<number | null> 
   // closer to market than the scraper. The scraper is the next fallback only
   // if we have nothing at all.
   return hit?.rate ?? null;
+}
+
+/**
+ * Backfill price history for one currency vs LYD into the FxRateTick table, so
+ * the admin charts are populated immediately instead of waiting for the live
+ * sampler to accumulate points. Pulls GET /rates/history for each of the last
+ * `days` days (one call/day) and inserts a tick per returned data point.
+ *
+ * Idempotent-ish: we skip a row whose (pair, createdAt) already exists, so
+ * re-running won't duplicate points. Returns the number of ticks inserted.
+ * Best-effort — any failed day is skipped, never throws.
+ */
+export async function backfillHistory(currency: string, days = 7): Promise<number> {
+  const token = process.env.FULUS_API_TOKEN;
+  const code = currency.toUpperCase();
+  if (!token || !FULUS_CURRENCIES.includes(code as FulusCurrency) || days <= 0) return 0;
+
+  const { prisma } = await import('../../utils/prisma');
+  const pair = `${code}/LYD`;
+  let inserted = 0;
+
+  for (let d = 0; d < days; d++) {
+    const day = new Date(Date.now() - d * 86_400_000);
+    const date = day.toISOString().slice(0, 10); // YYYY-MM-DD
+    try {
+      const json = await fulusGet<{ data?: Array<{ rate?: number; timestamp?: string }> }>(
+        `/rates/history?date=${date}&currency=${encodeURIComponent(code)}&rate_type=cash`,
+        5000,
+      );
+      const points = Array.isArray(json?.data) ? json!.data! : [];
+      for (const pt of points) {
+        const rate = typeof pt.rate === 'number' ? pt.rate : NaN;
+        if (!sane(code, rate) || !pt.timestamp) continue;
+        const createdAt = new Date(pt.timestamp);
+        if (Number.isNaN(createdAt.getTime())) continue;
+        // Skip if a tick already exists at this exact instant for the pair.
+        const exists = await prisma.fxRateTick.findFirst({
+          where: { pair, createdAt }, select: { id: true },
+        }).catch(() => null);
+        if (exists) continue;
+        await prisma.fxRateTick.create({
+          data: { pair, price: rate.toFixed(8), volumeUsd: '0', skewPct: '0', createdAt },
+        }).then(() => { inserted++; }).catch(() => undefined);
+      }
+    } catch {
+      /* skip this day */
+    }
+  }
+  if (inserted > 0) {
+    // eslint-disable-next-line no-console
+    console.log(`[fulus] backfilled ${inserted} ${pair} history tick(s) over ${days}d`);
+  }
+  return inserted;
+}
+
+/**
+ * Backfill every Fulus currency once on boot, but only for pairs that are
+ * sparse (few existing ticks) so we don't re-pull on every restart. Gated by
+ * FULUS_BACKFILL_DAYS (default 7; 0 disables) in the caller.
+ */
+export async function backfillAllHistory(days: number): Promise<void> {
+  if (!fulusEnabled() || days <= 0) return;
+  const { countPairTicks } = await import('./lydOrderBook.service');
+  for (const code of FULUS_CURRENCIES) {
+    const have = await countPairTicks(`${code}/LYD`, days * 24);
+    // Only backfill a pair that's basically empty — avoids re-fetching daily.
+    if (have < 5) await backfillHistory(code, days);
+  }
 }
 
 /**
