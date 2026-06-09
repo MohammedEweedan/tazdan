@@ -100,6 +100,57 @@ export class ExchangeController {
     }
   }
 
+  /**
+   * POST /api/exchange/webhook/fulus
+   * Public webhook — Fulus POSTs a `rate.created` event whenever a new LYD
+   * parallel-market rate is published. We verify the X-Webhook-Signature HMAC
+   * over the RAW body, then push the cash rate into the Fulus cache so quotes
+   * reflect it instantly (no polling round-trip). Bank rates are acknowledged
+   * but not yet fed into pricing.
+   *
+   * Always returns 2xx on a verified payload (even when we choose not to act on
+   * it) so Fulus doesn't retry needlessly; only signature failures return 401.
+   */
+  static async fulusWebhook(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const { verifyFulusSignature, noteFulusRate } = await import('../services/exchange/fulus.service');
+      // The raw body is captured by express.json's `verify` hook (see index.ts).
+      const raw = (req as any).rawBody ?? JSON.stringify(req.body);
+      const sig = req.headers['x-webhook-signature'] as string | undefined;
+      if (!verifyFulusSignature(sig, raw)) {
+        logger.warn('[fulus.webhook] invalid signature', { hasSig: Boolean(sig) });
+        return res.status(401).json({ error: 'Invalid signature' });
+      }
+
+      const body = req.body as {
+        event?: string;
+        data?: { currency?: string; rate?: string | number; rate_type?: string; bank_name?: string | null };
+      };
+      const d = body?.data;
+      if (body?.event === 'rate.created' && d?.currency && d?.rate != null) {
+        const rate = typeof d.rate === 'string' ? parseFloat(d.rate) : d.rate;
+        // Only cash rates feed FIAT/LYD pricing; bank rates are logged for now.
+        if (d.rate_type === 'bank') {
+          logger.info('[fulus.webhook] bank rate (not yet priced)', { bank: d.bank_name, currency: d.currency, rate });
+        } else if (Number.isFinite(rate)) {
+          const accepted = noteFulusRate(d.currency, rate, 'webhook');
+          // Drop the FX memory cache so the next quote reflects the new rate at once.
+          if (accepted) {
+            const { invalidateRate } = await import('../services/exchange/fxRateProvider.service');
+            invalidateRate(d.currency.toUpperCase(), 'LYD');
+            logger.info('[fulus.webhook] cash rate updated', { currency: d.currency, rate });
+          }
+        }
+      }
+
+      // Acknowledge regardless — an unverified-but-signed event we don't act on
+      // is still a successful delivery from Fulus's perspective.
+      return res.status(200).json({ received: true });
+    } catch (error) {
+      next(error);
+    }
+  }
+
   // POST /api/exchange/quote
   static async createQuote(req: AuthRequest, res: Response, next: NextFunction) {
     try {
