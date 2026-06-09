@@ -844,10 +844,20 @@ export interface AdminExposure {
   unpriced: string[];
 }
 
+export interface AdminFxCurrency {
+  code: string;                 // e.g. "USD"
+  pair: string;                 // e.g. "USD/LYD"
+  buyPrice: number | null;      // live Fulus-first buy (LYD per unit)
+  sellPrice: number | null;     // live sell
+  source: string | null;        // 'fulus' | 'live' | 'derived' | 'admin:*' | …
+  history: Array<{ t: number; price: number }>;  // sparkline points
+}
+
 export interface AdminFxStatus {
-  lydParallelScraped: Record<string, number>;  // e.g. { USD: 8.32, EUR: 9.79, ... } LYD per unit
+  lydParallelScraped: Record<string, number>;  // e.g. { USD: 8.32, EUR: 9.79, ... } LYD per unit (scrape fallback)
   lydOrderBook: { netUsd: number; skewPct: number; maxSkewPct: number; refUsd: number };
   usdLydHistory: Array<{ t: number; price: number; volumeUsd: number; skewPct: number }>;
+  currencies?: AdminFxCurrency[]; // per-currency live rate + history for the sparkline strip
   historyHours: number;
   generatedAt: number;
 }

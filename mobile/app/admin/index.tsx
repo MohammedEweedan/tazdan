@@ -5,7 +5,7 @@
  * user growth, and one-tap access to every admin surface.
  */
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Alert, Animated, Easing, Pressable, RefreshControl, ScrollView, View } from 'react-native';
 import { Text } from '@/components/ui/Text';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -18,8 +18,8 @@ import { StatusBar } from 'expo-status-bar';
 import { useThemedPalette, useTheme } from '@/store/themeStore';
 import { useAuthStore } from '@/store/authStore';
 import { adminService, type AdminDashboard, type PeriodStats, type AdminExposure, type AdminFxStatus, type AdminFundIntegrity } from '@/services';
-import Svg, { Path, Rect, Line as SvgLine } from 'react-native-svg';
 import { LoadingPulse } from '@/components/ui/LoadingPulse';
+import { FxChart } from '@/components/admin/FxChart';
 
 type Metrics = {
   onlineSockets: number;
@@ -77,57 +77,52 @@ function fmtSignedUsd(n: number): string {
   return `${sign}${body}`;
 }
 
-// Price line + volume bars for the USD/LYD order book.
-function FxChart({ history, p }: { history: Array<{ t: number; price: number; volumeUsd: number }>; p: any }) {
-  const W = 320, H = 120, PAD = 4, VOL_H = 28;
-  if (history.length < 2) {
-    return (
-      <View style={{ height: H, alignItems: 'center', justifyContent: 'center', marginTop: 12 }}>
-        <Ionicons name="pulse-outline" size={28} color={p.fgFaint} />
-        <Text style={{ color: p.fgMuted, fontSize: 12, marginTop: 6 }}>Collecting price history…</Text>
-      </View>
-    );
-  }
-  const prices = history.map((h) => h.price);
-  const vols = history.map((h) => h.volumeUsd);
-  const min = Math.min(...prices), max = Math.max(...prices);
-  const spread = max - min || 1;
-  const maxVol = Math.max(...vols, 1);
-  const lineTop = PAD, lineBottom = H - VOL_H - PAD;
-  const lineH = lineBottom - lineTop;
-  const step = (W - PAD * 2) / (history.length - 1);
-  const xOf = (i: number) => PAD + i * step;
-  const yOf = (v: number) => lineTop + lineH * (1 - (v - min) / spread);
-  const linePath = prices.map((v, i) => `${i === 0 ? 'M' : 'L'} ${xOf(i).toFixed(1)} ${yOf(v).toFixed(1)}`).join(' ');
-  const up = prices[prices.length - 1] >= prices[0];
-  const color = up ? p.greenFg : p.redFg;
-  const barW = Math.max(1, step * 0.6);
+// Grouped admin navigation — replaces the flat 21-tile grid so the hub scans
+// fast instead of forcing a long scroll. Each group collapses; Trading opens by
+// default since rates/orders are the most-touched surfaces.
+type NavItem = { icon: keyof typeof Ionicons.glyphMap; label: string; route: string };
+type NavGroupDef = { title: string; icon: keyof typeof Ionicons.glyphMap; defaultOpen?: boolean; items: NavItem[] };
 
-  return (
-    <View style={{ marginTop: 12 }}>
-      <Svg width="100%" height={H} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none">
-        {[0.5].map((f) => {
-          const y = lineTop + lineH * f;
-          return <SvgLine key={f} x1={0} x2={W} y1={y} y2={y} stroke={p.border} strokeWidth={1} strokeDasharray="3,4" />;
-        })}
-        <Path d={linePath} stroke={color} strokeWidth={2} fill="none" />
-        {/* volume bars along the bottom */}
-        {vols.map((v, i) => {
-          const h = (v / maxVol) * VOL_H;
-          return <Rect key={i} x={xOf(i) - barW / 2} y={H - PAD - h} width={barW} height={h} fill={p.fgMuted} opacity={0.5} />;
-        })}
-      </Svg>
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 }}>
-        <Text style={{ color: p.fgFaint, fontSize: 10 }}>lo {min.toFixed(4)}</Text>
-        <Text style={{ color: p.fgFaint, fontSize: 10 }}>hi {max.toFixed(4)}</Text>
-      </View>
-    </View>
-  );
-}
+const NAV_GROUPS: NavGroupDef[] = [
+  { title: 'Trading', icon: 'trending-up-outline', defaultOpen: true, items: [
+    { icon: 'trending-up-outline',     label: 'Rates',         route: '/admin/rates' },
+    { icon: 'cube-outline',            label: 'Orders',        route: '/admin/orders' },
+    { icon: 'swap-horizontal-outline', label: 'P2P',           route: '/admin/p2p' },
+  ]},
+  { title: 'Money', icon: 'cash-outline', items: [
+    { icon: 'arrow-down-circle-outline', label: 'Deposits',    route: '/admin/deposits' },
+    { icon: 'arrow-up-circle-outline',   label: 'Withdrawals', route: '/admin/withdrawals' },
+    { icon: 'arrow-up-circle-outline',   label: 'On-Ramps',    route: '/admin/ramps' },
+    { icon: 'git-branch-outline',        label: 'On-Chain',    route: '/admin/onchain' },
+    { icon: 'cash-outline',              label: 'Fee Ledger',  route: '/admin/fees' },
+    { icon: 'card-outline',              label: 'Cards',       route: '/admin/cards' },
+  ]},
+  { title: 'People', icon: 'people-outline', items: [
+    { icon: 'people-outline',          label: 'Users',         route: '/admin/users' },
+    { icon: 'document-text-outline',   label: 'KYC',           route: '/admin/kyc' },
+    { icon: 'shield-outline',          label: 'AML Flags',     route: '/admin/aml' },
+    { icon: 'gift-outline',            label: 'Referrals',     route: '/admin/referrals' },
+    { icon: 'key-outline',             label: 'Sessions',      route: '/admin/sessions' },
+  ]},
+  { title: 'Comms', icon: 'chatbubbles-outline', items: [
+    { icon: 'chatbubbles-outline',     label: 'Messages',      route: '/admin/messages' },
+    { icon: 'logo-whatsapp',           label: 'WhatsApp',      route: '/admin/whatsapp' },
+    { icon: 'notifications-outline',   label: 'Notifications', route: '/admin/notifications' },
+    { icon: 'mail-outline',            label: 'Waitlist',      route: '/admin/waitlist' },
+    { icon: 'chatbubble-ellipses-outline', label: 'Support',   route: '/admin/support' },
+  ]},
+  { title: 'System', icon: 'settings-outline', items: [
+    { icon: 'pulse-outline',           label: 'Diagnostics',   route: '/admin/diagnostics' },
+    { icon: 'server-outline',          label: 'Database',      route: '/admin/data' },
+    { icon: 'settings-outline',        label: 'Settings',      route: '/admin/settings' },
+    { icon: 'business-outline',        label: 'Platform Banks', route: '/admin/platform-banks' },
+  ]},
+];
 
 export default function AdminScreen() {
   const p = useThemedPalette();
   const themeMode = useTheme((s) => s.mode);
+  const toggleTheme = useTheme((s) => s.toggle);
   const user = useAuthStore((s) => s.user);
   const setViewMode = useAuthStore((s) => s.setViewMode);
   const qc = useQueryClient();
@@ -148,6 +143,7 @@ export default function AdminScreen() {
 
   const isAdmin = user?.role === 'ADMIN';
   const [period, setPeriod] = useState<Period>('today');
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
   const [scrolling, setScrolling] = useState(false);
   const scrollingRef = useRef(false);
   const [manualRefreshing, setManualRefreshing] = useState(false);
@@ -346,7 +342,19 @@ export default function AdminScreen() {
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
               <Animated.View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#22c55e', transform: [{ scale: dotScale }], opacity: dotOpacity }} />
               <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '600', letterSpacing: 0.6 }}>LIVE</Text>
-              <Pressable onPress={switchToUser} hitSlop={8} style={{ marginLeft: 8, paddingHorizontal: 9, paddingVertical: 5, borderRadius: 7, backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border }}>
+              {/* Theme toggle — cycles dark → light → mono, matching settings. */}
+              <Pressable
+                onPress={() => toggleTheme()}
+                hitSlop={8}
+                style={{ marginLeft: 8, width: 30, height: 30, borderRadius: 8, alignItems: 'center', justifyContent: 'center', backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border }}
+              >
+                <Ionicons
+                  name={themeMode === 'light' ? 'sunny-outline' : themeMode === 'mono' ? 'contrast' : 'moon-outline'}
+                  size={15}
+                  color={p.fg}
+                />
+              </Pressable>
+              <Pressable onPress={switchToUser} hitSlop={8} style={{ paddingHorizontal: 9, paddingVertical: 5, borderRadius: 7, backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border }}>
                 <Text style={{ color: p.fg, fontSize: 10, fontWeight: '600', letterSpacing: 0.5 }}>USER VIEW</Text>
               </Pressable>
             </View>
@@ -426,7 +434,7 @@ export default function AdminScreen() {
 
           {/* Real-time strip */}
           <View style={{ marginTop: 18, paddingHorizontal: 20 }}>
-            <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '600', letterSpacing: 0.7, marginBottom: 10 }}>REAL-TIME</Text>
+            <SectionHeader icon="flash-outline" title="Real-time" accent="#22c55e" p={p} />
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
               <KpiCard label="USERS ONLINE"  value={(m?.onlineUsers ?? 0).toLocaleString()} hint={`${m?.onlineSockets ?? 0} sockets`} icon="people-outline" accent="#22c55e" p={p} />
               <KpiCard label="TXS / 5MIN"    value={(m?.recentTransactions5m ?? 0).toLocaleString()} hint={`${m?.recentOrders5m ?? 0} orders`} icon="flash-outline" accent="#f59e0b" p={p} />
@@ -439,7 +447,7 @@ export default function AdminScreen() {
 
           {/* Platform control strip */}
           <View style={{ marginTop: 18, paddingHorizontal: 20 }}>
-            <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '600', letterSpacing: 0.7, marginBottom: 10 }}>PLATFORM CONTROL</Text>
+            <SectionHeader icon="speedometer-outline" title="Platform control" accent="#06b6d4" p={p} />
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
               <KpiCard label="TX / MIN"       value={(m?.txPerMin ?? 0).toFixed(1)} hint="5 min avg" icon="speedometer-outline" accent="#06b6d4" p={p} />
               <KpiCard label="FEES / MIN"     value={formatUSD(m?.feesPerMin ?? 0, { compact: true })} hint={`${formatUSD(m?.commissions5mUSD ?? 0, { compact: true })} / 5m`} icon="cash-outline" accent="#22c55e" p={p} />
@@ -452,7 +460,7 @@ export default function AdminScreen() {
 
           {/* Lifetime totals strip */}
           <View style={{ marginTop: 18, paddingHorizontal: 20 }}>
-            <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '600', letterSpacing: 0.7, marginBottom: 10 }}>LIFETIME</Text>
+            <SectionHeader icon="infinite-outline" title="Lifetime" accent="#8b5cf6" p={p} />
             <View style={{
               flexDirection: 'row', flexWrap: 'wrap',
               backgroundColor: p.bgElev, borderRadius: 14, borderWidth: 1, borderColor: p.border,
@@ -467,10 +475,13 @@ export default function AdminScreen() {
 
           {/* Exposure & total holdings */}
           <View style={{ marginTop: 18, paddingHorizontal: 20 }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-              <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '600', letterSpacing: 0.7 }}>EXPOSURE & HOLDINGS</Text>
-              {exp && <Text style={{ color: p.fgFaint, fontSize: 10, fontWeight: '600' }}>spread {(exp.spreadPct * 100).toFixed(2)}%</Text>}
-            </View>
+            <SectionHeader
+              icon="wallet-outline"
+              title="Exposure & holdings"
+              accent="#63a1db"
+              right={exp ? <Text style={{ color: p.fgFaint, fontSize: 10, fontWeight: '700' }}>spread {(exp.spreadPct * 100).toFixed(2)}%</Text> : undefined}
+              p={p}
+            />
 
             <View style={{ borderRadius: 20, padding: 20, backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border }}>
               <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '600', letterSpacing: 0.7 }}>
@@ -540,7 +551,18 @@ export default function AdminScreen() {
 
           {/* Treasury integrity — fund audit + ledger reconciliation */}
           <View style={{ marginTop: 18, paddingHorizontal: 20 }}>
-            <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '600', letterSpacing: 0.7, marginBottom: 10 }}>TREASURY INTEGRITY</Text>
+            <SectionHeader
+              icon="shield-checkmark-outline"
+              title="Treasury integrity"
+              accent={fund?.tradingHalted ? '#ef4444' : p.greenFg}
+              right={fund ? (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 7, backgroundColor: (fund.tradingHalted ? '#ef4444' : p.greenFg) + '1f' }}>
+                  <View style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: fund.tradingHalted ? '#ef4444' : p.greenFg }} />
+                  <Text style={{ color: fund.tradingHalted ? '#ef4444' : p.greenFg, fontSize: 10, fontWeight: '800' }}>{fund.tradingHalted ? 'HALTED' : 'OK'}</Text>
+                </View>
+              ) : undefined}
+              p={p}
+            />
 
             {fund?.tradingHalted && (
               <View style={{ marginBottom: 10, borderRadius: 14, padding: 14, backgroundColor: 'rgba(239,68,68,0.12)', borderWidth: 1, borderColor: '#ef4444' }}>
@@ -621,7 +643,18 @@ export default function AdminScreen() {
 
           {/* FX — USD/LYD order book + scraped parallel rates */}
           <View style={{ marginTop: 18, paddingHorizontal: 20 }}>
-            <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '600', letterSpacing: 0.7, marginBottom: 10 }}>FX · USD/LYD ORDER BOOK</Text>
+            <SectionHeader
+              icon="git-compare-outline"
+              title="FX · USD/LYD order book"
+              accent="#f59e0b"
+              right={(
+                <Pressable onPress={() => router.push('/admin/rates' as any)} hitSlop={8} style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+                  <Text style={{ color: p.accent, fontSize: 11, fontWeight: '800' }}>Manage</Text>
+                  <Ionicons name="chevron-forward" size={13} color={p.accent} />
+                </Pressable>
+              )}
+              p={p}
+            />
 
             <View style={{ borderRadius: 18, padding: 16, backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border }}>
               {/* Current rate + skew */}
@@ -686,7 +719,22 @@ export default function AdminScreen() {
 
           {/* Pending action queue */}
           <View style={{ marginTop: 18, paddingHorizontal: 20 }}>
-            <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '600', letterSpacing: 0.7, marginBottom: 10 }}>PENDING ACTIONS</Text>
+            {(() => {
+              const totalPending = (d?.pendingKYC ?? 0) + (d?.pendingDeposits ?? 0) + (d?.pendingWithdrawals ?? 0);
+              return (
+                <SectionHeader
+                  icon="alert-circle-outline"
+                  title="Needs attention"
+                  accent={totalPending > 0 ? '#f59e0b' : p.greenFg}
+                  right={(
+                    <View style={{ minWidth: 22, paddingHorizontal: 7, height: 20, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: (totalPending > 0 ? '#f59e0b' : p.greenFg) + '1f' }}>
+                      <Text style={{ color: totalPending > 0 ? '#f59e0b' : p.greenFg, fontSize: 11, fontWeight: '800', fontVariant: ['tabular-nums'] }}>{totalPending}</Text>
+                    </View>
+                  )}
+                  p={p}
+                />
+              );
+            })()}
             <ActionRow icon="document-text-outline"   label="KYC Reviews"             count={d?.pendingKYC ?? 0}         onPress={() => router.push('/admin/kyc' as any)} p={p} />
             <ActionRow icon="arrow-down-circle-outline" label="Deposits Awaiting"     count={d?.pendingDeposits ?? 0}    onPress={() => router.push('/admin/deposits' as any)} p={p} />
             <ActionRow icon="arrow-up-circle-outline"  label="Withdrawal Queue"        count={d?.pendingWithdrawals ?? 0} onPress={() => router.push('/admin/withdrawals' as any)} p={p} />
@@ -697,7 +745,7 @@ export default function AdminScreen() {
 
           {/* Trade flow */}
           <View style={{ marginTop: 18, paddingHorizontal: 20 }}>
-            <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '600', letterSpacing: 0.7, marginBottom: 10 }}>TRADE FLOW</Text>
+            <SectionHeader icon="swap-vertical-outline" title="Trade flow" accent="#8b5cf6" p={p} />
             <View style={{ backgroundColor: p.bgElev, borderRadius: 14, borderWidth: 1, borderColor: p.border, padding: 16 }}>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
                 <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '700' }}>{PERIOD_LABEL[period].current} Volume</Text>
@@ -716,7 +764,7 @@ export default function AdminScreen() {
           {/* Top pairs */}
           {!!d?.ordersByPair?.length && (
             <View style={{ marginTop: 18, paddingHorizontal: 20 }}>
-              <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '600', letterSpacing: 0.7, marginBottom: 10 }}>TOP PAIRS BY ORDER COUNT</Text>
+              <SectionHeader icon="podium-outline" title="Top pairs by order count" accent="#06b6d4" p={p} />
               <View style={{ backgroundColor: p.bgElev, borderRadius: 14, borderWidth: 1, borderColor: p.border, overflow: 'hidden' }}>
                 {d.ordersByPair.slice(0, 6).map((row, i, arr) => {
                   const max = Math.max(...d.ordersByPair.map((r) => r.count));
@@ -742,7 +790,7 @@ export default function AdminScreen() {
           {/* User growth */}
           {!!d?.userGrowth?.length && (
             <View style={{ marginTop: 18, paddingHorizontal: 20 }}>
-              <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '600', letterSpacing: 0.7, marginBottom: 10 }}>USER GROWTH · 7 DAYS</Text>
+              <SectionHeader icon="people-circle-outline" title="User growth · 7 days" accent="#22c55e" p={p} />
               <View style={{ backgroundColor: p.bgElev, borderRadius: 14, borderWidth: 1, borderColor: p.border, padding: 16 }}>
                 <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 6, height: 80 }}>
                   {d.userGrowth.map((g) => {
@@ -787,30 +835,21 @@ export default function AdminScreen() {
             </View>
           )}
 
-          {/* Manage tiles */}
+          {/* Manage — grouped, collapsible. Replaces the flat 21-tile wall that
+              forced a long scroll. Groups open on tap; Trading is open by default
+              since rates/orders are the most-touched. */}
           <View style={{ marginTop: 22, paddingHorizontal: 20 }}>
-            <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '600', letterSpacing: 0.7, marginBottom: 10 }}>MANAGE</Text>
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
-              <NavTile icon="pulse-outline"             label="Diagnostics"    onPress={() => router.push('/admin/diagnostics' as any)} p={p} />
-              <NavTile icon="people-outline"            label="Users"          onPress={() => router.push('/admin/users' as any)} p={p} />
-              <NavTile icon="trending-up-outline"       label="Rates"          onPress={() => router.push('/admin/rates' as any)} p={p} />
-              <NavTile icon="server-outline"            label="Database"       onPress={() => router.push('/admin/data' as any)} p={p} />
-              <NavTile icon="cash-outline"              label="Fee Ledger"     onPress={() => router.push('/admin/fees' as any)} p={p} />
-              <NavTile icon="shield-outline"            label="AML Flags"      onPress={() => router.push('/admin/aml' as any)} p={p} />
-              <NavTile icon="settings-outline"          label="Settings"       onPress={() => router.push('/admin/settings' as any)} p={p} />
-              <NavTile icon="cube-outline"              label="Orders"         onPress={() => router.push('/admin/orders' as any)} p={p} />
-              <NavTile icon="swap-horizontal-outline"   label="P2P"            onPress={() => router.push('/admin/p2p' as any)} p={p} />
-              <NavTile icon="card-outline"              label="Cards"          onPress={() => router.push('/admin/cards' as any)} p={p} />
-              <NavTile icon="chatbubbles-outline"       label="Messages"       onPress={() => router.push('/admin/messages' as any)} p={p} />
-              <NavTile icon="logo-whatsapp"             label="WhatsApp"       onPress={() => router.push('/admin/whatsapp' as any)} p={p} />
-              <NavTile icon="arrow-up-circle-outline"   label="On-Ramps"       onPress={() => router.push('/admin/ramps' as any)} p={p} />
-              <NavTile icon="git-branch-outline"        label="On-Chain"       onPress={() => router.push('/admin/onchain' as any)} p={p} />
-              <NavTile icon="gift-outline"              label="Referrals"      onPress={() => router.push('/admin/referrals' as any)} p={p} />
-              <NavTile icon="key-outline"               label="Sessions"       onPress={() => router.push('/admin/sessions' as any)} p={p} />
-              <NavTile icon="notifications-outline"     label="Notifications"  onPress={() => router.push('/admin/notifications' as any)} p={p} />
-              <NavTile icon="mail-outline"              label="Waitlist"       onPress={() => router.push('/admin/waitlist' as any)} p={p} />
-              <NavTile icon="business-outline"          label="Platform Banks" onPress={() => router.push('/admin/platform-banks' as any)} p={p} />
-            </View>
+            <SectionHeader icon="grid-outline" title="Manage" accent={p.accent} p={p} />
+            {NAV_GROUPS.map((g) => (
+              <NavGroup
+                key={g.title}
+                group={g}
+                open={openGroups[g.title] ?? g.defaultOpen ?? false}
+                onToggle={() => setOpenGroups((s) => ({ ...s, [g.title]: !(s[g.title] ?? g.defaultOpen ?? false) }))}
+                onNavigate={(route) => router.push(route as any)}
+                p={p}
+              />
+            ))}
           </View>
         </ScrollView>
       </SafeAreaView>
@@ -852,6 +891,30 @@ function PeriodMiniStat({ label, curr, prev, delta, format, p }: { label: string
         <Text style={{ color, fontSize: 10, fontWeight: '700' }}>{formatPct(delta)}</Text>
         <Text style={{ color: p.fgFaint, fontSize: 10, marginLeft: 2 }}>was {format(prev)}</Text>
       </View>
+    </View>
+  );
+}
+
+/**
+ * Consistent section header: a small accent icon chip + title, with an optional
+ * trailing accessory (e.g. a stat or badge). Replaces the bare repeated grey
+ * uppercase labels so the sections read as a designed console, not a dump.
+ */
+function SectionHeader({ icon, title, accent, right, p }: {
+  icon: keyof typeof Ionicons.glyphMap;
+  title: string;
+  accent?: string;
+  right?: ReactNode;
+  p: any;
+}) {
+  const tint = accent ?? p.accent;
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 9, marginBottom: 12 }}>
+      <View style={{ width: 26, height: 26, borderRadius: 8, alignItems: 'center', justifyContent: 'center', backgroundColor: tint + '1f' }}>
+        <Ionicons name={icon} size={14} color={tint} />
+      </View>
+      <Text style={{ flex: 1, color: p.fg, fontSize: 13, fontWeight: '800', letterSpacing: 0.2 }}>{title}</Text>
+      {right}
     </View>
   );
 }
@@ -925,6 +988,41 @@ function NavTile({ icon, label, onPress, p }: { icon: keyof typeof Ionicons.glyp
       <Ionicons name={icon} size={22} color={p.fg} />
       <Text style={{ color: p.fg, fontSize: 11, fontWeight: '700' }}>{label}</Text>
     </Pressable>
+  );
+}
+
+/** Collapsible navigation group: header row toggles its tile grid. */
+function NavGroup({ group, open, onToggle, onNavigate, p }: {
+  group: NavGroupDef;
+  open: boolean;
+  onToggle: () => void;
+  onNavigate: (route: string) => void;
+  p: any;
+}) {
+  return (
+    <View style={{ marginBottom: 10 }}>
+      <Pressable
+        onPress={onToggle}
+        style={({ pressed }) => ({
+          flexDirection: 'row', alignItems: 'center', gap: 10,
+          paddingHorizontal: 14, paddingVertical: 13, borderRadius: 14,
+          backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border,
+          opacity: pressed ? 0.85 : 1,
+        })}
+      >
+        <Ionicons name={group.icon} size={18} color={p.fg} />
+        <Text style={{ flex: 1, color: p.fg, fontSize: 14, fontWeight: '700', letterSpacing: -0.2 }}>{group.title}</Text>
+        <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '700' }}>{group.items.length}</Text>
+        <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={16} color={p.fgMuted} />
+      </Pressable>
+      {open && (
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 10 }}>
+          {group.items.map((it) => (
+            <NavTile key={it.route} icon={it.icon} label={it.label} onPress={() => onNavigate(it.route)} p={p} />
+          ))}
+        </View>
+      )}
+    </View>
   );
 }
 

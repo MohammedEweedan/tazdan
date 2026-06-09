@@ -1,7 +1,8 @@
 /**
- * Admin Rates — manual exchange-rate control. Lists every pair, lets
- * admins override buy/sell prices, add new pairs, refresh from the
- * upstream FX provider, or clear an override and fall back to live.
+ * Admin Rates — a USD/LYD price chart on top, with the editable rate pairs
+ * below it. Each pair shows the STORED value next to the current LIVE value so
+ * a stale override is obvious. Admins can override buy/sell, refresh from
+ * upstream (which clears the override), or clear an override to fall back to live.
  */
 
 import { useMemo, useState } from 'react';
@@ -16,9 +17,10 @@ import * as Haptics from 'expo-haptics';
 
 import { useThemedPalette, useTheme } from '@/store/themeStore';
 import { useAuthStore } from '@/store/authStore';
-import { adminService } from '@/services';
+import { adminService, type AdminFxStatus } from '@/services';
 import { LoadingPulse } from '@/components/ui/LoadingPulse';
 import { TopGradient } from '@/components/ui/ScreenShell';
+import { FxChart } from '@/components/admin/FxChart';
 
 type Rate = {
   id: string;
@@ -30,6 +32,8 @@ type Rate = {
   setBy?: string | null;
   setByUser?: { firstName?: string; lastName?: string; email?: string } | null;
   updatedAt: string;
+  // Decorated by the backend: the current live provider rate, override-bypassed.
+  live?: { buyPrice: number; sellPrice: number; source: string } | null;
 };
 
 export default function AdminRates() {
@@ -51,14 +55,28 @@ export default function AdminRates() {
     refetchInterval: 20_000,
   });
 
+  // USD/LYD price history for the chart.
+  const fxQ = useQuery<AdminFxStatus>({
+    queryKey: ['admin-fx-status', 24],
+    queryFn: () => adminService.fxStatus(24),
+    enabled: isAdmin,
+    refetchInterval: 30_000,
+  });
+
   const refreshMut = useMutation({
     mutationFn: ({ base, quote }: { base: string; quote: string }) => adminService.refreshRate(base, quote),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-rates'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin-rates'] });
+      qc.invalidateQueries({ queryKey: ['admin-fx-status'] });
+    },
   });
 
   const clearMut = useMutation({
     mutationFn: ({ base, quote }: { base: string; quote: string }) => adminService.clearRateOverride(base, quote),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-rates'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin-rates'] });
+      qc.invalidateQueries({ queryKey: ['admin-fx-status'] });
+    },
   });
 
   const rates = useMemo<Rate[]>(() => {
@@ -68,10 +86,16 @@ export default function AdminRates() {
     return list.filter((r) => `${r.baseCurrency}${r.quoteCurrency}`.toLowerCase().includes(s.replace('/', '')));
   }, [q.data, search]);
 
+  const usdLyd = fxQ.data?.currencies?.find((c) => c.code === 'USD');
+  const usdHistory = fxQ.data?.usdLydHistory ?? [];
+  const usdMid = usdLyd?.buyPrice != null && usdLyd?.sellPrice != null
+    ? (usdLyd.buyPrice + usdLyd.sellPrice) / 2
+    : null;
+
   if (!isAdmin) {
     return (
       <View style={{ flex: 1, backgroundColor: p.bg, alignItems: 'center', justifyContent: 'center' }}>
-      <TopGradient />
+        <TopGradient />
         <Text style={{ color: p.fg }}>Admin only</Text>
       </View>
     );
@@ -80,6 +104,7 @@ export default function AdminRates() {
   return (
     <View style={{ flex: 1, backgroundColor: p.bg }}>
       <StatusBar style={themeMode === 'light' ? 'dark' : 'light'} />
+      <TopGradient />
       <SafeAreaView style={{ flex: 1 }} edges={['top']}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingTop: 8, paddingBottom: 8 }}>
           <Pressable onPress={() => router.back()} hitSlop={8}>
@@ -92,9 +117,33 @@ export default function AdminRates() {
           </Pressable>
         </View>
 
-        {/* Search */}
-        <View style={{ paddingHorizontal: 16, marginTop: 4 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: p.bgElev, borderRadius: 12, borderWidth: 1, borderColor: p.border, paddingHorizontal: 12, height: 42 }}>
+        <ScrollView
+          contentContainerStyle={{ padding: 16, paddingBottom: 80 }}
+          showsVerticalScrollIndicator={false}
+          refreshControl={<RefreshControl refreshing={q.isFetching} onRefresh={() => { q.refetch(); fxQ.refetch(); }} tintColor={p.fg} />}
+        >
+          {/* ── USD/LYD chart ─────────────────────────────────────────────── */}
+          <View style={{ backgroundColor: p.bgElev, borderRadius: 16, borderWidth: 1, borderColor: p.border, padding: 14, marginBottom: 16 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between' }}>
+              <View>
+                <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '700', letterSpacing: 0.4 }}>USD/LYD</Text>
+                <Text style={{ color: p.fg, fontSize: 26, fontWeight: '700', letterSpacing: -0.6, fontVariant: ['tabular-nums'], marginTop: 2 }}>
+                  {usdMid != null ? usdMid.toFixed(4) : '—'}
+                </Text>
+                <Text style={{ color: p.fgFaint, fontSize: 11, marginTop: 1 }}>LYD per 1 USD · parallel market</Text>
+              </View>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: p.greenFg }} />
+                <Text style={{ color: p.fgMuted, fontSize: 10, fontWeight: '700', letterSpacing: 0.5 }}>
+                  {usdLyd?.source === 'fulus' || usdLyd?.source?.startsWith('live') ? 'LIVE' : (usdLyd?.source?.toUpperCase() ?? '—')}
+                </Text>
+              </View>
+            </View>
+            <FxChart history={usdHistory} p={p} showVolume />
+          </View>
+
+          {/* ── Editable pairs ────────────────────────────────────────────── */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: p.bgElev, borderRadius: 12, borderWidth: 1, borderColor: p.border, paddingHorizontal: 12, height: 42, marginBottom: 12 }}>
             <Ionicons name="search" size={15} color={p.fgFaint} />
             <TextInput
               value={search}
@@ -110,11 +159,9 @@ export default function AdminRates() {
               </Pressable>
             )}
           </View>
-        </View>
 
-        <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 80 }} refreshControl={<RefreshControl refreshing={q.isFetching} onRefresh={q.refetch} tintColor={p.fg} />}>
           {q.isLoading ? (
-            <View style={{ paddingTop: 80, alignItems: 'center' }}><LoadingPulse size={56} icon="trending-up-outline" label="Loading rates…" /></View>
+            <View style={{ paddingTop: 40, alignItems: 'center' }}><LoadingPulse size={56} icon="trending-up-outline" label="Loading rates…" /></View>
           ) : rates.length === 0 ? (
             <View style={{ paddingVertical: 60, alignItems: 'center' }}>
               <Ionicons name="trending-up-outline" size={42} color={p.fgFaint} />
@@ -122,78 +169,20 @@ export default function AdminRates() {
             </View>
           ) : (
             rates.map((r) => (
-              <View key={r.id} style={{ backgroundColor: p.bgElev, borderRadius: 14, borderWidth: 1, borderColor: r.isActive ? p.border : 'rgba(239,68,68,0.3)', padding: 14, marginBottom: 10 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                  <View style={{ paddingHorizontal: 10, paddingVertical: 6, borderRadius: 9, backgroundColor: p.fg }}>
-                    <Text style={{ color: p.bg, fontSize: 14, fontWeight: '600', letterSpacing: 0.3 }}>{r.baseCurrency}/{r.quoteCurrency}</Text>
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ color: p.fgFaint, fontSize: 10, fontWeight: '600', letterSpacing: 0.4 }}>
-                      SPREAD {(((r.buyPrice - r.sellPrice) / r.sellPrice) * 100).toFixed(2)}%
-                    </Text>
-                    {r.setByUser && (
-                      <Text style={{ color: p.fgFaint, fontSize: 10 }}>
-                        OVERRIDE by {r.setByUser.firstName ?? r.setByUser.email}
-                      </Text>
-                    )}
-                  </View>
-                  <View style={{
-                    paddingHorizontal: 7, paddingVertical: 3, borderRadius: 6,
-                    backgroundColor: r.isActive ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)',
-                  }}>
-                    <Text style={{ color: r.isActive ? '#22c55e' : '#ef4444', fontSize: 10, fontWeight: '600', letterSpacing: 0.4 }}>
-                      {r.isActive ? 'OVERRIDE' : 'LIVE FX'}
-                    </Text>
-                  </View>
-                </View>
-
-                <View style={{ flexDirection: 'row', gap: 10, marginTop: 12 }}>
-                  <View style={{ flex: 1, padding: 12, borderRadius: 10, backgroundColor: 'rgba(34,197,94,0.10)', borderWidth: 1, borderColor: 'rgba(34,197,94,0.25)' }}>
-                    <Text style={{ color: '#22c55e', fontSize: 10, fontWeight: '600', letterSpacing: 0.5 }}>BUY</Text>
-                    <Text style={{ color: p.fg, fontSize: 18, fontWeight: '600', marginTop: 2, fontVariant: ['tabular-nums'] }}>
-                      {r.buyPrice.toLocaleString('en-US', { maximumFractionDigits: 8 })}
-                    </Text>
-                  </View>
-                  <View style={{ flex: 1, padding: 12, borderRadius: 10, backgroundColor: 'rgba(239,68,68,0.10)', borderWidth: 1, borderColor: 'rgba(239,68,68,0.25)' }}>
-                    <Text style={{ color: '#ef4444', fontSize: 10, fontWeight: '600', letterSpacing: 0.5 }}>SELL</Text>
-                    <Text style={{ color: p.fg, fontSize: 18, fontWeight: '600', marginTop: 2, fontVariant: ['tabular-nums'] }}>
-                      {r.sellPrice.toLocaleString('en-US', { maximumFractionDigits: 8 })}
-                    </Text>
-                  </View>
-                </View>
-
-                <View style={{ flexDirection: 'row', gap: 8, marginTop: 12 }}>
-                  <Pressable
-                    onPress={() => setEditing(r)}
-                    style={{ flex: 1, paddingVertical: 10, borderRadius: 10, backgroundColor: p.ctaBg, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 5 }}
-                  >
-                    <Ionicons name="pencil" size={13} color={p.ctaFg} />
-                    <Text style={{ color: p.ctaFg, fontSize: 12, fontWeight: '600' }}>Edit</Text>
-                  </Pressable>
-                  <Pressable
-                    onPress={() => Alert.alert('Refresh from upstream?', `Pull live ${r.baseCurrency}/${r.quoteCurrency} from FX provider?`, [
-                      { text: 'Cancel', style: 'cancel' },
-                      { text: 'Refresh', onPress: () => refreshMut.mutate({ base: r.baseCurrency, quote: r.quoteCurrency }) },
-                    ])}
-                    style={{ flex: 1, paddingVertical: 10, borderRadius: 10, backgroundColor: p.pillBg, borderWidth: 1, borderColor: p.border, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 5 }}
-                  >
-                    <Ionicons name="refresh" size={13} color={p.fg} />
-                    <Text style={{ color: p.fg, fontSize: 12, fontWeight: '700' }}>Refresh</Text>
-                  </Pressable>
-                  {r.isActive && (
-                    <Pressable
-                      onPress={() => Alert.alert('Clear override?', `Restore live FX for ${r.baseCurrency}/${r.quoteCurrency}? Users will see the upstream rate again.`, [
-                        { text: 'Cancel', style: 'cancel' },
-                        { text: 'Clear', style: 'destructive', onPress: () => clearMut.mutate({ base: r.baseCurrency, quote: r.quoteCurrency }) },
-                      ])}
-                      style={{ flex: 1, paddingVertical: 10, borderRadius: 10, backgroundColor: 'rgba(239,68,68,0.10)', borderWidth: 1, borderColor: 'rgba(239,68,68,0.25)', alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 5 }}
-                    >
-                      <Ionicons name="close" size={13} color="#ef4444" />
-                      <Text style={{ color: '#ef4444', fontSize: 12, fontWeight: '700' }}>Clear</Text>
-                    </Pressable>
-                  )}
-                </View>
-              </View>
+              <RateCard
+                key={r.id}
+                r={r}
+                p={p}
+                onEdit={() => setEditing(r)}
+                onRefresh={() => Alert.alert('Refresh from upstream?', `Pull live ${r.baseCurrency}/${r.quoteCurrency} and clear any override?`, [
+                  { text: 'Cancel', style: 'cancel' },
+                  { text: 'Refresh', onPress: () => refreshMut.mutate({ base: r.baseCurrency, quote: r.quoteCurrency }) },
+                ])}
+                onClear={() => Alert.alert('Clear override?', `Restore live FX for ${r.baseCurrency}/${r.quoteCurrency}? Users will see the upstream rate again.`, [
+                  { text: 'Cancel', style: 'cancel' },
+                  { text: 'Clear', style: 'destructive', onPress: () => clearMut.mutate({ base: r.baseCurrency, quote: r.quoteCurrency }) },
+                ])}
+              />
             ))
           )}
         </ScrollView>
@@ -220,6 +209,95 @@ export default function AdminRates() {
           />
         </Modal>
       </SafeAreaView>
+    </View>
+  );
+}
+
+/** One editable rate pair card with stored-vs-live and action buttons. */
+function RateCard({ r, p, onEdit, onRefresh, onClear }: { r: Rate; p: any; onEdit: () => void; onRefresh: () => void; onClear: () => void }) {
+  const storedMid = (r.buyPrice + r.sellPrice) / 2;
+  const liveMid = r.live ? (r.live.buyPrice + r.live.sellPrice) / 2 : null;
+  // Flag a meaningful gap between the override and the live market (>0.5%).
+  const drift = r.isActive && liveMid != null && storedMid > 0 ? Math.abs(storedMid - liveMid) / liveMid : 0;
+  const stale = drift > 0.005;
+
+  return (
+    <View style={{ backgroundColor: p.bgElev, borderRadius: 14, borderWidth: 1, borderColor: stale ? 'rgba(245,158,11,0.45)' : (r.isActive ? p.border : 'rgba(99,161,219,0.25)'), padding: 14, marginBottom: 10 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+        <View style={{ paddingHorizontal: 10, paddingVertical: 6, borderRadius: 9, backgroundColor: p.fg }}>
+          <Text style={{ color: p.bg, fontSize: 14, fontWeight: '600', letterSpacing: 0.3 }}>{r.baseCurrency}/{r.quoteCurrency}</Text>
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={{ color: p.fgFaint, fontSize: 10, fontWeight: '600', letterSpacing: 0.4 }}>
+            SPREAD {(((r.buyPrice - r.sellPrice) / r.sellPrice) * 100).toFixed(2)}%
+          </Text>
+          {r.setByUser && (
+            <Text style={{ color: p.fgFaint, fontSize: 10 }}>
+              OVERRIDE by {r.setByUser.firstName ?? r.setByUser.email}
+            </Text>
+          )}
+        </View>
+        <View style={{
+          paddingHorizontal: 7, paddingVertical: 3, borderRadius: 6,
+          backgroundColor: r.isActive ? 'rgba(245,158,11,0.15)' : 'rgba(99,161,219,0.15)',
+        }}>
+          <Text style={{ color: r.isActive ? '#f59e0b' : p.accent, fontSize: 10, fontWeight: '700', letterSpacing: 0.4 }}>
+            {r.isActive ? 'OVERRIDE' : 'LIVE FX'}
+          </Text>
+        </View>
+      </View>
+
+      {/* Stored-vs-live: surfaced only for an active override so a frozen value is obvious. */}
+      {r.isActive && liveMid != null && (
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 10, paddingHorizontal: 10, paddingVertical: 8, borderRadius: 10, backgroundColor: p.pillBg }}>
+          <Ionicons name={stale ? 'warning' : 'information-circle-outline'} size={14} color={stale ? '#f59e0b' : p.fgMuted} />
+          <Text style={{ flex: 1, color: p.fgMuted, fontSize: 11 }}>
+            Stored <Text style={{ color: p.fg, fontWeight: '700' }}>{storedMid.toFixed(4)}</Text> · live <Text style={{ color: p.fg, fontWeight: '700' }}>{liveMid.toFixed(4)}</Text>
+            {stale ? `  (${((storedMid - liveMid) / liveMid * 100).toFixed(1)}% off)` : ''}
+          </Text>
+        </View>
+      )}
+
+      <View style={{ flexDirection: 'row', gap: 10, marginTop: 12 }}>
+        <View style={{ flex: 1, padding: 12, borderRadius: 10, backgroundColor: 'rgba(34,197,94,0.10)', borderWidth: 1, borderColor: 'rgba(34,197,94,0.25)' }}>
+          <Text style={{ color: '#22c55e', fontSize: 10, fontWeight: '600', letterSpacing: 0.5 }}>BUY</Text>
+          <Text style={{ color: p.fg, fontSize: 18, fontWeight: '600', marginTop: 2, fontVariant: ['tabular-nums'] }}>
+            {r.buyPrice.toLocaleString('en-US', { maximumFractionDigits: 8 })}
+          </Text>
+        </View>
+        <View style={{ flex: 1, padding: 12, borderRadius: 10, backgroundColor: 'rgba(239,68,68,0.10)', borderWidth: 1, borderColor: 'rgba(239,68,68,0.25)' }}>
+          <Text style={{ color: '#ef4444', fontSize: 10, fontWeight: '600', letterSpacing: 0.5 }}>SELL</Text>
+          <Text style={{ color: p.fg, fontSize: 18, fontWeight: '600', marginTop: 2, fontVariant: ['tabular-nums'] }}>
+            {r.sellPrice.toLocaleString('en-US', { maximumFractionDigits: 8 })}
+          </Text>
+        </View>
+      </View>
+
+      <View style={{ flexDirection: 'row', gap: 8, marginTop: 12 }}>
+        <Pressable
+          onPress={onEdit}
+          style={{ flex: 1, paddingVertical: 10, borderRadius: 10, backgroundColor: p.ctaBg, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 5 }}
+        >
+          <Ionicons name="pencil" size={13} color={p.ctaFg} />
+          <Text style={{ color: p.ctaFg, fontSize: 12, fontWeight: '600' }}>Edit</Text>
+        </Pressable>
+        <Pressable
+          onPress={onRefresh}
+          style={{ flex: 1, paddingVertical: 10, borderRadius: 10, backgroundColor: p.pillBg, borderWidth: 1, borderColor: p.border, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 5 }}
+        >
+          <Ionicons name="refresh" size={13} color={p.fg} />
+          <Text style={{ color: p.fg, fontSize: 12, fontWeight: '700' }}>Go live</Text>
+        </Pressable>
+        {r.isActive && (
+          <Pressable
+            onPress={onClear}
+            style={{ flex: 1, paddingVertical: 10, borderRadius: 10, backgroundColor: 'rgba(239,68,68,0.10)', borderWidth: 1, borderColor: 'rgba(239,68,68,0.25)', alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 5 }}
+          >
+            <Ionicons name="close" size={13} color="#ef4444" />
+            <Text style={{ color: '#ef4444', fontSize: 12, fontWeight: '700' }}>Clear</Text>
+          </Pressable>
+        )}
+      </View>
     </View>
   );
 }

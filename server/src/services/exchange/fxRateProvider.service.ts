@@ -276,8 +276,15 @@ async function fetchProviderMid(base: string, quote: string): Promise<number | n
 /**
  * Returns the freshest available rate for the requested pair.
  * Admin overrides win when they are newer than `MAX_OVERRIDE_AGE_MS`.
+ *
+ * The window used to be 24h, which made a forgotten override an invisible trap:
+ * a stale manual rate (e.g. USD/LYD stuck at 8.43) would beat the live Fulus
+ * feed for a full day and the admin "Refresh" button — which also calls getRate
+ * — would just re-return the same override. Default is now 2h so a deliberate
+ * override still holds for a working session but yields back to live quickly.
+ * Override with FX_OVERRIDE_MAX_AGE_MS.
  */
-const MAX_OVERRIDE_AGE_MS = 24 * 60 * 60 * 1000;
+const MAX_OVERRIDE_AGE_MS = Number(process.env.FX_OVERRIDE_MAX_AGE_MS ?? 2 * 60 * 60 * 1000);
 
 export async function getRate(base: string, quote: string): Promise<RatePair> {
   // Memory cache (cuts back-to-back screen loads to single-digit ms).
@@ -365,4 +372,54 @@ export async function getRate(base: string, quote: string): Promise<RatePair> {
 /** Force-refresh cache for a pair. Called by admin "refresh rate" endpoint. */
 export function invalidateRate(base: string, quote: string) {
   memoryCache.delete(`${base}/${quote}`);
+}
+
+/**
+ * Live provider rate for a pair, IGNORING any admin override. Used by admin
+ * surfaces to show "what the market is right now" next to the stored value, so
+ * a stale override is visible rather than silently winning. Returns null when
+ * no provider can price the pair (the caller decides how to render that).
+ */
+export async function getLiveProviderRate(base: string, quote: string): Promise<RatePair | null> {
+  let mid = await fetchProviderMid(base, quote);
+  let derived = false;
+  if (mid == null) {
+    const inv = await fetchProviderMid(quote, base);
+    if (inv != null && inv > 0) { mid = 1 / inv; derived = true; }
+  }
+  if (mid == null) return null;
+
+  // Mirror getRate's USD/LYD demand-skew so the "live" figure matches what a
+  // user would actually transact at.
+  let skewSource = '';
+  if (base === 'USD' && quote === 'LYD') {
+    const { applyLydDemandSkew, currentLydSkewPct } = await import('./lydOrderBook.service');
+    mid = applyLydDemandSkew(mid).toNumber();
+    if (currentLydSkewPct() > 0) skewSource = '+skew';
+  } else if (base === 'LYD' && quote === 'USD') {
+    const { currentLydSkewPct } = await import('./lydOrderBook.service');
+    const skew = currentLydSkewPct();
+    if (skew > 0) { mid = mid / (1 + skew); skewSource = '+skew'; }
+  }
+  const { buy, sell } = await applySpread(base, quote, mid);
+  return { buyPrice: buy, sellPrice: sell, source: (derived ? 'derived' : 'live') + skewSource, fetchedAt: new Date() };
+}
+
+/**
+ * One-shot boot cleanup: demote auto-persisted rows that were wrongly left
+ * `isActive=true` with no human `setBy`. The live-rate persist path writes
+ * `isActive:false` (see getRate), so this only catches legacy/bad rows that
+ * would otherwise short-circuit getRate to a frozen value. Idempotent.
+ * Gated by FX_CLEAR_STALE_OVERRIDES_ON_BOOT=1 in the caller.
+ */
+export async function clearStaleAutoOverrides(): Promise<number> {
+  const res = await prisma.exchangeRate.updateMany({
+    where: { isActive: true, setBy: null },
+    data: { isActive: false },
+  }).catch(() => ({ count: 0 }));
+  if (res.count > 0) {
+    // eslint-disable-next-line no-console
+    console.log(`[fx] cleared ${res.count} stale auto-override row(s) (isActive=true, setBy=null)`);
+  }
+  return res.count;
 }

@@ -99,32 +99,54 @@ export function lydOrderBookState() {
 // interval keeps DB load trivial. Disabled until we have a price.
 const SAMPLE_INTERVAL_MS = Number(process.env.LYD_SAMPLE_INTERVAL_MS ?? 5 * 60_000);
 
+// Every currency Fulus carries vs LYD. We record a tick per pair each interval
+// so each currency has its own continuous price line for the admin charts. Only
+// USD/LYD carries volume + skew (the pair that actually trades); the rest are
+// pure price history.
+const LYD_TICK_CODES = ['USD', 'EUR', 'GBP', 'TRY', 'EGP', 'TND', 'SAR', 'AED'] as const;
+
 async function sampleTick(): Promise<void> {
-  // Refresh the price so the chart stays continuous even with no user traffic.
+  const { getRate } = await import('./fxRateProvider.service');
+
+  // USD/LYD first — it drives lastPrice (used by trade ticks) and carries volume.
   try {
-    const { getRate } = await import('./fxRateProvider.service');
     const r = await getRate('USD', 'LYD');
-    // Use the mid of buy/sell as the recorded price.
     const mid = (Number(r.buyPrice) + Number(r.sellPrice)) / 2;
     if (Number.isFinite(mid) && mid > 0) lastPrice = mid;
   } catch { /* keep last known price */ }
 
-  if (lastPrice <= 0) return; // nothing priced yet
-  const volume = pendingVolumeUsd;
-  pendingVolumeUsd = 0;
-  try {
-    await prisma.fxRateTick.create({
-      data: {
-        pair: PAIR,
-        price: lastPrice.toFixed(8),
-        volumeUsd: volume.toFixed(2),
-        skewPct: currentLydSkewPct().toFixed(6),
-      },
-    });
-  } catch {
-    // On failure, don't lose the volume — roll it back into the accumulator.
-    pendingVolumeUsd += volume;
+  if (lastPrice > 0) {
+    const volume = pendingVolumeUsd;
+    pendingVolumeUsd = 0;
+    try {
+      await prisma.fxRateTick.create({
+        data: {
+          pair: PAIR,
+          price: lastPrice.toFixed(8),
+          volumeUsd: volume.toFixed(2),
+          skewPct: currentLydSkewPct().toFixed(6),
+        },
+      });
+    } catch {
+      // On failure, don't lose the volume — roll it back into the accumulator.
+      pendingVolumeUsd += volume;
+    }
   }
+
+  // Remaining currencies — price-only ticks. Best-effort and independent: one
+  // pair failing must not stop the others.
+  await Promise.all(
+    LYD_TICK_CODES.filter((c) => c !== 'USD').map(async (code) => {
+      try {
+        const r = await getRate(code, 'LYD');
+        const mid = (Number(r.buyPrice) + Number(r.sellPrice)) / 2;
+        if (!Number.isFinite(mid) || mid <= 0) return;
+        await prisma.fxRateTick.create({
+          data: { pair: `${code}/LYD`, price: mid.toFixed(8), volumeUsd: '0', skewPct: '0' },
+        });
+      } catch { /* skip this pair this interval */ }
+    }),
+  );
 }
 
 let samplerStarted = false;
@@ -153,4 +175,32 @@ export async function getLydHistory(hours = 24): Promise<
     volumeUsd: Number(r.volumeUsd),
     skewPct: Number(r.skewPct),
   }));
+}
+
+/**
+ * Price history for an arbitrary pair (e.g. "EUR/LYD"). Used by the admin
+ * per-currency sparklines. Same shape as getLydHistory; volume/skew are 0 for
+ * non-USD pairs since only USD/LYD carries them.
+ */
+export async function getPairHistory(pair: string, hours = 24): Promise<
+  Array<{ t: number; price: number; volumeUsd: number; skewPct: number }>
+> {
+  const since = new Date(Date.now() - hours * 3_600_000);
+  const rows = await prisma.fxRateTick.findMany({
+    where: { pair, createdAt: { gte: since } },
+    orderBy: { createdAt: 'asc' },
+    take: 500,
+  });
+  return rows.map((r) => ({
+    t: r.createdAt.getTime(),
+    price: Number(r.price),
+    volumeUsd: Number(r.volumeUsd),
+    skewPct: Number(r.skewPct),
+  }));
+}
+
+/** Number of recorded ticks for a pair within the window — used to decide whether to backfill. */
+export async function countPairTicks(pair: string, hours = 24): Promise<number> {
+  const since = new Date(Date.now() - hours * 3_600_000);
+  return prisma.fxRateTick.count({ where: { pair, createdAt: { gte: since } } }).catch(() => 0);
 }

@@ -428,6 +428,25 @@ async function start() {
     // Sample USD/LYD price + volume for the admin chart (one worker only).
     if (isSchedulerWorker) {
       startLydSampler();
+
+      // FX boot tasks (one worker only, fire-and-forget — never block startup):
+      //  1. Demote legacy auto-override rows wrongly left isActive=true, which
+      //     would otherwise freeze a pair (e.g. USD/LYD stuck at an old value).
+      //  2. Backfill chart history for every Fulus currency so the admin charts
+      //     are populated immediately. Both are idempotent and gated by env.
+      (async () => {
+        try {
+          if (process.env.FX_CLEAR_STALE_OVERRIDES_ON_BOOT === '1') {
+            const { clearStaleAutoOverrides } = await import('./services/exchange/fxRateProvider.service');
+            await clearStaleAutoOverrides();
+          }
+          const days = Number(process.env.FULUS_BACKFILL_DAYS ?? 7);
+          if (days > 0) {
+            const { backfillAllHistory } = await import('./services/exchange/fulus.service');
+            await backfillAllHistory(days);
+          }
+        } catch (e) { logger.warn('[fx] boot tasks failed', { err: e }); }
+      })();
     }
     // One-time idempotent ledger backfill — sync opening balances from the
     // live Wallet/UserWallet tables so the ledger is an authoritative copy.

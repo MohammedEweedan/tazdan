@@ -338,13 +338,29 @@ export class AdminController {
     } catch (error) { next(error); }
   }
 
-  /** Force a refresh from the FX provider, returning the new rate. */
+  /**
+   * Force a refresh from the FX provider, returning the new live rate.
+   *
+   * Refresh now CLEARS any admin override on the pair first. Previously it just
+   * called getRate, which short-circuits to a fresh override — so refreshing an
+   * overridden pair (e.g. USD/LYD stuck at 8.43) re-returned the same frozen
+   * value and looked broken. Clearing the override makes "Refresh" do what it
+   * says: pull the live upstream (Fulus-first) rate.
+   */
   static async refreshRateFromApi(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const { base, quote } = req.params;
       const baseU  = base.toUpperCase();
       const quoteU = quote.toUpperCase();
       const { getRate, invalidateRate } = await import('../services/exchange/fxRateProvider.service');
+
+      // Demote any override on this pair so getRate consults the live provider.
+      // Best-effort — the row may not exist yet (first-ever fetch).
+      await prisma.exchangeRate.updateMany({
+        where: { baseCurrency: baseU as any, quoteCurrency: quoteU as any, isActive: true },
+        data:  { isActive: false, setBy: null },
+      }).catch(() => undefined);
+
       invalidateRate(baseU, quoteU);
       const fresh = await getRate(baseU, quoteU);
       await prisma.auditLog.create({
@@ -925,13 +941,37 @@ export class AdminController {
   static async getFxStatus(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const hours = Math.min(168, Math.max(1, parseInt(String(req.query.hours ?? '24'), 10) || 24));
-      const { getScrapedLydRates } = await import('../services/exchange/fxRateProvider.service');
-      const { lydOrderBookState, getLydHistory } = await import('../services/exchange/lydOrderBook.service');
+      const { getScrapedLydRates, getRate } = await import('../services/exchange/fxRateProvider.service');
+      const { lydOrderBookState, getLydHistory, getPairHistory } = await import('../services/exchange/lydOrderBook.service');
+      const { FULUS_CURRENCIES } = await import('../services/exchange/fulus.service');
+
       const [lydScraped, history] = await Promise.all([getScrapedLydRates(), getLydHistory(hours)]);
+
+      // Per-currency block: live buy/sell (Fulus-first via getRate) + history line
+      // for each currency we carry vs LYD. Powers the admin sparkline strip.
+      const currencies = await Promise.all(
+        FULUS_CURRENCIES.map(async (code) => {
+          const pair = `${code}/LYD`;
+          const [rate, hist] = await Promise.all([
+            getRate(code, 'LYD').catch(() => null),
+            code === 'USD' ? Promise.resolve(history) : getPairHistory(pair, hours).catch(() => []),
+          ]);
+          return {
+            code,
+            pair,
+            buyPrice:  rate ? Number(rate.buyPrice)  : null,
+            sellPrice: rate ? Number(rate.sellPrice) : null,
+            source:    rate ? rate.source : null,
+            history:   (hist as Array<{ t: number; price: number }>).map((h) => ({ t: h.t, price: h.price })),
+          };
+        }),
+      );
+
       res.json({
-        lydParallelScraped: lydScraped,      // LYD per 1 unit, straight from the source
+        lydParallelScraped: lydScraped,      // LYD per 1 unit, straight from the scrape (fallback)
         lydOrderBook: lydOrderBookState(),   // net flow + current upward skew
-        usdLydHistory: history,              // [{ t, price, volumeUsd, skewPct }]
+        usdLydHistory: history,              // [{ t, price, volumeUsd, skewPct }] — USD/LYD candlestick
+        currencies,                          // [{ code, pair, buyPrice, sellPrice, source, history }]
         historyHours: hours,
         generatedAt: Date.now(),
       });
@@ -1254,12 +1294,26 @@ export class AdminController {
           })
         : [];
       const setterMap = new Map(setters.map((u) => [u.id, u]));
+
+      // Decorate each pair with the CURRENT live provider rate (override-bypassed)
+      // so the admin sees stored-vs-live and can spot a frozen override at a glance.
+      const { getLiveProviderRate } = await import('../services/exchange/fxRateProvider.service');
+      const live = await Promise.all(
+        rates.map((r) =>
+          getLiveProviderRate(r.baseCurrency as string, r.quoteCurrency as string).catch(() => null),
+        ),
+      );
+
       res.json({
-        rates: rates.map((r) => ({
+        rates: rates.map((r, i) => ({
           ...r,
           buyPrice:  Number(r.buyPrice),
           sellPrice: Number(r.sellPrice),
           setByUser: r.setBy ? setterMap.get(r.setBy) ?? null : null,
+          // Null when no provider can price the pair right now.
+          live: live[i]
+            ? { buyPrice: Number(live[i]!.buyPrice), sellPrice: Number(live[i]!.sellPrice), source: live[i]!.source }
+            : null,
         })),
       });
     } catch (error) { next(error); }
