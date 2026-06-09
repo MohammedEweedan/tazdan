@@ -1878,9 +1878,11 @@ function SparklineChart({ points, color, palette: p, onHoverPrice, livePrice, ma
   markers?: TradeMarker[];
 }) {
   const W = 320;
-  const H = 220;
-  const PAD = 0;
-  const HPAD = 0;
+  const H = 214;
+  const TOP_PAD = 4;
+  const RIGHT_PAD = 12;
+  const BOTTOM_PAD = 18;
+  const LEFT_PAD = 0;
   const CARD_INSET = 0;
   const [hoverDate, setHoverDate]   = useState<string | null>(null);
   const [hoverPriceLabel, setHoverPriceLabel] = useState<string | null>(null);
@@ -1901,18 +1903,20 @@ function SparklineChart({ points, color, palette: p, onHoverPrice, livePrice, ma
     const min = Math.min(...values);
     const max = Math.max(...values);
     const spread = max - min || 1;
-    const step = (W - HPAD * 2) / (values.length - 1);
+    const plotW = W - LEFT_PAD - RIGHT_PAD;
+    const plotH = H - TOP_PAD - BOTTOM_PAD;
+    const step = plotW / (values.length - 1);
 
     const pts = values.map((v, i) => ({
-      x: HPAD + i * step,
-      y: PAD + (H - PAD * 2) * (1 - (v - min) / spread),
+      x: LEFT_PAD + i * step,
+      y: TOP_PAD + plotH * (1 - (v - min) / spread),
       val: v,
       ts: series[i]?.timestamp ?? 0,
     }));
 
     const last = pts[pts.length - 1];
     const linePath = monotoneCubicPath(pts);
-    const areaPath = `${linePath} L ${last.x} ${H - PAD} L ${pts[0].x} ${H - PAD} Z`;
+    const areaPath = `${linePath} L ${last.x} ${H - BOTTOM_PAD} L ${pts[0].x} ${H - BOTTOM_PAD} Z`;
 
     // Project trade markers onto chart coords. X from timestamp (interpolated
     // across the series span), Y from the marker's execution price.
@@ -1920,11 +1924,11 @@ function SparklineChart({ points, color, palette: p, onHoverPrice, livePrice, ma
     const tLast = series[series.length - 1]?.timestamp ?? 1;
     const tSpan = tLast - tFirst || 1;
     const markerPts = (markers ?? []).map((m) => ({
-      x: HPAD + ((m.ts - tFirst) / tSpan) * (W - HPAD * 2),
-      y: PAD + (H - PAD * 2) * (1 - (m.price - min) / spread),
+      x: LEFT_PAD + ((m.ts - tFirst) / tSpan) * plotW,
+      y: TOP_PAD + plotH * (1 - (m.price - min) / spread),
       side: m.side,
       price: m.price,
-    })).filter((mp) => mp.x >= 0 && mp.x <= W);
+    })).filter((mp) => mp.x >= LEFT_PAD && mp.x <= W - RIGHT_PAD);
 
     return { pts, step, last, linePath, areaPath, markerPts };
   }, [series, markers]);
@@ -1954,7 +1958,7 @@ function SparklineChart({ points, color, palette: p, onHoverPrice, livePrice, ma
       return;
     }
     const { pts, step } = chart;
-    const idx = Math.min(pts.length - 1, Math.max(0, Math.round((vbX - HPAD) / step)));
+    const idx = Math.min(pts.length - 1, Math.max(0, Math.round((vbX - LEFT_PAD) / step)));
     const pt = pts[idx];
     hoverX.value = pt.x;
     hoverY.value = pt.y;
@@ -2094,8 +2098,11 @@ function CandleChart({ candles, palette: p, upColor, downColor, onHoverPrice, ma
   markers?: TradeMarker[];
 }) {
   const W = 320;
-  const H = 220;
-  const PAD = 0;
+  const H = 214;
+  const TOP_PAD = 6;
+  const RIGHT_PAD = 12;
+  const BOTTOM_PAD = 18;
+  const LEFT_PAD = 0;
   const CARD_INSET = 0;
   const [hoverDate, setHoverDate] = useState<string | null>(null);
   const [hoverPriceLabel, setHoverPriceLabel] = useState<string | null>(null);
@@ -2109,12 +2116,13 @@ function CandleChart({ candles, palette: p, upColor, downColor, onHoverPrice, ma
     let min = Infinity, max = -Infinity;
     for (const c of candles) { if (c.low < min) min = c.low; if (c.high > max) max = c.high; }
     const spread = max - min || 1;
-    const innerW = W - PAD * 2;
+    const innerW = W - LEFT_PAD - RIGHT_PAD;
+    const innerH = H - TOP_PAD - BOTTOM_PAD;
     const slot = innerW / candles.length;
     const bodyW = Math.max(1.5, slot * 0.62);
-    const yOf = (v: number) => PAD + (H - PAD * 2) * (1 - (v - min) / spread);
+    const yOf = (v: number) => TOP_PAD + innerH * (1 - (v - min) / spread);
     const bars = candles.map((c, i) => {
-      const cx = PAD + slot * (i + 0.5);
+      const cx = LEFT_PAD + slot * (i + 0.5);
       const up = c.close >= c.open;
       const yO = yOf(c.open), yC = yOf(c.close);
       return {
@@ -2132,10 +2140,10 @@ function CandleChart({ candles, palette: p, upColor, downColor, onHoverPrice, ma
     const tLast = candles[candles.length - 1]?.timestamp ?? 1;
     const tSpan = tLast - tFirst || 1;
     const markerPts = (markers ?? []).map((m) => ({
-      x: PAD + ((m.ts - tFirst) / tSpan) * innerW,
+      x: LEFT_PAD + ((m.ts - tFirst) / tSpan) * innerW,
       y: yOf(m.price),
       side: m.side,
-    })).filter((mp) => mp.x >= 0 && mp.x <= W);
+    })).filter((mp) => mp.x >= LEFT_PAD && mp.x <= W - RIGHT_PAD);
 
     return { bars, slot, bodyW, markerPts };
   }, [candles, markers]);
@@ -2152,7 +2160,7 @@ function CandleChart({ candles, palette: p, upColor, downColor, onHoverPrice, ma
       return;
     }
     const vbX = pxToVB(px);
-    if (!Number.isFinite(vbX) || vbX < PAD || vbX > W - PAD) {
+    if (!Number.isFinite(vbX) || vbX < LEFT_PAD || vbX > W) {
       if (onHoverPrice) onHoverPrice(null);
       setHoverDate(null);
       setHoverPriceLabel(null);
@@ -2160,7 +2168,7 @@ function CandleChart({ candles, palette: p, upColor, downColor, onHoverPrice, ma
       hoverOpacity.value = withTiming(0, { duration: 150 });
       return;
     }
-    const idx = Math.min(chart.bars.length - 1, Math.max(0, Math.floor((vbX - PAD) / chart.slot)));
+    const idx = Math.min(chart.bars.length - 1, Math.max(0, Math.floor((vbX - LEFT_PAD) / chart.slot)));
     const bar = chart.bars[idx];
     setHoveredIndex(idx);
     hoverOpacity.value = withTiming(1, { duration: 50 });

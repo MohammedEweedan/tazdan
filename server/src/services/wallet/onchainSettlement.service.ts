@@ -37,6 +37,7 @@ import { AppError } from '../../middleware/errorHandler';
 import { logger } from '../../utils/logger';
 import { sendDepositConfirmed } from '../email';
 import { pushCopy, pushTxEvent } from '../push.service';
+import { postLedger } from '../ledger/ledger.service';
 import { deriveKeyForChain } from './walletDerivation.service';
 
 bitcoin.initEccLib(ecc);
@@ -280,6 +281,16 @@ export async function initiateWithdrawal(opts: {
         },
       });
 
+      await postLedger(tx as any, {
+        refType: 'onchain_withdrawal',
+        refId: onChainTx.id,
+        memo: `On-chain withdrawal ${asset} ${network}`,
+        legs: [
+          { type: 'USER', userId: opts.userId, currency: asset as any, amount: amount.mul(-1).toFixed(18) },
+          { type: 'SYSTEM_CHAIN', currency: asset as any, amount: amount.toFixed(18) },
+        ],
+      }, { allowNegativeUser: true });
+
       return {
         onChainTx,
         walletIndex: w.walletIndex as number,
@@ -315,6 +326,15 @@ export async function initiateWithdrawal(opts: {
         where: { id: onChainTx.id },
         data: { status: 'FAILED' },
       });
+      await postLedger(tx as any, {
+        refType: 'onchain_withdrawal_refund',
+        refId: onChainTx.id,
+        memo: `Refund failed on-chain withdrawal ${asset} ${network}`,
+        legs: [
+          { type: 'SYSTEM_CHAIN', currency: asset as any, amount: amount.mul(-1).toFixed(18) },
+          { type: 'USER', userId: opts.userId, currency: asset as any, amount: amount.toFixed(18) },
+        ],
+      }, { allowNegativeUser: true });
     });
     throw new AppError('Withdrawal broadcast failed — refunded', 502);
   }
@@ -387,6 +407,15 @@ export async function processDeposit(opts: {
         where: { id: wallet.id },
         data: { [field]: { increment: new Prisma.Decimal(amount.toFixed(18)) } },
       });
+      await postLedger(tx as any, {
+        refType: 'onchain_deposit',
+        refId: row.id,
+        memo: `Confirmed on-chain deposit ${asset} ${network}`,
+        legs: [
+          { type: 'SYSTEM_CHAIN', currency: asset as any, amount: amount.mul(-1).toFixed(18) },
+          { type: 'USER', userId: wallet.userId, currency: asset as any, amount: amount.toFixed(18) },
+        ],
+      }, { allowNegativeUser: true });
       const confirmed = await tx.onChainTransaction.update({
         where: { id: row.id },
         data: { status: 'CONFIRMED', confirmedAt: new Date() },

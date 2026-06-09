@@ -8,6 +8,7 @@ import { AuthRequest } from '../types';
 import { logger } from '../utils/logger';
 import { sendSwapConfirmed } from '../services/email';
 import { pushCopy, pushTxEvent } from '../services/push.service';
+import { isLedgerCurrency, postLedger } from '../services/ledger/ledger.service';
 
 interface WalletRecord {
   id: string;
@@ -203,6 +204,7 @@ export class WalletController {
           data: { userId: req.user!.id, currency: to as any, balance: 0, frozen: 0 },
         });
         const toBalanceD = new Decimal(toWallet.balance.toString());
+        const reference = `SWP-${Date.now().toString(36).toUpperCase()}`;
 
         // Apply balance changes
         await tx.wallet.update({
@@ -213,6 +215,20 @@ export class WalletController {
           where: { id: toWallet.id },
           data: { balance: { increment: creditedD } },
         });
+
+        if (isLedgerCurrency(from) && isLedgerCurrency(to)) {
+          await postLedger(tx as any, {
+            refType: 'swap',
+            refId: reference,
+            memo: `Swap ${amountD.toString()} ${from} to ${creditedD.toFixed(18)} ${to}`,
+            legs: [
+              { type: 'USER', userId: req.user!.id, currency: from as any, amount: amountD.neg() },
+              { type: 'SYSTEM_FX', currency: from as any, amount: amountD },
+              { type: 'SYSTEM_FX', currency: to as any, amount: creditedD.neg() },
+              { type: 'USER', userId: req.user!.id, currency: to as any, amount: creditedD },
+            ],
+          }, { allowNegativeUser: true });
+        }
         const fromBalance = fromBalanceD.toNumber();
         const toBalance   = toBalanceD.toNumber();
 
@@ -222,7 +238,6 @@ export class WalletController {
         const fakeHash = '0x' + [...Array(64)]
           .map(() => Math.floor(Math.random() * 16).toString(16))
           .join('');
-        const reference = `SWP-${Date.now().toString(36).toUpperCase()}`;
 
         // Two transaction rows — one debit, one credit (paired by reference).
         await tx.transaction.createMany({

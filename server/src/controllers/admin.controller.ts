@@ -946,6 +946,33 @@ export class AdminController {
     } catch (error) { next(error); }
   }
 
+  static async getOperationalReadiness(_req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const { buildOperationalReadiness } = await import('../services/ops/operationalReadiness.service');
+      res.json(await buildOperationalReadiness());
+    } catch (error) { next(error); }
+  }
+
+  static async runDailyClose(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const schema = z.object({ date: z.string().datetime().optional() });
+      const { date } = schema.parse(req.body ?? {});
+      const { runDailyClose } = await import('../services/ops/operationalReadiness.service');
+      const result = await runDailyClose(req.user!.id, date ? new Date(date) : new Date());
+      res.json({ message: 'Daily close completed', ...result });
+    } catch (error) { next(error); }
+  }
+
+  static async markAuditLogReviewed(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const schema = z.object({ note: z.string().max(500).optional() });
+      const { note } = schema.parse(req.body ?? {});
+      const { markAuditLogReviewed } = await import('../services/ops/operationalReadiness.service');
+      const review = await markAuditLogReviewed(req.user!.id, note);
+      res.json({ message: 'Audit log review recorded', review });
+    } catch (error) { next(error); }
+  }
+
   // ── FX status (LYD scrape + order-book skew, for cross-check) ───
   static async getFxStatus(req: AuthRequest, res: Response, next: NextFunction) {
     try {

@@ -17,12 +17,14 @@
 import { Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { Server as IOServer } from 'socket.io';
+import { Decimal } from '@prisma/client/runtime/library';
 
 import { prisma } from '../utils/prisma';
 import { AppError } from '../middleware/errorHandler';
 import { generateReference } from '../utils/helpers';
 import { AuthRequest } from '../types';
 import { TransactionController } from './transaction.controller';
+import { postLedger } from '../services/ledger/ledger.service';
 
 const EDIT_WINDOW_MS = 5 * 60_000;
 
@@ -351,6 +353,7 @@ export class MessageController {
           const ledgerCurrency = PRISMA_CURRENCIES.has(currency)
             ? currency
             : (currency === 'USDT_ERC20' || currency === 'USDT_TRC20' ? 'USDT' : 'USDT');
+          const canPostLedger = PRISMA_CURRENCIES.has(currency) || currency === 'USDT_ERC20' || currency === 'USDT_TRC20';
 
           const transfer = await tx.transfer.create({
             data: {
@@ -363,6 +366,19 @@ export class MessageController {
               note: m.note || undefined,
             },
           });
+
+          if (canPostLedger) {
+            const amountDec = new Decimal(amountNum);
+            await postLedger(tx as any, {
+              refType: 'message_payment',
+              refId: reference,
+              memo: `Message payment ${currency}`,
+              legs: [
+                { type: 'USER', userId: senderId, currency: ledgerCurrency as any, amount: amountDec.neg() },
+                { type: 'USER', userId: data.receiverId, currency: ledgerCurrency as any, amount: amountDec },
+              ],
+            }, { allowNegativeUser: true });
+          }
 
           const senderTx = await tx.transaction.create({
             data: {

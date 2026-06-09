@@ -57,6 +57,9 @@ adminRouter.get('/fx-status', AdminController.getFxStatus);
 adminRouter.get('/fund-integrity', AdminController.getFundIntegrity);
 adminRouter.post('/fund-integrity/reconcile', AdminController.reconcileFundIntegrity);
 adminRouter.post('/clear-trading-halt', AdminController.clearTradingHalt);
+adminRouter.get('/operational-readiness', AdminController.getOperationalReadiness);
+adminRouter.post('/daily-close', AdminController.runDailyClose);
+adminRouter.post('/audit-log/review', AdminController.markAuditLogReviewed);
 
 // Production-safe manual wallet credit
 adminRouter.post('/manual-credit', AdminController.manualCredit);

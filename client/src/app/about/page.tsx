@@ -14,24 +14,19 @@ import {
 import { motion } from "framer-motion";
 import PublicNav from "@/components/ui/PublicNav";
 import PublicFooter from "@/components/ui/PublicFooter";
+import { publicPageEase, publicPageTheme } from "@/components/ui/publicPageTheme";
 
 export default function AboutPage() {
   const { t } = useTranslate();
   const { colorMode } = useColorMode();
   const dark = colorMode === "dark";
 
-  // Charcoal dark mode (matches the app) + #63a1db brand accent.
-  const pageBg     = dark ? "#16181C" : "#ffffff";
-  const textMain   = dark ? "#ffffff" : "#0a0f1e";
-  const textSub    = dark ? "rgba(255,255,255,0.6)" : "#64748b";
-  const cardBg     = dark ? "rgba(255,255,255,0.04)" : "#f4f4f4";
-  const cardBorder = dark ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.10)";
-  const iconBg     = dark ? "rgba(99,161,219,0.14)" : "rgba(99,161,219,0.10)";
-  const accent     = "#63a1db";
-
-  const titleGradient = dark
-    ? "linear(to-b, #ffffff 0%, rgba(255,255,255,0.85) 60%, rgba(255,255,255,0.3) 100%)"
-    : "linear(to-b, #000000 0%, rgba(0,0,0,0.7) 60%, rgba(0,0,0,0.2) 100%)";
+  const {
+    pageBg, textMain, textSub, cardBg, cardBgHover,
+    raisedBg, raisedAlt, cardBorder, strongBorder, accent, accentText,
+    accentSoft, accentBorder, shadow, titleGradient,
+  } = publicPageTheme(dark);
+  const iconBg = accentSoft;
 
   const values = [
     { icon: FiEye,    title: t("page_about_v1_t"), desc: t("page_about_v1_d") },
@@ -66,23 +61,17 @@ export default function AboutPage() {
       <PublicNav />
 
       {/* ── Hero ───────────────────────────────────────────────────────────── */}
-      <motion.div initial={{ opacity: 0, y: 40 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}>
-      <Box pt={{ base: "120px", md: "170px" }} pb={{ base: 16, md: 28 }} textAlign="center" position="relative">
-        {/* subtle grid texture */}
+      <motion.div initial={{ opacity: 0, y: 40 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7, ease: [...publicPageEase] }}>
+      <Box pt={{ base: "118px", md: "160px" }} pb={{ base: 14, md: 22 }} textAlign="center" position="relative" overflow="hidden">
         <Box
-          position="absolute" inset={0} opacity={dark ? 0.04 : 0.03}
-          backgroundImage="linear-gradient(rgba(128,128,128,1) 1px, transparent 1px), linear-gradient(90deg, rgba(128,128,128,1) 1px, transparent 1px)"
-          backgroundSize="60px 60px"
+          position="absolute" inset={0}
+          bg={dark
+            ? "linear-gradient(180deg, rgba(99,161,219,0.10) 0%, rgba(99,161,219,0.025) 42%, rgba(22,24,28,0) 100%)"
+            : "linear-gradient(180deg, rgba(79,139,196,0.10) 0%, rgba(79,139,196,0.025) 42%, rgba(255,255,255,0) 100%)"}
           pointerEvents="none"
         />
         <Container maxW="960px" position="relative" zIndex={1}>
           <VStack spacing={7}>
-            <Text
-              fontSize="11px" fontWeight="800" letterSpacing="0.18em"
-              color={textSub} textTransform="uppercase"
-            >
-              {t("page_about_eyebrow")}
-            </Text>
             <Heading
               as="h1"
               fontWeight="900"
@@ -108,10 +97,11 @@ export default function AboutPage() {
               <Button
                 as={NextLink} href="/register"
                 h="52px" px={8}
-                bg={textMain} color={pageBg}
+                bg={accent} color="#ffffff"
                 borderRadius="14px" fontWeight="800" fontSize="14px"
                 rightIcon={<Icon as={FiArrowRight} />}
-                _hover={{ opacity: 0.85, transform: "scale(1.02)" }}
+                boxShadow={dark ? "0 14px 38px rgba(99,161,219,0.22)" : "0 14px 34px rgba(79,139,196,0.18)"}
+                _hover={{ opacity: 0.9, transform: "translateY(-2px)" }}
                 transition="all 0.2s"
               >
                 {t("nav_register")}
@@ -119,10 +109,11 @@ export default function AboutPage() {
               <Button
                 as={NextLink} href="/trust"
                 h="52px" px={8} variant="ghost"
-                color={textSub}
+                color={textMain}
                 border="1px solid" borderColor={cardBorder}
+                bg={cardBg}
                 borderRadius="14px" fontWeight="700" fontSize="14px"
-                _hover={{ borderColor: textMain, color: textMain }}
+                _hover={{ borderColor: strongBorder, bg: cardBgHover }}
                 transition="all 0.2s"
               >
                 {t("nav_trust") ?? "Trust & Security"}
@@ -134,24 +125,24 @@ export default function AboutPage() {
       </motion.div>
 
       {/* ── Stats strip ───────────────────────────────────────────────────── */}
-      <motion.div initial={{ opacity: 0, y: 32 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, amount: 0.3 }} transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}>
-      <Container maxW="1100px" pb={{ base: 16, md: 24 }}>
+      <motion.div initial={{ opacity: 0, y: 32 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, amount: 0.3 }} transition={{ duration: 0.6, ease: [...publicPageEase] }}>
+      <Container maxW="1100px" pb={{ base: 14, md: 22 }}>
         <SimpleGrid
           columns={{ base: 2, md: 4 }}
-          bg={cardBg}
-          border="1px solid" borderColor={cardBorder}
-          borderRadius="28px"
-          py={{ base: 8, md: 10 }}
-          px={{ base: 6, md: 10 }}
+          gap={{ base: 3, md: 4 }}
         >
           {stats.map((s, i) => (
             <VStack
               key={s.l}
-              align="center"
-              spacing={1.5}
-              py={3}
-              borderRight={i < stats.length - 1 ? "1px solid" : "none"}
+              align="start"
+              spacing={2}
+              p={{ base: 5, md: 6 }}
+              bg={i === 0 ? raisedBg : cardBg}
+              border="1px solid"
               borderColor={cardBorder}
+              borderRadius="18px"
+              minH={{ base: "126px", md: "140px" }}
+              boxShadow={i === 0 ? shadow : "none"}
             >
               <Heading
                 fontSize={{ base: "30px", md: "42px" }}
@@ -161,7 +152,7 @@ export default function AboutPage() {
               >
                 {s.v}
               </Heading>
-              <Text fontSize="12px" color={textSub} fontWeight="600" textAlign="center">
+              <Text fontSize="12px" color={textSub} fontWeight="700" lineHeight="1.35">
                 {s.l}
               </Text>
             </VStack>
@@ -171,7 +162,7 @@ export default function AboutPage() {
       </motion.div>
 
       {/* ── Mission ───────────────────────────────────────────────────────── */}
-      <motion.div initial={{ opacity: 0, y: 32 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, amount: 0.2 }} transition={{ duration: 0.65, ease: [0.22, 1, 0.36, 1] }}>
+      <motion.div initial={{ opacity: 0, y: 32 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, amount: 0.2 }} transition={{ duration: 0.65, ease: [...publicPageEase] }}>
       <Box py={{ base: 16, md: 24 }} px={{ base: 4, md: 8 }}>
         <Container maxW="1100px">
           <Grid templateColumns={{ base: "1fr", lg: "1fr 1fr" }} gap={{ base: 8, lg: 16 }} alignItems="center">
@@ -198,8 +189,9 @@ export default function AboutPage() {
             <GridItem>
               <VStack align="stretch" spacing={4}>
                 <Box
-                  bg={cardBg} border="1px solid" borderColor={cardBorder}
+                  bg={raisedBg} border="1px solid" borderColor={cardBorder}
                   borderRadius="20px" p={{ base: 6, md: 8 }}
+                  boxShadow={dark ? "0 18px 48px rgba(0,0,0,0.22)" : "0 18px 48px rgba(10,10,11,0.06)"}
                 >
                   <Heading fontSize="17px" fontWeight="800" color={textMain} mb={3} letterSpacing="-0.02em">
                     {t("page_about_problem_title")}
@@ -227,8 +219,8 @@ export default function AboutPage() {
       </motion.div>
 
       {/* ── Story prose ───────────────────────────────────────────────────── */}
-      <motion.div initial={{ opacity: 0, y: 28 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, amount: 0.25 }} transition={{ duration: 0.65, ease: [0.22, 1, 0.36, 1] }}>
-      <Container maxW="820px" py={{ base: 12, md: 20 }}>
+      <motion.div initial={{ opacity: 0, y: 28 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, amount: 0.25 }} transition={{ duration: 0.65, ease: [...publicPageEase] }}>
+      <Container maxW="860px" py={{ base: 12, md: 20 }}>
         <VStack spacing={6} align="start">
           <Heading
             fontSize={{ base: "28px", md: "40px" }}
@@ -238,12 +230,14 @@ export default function AboutPage() {
           >
             {t("page_about_story_title")}
           </Heading>
-          <Text fontSize={{ base: "15px", md: "17px" }} color={textSub} lineHeight="1.9">
-            {t("page_about_story_p1")}
-          </Text>
-          <Text fontSize={{ base: "15px", md: "17px" }} color={textSub} lineHeight="1.9">
-            {t("page_about_story_p2")}
-          </Text>
+          <Box bg={cardBg} border="1px solid" borderColor={cardBorder} borderRadius="22px" p={{ base: 6, md: 8 }}>
+            <Text fontSize={{ base: "15px", md: "17px" }} color={textSub} lineHeight="1.9">
+              {t("page_about_story_p1")}
+            </Text>
+            <Text fontSize={{ base: "15px", md: "17px" }} color={textSub} lineHeight="1.9" mt={5}>
+              {t("page_about_story_p2")}
+            </Text>
+          </Box>
         </VStack>
       </Container>
       </motion.div>
@@ -294,9 +288,9 @@ export default function AboutPage() {
                   </VStack>
 
                   {/* content card */}
-                  <Box
-                    flex={1}
-                    bg={cardBg} border="1px solid" borderColor={cardBorder}
+                <Box
+                  flex={1}
+                    bg={raisedAlt} border="1px solid" borderColor={cardBorder}
                     borderRadius="16px" p={{ base: 5, md: 6 }}
                     mb={0}
                   >
@@ -347,7 +341,9 @@ export default function AboutPage() {
                 transition="all 0.25s ease"
                 _hover={{
                   transform: "translateY(-4px)",
-                  borderColor: dark ? "rgba(255,255,255,0.28)" : "rgba(0,0,0,0.28)",
+                  bg: cardBgHover,
+                  borderColor: strongBorder,
+                  boxShadow: shadow,
                 }}
               >
                 <Flex
@@ -397,7 +393,8 @@ export default function AboutPage() {
                   transition="all 0.25s ease"
                   _hover={{
                     transform: "translateY(-4px)",
-                    borderColor: dark ? "rgba(255,255,255,0.28)" : "rgba(0,0,0,0.28)",
+                    bg: cardBgHover,
+                    borderColor: strongBorder,
                   }}
                 >
                   <Flex
@@ -425,21 +422,23 @@ export default function AboutPage() {
       <motion.div initial={{ opacity: 0, y: 28 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, amount: 0.2 }} transition={{ duration: 0.65 }}>
       <Container maxW="1100px" py={{ base: 12, md: 20 }}>
         <Box
-          borderRadius="32px" overflow="hidden" position="relative"
-          bg={dark ? "#ffffff" : "#0a0f1e"}
+          borderRadius="28px" overflow="hidden" position="relative"
+          bg={dark ? "#1E2127" : "#0A0A0B"}
+          border="1px solid"
+          borderColor={dark ? "rgba(255,255,255,0.12)" : "rgba(10,10,11,0.12)"}
           p={{ base: 10, md: 16 }} textAlign="center"
+          boxShadow={shadow}
         >
           <Box
-            position="absolute" inset={0} opacity={dark ? 0.04 : 0.06}
-            backgroundImage="radial-gradient(circle at 2px 2px, currentColor 1px, transparent 0)"
-            backgroundSize="36px 36px" pointerEvents="none"
-            color={dark ? "black" : "white"}
+            position="absolute" inset={0}
+            bg="linear-gradient(135deg, rgba(99,161,219,0.20), transparent 42%)"
+            pointerEvents="none"
           />
           <VStack spacing={6} position="relative" zIndex={2}>
             <Heading
               fontSize={{ base: "28px", md: "48px" }}
               fontWeight="900"
-              color={dark ? "#000000" : "#ffffff"}
+              color="#ffffff"
               letterSpacing="-0.04em"
               lineHeight="1.05"
               maxW="580px"
@@ -448,7 +447,7 @@ export default function AboutPage() {
             </Heading>
             <Text
               fontSize={{ base: "15px", md: "17px" }}
-              color={dark ? "rgba(0,0,0,0.6)" : "rgba(255,255,255,0.75)"}
+              color="rgba(255,255,255,0.72)"
               maxW="440px"
             >
               {t("page_about_cta_sub")}
@@ -457,8 +456,8 @@ export default function AboutPage() {
               <Button
                 as={NextLink} href="/register"
                 h="52px" px={8}
-                bg={dark ? "#0a0f1e" : "#ffffff"}
-                color={dark ? "#ffffff" : "#0a0f1e"}
+                bg="#ffffff"
+                color="#0A0A0B"
                 borderRadius="14px" fontWeight="800" fontSize="14px"
                 rightIcon={<Icon as={FiArrowRight} />}
                 _hover={{ opacity: 0.9, transform: "scale(1.02)" }}
@@ -469,9 +468,9 @@ export default function AboutPage() {
               <Button
                 as={NextLink} href="/contact"
                 h="52px" px={8} variant="ghost"
-                color={dark ? "rgba(0,0,0,0.7)" : "rgba(255,255,255,0.8)"}
+                color="rgba(255,255,255,0.78)"
                 borderRadius="14px" fontWeight="700" fontSize="14px"
-                _hover={{ bg: dark ? "rgba(0,0,0,0.08)" : "rgba(255,255,255,0.1)" }}
+                _hover={{ bg: "rgba(255,255,255,0.1)" }}
               >
                 {t("nav_contact")}
               </Button>

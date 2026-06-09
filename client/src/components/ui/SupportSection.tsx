@@ -7,16 +7,17 @@ import {
   Text, Icon, useColorMode,
 } from '@chakra-ui/react';
 import { FiSmartphone, FiBook, FiMail, FiZap } from 'react-icons/fi';
+import { publicPageTheme } from './publicPageTheme';
 
 export default function SupportSection() {
   const { t } = useTranslate();
   const { colorMode } = useColorMode();
   const dark = colorMode === 'dark';
 
-  const textMain   = dark ? '#ffffff' : '#0a0f1e';
-  const textSub    = dark ? 'rgba(255,255,255,0.55)' : '#64748b';
-  const cardBg     = dark ? 'rgba(255,255,255,0.04)' : '#f4f4f4';
-  const cardBorder = dark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.10)';
+  const {
+    textMain, textSub, cardBg, cardBgHover, cardBorder, strongBorder,
+    accentText, accentSoft, accentBorder, shadow,
+  } = publicPageTheme(dark);
 
   const CHANNELS = [
     {
@@ -58,7 +59,7 @@ export default function SupportSection() {
   ];
 
   return (
-    <Box id="support" py={{ base: 20, md: 28 }} px={{ base: 5, md: 8 }}>
+    <Box id="support" py={{ base: 16, md: 24 }} px={{ base: 5, md: 8 }}>
       <Box maxW="1100px" mx="auto">
         <VStack spacing={4} mb={{ base: 10, md: 14 }} textAlign="center">
           <Text fontSize="11px" fontWeight="800" letterSpacing="0.14em" color={textSub} textTransform="uppercase">
@@ -90,28 +91,29 @@ export default function SupportSection() {
               transition="all 0.2s ease"
               _hover={{
                 transform: 'translateY(-3px)',
-                borderColor: dark ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.3)',
-                boxShadow: dark ? '0 12px 32px rgba(0,0,0,0.4)' : '0 12px 32px rgba(0,0,0,0.08)',
+                bg: cardBgHover,
+                borderColor: strongBorder,
+                boxShadow: shadow,
               }}
             >
               <VStack align="start" spacing={4} h="100%">
                 <HStack justify="space-between" w="100%">
                   <Box
                     w="44px" h="44px" borderRadius="12px"
-                    bg={dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)'}
-                    border="1px solid" borderColor={cardBorder}
+                    bg={accentSoft}
+                    border="1px solid" borderColor={accentBorder}
                     display="flex" alignItems="center" justifyContent="center"
                     transition="background 0.2s"
-                    _groupHover={{ bg: dark ? 'rgba(255,255,255,0.13)' : 'rgba(0,0,0,0.10)' }}
+                    _groupHover={{ bg: accentSoft }}
                   >
-                    <Icon as={ch.icon} boxSize={5} color={textMain} />
+                    <Icon as={ch.icon} boxSize={5} color={accentText} />
                   </Box>
                   {ch.badge && (
                     <Box
                       px={2.5} py={0.5} borderRadius="full"
-                      bg={dark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.07)'}
+                      bg={accentSoft}
                       fontSize="10px" fontWeight="800" letterSpacing="0.08em"
-                      textTransform="uppercase" color={textSub}
+                      textTransform="uppercase" color={accentText}
                     >
                       {ch.badge}
                     </Box>

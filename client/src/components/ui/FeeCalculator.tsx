@@ -110,14 +110,6 @@ export default function FeeCalculator() {
       boxShadow={dark ? '0 24px 60px rgba(0,0,0,0.4)' : '0 24px 60px rgba(0,0,0,0.08)'}
     >
       <VStack spacing={6} align="stretch">
-        <VStack spacing={1} align="start">
-          <Heading fontSize="22px" fontWeight="800" letterSpacing="-0.03em" color={fg}>
-            {t('calc_title')}
-          </Heading>
-          <Text fontSize="14px" color={muted}>
-            {t('calc_sub')}
-          </Text>
-        </VStack>
 
         {/* Inputs */}
         <HStack spacing={3}>
