@@ -19,6 +19,7 @@ import Decimal from 'decimal.js';
 import { prisma } from '../../utils/prisma';
 
 interface RatePair { buyPrice: string; sellPrice: string; source: string; fetchedAt: Date; }
+interface ProviderMid { mid: number; source: string; derived?: boolean }
 
 // Cache structure: `${base}/${quote}` → { value, expires }
 // Short TTL so quotes track the live market closely while still shielding the
@@ -258,7 +259,7 @@ async function applySpread(base: string, quote: string, mid: number): Promise<{ 
  * Walk the provider list for a pair and return the first sane mid, or null.
  * Sanity bounds (when defined for the pair) reject poisoned API values.
  */
-async function fetchProviderMid(base: string, quote: string): Promise<number | null> {
+async function fetchProviderMid(base: string, quote: string): Promise<ProviderMid | null> {
   for (const provider of RATE_PROVIDERS) {
     if (!provider.supports(base, quote)) continue;
     const result = await provider.fetch(base, quote);
@@ -268,7 +269,7 @@ async function fetchProviderMid(base: string, quote: string): Promise<number | n
       console.warn(`[fx] ${provider.name} returned ${base}/${quote}=${result.mid} outside sanity bounds — skipping`);
       continue;
     }
-    return result.mid;
+    return { mid: result.mid, source: provider.name };
   }
   return null;
 }
@@ -311,13 +312,13 @@ export async function getRate(base: string, quote: string): Promise<RatePair> {
   // 2. External provider — try the pair directly, then derive from its
   //    inverse (e.g. LYD/USD from the parallel USD/LYD) so both directions
   //    stay consistent with the same source.
-  let mid = await fetchProviderMid(base, quote);
-  let derived = false;
-  if (mid == null) {
+  let providerRate = await fetchProviderMid(base, quote);
+  if (providerRate == null) {
     const inv = await fetchProviderMid(quote, base);
-    if (inv != null && inv > 0) { mid = 1 / inv; derived = true; }
+    if (inv != null && inv.mid > 0) providerRate = { mid: 1 / inv.mid, source: inv.source, derived: true };
   }
-  if (mid != null) {
+  if (providerRate != null) {
+    let mid = providerRate.mid;
     // Adaptive USD/LYD: lift the scraped market FLOOR by the current demand
     // skew. Skew is >= 0, so the result never dips below the street rate even
     // when platform demand is low. Applied to both USD/LYD and the derived
@@ -334,7 +335,8 @@ export async function getRate(base: string, quote: string): Promise<RatePair> {
       if (skew > 0) { mid = mid / (1 + skew); skewSource = '+skew'; }
     }
     const { buy, sell } = await applySpread(base, quote, mid);
-    const pair: RatePair = { buyPrice: buy, sellPrice: sell, source: (derived ? 'derived' : 'live') + skewSource, fetchedAt: new Date() };
+    const baseSource = `${providerRate.derived ? 'derived' : 'live'}:${providerRate.source}`;
+    const pair: RatePair = { buyPrice: buy, sellPrice: sell, source: baseSource + skewSource, fetchedAt: new Date() };
     memoryCache.set(k, { value: pair, expires: now + CACHE_TTL_MS });
 
     // Persist the latest fetched rate so admin UIs can read recent history.
@@ -381,13 +383,13 @@ export function invalidateRate(base: string, quote: string) {
  * no provider can price the pair (the caller decides how to render that).
  */
 export async function getLiveProviderRate(base: string, quote: string): Promise<RatePair | null> {
-  let mid = await fetchProviderMid(base, quote);
-  let derived = false;
-  if (mid == null) {
+  let providerRate = await fetchProviderMid(base, quote);
+  if (providerRate == null) {
     const inv = await fetchProviderMid(quote, base);
-    if (inv != null && inv > 0) { mid = 1 / inv; derived = true; }
+    if (inv != null && inv.mid > 0) providerRate = { mid: 1 / inv.mid, source: inv.source, derived: true };
   }
-  if (mid == null) return null;
+  if (providerRate == null) return null;
+  let mid = providerRate.mid;
 
   // Mirror getRate's USD/LYD demand-skew so the "live" figure matches what a
   // user would actually transact at.
@@ -402,7 +404,8 @@ export async function getLiveProviderRate(base: string, quote: string): Promise<
     if (skew > 0) { mid = mid / (1 + skew); skewSource = '+skew'; }
   }
   const { buy, sell } = await applySpread(base, quote, mid);
-  return { buyPrice: buy, sellPrice: sell, source: (derived ? 'derived' : 'live') + skewSource, fetchedAt: new Date() };
+  const baseSource = `${providerRate.derived ? 'derived' : 'live'}:${providerRate.source}`;
+  return { buyPrice: buy, sellPrice: sell, source: baseSource + skewSource, fetchedAt: new Date() };
 }
 
 /**

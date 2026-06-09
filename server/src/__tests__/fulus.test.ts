@@ -71,9 +71,14 @@ describe('noteFulusRate sanity bounds', () => {
   });
 });
 
+// Fulus uses axios (with insecureHTTPParser) because its responses use
+// LF-terminated headers that Node's strict fetch parser rejects.
+jest.mock('axios');
+import axios from 'axios';
+const mockedAxios = axios as jest.Mocked<typeof axios>;
+
 describe('backfillHistory', () => {
-  const realFetch = global.fetch;
-  afterEach(() => { global.fetch = realFetch; });
+  afterEach(() => { jest.clearAllMocks(); });
 
   it('inserts a tick per sane data point and skips out-of-range rates', async () => {
     process.env.FULUS_API_TOKEN = 'tok_test';
@@ -90,14 +95,13 @@ describe('backfillHistory', () => {
     // Re-import so the mock is picked up.
     const { backfillHistory } = await import('../services/exchange/fulus.service');
 
-    global.fetch = jest.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ data: [
+    mockedAxios.get.mockResolvedValue({
+      data: { data: [
         { rate: 8.37, timestamp: '2026-06-08T14:00:00+02:00' },  // sane → inserted
         { rate: 99,   timestamp: '2026-06-08T09:00:00+02:00' },  // out of bounds → skipped
         { rate: 8.40 },                                          // no timestamp → skipped
-      ] }),
-    }) as any;
+      ] },
+    });
 
     const n = await backfillHistory('USD', 1);
     expect(n).toBe(1);

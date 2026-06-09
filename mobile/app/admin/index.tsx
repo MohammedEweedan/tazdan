@@ -701,18 +701,28 @@ export default function AdminScreen() {
               <FxChart history={fx?.usdLydHistory ?? []} p={p} />
             </View>
 
-            {/* Scraped parallel rates table */}
-            {fx?.lydParallelScraped && Object.keys(fx.lydParallelScraped).length > 0 && (
+            {/* Live parallel rates table — Fulus-first, scraper only as backend fallback. */}
+            {((fx?.currencies?.some((c) => c.buyPrice != null && c.sellPrice != null)) || (fx?.lydParallelScraped && Object.keys(fx.lydParallelScraped).length > 0)) && (
               <View style={{ marginTop: 10, backgroundColor: p.bgElev, borderRadius: 14, borderWidth: 1, borderColor: p.border, overflow: 'hidden' }}>
                 <Text style={{ color: p.fgFaint, fontSize: 10, fontWeight: '700', letterSpacing: 0.5, padding: 12, paddingBottom: 6 }}>
-                  PARALLEL RATES (LYD per unit · scraped)
+                  PARALLEL RATES (LYD per unit · live)
                 </Text>
-                {Object.entries(fx.lydParallelScraped).map(([cur, val], i, arr) => (
-                  <View key={cur} style={{ flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 14, paddingVertical: 9, borderTopWidth: 1, borderTopColor: p.border }}>
-                    <Text style={{ color: p.fg, fontSize: 13, fontWeight: '700' }}>{cur}/LYD</Text>
-                    <Text style={{ color: p.fg, fontSize: 13, fontWeight: '600', fontVariant: ['tabular-nums'] }}>{Number(val).toFixed(2)}</Text>
-                  </View>
-                ))}
+                {(fx?.currencies?.some((c) => c.buyPrice != null && c.sellPrice != null)
+                  ? fx.currencies
+                      .filter((c) => c.buyPrice != null && c.sellPrice != null)
+                      .map((c) => [c.code, ((c.buyPrice! + c.sellPrice!) / 2), c.source] as const)
+                  : Object.entries(fx?.lydParallelScraped ?? {}).map(([cur, val]) => [cur, Number(val), 'scrape'] as const)
+                ).map(([cur, val, source]) => (
+                    <View key={cur} style={{ flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 14, paddingVertical: 9, borderTopWidth: 1, borderTopColor: p.border }}>
+                      <View>
+                        <Text style={{ color: p.fg, fontSize: 13, fontWeight: '700' }}>{cur}/LYD</Text>
+                        <Text style={{ color: p.fgFaint, fontSize: 9, fontWeight: '700', marginTop: 1 }}>
+                          {String(source ?? '').includes('fulus') ? 'FULUS' : String(source ?? 'LIVE').toUpperCase()}
+                        </Text>
+                      </View>
+                      <Text style={{ color: p.fg, fontSize: 13, fontWeight: '600', fontVariant: ['tabular-nums'] }}>{Number(val).toFixed(2)}</Text>
+                    </View>
+                  ))}
               </View>
             )}
           </View>

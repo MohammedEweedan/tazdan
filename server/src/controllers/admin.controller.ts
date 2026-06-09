@@ -304,6 +304,9 @@ export class AdminController {
 
       const { invalidateRate } = await import('../services/exchange/fxRateProvider.service');
       invalidateRate(rate.baseCurrency as string, rate.quoteCurrency as string);
+      invalidateRate(rate.quoteCurrency as string, rate.baseCurrency as string);
+      const { invalidateRatesCache } = await import('../routes/rates');
+      invalidateRatesCache();
 
       const io = req.app.get('io');
       if (io) io.to('prices').emit('price:update', { baseCurrency: rate.baseCurrency, quoteCurrency: rate.quoteCurrency, buyPrice: rate.buyPrice, sellPrice: rate.sellPrice });
@@ -330,6 +333,9 @@ export class AdminController {
 
       const { invalidateRate } = await import('../services/exchange/fxRateProvider.service');
       invalidateRate(rate.baseCurrency as string, rate.quoteCurrency as string);
+      invalidateRate(rate.quoteCurrency as string, rate.baseCurrency as string);
+      const { invalidateRatesCache } = await import('../routes/rates');
+      invalidateRatesCache();
 
       await prisma.auditLog.create({
         data: { userId: req.user!.id, action: 'CLEAR_RATE_OVERRIDE', entity: 'ExchangeRate', entityId: rate.id },
@@ -362,6 +368,9 @@ export class AdminController {
       }).catch(() => undefined);
 
       invalidateRate(baseU, quoteU);
+      invalidateRate(quoteU, baseU);
+      const { invalidateRatesCache } = await import('../routes/rates');
+      invalidateRatesCache();
       const fresh = await getRate(baseU, quoteU);
       await prisma.auditLog.create({
         data: { userId: req.user!.id, action: 'REFRESH_RATE_FROM_API', entity: 'ExchangeRate', entityId: `${baseU}/${quoteU}`, newValues: { source: fresh.source } },
@@ -943,7 +952,7 @@ export class AdminController {
       const hours = Math.min(168, Math.max(1, parseInt(String(req.query.hours ?? '24'), 10) || 24));
       const { getScrapedLydRates, getRate } = await import('../services/exchange/fxRateProvider.service');
       const { lydOrderBookState, getLydHistory, getPairHistory } = await import('../services/exchange/lydOrderBook.service');
-      const { FULUS_CURRENCIES } = await import('../services/exchange/fulus.service');
+      const { FULUS_CURRENCIES, fulusCachedRates } = await import('../services/exchange/fulus.service');
 
       const [lydScraped, history] = await Promise.all([getScrapedLydRates(), getLydHistory(hours)]);
 
@@ -969,6 +978,7 @@ export class AdminController {
 
       res.json({
         lydParallelScraped: lydScraped,      // LYD per 1 unit, straight from the scrape (fallback)
+        fulusCached: fulusCachedRates(),     // Latest webhook/poll-fed Fulus values for admin visibility
         lydOrderBook: lydOrderBookState(),   // net flow + current upward skew
         usdLydHistory: history,              // [{ t, price, volumeUsd, skewPct }] — USD/LYD candlestick
         currencies,                          // [{ code, pair, buyPrice, sellPrice, source, history }]
@@ -1296,12 +1306,21 @@ export class AdminController {
       const setterMap = new Map(setters.map((u) => [u.id, u]));
 
       // Decorate each pair with the CURRENT live provider rate (override-bypassed)
-      // so the admin sees stored-vs-live and can spot a frozen override at a glance.
-      const { getLiveProviderRate } = await import('../services/exchange/fxRateProvider.service');
-      const live = await Promise.all(
-        rates.map((r) =>
-          getLiveProviderRate(r.baseCurrency as string, r.quoteCurrency as string).catch(() => null),
-        ),
+      // and the EFFECTIVE rate users actually get from getRate(). The stored
+      // row is audit state, not necessarily the active price: it may be an old
+      // non-override persistence row or a stale manual override whose freshness
+      // window has expired.
+      const { getLiveProviderRate, getRate } = await import('../services/exchange/fxRateProvider.service');
+      const decorated = await Promise.all(
+        rates.map(async (r) => {
+          const base = r.baseCurrency as string;
+          const quote = r.quoteCurrency as string;
+          const [live, effective] = await Promise.all([
+            getLiveProviderRate(base, quote).catch(() => null),
+            getRate(base, quote).catch(() => null),
+          ]);
+          return { live, effective };
+        }),
       );
 
       res.json({
@@ -1311,8 +1330,16 @@ export class AdminController {
           sellPrice: Number(r.sellPrice),
           setByUser: r.setBy ? setterMap.get(r.setBy) ?? null : null,
           // Null when no provider can price the pair right now.
-          live: live[i]
-            ? { buyPrice: Number(live[i]!.buyPrice), sellPrice: Number(live[i]!.sellPrice), source: live[i]!.source }
+          live: decorated[i].live
+            ? { buyPrice: Number(decorated[i].live!.buyPrice), sellPrice: Number(decorated[i].live!.sellPrice), source: decorated[i].live!.source }
+            : null,
+          effective: decorated[i].effective
+            ? {
+                buyPrice:  Number(decorated[i].effective!.buyPrice),
+                sellPrice: Number(decorated[i].effective!.sellPrice),
+                source:    decorated[i].effective!.source,
+                fetchedAt: decorated[i].effective!.fetchedAt,
+              }
             : null,
         })),
       });
@@ -1339,6 +1366,11 @@ export class AdminController {
         update: { buyPrice: data.buyPrice, sellPrice: data.sellPrice, isActive: true, setBy: req.user!.id },
         create: { baseCurrency: baseU, quoteCurrency: quoteU, buyPrice: data.buyPrice, sellPrice: data.sellPrice, isActive: true, setBy: req.user!.id },
       });
+      const { invalidateRate } = await import('../services/exchange/fxRateProvider.service');
+      invalidateRate(rate.baseCurrency as string, rate.quoteCurrency as string);
+      invalidateRate(rate.quoteCurrency as string, rate.baseCurrency as string);
+      const { invalidateRatesCache } = await import('../routes/rates');
+      invalidateRatesCache();
       res.status(201).json({ rate });
     } catch (error) { next(error); }
   }

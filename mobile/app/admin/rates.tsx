@@ -34,6 +34,8 @@ type Rate = {
   updatedAt: string;
   // Decorated by the backend: the current live provider rate, override-bypassed.
   live?: { buyPrice: number; sellPrice: number; source: string } | null;
+  // Decorated by the backend: the rate users actually get right now.
+  effective?: { buyPrice: number; sellPrice: number; source: string; fetchedAt?: string } | null;
 };
 
 export default function AdminRates() {
@@ -135,7 +137,7 @@ export default function AdminRates() {
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
                 <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: p.greenFg }} />
                 <Text style={{ color: p.fgMuted, fontSize: 10, fontWeight: '700', letterSpacing: 0.5 }}>
-                  {usdLyd?.source === 'fulus' || usdLyd?.source?.startsWith('live') ? 'LIVE' : (usdLyd?.source?.toUpperCase() ?? '—')}
+                  {usdLyd?.source?.includes('fulus') ? 'FULUS LIVE' : usdLyd?.source?.startsWith('live') ? 'LIVE' : (usdLyd?.source?.toUpperCase() ?? '—')}
                 </Text>
               </View>
             </View>
@@ -217,12 +219,28 @@ export default function AdminRates() {
 function RateCard({ r, p, onEdit, onRefresh, onClear }: { r: Rate; p: any; onEdit: () => void; onRefresh: () => void; onClear: () => void }) {
   const storedMid = (r.buyPrice + r.sellPrice) / 2;
   const liveMid = r.live ? (r.live.buyPrice + r.live.sellPrice) / 2 : null;
+  const effective = r.effective ?? (!r.isActive && r.live ? r.live : null);
+  const effectiveMid = effective ? (effective.buyPrice + effective.sellPrice) / 2 : storedMid;
+  const effectiveSource = effective?.source ?? (r.isActive ? 'admin:stored' : r.live?.source ?? 'stored');
+  const activeOverride = effectiveSource.startsWith('admin:');
+  const staleOverride = r.isActive && !activeOverride && liveMid != null;
+  const liveLabel = effectiveSource.startsWith('live:fulus')
+    ? 'FULUS LIVE'
+    : effectiveSource.startsWith('live:')
+      ? effectiveSource.replace('live:', '').toUpperCase()
+      : effectiveSource.startsWith('derived:')
+        ? `DERIVED ${effectiveSource.replace('derived:', '').toUpperCase()}`
+        : effectiveSource.startsWith('fallback:')
+          ? 'FALLBACK'
+          : activeOverride
+            ? 'OVERRIDE'
+            : 'LIVE FX';
   // Flag a meaningful gap between the override and the live market (>0.5%).
   const drift = r.isActive && liveMid != null && storedMid > 0 ? Math.abs(storedMid - liveMid) / liveMid : 0;
   const stale = drift > 0.005;
 
   return (
-    <View style={{ backgroundColor: p.bgElev, borderRadius: 14, borderWidth: 1, borderColor: stale ? 'rgba(245,158,11,0.45)' : (r.isActive ? p.border : 'rgba(99,161,219,0.25)'), padding: 14, marginBottom: 10 }}>
+    <View style={{ backgroundColor: p.bgElev, borderRadius: 14, borderWidth: 1, borderColor: stale ? 'rgba(245,158,11,0.45)' : (activeOverride ? p.border : 'rgba(99,161,219,0.25)'), padding: 14, marginBottom: 10 }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
         <View style={{ paddingHorizontal: 10, paddingVertical: 6, borderRadius: 9, backgroundColor: p.fg }}>
           <Text style={{ color: p.bg, fontSize: 14, fontWeight: '600', letterSpacing: 0.3 }}>{r.baseCurrency}/{r.quoteCurrency}</Text>
@@ -239,21 +257,21 @@ function RateCard({ r, p, onEdit, onRefresh, onClear }: { r: Rate; p: any; onEdi
         </View>
         <View style={{
           paddingHorizontal: 7, paddingVertical: 3, borderRadius: 6,
-          backgroundColor: r.isActive ? 'rgba(245,158,11,0.15)' : 'rgba(99,161,219,0.15)',
+          backgroundColor: activeOverride ? 'rgba(245,158,11,0.15)' : 'rgba(99,161,219,0.15)',
         }}>
-          <Text style={{ color: r.isActive ? '#f59e0b' : p.accent, fontSize: 10, fontWeight: '700', letterSpacing: 0.4 }}>
-            {r.isActive ? 'OVERRIDE' : 'LIVE FX'}
+          <Text style={{ color: activeOverride ? '#f59e0b' : p.accent, fontSize: 10, fontWeight: '700', letterSpacing: 0.4 }}>
+            {liveLabel}
           </Text>
         </View>
       </View>
 
-      {/* Stored-vs-live: surfaced only for an active override so a frozen value is obvious. */}
-      {r.isActive && liveMid != null && (
+      {/* Stored-vs-live: surfaced for active/stale overrides so frozen values are obvious. */}
+      {(r.isActive || staleOverride) && liveMid != null && (
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 10, paddingHorizontal: 10, paddingVertical: 8, borderRadius: 10, backgroundColor: p.pillBg }}>
-          <Ionicons name={stale ? 'warning' : 'information-circle-outline'} size={14} color={stale ? '#f59e0b' : p.fgMuted} />
+          <Ionicons name={stale || staleOverride ? 'warning' : 'information-circle-outline'} size={14} color={stale || staleOverride ? '#f59e0b' : p.fgMuted} />
           <Text style={{ flex: 1, color: p.fgMuted, fontSize: 11 }}>
-            Stored <Text style={{ color: p.fg, fontWeight: '700' }}>{storedMid.toFixed(4)}</Text> · live <Text style={{ color: p.fg, fontWeight: '700' }}>{liveMid.toFixed(4)}</Text>
-            {stale ? `  (${((storedMid - liveMid) / liveMid * 100).toFixed(1)}% off)` : ''}
+            Stored <Text style={{ color: p.fg, fontWeight: '700' }}>{storedMid.toFixed(4)}</Text> · live <Text style={{ color: p.fg, fontWeight: '700' }}>{liveMid.toFixed(4)}</Text> · shown <Text style={{ color: p.fg, fontWeight: '700' }}>{effectiveMid.toFixed(4)}</Text>
+            {stale ? `  (${((storedMid - liveMid) / liveMid * 100).toFixed(1)}% off)` : staleOverride ? '  (stored override expired)' : ''}
           </Text>
         </View>
       )}
@@ -262,13 +280,13 @@ function RateCard({ r, p, onEdit, onRefresh, onClear }: { r: Rate; p: any; onEdi
         <View style={{ flex: 1, padding: 12, borderRadius: 10, backgroundColor: 'rgba(34,197,94,0.10)', borderWidth: 1, borderColor: 'rgba(34,197,94,0.25)' }}>
           <Text style={{ color: '#22c55e', fontSize: 10, fontWeight: '600', letterSpacing: 0.5 }}>BUY</Text>
           <Text style={{ color: p.fg, fontSize: 18, fontWeight: '600', marginTop: 2, fontVariant: ['tabular-nums'] }}>
-            {r.buyPrice.toLocaleString('en-US', { maximumFractionDigits: 8 })}
+            {(effective?.buyPrice ?? r.buyPrice).toLocaleString('en-US', { maximumFractionDigits: 8 })}
           </Text>
         </View>
         <View style={{ flex: 1, padding: 12, borderRadius: 10, backgroundColor: 'rgba(239,68,68,0.10)', borderWidth: 1, borderColor: 'rgba(239,68,68,0.25)' }}>
           <Text style={{ color: '#ef4444', fontSize: 10, fontWeight: '600', letterSpacing: 0.5 }}>SELL</Text>
           <Text style={{ color: p.fg, fontSize: 18, fontWeight: '600', marginTop: 2, fontVariant: ['tabular-nums'] }}>
-            {r.sellPrice.toLocaleString('en-US', { maximumFractionDigits: 8 })}
+            {(effective?.sellPrice ?? r.sellPrice).toLocaleString('en-US', { maximumFractionDigits: 8 })}
           </Text>
         </View>
       </View>
