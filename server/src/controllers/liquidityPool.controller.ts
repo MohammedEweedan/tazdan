@@ -29,6 +29,7 @@ import { prisma } from '../utils/prisma';
 import { AppError } from '../middleware/errorHandler';
 import { AuthRequest } from '../types';
 import { getMarketPrice } from '../services/exchange/priceEngine.service';
+import { isLedgerCurrency, postLedger } from '../services/ledger/ledger.service';
 
 // Stablecoins that are pegged to USD at 1:1 — skip the price lookup.
 const USD_PEGGED = new Set(['USDT', 'USDC', 'USD']);
@@ -153,9 +154,9 @@ export const LiquidityPoolController = {
       // For v1 we require USDT/USDC/USD for actual settlement — these
       // are the wallets we can reliably debit. Crypto deposits would
       // need a price-locked sub-ledger; we'll add that in v2.
-      if (!USD_PEGGED.has(parsed.currency)) {
+      if (!USD_PEGGED.has(parsed.currency) || parsed.currency === 'USDC') {
         throw new AppError(
-          'For v1, pool deposits must be in USDT, USDC, or USD. Crypto support coming soon.',
+          'For v1, pool deposits must be in USDT or USD. Crypto support coming soon.',
           400,
         );
       }
@@ -188,6 +189,26 @@ export const LiquidityPoolController = {
             reference:     ref,
           },
         });
+
+        if (isLedgerCurrency(parsed.currency)) {
+          const legs = parsed.currency === 'USDT'
+            ? [
+                { type: 'USER' as const, userId: me, currency: 'USDT' as any, amount: amountDec.neg() },
+                { type: 'SYSTEM_ESCROW' as const, currency: 'USDT' as any, amount: amountDec },
+              ]
+            : [
+                { type: 'USER' as const, userId: me, currency: parsed.currency as any, amount: amountDec.neg() },
+                { type: 'SYSTEM_FX' as const, currency: parsed.currency as any, amount: amountDec },
+                { type: 'SYSTEM_FX' as const, currency: 'USDT' as any, amount: amountUsd.neg() },
+                { type: 'SYSTEM_ESCROW' as const, currency: 'USDT' as any, amount: amountUsd },
+              ];
+          await postLedger(tx, {
+            refType: 'liquidity_pool_deposit',
+            refId: ref,
+            memo: `Pool deposit ${pool.id}`,
+            legs,
+          }, { allowNegativeUser: true });
+        }
 
         // Upsert pool membership (in case they joined the group after pool creation).
         const pm = await tx.liquidityPoolMember.upsert({
@@ -330,6 +351,16 @@ export const LiquidityPoolController = {
           },
         });
 
+        await postLedger(tx, {
+          refType: 'liquidity_pool_withdrawal',
+          refId: ref,
+          memo: `Pool withdrawal ${pool.id}`,
+          legs: [
+            { type: 'SYSTEM_ESCROW', currency: 'USDT' as any, amount: amountUsd.neg() },
+            { type: 'USER', userId: me, currency: 'USDT' as any, amount: amountUsd },
+          ],
+        }, { allowNegativeUser: true });
+
         await tx.liquidityPoolMember.update({
           where: { poolId_userId: { poolId: pool.id, userId: me } },
           data:  { totalWithdrawnUsd: { increment: amountUsd } },
@@ -446,6 +477,15 @@ export const LiquidityPoolController = {
                   reference:     ref,
                 },
               });
+              await postLedger(tx, {
+                refType: 'liquidity_pool_close_payout',
+                refId: ref,
+                memo: `Pool close payout ${pool.id}`,
+                legs: [
+                  { type: 'SYSTEM_ESCROW', currency: 'USDT' as any, amount: payout.neg() },
+                  { type: 'USER', userId: s.userId, currency: 'USDT' as any, amount: payout },
+                ],
+              }, { allowNegativeUser: true });
               await tx.liquidityPoolMember.update({
                 where: { poolId_userId: { poolId: pool.id, userId: s.userId } },
                 data:  { totalWithdrawnUsd: { increment: payout } },

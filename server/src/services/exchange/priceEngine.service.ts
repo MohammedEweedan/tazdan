@@ -449,7 +449,9 @@ async function fundingToUsd(currency: string, amount: Decimal): Promise<Decimal>
   if (c === 'USD' || c === 'USDT' || c === 'USDC') return amount;
   const { getRate } = await import('./fxRateProvider.service');
   const pair = await getRate(c, 'USD').catch(() => null);
-  const usdPerUnit = pair ? new Decimal(pair.buyPrice || pair.sellPrice) : new Decimal(0);
+  // User is converting funding currency into USD purchasing power, so use the
+  // SELL side: what the user receives when selling 1 unit of the funding fiat.
+  const usdPerUnit = pair ? new Decimal(pair.sellPrice || pair.buyPrice) : new Decimal(0);
   if (usdPerUnit.lte(0)) return amount; // last-resort: treat as USD
   return amount.mul(usdPerUnit);
 }

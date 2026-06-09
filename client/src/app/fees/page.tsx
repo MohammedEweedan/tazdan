@@ -14,25 +14,20 @@ import { useTranslate } from "@tolgee/react";
 import PublicNav from "@/components/ui/PublicNav";
 import PublicFooter from "@/components/ui/PublicFooter";
 import FeeCalculator from "@/components/ui/FeeCalculator";
+import { publicPageTheme } from "@/components/ui/publicPageTheme";
 
 export default function FeesPage() {
   const { t } = useTranslate();
   const { colorMode } = useColorMode();
   const dark = colorMode === "dark";
 
-  // Charcoal dark mode (matches the app) + #63a1db brand accent on CTAs.
-  const pageBg    = dark ? "#16181C" : "#ffffff";
-  const textMain  = dark ? "#ffffff" : "#0a0f1e";
-  const textSub   = dark ? "rgba(255,255,255,0.6)" : "#64748b";
-  const cardBg    = dark ? "rgba(255,255,255,0.04)" : "#f4f4f4";
-  const cardBorder = dark ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.10)";
-  const rowBorder  = dark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)";
-  const ctaBg     = "#63a1db";
+  const {
+    pageBg, textMain, textSub, cardBg, cardBgHover, raisedBg, raisedAlt,
+    cardBorder, rowBorder, strongBorder, accent, accentText, accentSoft,
+    accentBorder, green, greenSoft, shadow, titleGradient,
+  } = publicPageTheme(dark);
+  const ctaBg     = accent;
   const ctaFg     = "#ffffff";
-
-  const titleGradient = dark
-    ? "linear(to-b, #ffffff 0%, rgba(255,255,255,0.85) 60%, rgba(255,255,255,0.3) 100%)"
-    : "linear(to-b, #000000 0%, rgba(0,0,0,0.7) 60%, rgba(0,0,0,0.2) 100%)";
 
   const rows = [
     { s: t("page_fees_row1_s"), f: t("page_fees_row1_f"), n: t("page_fees_row1_n"), highlight: true },
@@ -80,9 +75,32 @@ export default function FeesPage() {
       <PublicNav />
 
       {/* Hero */}
-      <Box pt={{ base: "120px", md: "170px" }} pb={{ base: 14, md: 20 }} textAlign="center">
-        <Container maxW="900px">
+      <Box pt={{ base: "118px", md: "160px" }} pb={{ base: 14, md: 20 }} textAlign="center" position="relative" overflow="hidden">
+        <Box
+          position="absolute"
+          inset={0}
+          bg={dark
+            ? "linear-gradient(180deg, rgba(99,161,219,0.10) 0%, rgba(99,161,219,0.025) 44%, rgba(22,24,28,0) 100%)"
+            : "linear-gradient(180deg, rgba(79,139,196,0.10) 0%, rgba(79,139,196,0.025) 44%, rgba(255,255,255,0) 100%)"}
+          pointerEvents="none"
+        />
+        <Container maxW="900px" position="relative">
           <VStack spacing={6}>
+            <Text
+              fontSize="11px"
+              fontWeight="800"
+              letterSpacing="0.18em"
+              color={accentText}
+              textTransform="uppercase"
+              border="1px solid"
+              borderColor={accentBorder}
+              bg={accentSoft}
+              borderRadius="full"
+              px={4}
+              py={2}
+            >
+              {t("page_fees_eyebrow")}
+            </Text>
             <Heading
               as="h1"
               fontWeight="900"
@@ -107,9 +125,10 @@ export default function FeesPage() {
               ].map((s) => (
                 <VStack
                   key={s.v}
-                  bg={cardBg} border="1px solid" borderColor={cardBorder}
+                  bg={raisedBg} border="1px solid" borderColor={cardBorder}
                   borderRadius="16px" px={{ base: 4, md: 6 }} py={3} spacing={0}
                   minW={{ base: "90px", md: "120px" }}
+                  boxShadow={dark ? "0 14px 36px rgba(0,0,0,0.18)" : "0 14px 32px rgba(10,10,11,0.05)"}
                 >
                   <Text fontSize={{ base: "20px", md: "24px" }} fontWeight="800" color={textMain} letterSpacing="-0.02em">
                     {s.k}
@@ -134,15 +153,15 @@ export default function FeesPage() {
               bg={cardBg} border="1px solid" borderColor={cardBorder}
               borderRadius="20px" p={6} h="100%"
               transition="all 0.2s ease"
-              _hover={{ transform: "translateY(-3px)", borderColor: dark ? "rgba(255,255,255,0.25)" : "rgba(0,0,0,0.25)" }}
+              _hover={{ transform: "translateY(-3px)", bg: cardBgHover, borderColor: strongBorder, boxShadow: shadow }}
             >
               <Flex
                 w="40px" h="40px" borderRadius="12px"
-                bg={dark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)"}
-                border="1px solid" borderColor={cardBorder}
+                bg={accentSoft}
+                border="1px solid" borderColor={accentBorder}
                 align="center" justify="center"
               >
-                <Icon as={h.icon} color={textMain} boxSize={4.5} />
+                <Icon as={h.icon} color={accentText} />
               </Flex>
               <Text fontSize="16px" fontWeight="800" color={textMain} letterSpacing="-0.01em">{h.title}</Text>
               <Text fontSize="13.5px" color={textSub} lineHeight="1.6">{h.desc}</Text>
@@ -154,27 +173,13 @@ export default function FeesPage() {
       {/* Fees table */}
       <Container maxW="1100px" pb={{ base: 10, md: 16 }}>
         <Box
-          bg={cardBg} border="1px solid" borderColor={cardBorder}
-          borderRadius="28px" overflow="hidden"
-          boxShadow={dark ? "0 20px 60px rgba(0,0,0,0.4)" : "0 20px 60px rgba(0,0,0,0.06)"}
+          bg={raisedBg} border="1px solid" borderColor={cardBorder}
+          borderRadius="24px" overflow="hidden"
+          boxShadow={shadow}
         >
-          <Box px={{ base: 5, md: 8 }} py={5} borderBottom="1px solid" borderColor={rowBorder}>
-            <HStack justify="space-between" flexWrap="wrap" gap={2}>
-              <Text fontSize="13px" fontWeight="800" color={textMain} letterSpacing="0.12em" textTransform="uppercase">
-                {t("page_fees_table_title")}
-              </Text>
-              <Badge
-                bg={dark ? "rgba(74,222,128,0.15)" : "rgba(22,163,74,0.12)"}
-                color={dark ? "#4ade80" : "#16a34a"}
-                fontSize="10px" px={2.5} py={1} borderRadius="full" letterSpacing="0.1em"
-              >
-                LIVE
-              </Badge>
-            </HStack>
-          </Box>
           <TableContainer>
             <Table variant="simple">
-              <Thead bg={dark ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.02)"}>
+              <Thead bg={dark ? "rgba(255,255,255,0.025)" : "rgba(10,10,11,0.025)"}>
                 <Tr>
                   <Th color={textSub} borderColor={rowBorder} fontSize="11px" letterSpacing="0.12em" py={5}>{t("page_fees_t1")}</Th>
                   <Th color={textSub} borderColor={rowBorder} fontSize="11px" letterSpacing="0.12em" py={5}>{t("page_fees_t2")}</Th>
@@ -183,7 +188,7 @@ export default function FeesPage() {
               </Thead>
               <Tbody>
                 {rows.map((r, i) => (
-                  <Tr key={i} _hover={{ bg: dark ? "rgba(255,255,255,0.025)" : "rgba(0,0,0,0.025)" }} transition="background 0.15s">
+                  <Tr key={i} _hover={{ bg: dark ? "rgba(255,255,255,0.035)" : "rgba(10,10,11,0.03)" }} transition="background 0.15s">
                     <Td borderColor={rowBorder} py={5}>
                       <Text fontSize={{ base: "13.5px", md: "15px" }} color={textMain} fontWeight="600">{r.s}</Text>
                     </Td>
@@ -191,10 +196,10 @@ export default function FeesPage() {
                       <HStack spacing={2}>
                         <Text fontSize={{ base: "13.5px", md: "15px" }} color={textMain} fontWeight="700">{r.f}</Text>
                         {r.free && (
-                          <Badge bg={dark ? "rgba(74,222,128,0.15)" : "rgba(22,163,74,0.12)"} color={dark ? "#4ade80" : "#16a34a"} fontSize="9.5px" px={2} py={0.5} borderRadius="full">FREE</Badge>
+                          <Badge bg={greenSoft} color={green} fontSize="9.5px" px={2} py={0.5} borderRadius="full">FREE</Badge>
                         )}
                         {r.highlight && (
-                          <Badge bg={dark ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.07)"} color={textSub} fontSize="9.5px" px={2} py={0.5} borderRadius="full">LOW</Badge>
+                          <Badge bg={accentSoft} color={accentText} fontSize="9.5px" px={2} py={0.5} borderRadius="full">LOW</Badge>
                         )}
                       </HStack>
                     </Td>
@@ -207,11 +212,6 @@ export default function FeesPage() {
             </Table>
           </TableContainer>
         </Box>
-      </Container>
-
-      {/* Calculator */}
-      <Container maxW="620px" pb={{ base: 16, md: 24 }}>
-        <FeeCalculator />
       </Container>
 
       {/* Account tiers */}
@@ -228,24 +228,25 @@ export default function FeesPage() {
               <Box
                 key={tier.title}
                 position="relative"
-                borderRadius="24px"
+                borderRadius="22px"
                 p={{ base: 6, md: 8 }}
-                bg={cardBg}
-                border="2px solid"
-                borderColor={tier.badge ? (dark ? "rgba(255,255,255,0.35)" : "rgba(0,0,0,0.35)") : cardBorder}
+                bg={tier.badge ? raisedBg : cardBg}
+                border="1px solid"
+                borderColor={tier.badge ? accentBorder : cardBorder}
                 transition="all 0.25s ease"
-                _hover={{ transform: "translateY(-4px)", borderColor: dark ? "rgba(255,255,255,0.5)" : "rgba(0,0,0,0.5)" }}
+                boxShadow={tier.badge ? shadow : "none"}
+                _hover={{ transform: "translateY(-4px)", bg: tier.badge ? raisedBg : cardBgHover, borderColor: tier.badge ? accentBorder : strongBorder }}
                 h="100%"
               >
                 <VStack align="start" spacing={5}>
                   <HStack spacing={3} w="100%">
                     <Flex
                       w="44px" h="44px" borderRadius="14px"
-                      bg={dark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)"}
-                      border="1px solid" borderColor={cardBorder}
+                      bg={tier.badge ? accentSoft : (dark ? "rgba(255,255,255,0.08)" : "rgba(10,10,11,0.06)")}
+                      border="1px solid" borderColor={tier.badge ? accentBorder : cardBorder}
                       align="center" justify="center"
                     >
-                      <Icon as={tier.icon} color={textMain} boxSize={5} />
+                      <Icon as={tier.icon} color={tier.badge ? accentText : textMain} boxSize={5} />
                     </Flex>
                     <Box flex={1}>
                       <Text fontSize="11.5px" fontWeight="800" color={textSub} letterSpacing="0.15em" textTransform="uppercase">
@@ -256,7 +257,7 @@ export default function FeesPage() {
                       </Text>
                     </Box>
                     {tier.badge && (
-                      <Badge bg={dark ? "rgba(255,255,255,0.15)" : "rgba(0,0,0,0.08)"} color={textMain} fontSize="9.5px" fontWeight="800" letterSpacing="0.1em" px={2.5} py={1} borderRadius="full">
+                      <Badge bg={accentSoft} color={accentText} fontSize="9.5px" fontWeight="800" letterSpacing="0.1em" px={2.5} py={1} borderRadius="full">
                         POPULAR
                       </Badge>
                     )}
@@ -265,8 +266,8 @@ export default function FeesPage() {
                   <VStack align="start" spacing={2.5} w="100%" pt={2} borderTop="1px solid" borderColor={cardBorder}>
                     {tier.perks.map((p) => (
                       <HStack key={p} spacing={2.5} pt={2.5}>
-                        <Flex w="18px" h="18px" borderRadius="full" bg={textMain} align="center" justify="center" flexShrink={0}>
-                          <Icon as={FiCheck} color={pageBg} boxSize={2.5} />
+                        <Flex w="18px" h="18px" borderRadius="full" bg={accentSoft} border="1px solid" borderColor={accentBorder} align="center" justify="center" flexShrink={0}>
+                          <Icon as={FiCheck} color={accentText} boxSize={2.5} />
                         </Flex>
                         <Text fontSize="13px" color={textMain} fontWeight="600">{p}</Text>
                       </HStack>
@@ -283,6 +284,7 @@ export default function FeesPage() {
             bg={ctaBg} color={ctaFg}
             borderRadius="full" fontWeight="800" fontSize="14px"
             rightIcon={<Icon as={FiArrowRight} />}
+            boxShadow={dark ? "0 14px 38px rgba(99,161,219,0.22)" : "0 14px 34px rgba(79,139,196,0.18)"}
             _hover={{ opacity: 0.9, transform: "translateY(-2px)" }}
             transition="all 0.2s"
           >

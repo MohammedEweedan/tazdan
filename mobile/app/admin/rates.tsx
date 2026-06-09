@@ -20,7 +20,7 @@ import { useAuthStore } from '@/store/authStore';
 import { adminService, type AdminFxStatus } from '@/services';
 import { LoadingPulse } from '@/components/ui/LoadingPulse';
 import { TopGradient } from '@/components/ui/ScreenShell';
-import { FxChart } from '@/components/admin/FxChart';
+import { FxChart, type FxChartMode } from '@/components/admin/FxChart';
 
 type Rate = {
   id: string;
@@ -49,6 +49,7 @@ export default function AdminRates() {
   const [search, setSearch] = useState('');
   const [editing, setEditing] = useState<Rate | null>(null);
   const [creating, setCreating] = useState(false);
+  const [chartMode, setChartMode] = useState<FxChartMode>('sparkline');
 
   const q = useQuery({
     queryKey: ['admin-rates'],
@@ -141,7 +142,34 @@ export default function AdminRates() {
                 </Text>
               </View>
             </View>
-            <FxChart history={usdHistory} p={p} showVolume />
+            <View style={{ flexDirection: 'row', alignSelf: 'flex-start', gap: 6, marginTop: 12, backgroundColor: p.pillBg, borderRadius: 10, padding: 3, borderWidth: 1, borderColor: p.border }}>
+              {([
+                ['sparkline', 'analytics-outline', 'Line'],
+                ['candles', 'stats-chart-outline', 'Candles'],
+              ] as [FxChartMode, keyof typeof Ionicons.glyphMap, string][]).map(([mode, icon, label]) => {
+                const active = chartMode === mode;
+                return (
+                  <Pressable
+                    key={mode}
+                    onPress={() => setChartMode(mode)}
+                    hitSlop={6}
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      gap: 5,
+                      paddingHorizontal: 10,
+                      paddingVertical: 6,
+                      borderRadius: 8,
+                      backgroundColor: active ? p.ctaBg : 'transparent',
+                    }}
+                  >
+                    <Ionicons name={icon} size={13} color={active ? p.ctaFg : p.fgMuted} />
+                    <Text style={{ color: active ? p.ctaFg : p.fgMuted, fontSize: 11, fontWeight: '800' }}>{label}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+            <FxChart history={usdHistory} p={p} showVolume={chartMode === 'sparkline'} mode={chartMode} />
           </View>
 
           {/* ── Editable pairs ────────────────────────────────────────────── */}
@@ -220,12 +248,16 @@ function RateCard({ r, p, onEdit, onRefresh, onClear }: { r: Rate; p: any; onEdi
   const storedMid = (r.buyPrice + r.sellPrice) / 2;
   const liveMid = r.live ? (r.live.buyPrice + r.live.sellPrice) / 2 : null;
   const effective = r.effective ?? (!r.isActive && r.live ? r.live : null);
+  const shownBuy = effective?.buyPrice ?? r.buyPrice;
+  const shownSell = effective?.sellPrice ?? r.sellPrice;
   const effectiveMid = effective ? (effective.buyPrice + effective.sellPrice) / 2 : storedMid;
   const effectiveSource = effective?.source ?? (r.isActive ? 'admin:stored' : r.live?.source ?? 'stored');
   const activeOverride = effectiveSource.startsWith('admin:');
   const staleOverride = r.isActive && !activeOverride && liveMid != null;
   const liveLabel = effectiveSource.startsWith('live:fulus')
     ? 'FULUS LIVE'
+    : effectiveSource.includes('lyd-parallel-scrape')
+      ? 'SCRAPE FALLBACK'
     : effectiveSource.startsWith('live:')
       ? effectiveSource.replace('live:', '').toUpperCase()
       : effectiveSource.startsWith('derived:')
@@ -238,6 +270,8 @@ function RateCard({ r, p, onEdit, onRefresh, onClear }: { r: Rate; p: any; onEdi
   // Flag a meaningful gap between the override and the live market (>0.5%).
   const drift = r.isActive && liveMid != null && storedMid > 0 ? Math.abs(storedMid - liveMid) / liveMid : 0;
   const stale = drift > 0.005;
+  const shownMid = (shownBuy + shownSell) / 2;
+  const shownSpread = shownMid > 0 ? Math.abs(shownBuy - shownSell) / shownMid * 100 : 0;
 
   return (
     <View style={{ backgroundColor: p.bgElev, borderRadius: 14, borderWidth: 1, borderColor: stale ? 'rgba(245,158,11,0.45)' : (activeOverride ? p.border : 'rgba(99,161,219,0.25)'), padding: 14, marginBottom: 10 }}>
@@ -247,7 +281,7 @@ function RateCard({ r, p, onEdit, onRefresh, onClear }: { r: Rate; p: any; onEdi
         </View>
         <View style={{ flex: 1 }}>
           <Text style={{ color: p.fgFaint, fontSize: 10, fontWeight: '600', letterSpacing: 0.4 }}>
-            SPREAD {(((r.buyPrice - r.sellPrice) / r.sellPrice) * 100).toFixed(2)}%
+            SPREAD {shownSpread.toFixed(2)}%
           </Text>
           {r.setByUser && (
             <Text style={{ color: p.fgFaint, fontSize: 10 }}>
@@ -280,13 +314,13 @@ function RateCard({ r, p, onEdit, onRefresh, onClear }: { r: Rate; p: any; onEdi
         <View style={{ flex: 1, padding: 12, borderRadius: 10, backgroundColor: 'rgba(34,197,94,0.10)', borderWidth: 1, borderColor: 'rgba(34,197,94,0.25)' }}>
           <Text style={{ color: '#22c55e', fontSize: 10, fontWeight: '600', letterSpacing: 0.5 }}>BUY</Text>
           <Text style={{ color: p.fg, fontSize: 18, fontWeight: '600', marginTop: 2, fontVariant: ['tabular-nums'] }}>
-            {(effective?.buyPrice ?? r.buyPrice).toLocaleString('en-US', { maximumFractionDigits: 8 })}
+            {shownBuy.toLocaleString('en-US', { maximumFractionDigits: 8 })}
           </Text>
         </View>
         <View style={{ flex: 1, padding: 12, borderRadius: 10, backgroundColor: 'rgba(239,68,68,0.10)', borderWidth: 1, borderColor: 'rgba(239,68,68,0.25)' }}>
           <Text style={{ color: '#ef4444', fontSize: 10, fontWeight: '600', letterSpacing: 0.5 }}>SELL</Text>
           <Text style={{ color: p.fg, fontSize: 18, fontWeight: '600', marginTop: 2, fontVariant: ['tabular-nums'] }}>
-            {(effective?.sellPrice ?? r.sellPrice).toLocaleString('en-US', { maximumFractionDigits: 8 })}
+            {shownSell.toLocaleString('en-US', { maximumFractionDigits: 8 })}
           </Text>
         </View>
       </View>

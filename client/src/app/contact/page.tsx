@@ -9,10 +9,11 @@ import {
   Icon, Flex, FormControl, FormLabel,
   useColorMode, useToast,
 } from "@chakra-ui/react";
-import { FiMapPin, FiClock, FiSend, FiArrowRight } from "react-icons/fi";
+import { FiClock, FiSend, FiArrowRight } from "react-icons/fi";
 import PublicNav from "@/components/ui/PublicNav";
 import PublicFooter from "@/components/ui/PublicFooter";
 import SupportSection from "@/components/ui/SupportSection";
+import { publicPageTheme } from "@/components/ui/publicPageTheme";
 
 export default function ContactPage() {
   const { t } = useTranslate();
@@ -22,19 +23,13 @@ export default function ContactPage() {
   const [submitting, setSubmitting] = useState(false);
   const [form, setForm] = useState({ name: "", email: "", topic: "support", msg: "" });
 
-  // Charcoal dark mode (matches the app) + #63a1db brand accent on CTAs.
-  const pageBg    = dark ? "#16181C" : "#ffffff";
-  const textMain  = dark ? "#ffffff" : "#0a0f1e";
-  const textSub   = dark ? "rgba(255,255,255,0.6)" : "#64748b";
-  const cardBg    = dark ? "rgba(255,255,255,0.04)" : "#f4f4f4";
-  const cardBorder = dark ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.10)";
-  const inputBg   = dark ? "rgba(255,255,255,0.04)" : "#f0f0f0";
-  const ctaBg     = "#63a1db";
+  const {
+    pageBg, textMain, textSub, cardBg, cardBgHover, raisedBg, inputBg,
+    cardBorder, strongBorder, accent, accentText, accentSoft, accentBorder,
+    shadow, titleGradient,
+  } = publicPageTheme(dark);
+  const ctaBg     = accent;
   const ctaFg     = "#ffffff";
-
-  const titleGradient = dark
-    ? "linear(to-b, #ffffff 0%, rgba(255,255,255,0.85) 60%, rgba(255,255,255,0.3) 100%)"
-    : "linear(to-b, #000000 0%, rgba(0,0,0,0.7) 60%, rgba(0,0,0,0.2) 100%)";
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -60,8 +55,31 @@ export default function ContactPage() {
       <PublicNav />
 
       {/* Hero */}
-      <Box pt={{ base: "120px", md: "160px" }} pb={{ base: 8, md: 14 }} textAlign="center">
-        <VStack spacing={5} px={5}>
+      <Box pt={{ base: "118px", md: "158px" }} pb={{ base: 8, md: 12 }} textAlign="center" position="relative" overflow="hidden">
+        <Box
+          position="absolute"
+          inset={0}
+          bg={dark
+            ? "linear-gradient(180deg, rgba(99,161,219,0.10) 0%, rgba(99,161,219,0.025) 44%, rgba(22,24,28,0) 100%)"
+            : "linear-gradient(180deg, rgba(79,139,196,0.10) 0%, rgba(79,139,196,0.025) 44%, rgba(255,255,255,0) 100%)"}
+          pointerEvents="none"
+        />
+        <VStack spacing={5} px={5} position="relative">
+          <Text
+            fontSize="11px"
+            fontWeight="800"
+            letterSpacing="0.18em"
+            color={accentText}
+            textTransform="uppercase"
+            border="1px solid"
+            borderColor={accentBorder}
+            bg={accentSoft}
+            borderRadius="full"
+            px={4}
+            py={2}
+          >
+            {t('nav_contact')}
+          </Text>
           <Heading
             as="h1"
             fontWeight="900"
@@ -88,8 +106,9 @@ export default function ContactPage() {
           {/* Form — spans 2 cols */}
           <Box
             gridColumn={{ lg: "span 2" }}
-            bg={cardBg} border="1px solid" borderColor={cardBorder}
+            bg={raisedBg} border="1px solid" borderColor={cardBorder}
             borderRadius="24px" p={{ base: 6, md: 10 }}
+            boxShadow={shadow}
           >
             <Heading
               fontSize={{ base: "22px", md: "28px" }} fontWeight="900"
@@ -109,7 +128,7 @@ export default function ContactPage() {
                       onChange={(e) => setForm({ ...form, name: e.target.value })}
                       bg={inputBg} border="1px solid" borderColor={cardBorder}
                       borderRadius="12px" h="48px" color={textMain}
-                      _focus={{ borderColor: textMain, boxShadow: "none" }}
+                      _focus={{ borderColor: accentBorder, boxShadow: dark ? "0 0 0 1px rgba(99,161,219,0.22)" : "0 0 0 1px rgba(79,139,196,0.18)" }}
                     />
                   </FormControl>
                   <FormControl isRequired>
@@ -122,7 +141,7 @@ export default function ContactPage() {
                       onChange={(e) => setForm({ ...form, email: e.target.value })}
                       bg={inputBg} border="1px solid" borderColor={cardBorder}
                       borderRadius="12px" h="48px" color={textMain}
-                      _focus={{ borderColor: textMain, boxShadow: "none" }}
+                      _focus={{ borderColor: accentBorder, boxShadow: dark ? "0 0 0 1px rgba(99,161,219,0.22)" : "0 0 0 1px rgba(79,139,196,0.18)" }}
                     />
                   </FormControl>
                 </SimpleGrid>
@@ -136,7 +155,7 @@ export default function ContactPage() {
                     onChange={(e) => setForm({ ...form, topic: e.target.value })}
                     bg={inputBg} border="1px solid" borderColor={cardBorder}
                     borderRadius="12px" h="48px" color={textMain}
-                    _focus={{ borderColor: textMain, boxShadow: "none" }}
+                    _focus={{ borderColor: accentBorder, boxShadow: dark ? "0 0 0 1px rgba(99,161,219,0.22)" : "0 0 0 1px rgba(79,139,196,0.18)" }}
                   >
                     <option value="support">{t('contact_topic_support')}</option>
                     <option value="kyc">{t('contact_topic_kyc')}</option>
@@ -155,7 +174,7 @@ export default function ContactPage() {
                     onChange={(e) => setForm({ ...form, msg: e.target.value })}
                     bg={inputBg} border="1px solid" borderColor={cardBorder}
                     borderRadius="12px" minH="140px" color={textMain}
-                    _focus={{ borderColor: textMain, boxShadow: "none" }}
+                    _focus={{ borderColor: accentBorder, boxShadow: dark ? "0 0 0 1px rgba(99,161,219,0.22)" : "0 0 0 1px rgba(79,139,196,0.18)" }}
                   />
                 </FormControl>
 
@@ -166,7 +185,8 @@ export default function ContactPage() {
                     h="48px" px={7} bg={ctaBg} color={ctaFg}
                     borderRadius="12px" fontWeight="800" fontSize="14px"
                     rightIcon={<Icon as={FiSend} />}
-                    _hover={{ opacity: 0.9 }}
+                    boxShadow={dark ? "0 14px 38px rgba(99,161,219,0.22)" : "0 14px 34px rgba(79,139,196,0.18)"}
+                    _hover={{ opacity: 0.9, transform: "translateY(-1px)" }}
                   >
                     {t('contact_form_send')}
                   </Button>
@@ -194,14 +214,14 @@ export default function ContactPage() {
               </Text>
             </Box> */}
 
-            <Box bg={cardBg} border="1px solid" borderColor={cardBorder} borderRadius="24px" p={6}>
+            <Box bg={cardBg} border="1px solid" borderColor={cardBorder} borderRadius="22px" p={6}>
               <Flex
                 w="42px" h="42px" borderRadius="12px"
-                bg={dark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)"}
-                border="1px solid" borderColor={cardBorder}
+                bg={accentSoft}
+                border="1px solid" borderColor={accentBorder}
                 align="center" justify="center" mb={4}
               >
-                <Icon as={FiClock} color={textMain} boxSize={5} />
+                <Icon as={FiClock} color={accentText} boxSize={5} />
               </Flex>
               <Text fontSize="11px" fontWeight="800" color={textSub} letterSpacing="0.15em" textTransform="uppercase" mb={1.5}>
                 {t('contact_hours_label')}
@@ -216,9 +236,9 @@ export default function ContactPage() {
               as={NextLink} href="/faq" display="block"
               bg={dark ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.03)"}
               border="1px solid" borderColor={cardBorder}
-              borderRadius="24px" p={6} cursor="pointer" role="group"
+              borderRadius="22px" p={6} cursor="pointer" role="group"
               transition="all 0.2s"
-              _hover={{ borderColor: dark ? "rgba(255,255,255,0.3)" : "rgba(0,0,0,0.3)", transform: "translateY(-2px)" }}
+              _hover={{ bg: cardBgHover, borderColor: strongBorder, transform: "translateY(-2px)", boxShadow: shadow }}
             >
               <Text fontSize="11px" fontWeight="800" color={textSub} letterSpacing="0.15em" textTransform="uppercase" mb={2}>
                 {t('contact_faq_eyebrow')}
@@ -226,7 +246,7 @@ export default function ContactPage() {
               <Text fontSize="15px" color={textMain} fontWeight="600" lineHeight="1.6" mb={3}>
                 {t('contact_faq_nudge')}
               </Text>
-              <HStack color={textMain} fontWeight="700" fontSize="13px" transition="all 0.15s">
+              <HStack color={accentText} fontWeight="800" fontSize="13px" transition="all 0.15s">
                 <Text>{t('contact_faq_link')}</Text>
                 <Icon as={FiArrowRight} />
               </HStack>

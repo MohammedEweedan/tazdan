@@ -6,9 +6,9 @@
  *
  *   1. Records a row in the `PlatformFee` ledger so we can audit and
  *      report on every dollar collected.
- *   2. Credits the platform wallet (a designated user with
- *      `username='platform'`) so admins can see and withdraw the
- *      accumulated revenue.
+ *   2. Credits the platform's corporate USDT wallet (a designated user
+ *      with `username='platform'`) so revenue is consolidated instead
+ *      of stranded across every fee currency.
  *
  * Fees from deposits and internal user-to-user transfers are
  * intentionally NOT collected here — the user explicitly asked for
@@ -68,9 +68,7 @@ async function getPlatformUserId(client: any): Promise<string> {
   return created.id;
 }
 
-// Enum currencies that have a real Wallet row. Anything else (random
-// altcoin tickers) is stored as a PlatformFee row only — there's no
-// per-altcoin platform wallet yet.
+// Enum currencies that have a real Wallet row.
 const ENUM_CURRENCIES: Currency[] = [
   'USDT', 'BTC', 'ETH', 'BNB', 'SOL', 'XRP', 'ADA', 'DOGE', 'MATIC', 'DOT', 'AVAX',
   'USD',  'EUR', 'GBP', 'AED', 'SAR', 'EGP', 'LYD',
@@ -199,6 +197,12 @@ export async function collectFee(input: CollectFeeInput): Promise<string | null>
     );
   }
 
+  // Corporate revenue is held in USDT. Keep the original fee amount/currency
+  // on PlatformFee, but credit treasury in USD-equivalent USDT.
+  const creditedCurrency: Currency = 'USDT';
+  const creditedAmount = amountUsd;
+  const baseMetadata = input.metadata ?? {};
+
   // Record the fee event
   const fee = await client.platformFee.create({
     data: {
@@ -209,31 +213,21 @@ export async function collectFee(input: CollectFeeInput): Promise<string | null>
       currency:    isEnumCurrency(currencyUpper) ? currencyUpper : 'USDT',
       amountUsd,
       description: input.description ?? null,
-      metadata:    (input.metadata ?? {}) as Prisma.InputJsonValue,
+      metadata:    {
+        ...baseMetadata,
+        originalAmount: amount.toString(),
+        originalCurrency: currencyUpper,
+        creditedAmount: creditedAmount.toString(),
+        creditedCurrency,
+      } as Prisma.InputJsonValue,
     },
   });
 
-  // Credit the platform wallet for enum currencies
-  if (isEnumCurrency(currencyUpper)) {
-    await client.wallet.upsert({
-      where: { userId_currency: { userId: platformUserId, currency: currencyUpper as Currency } },
-      update: { balance: { increment: amount } },
-      create: { userId: platformUserId, currency: currencyUpper as Currency, balance: amount, frozen: new Decimal(0) },
-    });
-  } else {
-    // For altcoins, store in UserWallet.altBalances
-    const uw = await client.userWallet.upsert({
-      where:  { userId: platformUserId },
-      update: {},
-      create: { userId: platformUserId, altBalances: {} as any },
-    });
-    const balances = (uw.altBalances && typeof uw.altBalances === 'object' ? uw.altBalances : {}) as Record<string, string>;
-    const next = new Decimal(balances[currencyUpper] ?? '0').add(amount);
-    await client.userWallet.update({
-      where: { userId: platformUserId },
-      data:  { altBalances: { ...balances, [currencyUpper]: next.toFixed(8) } as any },
-    });
-  }
+  await client.wallet.upsert({
+    where: { userId_currency: { userId: platformUserId, currency: creditedCurrency } },
+    update: { balance: { increment: creditedAmount } },
+    create: { userId: platformUserId, currency: creditedCurrency, balance: creditedAmount, frozen: new Decimal(0) },
+  });
 
   return fee.id;
 }

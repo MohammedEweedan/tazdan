@@ -16,6 +16,9 @@ import { AppError } from '../middleware/errorHandler';
 import { AuthRequest } from '../types';
 import { v4 as uuidv4 } from 'uuid';
 import { emitActivity } from '../utils/realtime';
+import { Decimal } from '@prisma/client/runtime/library';
+import { collectFee } from '../services/fee/feeCollector.service';
+import { isLedgerCurrency, postLedger } from '../services/ledger/ledger.service';
 
 export class TransactionController {
   /**
@@ -137,6 +140,37 @@ export class TransactionController {
             note: note || undefined,
           },
         });
+
+        if (isLedgerCurrency(currency)) {
+          const amountDec = new Decimal(amountNum);
+          const feeDec = new Decimal(feeNum);
+          const totalDec = amountDec.add(feeDec);
+          await postLedger(tx as any, {
+            refType: 'transfer',
+            refId: reference,
+            memo: `Legacy internal transfer ${currency}`,
+            legs: [
+              { type: 'USER', userId: senderId, currency: currency as any, amount: totalDec.neg() },
+              { type: 'USER', userId: receiverId, currency: currency as any, amount: amountDec },
+              ...(feeDec.gt(0)
+                ? [{ type: 'PLATFORM' as const, currency: currency as any, amount: feeDec }]
+                : []),
+            ],
+          }, { allowNegativeUser: true });
+
+          if (feeDec.gt(0)) {
+            await collectFee({
+              tx,
+              source: 'manual',
+              sourceId: transfer.id,
+              payerId: senderId,
+              amount: feeDec,
+              currency,
+              description: `Internal transfer fee · ${currency}`,
+              metadata: { reference, receiverId, legacyRoute: true },
+            });
+          }
+        }
 
         const senderTx = await tx.transaction.create({
           data: {

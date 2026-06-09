@@ -19,7 +19,7 @@ import { useThemedPalette, useTheme } from '@/store/themeStore';
 import { useAuthStore } from '@/store/authStore';
 import { adminService, type AdminDashboard, type PeriodStats, type AdminExposure, type AdminFxStatus, type AdminFundIntegrity } from '@/services';
 import { LoadingPulse } from '@/components/ui/LoadingPulse';
-import { FxChart } from '@/components/admin/FxChart';
+import { FxChart, type FxChartMode } from '@/components/admin/FxChart';
 
 type Metrics = {
   onlineSockets: number;
@@ -191,6 +191,7 @@ export default function AdminScreen() {
   });
 
   const [fxHours, setFxHours] = useState(24);
+  const [fxChartMode, setFxChartMode] = useState<FxChartMode>('sparkline');
   const fxQ = useQuery<AdminFxStatus>({
     queryKey: ['admin-fx-status', fxHours],
     queryFn: () => adminService.fxStatus(fxHours),
@@ -684,21 +685,41 @@ export default function AdminScreen() {
                 </View>
               </View>
 
-              {/* Range picker */}
-              <View style={{ flexDirection: 'row', gap: 6, marginTop: 14 }}>
-                {([[6, '6h'], [24, '24h'], [72, '3d'], [168, '7d']] as [number, string][]).map(([h, lbl]) => (
-                  <Pressable key={h} onPress={() => setFxHours(h)} style={{
-                    paddingHorizontal: 12, paddingVertical: 5, borderRadius: 8,
-                    backgroundColor: fxHours === h ? p.accent : 'transparent',
-                    borderWidth: 1, borderColor: fxHours === h ? p.accent : p.border,
-                  }}>
-                    <Text style={{ color: fxHours === h ? p.accentFg : p.fgMuted, fontSize: 11, fontWeight: '700' }}>{lbl}</Text>
-                  </Pressable>
-                ))}
+              {/* Range + chart type picker */}
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginTop: 14 }}>
+                <View style={{ flexDirection: 'row', gap: 6 }}>
+                  {([[6, '6h'], [24, '24h'], [72, '3d'], [168, '7d']] as [number, string][]).map(([h, lbl]) => (
+                    <Pressable key={h} onPress={() => setFxHours(h)} style={{
+                      paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8,
+                      backgroundColor: fxHours === h ? p.accent : 'transparent',
+                      borderWidth: 1, borderColor: fxHours === h ? p.accent : p.border,
+                    }}>
+                      <Text style={{ color: fxHours === h ? p.accentFg : p.fgMuted, fontSize: 11, fontWeight: '700' }}>{lbl}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+                <View style={{ flexDirection: 'row', gap: 4, backgroundColor: p.pillBg, borderRadius: 9, padding: 2, borderWidth: 1, borderColor: p.border }}>
+                  {([
+                    ['sparkline', 'analytics-outline'],
+                    ['candles', 'stats-chart-outline'],
+                  ] as [FxChartMode, keyof typeof Ionicons.glyphMap][]).map(([mode, icon]) => {
+                    const active = fxChartMode === mode;
+                    return (
+                      <Pressable
+                        key={mode}
+                        onPress={() => setFxChartMode(mode)}
+                        hitSlop={6}
+                        style={{ paddingHorizontal: 8, paddingVertical: 5, borderRadius: 7, backgroundColor: active ? p.ctaBg : 'transparent' }}
+                      >
+                        <Ionicons name={icon} size={13} color={active ? p.ctaFg : p.fgMuted} />
+                      </Pressable>
+                    );
+                  })}
+                </View>
               </View>
 
               {/* Price + volume chart */}
-              <FxChart history={fx?.usdLydHistory ?? []} p={p} />
+              <FxChart history={fx?.usdLydHistory ?? []} p={p} showVolume={fxChartMode === 'sparkline'} mode={fxChartMode} />
             </View>
 
             {/* Live parallel rates table — Fulus-first, scraper only as backend fallback. */}

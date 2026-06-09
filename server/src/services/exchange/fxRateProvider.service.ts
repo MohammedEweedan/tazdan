@@ -249,9 +249,11 @@ async function applySpread(base: string, quote: string, mid: number): Promise<{ 
   const pct = Decimal.max(configured, floor);
   const midDec = new Decimal(mid);
   const half = pct.div(2).div(100);
-  // Spread is symmetric around the mid: buy = mid * (1 - half), sell = mid * (1 + half)
-  const buy  = midDec.mul(new Decimal(1).sub(half));
-  const sell = midDec.mul(new Decimal(1).add(half));
+  // Spread is symmetric around the mid:
+  // - buyPrice is what the user pays in QUOTE to buy 1 BASE, so it is above mid.
+  // - sellPrice is what the user receives in QUOTE to sell 1 BASE, so it is below mid.
+  const buy  = midDec.mul(new Decimal(1).add(half));
+  const sell = midDec.mul(new Decimal(1).sub(half));
   return { buy: buy.toFixed(8), sell: sell.toFixed(8) };
 }
 

@@ -10,6 +10,7 @@ import { sendTransferSent, sendTransferReceived } from '../services/email';
 import { pushCopy, pushTxEvent } from '../services/push.service';
 import { postLedger, isLedgerCurrency } from '../services/ledger/ledger.service';
 import { enforceStepUp } from '../services/security/stepUp.service';
+import { collectFee } from '../services/fee/feeCollector.service';
 
 // Internal-transfer accepts the same set as wallet creation, including
 // the USDT on-chain variants. We normalise them to a single logical
@@ -189,6 +190,18 @@ export class TransferController {
             ...(fee > 0 ? [{ type: 'PLATFORM' as const, currency: logicalCurrency as any, amount: new Decimal(fee) }] : []),
           ];
           await postLedger(tx, { refType: 'transfer', refId: reference, memo: `Transfer ${logicalCurrency}`, legs }, { allowNegativeUser: true });
+          if (fee > 0) {
+            await collectFee({
+              tx,
+              source: 'manual',
+              sourceId: reference,
+              payerId: req.user!.id,
+              amount: new Decimal(fee),
+              currency: logicalCurrency,
+              description: `Transfer fee · ${logicalCurrency}`,
+              metadata: { recipientId: recipient.id, reference },
+            });
+          }
         }
 
         await tx.transaction.createMany({
