@@ -169,6 +169,20 @@ const lydParallel: Provider = {
   },
 };
 
+// Provider: FIAT/LYD from the Fulus API (real-time, webhook-fed). Primary
+// source for LYD parallel-market rates — sits ABOVE the scraper so its live
+// value wins, with the scraper as the no-key fallback. Returns null (deferring
+// to the scraper) when no Fulus token is configured.
+const fulusLyd: Provider = {
+  name: 'fulus',
+  supports: (base, quote) => quote === 'LYD',
+  async fetch(base) {
+    const { getFulusLydRate } = await import('./fulus.service');
+    const v = await getFulusLydRate(base.toUpperCase());
+    return typeof v === 'number' && v > 0 ? { mid: v } : null;
+  },
+};
+
 const openExchangeRates: Provider = {
   name: 'openexchangerates',
   supports: () => Boolean(process.env.OPENEXCHANGERATES_APP_ID),
@@ -192,9 +206,10 @@ const openExchangeRates: Provider = {
 };
 
 // Order matters — first provider that supports the pair AND returns a sane
-// value wins. lydParallel is first so the LYD black-market rate beats the
-// official peg that open.er-api would otherwise return for USD/LYD.
-const RATE_PROVIDERS: Provider[] = [lydParallel, openExchangeRates, frankfurter, openErApi];
+// value wins. fulus is first so the real-time parallel rate beats the daily
+// scrape; lydParallel (scrape) is the no-key fallback for LYD pairs; both
+// beat the official peg that open.er-api would otherwise return for USD/LYD.
+const RATE_PROVIDERS: Provider[] = [fulusLyd, lydParallel, openExchangeRates, frankfurter, openErApi];
 
 function withinSanity(base: string, quote: string, mid: number): boolean {
   const key = `${base}/${quote}`;

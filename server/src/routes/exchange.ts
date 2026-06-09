@@ -52,6 +52,11 @@ exchangeRouter.get('/fx/:base/:quote', ExchangeController.getFxRate);
 // Public disclosed quote spread — mobile charts mark up prices with this.
 exchangeRouter.get('/spread', ExchangeController.getSpread);
 
+// Fulus rate webhook (public; HMAC-verified over the raw body in the handler).
+// Index.ts captures req.rawBody for this path so the X-Webhook-Signature check
+// runs over the exact bytes Fulus signed.
+exchangeRouter.post('/webhook/fulus', ExchangeController.fulusWebhook);
+
 // Custody trading (fiat ↔ crypto via Binance liquidity).
 exchangeRouter.post('/quote',       authenticate, quoteLimiter,   ExchangeController.createQuote);
 exchangeRouter.post('/execute',     authenticate, executeLimiter, ExchangeController.executeOrder);

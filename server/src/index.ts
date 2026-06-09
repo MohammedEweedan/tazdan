@@ -185,12 +185,15 @@ app.use(cookieParser());
 // just exempt it from JSON parsing.
 app.use((req, res, next) => {
   if (req.path === '/api/deposits/webhook/stripe') return next();
-  // Capture raw body on the Meta WhatsApp webhook so we can verify the
-  // X-Hub-Signature-256 HMAC. The body is still parsed into req.body.
-  const isMetaWebhook = req.path === '/api/whatsapp/webhook/meta';
+  // Capture raw body on webhooks that verify an HMAC over the exact bytes the
+  // sender signed (Meta WhatsApp X-Hub-Signature-256, Fulus X-Webhook-Signature).
+  // The body is still parsed into req.body.
+  const needsRawBody =
+    req.path === '/api/whatsapp/webhook/meta' ||
+    req.path === '/api/exchange/webhook/fulus';
   return express.json({
     limit:  '1mb',
-    verify: isMetaWebhook
+    verify: needsRawBody
       ? (req2: any, _res, buf) => { req2.rawBody = buf.toString('utf8'); }
       : undefined,
   })(req, res, next);
