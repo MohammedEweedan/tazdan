@@ -341,7 +341,7 @@ export default function AdminScreen() {
               <Ionicons name="chevron-back" size={26} color={p.fg} />
             </Pressable>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <Animated.View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#22c55e', transform: [{ scale: dotScale }], opacity: dotOpacity }} />
+              <Animated.View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: p.greenFg, transform: [{ scale: dotScale }], opacity: dotOpacity }} />
               <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '600', letterSpacing: 0.6 }}>LIVE</Text>
               {/* Theme toggle — cycles dark → light → mono, matching settings. */}
               <Pressable
@@ -413,7 +413,7 @@ export default function AdminScreen() {
           {/* Big revenue card */}
           <View style={{ marginHorizontal: 20, marginTop: 14 }}>
             <View style={{
-              borderRadius: 20, padding: 20,
+              borderRadius: 16, padding: 20,
               backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border,
             }}>
               <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '600', letterSpacing: 0.7 }}>
@@ -434,37 +434,37 @@ export default function AdminScreen() {
           </View>
 
           {/* Real-time strip */}
-          <View style={{ marginTop: 18, paddingHorizontal: 20 }}>
-            <SectionHeader icon="flash-outline" title="Real-time" accent="#22c55e" p={p} />
+          <View style={{ marginTop: 24, paddingHorizontal: 20 }}>
+            <SectionHeader icon="flash-outline" title="Real-time" p={p} />
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
-              <KpiCard label="USERS ONLINE"  value={(m?.onlineUsers ?? 0).toLocaleString()} hint={`${m?.onlineSockets ?? 0} sockets`} icon="people-outline" accent="#22c55e" p={p} />
-              <KpiCard label="TXS / 5MIN"    value={(m?.recentTransactions5m ?? 0).toLocaleString()} hint={`${m?.recentOrders5m ?? 0} orders`} icon="flash-outline" accent="#f59e0b" p={p} />
-              <KpiCard label="ACTIVE USERS"  value={(d?.activeUsers ?? 0).toLocaleString()} hint={`+${d?.newUsersWeek ?? 0} this week`} icon="person-add-outline" accent="#63a1db" p={p} />
-              <KpiCard label="FROZEN"        value={(d?.frozenUsers ?? d?.suspendedUsers ?? 0).toLocaleString()} hint="suspended" icon="snow-outline" accent="#ef4444" p={p} />
-              <KpiCard label="UPTIME"        value={formatUptime(m?.uptimeSeconds ?? 0)} hint={`${m?.memoryMb ?? 0} MB`} icon="pulse-outline" accent={p.fg} p={p} />
-              <KpiCard label="TOTAL USERS"   value={(d?.totalUsers ?? 0).toLocaleString()} hint={`+${d?.newUsersToday ?? 0} today`} icon="globe-outline" accent={p.fg} p={p} />
+              <KpiCard label="USERS ONLINE"  value={(m?.onlineUsers ?? 0).toLocaleString()} hint={`${m?.onlineSockets ?? 0} sockets`} icon="people-outline" p={p} />
+              <KpiCard label="TXS / 5MIN"    value={(m?.recentTransactions5m ?? 0).toLocaleString()} hint={`${m?.recentOrders5m ?? 0} orders`} icon="flash-outline" p={p} />
+              <KpiCard label="ACTIVE USERS"  value={(d?.activeUsers ?? 0).toLocaleString()} hint={`+${d?.newUsersWeek ?? 0} this week`} icon="person-add-outline" p={p} />
+              <KpiCard label="FROZEN"        value={(d?.frozenUsers ?? d?.suspendedUsers ?? 0).toLocaleString()} hint="suspended" icon="snow-outline" p={p} />
+              <KpiCard label="UPTIME"        value={formatUptime(m?.uptimeSeconds ?? 0)} hint={`${m?.memoryMb ?? 0} MB`} icon="pulse-outline" p={p} />
+              <KpiCard label="TOTAL USERS"   value={(d?.totalUsers ?? 0).toLocaleString()} hint={`+${d?.newUsersToday ?? 0} today`} icon="globe-outline" p={p} />
             </View>
           </View>
 
           {/* Platform control strip */}
-          <View style={{ marginTop: 18, paddingHorizontal: 20 }}>
-            <SectionHeader icon="speedometer-outline" title="Platform control" accent="#06b6d4" p={p} />
+          <View style={{ marginTop: 24, paddingHorizontal: 20 }}>
+            <SectionHeader icon="speedometer-outline" title="Platform control" p={p} />
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
-              <KpiCard label="TX / MIN"       value={(m?.txPerMin ?? 0).toFixed(1)} hint="5 min avg" icon="speedometer-outline" accent="#06b6d4" p={p} />
-              <KpiCard label="FEES / MIN"     value={formatUSD(m?.feesPerMin ?? 0, { compact: true })} hint={`${formatUSD(m?.commissions5mUSD ?? 0, { compact: true })} / 5m`} icon="cash-outline" accent="#22c55e" p={p} />
-              <KpiCard label="DEPOSITS 5M"   value={(m?.recentDeposits5m ?? 0).toLocaleString()} hint={`${d?.pendingDeposits ?? 0} pending`} icon="arrow-down-circle-outline" accent="#22c55e" p={p} />
-              <KpiCard label="WITHDRAWALS"   value={(m?.recentWithdrawals5m ?? 0).toLocaleString()} hint={`${d?.pendingWithdrawals ?? 0} queue`} icon="arrow-up-circle-outline" accent="#ef4444" p={p} />
-              <KpiCard label="P2P / 5MIN"    value={(m?.recentP2P5m ?? 0).toLocaleString()} hint="trades opened" icon="swap-horizontal-outline" accent="#8b5cf6" p={p} />
-              <KpiCard label="CARDS / 5MIN"  value={(m?.recentCardTx5m ?? 0).toLocaleString()} hint="card events" icon="card-outline" accent="#f59e0b" p={p} />
+              <KpiCard label="TX / MIN"       value={(m?.txPerMin ?? 0).toFixed(1)} hint="5 min avg" icon="speedometer-outline" p={p} />
+              <KpiCard label="FEES / MIN"     value={formatUSD(m?.feesPerMin ?? 0, { compact: true })} hint={`${formatUSD(m?.commissions5mUSD ?? 0, { compact: true })} / 5m`} icon="cash-outline" p={p} />
+              <KpiCard label="DEPOSITS 5M"   value={(m?.recentDeposits5m ?? 0).toLocaleString()} hint={`${d?.pendingDeposits ?? 0} pending`} icon="arrow-down-circle-outline" p={p} />
+              <KpiCard label="WITHDRAWALS"   value={(m?.recentWithdrawals5m ?? 0).toLocaleString()} hint={`${d?.pendingWithdrawals ?? 0} queue`} icon="arrow-up-circle-outline" p={p} />
+              <KpiCard label="P2P / 5MIN"    value={(m?.recentP2P5m ?? 0).toLocaleString()} hint="trades opened" icon="swap-horizontal-outline" p={p} />
+              <KpiCard label="CARDS / 5MIN"  value={(m?.recentCardTx5m ?? 0).toLocaleString()} hint="card events" icon="card-outline" p={p} />
             </View>
           </View>
 
           {/* Lifetime totals strip */}
-          <View style={{ marginTop: 18, paddingHorizontal: 20 }}>
-            <SectionHeader icon="infinite-outline" title="Lifetime" accent="#8b5cf6" p={p} />
+          <View style={{ marginTop: 24, paddingHorizontal: 20 }}>
+            <SectionHeader icon="infinite-outline" title="Lifetime" p={p} />
             <View style={{
               flexDirection: 'row', flexWrap: 'wrap',
-              backgroundColor: p.bgElev, borderRadius: 14, borderWidth: 1, borderColor: p.border,
+              backgroundColor: p.bgElev, borderRadius: 16, borderWidth: 1, borderColor: p.border,
               overflow: 'hidden',
             }}>
               <BigCell label="TOTAL FEES" value={formatUSD(d?.totalFees ?? 0, { compact: true })} p={p} />
@@ -475,16 +475,15 @@ export default function AdminScreen() {
           </View>
 
           {/* Exposure & total holdings */}
-          <View style={{ marginTop: 18, paddingHorizontal: 20 }}>
+          <View style={{ marginTop: 24, paddingHorizontal: 20 }}>
             <SectionHeader
               icon="wallet-outline"
               title="Exposure & holdings"
-              accent="#63a1db"
               right={exp ? <Text style={{ color: p.fgFaint, fontSize: 10, fontWeight: '700' }}>spread {(exp.spreadPct * 100).toFixed(2)}%</Text> : undefined}
               p={p}
             />
 
-            <View style={{ borderRadius: 20, padding: 20, backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border }}>
+            <View style={{ borderRadius: 16, padding: 20, backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border }}>
               <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '600', letterSpacing: 0.7 }}>
                 TOTAL USER HOLDINGS · ALL PLATFORMS
               </Text>
@@ -507,20 +506,20 @@ export default function AdminScreen() {
             </View>
 
             {/* Instant-liquidation exposure */}
-            <View style={{ marginTop: 10, borderRadius: 16, padding: 16, backgroundColor: 'rgba(239,68,68,0.08)', borderWidth: 1, borderColor: 'rgba(239,68,68,0.25)' }}>
+            <View style={{ marginTop: 10, borderRadius: 16, padding: 16, backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                <Ionicons name="alert-circle-outline" size={16} color="#ef4444" />
+                <Ionicons name="alert-circle-outline" size={15} color={p.redFg} />
                 <Text style={{ color: p.fg, fontSize: 12, fontWeight: '700' }}>If all users sold instantly</Text>
               </View>
               <Text style={{ color: p.fgMuted, fontSize: 11, marginTop: 4 }}>
                 Payout owed at our sell price (market − spread):
               </Text>
-              <Text style={{ color: '#ef4444', fontSize: 26, fontWeight: '700', marginTop: 6, fontVariant: ['tabular-nums'] }}>
+              <Text style={{ color: p.redFg, fontSize: 26, fontWeight: '700', marginTop: 6, fontVariant: ['tabular-nums'] }}>
                 {formatUSD(exp?.totals.exposureUsd ?? 0)}
               </Text>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 10 }}>
                 <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '600' }}>Spread cushion retained</Text>
-                <Text style={{ color: '#22c55e', fontSize: 13, fontWeight: '700', fontVariant: ['tabular-nums'] }}>
+                <Text style={{ color: p.greenFg, fontSize: 13, fontWeight: '700', fontVariant: ['tabular-nums'] }}>
                   +{formatUSD(exp?.totals.spreadCushionUsd ?? 0)}
                 </Text>
               </View>
@@ -528,7 +527,7 @@ export default function AdminScreen() {
 
             {/* Top holdings breakdown */}
             {!!exp?.crypto?.length && (
-              <View style={{ marginTop: 10, backgroundColor: p.bgElev, borderRadius: 14, borderWidth: 1, borderColor: p.border, overflow: 'hidden' }}>
+              <View style={{ marginTop: 10, backgroundColor: p.bgElev, borderRadius: 16, borderWidth: 1, borderColor: p.border, overflow: 'hidden' }}>
                 {exp.crypto.slice(0, 6).map((row, i, arr) => (
                   <View key={row.symbol} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 14, paddingVertical: 11, borderBottomWidth: i === arr.length - 1 ? 0 : 1, borderBottomColor: p.border }}>
                     <Text style={{ color: p.fg, fontSize: 13, fontWeight: '700' }}>{row.symbol}</Text>
@@ -551,25 +550,24 @@ export default function AdminScreen() {
           </View>
 
           {/* Treasury integrity — fund audit + ledger reconciliation */}
-          <View style={{ marginTop: 18, paddingHorizontal: 20 }}>
+          <View style={{ marginTop: 24, paddingHorizontal: 20 }}>
             <SectionHeader
               icon="shield-checkmark-outline"
               title="Treasury integrity"
-              accent={fund?.tradingHalted ? '#ef4444' : p.greenFg}
               right={fund ? (
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 7, backgroundColor: (fund.tradingHalted ? '#ef4444' : p.greenFg) + '1f' }}>
-                  <View style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: fund.tradingHalted ? '#ef4444' : p.greenFg }} />
-                  <Text style={{ color: fund.tradingHalted ? '#ef4444' : p.greenFg, fontSize: 10, fontWeight: '800' }}>{fund.tradingHalted ? 'HALTED' : 'OK'}</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, backgroundColor: fund.tradingHalted ? p.redBg : p.greenBg }}>
+                  <View style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: fund.tradingHalted ? p.redFg : p.greenFg }} />
+                  <Text style={{ color: fund.tradingHalted ? p.redFg : p.greenFg, fontSize: 10, fontWeight: '800' }}>{fund.tradingHalted ? 'HALTED' : 'OK'}</Text>
                 </View>
               ) : undefined}
               p={p}
             />
 
             {fund?.tradingHalted && (
-              <View style={{ marginBottom: 10, borderRadius: 14, padding: 14, backgroundColor: 'rgba(239,68,68,0.12)', borderWidth: 1, borderColor: '#ef4444' }}>
+              <View style={{ marginBottom: 10, borderRadius: 16, padding: 14, backgroundColor: p.redBg, borderWidth: 1, borderColor: p.redFg }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                  <Ionicons name="warning" size={18} color="#ef4444" />
-                  <Text style={{ color: '#ef4444', fontSize: 14, fontWeight: '800' }}>TRADING HALTED</Text>
+                  <Ionicons name="warning" size={18} color={p.redFg} />
+                  <Text style={{ color: p.redFg, fontSize: 14, fontWeight: '800' }}>TRADING HALTED</Text>
                 </View>
                 <Text style={{ color: p.fgMuted, fontSize: 12, marginTop: 6 }}>
                   A money-conservation check failed. Trading is blocked until you investigate and clear it.
@@ -577,7 +575,7 @@ export default function AdminScreen() {
                 <Pressable
                   onPress={() => clearHaltMut.mutate()}
                   disabled={clearHaltMut.isPending}
-                  style={{ marginTop: 10, alignSelf: 'flex-start', paddingHorizontal: 14, paddingVertical: 9, borderRadius: 10, backgroundColor: '#ef4444' }}
+                  style={{ marginTop: 10, alignSelf: 'flex-start', paddingHorizontal: 14, paddingVertical: 9, borderRadius: 10, backgroundColor: p.redFg }}
                 >
                   <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>{clearHaltMut.isPending ? 'Clearing…' : 'Clear halt'}</Text>
                 </Pressable>
@@ -585,19 +583,19 @@ export default function AdminScreen() {
             )}
 
             <View style={{ flexDirection: 'row', gap: 10, marginBottom: 10 }}>
-              <View style={{ flex: 1, borderRadius: 14, padding: 14, backgroundColor: p.bgElev, borderWidth: 1, borderColor: fund ? (fund.funds.ok ? p.greenFg + '40' : '#f59e0b') : p.border }}>
+              <View style={{ flex: 1, borderRadius: 16, padding: 14, backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border }}>
                 <Text style={{ color: p.fgFaint, fontSize: 10, fontWeight: '700', letterSpacing: 0.5 }}>FUND AUDIT</Text>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6 }}>
-                  <Ionicons name={fund?.funds.ok ? 'checkmark-circle' : 'information-circle'} size={16} color={fund?.funds.ok ? p.greenFg : '#f59e0b'} />
-                  <Text style={{ color: fund?.funds.ok ? p.greenFg : '#f59e0b', fontSize: 15, fontWeight: '700' }}>{fund ? (fund.funds.ok ? 'Balanced' : 'Review') : '—'}</Text>
+                  <Ionicons name={fund?.funds.ok ? 'checkmark-circle' : 'information-circle'} size={16} color={fund?.funds.ok ? p.greenFg : p.amberFg} />
+                  <Text style={{ color: fund?.funds.ok ? p.greenFg : p.amberFg, fontSize: 15, fontWeight: '700' }}>{fund ? (fund.funds.ok ? 'Balanced' : 'Review') : '—'}</Text>
                 </View>
                 <Text style={{ color: p.fgFaint, fontSize: 9, marginTop: 4 }}>internal balances vs net deposits</Text>
               </View>
-              <View style={{ flex: 1, borderRadius: 14, padding: 14, backgroundColor: p.bgElev, borderWidth: 1, borderColor: fund ? (fund.ledger.ok ? p.greenFg + '40' : '#ef4444') : p.border }}>
+              <View style={{ flex: 1, borderRadius: 16, padding: 14, backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border }}>
                 <Text style={{ color: p.fgFaint, fontSize: 10, fontWeight: '700', letterSpacing: 0.5 }}>LEDGER</Text>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6 }}>
-                  <Ionicons name={fund?.ledger.ok ? 'checkmark-circle' : 'alert-circle'} size={16} color={fund?.ledger.ok ? p.greenFg : '#ef4444'} />
-                  <Text style={{ color: fund?.ledger.ok ? p.greenFg : '#ef4444', fontSize: 15, fontWeight: '700' }}>{fund ? (fund.ledger.ok ? 'Reconciled' : 'BROKEN') : '—'}</Text>
+                  <Ionicons name={fund?.ledger.ok ? 'checkmark-circle' : 'alert-circle'} size={16} color={fund?.ledger.ok ? p.greenFg : p.redFg} />
+                  <Text style={{ color: fund?.ledger.ok ? p.greenFg : p.redFg, fontSize: 15, fontWeight: '700' }}>{fund ? (fund.ledger.ok ? 'Reconciled' : 'BROKEN') : '—'}</Text>
                 </View>
                 <Text style={{ color: p.fgFaint, fontSize: 9, marginTop: 4 }}>double-entry conservation</Text>
               </View>
@@ -605,8 +603,8 @@ export default function AdminScreen() {
 
             {/* Explain the (non-contradictory) "review + reconciled" combo. */}
             {fund && !fund.funds.ok && fund.ledger.ok && (
-              <View style={{ flexDirection: 'row', gap: 8, padding: 12, marginBottom: 10, borderRadius: 12, backgroundColor: 'rgba(245,158,11,0.08)', borderWidth: 1, borderColor: 'rgba(245,158,11,0.25)' }}>
-                <Ionicons name="information-circle-outline" size={16} color="#f59e0b" />
+              <View style={{ flexDirection: 'row', gap: 8, padding: 12, marginBottom: 10, borderRadius: 12, backgroundColor: p.amberBg, borderWidth: 1, borderColor: p.amberFg + '40' }}>
+                <Ionicons name="information-circle-outline" size={16} color={p.amberFg} />
                 <Text style={{ flex: 1, color: p.fgMuted, fontSize: 11, lineHeight: 16 }}>
                   Books are internally consistent (ledger reconciled — no money created or lost). The amounts below entered outside the deposit flow (opening balances / admin seeding) and just need a recorded source for full attribution.
                 </Text>
@@ -615,19 +613,19 @@ export default function AdminScreen() {
 
             {/* Per-currency drift rows (only show non-OK to keep it tight) */}
             {!!fund?.funds.perCurrency?.some((c) => !c.ok) && (
-              <View style={{ backgroundColor: p.bgElev, borderRadius: 14, borderWidth: 1, borderColor: p.border, overflow: 'hidden' }}>
+              <View style={{ backgroundColor: p.bgElev, borderRadius: 16, borderWidth: 1, borderColor: p.border, overflow: 'hidden' }}>
                 {fund.funds.perCurrency.filter((c) => !c.ok).slice(0, 8).map((c) => {
                   const positive = !String(c.diff).trim().startsWith('-'); // only a positive diff is a credit recon
                   return (
                     <View key={c.currency} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, paddingHorizontal: 14, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: p.border }}>
                       <Text style={{ color: p.fg, fontSize: 13, fontWeight: '700' }}>{c.currency}</Text>
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                        <Text style={{ color: '#ef4444', fontSize: 12, fontWeight: '600', fontVariant: ['tabular-nums'] }}>off by {c.diff}</Text>
+                        <Text style={{ color: p.redFg, fontSize: 12, fontWeight: '600', fontVariant: ['tabular-nums'] }}>off by {c.diff}</Text>
                         {positive ? (
                           <Pressable
                             onPress={() => confirmReconcile(c.currency, c.diff)}
                             disabled={reconcileMut.isPending}
-                            style={{ paddingHorizontal: 12, paddingVertical: 7, borderRadius: 9, backgroundColor: '#f59e0b', opacity: reconcileMut.isPending ? 0.6 : 1 }}
+                            style={{ paddingHorizontal: 12, paddingVertical: 7, borderRadius: 9, backgroundColor: p.amberFg, opacity: reconcileMut.isPending ? 0.6 : 1 }}
                           >
                             <Text style={{ color: '#1a1a1a', fontSize: 11, fontWeight: '800' }}>{reconcileMut.isPending && reconcileMut.variables === c.currency ? 'Reconciling…' : 'Reconcile'}</Text>
                           </Pressable>
@@ -643,11 +641,10 @@ export default function AdminScreen() {
           </View>
 
           {/* FX — USD/LYD order book + scraped parallel rates */}
-          <View style={{ marginTop: 18, paddingHorizontal: 20 }}>
+          <View style={{ marginTop: 24, paddingHorizontal: 20 }}>
             <SectionHeader
               icon="git-compare-outline"
               title="FX · USD/LYD order book"
-              accent="#f59e0b"
               right={(
                 <Pressable onPress={() => router.push('/admin/rates' as any)} hitSlop={8} style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
                   <Text style={{ color: p.accent, fontSize: 11, fontWeight: '800' }}>Manage</Text>
@@ -657,7 +654,7 @@ export default function AdminScreen() {
               p={p}
             />
 
-            <View style={{ borderRadius: 18, padding: 16, backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border }}>
+            <View style={{ borderRadius: 16, padding: 16, backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border }}>
               {/* Current rate + skew */}
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                 <View>
@@ -672,10 +669,10 @@ export default function AdminScreen() {
                 <View style={{ alignItems: 'flex-end' }}>
                   <View style={{
                     flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8,
-                    backgroundColor: (fx?.lydOrderBook.skewPct ?? 0) > 0 ? 'rgba(34,197,94,0.15)' : p.pillBg,
+                    backgroundColor: (fx?.lydOrderBook.skewPct ?? 0) > 0 ? p.greenBg : p.pillBg,
                   }}>
-                    <Ionicons name="trending-up" size={12} color={(fx?.lydOrderBook.skewPct ?? 0) > 0 ? '#22c55e' : p.fgMuted} />
-                    <Text style={{ color: (fx?.lydOrderBook.skewPct ?? 0) > 0 ? '#22c55e' : p.fgMuted, fontSize: 12, fontWeight: '700' }}>
+                    <Ionicons name="trending-up" size={12} color={(fx?.lydOrderBook.skewPct ?? 0) > 0 ? p.greenFg : p.fgMuted} />
+                    <Text style={{ color: (fx?.lydOrderBook.skewPct ?? 0) > 0 ? p.greenFg : p.fgMuted, fontSize: 12, fontWeight: '700' }}>
                       +{((fx?.lydOrderBook.skewPct ?? 0) * 100).toFixed(2)}% skew
                     </Text>
                   </View>
@@ -724,7 +721,7 @@ export default function AdminScreen() {
 
             {/* Live parallel rates table — Fulus-first, scraper only as backend fallback. */}
             {((fx?.currencies?.some((c) => c.buyPrice != null && c.sellPrice != null)) || (fx?.lydParallelScraped && Object.keys(fx.lydParallelScraped).length > 0)) && (
-              <View style={{ marginTop: 10, backgroundColor: p.bgElev, borderRadius: 14, borderWidth: 1, borderColor: p.border, overflow: 'hidden' }}>
+              <View style={{ marginTop: 10, backgroundColor: p.bgElev, borderRadius: 16, borderWidth: 1, borderColor: p.border, overflow: 'hidden' }}>
                 <Text style={{ color: p.fgFaint, fontSize: 10, fontWeight: '700', letterSpacing: 0.5, padding: 12, paddingBottom: 6 }}>
                   PARALLEL RATES (LYD per unit · live)
                 </Text>
@@ -749,17 +746,16 @@ export default function AdminScreen() {
           </View>
 
           {/* Pending action queue */}
-          <View style={{ marginTop: 18, paddingHorizontal: 20 }}>
+          <View style={{ marginTop: 24, paddingHorizontal: 20 }}>
             {(() => {
               const totalPending = (d?.pendingKYC ?? 0) + (d?.pendingDeposits ?? 0) + (d?.pendingWithdrawals ?? 0);
               return (
                 <SectionHeader
                   icon="alert-circle-outline"
                   title="Needs attention"
-                  accent={totalPending > 0 ? '#f59e0b' : p.greenFg}
                   right={(
-                    <View style={{ minWidth: 22, paddingHorizontal: 7, height: 20, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: (totalPending > 0 ? '#f59e0b' : p.greenFg) + '1f' }}>
-                      <Text style={{ color: totalPending > 0 ? '#f59e0b' : p.greenFg, fontSize: 11, fontWeight: '800', fontVariant: ['tabular-nums'] }}>{totalPending}</Text>
+                    <View style={{ minWidth: 22, paddingHorizontal: 7, height: 20, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: totalPending > 0 ? p.amberBg : p.greenBg }}>
+                      <Text style={{ color: totalPending > 0 ? p.amberFg : p.greenFg, fontSize: 11, fontWeight: '800', fontVariant: ['tabular-nums'] }}>{totalPending}</Text>
                     </View>
                   )}
                   p={p}
@@ -775,9 +771,9 @@ export default function AdminScreen() {
           </View>
 
           {/* Trade flow */}
-          <View style={{ marginTop: 18, paddingHorizontal: 20 }}>
-            <SectionHeader icon="swap-vertical-outline" title="Trade flow" accent="#8b5cf6" p={p} />
-            <View style={{ backgroundColor: p.bgElev, borderRadius: 14, borderWidth: 1, borderColor: p.border, padding: 16 }}>
+          <View style={{ marginTop: 24, paddingHorizontal: 20 }}>
+            <SectionHeader icon="swap-vertical-outline" title="Trade flow" p={p} />
+            <View style={{ backgroundColor: p.bgElev, borderRadius: 16, borderWidth: 1, borderColor: p.border, padding: 16 }}>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
                 <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '700' }}>{PERIOD_LABEL[period].current} Volume</Text>
                 <Text style={{ color: p.fg, fontSize: 16, fontWeight: '600', fontVariant: ['tabular-nums'] }}>
@@ -786,17 +782,17 @@ export default function AdminScreen() {
               </View>
               <BuySellBar buys={d?.buyOrders ?? 0} sells={d?.sellOrders ?? 0} p={p} />
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 }}>
-                <Text style={{ color: '#22c55e', fontSize: 11, fontWeight: '600' }}>BUY · {(d?.buyOrders ?? 0).toLocaleString()}</Text>
-                <Text style={{ color: '#ef4444', fontSize: 11, fontWeight: '600' }}>SELL · {(d?.sellOrders ?? 0).toLocaleString()}</Text>
+                <Text style={{ color: p.greenFg, fontSize: 11, fontWeight: '600' }}>BUY · {(d?.buyOrders ?? 0).toLocaleString()}</Text>
+                <Text style={{ color: p.redFg, fontSize: 11, fontWeight: '600' }}>SELL · {(d?.sellOrders ?? 0).toLocaleString()}</Text>
               </View>
             </View>
           </View>
 
           {/* Top pairs */}
           {!!d?.ordersByPair?.length && (
-            <View style={{ marginTop: 18, paddingHorizontal: 20 }}>
-              <SectionHeader icon="podium-outline" title="Top pairs by order count" accent="#06b6d4" p={p} />
-              <View style={{ backgroundColor: p.bgElev, borderRadius: 14, borderWidth: 1, borderColor: p.border, overflow: 'hidden' }}>
+            <View style={{ marginTop: 24, paddingHorizontal: 20 }}>
+              <SectionHeader icon="podium-outline" title="Top pairs by order count" p={p} />
+              <View style={{ backgroundColor: p.bgElev, borderRadius: 16, borderWidth: 1, borderColor: p.border, overflow: 'hidden' }}>
                 {d.ordersByPair.slice(0, 6).map((row, i, arr) => {
                   const max = Math.max(...d.ordersByPair.map((r) => r.count));
                   const pct = max > 0 ? (row.count / max) * 100 : 0;
@@ -820,9 +816,9 @@ export default function AdminScreen() {
 
           {/* User growth */}
           {!!d?.userGrowth?.length && (
-            <View style={{ marginTop: 18, paddingHorizontal: 20 }}>
-              <SectionHeader icon="people-circle-outline" title="User growth · 7 days" accent="#22c55e" p={p} />
-              <View style={{ backgroundColor: p.bgElev, borderRadius: 14, borderWidth: 1, borderColor: p.border, padding: 16 }}>
+            <View style={{ marginTop: 24, paddingHorizontal: 20 }}>
+              <SectionHeader icon="people-circle-outline" title="User growth · 7 days" p={p} />
+              <View style={{ backgroundColor: p.bgElev, borderRadius: 16, borderWidth: 1, borderColor: p.border, padding: 16 }}>
                 <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 6, height: 80 }}>
                   {d.userGrowth.map((g) => {
                     const max = Math.max(...d.userGrowth.map((x) => x.count), 1);
@@ -841,14 +837,14 @@ export default function AdminScreen() {
 
           {/* Backfill banner — only show if total commissions is suspiciously low */}
           {(m?.totalCommissionsUSD ?? 0) < 1 && (
-            <View style={{ marginTop: 18, marginHorizontal: 20 }}>
+            <View style={{ marginTop: 24, marginHorizontal: 20 }}>
               <View style={{
-                borderRadius: 14, padding: 14,
-                backgroundColor: 'rgba(245,158,11,0.10)',
-                borderWidth: 1, borderColor: 'rgba(245,158,11,0.30)',
+                borderRadius: 16, padding: 14,
+                backgroundColor: p.amberBg,
+                borderWidth: 1, borderColor: p.amberFg + '40',
                 flexDirection: 'row', alignItems: 'center', gap: 12,
               }}>
-                <Ionicons name="flash-outline" size={22} color="#f59e0b" />
+                <Ionicons name="flash-outline" size={22} color={p.amberFg} />
                 <View style={{ flex: 1 }}>
                   <Text style={{ color: p.fg, fontSize: 13, fontWeight: '600' }}>Backfill historical fees</Text>
                   <Text style={{ color: p.fgMuted, fontSize: 11, marginTop: 2 }}>Import fees from existing orders, withdrawals, and P2P trades into the platform ledger.</Text>
@@ -856,9 +852,9 @@ export default function AdminScreen() {
                 <Pressable
                   onPress={() => backfillMut.mutate()}
                   disabled={backfillMut.isPending}
-                  style={{ paddingHorizontal: 14, paddingVertical: 9, borderRadius: 10, backgroundColor: '#f59e0b' }}
+                  style={{ paddingHorizontal: 14, paddingVertical: 9, borderRadius: 10, backgroundColor: p.amberFg }}
                 >
-                  <Text style={{ color: '#fff', fontSize: 12, fontWeight: '600' }}>
+                  <Text style={{ color: '#1a1a1a', fontSize: 12, fontWeight: '700' }}>
                     {backfillMut.isPending ? 'Importing…' : 'Run'}
                   </Text>
                 </Pressable>
@@ -869,8 +865,8 @@ export default function AdminScreen() {
           {/* Manage — grouped, collapsible. Replaces the flat 21-tile wall that
               forced a long scroll. Groups open on tap; Trading is open by default
               since rates/orders are the most-touched. */}
-          <View style={{ marginTop: 22, paddingHorizontal: 20 }}>
-            <SectionHeader icon="grid-outline" title="Manage" accent={p.accent} p={p} />
+          <View style={{ marginTop: 24, paddingHorizontal: 20 }}>
+            <SectionHeader icon="grid-outline" title="Manage" p={p} />
             {NAV_GROUPS.map((g) => (
               <NavGroup
                 key={g.title}
@@ -892,13 +888,13 @@ export default function AdminScreen() {
 
 function DeltaRow({ current, prev, delta, prevLabel, p }: { current: number; prev: number; delta: number; prevLabel: string; p: any }) {
   const positive = delta >= 0;
-  const color = positive ? '#22c55e' : '#ef4444';
+  const color = positive ? p.greenFg : p.redFg;
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 }}>
       <View style={{
         flexDirection: 'row', alignItems: 'center', gap: 3,
         paddingHorizontal: 7, paddingVertical: 3, borderRadius: 6,
-        backgroundColor: positive ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)',
+        backgroundColor: positive ? p.greenBg : p.redBg,
       }}>
         <Ionicons name={positive ? 'caret-up' : 'caret-down'} size={10} color={color} />
         <Text style={{ color, fontSize: 11, fontWeight: '600', fontVariant: ['tabular-nums'] }}>{formatPct(delta)}</Text>
@@ -912,7 +908,7 @@ function DeltaRow({ current, prev, delta, prevLabel, p }: { current: number; pre
 
 function PeriodMiniStat({ label, curr, prev, delta, format, p }: { label: string; curr: number; prev: number; delta: number; format: (v: number) => string; p: any }) {
   const positive = delta >= 0;
-  const color = positive ? '#22c55e' : '#ef4444';
+  const color = positive ? p.greenFg : p.redFg;
   return (
     <View style={{ flex: 1, paddingVertical: 8 }}>
       <Text style={{ color: p.fgFaint, fontSize: 9, fontWeight: '600', letterSpacing: 0.5 }}>{label.toUpperCase()}</Text>
@@ -927,22 +923,21 @@ function PeriodMiniStat({ label, curr, prev, delta, format, p }: { label: string
 }
 
 /**
- * Consistent section header: a small accent icon chip + title, with an optional
- * trailing accessory (e.g. a stat or badge). Replaces the bare repeated grey
- * uppercase labels so the sections read as a designed console, not a dump.
+ * Consistent section header — neutral by design. Colour in a control panel is
+ * reserved for STATE (halted, pending, up/down); decorating every section with
+ * its own hue reads as a consumer app, not an ops console. State, when there
+ * is one, arrives via the `right` accessory (already tinted by the caller).
  */
-function SectionHeader({ icon, title, accent, right, p }: {
+function SectionHeader({ icon, title, right, p }: {
   icon: keyof typeof Ionicons.glyphMap;
   title: string;
-  accent?: string;
   right?: ReactNode;
   p: any;
 }) {
-  const tint = accent ?? p.accent;
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 9, marginBottom: 12 }}>
-      <View style={{ width: 26, height: 26, borderRadius: 8, alignItems: 'center', justifyContent: 'center', backgroundColor: tint + '1f' }}>
-        <Ionicons name={icon} size={14} color={tint} />
+      <View style={{ width: 26, height: 26, borderRadius: 8, alignItems: 'center', justifyContent: 'center', backgroundColor: p.pillBg, borderWidth: 1, borderColor: p.border }}>
+        <Ionicons name={icon} size={13} color={p.fgMuted} />
       </View>
       <Text style={{ flex: 1, color: p.fg, fontSize: 13, fontWeight: '800', letterSpacing: 0.2 }}>{title}</Text>
       {right}
@@ -950,12 +945,12 @@ function SectionHeader({ icon, title, accent, right, p }: {
   );
 }
 
-function KpiCard({ label, value, hint, icon, accent, p }: { label: string; value: string; hint?: string; icon: keyof typeof Ionicons.glyphMap; accent: string; p: any }) {
+function KpiCard({ label, value, hint, icon, p }: { label: string; value: string; hint?: string; icon: keyof typeof Ionicons.glyphMap; p: any }) {
   return (
-    <View style={{ width: '48%', backgroundColor: p.bgElev, borderRadius: 14, borderWidth: 1, borderColor: p.border, padding: 14 }}>
+    <View style={{ width: '48%', backgroundColor: p.bgElev, borderRadius: 16, borderWidth: 1, borderColor: p.border, padding: 14 }}>
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
         <Text style={{ color: p.fgFaint, fontSize: 10, fontWeight: '600', letterSpacing: 0.6 }}>{label}</Text>
-        <Ionicons name={icon} size={15} color={accent} />
+        <Ionicons name={icon} size={14} color={p.fgFaint} />
       </View>
       <Text style={{ color: p.fg, fontSize: 22, fontWeight: '600', letterSpacing: -0.5, fontVariant: ['tabular-nums'] }}>{value}</Text>
       {hint && <Text style={{ color: p.fgMuted, fontSize: 10, fontWeight: '600', marginTop: 3 }}>{hint}</Text>}
@@ -990,12 +985,12 @@ function ActionRow({ icon, label, count, onPress, p }: { icon: keyof typeof Ioni
         opacity: pressed ? 0.85 : 1,
       })}
     >
-      <View style={{ width: 38, height: 38, borderRadius: 12, backgroundColor: urgent ? 'rgba(239,68,68,0.15)' : p.pillBg, alignItems: 'center', justifyContent: 'center' }}>
-        <Ionicons name={icon} size={18} color={urgent ? '#ef4444' : p.fg} />
+      <View style={{ width: 38, height: 38, borderRadius: 12, backgroundColor: urgent ? p.redBg : p.pillBg, alignItems: 'center', justifyContent: 'center' }}>
+        <Ionicons name={icon} size={18} color={urgent ? p.redFg : p.fg} />
       </View>
       <Text style={{ flex: 1, color: p.fg, fontSize: 14, fontWeight: '700' }}>{label}</Text>
       {hasCount ? (
-        <View style={{ paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, backgroundColor: urgent ? '#ef4444' : p.pillBg }}>
+        <View style={{ paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, backgroundColor: urgent ? p.redFg : p.pillBg }}>
           <Text style={{ color: urgent ? '#fff' : p.fgMuted, fontSize: 12, fontWeight: '600', fontVariant: ['tabular-nums'] }}>{(count ?? 0).toLocaleString()}</Text>
         </View>
       ) : (
@@ -1005,24 +1000,12 @@ function ActionRow({ icon, label, count, onPress, p }: { icon: keyof typeof Ioni
   );
 }
 
-function NavTile({ icon, label, onPress, p }: { icon: keyof typeof Ionicons.glyphMap; label: string; onPress: () => void; p: any }) {
-  return (
-    <Pressable
-      onPress={onPress}
-      style={({ pressed }) => ({
-        width: '31%', aspectRatio: 1.1,
-        backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border, borderRadius: 14,
-        alignItems: 'center', justifyContent: 'center', gap: 8,
-        opacity: pressed ? 0.85 : 1,
-      })}
-    >
-      <Ionicons name={icon} size={22} color={p.fg} />
-      <Text style={{ color: p.fg, fontSize: 11, fontWeight: '700' }}>{label}</Text>
-    </Pressable>
-  );
-}
-
-/** Collapsible navigation group: header row toggles its tile grid. */
+/**
+ * Collapsible navigation group rendered as a single card: header row toggles
+ * a settings-style row list. List rows beat a tile grid for an ops console —
+ * labels left-aligned on one scan line, bigger touch targets, and the card
+ * reads as one unit instead of a mosaic.
+ */
 function NavGroup({ group, open, onToggle, onNavigate, p }: {
   group: NavGroupDef;
   open: boolean;
@@ -1031,28 +1014,41 @@ function NavGroup({ group, open, onToggle, onNavigate, p }: {
   p: any;
 }) {
   return (
-    <View style={{ marginBottom: 10 }}>
+    <View style={{
+      marginBottom: 10, borderRadius: 16, overflow: 'hidden',
+      backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border,
+    }}>
       <Pressable
         onPress={onToggle}
         style={({ pressed }) => ({
           flexDirection: 'row', alignItems: 'center', gap: 10,
-          paddingHorizontal: 14, paddingVertical: 13, borderRadius: 14,
-          backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border,
-          opacity: pressed ? 0.85 : 1,
+          paddingHorizontal: 14, paddingVertical: 13,
+          backgroundColor: pressed ? p.pillBg : 'transparent',
         })}
       >
-        <Ionicons name={group.icon} size={18} color={p.fg} />
-        <Text style={{ flex: 1, color: p.fg, fontSize: 14, fontWeight: '700', letterSpacing: -0.2 }}>{group.title}</Text>
-        <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '700' }}>{group.items.length}</Text>
-        <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={16} color={p.fgMuted} />
-      </Pressable>
-      {open && (
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 10 }}>
-          {group.items.map((it) => (
-            <NavTile key={it.route} icon={it.icon} label={it.label} onPress={() => onNavigate(it.route)} p={p} />
-          ))}
+        <View style={{ width: 30, height: 30, borderRadius: 9, alignItems: 'center', justifyContent: 'center', backgroundColor: p.pillBg, borderWidth: 1, borderColor: p.border }}>
+          <Ionicons name={group.icon} size={15} color={p.fgMuted} />
         </View>
-      )}
+        <Text style={{ flex: 1, color: p.fg, fontSize: 14, fontWeight: '700', letterSpacing: -0.2 }}>{group.title}</Text>
+        <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '700', fontVariant: ['tabular-nums'] }}>{group.items.length}</Text>
+        <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={15} color={p.fgFaint} />
+      </Pressable>
+      {open && group.items.map((it) => (
+        <Pressable
+          key={it.route}
+          onPress={() => onNavigate(it.route)}
+          style={({ pressed }) => ({
+            flexDirection: 'row', alignItems: 'center', gap: 12,
+            paddingVertical: 12, paddingLeft: 18, paddingRight: 14,
+            borderTopWidth: 1, borderTopColor: p.border,
+            backgroundColor: pressed ? p.pillBg : 'transparent',
+          })}
+        >
+          <Ionicons name={it.icon} size={17} color={p.fgMuted} />
+          <Text style={{ flex: 1, color: p.fg, fontSize: 13.5, fontWeight: '600' }}>{it.label}</Text>
+          <Ionicons name="chevron-forward" size={14} color={p.fgFaint} />
+        </Pressable>
+      ))}
     </View>
   );
 }
@@ -1062,8 +1058,8 @@ function BuySellBar({ buys, sells, p }: { buys: number; sells: number; p: any })
   const buyPct = (buys / total) * 100;
   return (
     <View style={{ height: 8, backgroundColor: p.pillBg, borderRadius: 4, overflow: 'hidden', flexDirection: 'row', marginTop: 14 }}>
-      <View style={{ width: `${buyPct}%`, backgroundColor: '#22c55e' }} />
-      <View style={{ flex: 1, backgroundColor: '#ef4444' }} />
+      <View style={{ width: `${buyPct}%`, backgroundColor: p.greenFg }} />
+      <View style={{ flex: 1, backgroundColor: p.redFg }} />
     </View>
   );
 }
