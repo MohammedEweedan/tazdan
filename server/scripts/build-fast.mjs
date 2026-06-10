@@ -52,6 +52,12 @@ await build({
   platform: 'node',
   format: 'cjs',
   target: 'node20',
+  supported: {
+    // Keep parity with the old tsc CommonJS emit. Native dynamic import()
+    // uses ESM resolution at runtime and requires ".js" extensions, so
+    // extensionless local imports like import("./foo.service") break in dist.
+    'dynamic-import': false,
+  },
   sourcemap: true,
   logLevel: 'warning',
 });
