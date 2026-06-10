@@ -41,9 +41,24 @@ import axios from 'axios';
  * parsed JSON body or null on any failure (timeout, non-2xx, network). Never
  * throws — callers fall back to cache/scraper.
  */
+// ── 429 circuit breaker ──────────────────────────────────────────────
+// The Fulus plan has a hard daily request budget. Once we see a 429,
+// hammering only digs the hole deeper and floods the logs (hundreds of
+// identical warnings). Open the breaker for a cooldown: every fulusGet
+// during it short-circuits to null and the callers' existing cache/
+// scraper fallbacks take over silently.
+const FULUS_429_COOLDOWN_MS = Number(process.env.FULUS_429_COOLDOWN_MS ?? 10 * 60_000);
+let breakerOpenUntil = 0;
+
+/** True while the post-429 cooldown is active (also used to abort backfill). */
+export function fulusBreakerOpen(): boolean {
+  return Date.now() < breakerOpenUntil;
+}
+
 async function fulusGet<T = any>(path: string, timeoutMs = 5000): Promise<T | null> {
   const token = process.env.FULUS_API_TOKEN;
   if (!token) return null;
+  if (fulusBreakerOpen()) return null;
   try {
     const res = await axios.get<T>(`${BASE_URL}${path}`, {
       headers: { Authorization: `Bearer ${token}`, accept: 'application/json' },
@@ -54,8 +69,9 @@ async function fulusGet<T = any>(path: string, timeoutMs = 5000): Promise<T | nu
     return res.data;
   } catch (err: any) {
     if (err?.response?.status === 429) {
+      breakerOpenUntil = Date.now() + FULUS_429_COOLDOWN_MS;
       // eslint-disable-next-line no-console
-      console.warn('[fulus] rate limit hit (429) — relying on cache/scraper');
+      console.warn(`[fulus] 429 — pausing ALL Fulus calls for ${Math.round(FULUS_429_COOLDOWN_MS / 60_000)}min (cache/scraper take over)`);
     }
     return null;
   }
@@ -178,6 +194,15 @@ export async function backfillHistory(currency: string, days = 7): Promise<numbe
   let inserted = 0;
 
   for (let d = 0; d < days; d++) {
+    // Budget protection: a 429 mid-backfill means the daily quota is gone —
+    // every further day would burn requests for nulls. Resume next boot.
+    if (fulusBreakerOpen()) {
+      // eslint-disable-next-line no-console
+      console.warn(`[fulus] backfill ${pair} aborted at day ${d}/${days} — 429 cooldown active`);
+      break;
+    }
+    // Pace: ~4 req/s max keeps a deep backfill from monopolizing the quota.
+    if (d > 0) await new Promise((r) => setTimeout(r, 250));
     const day = new Date(Date.now() - d * 86_400_000);
     const date = day.toISOString().slice(0, 10); // YYYY-MM-DD
     try {
@@ -220,6 +245,7 @@ export async function backfillAllHistory(days: number): Promise<void> {
   if (!fulusEnabled() || days <= 0) return;
   const { countPairTicks } = await import('./lydOrderBook.service');
   for (const code of FULUS_CURRENCIES) {
+    if (fulusBreakerOpen()) break; // quota gone — finish on a later boot
     const have = await countPairTicks(`${code}/LYD`, days * 24);
     // Only backfill a pair that's basically empty — avoids re-fetching daily.
     if (have < 5) await backfillHistory(code, days);
