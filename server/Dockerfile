@@ -28,7 +28,12 @@ COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/prisma ./prisma
 COPY --from=build /app/dist ./dist
 COPY package.json ./
-RUN mkdir -p uploads
+# uploads must be writable by the unprivileged runtime user (KYC docs,
+# avatars, media land here unless an external volume is mounted over it).
+RUN mkdir -p uploads && chown -R node:node /app
+# Never run a money server as root: a container escape or dependency RCE
+# should land in an unprivileged user, not uid 0.
+USER node
 EXPOSE 5000
 # Apply pending migrations BEFORE starting so every deploy self-migrates and is
 # idempotent (avoids the "column does not exist → 502 on everything" outage).

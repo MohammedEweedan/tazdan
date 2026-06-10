@@ -72,6 +72,7 @@ import { startLydSampler } from './services/exchange/lydOrderBook.service';
 import { startReconciliation } from './services/ledger/reconcile.service';
 import { getEmailStatus } from './services/email';
 import { startFundIntegrityAudit } from './services/ledger/fundIntegrity.service';
+import { startOperationalReadinessAlerts } from './services/ops/operationalReadiness.service';
 import { globalLimiter, authLimiter, registerLimiter, withdrawalLimiter, webhookLimiter } from './middleware/rateLimiters';
 import { protectedUploadsRouter } from './middleware/protectedUploads';
 import { ipBanMiddleware } from './middleware/ipBan';
@@ -380,7 +381,12 @@ io.on('connection', (socket) => {
   });
 
   // Legacy explicit subscribe (kept for backward compat with older clients).
-  socket.on('subscribe:orders', (userId: string) => socket.join(`user:${userId}`));
+  // Only ever joins the AUTHENTICATED user's own room — honouring the passed
+  // userId would let any socket eavesdrop on another user's private events
+  // (order fills, transfers, messages).
+  socket.on('subscribe:orders', () => {
+    if (user?.id) socket.join(`user:${user.id}`);
+  });
 
   socket.on('typing:start', ({ toUserId }: { toUserId: string }) => {
     if (user?.id) io.to(`user:${toUserId}`).emit('typing:start', { fromUserId: user.id });
@@ -468,6 +474,7 @@ async function start() {
     // conjured funds (internal balances vs net external deposits/withdrawals).
     if (isSchedulerWorker) {
       startFundIntegrityAudit();
+      startOperationalReadinessAlerts();
     }
   } catch (error) {
     logger.error('Failed to start server:', { err: error });

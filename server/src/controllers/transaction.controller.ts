@@ -19,6 +19,7 @@ import { emitActivity } from '../utils/realtime';
 import { Decimal } from '@prisma/client/runtime/library';
 import { collectFee } from '../services/fee/feeCollector.service';
 import { isLedgerCurrency, postLedger } from '../services/ledger/ledger.service';
+import { postAssetLedger, normaliseAsset } from '../services/ledger/assetLedger.service';
 
 export class TransactionController {
   /**
@@ -170,6 +171,23 @@ export class TransactionController {
               metadata: { reference, receiverId, legacyRoute: true },
             });
           }
+        } else {
+          const asset = normaliseAsset(currency);
+          const amountDec = new Decimal(amountNum);
+          const feeDec = new Decimal(feeNum);
+          const totalDec = amountDec.add(feeDec);
+          await postAssetLedger(tx as any, {
+            refType: 'transfer',
+            refId: reference,
+            memo: `Legacy internal transfer ${asset}`,
+            legs: [
+              { type: 'USER', userId: senderId, asset, amount: totalDec.neg() },
+              { type: 'USER', userId: receiverId, asset, amount: amountDec },
+              ...(feeDec.gt(0)
+                ? [{ type: 'PLATFORM' as const, asset, amount: feeDec }]
+                : []),
+            ],
+          }, { allowNegativeUser: process.env.LEDGER_ALLOW_NEGATIVE_USER !== '0' });
         }
 
         const senderTx = await tx.transaction.create({

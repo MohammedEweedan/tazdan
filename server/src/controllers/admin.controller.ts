@@ -946,6 +946,25 @@ export class AdminController {
     } catch (error) { next(error); }
   }
 
+  static async backfillLedgerOpeningBalances(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const { backfillLedgerOpeningBalances } = await import('../services/ledger/backfill.service');
+      const report = await backfillLedgerOpeningBalances();
+      await prisma.auditLog.create({
+        data: {
+          userId: req.user!.id,
+          action: 'LEDGER_OPENING_BALANCE_BACKFILL',
+          entity: 'ledger',
+          newValues: report as any,
+        },
+      }).catch(() => {});
+      res.json({
+        message: 'Ledger opening-balance backfill completed. Set LEDGER_ALLOW_NEGATIVE_USER=0 after reviewing the report.',
+        report,
+      });
+    } catch (error) { next(error); }
+  }
+
   static async getOperationalReadiness(_req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const { buildOperationalReadiness } = await import('../services/ops/operationalReadiness.service');

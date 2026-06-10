@@ -8,6 +8,7 @@ import { AuthRequest } from '../types';
 import { redisGet, redisSet, redisDel } from '../utils/redis';
 import { collectFee } from '../services/fee/feeCollector.service';
 import { postLedger, isLedgerCurrency } from '../services/ledger/ledger.service';
+import { postAssetLedger, normaliseAsset } from '../services/ledger/assetLedger.service';
 import { emitActivity } from '../utils/realtime';
 import { sendP2PTradeUpdate } from '../services/email';
 import { pushP2PTradeUpdate } from '../services/push.service';
@@ -396,7 +397,17 @@ export class P2PController {
         const alts = (uw.altBalances && typeof uw.altBalances === 'object' ? uw.altBalances : {}) as Record<string, string>;
         const available = parseFloat(alts[realTicker] ?? '0');
         if (data.amount > available) throw new AppError('Seller has insufficient balance for escrow', 400);
-        // Freeze by reducing altBalances and storing frozen amount in metadata (simple approach: just validate here, deduct on release)
+        await prisma.$transaction(async (tx) => {
+          await postAssetLedger(tx as any, {
+            refType: 'p2p_escrow_lock',
+            refId: listing.id,
+            memo: `P2P escrow lock ${realTicker}`,
+            legs: [
+              { type: 'USER', userId: sellerId, asset: normaliseAsset(realTicker), amount: new Decimal(data.amount).neg() },
+              { type: 'SYSTEM_ESCROW', asset: normaliseAsset(realTicker), amount: new Decimal(data.amount) },
+            ],
+          }, { allowNegativeUser: process.env.LEDGER_ALLOW_NEGATIVE_USER !== '0' });
+        });
       }
 
       const trade = await (prisma as any).p2PTrade.create({
@@ -535,6 +546,15 @@ export class P2PController {
           const newBuyer  = parseFloat(buyerAlts[realTicker] ?? '0') + crypto;
           await tx.userWallet.update({ where: { userId: trade.sellerId }, data: { altBalances: { ...sellerAlts, [realTicker]: newSeller.toFixed(8) } } });
           await tx.userWallet.update({ where: { userId: trade.buyerId  }, data: { altBalances: { ...buyerAlts,  [realTicker]: newBuyer.toFixed(8)  } } });
+          await postAssetLedger(tx as any, {
+            refType: 'p2p_escrow_release',
+            refId: trade.id,
+            memo: `P2P escrow release ${realTicker}`,
+            legs: [
+              { type: 'SYSTEM_ESCROW', asset: normaliseAsset(realTicker), amount: new Decimal(trade.escrowAmount.toString()).neg() },
+              { type: 'USER', userId: trade.buyerId, asset: normaliseAsset(realTicker), amount: new Decimal(trade.cryptoAmount.toString()) },
+            ],
+          }, { allowNegativeUser: process.env.LEDGER_ALLOW_NEGATIVE_USER !== '0' });
         }
         await (tx as any).p2PTrade.update({
           where: { id: trade.id },
@@ -733,7 +753,19 @@ export class P2PController {
             }
           });
         }
-        // For altcoins: escrow was validated but not hard-frozen in altBalances; nothing to unfreeze.
+        else {
+          await prisma.$transaction(async (tx) => {
+            await postAssetLedger(tx as any, {
+              refType: 'p2p_escrow_refund',
+              refId: trade.id,
+              memo: `P2P escrow refund ${realTicker}`,
+              legs: [
+                { type: 'SYSTEM_ESCROW', asset: normaliseAsset(realTicker), amount: new Decimal(trade.escrowAmount.toString()).neg() },
+                { type: 'USER', userId: trade.sellerId, asset: normaliseAsset(realTicker), amount: new Decimal(trade.escrowAmount.toString()) },
+              ],
+            }, { allowNegativeUser: process.env.LEDGER_ALLOW_NEGATIVE_USER !== '0' });
+          });
+        }
       }
 
       await (prisma as any).p2PTrade.update({

@@ -38,6 +38,11 @@ import { CURRENCY_META, getCurrencyMeta } from '@/constants';
 import { formatMoney } from '@/utils/format';
 import { CurrencyBadge } from '@/components/ui/CurrencyBadge';
 import { AssetTxRow, txBelongsToAsset } from '@/components/transactions/AssetTxRow';
+import {
+  useFiatRateHistory,
+  FULUS_CHART_CURRENCIES,
+  type FiatRange,
+} from '@/hooks/useFiatRateHistory';
 
 type Range = '1H' | '24H' | '7D' | '30D' | '1Y' | 'ALL';
 type Tab = 'activity' | 'news' | 'discussion';
@@ -2338,6 +2343,145 @@ function fmtSupply(n: number, sym: string): string {
 }
 
 /* ── Fiat asset view ─── */
+/**
+ * Parallel-market rate chart for fiat pages — the Fulus feed vs LYD.
+ * The LYD page charts USD/LYD ("what's the dollar at?" — the number every
+ * Libyan user tracks); other Fulus currencies chart themselves vs the dinar.
+ * Line (sparkline) and candlestick modes share the same bucketed OHLC data.
+ */
+function FiatRateChart({ sym, p, h }: {
+  sym: Currency; p: Palette;
+  h: { selection: () => void; medium: () => void; light: () => void };
+}) {
+  const [range, setRange] = useState<FiatRange>('1M');
+  const [chartType, setChartType] = useState<ChartType>('line');
+  const [hoverRate, setHoverRate] = useState<number | null>(null);
+  const { data, isLoading } = useFiatRateHistory(sym, range);
+
+  const points = data?.points ?? [];
+  const chartPoints = useMemo(
+    () => points.map((pt) => ({ price: pt.c, timestamp: pt.t })),
+    [points],
+  );
+  const candles: Candle[] = useMemo(
+    () => points.map((pt) => ({ timestamp: pt.t, open: pt.o, high: pt.h, low: pt.l, close: pt.c })),
+    [points],
+  );
+
+  if (!FULUS_CHART_CURRENCIES.has(sym)) return null;
+
+  const base = data?.base ?? (sym === 'LYD' ? 'USD' : sym);
+  const latest = points.length ? points[points.length - 1].c : 0;
+  const windowOpen = points.length ? points[0].o : 0;
+  const shown = hoverRate ?? latest;
+  const change = windowOpen > 0 && latest > 0 ? ((latest - windowOpen) / windowOpen) * 100 : 0;
+  const positive = change >= 0;
+  const lineColor = positive ? p.greenFg : p.redFg;
+
+  return (
+    <View style={{
+      borderRadius: 16, backgroundColor: p.bgElev,
+      borderWidth: 1, borderColor: p.border, overflow: 'hidden',
+    }}>
+      {/* Header */}
+      <View style={{ paddingHorizontal: 16, paddingTop: 14, paddingBottom: 4 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '700', letterSpacing: 0.6 }}>
+            {base}/LYD · PARALLEL MARKET
+          </Text>
+          <ChartModeToggle chartType={chartType} setChartType={setChartType} p={p} h={h} />
+        </View>
+        {shown > 0 && (
+          <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 8, marginTop: 8 }}>
+            <Text style={{
+              color: p.fg, fontSize: 28, fontWeight: '700',
+              letterSpacing: -0.8, fontVariant: ['tabular-nums'],
+            }}>
+              {shown.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}
+            </Text>
+            <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '600', marginBottom: 4 }}>
+              LYD per {base}
+            </Text>
+            {hoverRate === null && Number.isFinite(change) && change !== 0 && (
+              <View style={{
+                flexDirection: 'row', alignItems: 'center', gap: 2, marginBottom: 4,
+                paddingHorizontal: 7, paddingVertical: 2, borderRadius: 8,
+                backgroundColor: positive ? p.greenBg : p.redBg,
+              }}>
+                <Ionicons name={positive ? 'arrow-up' : 'arrow-down'} size={10} color={positive ? p.greenFg : p.redFg} />
+                <Text style={{ color: positive ? p.greenFg : p.redFg, fontSize: 11, fontWeight: '700' }}>
+                  {Math.abs(change).toFixed(2)}%
+                </Text>
+              </View>
+            )}
+          </View>
+        )}
+      </View>
+
+      {/* Chart body */}
+      {isLoading ? (
+        <View style={{ height: 214, alignItems: 'center', justifyContent: 'center' }}>
+          <LoadingPulse size={40} icon="trending-up-outline" />
+        </View>
+      ) : chartPoints.length < 2 ? (
+        <View style={{ height: 140, alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+          <Ionicons name="pulse-outline" size={26} color={p.fgFaint} />
+          <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '500', textAlign: 'center', paddingHorizontal: 24 }}>
+            Rate history is still being collected for this range.
+          </Text>
+        </View>
+      ) : chartType === 'candle' ? (
+        <CandleChart
+          candles={candles}
+          palette={p}
+          upColor={p.greenFg}
+          downColor={p.redFg}
+          onHoverPrice={setHoverRate}
+        />
+      ) : (
+        <SparklineChart
+          points={chartPoints}
+          color={lineColor}
+          palette={p}
+          onHoverPrice={setHoverRate}
+        />
+      )}
+
+      {/* Range selector */}
+      <View style={{
+        flexDirection: 'row', gap: 4,
+        margin: 12, marginTop: 8, padding: 4,
+        borderRadius: 14, backgroundColor: p.bg,
+        borderWidth: 1, borderColor: p.border,
+      }}>
+        {(['24H', '7D', '1M', '3M', '1Y'] as FiatRange[]).map((r) => (
+          <Pressable key={r} onPress={() => { h.selection(); setRange(r); }} style={{ flex: 1 }}>
+            <View style={{
+              paddingVertical: 8, borderRadius: 10, alignItems: 'center',
+              backgroundColor: range === r ? p.accent : 'transparent',
+            }}>
+              <Text style={{
+                color: range === r ? p.accentFg : p.fgMuted,
+                fontWeight: '700', fontSize: 11, letterSpacing: 0.4,
+              }}>
+                {r}
+              </Text>
+            </View>
+          </Pressable>
+        ))}
+      </View>
+
+      {/* Source note */}
+      <Text style={{
+        color: p.fgFaint, fontSize: 10, fontWeight: '600',
+        paddingHorizontal: 16, paddingBottom: 12, letterSpacing: 0.3,
+      }}>
+        Live parallel-market rate · Fulus feed
+      </Text>
+    </View>
+  );
+}
+
 function FiatAssetView({ sym, wallet, p, h }: {
   sym: Currency; wallet: Wallet | undefined; p: Palette;
   h: { selection: () => void; medium: () => void; light: () => void };
@@ -2375,6 +2519,9 @@ function FiatAssetView({ sym, wallet, p, h }: {
           </Text>
         )}
       </View>
+
+      {/* Parallel-market rate chart (Fulus-covered currencies only) */}
+      <FiatRateChart sym={sym} p={p} h={h} />
 
       {/* Activity */}
       {txs.length > 0 ? (

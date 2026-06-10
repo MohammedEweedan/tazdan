@@ -27,11 +27,19 @@ export function useActivityRealtime(currentUserId: string | null | undefined) {
       };
 
       socket.on('activity:new', onActivity);
+      // Server emits these to user:{id} on on-chain settlement events.
+      // A confirmed deposit is the single moment a user most wants to see
+      // their balance move — refresh instantly instead of waiting out the
+      // 15s wallet poll.
+      socket.on('deposit:update', onActivity);
+      socket.on('withdrawal:submitted', onActivity);
     })();
 
     return () => {
       cancelled = true;
       socket?.off('activity:new');
+      socket?.off('deposit:update');
+      socket?.off('withdrawal:submitted');
     };
   }, [currentUserId, qc]);
 }

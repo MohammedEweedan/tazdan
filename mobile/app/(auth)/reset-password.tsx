@@ -72,12 +72,15 @@ export default function ResetPassword() {
   const submitReset = async () => {
     setError('');
     const tok = extractToken(token);
-    if (tok.length < 10) { setError(t('reset.invalidToken')); return; }
+    // Accept either the 6-digit emailed code or a pasted link token.
+    if (!/^\d{6}$/.test(tok) && tok.length < 10) { setError(t('reset.invalidToken')); return; }
     if (password.length < 8) { setError(t('reset.weakPassword')); return; }
     setSubmitting(true);
     try {
       h.medium();
-      await authService.resetPassword(tok, password);
+      // Email accompanies the 6-digit code so the server can count
+      // attempts per account (brute-force cap).
+      await authService.resetPassword(tok, password, email.trim().toLowerCase() || undefined);
       h.success();
       setPhase('done');
     } catch (e: any) {

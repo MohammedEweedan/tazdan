@@ -472,6 +472,14 @@ export class DepositController {
       const rawBody = (req.body as Buffer).toString('utf8');
       const signingKey = process.env.ALCHEMY_WEBHOOK_SIGNING_KEY;
 
+      // Fail closed: an unsigned deposit webhook in production is an open
+      // invitation to credit forged deposits. (Chain verification in
+      // processDeposit is the backstop, but defense-in-depth is free here.)
+      if (!signingKey && process.env.NODE_ENV === 'production') {
+        logger.error('[webhook:alchemy] ALCHEMY_WEBHOOK_SIGNING_KEY not set — rejecting');
+        return res.status(503).json({ error: 'Webhook not configured' });
+      }
+
       if (signingKey) {
         const sig = req.headers['x-alchemy-signature'] as string | undefined;
         if (!sig) {
@@ -523,6 +531,11 @@ export class DepositController {
   static async webhookTrongrid(req: Request, res: Response, next: NextFunction) {
     try {
       const apiKey = process.env.TRON_WEBHOOK_API_KEY;
+      // Fail closed in production — see webhookAlchemy above.
+      if (!apiKey && process.env.NODE_ENV === 'production') {
+        logger.error('[webhook:trongrid] TRON_WEBHOOK_API_KEY not set — rejecting');
+        return res.status(503).json({ error: 'Webhook not configured' });
+      }
       if (apiKey) {
         const provided = req.headers['x-api-key'] as string | undefined;
         if (!provided || provided !== apiKey) {

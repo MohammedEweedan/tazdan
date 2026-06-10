@@ -1,5 +1,7 @@
 import { Decimal } from '@prisma/client/runtime/library';
+import axios from 'axios';
 import { prisma } from '../../utils/prisma';
+import { logger } from '../../utils/logger';
 import { auditFundIntegrity } from '../ledger/fundIntegrity.service';
 import { isTradingHalted, reconcileLedger } from '../ledger/reconcile.service';
 import { fulusCachedRates } from '../exchange/fulus.service';
@@ -228,4 +230,60 @@ export async function markAuditLogReviewed(adminId: string, note?: string) {
       newValues: { note: note ?? null } as any,
     },
   });
+}
+
+async function dispatchOpsAlert(report: Awaited<ReturnType<typeof buildOperationalReadiness>>) {
+  if (report.overall === 'ok') return;
+  const dedupeKey = `ops_alert_${report.overall}`;
+  const cooldownMs = num(await setting('ops_alert_cooldown_ms'), 30 * 60_000);
+  const last = await prisma.platformSettings.findUnique({ where: { key: dedupeKey } }).catch(() => null);
+  if (last?.updatedAt && Date.now() - last.updatedAt.getTime() < cooldownMs) return;
+
+  const failing = Object.entries(report.controls)
+    .filter(([, value]: any) => value?.status && value.status !== 'ok')
+    .map(([key, value]: any) => `${key}:${value.status}`);
+  const title = report.overall === 'critical' ? 'Critical operations alert' : 'Operations warning';
+  const message = failing.length ? failing.join(', ') : 'Operational readiness requires review';
+
+  const admins = await prisma.user.findMany({ where: { role: 'ADMIN', status: 'ACTIVE' }, select: { id: true } }).catch(() => []);
+  if (admins.length) {
+    await prisma.notification.createMany({
+      data: admins.map((admin) => ({
+        userId: admin.id,
+        title,
+        message,
+        type: 'ops_alert',
+        metadata: { overall: report.overall, failing, generatedAt: report.generatedAt } as any,
+      })),
+    }).catch((err) => logger.warn('[ops] admin notification alert failed', { err }));
+  }
+
+  const webhookUrl = process.env.OPERATIONAL_ALERT_WEBHOOK_URL;
+  if (webhookUrl) {
+    await axios.post(webhookUrl, {
+      title,
+      message,
+      overall: report.overall,
+      failing,
+      generatedAt: report.generatedAt,
+    }, { timeout: 5000 }).catch((err) => logger.warn('[ops] external alert webhook failed', { err: err?.message ?? err }));
+  }
+
+  await prisma.platformSettings.upsert({
+    where: { key: dedupeKey },
+    update: { value: report.generatedAt, description: message },
+    create: { key: dedupeKey, value: report.generatedAt, description: message },
+  }).catch(() => {});
+}
+
+let readinessAlertsStarted = false;
+export function startOperationalReadinessAlerts(intervalMs = Number(process.env.OPERATIONAL_ALERT_MS ?? 5 * 60_000)) {
+  if (readinessAlertsStarted) return;
+  readinessAlertsStarted = true;
+  setInterval(() => {
+    void buildOperationalReadiness()
+      .then(dispatchOpsAlert)
+      .catch((err) => logger.error('[ops] readiness alert tick failed', { err }));
+  }, intervalMs).unref?.();
+  logger.info('[ops] operational readiness alert scheduler started');
 }

@@ -15,6 +15,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useThemedPalette, useTheme } from '@/store/themeStore';
 import { useAuthStore } from '@/store/authStore';
 import { adminService } from '@/services';
+import { useDebounce } from '@/hooks/useDebounce';
 import { LoadingPulse } from '@/components/ui/LoadingPulse';
 import { formatRelativeTime } from '@/utils/format';
 import { TopGradient } from '@/components/ui/ScreenShell';
@@ -125,12 +126,14 @@ export default function AdminData() {
 
   const [tab, setTab] = useState<Tab>('TRANSACTIONS');
   const [search, setSearch] = useState('');
+  // One request per settled search, not per keystroke.
+  const debouncedSearch = useDebounce(search, 300);
   const [page, setPage] = useState(1);
   const [drill, setDrill] = useState<any | null>(null);
 
   const q = useQuery({
-    queryKey: ['admin-data', tab, page, search],
-    queryFn: () => fetchTab(tab, page, search),
+    queryKey: ['admin-data', tab, page, debouncedSearch],
+    queryFn: () => fetchTab(tab, page, debouncedSearch),
     enabled: isAdmin,
   });
 

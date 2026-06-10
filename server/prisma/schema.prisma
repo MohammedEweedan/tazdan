@@ -298,6 +298,12 @@ model User {
   emailVerificationCodeExpires DateTime?
   passwordResetToken           String?                      @unique
   passwordResetExpires         DateTime?
+  // 6-digit typed-code path for the mobile app. SHA-256 hash; verified
+  // together with the account email and capped by passwordResetAttempts
+  // so the 1e6 code space can't be brute-forced. The emailed LINK uses
+  // passwordResetToken (32-byte random, unguessable) instead.
+  passwordResetCode            String?
+  passwordResetAttempts        Int                          @default(0)
   // 2FA recovery for locked-out users (lost authenticator). We email a
   // 6-digit code (hash stored here) and additionally verify phone + DOB
   // before disabling 2FA. Separate from passwordReset* to avoid collision.
@@ -326,6 +332,7 @@ model User {
   updatedAt                    DateTime                     @updatedAt
   wallets                      Wallet[]
   ledgerAccounts               LedgerAccount[]
+  assetLedgerAccounts          AssetLedgerAccount[]
   stepUpChallenges             StepUpChallenge[]
   knownDevices                 KnownDevice[]
   deposits                     Deposit[]
@@ -767,6 +774,40 @@ model LedgerEntry {
   createdAt   DateTime      @default(now())
 
   account     LedgerAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([groupId])
+  @@index([accountId, createdAt])
+  @@index([refType, refId])
+}
+
+model AssetLedgerAccount {
+  id        String             @id
+  type      String
+  userId    String?
+  asset     String
+  balance   Decimal            @default(0) @db.Decimal(38, 18)
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+
+  user      User?              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  entries   AssetLedgerEntry[]
+
+  @@index([userId])
+  @@index([type, asset])
+}
+
+model AssetLedgerEntry {
+  id        String             @id
+  groupId   String
+  accountId String
+  asset     String
+  amount    Decimal            @db.Decimal(38, 18)
+  refType   String
+  refId     String?
+  memo      String?
+  createdAt DateTime           @default(now())
+
+  account   AssetLedgerAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
 
   @@index([groupId])
   @@index([accountId, createdAt])

@@ -19,6 +19,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useThemedPalette, useTheme } from '@/store/themeStore';
 import { useAuthStore } from '@/store/authStore';
 import { adminService } from '@/services';
+import { useDebounce } from '@/hooks/useDebounce';
 import { LoadingPulse } from '@/components/ui/LoadingPulse';
 import { TopGradient } from '@/components/ui/ScreenShell';
 
@@ -50,6 +51,8 @@ export default function AdminUsers() {
   const isAdmin = me?.role === 'ADMIN';
 
   const [search, setSearch] = useState('');
+  // Query on the settled value — typing "mohammed" is 1 request, not 8.
+  const debouncedSearch = useDebounce(search, 300);
   const [filter, setFilter] = useState<Filter>('ALL');
 
   // Admin-created relationship account
@@ -91,7 +94,7 @@ export default function AdminUsers() {
 
   const params = (() => {
     const out: any = { limit: 100 };
-    if (search) out.search = search;
+    if (debouncedSearch) out.search = debouncedSearch;
     if (filter === 'ACTIVE')      out.status = 'ACTIVE';
     if (filter === 'SUSPENDED')   out.status = 'SUSPENDED';
     if (filter === 'PENDING_KYC') out.kycStatus = 'PENDING';
@@ -99,7 +102,7 @@ export default function AdminUsers() {
   })();
 
   const q = useQuery({
-    queryKey: ['admin-users', search, filter],
+    queryKey: ['admin-users', debouncedSearch, filter],
     queryFn: () => adminService.users(params),
     enabled: isAdmin,
     refetchInterval: 30_000,

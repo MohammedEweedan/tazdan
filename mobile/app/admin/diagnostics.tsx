@@ -24,6 +24,7 @@ export default function AdminDiagnostics() {
 
   const health = useQuery({ queryKey: ['sys-health'], queryFn: adminService.systemHealth, refetchInterval: 30_000 });
   const fi = useQuery({ queryKey: ['fund-integrity'], queryFn: adminService.fundIntegrity, refetchInterval: 30_000 });
+  const readiness = useQuery({ queryKey: ['operational-readiness'], queryFn: adminService.operationalReadiness, refetchInterval: 30_000 });
 
   const clearHalt = useMutation({
     mutationFn: adminService.clearTradingHalt,
@@ -36,9 +37,24 @@ export default function AdminDiagnostics() {
     onSuccess: (r) => { qc.invalidateQueries({ queryKey: ['fund-integrity'] }); Alert.alert('Reconciled', `${r.currency}: ${r.reconciledAmount} (diff after ${r.diffAfter})`); },
     onError: (e: any) => Alert.alert('Reconcile failed', e?.response?.data?.error ?? 'Try again'),
   });
+  const dailyClose = useMutation({
+    mutationFn: adminService.runDailyClose,
+    onSuccess: (r) => { readiness.refetch(); Alert.alert('Daily close completed', `${r.closeDate} · ${r.report.overall.toUpperCase()}`); },
+    onError: (e: any) => Alert.alert('Daily close failed', e?.response?.data?.error ?? 'Try again'),
+  });
+  const auditReview = useMutation({
+    mutationFn: () => adminService.markAuditLogReviewed('Reviewed from admin diagnostics'),
+    onSuccess: () => { readiness.refetch(); Alert.alert('Recorded', 'Audit log review recorded.'); },
+    onError: (e: any) => Alert.alert('Review failed', e?.response?.data?.error ?? 'Try again'),
+  });
+  const backfill = useMutation({
+    mutationFn: adminService.backfillLedgerOpeningBalances,
+    onSuccess: (r) => { fi.refetch(); readiness.refetch(); Alert.alert('Backfill complete', `${r.report.ran} posted · ${r.report.skipped} skipped`); },
+    onError: (e: any) => Alert.alert('Backfill failed', e?.response?.data?.error ?? 'Try again'),
+  });
 
-  const refreshing = health.isFetching || fi.isFetching;
-  const refresh = () => { health.refetch(); fi.refetch(); };
+  const refreshing = health.isFetching || fi.isFetching || readiness.isFetching;
+  const refresh = () => { health.refetch(); fi.refetch(); readiness.refetch(); };
 
   const dbOk = health.data?.checks?.database === 'ok';
   const redisOk = health.data?.checks?.redis === 'ok';
@@ -48,7 +64,8 @@ export default function AdminDiagnostics() {
   const ledgerOk = fi.data?.ledger?.ok;
 
   // Overall status banner colour.
-  const allOk = dbOk && redisOk && !!email?.canSend && !halted && fundsOk && ledgerOk;
+  const readinessOk = readiness.data?.overall === 'ok';
+  const allOk = dbOk && redisOk && !!email?.canSend && !halted && fundsOk && ledgerOk && readinessOk;
 
   return (
     <AdminScreen
@@ -89,6 +106,39 @@ export default function AdminDiagnostics() {
             {!!email?.missingEnv?.length && (
               <AdminStatRow label="Missing env" value={email.missingEnv.join(', ')} tone="warn" p={p} />
             )}
+          </AdminCard>
+
+          <Text style={sectionLabel(p)}>OPERATIONAL READINESS</Text>
+          <AdminCard style={{ marginBottom: 16 }}>
+            <AdminStatRow
+              label="Overall"
+              value={(readiness.data?.overall ?? '—').toUpperCase()}
+              tone={readiness.data?.overall === 'ok' ? 'ok' : readiness.data?.overall === 'critical' ? 'bad' : 'warn'}
+              p={p}
+            />
+            <AdminStatRow label="Generated" value={readiness.data?.generatedAt ? new Date(readiness.data.generatedAt).toLocaleString() : '—'} p={p} />
+            {Object.entries(readiness.data?.controls ?? {}).slice(0, 8).map(([key, value]: any) => (
+              <AdminStatRow
+                key={key}
+                label={key.replace(/([A-Z])/g, ' $1')}
+                value={(value?.status ?? 'ok').toUpperCase()}
+                tone={value?.status === 'critical' ? 'bad' : value?.status === 'warn' ? 'warn' : 'ok'}
+                p={p}
+              />
+            ))}
+            <View style={{ flexDirection: 'row', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
+              <ActionButton label={dailyClose.isPending ? 'Closing…' : 'Daily close'} onPress={() => dailyClose.mutate()} p={p} />
+              <ActionButton label={auditReview.isPending ? 'Recording…' : 'Audit reviewed'} onPress={() => auditReview.mutate()} p={p} />
+              <ActionButton
+                label={backfill.isPending ? 'Backfilling…' : 'Backfill ledger'}
+                danger
+                onPress={() => Alert.alert('Backfill ledger?', 'Posts opening-balance differences for Wallet, UserWallet, and dynamic alt assets.', [
+                  { text: 'Cancel', style: 'cancel' },
+                  { text: 'Backfill', style: 'destructive', onPress: () => backfill.mutate() },
+                ])}
+                p={p}
+              />
+            </View>
           </AdminCard>
 
           {/* Money integrity */}
@@ -147,6 +197,26 @@ export default function AdminDiagnostics() {
         </>
       )}
     </AdminScreen>
+  );
+}
+
+function ActionButton({ label, onPress, p, danger }: { label: string; onPress: () => void; p: ReturnType<typeof useThemedPalette>; danger?: boolean }) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={{
+        height: 40,
+        paddingHorizontal: 12,
+        borderRadius: 10,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: danger ? p.redBg : p.accentSoft,
+        borderWidth: 1,
+        borderColor: danger ? p.redFg : p.accentBorder,
+      }}
+    >
+      <Text style={{ color: danger ? p.redFg : p.accentText, fontSize: 12, fontWeight: '800' }}>{label}</Text>
+    </Pressable>
   );
 }
 

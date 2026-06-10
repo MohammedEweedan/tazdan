@@ -70,9 +70,11 @@ export const authService = {
   async forgotPassword(email: string): Promise<void> {
     await api.post('/auth/forgot-password', { email });
   },
-  /** Complete a reset with the token/6-digit code from the email + a new password. */
-  async resetPassword(token: string, password: string): Promise<void> {
-    await api.post('/auth/reset-password', { token, password });
+  /** Complete a reset with the token/6-digit code from the email + a new password.
+   *  The 6-digit code path requires the account email (the server counts
+   *  attempts per account); the pasted-link token works without it. */
+  async resetPassword(token: string, password: string, email?: string): Promise<void> {
+    await api.post('/auth/reset-password', { token, password, ...(email ? { email } : {}) });
   },
   /** 2FA recovery (locked out). Step 1: email a 6-digit recovery code. */
   async request2FARecovery(email: string): Promise<void> {
@@ -898,6 +900,12 @@ export interface AdminFundIntegrity {
   };
 }
 
+export interface AdminOperationalReadiness {
+  generatedAt: string;
+  overall: 'ok' | 'warn' | 'critical';
+  controls: Record<string, any>;
+}
+
 export const adminService = {
   dashboard: async (): Promise<AdminDashboard> => {
     const { data } = await api.get<AdminDashboard>('/admin/dashboard');
@@ -927,6 +935,22 @@ export const adminService = {
   },
   reconcileFundIntegrity: async (currency: string, note?: string): Promise<{ message: string; currency: string; reconciledAmount: string; diffAfter: string }> => {
     const { data } = await api.post('/admin/fund-integrity/reconcile', { currency, note });
+    return data;
+  },
+  operationalReadiness: async (): Promise<AdminOperationalReadiness> => {
+    const { data } = await api.get<AdminOperationalReadiness>('/admin/operational-readiness');
+    return data;
+  },
+  runDailyClose: async (): Promise<{ message: string; key: string; closeDate: string; report: AdminOperationalReadiness }> => {
+    const { data } = await api.post('/admin/daily-close', {});
+    return data;
+  },
+  markAuditLogReviewed: async (note?: string): Promise<{ message: string; review: any }> => {
+    const { data } = await api.post('/admin/audit-log/review', { note });
+    return data;
+  },
+  backfillLedgerOpeningBalances: async (): Promise<{ message: string; report: any }> => {
+    const { data } = await api.post('/admin/ledger/backfill-opening-balances', {});
     return data;
   },
   users: (params?: { search?: string; status?: string; kycStatus?: string; page?: number; limit?: number }) =>
