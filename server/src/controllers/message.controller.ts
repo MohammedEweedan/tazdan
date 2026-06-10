@@ -25,6 +25,7 @@ import { generateReference } from '../utils/helpers';
 import { AuthRequest } from '../types';
 import { TransactionController } from './transaction.controller';
 import { postLedger } from '../services/ledger/ledger.service';
+import { postAssetLedger, normaliseAsset } from '../services/ledger/assetLedger.service';
 
 const EDIT_WINDOW_MS = 5 * 60_000;
 
@@ -378,6 +379,18 @@ export class MessageController {
                 { type: 'USER', userId: data.receiverId, currency: ledgerCurrency as any, amount: amountDec },
               ],
             }, { allowNegativeUser: true });
+          } else {
+            const amountDec = new Decimal(amountNum);
+            const asset = normaliseAsset(currency);
+            await postAssetLedger(tx as any, {
+              refType: 'message_payment',
+              refId: reference,
+              memo: `Message payment ${asset}`,
+              legs: [
+                { type: 'USER', userId: senderId, asset, amount: amountDec.neg() },
+                { type: 'USER', userId: data.receiverId, asset, amount: amountDec },
+              ],
+            }, { allowNegativeUser: process.env.LEDGER_ALLOW_NEGATIVE_USER !== '0' });
           }
 
           const senderTx = await tx.transaction.create({

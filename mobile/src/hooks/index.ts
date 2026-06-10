@@ -32,9 +32,15 @@ export const useWallets = () =>
   useQuery({
     queryKey: QUERY_KEYS.wallets,
     queryFn: walletService.list,
-    refetchInterval: 5_000,
+    // 15s, not 5s: balances only change on deposits/trades/transfers, all of
+    // which already invalidate this query (or arrive via socket + push).
+    // At 5s every active user fired 12 wallet reads/min — pure battery and
+    // server load for data that was almost always identical. Focus refetch
+    // (react-query default) still gives an instant update when the user
+    // returns to a screen.
+    refetchInterval: 15_000,
     refetchIntervalInBackground: false,
-    staleTime: 4_000,
+    staleTime: 10_000,
   });
 
 /* ── Budget Wallets ─── */

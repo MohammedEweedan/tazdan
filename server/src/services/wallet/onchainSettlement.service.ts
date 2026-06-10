@@ -39,6 +39,11 @@ import { sendDepositConfirmed } from '../email';
 import { pushCopy, pushTxEvent } from '../push.service';
 import { postLedger } from '../ledger/ledger.service';
 import { deriveKeyForChain } from './walletDerivation.service';
+import {
+  verifyOnChainDeposit,
+  unverifiedDepositsAllowed,
+  warnUnverifiedOnce,
+} from './depositVerification.service';
 
 bitcoin.initEccLib(ecc);
 const ECPair = ECPairFactory(ecc);
@@ -96,6 +101,32 @@ const STATIC_FEE_FALLBACK: Record<string, { asset: string; estimate: string }> =
 
 // Gas units consumed by common operations (EVM).
 const EVM_GAS_UNITS = { ETH_TRANSFER: 21_000, ERC20_TRANSFER: 65_000 };
+
+/**
+ * Asset/network pairs we can actually sign + broadcast today.
+ * BTC (UTXO assembly), SOL and TRON (TRC-20) signing are not implemented —
+ * withdrawals for those MUST be rejected up front rather than debited and
+ * left in a permanent PENDING that never reaches the chain.
+ */
+function supportsLiveBroadcast(asset: string, network: string): boolean {
+  const a = asset.toUpperCase();
+  const n = network.toUpperCase();
+  if (a === 'ETH' && (n === 'ETH' || n === 'ERC20')) return true;
+  if (a === 'USDT' && n === 'ERC20') return true;
+  return false;
+}
+
+/**
+ * Simulated broadcasts (debit the ledger, skip the chain) are a dev/test
+ * convenience only. In production a simulated withdrawal is indistinguishable
+ * from theft — the user's balance drops and nothing ever arrives.
+ */
+function simulatedBroadcastAllowed(): boolean {
+  return (
+    process.env.NODE_ENV !== 'production' &&
+    process.env.ALLOW_SIMULATED_ONCHAIN_BROADCAST === '1'
+  );
+}
 
 /**
  * Estimate the network fee for a withdrawal using live RPC where possible,
@@ -240,6 +271,16 @@ export async function initiateWithdrawal(opts: {
   const amount = new Decimal(opts.amount);
   if (amount.lte(0)) throw new AppError('Amount must be > 0', 400);
 
+  // Fail BEFORE the debit for assets we cannot broadcast. Anything else
+  // either errors-and-refunds (wasted ledger churn) or, with the simulated
+  // flag, silently strands user funds.
+  if (!supportsLiveBroadcast(asset, network) && !simulatedBroadcastAllowed()) {
+    throw new AppError(
+      `${asset}/${network} withdrawals are temporarily unavailable. Please contact support.`,
+      503,
+    );
+  }
+
   const field = balanceField(asset, network);
   const chain = chainForAsset(asset, network);
   const fromField = fromAddressField(asset, network);
@@ -309,10 +350,14 @@ export async function initiateWithdrawal(opts: {
     } else if (asset === 'USDT' && network === 'ERC20') {
       txHash = await broadcastUsdtErc20({ privateKey: key.privateKey, toAddress: opts.toAddress, amount: amount.toFixed(6) });
     } else {
-      // BTC / SOL / USDT_TRC20 paths — TODO implement live broadcast.
-      simulated = true;
+      if (simulatedBroadcastAllowed()) {
+        simulated = true;
+      } else {
+        throw new Error(`Live broadcast not implemented for ${asset}/${network}`);
+      }
     }
-    if (!txHash) simulated = true;
+    if (!txHash && simulatedBroadcastAllowed()) simulated = true;
+    if (!txHash && !simulated) throw new Error(`Broadcast returned no tx hash for ${asset}/${network}`);
     // Wipe the key reference ASAP.
     (key as any).privateKey = '';
   } catch (err: any) {
@@ -379,13 +424,40 @@ export async function processDeposit(opts: {
   });
   if (!wallet) throw new AppError('Deposit address not recognised', 404);
 
-  const amount = new Decimal(opts.amount);
+  // The webhook payload is a NOTIFICATION, not a source of truth. Amount
+  // and confirmation count are re-derived from the chain before anything
+  // is credited — a forged or replayed payload can at worst make us look
+  // up a tx that doesn't pay us, which fails closed.
+  let amount = new Decimal(opts.amount);
+  let confirmations = opts.confirmations;
+  if (unverifiedDepositsAllowed()) {
+    warnUnverifiedOnce();
+  } else {
+    const verified = await verifyOnChainDeposit({
+      txHash: opts.txHash,
+      asset,
+      network,
+      toAddress: opts.toAddress,
+    });
+    if (!verified.amount.eq(amount)) {
+      logger.warn('[deposit] webhook amount differs from chain — using chain value', {
+        txHash: opts.txHash,
+        claimed: amount.toString(),
+        chain: verified.amount.toString(),
+      });
+    }
+    amount = verified.amount;
+    confirmations = verified.confirmations;
+    if (amount.lte(0)) throw new AppError('Deposit has zero on-chain value', 400);
+  }
 
   return prisma.$transaction(async (tx) => {
     const row = existing
       ? await tx.onChainTransaction.update({
           where: { id: existing.id },
-          data: { confirmations: opts.confirmations },
+          // Re-assert the chain-derived amount: the row may have been
+          // created from an earlier (unverified or differing) payload.
+          data: { confirmations, amount: new Prisma.Decimal(amount.toFixed(18)) },
         })
       : await tx.onChainTransaction.create({
           data: {
@@ -398,11 +470,11 @@ export async function processDeposit(opts: {
             fromAddress: opts.fromAddress,
             toAddress: opts.toAddress,
             status: 'PENDING',
-            confirmations: opts.confirmations,
+            confirmations,
           },
         });
 
-    if (opts.confirmations >= required && row.status !== 'CONFIRMED') {
+    if (confirmations >= required && row.status !== 'CONFIRMED') {
       await tx.userWallet.update({
         where: { id: wallet.id },
         data: { [field]: { increment: new Prisma.Decimal(amount.toFixed(18)) } },

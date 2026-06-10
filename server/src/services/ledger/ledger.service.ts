@@ -94,6 +94,7 @@ export async function postLedger(
   opts: { allowNegativeUser?: boolean } = {},
 ): Promise<{ groupId: string }> {
   if (!input.legs.length) throw new Error('postLedger: no legs');
+  const allowNegativeUser = Boolean(opts.allowNegativeUser) && process.env.LEDGER_ALLOW_NEGATIVE_USER !== '0';
 
   // 1) Assert conservation: signed sum per currency must be ~0.
   const perCurrency = new Map<string, Decimal>();
@@ -125,11 +126,12 @@ export async function postLedger(
   // Never read-modify-write the balance in application memory. Concurrent
   // debits must compete against the current DB value, otherwise two requests
   // can both pass a stale balance check and overwrite each other's result.
+  const affectedUserAccounts = new Map<string, { userId: string; currency: Currency }>();
   for (const { leg, amount } of agg.values()) {
     if (amount.isZero()) continue;
     const acct = await resolveAccount(tx, leg.type, leg.currency, leg.userId ?? null);
 
-    if (leg.type === 'USER' && !opts.allowNegativeUser && amount.lt(0)) {
+    if (leg.type === 'USER' && !allowNegativeUser && amount.lt(0)) {
       const updated = await tx.ledgerAccount.updateMany({
         where: {
           id: acct.id,
@@ -165,6 +167,25 @@ export async function postLedger(
         memo: input.memo,
       },
     });
+
+    if (leg.type === 'USER' && leg.userId) {
+      affectedUserAccounts.set(`${leg.userId}:${leg.currency}`, { userId: leg.userId, currency: leg.currency });
+    }
+  }
+
+  // Keep Wallet as a read model of the ledger for enum assets. Most legacy
+  // flows still mutate Wallet in the same transaction; this overwrite makes
+  // the posted ledger balance win for affected USER accounts.
+  if (process.env.LEDGER_SYNC_WALLET_READ_MODEL !== '0' && (tx as any).wallet?.upsert) {
+    for (const { userId, currency } of affectedUserAccounts.values()) {
+      const acct = await tx.ledgerAccount.findFirst({ where: { type: 'USER', userId, currency } });
+      if (!acct) continue;
+      await (tx as any).wallet.upsert({
+        where: { userId_currency: { userId, currency } },
+        update: { balance: acct.balance },
+        create: { userId, currency, balance: acct.balance, frozen: new Prisma.Decimal(0) },
+      });
+    }
   }
 
   return { groupId };

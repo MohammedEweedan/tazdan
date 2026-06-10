@@ -14,6 +14,7 @@ import { useRouter } from 'expo-router';
 
 import { useThemedPalette } from '@/store/themeStore';
 import { useConversations } from '@/hooks';
+import { useDebounce } from '@/hooks/useDebounce';
 import { adminService } from '@/services';
 import { LoadingPulse } from '@/components/ui/LoadingPulse';
 import { formatRelativeTime } from '@/utils/format';
@@ -24,13 +25,15 @@ export default function AdminSupport() {
   const router = useRouter();
 
   const [search, setSearch] = useState('');
+  // One request per settled search, not per keystroke.
+  const debouncedSearch = useDebounce(search, 300);
   const [tab, setTab] = useState<'CONVERSATIONS' | 'USERS'>('CONVERSATIONS');
 
   const convQ = useConversations();
   const usersQ = useQuery({
-    queryKey: ['admin-user-search', search],
-    queryFn: () => adminService.users({ search, limit: 30 }),
-    enabled: tab === 'USERS' && search.length >= 2,
+    queryKey: ['admin-user-search', debouncedSearch],
+    queryFn: () => adminService.users({ search: debouncedSearch, limit: 30 }),
+    enabled: tab === 'USERS' && debouncedSearch.length >= 2,
   });
 
   const conversations = convQ.data ?? [];

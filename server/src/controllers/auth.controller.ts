@@ -624,18 +624,23 @@ export class AuthController {
         return res.json({ message: 'If an account exists, a reset email has been sent.' });
       }
 
-      // Two ways to reset, one shared secret:
-      //   • a 6-digit CODE the user types into the mobile app, and
-      //   • a LINK (the same code as a query param) for the web client.
-      // We persist only the SHA-256 hash of the code (a DB/backup/replica
-      // leak must not yield a live reset secret). `resetPassword` hashes
-      // whatever it's given and compares — so the code works for both paths.
-      const code     = crypto.randomInt(100000, 1000000).toString(); // 6 digits, CSPRNG
-      const codeHash = crypto.createHash('sha256').update(code).digest('hex');
+      // Two ways to reset, two separate secrets:
+      //   • a LINK with a 32-byte random token (web) — unguessable, so it
+      //     can be verified by bare hash lookup, and
+      //   • a 6-digit CODE the user types into the mobile app — guessable
+      //     in principle (1e6 space), so it is only valid together with
+      //     the account email and is capped at 5 attempts.
+      // Only SHA-256 hashes are persisted (a DB/backup/replica leak must
+      // not yield a live reset secret).
+      const linkToken = crypto.randomBytes(32).toString('hex');
+      const code      = crypto.randomInt(100000, 1000000).toString(); // 6 digits, CSPRNG
+      const sha256    = (s: string) => crypto.createHash('sha256').update(s).digest('hex');
       await prisma.user.update({
         where: { id: user.id },
         data: {
-          passwordResetToken: codeHash,
+          passwordResetToken: sha256(linkToken),
+          passwordResetCode: sha256(code),
+          passwordResetAttempts: 0,
           passwordResetExpires: new Date(Date.now() + 60 * 60 * 1000),
         },
       });
@@ -643,7 +648,7 @@ export class AuthController {
       sendPasswordResetEmail({
         to: user.email,
         firstName: user.firstName,
-        token: code,   // doubles as the link token and the typed code
+        token: linkToken,
         code,
       }).catch((e) => console.error('[email] password reset failed:', emailErrorSummary(e)));
 
@@ -655,21 +660,58 @@ export class AuthController {
 
   static async resetPassword(req: AuthRequest, res: Response, next: NextFunction) {
     try {
-      const { token, password } = z.object({
-        token: z.string().min(10),
+      const { token, password, email } = z.object({
+        // 6 chars = typed code; longer = link token. Both arrive as `token`.
+        token: z.string().min(6).max(128),
         password: z.string().min(8).max(128),
+        // Required for the 6-digit code path (identifies the account so
+        // attempts can be counted). The link token needs no email — it
+        // has 256 bits of entropy and is verified by unique hash lookup.
+        email: z.string().email().optional(),
       }).parse(req.body);
 
-      // Hash the supplied token and compare against the stored hash —
-      // mirrors the forgotPassword storage change above.
-      const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
-      const user = await prisma.user.findFirst({
-        where: {
-          passwordResetToken: tokenHash,
-          passwordResetExpires: { gt: new Date() },
-        },
-      });
-      if (!user) throw new AppError('Invalid or expired reset token', 400);
+      const sha256 = (s: string) => crypto.createHash('sha256').update(s).digest('hex');
+      const isCode = /^\d{6}$/.test(token);
+      const MAX_RESET_ATTEMPTS = 5;
+
+      let user: { id: string } | null = null;
+
+      if (isCode) {
+        if (!email) throw new AppError('Email is required with a reset code', 400);
+        const candidate = await prisma.user.findUnique({ where: { email } });
+        const valid =
+          candidate &&
+          candidate.passwordResetCode &&
+          candidate.passwordResetExpires &&
+          candidate.passwordResetExpires > new Date() &&
+          candidate.passwordResetAttempts < MAX_RESET_ATTEMPTS &&
+          candidate.passwordResetCode === sha256(token);
+        if (!valid) {
+          // Count the failure; after the cap, burn the whole reset so the
+          // remaining code space can't be walked.
+          if (candidate?.passwordResetCode) {
+            const attempts = candidate.passwordResetAttempts + 1;
+            await prisma.user.update({
+              where: { id: candidate.id },
+              data: attempts >= MAX_RESET_ATTEMPTS
+                ? { passwordResetCode: null, passwordResetToken: null,
+                    passwordResetExpires: null, passwordResetAttempts: 0 }
+                : { passwordResetAttempts: attempts },
+            });
+          }
+          throw new AppError('Invalid or expired reset code', 400);
+        }
+        user = candidate;
+      } else {
+        // Link-token path — hash lookup, mirrors forgotPassword storage.
+        user = await prisma.user.findFirst({
+          where: {
+            passwordResetToken: sha256(token),
+            passwordResetExpires: { gt: new Date() },
+          },
+        });
+        if (!user) throw new AppError('Invalid or expired reset token', 400);
+      }
 
       const passwordHash = await bcrypt.hash(password, 12);
       await prisma.user.update({
@@ -677,7 +719,9 @@ export class AuthController {
         data: {
           passwordHash,
           passwordResetToken: null,
+          passwordResetCode: null,
           passwordResetExpires: null,
+          passwordResetAttempts: 0,
         },
       });
 

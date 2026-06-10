@@ -163,6 +163,9 @@ export function SendWidget() {
       await messageService.transfer({ receiverId: picked.id, currency: currency as Currency, amount: sendAmount, note: note || undefined });
       playSuccess('transfer');
       setCta('success');
+      // Money successfully sent = peak-happiness moment; the prompt lib
+      // self-throttles (2nd success, once per install) and never throws.
+      import('@/lib/reviewPrompt').then(({ maybeAskForReview }) => maybeAskForReview());
       setAmount(''); setNote(''); setRecipient(''); setPicked(null); setNoteOpen(false);
       setTimeout(() => setCta('idle'), 2000);
     } catch (e: any) {

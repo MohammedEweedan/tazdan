@@ -20,6 +20,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useThemedPalette, useTheme } from '@/store/themeStore';
 import { useAuthStore } from '@/store/authStore';
 import { adminService } from '@/services';
+import { useDebounce } from '@/hooks/useDebounce';
 import { LoadingPulse } from '@/components/ui/LoadingPulse';
 import { TopGradient } from '@/components/ui/ScreenShell';
 import { formatRelativeTime } from '@/utils/format';
@@ -36,6 +37,8 @@ export default function AdminWaitlist() {
 
   const [tab, setTab] = useState<Tab>('list');
   const [search, setSearch] = useState('');
+  // One request per settled search, not per keystroke.
+  const debouncedSearch = useDebounce(search, 300);
   const [filter, setFilter] = useState<Filter>('all');
 
   // Launch composer state
@@ -47,11 +50,11 @@ export default function AdminWaitlist() {
   const [audience, setAudience] = useState<'pending' | 'all'>('pending');
 
   const q = useQuery({
-    queryKey: ['admin-waitlist', search, filter],
+    queryKey: ['admin-waitlist', debouncedSearch, filter],
     queryFn: () => adminService.waitlist({
       page: 1,
       limit: 100,
-      search: search.trim() || undefined,
+      search: debouncedSearch.trim() || undefined,
       filter: filter === 'all' ? undefined : filter,
     }),
     enabled: user?.role === 'ADMIN',

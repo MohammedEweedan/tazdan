@@ -8,6 +8,13 @@
     "scheme": "tazdan",
     "userInterfaceStyle": "dark",
     "newArchEnabled": true,
+    "updates": {
+      "url": "https://u.expo.dev/721a82c4-c3ec-472e-9636-891d30516a54",
+      "fallbackToCacheTimeout": 0
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
     "splash": {
       "image": "./assets/icon-color.png",
       "resizeMode": "contain",
@@ -45,7 +52,11 @@
           "action": "VIEW",
           "autoVerify": true,
           "data": [
-            { "scheme": "https", "host": "tazdan.com", "pathPrefix": "/claim" }
+            {
+              "scheme": "https",
+              "host": "tazdan.com",
+              "pathPrefix": "/claim"
+            }
           ],
           "category": [
             "BROWSABLE",
@@ -77,7 +88,8 @@
           "merchantIdentifier": "merchant.com.tazdan.app",
           "enableGooglePay": true
         }
-      ]
+      ],
+      "@sentry/react-native"
     ],
     "experiments": {
       "typedRoutes": false

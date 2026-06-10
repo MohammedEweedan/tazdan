@@ -52,7 +52,8 @@ import { authService } from '@/services';
 import { secureStore } from '@/lib/secureStore';
 import { STORAGE_KEYS, STRIPE } from '@/constants';
 import { StripeProvider } from '@/lib/stripeShim';
-import { usePushDeepLink } from '@/lib/pushNotifications';
+import { usePushDeepLink, registerPushToken } from '@/lib/pushNotifications';
+import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
 
 // Match the dark palette bg exactly so the system chrome (keyboard toolbar,
 // nav bar on Android) never flashes a different shade of black.
@@ -78,6 +79,17 @@ function AuthGate() {
   useEffect(() => {
     secureStore.get(STORAGE_KEYS.onboarded).then((v) => setHasOnboarded(!!v));
   }, []);
+
+  // Register the device's Expo push token once per authenticated session.
+  // Transactional pushes (deposit confirmed, transfer received, P2P trade
+  // updates) are the strongest re-engagement surface a fintech has — the
+  // server-side pipeline and the tap deep-linking below were already built,
+  // but nothing ever registered the token, so no device received them.
+  useEffect(() => {
+    if (isAuthenticated) {
+      registerPushToken().catch(() => { /* non-fatal; retried next session */ });
+    }
+  }, [isAuthenticated]);
 
   // Re-fetch /me whenever the app comes back to the foreground so the
   // handle, avatar, and other profile fields are always fresh — no reload needed.
@@ -192,6 +204,7 @@ export default function RootLayout() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: '#16181C' }}>
+      <ErrorBoundary>
       <SafeAreaProvider>
         <QueryClientProvider client={queryClient}>
           <StripeProvider
@@ -223,6 +236,7 @@ export default function RootLayout() {
           </StripeProvider>
         </QueryClientProvider>
       </SafeAreaProvider>
+      </ErrorBoundary>
     </GestureHandlerRootView>
   );
 }

@@ -30,6 +30,7 @@ import { Prisma, type Currency } from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/library';
 import { prisma } from '../../utils/prisma';
 import { getRate } from '../exchange/fxRateProvider.service';
+import { postLedger } from '../ledger/ledger.service';
 
 // ── Constants ──────────────────────────────────────────────────────
 const PLATFORM_USERNAME = 'platform';
@@ -228,6 +229,20 @@ export async function collectFee(input: CollectFeeInput): Promise<string | null>
     update: { balance: { increment: creditedAmount } },
     create: { userId: platformUserId, currency: creditedCurrency, balance: creditedAmount, frozen: new Decimal(0) },
   });
+
+  if (isEnumCurrency(currencyUpper) && currencyUpper !== creditedCurrency && creditedAmount.gt(0)) {
+    await postLedger(client, {
+      refType: 'fee_consolidation',
+      refId: fee.id,
+      memo: `Convert ${currencyUpper} fee revenue to corporate USDT`,
+      legs: [
+        { type: 'PLATFORM', currency: currencyUpper as Currency, amount: amount.neg() },
+        { type: 'SYSTEM_FX', currency: currencyUpper as Currency, amount },
+        { type: 'SYSTEM_FX', currency: creditedCurrency, amount: creditedAmount.neg() },
+        { type: 'PLATFORM', currency: creditedCurrency, amount: creditedAmount },
+      ],
+    }, { allowNegativeUser: true });
+  }
 
   return fee.id;
 }

@@ -56,6 +56,7 @@ adminRouter.get('/fx-status', AdminController.getFxStatus);
 // Treasury safety — fund-integrity audit + ledger reconciliation + halt control
 adminRouter.get('/fund-integrity', AdminController.getFundIntegrity);
 adminRouter.post('/fund-integrity/reconcile', AdminController.reconcileFundIntegrity);
+adminRouter.post('/ledger/backfill-opening-balances', AdminController.backfillLedgerOpeningBalances);
 adminRouter.post('/clear-trading-halt', AdminController.clearTradingHalt);
 adminRouter.get('/operational-readiness', AdminController.getOperationalReadiness);
 adminRouter.post('/daily-close', AdminController.runDailyClose);

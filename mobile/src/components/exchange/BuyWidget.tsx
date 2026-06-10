@@ -447,6 +447,9 @@ export function BuyWidget({ defaultAsset, lockAsset = false }: BuyWidgetProps = 
         ...(biometricVerified ? { biometricVerified: true } : {}),
       } as any) as any;
       playSuccess('buy');
+      // First/second completed buy is the moment a user decides this app is
+      // real — the prompt lib self-throttles and never throws.
+      import('@/lib/reviewPrompt').then(({ maybeAskForReview }) => maybeAskForReview());
       setStepUpOpen(false);
       setQuote(null); setFiat('');
       const txRef = result?.data?.txRef ?? result?.data?.orderId ?? result?.data?.id ?? `#${idemRef.current}`;

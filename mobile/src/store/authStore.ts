@@ -285,6 +285,15 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   forgetLastUser: async () => {
+    // Full account switch — stop transactional pushes for the departing
+    // account BEFORE the credentials are wiped (the call needs auth).
+    // Soft logout (lock screen) deliberately keeps the registration: the
+    // user still owns this account on this device, and deposit/transfer
+    // pushes are the main reason they come back.
+    try {
+      const { unregisterPushToken } = await import('@/lib/pushNotifications');
+      await unregisterPushToken();
+    } catch { /* non-fatal */ }
     await Promise.all([
       secureStore.remove(STORAGE_KEYS.accessToken).catch(() => {}),
       secureStore.remove(STORAGE_KEYS.refreshToken).catch(() => {}),

@@ -12,6 +12,7 @@
 import { useEffect } from 'react';
 import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
+import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 import { router } from 'expo-router';
 import { api } from './api';
@@ -49,7 +50,14 @@ export async function registerPushToken(): Promise<void> {
     });
   }
 
-  const token = (await Notifications.getExpoPushTokenAsync()).data;
+  // EAS builds require the projectId to be passed explicitly — relying on
+  // auto-detection works in Expo Go but throws in production binaries.
+  const projectId: string | undefined =
+    Constants.expoConfig?.extra?.eas?.projectId ??
+    (Constants as any).easConfig?.projectId;
+  const token = (
+    await Notifications.getExpoPushTokenAsync(projectId ? { projectId } : undefined)
+  ).data;
 
   try {
     await api.post('/notifications/register-token', { token });
