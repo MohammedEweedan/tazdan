@@ -10,8 +10,10 @@
 #
 # `--mount=type=cache,target=/root/.npm` keeps the npm cache on the build
 # host between builds, so even lockfile-busting rebuilds reuse packages.
-# A code-only change rebuilds in seconds: both npm ci layers are cached,
-# only COPY + esbuild re-run.
+# Use `npm install` rather than `npm ci` in Docker: npm 10 on node:20-alpine
+# can hard-fail on optional peer lock drift (utf-8-validate), while install
+# repairs that metadata inside the image. Code-only changes still rebuild fast:
+# both install layers are cached, only COPY + esbuild re-run.
 
 FROM node:20-alpine AS deps
 WORKDIR /app
@@ -20,14 +22,14 @@ COPY package.json package-lock.json ./
 COPY prisma ./prisma/
 # prisma is a production dependency (the runtime image runs `migrate deploy`
 # at boot), so the CLI + generated client both land here.
-RUN --mount=type=cache,target=/root/.npm npm ci --omit=dev --no-audit --no-fund \
+RUN --mount=type=cache,target=/root/.npm npm install --omit=dev --prefer-offline --no-audit --no-fund \
  && npx prisma generate
 
 FROM node:20-alpine AS build
 WORKDIR /app
 RUN apk add --no-cache openssl
 COPY package.json package-lock.json ./
-RUN --mount=type=cache,target=/root/.npm npm ci --no-audit --no-fund
+RUN --mount=type=cache,target=/root/.npm npm install --prefer-offline --no-audit --no-fund
 COPY . .
 RUN npm run build:fast
 
