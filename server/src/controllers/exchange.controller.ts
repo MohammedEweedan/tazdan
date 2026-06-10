@@ -235,14 +235,21 @@ export class ExchangeController {
       if (!me?.twoFactorEnabled && process.env.EXCHANGE_REQUIRE_2FA === '1') {
         throw new AppError('Enable 2FA before trading', 403);
       }
-      await enforceStepUp({
-        userId: req.user!.id,
-        action: (peek as any).side === 'SELL' ? 'sell' : 'buy',
-        valueUsd: Number((peek as any).fiatAmount ?? 0),
-        req,
-        code: body.stepUpCode ?? body.twoFactorCode,
-        biometricVerified: body.biometricVerified === true,
-      });
+      try {
+        await enforceStepUp({
+          userId: req.user!.id,
+          action: (peek as any).side === 'SELL' ? 'sell' : 'buy',
+          valueUsd: Number((peek as any).fiatAmount ?? 0),
+          req,
+          code: body.stepUpCode ?? body.twoFactorCode,
+          biometricVerified: body.biometricVerified === true,
+        });
+      } catch (error) {
+        if (error instanceof AppError && error.statusCode === 401 && /security|verification|challenge|authenticator|code/i.test(error.message)) {
+          return res.status(401).json({ requiresStepUp: true, error: error.message });
+        }
+        throw error;
+      }
 
       const order = await executeQuote({
         userId: req.user!.id,

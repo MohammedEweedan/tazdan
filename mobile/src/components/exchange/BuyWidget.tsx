@@ -24,6 +24,7 @@ import * as LocalAuthentication from 'expo-local-authentication';
 import { CoinAvatar } from '@/components/ui/CoinAvatar';
 import { CurrencyPicker, type CurrencyItem } from '@/components/ui/CurrencyPicker';
 import { cryptoExchangeAPI, type CryptoQuote, type AssetSearchResult } from '@/lib/cryptoApi';
+import { isStepUpChallengeError, stepUpErrorMessage } from '@/lib/stepUpErrors';
 import { STRIPE, fiatSymbol as fiatGlyph, getCurrencyMeta } from '@/constants';
 
 // ── Static metadata for well-known coins ─────────────────────────────────────
@@ -466,8 +467,9 @@ export function BuyWidget({ defaultAsset, lockAsset = false }: BuyWidgetProps = 
         timestamp: new Date(),
       });
     } catch (e: any) {
-      const msg = e?.response?.data?.error ?? '';
-      if (e?.response?.status === 401 && /security|verification|code|device/i.test(msg) && !stepUpCode) {
+      const msg = stepUpErrorMessage(e);
+      if (isStepUpChallengeError(e) && !stepUpCode) {
+        setError(null);
         setStepUpOpen(true);
         return;
       }
