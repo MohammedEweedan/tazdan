@@ -359,8 +359,10 @@ export interface Quote {
 }
 
 // ── Quote cache (Redis-backed with in-memory fallback) ───────────────
-const QUOTE_TTL_MS = 30_000;
-const QUOTE_TTL_S = QUOTE_TTL_MS / 1000; // 30 seconds
+// Step-up challenges may require an emailed code before execute retries.
+// Thirty seconds made that flow expire quotes before users could enter it.
+const QUOTE_TTL_MS = 90_000;
+const QUOTE_TTL_S = QUOTE_TTL_MS / 1000; // 90 seconds
 
 // In-memory fallback store (used when Redis is unavailable)
 const quoteStore = new Map<string, Quote>();

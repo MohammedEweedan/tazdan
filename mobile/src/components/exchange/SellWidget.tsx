@@ -27,6 +27,7 @@ import { useWallets, useMarkets, useTransactionSound } from '@/hooks';
 import * as LocalAuthentication from 'expo-local-authentication';
 import { CoinAvatar } from '@/components/ui/CoinAvatar';
 import { cryptoExchangeAPI, type CryptoQuote } from '@/lib/cryptoApi';
+import { isStepUpChallengeError, stepUpErrorMessage } from '@/lib/stepUpErrors';
 import { fiatSymbol as fiatGlyph, getCurrencyMeta } from '@/constants';
 
 // ── Shared metadata ───────────────────────────────────────────────────────────
@@ -323,8 +324,9 @@ export function SellWidget({ defaultAsset, lockAsset = false }: SellWidgetProps 
       // Auto-dismiss the success banner so the widget returns to a clean state.
       setTimeout(() => setSuccess(null), 4000);
     } catch (e: any) {
-      const msg = e?.response?.data?.error ?? '';
-      if (e?.response?.status === 401 && /security|verification|code|device/i.test(msg) && !stepUpCode) {
+      const msg = stepUpErrorMessage(e);
+      if (isStepUpChallengeError(e) && !stepUpCode) {
+        setError(null);
         setStepUpOpen(true);
         return;
       }

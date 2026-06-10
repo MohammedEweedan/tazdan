@@ -9,6 +9,7 @@
 import axios, { AxiosError, type InternalAxiosRequestConfig } from 'axios';
 import { APP, STORAGE_KEYS } from '@/constants';
 import { secureStore } from './secureStore';
+import { isStepUpChallengeError } from './stepUpErrors';
 
 export const api = axios.create({
   baseURL: APP.apiBaseUrl,
@@ -92,7 +93,7 @@ async function tryRefresh(): Promise<{ token: string | null; hardFail: boolean }
  *  We mutate the error in-place because rethrowing a different object
  *  loses the prototype chain that callers rely on (`err.isAxiosError`,
  *  `err.response.status`, etc.). */
-const SENSITIVE_BODY_KEYS = ['password', 'twoFactorCode', 'pin', 'refreshToken', 'token', 'code'];
+const SENSITIVE_BODY_KEYS = ['password', 'twoFactorCode', 'stepUpCode', 'pin', 'refreshToken', 'token', 'code'];
 function scrubAxiosError(error: AxiosError): AxiosError {
   try {
     if (error.config?.headers) {
@@ -134,6 +135,9 @@ api.interceptors.response.use(
   (r) => r,
   async (error: AxiosError) => {
     const original = error.config as InternalAxiosRequestConfig & { _retried?: boolean };
+    if (isStepUpChallengeError(error)) {
+      return Promise.reject(scrubAxiosError(error));
+    }
     if (error.response?.status === 401 && original && !original._retried) {
       original._retried = true;
       const { token, hardFail } = await tryRefresh();
