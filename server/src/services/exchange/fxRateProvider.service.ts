@@ -16,7 +16,13 @@
  * needs to map a pair → { buy, sell } in Decimal-safe strings.
  */
 import Decimal from 'decimal.js';
+import { Currency } from '@prisma/client';
 import { prisma } from '../../utils/prisma';
+
+/** ExchangeRate rows use the Currency enum — symbols outside it (a Fulus
+ *  currency added before its enum value ships) must skip the DB override/
+ *  persist paths instead of spamming prisma validation errors. */
+const isDbCurrency = (c: string): boolean => c in Currency;
 
 interface RatePair { buyPrice: string; sellPrice: string; source: string; fetchedAt: Date; }
 interface ProviderMid { mid: number; source: string; derived?: boolean }
@@ -296,10 +302,13 @@ export async function getRate(base: string, quote: string): Promise<RatePair> {
   const cached = memoryCache.get(k);
   if (cached && cached.expires > now) return cached.value;
 
-  // 1. Admin override.
-  const override = await prisma.exchangeRate.findUnique({
-    where: { baseCurrency_quoteCurrency: { baseCurrency: base as any, quoteCurrency: quote as any } },
-  }).catch(() => null);
+  // 1. Admin override. (Only for enum-backed currencies — see isDbCurrency.)
+  const dbBacked = isDbCurrency(base) && isDbCurrency(quote);
+  const override = dbBacked
+    ? await prisma.exchangeRate.findUnique({
+        where: { baseCurrency_quoteCurrency: { baseCurrency: base as any, quoteCurrency: quote as any } },
+      }).catch(() => null)
+    : null;
   if (override && override.isActive && override.setBy && (now - override.updatedAt.getTime() < MAX_OVERRIDE_AGE_MS)) {
     const pair: RatePair = {
       buyPrice:  override.buyPrice.toString(),
@@ -343,11 +352,13 @@ export async function getRate(base: string, quote: string): Promise<RatePair> {
 
     // Persist the latest fetched rate so admin UIs can read recent history.
     // Mark it `isActive=false` so the override path above doesn't pick it up.
-    await prisma.exchangeRate.upsert({
-      where: { baseCurrency_quoteCurrency: { baseCurrency: base as any, quoteCurrency: quote as any } },
-      create: { baseCurrency: base as any, quoteCurrency: quote as any, buyPrice: buy, sellPrice: sell, isActive: false },
-      update: { buyPrice: buy, sellPrice: sell },
-    }).catch(() => { /* non-critical */ });
+    if (dbBacked) {
+      await prisma.exchangeRate.upsert({
+        where: { baseCurrency_quoteCurrency: { baseCurrency: base as any, quoteCurrency: quote as any } },
+        create: { baseCurrency: base as any, quoteCurrency: quote as any, buyPrice: buy, sellPrice: sell, isActive: false },
+        update: { buyPrice: buy, sellPrice: sell },
+      }).catch(() => { /* non-critical */ });
+    }
 
     return pair;
   }
