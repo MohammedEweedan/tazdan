@@ -57,6 +57,25 @@ jobs:
       - run: npx prisma migrate deploy
       - run: npx tsc --noEmit
       - run: npm test -- --passWithNoTests --forceExit
+      # The Docker image ships esbuild output, not tsc output — verify that
+      # path produces loadable JS so a broken fast-build can't reach prod.
+      - run: npm run build:fast && node --check dist/index.js
+
+  mobile:
+    name: Mobile — type-check
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: mobile/package-lock.json
+      - run: npm ci --legacy-peer-deps
+      - run: npx tsc --noEmit
 
   client:
     name: Client — type-check, build
@@ -86,10 +105,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-      - name: Audit server deps
-        run: npm audit --audit-level=high
+      # Production deps on a money server are a HARD gate — a known-high CVE
+      # in something we ship must block the merge, not decorate it.
+      - name: Audit server prod deps (blocking)
+        run: npm audit --omit=dev --audit-level=high
         working-directory: server
-        continue-on-error: true
       - name: Audit client deps
         run: npm audit --audit-level=high
         working-directory: client

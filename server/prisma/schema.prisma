@@ -116,6 +116,8 @@ enum Currency {
   SAR // Saudi Riyal
   EGP // Egyptian Pound
   LYD // Libyan Dinar — controlled FX, primary spread opportunity
+  TRY // Turkish Lira — Fulus corridor currency
+  TND // Tunisian Dinar — Fulus corridor currency
 }
 
 // ── KYC tier (gates daily/monthly limits, P2P verified badge,

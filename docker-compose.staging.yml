@@ -1,0 +1,50 @@
+# Staging stack — same image and topology as prod, separate env + DB + port.
+# Run it on the droplet next to prod (or a second small droplet):
+#
+#   cp .env.staging.example .env.staging   # fill in a SEPARATE database!
+#   docker compose -f docker-compose.staging.yml up -d --build
+#
+# Point a dev build of the mobile app at it via
+#   EXPO_PUBLIC_API_BASE=https://staging-api.promrkts.com   (or http://<ip>:5001)
+#
+# RULES THAT MAKE STAGING WORTH HAVING:
+#   - .env.staging must NEVER contain the prod DATABASE_URL or the prod
+#     MASTER_SEED_ENC_KEY. A staging box with prod keys IS prod, minus the
+#     monitoring.
+#   - Deploy here first, click through money flows, then deploy prod.
+
+services:
+  redis-staging:
+    image: redis:7-alpine
+    container_name: tazdan-redis-staging
+    restart: unless-stopped
+    command: redis-server --requirepass ${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env.staging} --save 60 1 --loglevel warning
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env.staging}
+    networks: [staging]
+
+  server-staging:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: tazdan-server-staging
+    restart: unless-stopped
+    depends_on: [redis-staging]
+    env_file: .env.staging
+    environment:
+      NODE_ENV: production            # prod code paths, staging data
+      PORT: 5000
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis-staging:6379
+      CLUSTER_WORKERS: 1
+    ports:
+      - '5001:5000'                   # staging exposed on :5001
+    volumes:
+      - uploads-staging:/app/uploads
+    networks: [staging]
+
+networks:
+  staging:
+    driver: bridge
+
+volumes:
+  uploads-staging:

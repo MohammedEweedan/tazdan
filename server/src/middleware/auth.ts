@@ -4,12 +4,52 @@ import crypto from 'crypto';
 import { AuthRequest } from '../types';
 import { prisma } from '../utils/prisma';
 import { AppError } from './errorHandler';
+import { getRedisClient } from '../utils/redis';
+import { logger } from '../utils/logger';
 
 // Token lifetimes — kept here so they're discoverable from one place.
 // Access tokens are short-lived; clients refresh silently via the refresh
-// token. 15min limits damage from a stolen access token.
-const ACCESS_TOKEN_TTL  = '2h';
+// token. 15min limits damage from a stolen access token, and is the window
+// a banned/demoted user can keep acting if Redis is down (see cutoff below).
+const ACCESS_TOKEN_TTL  = '15m';
+const ACCESS_TOKEN_TTL_SECONDS = 15 * 60;
 const REFRESH_TOKEN_TTL_DAYS = 7;
+
+// ── Instant session revocation ───────────────────────────────────────
+// Redis holds a per-user "tokens issued before T are dead" cutoff. Setting
+// it (ban, password reset, 2FA recovery) kills every outstanding access
+// token immediately instead of waiting out the TTL. Key TTL only needs to
+// outlive the access-token lifetime. Fail-open when Redis is missing: the
+// residual exposure is bounded by the 15m token TTL, and a hard dependency
+// on Redis for EVERY request would turn a cache blip into a full outage.
+const cutoffKey = (userId: string) => `sec:cutoff:${userId}`;
+
+export async function revokeAllUserSessions(userId: string): Promise<void> {
+  // Refresh tokens die in the DB (authoritative), access tokens via Redis.
+  await prisma.refreshToken.updateMany({
+    where: { userId, revokedAt: null },
+    data: { revokedAt: new Date() },
+  });
+  const client = getRedisClient();
+  if (client) {
+    await client
+      .set(cutoffKey(userId), String(Date.now()), { EX: ACCESS_TOKEN_TTL_SECONDS + 60 })
+      .catch((err) => logger.warn('[auth] failed to set session cutoff', { userId, err }));
+  }
+}
+
+async function isRevokedByCutoff(userId: string, iatSeconds?: number): Promise<boolean> {
+  if (!iatSeconds) return false;
+  const client = getRedisClient();
+  if (!client) return false;
+  try {
+    const raw = await client.get(cutoffKey(userId));
+    if (!raw) return false;
+    return iatSeconds * 1000 < Number(raw);
+  } catch {
+    return false; // fail-open, bounded by the 15m TTL
+  }
+}
 
 function jwtSecret(): string {
   const s = process.env.JWT_SECRET;
@@ -31,24 +71,75 @@ export function authenticate(req: AuthRequest, res: Response, next: NextFunction
     return next(new AppError('Authentication required', 401));
   }
 
+  let decoded: { id: string; email: string; role: string; iat?: number };
   try {
-    const decoded = jwt.verify(token, jwtSecret(), { algorithms: ['HS256'] }) as {
-      id: string;
-      email: string;
-      role: string;
-    };
-    req.user = decoded;
-    next();
+    decoded = jwt.verify(token, jwtSecret(), { algorithms: ['HS256'] }) as typeof decoded;
   } catch {
     return next(new AppError('Invalid or expired token', 401));
   }
+
+  // Instant-revocation check (ban / password reset / 2FA recovery).
+  isRevokedByCutoff(decoded.id, decoded.iat)
+    .then((revoked) => {
+      if (revoked) return next(new AppError('Session revoked. Please log in again.', 401));
+      req.user = decoded;
+      next();
+    })
+    .catch(() => { req.user = decoded; next(); });
+}
+
+// ── Admin gate ───────────────────────────────────────────────────────
+// The JWT role claim alone is not enough for the admin surface: a demoted
+// or suspended admin keeps a valid token until expiry. Re-check the DB
+// (with a 60s in-process cache so the admin dashboard's polling doesn't
+// add a query per request), require 2FA on the account in production, and
+// optionally pin admin access to an IP allowlist (ADMIN_IP_ALLOWLIST,
+// comma-separated exact IPs — e.g. an office/VPN egress).
+const adminCache = new Map<string, { at: number; ok: boolean; reason?: string }>();
+const ADMIN_CACHE_MS = 60 * 1000;
+
+function adminIpAllowed(ip: string | undefined): boolean {
+  const raw = process.env.ADMIN_IP_ALLOWLIST?.trim();
+  if (!raw) return true; // unset = no IP restriction
+  if (!ip) return false;
+  return raw.split(',').map((s) => s.trim()).filter(Boolean).includes(ip);
 }
 
 export function requireAdmin(req: AuthRequest, _res: Response, next: NextFunction) {
   if (!req.user || req.user.role !== 'ADMIN') {
     return next(new AppError('Admin access required', 403));
   }
-  next();
+  if (!adminIpAllowed(req.ip)) {
+    logger.warn('[auth] admin request from non-allowlisted IP', { userId: req.user.id, ip: req.ip });
+    return next(new AppError('Admin access is not permitted from this network', 403));
+  }
+
+  const cached = adminCache.get(req.user.id);
+  if (cached && Date.now() - cached.at < ADMIN_CACHE_MS) {
+    return cached.ok ? next() : next(new AppError(cached.reason ?? 'Admin access required', 403));
+  }
+
+  prisma.user
+    .findUnique({
+      where: { id: req.user.id },
+      select: { role: true, status: true, twoFactorEnabled: true },
+    })
+    .then((u) => {
+      let ok = true;
+      let reason: string | undefined;
+      if (!u || u.role !== 'ADMIN' || u.status !== 'ACTIVE') {
+        ok = false; reason = 'Admin access required';
+      } else if (
+        process.env.NODE_ENV === 'production' &&
+        process.env.ADMIN_REQUIRE_2FA !== '0' &&
+        !u.twoFactorEnabled
+      ) {
+        ok = false; reason = 'Enable 2FA on your account to access the admin console';
+      }
+      adminCache.set(req.user!.id, { at: Date.now(), ok, reason });
+      return ok ? next() : next(new AppError(reason!, 403));
+    })
+    .catch(() => next(new AppError('Internal error', 500)));
 }
 
 export function requireAgent(req: AuthRequest, _res: Response, next: NextFunction) {

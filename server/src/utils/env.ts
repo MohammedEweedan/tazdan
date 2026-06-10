@@ -81,6 +81,26 @@ export function validateEnv() {
     if (Number.isFinite(connectionLimit) && Number.isFinite(clusterWorkers) && connectionLimit * clusterWorkers > 20) {
       warn(`DB pool budget is ${connectionLimit * clusterWorkers} connections (${connectionLimit} x ${clusterWorkers}). Confirm your Postgres plan can handle this.`);
     }
+
+    // ── Custody key posture ─────────────────────────────────────────
+    // With only MASTER_SEED_ENC_KEY, one env leak + one DB read = every
+    // user's crypto. KMS envelope encryption removes that single point:
+    // the data key is decryptable only via an AWS KMS call the attacker
+    // can't make. Loud on every prod boot; hard-fail once the org is
+    // ready to enforce it (MASTER_SEED_REQUIRE_KMS=1).
+    if (!process.env.MASTER_SEED_KMS_KEY_ID) {
+      if (process.env.MASTER_SEED_REQUIRE_KMS === '1') {
+        fail(
+          'MASTER_SEED_KMS_KEY_ID is not set but MASTER_SEED_REQUIRE_KMS=1. ' +
+          'Configure AWS KMS envelope encryption (see docs/runbooks/custody-kms.md) before starting.'
+        );
+      }
+      warn(
+        'CUSTODY RISK: master seed is protected only by MASTER_SEED_ENC_KEY in the environment. ' +
+        'A server+DB compromise exposes ALL user funds. Enable KMS envelope encryption ' +
+        '(MASTER_SEED_KMS_KEY_ID — see docs/runbooks/custody-kms.md), then set MASTER_SEED_REQUIRE_KMS=1.'
+      );
+    }
   }
 
   if (process.env.REDIS_URL !== undefined && process.env.REDIS_URL.trim().length === 0) {

@@ -12,7 +12,7 @@
  * auth.controller still protects credentials.
  */
 
-import rateLimit from 'express-rate-limit';
+import rateLimit, { type Options, type Store } from 'express-rate-limit';
 import { RedisStore } from 'rate-limit-redis';
 import { recordStrike } from './ipBan';
 import { getRedisClient } from '../utils/redis';
@@ -27,21 +27,76 @@ const skipRateLimit = (req: any) =>
   process.env.NODE_ENV !== 'production' && isSimulatorRequest(req);
 
 /**
- * Redis-backed store, resolved lazily per command — the limiters are
- * constructed at import time, before initRedis() has connected.
- * Returns undefined when Redis is not configured (dev), which makes
- * express-rate-limit use its MemoryStore.
+ * Redis store that defers construction until Redis is actually CONNECTED.
+ *
+ * Limiters are built at import time, before initRedis() runs. Constructing
+ * rate-limit-redis's RedisStore eagerly fires its Lua-script load
+ * immediately; with no client that promise rejects with nothing awaiting
+ * it → unhandledRejection → the whole process dies in a crash loop (this
+ * took prod down on 2026-06-10). Instead we construct the real store on
+ * the first request that finds a live client. Until then — and whenever
+ * Redis drops later — increment() throws, which passOnStoreError converts
+ * to "skip limiting for this request" (fail-open; the DB-backed account
+ * lockout still protects credentials).
  */
-function redisStore(prefix: string): RedisStore | undefined {
+class LazyRedisStore implements Store {
+  localKeys = false;
+  // `prefix` is part of express-rate-limit's Store interface — keep public.
+  readonly prefix: string;
+  private real: RedisStore | null = null;
+  private options: Options | null = null;
+  private warned = false;
+
+  constructor(prefix: string) {
+    this.prefix = prefix;
+  }
+
+  init(options: Options): void {
+    this.options = options;
+    // Do NOT construct the real store here — init() runs at limiter
+    // creation, which is still before Redis connects.
+  }
+
+  private ensure(): RedisStore | null {
+    if (this.real) return this.real;
+    if (!getRedisClient()) return null;
+    this.real = new RedisStore({
+      prefix: `rl:${this.prefix}:`,
+      sendCommand: async (...args: string[]) => {
+        const client = getRedisClient();
+        if (!client) throw new Error('Redis not ready');
+        return client.sendCommand(args) as any;
+      },
+    });
+    if (this.options) this.real.init(this.options);
+    return this.real;
+  }
+
+  async increment(key: string) {
+    const store = this.ensure();
+    if (!store) {
+      if (!this.warned) {
+        this.warned = true;
+        logger.warn(`[rateLimiters] Redis not connected — '${this.prefix}' limiter failing open until it is.`);
+      }
+      throw new Error('Redis not ready'); // → passOnStoreError → request proceeds
+    }
+    return store.increment(key);
+  }
+
+  async decrement(key: string): Promise<void> {
+    await this.ensure()?.decrement(key).catch(() => {});
+  }
+
+  async resetKey(key: string): Promise<void> {
+    await this.ensure()?.resetKey(key).catch(() => {});
+  }
+}
+
+/** Memory store in dev (no REDIS_URL); lazy Redis store otherwise. */
+function redisStore(prefix: string): Store | undefined {
   if (!process.env.REDIS_URL?.trim()) return undefined;
-  return new RedisStore({
-    prefix: `rl:${prefix}:`,
-    sendCommand: async (...args: string[]) => {
-      const client = getRedisClient();
-      if (!client) throw new Error('Redis not ready');
-      return client.sendCommand(args);
-    },
-  });
+  return new LazyRedisStore(prefix);
 }
 
 /** Shared options wiring for every limiter. */
