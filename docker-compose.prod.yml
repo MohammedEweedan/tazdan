@@ -39,6 +39,25 @@ services:
     networks:
       - app
 
+  # Nightly DB backups with rotation (default 14 days). Dumps land in the
+  # `dbbackups` volume; set BACKUP_S3_URI (+ AWS creds) in .env to also copy
+  # offsite — a droplet loss must not take the backups with it.
+  # Manual run / restore drill:
+  #   docker compose -f docker-compose.prod.yml run --rm backup sh /backup.sh
+  backup:
+    image: postgres:16-alpine
+    container_name: tazdan-backup
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - dbbackups:/backups
+      - ./scripts/db-backup.sh:/backup.sh:ro
+    # Sleep-loop cron: runs once on start (so every deploy proves the backup
+    # path still works), then every 24h.
+    entrypoint: ["sh", "-c", "while true; do sh /backup.sh || echo '[backup] FAILED'; sleep 86400; done"]
+    networks:
+      - app
+
   # NOTE: the marketing/web client is hosted on Vercel — NOT built or run here.
   #
   # TLS termination + reverse proxy is handled by a HOST-level nginx (systemd)
@@ -46,7 +65,9 @@ services:
   # 127.0.0.1:5000 (this server's published port). A containerised nginx would
   # collide on those ports, so there is intentionally no nginx/certbot service
   # here. Host nginx config + certs live at /etc/nginx and /etc/letsencrypt on
-  # the host. The droplet stack is just: redis + server.
+  # the host — the HARDENED reference config to apply there is
+  # nginx/host/api.promrkts.com.conf in this repo. The droplet stack is:
+  # redis + server + backup.
 
 networks:
   app:
@@ -55,3 +76,4 @@ networks:
 volumes:
   redisdata:
   uploads:
+  dbbackups:

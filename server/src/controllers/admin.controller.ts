@@ -834,6 +834,12 @@ export class AdminController {
       const { status } = req.body;
       if (!['ACTIVE', 'SUSPENDED', 'BANNED'].includes(status)) throw new AppError('Invalid status', 400);
       await prisma.user.update({ where: { id: req.params.id }, data: { status } });
+      // A ban/suspension must take effect NOW, not when the access token
+      // expires — kill refresh tokens and live access tokens together.
+      if (status !== 'ACTIVE') {
+        const { revokeAllUserSessions } = await import('../middleware/auth');
+        await revokeAllUserSessions(req.params.id);
+      }
       res.json({ message: `User status updated to ${status}` });
     } catch (error) { next(error); }
   }
@@ -1230,9 +1236,12 @@ export class AdminController {
         data: { status, resolution, reviewedBy: req.user!.id, reviewedAt: new Date() },
       });
 
-      // If freezing, freeze user's wallets
+      // If freezing, freeze user's wallets and kill their live sessions —
+      // an AML freeze that waits out a token TTL isn't a freeze.
       if (status === 'FROZEN') {
         await prisma.user.update({ where: { id: flag.userId }, data: { status: 'SUSPENDED' } });
+        const { revokeAllUserSessions } = await import('../middleware/auth');
+        await revokeAllUserSessions(flag.userId);
       }
 
       res.json({ message: `AML flag ${status.toLowerCase()}` });
@@ -1433,6 +1442,10 @@ export class AdminController {
       }
 
       await prisma.user.update({ where: { id }, data: { status: 'SUSPENDED' } });
+      {
+        const { revokeAllUserSessions } = await import('../middleware/auth');
+        await revokeAllUserSessions(id);
+      }
 
       // Freeze every wallet's full balance so they can't withdraw or trade
       const wallets = await prisma.wallet.findMany({ where: { userId: id } });

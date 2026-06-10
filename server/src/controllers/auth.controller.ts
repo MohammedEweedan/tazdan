@@ -9,6 +9,7 @@ import {
   persistRefreshToken,
   verifyAndConsumeRefreshToken,
   revokeRefreshToken,
+  revokeAllUserSessions,
 } from '../middleware/auth';
 import { AppError } from '../middleware/errorHandler';
 import { generateReferralCode } from '../utils/helpers';
@@ -725,10 +726,8 @@ export class AuthController {
         },
       });
 
-      await prisma.refreshToken.updateMany({
-        where: { userId: user.id },
-        data: { revokedAt: new Date() },
-      });
+      // Kills refresh tokens (DB) AND outstanding access tokens (Redis cutoff).
+      await revokeAllUserSessions(user.id);
 
       res.json({ message: 'Password reset successfully. Please log in again.' });
     } catch (error) {
@@ -800,7 +799,8 @@ export class AuthController {
       if (!phoneOk || !dobOk) throw GENERIC_FAIL;
 
       // All checks pass → disable 2FA and clear the recovery code. Also revoke
-      // sessions so a re-login is required with the (now 2FA-free) account.
+      // sessions (refresh + live access tokens) so a re-login is required with
+      // the (now 2FA-free) account.
       await prisma.user.update({
         where: { id: user.id },
         data: {
@@ -810,10 +810,7 @@ export class AuthController {
           twoFactorRecoveryExpires: null,
         },
       });
-      await prisma.refreshToken.updateMany({
-        where: { userId: user.id },
-        data: { revokedAt: new Date() },
-      });
+      await revokeAllUserSessions(user.id);
 
       res.json({ message: '2FA has been removed. Sign in with your email and password.' });
     } catch (error) {

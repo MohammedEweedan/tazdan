@@ -90,6 +90,80 @@ function fromAddressField(asset: string, network: string):
 // Required confirmations per spec.
 const CONFIRMATIONS = { ETH: 3, BTC: 6, SOL: 32, TRON: 20 } as const;
 
+// ── Daily withdrawal caps (treasury protection) ──────────────────────
+// A compromised account (or a compromised signing path) is rate-limited in
+// VALUE, not just requests: per-user and platform-wide caps per asset per
+// UTC day. Admin-tunable via PlatformSettings keys
+//   onchain_user_daily_cap_<asset> / onchain_platform_daily_cap_<asset>
+// with conservative code defaults. The platform cap is the blast-radius
+// bound: even with many compromised accounts, at most this much of an
+// asset can leave custody per day.
+const DEFAULT_USER_DAILY_CAP: Record<string, string> = {
+  BTC: '0.25', ETH: '3', SOL: '150', USDT: '10000',
+};
+const DEFAULT_PLATFORM_DAILY_CAP: Record<string, string> = {
+  BTC: '1', ETH: '15', SOL: '750', USDT: '50000',
+};
+
+async function dailyCapFor(tx: Prisma.TransactionClient, kind: 'user' | 'platform', asset: string): Promise<Decimal> {
+  const key = `onchain_${kind}_daily_cap_${asset.toLowerCase()}`;
+  const row = await tx.platformSettings.findUnique({ where: { key } }).catch(() => null);
+  const fallback = (kind === 'user' ? DEFAULT_USER_DAILY_CAP : DEFAULT_PLATFORM_DAILY_CAP)[asset] ?? '0';
+  const raw = row?.value ?? fallback;
+  const v = new Decimal(raw || '0');
+  return v.isFinite() && v.gt(0) ? v : new Decimal(fallback || '0');
+}
+
+/** Sum of today's (UTC) non-failed on-chain withdrawals for the asset. */
+async function withdrawnTodayUtc(
+  tx: Prisma.TransactionClient,
+  asset: string,
+  userId?: string,
+): Promise<Decimal> {
+  const dayStart = new Date();
+  dayStart.setUTCHours(0, 0, 0, 0);
+  const agg = await tx.onChainTransaction.aggregate({
+    where: {
+      type: 'WITHDRAWAL',
+      asset,
+      createdAt: { gte: dayStart },
+      status: { not: 'FAILED' },
+      ...(userId ? { userId } : {}),
+    },
+    _sum: { amount: true },
+  });
+  return new Decimal(agg._sum.amount?.toString() ?? '0');
+}
+
+async function enforceDailyCaps(
+  tx: Prisma.TransactionClient,
+  userId: string,
+  asset: string,
+  amount: Decimal,
+): Promise<void> {
+  const [userCap, platformCap, userToday, platformToday] = await Promise.all([
+    dailyCapFor(tx, 'user', asset),
+    dailyCapFor(tx, 'platform', asset),
+    withdrawnTodayUtc(tx, asset, userId),
+    withdrawnTodayUtc(tx, asset),
+  ]);
+  if (userCap.gt(0) && userToday.plus(amount).gt(userCap)) {
+    throw new AppError(
+      `Daily ${asset} withdrawal limit reached (${userCap.toString()} ${asset}/day). Try again tomorrow or contact support.`,
+      429,
+    );
+  }
+  if (platformCap.gt(0) && platformToday.plus(amount).gt(platformCap)) {
+    logger.error('[treasury] PLATFORM daily withdrawal cap hit', {
+      asset, platformToday: platformToday.toString(), attempted: amount.toString(),
+    });
+    throw new AppError(
+      `${asset} withdrawals are temporarily paused. Please try again later.`,
+      503,
+    );
+  }
+}
+
 // Static fallback fee table — used when RPC is unavailable.
 const STATIC_FEE_FALLBACK: Record<string, { asset: string; estimate: string }> = {
   ETH:       { asset: 'ETH', estimate: '0.0008' },
@@ -113,6 +187,9 @@ function supportsLiveBroadcast(asset: string, network: string): boolean {
   const n = network.toUpperCase();
   if (a === 'ETH' && (n === 'ETH' || n === 'ERC20')) return true;
   if (a === 'USDT' && n === 'ERC20') return true;
+  if (a === 'BTC') return true;   // P2WPKH via mempool.space (broadcastBtc)
+  if (a === 'SOL') return true;   // native transfer via RPC (broadcastSol)
+  // USDT/TRC20 stays gated until the TRX fee-delegation treasury exists.
   return false;
 }
 
@@ -249,10 +326,122 @@ async function broadcastUsdtErc20(opts: {
   return tx.hash;
 }
 
-// BTC / SOL / TRON broadcasting is stubbed — real impl needs UTXO
-// assembly (BTC), recent blockhash (SOL), signed Transaction (TRON).
-// For MVP we record the settlement request and flag it for a later
-// treasury sweep. Ledger side still debits, so UX is coherent.
+// ── BTC (P2WPKH) ─────────────────────────────────────────────────────
+// UTXO assembly + fee estimation via the mempool.space REST API, PSBT
+// signing with the user's derived key, broadcast via POST /api/tx.
+
+const BTC_DUST_SATS = 546n;
+
+async function broadcastBtc(opts: {
+  privateKey: string;   // 32-byte hex (see deriveBtcWallet)
+  fromAddress: string;  // bc1… P2WPKH
+  toAddress: string;
+  amountBtc: string;
+}): Promise<string> {
+  const base = (process.env.MEMPOOL_API_URL || 'https://mempool.space/api').replace(/\/$/, '');
+  const network = bitcoin.networks.bitcoin;
+
+  const [utxoRes, feeRes] = await Promise.all([
+    axios.get(`${base}/address/${opts.fromAddress}/utxo`, { timeout: 10_000 }),
+    axios.get(`${base}/v1/fees/recommended`, { timeout: 10_000 }),
+  ]);
+  const utxos: Array<{ txid: string; vout: number; value: number; status?: { confirmed?: boolean } }> =
+    (utxoRes.data ?? []).filter((u: any) => u.status?.confirmed !== false);
+  if (!utxos.length) throw new Error('No confirmed UTXOs on custody address');
+
+  const satPerVb = BigInt(Math.max(1, Number(feeRes.data?.halfHourFee ?? 10)));
+  const target = BigInt(new Decimal(opts.amountBtc).mul(1e8).toFixed(0));
+  if (target <= BTC_DUST_SATS) throw new Error('BTC amount below dust threshold');
+
+  const keyPair = ECPair.fromPrivateKey(Buffer.from(opts.privateKey, 'hex'), { network });
+  const payment = bitcoin.payments.p2wpkh({ pubkey: Buffer.from(keyPair.publicKey), network });
+  if (payment.address !== opts.fromAddress) {
+    throw new Error('Derived key does not match custody address'); // never sign with a mismatched key
+  }
+
+  // Accumulate inputs largest-first until amount + fee is covered.
+  // P2WPKH vbytes ≈ 10.5 overhead + 68 per input + 31 per output.
+  utxos.sort((a, b) => b.value - a.value);
+  const selected: typeof utxos = [];
+  let inSats = 0n;
+  let fee = 0n;
+  for (const u of utxos) {
+    selected.push(u);
+    inSats += BigInt(u.value);
+    fee = (11n + 68n * BigInt(selected.length) + 31n * 2n) * satPerVb;
+    if (inSats >= target + fee) break;
+  }
+  if (inSats < target + fee) throw new Error('Insufficient confirmed UTXO value for amount + network fee');
+
+  const psbt = new bitcoin.Psbt({ network });
+  for (const u of selected) {
+    psbt.addInput({
+      hash: u.txid,
+      index: u.vout,
+      witnessUtxo: { script: payment.output!, value: BigInt(u.value) },
+    });
+  }
+  psbt.addOutput({ address: opts.toAddress, value: target });
+  const change = inSats - target - fee;
+  if (change > BTC_DUST_SATS) {
+    psbt.addOutput({ address: opts.fromAddress, value: change });
+  } // else: sub-dust change is burned into the fee
+
+  const signer = {
+    publicKey: Buffer.from(keyPair.publicKey),
+    sign: (hash: Buffer) => Buffer.from(keyPair.sign(hash)),
+  };
+  for (let i = 0; i < selected.length; i++) psbt.signInput(i, signer);
+  psbt.finalizeAllInputs();
+  const rawHex = psbt.extractTransaction().toHex();
+
+  const broadcast = await axios.post(`${base}/tx`, rawHex, {
+    timeout: 15_000,
+    headers: { 'Content-Type': 'text/plain' },
+  });
+  const txid = String(broadcast.data ?? '').trim();
+  if (!/^[0-9a-f]{64}$/i.test(txid)) throw new Error(`BTC broadcast returned unexpected response: ${txid.slice(0, 80)}`);
+  return txid;
+}
+
+// ── SOL (native transfer) ────────────────────────────────────────────
+async function broadcastSol(opts: {
+  privateKey: string;   // 64-byte secretKey hex (see deriveSolWallet)
+  toAddress: string;
+  amountSol: string;
+}): Promise<string> {
+  const rpcUrl = process.env.SOLANA_RPC_URL ?? 'https://api.mainnet-beta.solana.com';
+  const connection = new Connection(rpcUrl, 'confirmed');
+  const keypair = SolKeypair.fromSecretKey(Buffer.from(opts.privateKey, 'hex'));
+  const lamports = BigInt(new Decimal(opts.amountSol).mul(LAMPORTS_PER_SOL).toFixed(0));
+  if (lamports <= 0n) throw new Error('SOL amount too small');
+
+  const tx = new SolTransaction().add(
+    SystemProgram.transfer({
+      fromPubkey: keypair.publicKey,
+      toPubkey: new PublicKey(opts.toAddress),
+      lamports: Number(lamports),
+    }),
+  );
+  return sendAndConfirmTransaction(connection, tx, [keypair], { commitment: 'confirmed' });
+}
+
+// Operator-CLI sweep wrappers (scripts/treasury-sweep.ts) — same signing
+// paths as withdrawals, exported so cold-storage sweeps don't duplicate
+// broadcast logic.
+export function sweepBtc(privateKey: string, fromAddress: string, toAddress: string, amountBtc: string) {
+  return broadcastBtc({ privateKey, fromAddress, toAddress, amountBtc });
+}
+export function sweepSol(privateKey: string, toAddress: string, amountSol: string) {
+  return broadcastSol({ privateKey, toAddress, amountSol });
+}
+
+// TRON (TRC-20 USDT) broadcasting is intentionally NOT implemented yet:
+// TRC-20 transfers burn TRX for energy/bandwidth, and user deposit
+// addresses hold no TRX — every transfer would revert until a fee-
+// delegation / TRX top-up treasury exists. See
+// docs/runbooks/custody-cold-storage.md for the rollout plan. Until then
+// TRON withdrawals fail closed BEFORE any debit (supportsLiveBroadcast).
 
 /**
  * Initiate a withdrawal. Atomically debits the internal ledger and
@@ -304,6 +493,11 @@ export async function initiateWithdrawal(opts: {
       const current = new Decimal((w as any)[field].toString());
       if (current.lt(amount)) throw new AppError(`Insufficient ${asset} balance`, 400);
 
+      // Value-based rate limiting: per-user + platform-wide daily caps.
+      // Inside the SERIALIZABLE tx so two concurrent withdrawals can't both
+      // squeeze under the cap.
+      await enforceDailyCaps(tx, opts.userId, asset, amount);
+
       await tx.userWallet.update({
         where: { id: w.id },
         data: { [field]: { decrement: new Prisma.Decimal(amount.toFixed(18)) } },
@@ -349,6 +543,19 @@ export async function initiateWithdrawal(opts: {
       txHash = await broadcastEvm({ privateKey: key.privateKey, toAddress: opts.toAddress, amountEth: amount.toFixed(18) });
     } else if (asset === 'USDT' && network === 'ERC20') {
       txHash = await broadcastUsdtErc20({ privateKey: key.privateKey, toAddress: opts.toAddress, amount: amount.toFixed(6) });
+    } else if (asset === 'BTC') {
+      txHash = await broadcastBtc({
+        privateKey: key.privateKey,
+        fromAddress: onChainTx.fromAddress,
+        toAddress: opts.toAddress,
+        amountBtc: amount.toFixed(8),
+      });
+    } else if (asset === 'SOL') {
+      txHash = await broadcastSol({
+        privateKey: key.privateKey,
+        toAddress: opts.toAddress,
+        amountSol: amount.toFixed(9),
+      });
     } else {
       if (simulatedBroadcastAllowed()) {
         simulated = true;
