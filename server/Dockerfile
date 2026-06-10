@@ -35,13 +35,16 @@ FROM node:20-alpine AS production
 WORKDIR /app
 ENV NODE_ENV=production
 RUN apk add --no-cache openssl
-COPY --from=deps /app/node_modules ./node_modules
-COPY --from=build /app/dist ./dist
-COPY prisma ./prisma
-COPY package.json ./
+# --chown on COPY sets ownership during extraction — a separate
+# `chown -R /app` walked every node_modules inode and took ~230s on the
+# droplet's disk (it also doubled the layer size).
+COPY --from=deps --chown=node:node /app/node_modules ./node_modules
+COPY --from=build --chown=node:node /app/dist ./dist
+COPY --chown=node:node prisma ./prisma
+COPY --chown=node:node package.json ./
 # uploads must be writable by the unprivileged runtime user (KYC docs,
 # avatars, media land here unless an external volume is mounted over it).
-RUN mkdir -p uploads && chown -R node:node /app
+RUN mkdir -p uploads && chown node:node /app uploads
 # Never run a money server as root: a container escape or dependency RCE
 # should land in an unprivileged user, not uid 0.
 USER node
