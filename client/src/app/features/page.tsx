@@ -87,7 +87,7 @@ export default function FeaturesPage() {
   const {
     pageBg, textMain, textSub, cardBg, cardBgHover, raisedBg,
     cardBorder, strongBorder, accent, accentText, accentSoft,
-    accentBorder, shadow, titleGradient,
+    accentBorder,
   } = publicPageTheme(dark);
   const ctaBg = accent;
   const ctaFg = '#ffffff';
@@ -98,13 +98,22 @@ export default function FeaturesPage() {
       <PublicNav />
 
       {/* ── Hero ── */}
-      <Box pt={{ base: '118px', md: '160px' }} pb={{ base: 14, md: 20 }} textAlign="center" position="relative" overflow="hidden">
+      <Box
+        minH={{ base: '620px', md: '760px' }}
+        pt={{ base: '118px', md: '150px' }}
+        pb={{ base: 12, md: 18 }}
+        textAlign="center"
+        position="relative"
+        overflow="hidden"
+        display="flex"
+        alignItems="center"
+      >
         <Box
           position="absolute"
           inset={0}
           bg={dark
-            ? 'linear-gradient(180deg, rgba(99,161,219,0.10) 0%, rgba(99,161,219,0.025) 44%, rgba(22,24,28,0) 100%)'
-            : 'linear-gradient(180deg, rgba(79,139,196,0.10) 0%, rgba(79,139,196,0.025) 44%, rgba(255,255,255,0) 100%)'}
+            ? 'radial-gradient(circle at 50% 44%, rgba(99,161,219,0.10), transparent 48%)'
+            : 'radial-gradient(circle at 50% 44%, rgba(99,161,219,0.12), transparent 50%)'}
           pointerEvents="none"
         />
         <Container maxW="940px" position="relative" zIndex={1}>
@@ -124,10 +133,10 @@ export default function FeaturesPage() {
                 Platform Features
               </Box>
               <Heading
-                as="h1" fontWeight="900"
-                fontSize={{ base: '52px', md: '96px' }}
-                lineHeight="0.92" letterSpacing="-0.05em"
-                bgGradient={titleGradient} bgClip="text"
+                as="h1" fontWeight="700"
+                fontSize={{ base: 'clamp(46px, 13vw, 66px)', md: 'clamp(78px, 8vw, 108px)' }}
+                lineHeight="0.95" letterSpacing="-0.055em"
+                color={textMain}
               >
                 Everything{'\n'}in one app
               </Heading>
@@ -207,7 +216,7 @@ export default function FeaturesPage() {
         {FEATURE_GROUPS.map((group, gi) => (
           <Box
             key={group.eyebrow}
-            py={{ base: 16, md: 24 }}
+            py={{ base: 18, md: 28 }}
             bg={pageBg}
             borderTop={gi === 0 ? '0' : '1px solid'}
             borderColor={cardBorder}
@@ -231,7 +240,7 @@ export default function FeaturesPage() {
                       {group.eyebrow}
                     </Text>
                     <Heading
-                      fontSize={{ base: '36px', md: '52px' }} fontWeight="900"
+                      fontSize={{ base: '36px', md: '56px' }} fontWeight="800"
                       letterSpacing="-0.04em" color={textMain} lineHeight="1.05"
                       whiteSpace="pre-line"
                     >
@@ -252,7 +261,7 @@ export default function FeaturesPage() {
                           <HStack
                             h="60px"
                             bg={cardBg} border="1px solid" borderColor={cardBorder}
-                            borderRadius="14px" px={4} spacing={3}
+                            borderRadius="16px" px={4} spacing={3}
                             transition="all 0.2s ease"
                             _hover={{ transform: 'translateY(-2px)', bg: cardBgHover, borderColor: strongBorder }}
                           >
@@ -284,11 +293,11 @@ export default function FeaturesPage() {
                     <Box
                       w={{ base: '240px', md: '340px' }}
                       h={{ base: '240px', md: '340px' }}
-                      borderRadius="28px"
+                      borderRadius="18px"
                       bg={raisedBg}
                       border="1px solid" borderColor={cardBorder}
                       display="flex" alignItems="center" justifyContent="center"
-                      boxShadow={shadow}
+                      boxShadow="none"
                     >
                       <Icon
                         as={group.features[0].icon}

@@ -22,9 +22,9 @@ export default function FeesPage() {
   const dark = colorMode === "dark";
 
   const {
-    pageBg, textMain, textSub, cardBg, cardBgHover, raisedBg, raisedAlt,
+    pageBg, textMain, textSub, cardBg, cardBgHover, raisedBg,
     cardBorder, rowBorder, strongBorder, accent, accentText, accentSoft,
-    accentBorder, green, greenSoft, shadow, titleGradient,
+    accentBorder, green, greenSoft, shadow,
   } = publicPageTheme(dark);
   const ctaBg     = accent;
   const ctaFg     = "#ffffff";
@@ -75,16 +75,25 @@ export default function FeesPage() {
       <PublicNav />
 
       {/* Hero */}
-      <Box pt={{ base: "118px", md: "160px" }} pb={{ base: 14, md: 20 }} textAlign="center" position="relative" overflow="hidden">
+      <Box
+        minH={{ base: "620px", md: "720px" }}
+        pt={{ base: "118px", md: "150px" }}
+        pb={{ base: 12, md: 18 }}
+        textAlign="center"
+        position="relative"
+        overflow="hidden"
+        display="flex"
+        alignItems="center"
+      >
         <Box
           position="absolute"
           inset={0}
           bg={dark
-            ? "linear-gradient(180deg, rgba(99,161,219,0.10) 0%, rgba(99,161,219,0.025) 44%, rgba(22,24,28,0) 100%)"
-            : "linear-gradient(180deg, rgba(79,139,196,0.10) 0%, rgba(79,139,196,0.025) 44%, rgba(255,255,255,0) 100%)"}
+            ? "radial-gradient(circle at 50% 44%, rgba(99,161,219,0.10), transparent 48%)"
+            : "radial-gradient(circle at 50% 44%, rgba(99,161,219,0.12), transparent 50%)"}
           pointerEvents="none"
         />
-        <Container maxW="900px" position="relative">
+        <Container maxW="940px" position="relative">
           <VStack spacing={6}>
             <Text
               fontSize="11px"
@@ -103,12 +112,11 @@ export default function FeesPage() {
             </Text>
             <Heading
               as="h1"
-              fontWeight="900"
-              fontSize={{ base: "52px", md: "88px" }}
+              fontWeight="700"
+              fontSize={{ base: "clamp(46px, 13vw, 66px)", md: "clamp(78px, 8vw, 108px)" }}
               lineHeight="0.95"
-              letterSpacing="-0.045em"
-              bgGradient={titleGradient}
-              bgClip="text"
+              letterSpacing="-0.055em"
+              color={textMain}
             >
               {t("page_fees_title")}
             </Heading>
@@ -128,7 +136,7 @@ export default function FeesPage() {
                   bg={raisedBg} border="1px solid" borderColor={cardBorder}
                   borderRadius="16px" px={{ base: 4, md: 6 }} py={3} spacing={0}
                   minW={{ base: "90px", md: "120px" }}
-                  boxShadow={dark ? "0 14px 36px rgba(0,0,0,0.18)" : "0 14px 32px rgba(10,10,11,0.05)"}
+                  boxShadow="none"
                 >
                   <Text fontSize={{ base: "20px", md: "24px" }} fontWeight="800" color={textMain} letterSpacing="-0.02em">
                     {s.k}
@@ -151,7 +159,7 @@ export default function FeesPage() {
               key={h.title}
               align="start" spacing={3}
               bg={cardBg} border="1px solid" borderColor={cardBorder}
-              borderRadius="20px" p={6} h="100%"
+              borderRadius="18px" p={6} h="100%"
               transition="all 0.2s ease"
               _hover={{ transform: "translateY(-3px)", bg: cardBgHover, borderColor: strongBorder, boxShadow: shadow }}
             >
@@ -174,8 +182,8 @@ export default function FeesPage() {
       <Container maxW="1100px" pb={{ base: 10, md: 16 }}>
         <Box
           bg={raisedBg} border="1px solid" borderColor={cardBorder}
-          borderRadius="24px" overflow="hidden"
-          boxShadow={shadow}
+          borderRadius="18px" overflow="hidden"
+          boxShadow="none"
         >
           <TableContainer>
             <Table variant="simple">
@@ -215,7 +223,7 @@ export default function FeesPage() {
       </Container>
 
       {/* Account tiers */}
-      <Container maxW="1100px" pb={{ base: 16, md: 24 }}>
+      <Container maxW="1100px" pb={{ base: 16, md: 24 }} borderTop="1px solid" borderColor={cardBorder} pt={{ base: 12, md: 18 }}>
         <VStack spacing={12}>
           <VStack spacing={3} textAlign="center">
             <Heading fontSize={{ base: "32px", md: "52px" }} fontWeight="900" letterSpacing="-0.04em" color={textMain} lineHeight="1">
@@ -228,7 +236,7 @@ export default function FeesPage() {
               <Box
                 key={tier.title}
                 position="relative"
-                borderRadius="22px"
+                borderRadius="18px"
                 p={{ base: 6, md: 8 }}
                 bg={tier.badge ? raisedBg : cardBg}
                 border="1px solid"
