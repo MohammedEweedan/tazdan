@@ -12,6 +12,7 @@ import { motion } from 'framer-motion';
 import { useColorMode } from '@chakra-ui/react';
 import PublicNav from '@/components/ui/PublicNav';
 import PublicFooter from '@/components/ui/PublicFooter';
+import { publicPageEase, publicPageTheme } from '@/components/ui/publicPageTheme';
 
 const FEATURE_GROUPS = [
   {
@@ -83,38 +84,42 @@ export default function FeaturesPage() {
   const { colorMode } = useColorMode();
   const dark = colorMode === 'dark';
 
-  const pageBg     = dark ? '#000000' : '#ffffff';
-  const textMain   = dark ? '#ffffff' : '#0a0f1e';
-  const textSub    = dark ? 'rgba(255,255,255,0.6)' : '#64748b';
-  const cardBg     = dark ? 'rgba(255,255,255,0.04)' : '#f4f4f4';
-  const cardBorder = dark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.10)';
-  const ctaBg      = dark ? '#ffffff' : '#0a0f1e';
-  const ctaFg      = dark ? '#000000' : '#ffffff';
-  const stripBg    = dark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)';
-
-  const titleGradient = dark
-    ? 'linear(to-b, #ffffff 0%, rgba(255,255,255,0.85) 60%, rgba(255,255,255,0.3) 100%)'
-    : 'linear(to-b, #000000 0%, rgba(0,0,0,0.7) 60%, rgba(0,0,0,0.2) 100%)';
+  const {
+    pageBg, textMain, textSub, cardBg, cardBgHover, raisedBg,
+    cardBorder, strongBorder, accent, accentText, accentSoft,
+    accentBorder, shadow, titleGradient,
+  } = publicPageTheme(dark);
+  const ctaBg = accent;
+  const ctaFg = '#ffffff';
+  const stripBg = dark ? 'rgba(255,255,255,0.025)' : 'rgba(10,10,11,0.022)';
 
   return (
     <Box minH="100vh" bg={pageBg} color={textMain} overflowX="clip">
       <PublicNav />
 
       {/* ── Hero ── */}
-      <Box pt={{ base: '120px', md: '170px' }} pb={{ base: 14, md: 20 }} textAlign="center">
-        <Container maxW="900px">
+      <Box pt={{ base: '118px', md: '160px' }} pb={{ base: 14, md: 20 }} textAlign="center" position="relative" overflow="hidden">
+        <Box
+          position="absolute"
+          inset={0}
+          bg={dark
+            ? 'linear-gradient(180deg, rgba(99,161,219,0.10) 0%, rgba(99,161,219,0.025) 44%, rgba(22,24,28,0) 100%)'
+            : 'linear-gradient(180deg, rgba(79,139,196,0.10) 0%, rgba(79,139,196,0.025) 44%, rgba(255,255,255,0) 100%)'}
+          pointerEvents="none"
+        />
+        <Container maxW="940px" position="relative" zIndex={1}>
           <motion.div
             initial={{ opacity: 0, y: 32 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.65, ease: [0.22, 1, 0.36, 1] }}
+            transition={{ duration: 0.65, ease: [...publicPageEase] }}
           >
             <VStack spacing={6}>
               <Box
                 display="inline-block" px={3} py={1} borderRadius="full"
-                bg={dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)'}
-                border="1px solid" borderColor={cardBorder}
+                bg={accentSoft}
+                border="1px solid" borderColor={accentBorder}
                 fontSize="11px" fontWeight="800" letterSpacing="0.14em"
-                textTransform="uppercase" color={textMain}
+                textTransform="uppercase" color={accentText}
               >
                 Platform Features
               </Box>
@@ -134,10 +139,11 @@ export default function FeaturesPage() {
               </Text>
               <HStack spacing={3} pt={2} flexWrap="wrap" justify="center">
                 <Button
-                  h="52px" px={8} bg={ctaBg} color={ctaFg}
-                  borderRadius="full" fontWeight="800" fontSize="14px"
-                  rightIcon={<Icon as={FiArrowRight} />}
-                  _hover={{ opacity: 0.88, transform: 'translateY(-1px)' }}
+                h="52px" px={8} bg={ctaBg} color={ctaFg}
+                borderRadius="full" fontWeight="800" fontSize="14px"
+                rightIcon={<Icon as={FiArrowRight} />}
+                  boxShadow={dark ? '0 14px 38px rgba(99,161,219,0.22)' : '0 14px 34px rgba(79,139,196,0.18)'}
+                  _hover={{ opacity: 0.9, transform: 'translateY(-2px)' }}
                   transition="all 0.15s"
                 >
                   Join Waitlist
@@ -145,11 +151,11 @@ export default function FeaturesPage() {
                 <Button
                   as="a" href="#features-list"
                   h="52px" px={8}
-                  bg={dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)'}
+                  bg={cardBg}
                   color={textMain}
                   border="1px solid" borderColor={cardBorder}
                   borderRadius="full" fontWeight="700" fontSize="14px"
-                  _hover={{ bg: dark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)' }}
+                  _hover={{ bg: cardBgHover, borderColor: strongBorder }}
                   transition="all 0.15s"
                 >
                   Explore Features
@@ -202,7 +208,9 @@ export default function FeaturesPage() {
           <Box
             key={group.eyebrow}
             py={{ base: 16, md: 24 }}
-            bg={gi % 2 === 1 ? (dark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.02)') : pageBg}
+            bg={pageBg}
+            borderTop={gi === 0 ? '0' : '1px solid'}
+            borderColor={cardBorder}
           >
             <Container maxW="1100px">
               <SimpleGrid columns={{ base: 1, lg: 2 }} gap={{ base: 10, lg: 16 }} alignItems="center">
@@ -212,7 +220,7 @@ export default function FeaturesPage() {
                   initial={{ opacity: 0, x: gi % 2 === 0 ? -32 : 32 }}
                   whileInView={{ opacity: 1, x: 0 }}
                   viewport={{ once: true, amount: 0.25 }}
-                  transition={{ duration: 0.65, ease: [0.22, 1, 0.36, 1] }}
+                  transition={{ duration: 0.65, ease: [...publicPageEase] }}
                   style={{ order: gi % 2 === 0 ? 1 : 2 }}
                 >
                   <VStack align={{ base: 'center', lg: 'start' }} spacing={6} textAlign={{ base: 'center', lg: 'start' }}>
@@ -246,15 +254,15 @@ export default function FeaturesPage() {
                             bg={cardBg} border="1px solid" borderColor={cardBorder}
                             borderRadius="14px" px={4} spacing={3}
                             transition="all 0.2s ease"
-                            _hover={{ transform: 'translateY(-2px)', borderColor: dark ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.25)' }}
+                            _hover={{ transform: 'translateY(-2px)', bg: cardBgHover, borderColor: strongBorder }}
                           >
                             <Flex
                               w="32px" h="32px" borderRadius="9px"
-                              bg={dark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.05)'}
-                              border="1px solid" borderColor={cardBorder}
+                              bg={accentSoft}
+                              border="1px solid" borderColor={accentBorder}
                               align="center" justify="center" flexShrink={0}
                             >
-                              <Icon as={f.icon} color={textMain} boxSize={3.5} />
+                              <Icon as={f.icon} color={accentText} boxSize={3.5} />
                             </Flex>
                             <Text fontSize="12.5px" fontWeight="700" color={textMain} lineHeight="1.3">{f.label}</Text>
                           </HStack>
@@ -269,22 +277,24 @@ export default function FeaturesPage() {
                   initial={{ opacity: 0, x: gi % 2 === 0 ? 32 : -32 }}
                   whileInView={{ opacity: 1, x: 0 }}
                   viewport={{ once: true, amount: 0.25 }}
-                  transition={{ duration: 0.65, ease: [0.22, 1, 0.36, 1], delay: 0.1 }}
+                  transition={{ duration: 0.65, ease: [...publicPageEase], delay: 0.1 }}
                   style={{ order: gi % 2 === 0 ? 2 : 1 }}
                 >
                   <Flex justify="center" align="center">
                     <Box
                       w={{ base: '240px', md: '340px' }}
                       h={{ base: '240px', md: '340px' }}
-                      borderRadius="32px"
-                      bg={dark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)'}
+                      borderRadius="28px"
+                      bg={raisedBg}
                       border="1px solid" borderColor={cardBorder}
                       display="flex" alignItems="center" justifyContent="center"
+                      boxShadow={shadow}
                     >
                       <Icon
                         as={group.features[0].icon}
                         boxSize={{ base: '72px', md: '96px' }}
-                        color={dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'}
+                        color={accentText}
+                        opacity={0.28}
                       />
                     </Box>
                   </Flex>
