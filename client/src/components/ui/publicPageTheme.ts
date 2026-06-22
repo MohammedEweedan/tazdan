@@ -4,10 +4,10 @@ export function publicPageTheme(dark: boolean) {
     textMain: dark ? "#F4F5F7" : "#0A0A0B",
     textSub: dark ? "rgba(244,245,247,0.62)" : "rgba(10,10,11,0.62)",
     textFaint: dark ? "rgba(244,245,247,0.38)" : "rgba(10,10,11,0.38)",
-    cardBg: dark ? "rgba(255,255,255,0.055)" : "rgba(10,10,11,0.035)",
-    cardBgHover: dark ? "rgba(255,255,255,0.075)" : "rgba(10,10,11,0.055)",
-    raisedBg: dark ? "#1E2127" : "#F7F7F4",
-    raisedAlt: dark ? "#262A31" : "#FFFFFF",
+    cardBg: dark ? "rgba(255,255,255,0.04)" : "rgba(10,10,11,0.026)",
+    cardBgHover: dark ? "rgba(255,255,255,0.065)" : "rgba(10,10,11,0.045)",
+    raisedBg: dark ? "rgba(255,255,255,0.055)" : "#F8FAFC",
+    raisedAlt: dark ? "rgba(255,255,255,0.04)" : "#FFFFFF",
     inputBg: dark ? "rgba(255,255,255,0.055)" : "rgba(10,10,11,0.045)",
     cardBorder: dark ? "rgba(255,255,255,0.10)" : "rgba(10,10,11,0.09)",
     rowBorder: dark ? "rgba(255,255,255,0.075)" : "rgba(10,10,11,0.07)",
@@ -18,7 +18,7 @@ export function publicPageTheme(dark: boolean) {
     accentBorder: dark ? "rgba(99,161,219,0.36)" : "rgba(79,139,196,0.30)",
     green: dark ? "#3FCF8E" : "#1F8F58",
     greenSoft: dark ? "rgba(63,207,142,0.14)" : "rgba(31,143,88,0.10)",
-    shadow: dark ? "0 24px 80px rgba(0,0,0,0.38)" : "0 24px 70px rgba(10,10,11,0.08)",
+    shadow: dark ? "0 22px 70px rgba(0,0,0,0.28)" : "0 22px 62px rgba(10,10,11,0.06)",
     titleGradient: dark
       ? "linear(to-b, #ffffff 0%, rgba(244,245,247,0.88) 58%, rgba(244,245,247,0.34) 100%)"
       : "linear(to-b, #0A0A0B 0%, rgba(10,10,11,0.78) 58%, rgba(10,10,11,0.30) 100%)",

@@ -13,9 +13,10 @@ import PageTitle from '@/components/PageTitle';
    under client/public/fonts/, copied from the @fontsource packages.
    No DNS, no TLS, no fetch — the build is fully offline.
 
-   Cairo carries the Arabic glyphs (`arabic` + `latin` ranges).
-   DM Sans is the display family.  Inter is the body fallback in
-   case the page renders bare HTML.
+   Outfit is the neutral UI face. Cairo remains as the Arabic glyph fallback
+   because Outfit's official self-hosted package is Latin/Latin-ext only.
+   DM Sans is the display family. Inter is the body fallback in case the page
+   renders bare HTML.
    ───────────────────────────────────────────────────────────── */
 const dmSans = localFont({
   src: [
@@ -40,10 +41,20 @@ const inter = localFont({
   variable: '--font-inter',
 });
 
-// Cairo includes both Arabic and Latin ranges so a single family
-// covers the bilingual UI.  Order matters: Arabic first lets the
-// glyph-runs system pick Arabic for RTL strings without an extra
-// font swap.
+const outfit = localFont({
+  src: [
+    { path: '../../public/fonts/Outfit-latin-400.woff2', weight: '400', style: 'normal' },
+    { path: '../../public/fonts/Outfit-latin-500.woff2', weight: '500', style: 'normal' },
+    { path: '../../public/fonts/Outfit-latin-600.woff2', weight: '600', style: 'normal' },
+    { path: '../../public/fonts/Outfit-latin-700.woff2', weight: '700', style: 'normal' },
+    { path: '../../public/fonts/Outfit-latin-800.woff2', weight: '800', style: 'normal' },
+  ],
+  display: 'swap',
+  variable: '--font-outfit',
+});
+
+// Cairo includes Arabic glyphs and stays as the fallback for Arabic characters
+// until an Outfit Arabic subset exists in the asset pipeline.
 const cairo = localFont({
   src: [
     { path: '../../public/fonts/Cairo-arabic-400.woff2', weight: '400', style: 'normal' },
@@ -180,7 +191,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html
       lang="en"
       dir="ltr"
-      className={`${dmSans.variable} ${inter.variable} ${cairo.variable}`}
+      className={`${dmSans.variable} ${inter.variable} ${outfit.variable} ${cairo.variable}`}
     >
       <head>
         {/* Preconnect to the API origin — opens TCP + TLS in parallel

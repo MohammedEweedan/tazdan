@@ -6,6 +6,7 @@ import {
   Box,
   Flex,
   HStack,
+  Heading,
   Icon,
   SimpleGrid,
   Text,
@@ -15,6 +16,7 @@ import {
 import { FiAlertTriangle, FiGithub, FiInstagram, FiX } from "react-icons/fi";
 import { useTranslate } from "@tolgee/react";
 import Logo from "@/components/ui/Logo";
+import ShaderLines from "@/components/ui/shader-lines";
 
 export default function PublicFooter() {
   const { t } = useTranslate();
@@ -24,8 +26,8 @@ export default function PublicFooter() {
   const textMain = dark ? "#ffffff" : "#0a0f1e";
   const textSub = dark ? "rgba(255,255,255,0.55)" : "#64748b";
   const border = dark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.08)";
-  const disclosureBg = dark ? "#1E2127" : "#FFFFFF";
-  const disclosureIconBg = dark ? "#262A31" : "#F1F5F9";
+  const disclosureBg = dark ? "rgba(255,255,255,0.026)" : "rgba(255,255,255,0.72)";
+  const disclosureIconBg = dark ? "rgba(255,255,255,0.045)" : "rgba(10,15,30,0.045)";
 
   const disclosureItems = [
     t("footer_disclaimer_loss"),
@@ -82,59 +84,65 @@ export default function PublicFooter() {
       w="100%"
       // Full-bleed band: a faint surface + a full-width top hairline so the
       // footer reads as a distinct edge-to-edge section, not a floating box.
-      bg={dark ? "rgba(255,255,255,0.015)" : "rgba(0,0,0,0.015)"}
+      bg={dark ? "#0E1116" : "#F8FAFC"}
       borderTop="1px solid"
       borderColor={border}
       pt={{ base: 10, md: 14 }}
       pb={{ base: 6, md: 8 }}
-      px={{ base: 5, md: 10 }}
+      px={{ base: 4, md: 8 }}
     >
-      {/* Soft brand-blue glow behind the footer — the same static, directional
-          radial aura used behind the mobile balance card. A bright-ish core
-          offset to one side + a faint wash, both fading to nothing. */}
       <Box aria-hidden position="absolute" inset={0} zIndex={0} pointerEvents="none">
-        {/* Full-bleed glow layer — spans the entire footer (inset 0) so there's
-            no gap at either edge in LTR or RTL. The radial origin is offset
-            left so the aura feels directional like the mobile balance card. */}
         <Box
-          position="absolute" inset={0}
-          background={dark
-            ? "radial-gradient(ellipse 70% 130% at 30% 25%, rgba(99,161,219,0.18) 0%, rgba(99,161,219,0.05) 42%, transparent 70%)"
-            : "radial-gradient(ellipse 70% 130% at 30% 25%, rgba(99,161,219,0.13) 0%, rgba(99,161,219,0.04) 42%, transparent 70%)"}
-        />
-        {/* Faint secondary wash low-right for depth. */}
-        <Box
-          position="absolute" inset={0}
-          background="radial-gradient(circle 45% at 85% 80%, rgba(99,161,219,0.09) 0%, transparent 60%)"
-        />
+          position="absolute"
+          inset={0}
+          opacity={dark ? 0.075 : 0.055}
+          filter="saturate(0.9)"
+          sx={{
+            maskImage: "linear-gradient(180deg, transparent 0%, #000 18%, #000 76%, transparent 100%)",
+            WebkitMaskImage: "linear-gradient(180deg, transparent 0%, #000 18%, #000 76%, transparent 100%)",
+          }}
+        >
+          <ShaderLines mode={dark ? "dark" : "light"} />
+        </Box>
       </Box>
 
-      <Box maxW="1280px" mx="auto" position="relative" zIndex={1}>
-        {/* Top row: brand (full width on mobile) */}
-        <VStack align="start" spacing={3} mb={{ base: 7, md: 8 }}>
-          <Logo h={32} />
-          <Text fontSize="13px" color={textSub} lineHeight="1.6" maxW="320px">
-            {t("footer_tagline")}
-          </Text>
-        </VStack>
-
-        {/* Nav columns — 3 on mobile, 3 on desktop */}
+      <Box maxW="1180px" mx="auto" position="relative" zIndex={1}>
         <SimpleGrid
-          columns={{ base: 3, md: 3 }}
-          spacingX={{ base: 4, md: 12 }}
-          spacingY={{ base: 8, md: 6 }}
+          columns={{ base: 3, md: 4 }}
+          gridTemplateColumns={{ base: "repeat(3, minmax(0, 1fr))", md: "1.35fr 0.75fr 0.75fr 0.9fr" }}
+          spacingX={{ base: 4, md: 10 }}
+          spacingY={{ base: 8, md: 5 }}
           mb={{ base: 8, md: 10 }}
         >
+          <VStack align="start" spacing={3.5} maxW="360px" gridColumn={{ base: "1 / -1", md: "auto" }}>
+            <Logo h={32} />
+            <Heading
+              as="h2"
+              fontFamily="'DM Sans', sans-serif"
+              fontSize={{ base: "24px", md: "28px" }}
+              lineHeight="1.05"
+              letterSpacing="-0.04em"
+              color={textMain}
+              fontWeight="850"
+            >
+              {t("footer_statement")}
+            </Heading>
+            <Text fontSize={{ base: "13px", md: "13.5px" }} color={textSub} lineHeight="1.7" maxW="350px">
+              {t("footer_tagline")}
+            </Text>
+          </VStack>
+
           {cols.map((col) => (
-            <VStack key={col.title} align="start" spacing={2}>
+            <VStack key={col.title} align="start" spacing={2.25} minW={0}>
               <Text
-                fontSize="10px"
+                fontSize={{ base: "9px", md: "10px" }}
                 fontWeight="700"
                 color={textMain}
-                letterSpacing="0.14em"
+                letterSpacing={{ base: "0.08em", md: "0.14em" }}
                 textTransform="uppercase"
                 opacity={0.85}
                 mb={0.5}
+                noOfLines={1}
               >
                 {col.title}
               </Text>
@@ -149,6 +157,7 @@ export default function PublicFooter() {
                   transition="color 0.15s"
                   cursor="pointer"
                   lineHeight="1.5"
+                  wordBreak="break-word"
                 >
                   {l.label}
                 </Box>
@@ -161,14 +170,15 @@ export default function PublicFooter() {
           bg={disclosureBg}
           border="1px solid"
           borderColor={border}
-          borderRadius="20px"
-          p={{ base: 5, md: 6 }}
-          mb={{ base: 8, md: 10 }}
+          borderRadius="14px"
+          p={{ base: 3.5, md: 4 }}
+          mb={{ base: 7, md: 8 }}
+          backdropFilter="blur(16px)"
         >
-          <HStack spacing={3} align="center" mb={4}>
+          <HStack spacing={2.5} align="center" mb={3}>
             <Flex
-              w="34px"
-              h="34px"
+              w="26px"
+              h="26px"
               borderRadius="full"
               align="center"
               justify="center"
@@ -177,25 +187,25 @@ export default function PublicFooter() {
               borderColor={border}
               flexShrink={0}
             >
-              <Icon as={FiAlertTriangle} boxSize={4} color={textMain} />
+              <Icon as={FiAlertTriangle} boxSize={3} color={textMain} />
             </Flex>
-            <Text fontSize={{ base: "13px", md: "14px" }} fontWeight="800" color={textMain}>
+            <Text fontSize={{ base: "11.5px", md: "12.5px" }} fontWeight="800" color={textMain}>
               {t("footer_disclaimer_title")}
             </Text>
           </HStack>
 
-          <SimpleGrid columns={{ base: 1, md: 2 }} spacing={{ base: 3, md: 4 }}>
+          <SimpleGrid columns={{ base: 1, md: 2 }} spacing={{ base: 2, md: 3 }}>
             {disclosureItems.map((item) => (
-              <HStack key={item} align="flex-start" spacing={2.5}>
+              <HStack key={item} align="flex-start" spacing={2}>
                 <Box
-                  w="5px"
-                  h="5px"
+                  w="4px"
+                  h="4px"
                   borderRadius="full"
                   bg={dark ? "rgba(255,255,255,0.45)" : "rgba(10,15,30,0.42)"}
-                  mt="8px"
+                  mt="7px"
                   flexShrink={0}
                 />
-                <Text fontSize={{ base: "11px", md: "12px" }} lineHeight="1.65" color={textSub}>
+                <Text fontSize={{ base: "9.5px", md: "10.5px" }} lineHeight="1.55" color={textSub}>
                   {item}
                 </Text>
               </HStack>
@@ -206,8 +216,8 @@ export default function PublicFooter() {
             as={NextLink}
             href="/risk"
             display="inline-flex"
-            mt={4}
-            fontSize="12px"
+          mt={3.5}
+          fontSize="10.5px"
             fontWeight="800"
             color={dark ? "#8BBCE8" : "#3E78AE"}
             _hover={{ color: textMain }}
@@ -219,13 +229,13 @@ export default function PublicFooter() {
 
         {/* Bottom bar — single divider, everything in one row */}
         <Flex
-          pt={{ base: 6, md: 7 }}
+          pt={{ base: 5, md: 6 }}
           borderTop="1px solid"
           borderColor={border}
           direction={{ base: "column", md: "row" }}
           align={{ base: "start", md: "center" }}
           justify="space-between"
-          gap={{ base: 5, md: 0 }}
+          gap={{ base: 4, md: 0 }}
           wrap="wrap"
         >
           {/* Left cluster: copyright + address + email */}

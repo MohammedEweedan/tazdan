@@ -4,7 +4,7 @@
     {
       "name": "promrkts-client",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["--prefix", "client", "run", "dev"],
+      "runtimeArgs": ["--prefix", "client", "run", "dev", "--", "-p", "3001"],
       "port": 3001
     }
   ]

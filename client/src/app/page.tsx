@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useEffect, useState, memo, useMemo, useCallback } from "react";
-import { useTranslate, useTolgee } from "@tolgee/react";
+import { useTranslate } from "@tolgee/react";
 import dynamic from "next/dynamic";
 import NextLink from "next/link";
 import NextImage from "next/image";
@@ -11,14 +11,11 @@ import {
   Flex,
   Heading,
   Text,
-  Button,
   VStack,
   HStack,
   Icon,
   SimpleGrid,
-  Badge,
   useColorMode,
-  useBreakpointValue,
   useDisclosure,
 } from "@chakra-ui/react";
 import {
@@ -30,13 +27,13 @@ import {
   FiEye, FiSearch, FiChevronDown, FiChevronUp, FiMaximize2, FiClock,
   FiLink, FiTrendingUp, FiTrendingDown, FiDownload, FiCamera,
 } from "react-icons/fi";
-import { FaApple, FaGooglePlay, FaApplePay, FaGooglePay, FaCcVisa, FaCcMastercard } from "react-icons/fa";
+import { FaApplePay, FaGooglePay, FaCcVisa, FaCcMastercard } from "react-icons/fa";
 import { SiRevolut } from "react-icons/si";
 import {
   motion, useTransform, useMotionValue, useScroll, useSpring,
   MotionValue, AnimatePresence, useAnimationControls,
+  useReducedMotion,
 } from "framer-motion";
-import { ContainerScroll } from "@/components/ui/container-scroll-animation";
 // Lazy-mount the shader so its WebGL setup runs AFTER LCP. Until it
 // hydrates the hero shows a static gradient (handled in CSS), keeping
 // LCP image-driven instead of canvas-driven.
@@ -44,10 +41,10 @@ const ShaderAnimation = dynamic(
   () => import("@/components/ui/shader-lines").then((m) => m.ShaderLines),
   { ssr: false, loading: () => null },
 );
-import { IconLogo } from "@/components/ui/Logo";
 import PublicNav from "@/components/ui/PublicNav";
 import PublicFooter from "@/components/ui/PublicFooter";
 import WaitlistModal from "@/components/ui/WaitlistModal";
+import { VideoHero, ScrollytellingManifesto, AppleBento } from "@/components/ui/AppleShowcase";
 import { useIsAr } from "@/hooks/useIsAr";
 
 /* ─────────────────────────────────────────────────────────────────
@@ -1954,75 +1951,8 @@ function SectionSocialFinance() {
 }
 
 
-function SectionBento() {
-  const { t } = useTranslate();
-  const { colorMode } = useColorMode();
-  const isAr = useIsAr();
-  const dark = colorMode === "dark";
-  const textMain = dark ? "white" : "#0a0f1e";
-  const textSub = dark ? "rgba(255,255,255,0.6)" : "#475569";
-  const cardBg = dark ? "#242933" : "#FFFFFF";
-  const cardBorder = dark ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.10)";
-  const brand     = "#63a1db";
-  const brandSoft = dark ? "#303744" : "#EEF3F8";
-  const heroCardBg = dark
-    ? "linear-gradient(145deg, #20242C 0%, #0B0D11 100%)"
-    : "linear-gradient(145deg, #1C2027 0%, #050608 100%)";
-
-  const stats = [
-    { label: t("bento_security_title"), value: "", sub: t("bento_security_desc"), icon: FiShield, span: 2, hero: true },
-    { label: t("bento_speed_title"), value: "<2s", sub: t("bento_speed_desc"), icon: FiZap, span: 1 },
-    { label: t("bento_countries_label"), value: "120+", sub: t("bento_countries_desc"), icon: FiGlobe, span: 1 },
-    { label: t("bento_pairs_label"), value: "400+", sub: "", icon: FiBarChart2, span: 1 },
-    { label: t("bento_rating_label"), value: "4.2/5", sub: "", icon: FiStar, span: 1 },
-  ];
-
-  return (
-    <Box py={{ base: 16, md: 32 }} px={{ base: 4, md: 10 }} position="relative" overflow="hidden">
-      <Container maxW="1200px" position="relative" zIndex={1}>
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} viewport={{ once: true, amount: 0.4 }} transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}>
-          <VStack align="center" spacing={3} mb={{ base: 10, md: 16 }} textAlign="center">
-            <Heading fontFamily="'DM Sans', sans-serif" fontWeight="800" fontSize={{ base: "32px", md: "56px", lg: "64px" }} letterSpacing="-0.04em" color={textMain} lineHeight={isAr ? 1.2 : 1.1}>
-              {t("bento_title_1")}{" "}
-              <Box as="span"><EmphText text={t("bento_title_2")} /></Box>
-            </Heading>
-          </VStack>
-        </motion.div>
-        <SimpleGrid columns={{ base: 2, sm: 2, md: 4 }} gap={{ base: 3, md: 4 }}>
-          {stats.map((s, i) => (
-            <motion.div key={s.label} initial={{ opacity: 0, y: 30, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} viewport={{ once: true, amount: 0.25 }} transition={{ delay: i * 0.06, duration: 0.5, ease: [0.22, 1, 0.36, 1] }} style={{ gridColumn: s.span && s.span > 1 ? `span ${s.span}` : undefined }}>
-              <Box h="100%" minH={{ base: s.span && s.span > 1 ? "140px" : "110px", md: "auto" }} p={{ base: s.span && s.span > 1 ? 5 : 4, md: 7 }} borderRadius={{ base: "20px", md: "28px" }}
-                bg={(s as any).hero ? heroCardBg : cardBg}
-                border="1px solid" borderColor={(s as any).hero ? (dark ? "rgba(255,255,255,0.25)" : "rgba(0,0,0,0.25)") : cardBorder}
-                color={(s as any).hero ? "white" : textMain}
-                boxShadow={dark ? "0 20px 50px rgba(0,0,0,0.4)" : "0 20px 40px rgba(0,0,0,0.06)"}
-                position="relative" overflow="hidden"
-                transition="all 0.3s ease"
-                _hover={{ transform: "translateY(-4px)", boxShadow: dark ? "0 24px 60px rgba(0,0,0,0.5)" : "0 24px 60px rgba(0,0,0,0.12)", borderColor: dark ? "rgba(255,255,255,0.3)" : "rgba(0,0,0,0.3)" }}
-              >
-                <VStack align="start" spacing={{ base: 2, md: 4 }} position="relative">
-                  <Flex w={{ base: "36px", md: "44px" }} h={{ base: "36px", md: "44px" }} borderRadius="12px"
-                    bg={(s as any).hero ? "rgba(255,255,255,0.10)" : brandSoft}
-                    border="1px solid"
-                    borderColor={(s as any).hero ? "rgba(255,255,255,0.15)" : (dark ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.08)")}
-                    align="center" justify="center"
-                  >
-                    <Icon as={s.icon} color={(s as any).hero ? "#fff" : textMain} boxSize={{ base: 5, md: 6 }} />
-                  </Flex>
-                  <Box>
-                    <Text fontSize={{ base: "10px", md: "12px" }} fontWeight="700" letterSpacing="0.1em" opacity={0.6} mb={0.5} textTransform="uppercase">{s.label}</Text>
-                    {s.value && <Heading fontSize={{ base: "28px", md: "44px", lg: "52px" }} fontWeight="900" letterSpacing="-0.04em" fontFamily="'DM Sans', sans-serif" lineHeight={isAr ? 1.15 : 1}>{s.value}</Heading>}
-                    {s.sub && <Text fontSize={{ base: "12px", md: "14px" }} opacity={0.8} mt={1} maxW="260px" fontWeight="500">{s.sub}</Text>}
-                  </Box>
-                </VStack>
-              </Box>
-            </motion.div>
-          ))}
-        </SimpleGrid>
-      </Container>
-    </Box>
-  );
-}
+/* (SectionBento removed — the old stat-grid bento was replaced by the
+   restrained bento inside <AppleShowcase />.) */
 
 function SectionOnRamp() {
   const { t } = useTranslate();
@@ -2148,11 +2078,12 @@ function SectionOnRamp() {
    "chapter" feel. `tone="tint"` gets a faint surface + a soft brand-accent
    corner glow; `tone="plain"` stays on the page bg. A hairline top rule
    separates bands. Purely additive — the section's own layout is untouched. */
-function SectionBand({ children, dark, tone, size }: {
+function SectionBand({ children, dark, tone, size, bleed = false }: {
   children: React.ReactNode;
   dark: boolean;
   tone: "tint" | "plain";
   size: string;
+  bleed?: boolean;
 }) {
   const tint = tone === "tint";
   const sectionBg = tint
@@ -2162,13 +2093,15 @@ function SectionBand({ children, dark, tone, size }: {
   return (
     <Box
       position="relative"
+      zIndex={bleed ? 4 : 0}
+      overflow={bleed ? "visible" : undefined}
       borderTop="1px solid"
       borderColor={dark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.045)"}
       bg={sectionBg}
       // contentVisibility defers offscreen paint for perf. No CSS scroll-snap
       // here — native momentum scrolling is smoother and reveals are driven by
       // framer-motion as each band enters the viewport.
-      style={{ contentVisibility: "auto", containIntrinsicSize: size } as React.CSSProperties}
+      style={bleed ? undefined : ({ contentVisibility: "auto", containIntrinsicSize: size } as React.CSSProperties)}
     >
       {/* Whole-band scroll reveal — a gentle fade + rise as each chapter
           enters the viewport, layered over the sections' own inner motion. */}
@@ -2420,7 +2353,6 @@ function AutopilotView() {
   const textSub = dark ? "rgba(245,245,247,0.60)" : "rgba(29,29,31,0.58)";
   const cardBg = dark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.022)";
   const cardBorder = dark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.07)";
-  const cadences = [t("rb_cad_daily"), t("rb_cad_weekly"), t("rb_cad_biweekly"), t("rb_cad_monthly")];
   const bars = [40, 55, 48, 70, 62, 85, 78, 96];
 
   return (
@@ -2435,14 +2367,6 @@ function AutopilotView() {
         <Text fontSize={{ base: "16px", md: "18px" }} color={textSub} maxW="460px" lineHeight={isAr ? 1.75 : 1.55} fontWeight="400">
           {t("rb_sub")}
         </Text>
-        <Flex gap={2} flexWrap="wrap" justify={{ base: "center", md: "start" }}>
-          {cadences.map((c, i) => (
-            <HStack key={i} spacing={1.5} px={3} h="32px" borderRadius="full" bg={dark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.035)"} border="1px solid" borderColor={cardBorder}>
-              <Icon as={FiClock} boxSize="12px" color={textSub} />
-              <Text fontSize="13px" fontWeight="600" color={textMain}>{c}</Text>
-            </HStack>
-          ))}
-        </Flex>
       </VStack>
 
       {/* Auto-buy product card */}
@@ -2483,12 +2407,6 @@ function BudgetsView() {
   const cardBg = dark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.022)";
   const cardBorder = dark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.07)";
   const ACCENT = "#63a1db";
-  const uses = [
-    { label: t("bg_use_trips"), icon: FiGlobe },
-    { label: t("bg_use_expenses"), icon: FiDollarSign },
-    { label: t("bg_use_occasions"), icon: FiStar },
-    { label: t("bg_use_targets"), icon: FiBarChart2 },
-  ];
 
   return (
     <VStack spacing={7} align={{ base: "center", md: "start" }} textAlign={{ base: "center", md: "left" }} w="100%" h="100%" justify="space-between">
@@ -2502,14 +2420,6 @@ function BudgetsView() {
         <Text fontSize={{ base: "16px", md: "18px" }} color={textSub} maxW="460px" lineHeight={isAr ? 1.75 : 1.55} fontWeight="400">
           {t("bg_sub")}
         </Text>
-        <Flex gap={2} flexWrap="wrap" justify={{ base: "center", md: "start" }}>
-          {uses.map((u, i) => (
-            <HStack key={i} spacing={1.5} px={3} h="32px" borderRadius="full" bg={dark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.035)"} border="1px solid" borderColor={cardBorder}>
-              <Icon as={u.icon} boxSize="12px" color={textSub} />
-              <Text fontSize="13px" fontWeight="600" color={textMain}>{u.label}</Text>
-            </HStack>
-          ))}
-        </Flex>
       </VStack>
 
       {/* Savings-goal product card */}
@@ -2606,18 +2516,115 @@ function SectionGrowSave() {
   );
 }
 
+function TazdanWordmarkInline({ dark }: { dark: boolean }) {
+  const [src, setSrc] = useState("/text-logo-color.png");
+
+  return (
+    <Box
+      as="span"
+      display="inline-flex"
+      position="relative"
+      w="2.72em"
+      h="0.68em"
+      mx="0.06em"
+      verticalAlign="-0.07em"
+      filter={dark ? "drop-shadow(0 10px 28px rgba(99,161,219,0.22))" : "none"}
+    >
+      <NextImage
+        src={src}
+        alt="tazdan"
+        fill
+        sizes="340px"
+        onError={() => setSrc("/logo-color.png")}
+        style={{ objectFit: "contain" }}
+      />
+    </Box>
+  );
+}
+
+function RotatingEverythingHeading({ dark }: { dark: boolean }) {
+  const { t } = useTranslate();
+  const isAr = useIsAr();
+  const reducedMotion = useReducedMotion();
+  const [index, setIndex] = useState(0);
+
+  const words = [
+    {
+      key: "money",
+      prefix: t("pb_phrase_money_prefix"),
+      node: <Box as="span" color="#63a1db">{t("pb_word_money")}</Box>,
+      suffix: t("pb_phrase_money_suffix"),
+    },
+    {
+      key: "tazdan",
+      prefix: t("pb_phrase_tazdan_prefix"),
+      node: <TazdanWordmarkInline dark={dark} />,
+      suffix: t("pb_phrase_tazdan_suffix"),
+    },
+    {
+      key: "crypto",
+      prefix: t("pb_phrase_crypto_prefix"),
+      node: <Box as="span" color="#63a1db">{t("pb_word_crypto")}</Box>,
+      suffix: t("pb_phrase_crypto_suffix"),
+    },
+    {
+      key: "you",
+      prefix: t("pb_phrase_you_prefix"),
+      node: <Box as="span" color="#63a1db">{t("pb_word_you")}</Box>,
+      suffix: t("pb_phrase_you_suffix"),
+    },
+  ];
+
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      setIndex((current) => (current + 1) % words.length);
+    }, 2000);
+    return () => window.clearInterval(id);
+  }, [words.length]);
+
+  return (
+    <Heading
+      fontFamily="'DM Sans', sans-serif"
+      fontWeight="700"
+      fontSize={isAr
+        ? { base: "clamp(23px, 6.4vw, 34px)", md: "clamp(46px, 6.5vw, 84px)", lg: "clamp(60px, 6.1vw, 94px)" }
+        : { base: "clamp(31px, 8.8vw, 44px)", md: "clamp(56px, 7vw, 88px)", lg: "clamp(70px, 6.3vw, 100px)" }}
+      letterSpacing={isAr ? "-0.01em" : "-0.05em"}
+      lineHeight={isAr ? 1.16 : 0.98}
+      maxW="96vw"
+      display="inline-flex"
+      alignItems="baseline"
+      justifyContent="center"
+      whiteSpace="nowrap"
+      dir={isAr ? "rtl" : "ltr"}
+    >
+      <Box as="span" whiteSpace="pre">{words[index].prefix}</Box>
+      <AnimatePresence mode="wait" initial={false}>
+        <motion.span
+          key={words[index].key}
+          initial={reducedMotion ? false : { opacity: 0, y: 22, filter: "blur(8px)" }}
+          animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+          exit={reducedMotion ? { opacity: 0 } : { opacity: 0, y: -22, filter: "blur(8px)" }}
+          transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
+          style={{ display: "inline-flex", alignItems: "baseline", whiteSpace: "nowrap" }}
+        >
+          {words[index].node}
+        </motion.span>
+      </AnimatePresence>
+      <Box as="span" whiteSpace="pre">{words[index].suffix}</Box>
+    </Heading>
+  );
+}
+
 /* ═════════════════════════════════════════════════════════════════
-   PATTERN BREAK — full-bleed inverted statement that sits right above
-   the footer. Breaks the card-grid rhythm: a black (or white) canvas,
-   one oversized line, a slow marquee of every feature, and a single
-   restrained CTA. Apple "Hello" closer energy.
+   PATTERN BREAK — a quiet sentence closer with one rotating word.
    ═════════════════════════════════════════════════════════════════ */
 function SectionPatternBreak() {
   const { t } = useTranslate();
-  const isAr = useIsAr();
   const { colorMode } = useColorMode();
   const dark = colorMode === "dark";
-
+  const isAr = useIsAr();
+  const reducedMotion = useReducedMotion();
   const marqueeItems: { label: string; icon: React.ElementType }[] = [
     { label: t("pb_f_buy"), icon: FiArrowUp },
     { label: t("pb_f_sell"), icon: FiChevronDown },
@@ -2632,28 +2639,37 @@ function SectionPatternBreak() {
     { label: t("pb_f_chat"), icon: FiMessageCircle },
     { label: t("pb_f_global"), icon: FiGlobe },
   ];
-  const loop = [...marqueeItems, ...marqueeItems];
+  const marqueeTrack = [...marqueeItems, ...marqueeItems];
+  const marqueeX = isAr ? ["-50%", "0%"] : ["0%", "-50%"];
+  const accent = "#63a1db";
+  const pillText = "#05070a";
+  const pillIconBg = "#ffffff";
 
   return (
-    <Box position="relative" overflow="hidden" py={{ base: 24, md: 36 }}>
-      {/* Monochrome light wash behind the statement — no colour */}
+    <Box
+      position="relative"
+      overflow="hidden"
+      minH={{ base: "610px", md: "720px" }}
+      py={{ base: 12, md: 16 }}
+      zIndex={1}
+      display="flex"
+      alignItems="center"
+    >
       <motion.div
-        animate={{ opacity: [0.25, 0.5, 0.25] }}
-        transition={{ duration: 10, repeat: Infinity, ease: "easeInOut" }}
+        animate={{ opacity: [0.18, 0.32, 0.18] }}
+        transition={{ duration: 12, repeat: Infinity, ease: "easeInOut" }}
         style={{ position: "absolute", top: "8%", left: "50%", width: 1100, height: 540,
           transform: "translateX(-50%)", borderRadius: "50%",
+          background: dark
+            ? "radial-gradient(circle, rgba(99,161,219,0.10), transparent 64%)"
+            : "radial-gradient(circle, rgba(99,161,219,0.12), transparent 64%)",
           pointerEvents: "none" }}
       />
-      <Container maxW="1200px" position="relative" zIndex={1}>
-        <VStack spacing={{ base: 8, md: 12 }} align="center" textAlign="center">
+      <Container maxW="1200px" position="relative" zIndex={1} transform={{ base: "translateY(-34px)", md: "translateY(-48px)" }}>
+        <VStack spacing={{ base: 4, md: 5 }} align="center" textAlign="center">
           <ScrollFade>
             <VStack spacing={5}>
-              <Heading fontFamily="'DM Sans', sans-serif" fontWeight="700"
-                fontSize={{ base: "48px", md: "88px", lg: "108px" }}
-                letterSpacing="-0.05em" lineHeight={isAr ? 1.15 : 0.95} maxW="1000px"
-              >
-                <EmphText text={t("pb_title")} />
-              </Heading>
+              <RotatingEverythingHeading dark={dark} />
               <Text fontSize={{ base: "17px", md: "21px" }} maxW="560px" lineHeight={isAr ? 1.75 : 1.5} fontWeight="400">
                 {t("pb_sub")}
               </Text>
@@ -2662,51 +2678,58 @@ function SectionPatternBreak() {
         </VStack>
       </Container>
 
-      {/* Full-bleed feature marquee — RTL-aware (animate the correct way so
-          Arabic doesn't scroll the wrong direction / stall). The track itself
-          is forced LTR so the duplicated halves tile predictably. */}
-      <Box position="relative" mt={{ base: 12, md: 16 }} py={{ base: 5, md: 7 }}
-        borderColor="rgba(255,255,255,0.08)"
-        dir="ltr"
-        style={{
-          maskImage: "linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent)",
-          WebkitMaskImage: "linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent)",
+      <Box
+        position="absolute"
+        left={0}
+        right={0}
+        bottom={{ base: "26px", md: "34px" }}
+        w="100vw"
+        overflow="hidden"
+        py={{ base: 2, md: 3 }}
+        sx={{
+          maskImage: "linear-gradient(90deg, transparent, #000 5%, #000 95%, transparent)",
+          WebkitMaskImage: "linear-gradient(90deg, transparent, #000 5%, #000 95%, transparent)",
         }}
+        dir="ltr"
+        aria-hidden
       >
         <motion.div
-          animate={{ x: isAr ? ["-50%", "0%"] : ["0%", "-50%"] }}
-          transition={{ duration: 34, repeat: Infinity, ease: "linear" }}
-          style={{ display: "flex", width: "max-content", gap: 0 }}
+          animate={reducedMotion ? undefined : { x: marqueeX }}
+          transition={reducedMotion ? undefined : { duration: 34, repeat: Infinity, ease: "linear" }}
+          style={{ display: "flex", width: "max-content", gap: 0, willChange: "transform" }}
         >
-          {loop.map((item, i) => (
+          {marqueeTrack.map((item, i) => (
             <HStack
               key={`${item.label}-${i}`}
-              spacing={{ base: 2.5, md: 3.5 }}
-              h={{ base: "54px", md: "68px" }}
-              px={{ base: 4, md: 6 }}
-              mx={{ base: 1.5, md: 2 }}
+              dir={isAr ? "rtl" : "ltr"}
+              spacing={{ base: 3, md: 4.5 }}
+              h={{ base: "64px", md: "82px" }}
+              px={{ base: 5, md: 7.5 }}
+              mx={{ base: 1.75, md: 3 }}
               flexShrink={0}
               borderRadius="full"
-              bg={dark ? "#63a1db" : "#63a1db"}
+              bg={accent}
+              // boxShadow={dark ? "0 20px 50px rgba(99,161,219,0.24)" : "0 22px 56px rgba(99,161,219,0.22)"}
             >
               <Flex
-                w={{ base: "30px", md: "36px" }}
-                h={{ base: "30px", md: "36px" }}
+                w={{ base: "40px", md: "54px" }}
+                h={{ base: "40px", md: "54px" }}
                 borderRadius="full"
                 align="center"
                 justify="center"
-                bg={dark ? "#2A303B" : "#F2F5F8"}
+                bg={pillIconBg}
                 flexShrink={0}
               >
-                <Icon as={item.icon} boxSize={{ base: "15px", md: "18px" }} color={dark ? "#f5f5f7" : "#0a0a0a"} />
+                <Icon as={item.icon} boxSize={{ base: "18px", md: "24px" }} color={pillText} />
               </Flex>
               <Text
                 fontFamily="'DM Sans', sans-serif"
-                fontWeight="850"
-                fontSize={{ base: "19px", md: "28px" }}
-                letterSpacing="-0.03em"
+                fontWeight="900"
+                fontSize={{ base: "24px", md: "38px" }}
+                letterSpacing={isAr ? "0" : "-0.04em"}
+                lineHeight={1}
                 whiteSpace="nowrap"
-                color={dark ? "#f5f5f7" : "#0a0a0a"}
+                color={pillText}
               >
                 {item.label}
               </Text>
@@ -2726,10 +2749,8 @@ function SectionPartners() {
   const textMain = dark ? "#f5f5f7" : "#0a0a0a";
   const textSub = dark ? "#A7AFBC" : "#5F6874";
   const sectionBg = dark ? "#16181C" : "#FFFFFF";
-  const cardBg = dark ? "#20252E" : "#FFFFFF";
-  const logoBg = dark ? "#2A303B" : "#F5F7FA";
+  const cardBg = dark ? "rgba(255,255,255,0.035)" : "rgba(10,15,30,0.025)";
   const border = dark ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.09)";
-  const mutedBorder = dark ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.06)";
 
   const partners = [
     {
@@ -2763,62 +2784,72 @@ function SectionPartners() {
       position="relative"
       bg={sectionBg}
       px={{ base: 4, md: 10 }}
-      py={{ base: 14, md: 18 }}
+      py={{ base: 10, md: 13 }}
       overflow="hidden"
-      style={{ contentVisibility: "auto", containIntrinsicSize: "0 520px" } as React.CSSProperties}
+      style={{ contentVisibility: "auto", containIntrinsicSize: "0 360px" } as React.CSSProperties}
     >
       <Container maxW="1180px" px={0}>
-        <SimpleGrid columns={{ base: 1, lg: 2 }} spacing={{ base: 8, lg: 12 }} alignItems="center">
+        <Box
+          borderTop="1px solid"
+          borderBottom="1px solid"
+          borderColor={border}
+          py={{ base: 7, md: 8 }}
+        >
+        <SimpleGrid
+          columns={{ base: 1, lg: 2 }}
+          gridTemplateColumns={{ base: "1fr", lg: "0.88fr 1.12fr" }}
+          spacing={{ base: 7, lg: 10 }}
+          alignItems="center"
+        >
           <motion.div
             initial={{ opacity: 0, y: 22 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true, amount: 0.25 }}
             transition={{ duration: 0.58, ease: [0.22, 1, 0.36, 1] }}
           >
-            <VStack align={{ base: "center", lg: "start" }} textAlign={{ base: "center", lg: "start" }} spacing={4}>
+            <VStack align={{ base: "start", lg: "start" }} textAlign="start" spacing={3}>
               <Heading
                 fontFamily="'DM Sans', sans-serif"
                 fontWeight="850"
-                fontSize={{ base: "32px", md: "48px" }}
+                fontSize={{ base: "26px", md: "38px" }}
                 letterSpacing="-0.045em"
-                lineHeight={isAr ? 1.18 : 1}
+                lineHeight={isAr ? 1.25 : 1.04}
                 color={textMain}
-                maxW="520px"
+                maxW="500px"
               >
                 {t("partners_title")}
               </Heading>
-              <Text fontSize={{ base: "15px", md: "17px" }} color={textSub} lineHeight={isAr ? 1.75 : 1.6} maxW="560px">
+              <Text fontSize={{ base: "14px", md: "15px" }} color={textSub} lineHeight={isAr ? 1.75 : 1.6} maxW="570px">
                 {t("partners_sub")}
               </Text>
             </VStack>
           </motion.div>
 
-          <SimpleGrid columns={{ base: 1, sm: 3 }} spacing={3.5}>
+          <SimpleGrid columns={{ base: 1, sm: 3 }} spacing={3}>
             {partners.map((partner, i) => (
               <motion.div
                 key={partner.name}
-                initial={{ opacity: 0, y: 24, scale: 0.97 }}
+                initial={{ opacity: 0, y: 18, scale: 0.98 }}
                 whileInView={{ opacity: 1, y: 0, scale: 1 }}
                 viewport={{ once: true, amount: 0.2 }}
                 transition={{ delay: i * 0.06, duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-                whileHover={{ y: -4 }}
+                whileHover={{ y: -2 }}
               >
                 <Box
-                  minH={{ base: "190px", sm: "230px" }}
+                  minH={{ base: "124px", sm: "156px" }}
                   h="100%"
                   bg={cardBg}
                   border="1px solid"
                   borderColor={border}
-                  borderRadius="24px"
-                  p={{ base: 5, md: 5 }}
-                  boxShadow={dark ? "0 22px 54px rgba(0,0,0,0.30)" : "0 22px 54px rgba(0,0,0,0.07)"}
+                  borderRadius="18px"
+                  p={{ base: 4, md: 4 }}
                 >
-                  <VStack h="100%" align="start" justify="space-between" spacing={5}>
+                  <VStack h="100%" align="start" justify="space-between" spacing={4}>
                     <Flex
                       w="100%"
-                      h="76px"
+                      h="38px"
                       align="center"
-                      justify="center"
+                      justify="flex-start"
                     >
                       <Box position="relative" w={`${partner.logoW}px`} h={`${partner.logoH}px`}>
                         <NextImage
@@ -2831,14 +2862,14 @@ function SectionPartners() {
                       </Box>
                     </Flex>
 
-                    <VStack align="start" spacing={2}>
-                      <Heading fontFamily="'DM Sans', sans-serif" fontSize="21px" fontWeight="850" color={textMain} letterSpacing="-0.025em">
+                    <VStack align="start" spacing={1.5}>
+                      <Heading fontFamily="'DM Sans', sans-serif" fontSize="15px" fontWeight="850" color={textMain} letterSpacing="-0.015em">
                         {partner.name}
                       </Heading>
-                      <Text fontSize="12px" fontWeight="850" color={textMain} lineHeight={1.25}>
+                      <Text fontSize="11px" fontWeight="800" color={textMain} lineHeight={1.3}>
                         {partner.role}
                       </Text>
-                      <Text fontSize="12.5px" color={textSub} lineHeight={isAr ? 1.7 : 1.5}>
+                      <Text fontSize="11.5px" color={textSub} lineHeight={isAr ? 1.7 : 1.45}>
                         {partner.tagline}
                       </Text>
                     </VStack>
@@ -2848,6 +2879,7 @@ function SectionPartners() {
             ))}
           </SimpleGrid>
         </SimpleGrid>
+        </Box>
       </Container>
     </Box>
   );
@@ -2950,96 +2982,179 @@ function SectionPrepaidCards() {
   );
 }
 
+type SocialAvatarSpec = {
+  src: string;
+  stackX: number;
+  stackY: number;
+  orbitAX: number;
+  orbitAY: number;
+  orbitBX: number;
+  orbitBY: number;
+  burstX: number;
+  burstY: number;
+  sizeBase: number;
+  sizeMd: number;
+  floatDelay: number;
+};
+
+function SocialProofAvatar({
+  avatar,
+  progress,
+  dark,
+  reducedMotion,
+  index,
+}: {
+  avatar: SocialAvatarSpec;
+  progress: MotionValue<number>;
+  dark: boolean;
+  reducedMotion: boolean;
+  index: number;
+}) {
+  const x = useTransform(
+    progress,
+    [0, 0.08, 0.50, 0.68, 0.82, 0.92, 1],
+    [avatar.stackX, avatar.stackX, avatar.orbitAX, avatar.orbitBX, avatar.orbitAX, avatar.burstX, avatar.burstX],
+  );
+  const y = useTransform(
+    progress,
+    [0, 0.08, 0.50, 0.68, 0.82, 0.92, 1],
+    [avatar.stackY, avatar.stackY, avatar.orbitAY, avatar.orbitBY, avatar.orbitAY, avatar.burstY, avatar.burstY],
+  );
+  const opacity = useTransform(progress, [0, 0.08, 0.34, 0.80, 0.91, 0.97], [0.96, 1, 1, 1, 0.42, 0]);
+  const scale = useTransform(progress, [0, 0.12, 0.50, 0.82, 0.94], [0.92, 0.94, 1, 1.04, 1.14]);
+
+  return (
+    <motion.div
+      style={{
+        position: "absolute",
+        top: "50%",
+        left: "50%",
+        x: reducedMotion ? avatar.orbitAX : x,
+        y: reducedMotion ? avatar.orbitAY : y,
+        opacity: reducedMotion ? 1 : opacity,
+        scale: reducedMotion ? 1 : scale,
+        zIndex: 20 - index,
+        willChange: "transform, opacity",
+      }}
+    >
+      <motion.div whileHover={{ scale: 1.08, zIndex: 10 }}>
+        <Box
+          w={{ base: `${avatar.sizeBase}px`, md: `${avatar.sizeMd}px` }}
+          h={{ base: `${avatar.sizeBase}px`, md: `${avatar.sizeMd}px` }}
+          borderRadius="full"
+          overflow="hidden"
+          border="2px solid"
+          borderColor={dark ? "rgba(255,255,255,0.22)" : "rgba(255,255,255,0.86)"}
+          boxShadow={dark
+            ? "0 18px 54px rgba(0,0,0,0.52), 0 0 0 1px rgba(99,161,219,0.12)"
+            : "0 18px 54px rgba(10,15,30,0.16), 0 0 0 1px rgba(99,161,219,0.10)"}
+          transition="border-color 0.3s ease, box-shadow 0.3s ease"
+          _hover={{ borderColor: "#63a1db", boxShadow: "0 20px 60px rgba(99,161,219,0.25)" }}
+          position="relative"
+          bg={dark ? "#111" : "#e8e8e8"}
+          style={{ transform: "translate(-50%, -50%)" }}
+        >
+          <NextImage src={avatar.src} alt="" fill style={{ objectFit: "cover" }} sizes="120px" />
+        </Box>
+      </motion.div>
+    </motion.div>
+  );
+}
+
 function SectionSocialProof() {
   const { t } = useTranslate();
   const { colorMode } = useColorMode();
   const isAr = useIsAr();
   const dark = colorMode === "dark";
   const textMain = dark ? "white" : "#0a0f1e";
-  const prefersReducedMotion = typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  const isMobileDevice = typeof window !== "undefined" && window.innerWidth < 768;
-  const avatars = [
-    { src: "/screenshots/p1.avif", top: "12%", left: "20%", sizeBase: 56, sizeMd: 88,  delay: 0.0,  floatDelay: 0   },
-    { src: "/screenshots/p2.avif", top: "8%",  left: "48%", sizeBase: 62, sizeMd: 96,  delay: 0.07, floatDelay: 0.6 },
-    { src: "/screenshots/p3.avif", top: "16%", left: "78%", sizeBase: 70, sizeMd: 110, delay: 0.14, floatDelay: 1.2 },
-    { src: "/screenshots/p4.avif", top: "58%", left: "10%", sizeBase: 56, sizeMd: 84,  delay: 0.21, floatDelay: 0.4 },
-    { src: "/screenshots/p5.avif", top: "60%", left: "84%", sizeBase: 58, sizeMd: 88,  delay: 0.28, floatDelay: 0.9 },
-    { src: "/screenshots/p6.avif", top: "86%", left: "50%", sizeBase: 68, sizeMd: 100, delay: 0.35, floatDelay: 0.2 },
+  const reducedMotion = !!useReducedMotion();
+  const ref = useRef<HTMLDivElement>(null);
+  const { scrollYProgress } = useScroll({ target: ref, offset: ["start start", "end end"] });
+  const avatarProgress = useSpring(scrollYProgress, {
+    stiffness: 95,
+    damping: 24,
+    mass: 0.22,
+    restDelta: 0.0008,
+  });
+  const [viewport, setViewport] = useState({ w: 1200, h: 820 });
+  useEffect(() => {
+    const update = () => setViewport({ w: window.innerWidth || 1200, h: window.innerHeight || 820 });
+    update();
+    window.addEventListener("resize", update);
+    return () => window.removeEventListener("resize", update);
+  }, []);
+
+  const clampNum = (min: number, value: number, max: number) => Math.min(max, Math.max(min, value));
+  const vw = (pct: number, min: number, max: number) => clampNum(min, viewport.w * pct / 100, max);
+  const vh = (pct: number, min: number, max: number) => clampNum(min, viewport.h * pct / 100, max);
+
+  const titleOpacity = useTransform(avatarProgress, [0.38, 0.52, 0.78, 0.90], [0, 1, 1, 0]);
+  const titleY = useTransform(avatarProgress, [0.38, 0.52, 0.78, 0.90], [18, 0, 0, -20]);
+  const avatars: SocialAvatarSpec[] = [
+    { src: "/screenshots/p1.avif", stackX: 0, stackY: 0, orbitAX: vw(-29, -236, -126), orbitAY: vw(-14, -108, -68),  orbitBX: vw(-10, -72, -42),   orbitBY: vw(-27, -212, -122), burstX: vw(-62, -520, -270), burstY: vh(-42, -330, -190), sizeBase: 50, sizeMd: 78, floatDelay: 0 },
+    { src: "/screenshots/p2.avif", stackX: 0, stackY: 0, orbitAX: vw(-9, -66, -38),    orbitAY: vw(-26, -196, -114), orbitBX: vw(17, 120, 164),     orbitBY: vw(-21, -162, -98),  burstX: vw(-17, -122, -62),  burstY: vh(-58, -470, -255), sizeBase: 56, sizeMd: 88, floatDelay: 0.7 },
+    { src: "/screenshots/p3.avif", stackX: 0, stackY: 0, orbitAX: vw(26, 126, 238),    orbitAY: vw(-13, -104, -64),  orbitBX: vw(30, 214, 292),     orbitBY: vw(9, 50, 94),       burstX: vw(62, 295, 560),    burstY: vh(-42, -330, -185), sizeBase: 60, sizeMd: 96, floatDelay: 1.4 },
+    { src: "/screenshots/p4.avif", stackX: 0, stackY: 0, orbitAX: vw(-31, -238, -132), orbitAY: vw(12, 76, 122),     orbitBX: vw(-28, -218, -138), orbitBY: vw(-4, -28, -16),    burstX: vw(-66, -560, -295), burstY: vh(42, 220, 380),     sizeBase: 50, sizeMd: 76, floatDelay: 0.4 },
+    { src: "/screenshots/p5.avif", stackX: 0, stackY: 0, orbitAX: vw(29, 142, 256),    orbitAY: vw(13, 78, 126),     orbitBX: vw(7, 24, 76),        orbitBY: vw(22, 156, 202),    burstX: vw(66, 310, 590),    burstY: vh(42, 225, 395),    sizeBase: 52, sizeMd: 80, floatDelay: 1.0 },
+    { src: "/screenshots/p6.avif", stackX: 0, stackY: 0, orbitAX: vw(1, -16, 10),      orbitAY: vw(22, 132, 180),    orbitBX: vw(-23, -178, -114), orbitBY: vw(12, 70, 116),     burstX: vw(13, 40, 112),     burstY: vh(54, 285, 470),    sizeBase: 60, sizeMd: 90, floatDelay: 0.2 },
   ];
   return (
-    <Box position="relative" overflow="hidden" py={{ base: 16, md: 28 }} px={{ base: 4, md: 10 }}>
-      {/* Ambient radial glow */}
+    <Box
+      ref={ref}
+      position="relative"
+      h={{ base: "220vh", md: "230vh" }}
+      overflow="visible"
+      zIndex={5}
+      scrollSnapAlign="start"
+      scrollSnapStop="always"
+    >
+      <Box position="sticky" top={0} h="100vh" w="100%" overflow="visible" display="flex" alignItems="center" px={{ base: 4, md: 10 }}>
       <motion.div
-        animate={{ opacity: [0.4, 0.8, 0.4], scale: [1, 1.08, 1] }}
+        animate={{ opacity: [0.26, 0.52, 0.26], scale: [1, 1.05, 1] }}
         transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
         style={{
           position: "absolute", top: "50%", left: "50%",
-          width: 700, height: 700, borderRadius: "50%",
+          width: 600, height: 600, borderRadius: "50%",
           transform: "translate(-50%,-50%)",
-          background: "radial-gradient(circle, rgba(99,161,219,0.07) 0%, transparent 70%)",
+          // background: "radial-gradient(circle, rgba(99,161,219,0.07) 0%, transparent 70%)",
           pointerEvents: "none",
         }}
       />
-      <Container maxW="1200px" position="relative" zIndex={2}>
-        <Box position="relative" w="100%" mx="auto" maxW={{ base: "100%", md: "960px" }} h={{ base: "560px", md: "640px" }}>
-          {avatars.map((a) => (
-            <motion.div
+      <Container maxW="1200px" position="relative" zIndex={2} overflow="visible">
+        <Box position="relative" w="100%" mx="auto" maxW={{ base: "100%", md: "940px" }} h={{ base: "560px", md: "640px" }} overflow="visible">
+          {avatars.map((a, index) => (
+            <SocialProofAvatar
               key={a.src}
-              initial={{ opacity: 0, scale: 0.4, y: 20 }}
-              whileInView={{ opacity: 1, scale: 1, y: 0 }}
-              viewport={{ once: true, amount: 0.2 }}
-              transition={{ duration: 0.65, delay: a.delay, ease: [0.22, 1, 0.36, 1] }}
-              style={{ position: "absolute", top: a.top, left: a.left, transform: "translate(-50%, -50%)", zIndex: 1 }}
-            >
-              <motion.div
-                animate={(!prefersReducedMotion && !isMobileDevice) ? { y: [0, -12, 0] } : {}}
-                transition={{ duration: 4.5 + (a.floatDelay % 2.5), delay: a.floatDelay, repeat: Infinity, ease: "easeInOut" }}
-                whileHover={{ scale: 1.1, zIndex: 10 }}
-              >
-                <Box
-                  w={{ base: `${a.sizeBase}px`, md: `${a.sizeMd}px` }}
-                  h={{ base: `${a.sizeBase}px`, md: `${a.sizeMd}px` }}
-                  borderRadius="full" overflow="hidden"
-                  border="2px solid"
-                  borderColor={dark ? "rgba(255,255,255,0.14)" : "rgba(0,0,0,0.12)"}
-                  boxShadow={dark
-                    ? "0 16px 48px rgba(0,0,0,0.45), 0 0 0 1px rgba(255,255,255,0.06)"
-                    : "0 16px 48px rgba(0,0,0,0.14), 0 0 0 1px rgba(0,0,0,0.04)"}
-                  transition="all 0.3s ease"
-                  _hover={{ borderColor: "#63a1db", boxShadow: "0 20px 60px rgba(99,161,219,0.25)" }}
-                  position="relative"
-                  bg={dark ? "#111" : "#e8e8e8"}
-                >
-                  <NextImage src={a.src} alt="" fill style={{ objectFit: "cover" }} sizes="120px" />
-                </Box>
-              </motion.div>
-            </motion.div>
+              avatar={a}
+              progress={avatarProgress}
+              dark={dark}
+              reducedMotion={reducedMotion}
+              index={index}
+            />
           ))}
           <Box
             position="absolute" top="50%" left="50%" transform="translate(-50%, -50%)"
-            zIndex={2} textAlign="center" pointerEvents="none"
+            zIndex={3} textAlign="center" pointerEvents="none"
             w={{ base: "82%", md: "auto" }}
           >
             <motion.div
-              initial={{ opacity: 0, y: 24, scale: 0.94 }}
-              whileInView={{ opacity: 1, y: 0, scale: 1 }}
-              viewport={{ once: true, amount: 0.4 }}
-              transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
+              style={reducedMotion ? undefined : { opacity: titleOpacity, y: titleY }}
             >
               <Heading fontFamily="'DM Sans', sans-serif" fontWeight="900"
-                fontSize={{ base: "28px", md: "44px", lg: "56px" }}
+                fontSize={{ base: "27px", md: "40px", lg: "50px" }}
                 letterSpacing="-0.04em" lineHeight={isAr ? 1.2 : 1.1}
                 color={textMain}
                 maxW={{ base: "280px", md: "540px" }}
                 mx="auto"
                 style={{ textShadow: dark ? "0 2px 40px rgba(0,0,0,0.6)" : "0 2px 20px rgba(255,255,255,0.8)" }}
               >
-                {t("socialproof_label")}
+                <EmphText text={t("socialproof_label")} />
               </Heading>
             </motion.div>
           </Box>
         </Box>
       </Container>
+      </Box>
     </Box>
   );
 }
@@ -3251,8 +3366,9 @@ function PhoneJourney() {
   const copyF = useTransform(scrollYProgress, journeyTiming.topUp, [0, 1, 1, 0]);
   const copyG = useTransform(scrollYProgress, journeyTiming.card, [0, 1, 1]);
 
-  // shader background — present at start, fades gently as journey progresses
-  const shaderOp = useTransform(scrollYProgress, [0, 0.25, 0.80, 1], [0.85, 0.60, 0.25, 0.08]);
+  // shader background — stays alive through the journey instead of fading out
+  // so the line field keeps visibly moving behind every phone chapter.
+  const shaderOp = useTransform(scrollYProgress, [0, 0.25, 0.80, 1], [0.82, 0.78, 0.68, 0.58]);
   // ambient halo follows the phone, gently breathing
   const phoneScale = useTransform(scrollYProgress, [0, 0.16], [0.96, 1]);
 
@@ -3290,24 +3406,33 @@ function PhoneJourney() {
   }, [flinch, rawProgress]);
 
   return (
-    <Box ref={ref} position="relative" h={{ base: "1180vh", md: "1180vh" }}>
-      <Box position="sticky" top={0} h="100vh" w="100%" overflow="hidden"
+    <Box ref={ref} position="relative" zIndex={1} h={{ base: "1180vh", md: "1180vh" }}>
+      <Box position="sticky" top={0} h="100vh" w="100%" overflow="visible"
         style={{ contain: "layout" } as React.CSSProperties}
       >
-        {/* ── Shader background — centered, fills viewport ── */}
+        {/* ── Shader background — intentionally overdraws above and below this
+            sticky frame so the line field bleeds into the manifesto and bento. ── */}
         <motion.div
           aria-hidden
           style={{
-            position: "absolute", inset: 0, opacity: shaderOp,
+            position: "absolute",
+            top: "-72vh",
+            right: 0,
+            bottom: "-68vh",
+            left: 0,
+            opacity: shaderOp,
             pointerEvents: "none", zIndex: 0,
+            maskImage: "linear-gradient(180deg, transparent 0%, #000 18%, #000 82%, transparent 100%)",
+            WebkitMaskImage: "linear-gradient(180deg, transparent 0%, #000 18%, #000 82%, transparent 100%)",
           }}
         >
           {/* Shader has transparent bg — normal blend works for both light & dark */}
-         <Box position="absolute" inset={0}>
+          <Box position="absolute" inset={0}>
             <ShaderAnimation mode={colorMode === "dark" ? "dark" : "light"} />
           </Box>
         </motion.div>
 
+        <Box position="absolute" inset={0} overflow="hidden" zIndex={1}>
         {/* ── Layout grid ── */}
         <Container maxW="1300px" h="100%" position="relative" zIndex={1} px={{ base: 4, md: 10 }}>
           <SimpleGrid columns={{ base: 1, lg: 2 }} h="100%"
@@ -3557,232 +3682,67 @@ function PhoneJourney() {
             height: "100%", background: ACCENT,
           }} />
         </Box>
+        </Box>
       </Box>
     </Box>
   );
 }
 
-/* ─── Device OS detection — runs once on mount ──────────────────── */
-const IOS_URL     = "https://apps.apple.com/app/tazdan/id0000000000";
-const ANDROID_URL = "https://play.google.com/store/apps/details?id=com.tazdan.app";
-
-function useDeviceOS(): "ios" | "android" | "other" {
-  const [os, setOS] = useState<"ios" | "android" | "other">("other");
-  useEffect(() => {
-    const ua = navigator.userAgent;
-    if (/iPad|iPhone|iPod/.test(ua) && !(window as any).MSStream) setOS("ios");
-    else if (/Android/i.test(ua)) setOS("android");
-  }, []);
-  return os;
-}
-
-function FinalCtaSection({
-  dark,
-  deviceOS,
-}: {
-  dark: boolean;
-  deviceOS: "ios" | "android" | "other";
-}) {
+function MinimalCtaSection({ dark, onJoinWaitlist }: { dark: boolean; onJoinWaitlist: () => void }) {
   const { t } = useTranslate();
   const isAr = useIsAr();
   const textMain = dark ? "#f5f5f7" : "#0a0a0a";
   const textSub = dark ? "rgba(245,245,247,0.62)" : "rgba(0,0,0,0.58)";
-  const panelBg = dark ? "#20252E" : "#FFFFFF";
-  const tileBg = dark ? "#2A303B" : "#F5F7FA";
-  const hairline = dark ? "rgba(255,255,255,0.11)" : "rgba(0,0,0,0.09)";
+  const hairline = dark ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.10)";
   const accent = "#63a1db";
 
-  const capabilities = [
-    { icon: FiBarChart2, label: t("cta_cap_spot") },
-    { icon: FiRepeat, label: t("cta_cap_p2p") },
-    { icon: FiSend, label: t("cta_cap_handles") },
-    { icon: FiLink, label: t("cta_cap_claimlinks") },
-    { icon: FiCreditCard, label: t("cta_cap_cards") },
-    { icon: FiShield, label: t("cta_cap_wallets") },
-  ];
-
-  const steps = [
-    {
-      step: "01",
-      title: t("cta_step1_title"),
-      desc: t("cta_step1_desc"),
-    },
-    {
-      step: "02",
-      title: t("cta_step2_title"),
-      desc: t("cta_step2_desc"),
-    },
-    {
-      step: "03",
-      title: t("cta_step3_title"),
-      desc: t("cta_step3_desc"),
-    },
-  ];
-
-  const stores =
-    deviceOS === "ios"
-      ? [{ label: t("cta_on_ios"), icon: FaApple, href: IOS_URL }]
-      : deviceOS === "android"
-        ? [{ label: t("cta_on_android"), icon: FaGooglePlay, href: ANDROID_URL }]
-        : [
-            { label: t("cta_on_ios"), icon: FaApple, href: IOS_URL },
-            { label: t("cta_on_android"), icon: FaGooglePlay, href: ANDROID_URL },
-          ];
-
   return (
-    <Box px={{ base: 4, md: 10 }} py={{ base: 14, md: 20 }} position="relative" zIndex={1}>
-      <Container maxW="1180px" px={0}>
+    <Box as="section" px={{ base: 4, md: 10 }} py={{ base: 12, md: 16 }} position="relative" zIndex={1}>
+      <Container maxW="900px" px={0}>
         <motion.div
-          initial={{ opacity: 0, y: 26 }}
+          initial={{ opacity: 0, y: 18 }}
           whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, amount: 0.25 }}
-          transition={{ duration: 0.65, ease: [0.22, 1, 0.36, 1] }}
+          viewport={{ once: true, amount: 0.4 }}
+          transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
         >
           <Box
-            position="relative"
-            overflow="hidden"
-            borderRadius={{ base: "28px", md: "36px" }}
-            border="1px solid"
-            borderColor={hairline}
-            bg={panelBg}
-            boxShadow={dark ? "0 34px 90px rgba(0,0,0,0.36)" : "0 34px 90px rgba(0,0,0,0.10)"}
-            p={{ base: 6, md: 9 }}
+            py={{ base: 9, md: 12 }}
           >
-            <SimpleGrid columns={{ base: 1, lg: 2 }} spacing={{ base: 9, lg: 12 }} position="relative" zIndex={1}>
-              <VStack align={{ base: "center", lg: "start" }} textAlign={{ base: "center", lg: "left" }} spacing={6}>
-
-                <VStack align={{ base: "center", lg: "start" }} spacing={3}>
-                  <Heading
-                    fontFamily="'DM Sans', sans-serif"
-                    fontWeight="850"
-                    fontSize={{ base: "34px", md: "54px", lg: "64px" }}
-                    letterSpacing="-0.05em"
-                    lineHeight={isAr ? 1.18 : 0.96}
-                    color={textMain}
-                    maxW="620px"
-                  >
-                    {t("cta_title")}
-                  </Heading>
-                  <Text fontSize={{ base: "16px", md: "19px" }} color={textSub} lineHeight={isAr ? 1.75 : 1.55} maxW="560px">
-                    {t("cta_desc")}
-                  </Text>
-                </VStack>
-
-                <SimpleGrid columns={{ base: 2, sm: 3 }} spacing={2.5} w="100%" maxW="560px">
-                  {capabilities.map((item, i) => (
-                    <motion.div
-                      key={item.label}
-                      initial={{ opacity: 0, y: 10 }}
-                      whileInView={{ opacity: 1, y: 0 }}
-                      viewport={{ once: true }}
-                      transition={{ delay: i * 0.035, duration: 0.38, ease: [0.22, 1, 0.36, 1] }}
-                    >
-                      <HStack
-                        h="44px"
-                        borderRadius="14px"
-                        px={3}
-                        bg={tileBg}
-                        border="1px solid"
-                        borderColor={hairline}
-                        spacing={2.5}
-                      >
-                        <Icon as={item.icon} boxSize="15px" color={textMain} />
-                        <Text fontSize="13px" fontWeight="800" color={textMain} noOfLines={1}>
-                          {item.label}
-                        </Text>
-                      </HStack>
-                    </motion.div>
-                  ))}
-                </SimpleGrid>
-
-                <Flex gap={3} flexWrap="wrap" justify={{ base: "center", lg: "start" }}>
-                  <NextLink href="/register" passHref legacyBehavior>
-                    <HStack
-                      as="a"
-                      h="48px"
-                      px={5}
-                      borderRadius="full"
-                      bg={accent}
-                      color="#fff"
-                      spacing={2}
-                      fontWeight="850"
-                      _hover={{ transform: "translateY(-1px)", boxShadow: "0 14px 30px rgba(99,161,219,0.36)" }}
-                      transition="all 0.2s ease"
-                    >
-                      <Text fontSize="14px">{t("cta_primary")}</Text>
-                      <Icon as={FiArrowRight} boxSize="15px" />
-                    </HStack>
-                  </NextLink>
-
-                  {stores.map((store) => (
-                    <HStack
-                      key={store.label}
-                      as="a"
-                      href={store.href}
-                      target="_blank"
-                      rel="noopener"
-                      h="48px"
-                      px={4}
-                      borderRadius="full"
-                      bg={dark ? "rgba(255,255,255,0.09)" : "#0a0a0a"}
-                      color={dark ? "#fff" : "#fff"}
-                      border="1px solid"
-                      borderColor={dark ? "rgba(255,255,255,0.15)" : "rgba(0,0,0,0.18)"}
-                      spacing={2.5}
-                      cursor="pointer"
-                      _hover={{ transform: "translateY(-1px)", opacity: 0.88 }}
-                      transition="all 0.2s ease"
-                    >
-                      <Icon as={store.icon} boxSize={store.icon === FaGooglePlay ? "14px" : "17px"} />
-                      <Text fontSize="13px" fontWeight="850">{store.label}</Text>
-                    </HStack>
-                  ))}
-                </Flex>
-              </VStack>
-
-              <VStack align="stretch" spacing={3.5}>
-                {steps.map((item, i) => (
-                  <motion.div
-                    key={item.step}
-                    initial={{ opacity: 0, x: 18 }}
-                    whileInView={{ opacity: 1, x: 0 }}
-                    viewport={{ once: true, amount: 0.35 }}
-                    transition={{ delay: 0.08 + i * 0.08, duration: 0.48, ease: [0.22, 1, 0.36, 1] }}
-                  >
-                    <HStack
-                      align="start"
-                      spacing={4}
-                      p={{ base: 4, md: 5 }}
-                      borderRadius="22px"
-                      bg={tileBg}
-                      border="1px solid"
-                      borderColor={hairline}
-                    >
-                      <Flex
-                        w="42px"
-                        h="42px"
-                        borderRadius="14px"
-                        align="center"
-                        justify="center"
-                        bg={i === 0 ? accent : (dark ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.055)")}
-                        color={i === 0 ? "#fff" : textMain}
-                        flexShrink={0}
-                      >
-                        <Text fontSize="12px" fontWeight="900">{item.step}</Text>
-                      </Flex>
-                      <VStack align="start" spacing={1.5} textAlign="left">
-                        <Text fontSize={{ base: "16px", md: "18px" }} fontWeight="850" color={textMain}>
-                          {item.title}
-                        </Text>
-                        <Text fontSize={{ base: "13.5px", md: "14.5px" }} color={textSub} lineHeight={isAr ? 1.75 : 1.55}>
-                          {item.desc}
-                        </Text>
-                      </VStack>
-                    </HStack>
-                  </motion.div>
-                ))}
-              </VStack>
-            </SimpleGrid>
+            <VStack spacing={5} textAlign="center" mx="auto">
+              <Heading
+                fontFamily="'DM Sans', sans-serif"
+                fontWeight="800"
+                fontSize={{ base: "32px", md: "54px" }}
+                letterSpacing="-0.045em"
+                lineHeight={isAr ? 1.18 : 1}
+                color={textMain}
+                maxW="700px"
+              >
+                {t("minimal_cta_title")}
+              </Heading>
+              <Text fontSize={{ base: "16px", md: "19px" }} color={textSub} lineHeight={isAr ? 1.75 : 1.55} maxW="560px">
+                {t("minimal_cta_desc")}
+              </Text>
+              <HStack
+                as="button"
+                type="button"
+                onClick={onJoinWaitlist}
+                h="46px"
+                px={5}
+                borderRadius="full"
+                bg={accent}
+                color="#fff"
+                spacing={2}
+                fontWeight="850"
+                border="0"
+                cursor="pointer"
+                _hover={{ transform: "translateY(-1px)", boxShadow: "0 14px 30px rgba(99,161,219,0.28)" }}
+                transition="all 0.2s ease"
+              >
+                <Text fontSize="14px">{t("minimal_cta_primary")}</Text>
+                <Icon as={FiArrowRight} boxSize="15px" />
+              </HStack>
+            </VStack>
           </Box>
         </motion.div>
       </Container>
@@ -3796,23 +3756,15 @@ function FinalCtaSection({
 export default function LandingPage() {
   const { colorMode } = useColorMode();
   const dark = colorMode === "dark";
+  const { isOpen: isWaitlistOpen, onOpen: onWaitlistOpen, onClose: onWaitlistClose } = useDisclosure();
   // Dark mode is a soft charcoal (matches the mobile app), not pitch black —
   // easier on the eyes and lets sections/cards read with depth.
   const pageBg = dark ? "#16181C" : "#ffffff";
-  const { t } = useTranslate();
-  const tolgee = useTolgee(["language"]);
-  const isAr = tolgee.getLanguage() === "ar";
-  const deviceOS = useDeviceOS();
 
   const textMain = dark ? "#ffffff" : "#0a0a0a";
-  const textMuted = dark ? "rgba(255,255,255,0.55)" : "rgba(0,0,0,0.55)";
-  const hairline = dark ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.10)";
-  const ACCENT = "#63a1db";
-
-  const { isOpen: isWaitlistOpen, onOpen: onWaitlistOpen, onClose: onWaitlistClose } = useDisclosure();
 
   // No web app to redirect into — the landing page is marketing-only. Banking
-  // lives in the mobile app; the only CTA is "register".
+  // lives in the mobile app; conversion happens through the waitlist.
 
   // Force body to match page background so blank gaps never show Chakra's
   // default surface colour through. (overflowX:clip was breaking sticky
@@ -3834,35 +3786,44 @@ export default function LandingPage() {
     <Box minH="100vh" color={textMain} bg={pageBg}>
       <PublicNav />
 
+      {/* ── Hero: full-bleed looping video with a text overlay ── */}
+      <VideoHero />
+
+      {/* ── Manifesto: a pinned crossfade of three statements; the final line
+          holds (sticks) as the last slide before you scroll on. ── */}
+      <ScrollytellingManifesto />
+
       {/* ══════════════════════════════════════════════════════════════
-          ONE CONTINUOUS PHONE JOURNEY
-          Tilt → unlock → dashboard → chat → buy → search → pay
+          PHONE JOURNEY — the product shown in motion, immediately before the
+          feature bento. Tilt → unlock → dashboard → chat → buy → pay.
           All copy is i18n — no hard-coded labels.
           ══════════════════════════════════════════════════════════════ */}
       <Box id="features">
         <PhoneJourney />
       </Box>
 
-      {/* Alternating background BANDS give each section its own identity — a
-          faint surface tint on every other one, separated by hairline rules,
-          so the page reads as distinct "chapters" instead of one flat scroll.
-          (contentVisibility: auto still skips off-screen layout+paint.) */}
-      <SectionBand dark={dark} tone="tint"  size="0 700px"><SectionBento /></SectionBand>
+      {/* ── Feature bento: restrained, asymmetric outline cards on the page
+          background — no generic grid boxes. ── */}
+      <AppleBento />
+
+      {/* One continuous background. Every band sits on the page colour (no
+          alternating tint) — separated only by the sections' own rhythm and a
+          faint hairline. contentVisibility: auto still skips off-screen paint. */}
       <SectionBand dark={dark} tone="plain" size="0 700px"><SectionOnRamp /></SectionBand>
-      <SectionBand dark={dark} tone="tint"  size="0 800px"><SectionPrepaidCards /></SectionBand>
+      <SectionBand dark={dark} tone="plain" size="0 800px"><SectionPrepaidCards /></SectionBand>
       <SectionBand dark={dark} tone="plain" size="0 760px"><SectionClaimLink /></SectionBand>
-      <SectionBand dark={dark} tone="tint"  size="0 820px"><SectionGrowSave /></SectionBand>
-      <SectionBand dark={dark} tone="plain" size="0 600px"><SectionSocialProof /></SectionBand>
+      <SectionBand dark={dark} tone="plain" size="0 820px"><SectionGrowSave /></SectionBand>
+      <SectionBand dark={dark} tone="plain" size="0 720px"><SectionSocialProof /></SectionBand>
 
       {/* ── Pattern-break closer — sits right above the footer ── */}
       <Box style={{ contentVisibility: "auto", containIntrinsicSize: "0 800px", scrollSnapAlign: "start", scrollSnapStop: "normal" } as React.CSSProperties}>
         <SectionPatternBreak />
       </Box>
-      <SectionPartners />
 
       {/* ══ FOOTER ══ */}
       <Box position="relative" overflow="hidden">
-        <FinalCtaSection dark={dark} deviceOS={deviceOS} />
+        <MinimalCtaSection dark={dark} onJoinWaitlist={onWaitlistOpen} />
+        <WaitlistModal isOpen={isWaitlistOpen} onClose={onWaitlistClose} />
 
         {/* ── JSON-LD structured data ──────────────────────────────── */}
         <script
@@ -3886,7 +3847,6 @@ export default function LandingPage() {
           }}
         />
 
-        <WaitlistModal isOpen={isWaitlistOpen} onClose={onWaitlistClose} />
         <Box position="relative" zIndex={1}><PublicFooter /></Box>
       </Box>
     </Box>
