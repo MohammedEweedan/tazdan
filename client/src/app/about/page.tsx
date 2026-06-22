@@ -24,7 +24,7 @@ export default function AboutPage() {
   const {
     pageBg, textMain, textSub, cardBg, cardBgHover,
     raisedBg, raisedAlt, cardBorder, strongBorder, accent, accentText,
-    accentSoft, accentBorder, shadow, titleGradient,
+    accentSoft, accentBorder, shadow,
   } = publicPageTheme(dark);
   const iconBg = accentSoft;
 
@@ -62,25 +62,33 @@ export default function AboutPage() {
 
       {/* ── Hero ───────────────────────────────────────────────────────────── */}
       <motion.div initial={{ opacity: 0, y: 40 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7, ease: [...publicPageEase] }}>
-      <Box pt={{ base: "118px", md: "160px" }} pb={{ base: 14, md: 22 }} textAlign="center" position="relative" overflow="hidden">
+      <Box
+        minH={{ base: "620px", md: "760px" }}
+        pt={{ base: "118px", md: "150px" }}
+        pb={{ base: 12, md: 18 }}
+        textAlign="center"
+        position="relative"
+        overflow="hidden"
+        display="flex"
+        alignItems="center"
+      >
         <Box
           position="absolute" inset={0}
           bg={dark
-            ? "linear-gradient(180deg, rgba(99,161,219,0.10) 0%, rgba(99,161,219,0.025) 42%, rgba(22,24,28,0) 100%)"
-            : "linear-gradient(180deg, rgba(79,139,196,0.10) 0%, rgba(79,139,196,0.025) 42%, rgba(255,255,255,0) 100%)"}
+            ? "radial-gradient(circle at 50% 44%, rgba(99,161,219,0.10), transparent 48%)"
+            : "radial-gradient(circle at 50% 44%, rgba(99,161,219,0.12), transparent 50%)"}
           pointerEvents="none"
         />
         <Container maxW="960px" position="relative" zIndex={1}>
           <VStack spacing={7}>
             <Heading
               as="h1"
-              fontWeight="900"
-              fontSize={{ base: "52px", md: "88px" }}
+              fontWeight="700"
+              fontSize={{ base: "clamp(46px, 13vw, 66px)", md: "clamp(78px, 8vw, 108px)" }}
               lineHeight="1.0"
-              letterSpacing="-0.04em"
-              bgGradient={titleGradient}
-              bgClip="text"
-              maxW="860px"
+              letterSpacing="-0.055em"
+              color={textMain}
+              maxW="980px"
               whiteSpace="pre-line"
             >
               {t("page_about_title")}
@@ -98,7 +106,7 @@ export default function AboutPage() {
                 as={NextLink} href="/register"
                 h="52px" px={8}
                 bg={accent} color="#ffffff"
-                borderRadius="14px" fontWeight="800" fontSize="14px"
+                borderRadius="full" fontWeight="800" fontSize="14px"
                 rightIcon={<Icon as={FiArrowRight} />}
                 boxShadow={dark ? "0 14px 38px rgba(99,161,219,0.22)" : "0 14px 34px rgba(79,139,196,0.18)"}
                 _hover={{ opacity: 0.9, transform: "translateY(-2px)" }}
@@ -112,7 +120,7 @@ export default function AboutPage() {
                 color={textMain}
                 border="1px solid" borderColor={cardBorder}
                 bg={cardBg}
-                borderRadius="14px" fontWeight="700" fontSize="14px"
+                borderRadius="full" fontWeight="700" fontSize="14px"
                 _hover={{ borderColor: strongBorder, bg: cardBgHover }}
                 transition="all 0.2s"
               >
@@ -126,7 +134,7 @@ export default function AboutPage() {
 
       {/* ── Stats strip ───────────────────────────────────────────────────── */}
       <motion.div initial={{ opacity: 0, y: 32 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, amount: 0.3 }} transition={{ duration: 0.6, ease: [...publicPageEase] }}>
-      <Container maxW="1100px" pb={{ base: 14, md: 22 }}>
+      <Container maxW="1120px" pb={{ base: 14, md: 22 }}>
         <SimpleGrid
           columns={{ base: 2, md: 4 }}
           gap={{ base: 3, md: 4 }}
@@ -140,9 +148,9 @@ export default function AboutPage() {
               bg={i === 0 ? raisedBg : cardBg}
               border="1px solid"
               borderColor={cardBorder}
-              borderRadius="18px"
+              borderRadius="16px"
               minH={{ base: "126px", md: "140px" }}
-              boxShadow={i === 0 ? shadow : "none"}
+              boxShadow="none"
             >
               <Heading
                 fontSize={{ base: "30px", md: "42px" }}
@@ -163,7 +171,7 @@ export default function AboutPage() {
 
       {/* ── Mission ───────────────────────────────────────────────────────── */}
       <motion.div initial={{ opacity: 0, y: 32 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, amount: 0.2 }} transition={{ duration: 0.65, ease: [...publicPageEase] }}>
-      <Box py={{ base: 16, md: 24 }} px={{ base: 4, md: 8 }}>
+      <Box py={{ base: 16, md: 24 }} px={{ base: 4, md: 8 }} borderTop="1px solid" borderColor={cardBorder}>
         <Container maxW="1100px">
           <Grid templateColumns={{ base: "1fr", lg: "1fr 1fr" }} gap={{ base: 8, lg: 16 }} alignItems="center">
             <GridItem>
@@ -190,7 +198,7 @@ export default function AboutPage() {
               <VStack align="stretch" spacing={4}>
                 <Box
                   bg={raisedBg} border="1px solid" borderColor={cardBorder}
-                  borderRadius="20px" p={{ base: 6, md: 8 }}
+                  borderRadius="18px" p={{ base: 6, md: 8 }}
                   boxShadow={dark ? "0 18px 48px rgba(0,0,0,0.22)" : "0 18px 48px rgba(10,10,11,0.06)"}
                 >
                   <Heading fontSize="17px" fontWeight="800" color={textMain} mb={3} letterSpacing="-0.02em">
@@ -202,7 +210,7 @@ export default function AboutPage() {
                 </Box>
                 <Box
                   bg={cardBg} border="1px solid" borderColor={cardBorder}
-                  borderRadius="20px" p={{ base: 6, md: 8 }}
+                  borderRadius="18px" p={{ base: 6, md: 8 }}
                 >
                   <Heading fontSize="17px" fontWeight="800" color={textMain} mb={3} letterSpacing="-0.02em">
                     {t("page_about_solution_title")}
@@ -230,7 +238,7 @@ export default function AboutPage() {
           >
             {t("page_about_story_title")}
           </Heading>
-          <Box bg={cardBg} border="1px solid" borderColor={cardBorder} borderRadius="22px" p={{ base: 6, md: 8 }}>
+          <Box bg={cardBg} border="1px solid" borderColor={cardBorder} borderRadius="18px" p={{ base: 6, md: 8 }}>
             <Text fontSize={{ base: "15px", md: "17px" }} color={textSub} lineHeight="1.9">
               {t("page_about_story_p1")}
             </Text>
@@ -243,7 +251,7 @@ export default function AboutPage() {
       </motion.div>
 
       {/* ── Timeline ──────────────────────────────────────────────────────── */}
-      <Box py={{ base: 14, md: 24 }} px={{ base: 4, md: 8 }}>
+      <Box py={{ base: 14, md: 24 }} px={{ base: 4, md: 8 }} borderTop="1px solid" borderColor={cardBorder}>
         <Container maxW="900px">
           <VStack spacing={12}>
             <VStack spacing={4} textAlign="center">
@@ -336,7 +344,7 @@ export default function AboutPage() {
                 key={v.title}
                 bg={cardBg}
                 border="1px solid" borderColor={cardBorder}
-                borderRadius="24px"
+                borderRadius="18px"
                 p={{ base: 7, md: 9 }}
                 transition="all 0.25s ease"
                 _hover={{
@@ -368,7 +376,7 @@ export default function AboutPage() {
 
       {/* ── Principles ────────────────────────────────────────────────────── */}
       <motion.div initial={{ opacity: 0, y: 28 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, amount: 0.2 }} transition={{ duration: 0.65 }}>
-      <Box py={{ base: 14, md: 24 }} px={{ base: 4, md: 8 }}>
+      <Box py={{ base: 14, md: 24 }} px={{ base: 4, md: 8 }} borderTop="1px solid" borderColor={cardBorder}>
         <Container maxW="1100px">
           <VStack spacing={10}>
             <VStack spacing={4} textAlign="center">
@@ -389,7 +397,7 @@ export default function AboutPage() {
                 <Box
                   key={p.title}
                   bg={cardBg} border="1px solid" borderColor={cardBorder}
-                  borderRadius="20px" p={{ base: 6, md: 8 }}
+                  borderRadius="18px" p={{ base: 6, md: 8 }}
                   transition="all 0.25s ease"
                   _hover={{
                     transform: "translateY(-4px)",
@@ -422,8 +430,8 @@ export default function AboutPage() {
       <motion.div initial={{ opacity: 0, y: 28 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, amount: 0.2 }} transition={{ duration: 0.65 }}>
       <Container maxW="1100px" py={{ base: 12, md: 20 }}>
         <Box
-          borderRadius="28px" overflow="hidden" position="relative"
-          bg={dark ? "#1E2127" : "#0A0A0B"}
+          borderRadius="18px" overflow="hidden" position="relative"
+          bg={dark ? "#0E1116" : "#0A0A0B"}
           border="1px solid"
           borderColor={dark ? "rgba(255,255,255,0.12)" : "rgba(10,10,11,0.12)"}
           p={{ base: 10, md: 16 }} textAlign="center"
@@ -458,7 +466,7 @@ export default function AboutPage() {
                 h="52px" px={8}
                 bg="#ffffff"
                 color="#0A0A0B"
-                borderRadius="14px" fontWeight="800" fontSize="14px"
+                borderRadius="full" fontWeight="800" fontSize="14px"
                 rightIcon={<Icon as={FiArrowRight} />}
                 _hover={{ opacity: 0.9, transform: "scale(1.02)" }}
                 transition="all 0.2s"
@@ -469,7 +477,7 @@ export default function AboutPage() {
                 as={NextLink} href="/contact"
                 h="52px" px={8} variant="ghost"
                 color="rgba(255,255,255,0.78)"
-                borderRadius="14px" fontWeight="700" fontSize="14px"
+                borderRadius="full" fontWeight="700" fontSize="14px"
                 _hover={{ bg: "rgba(255,255,255,0.1)" }}
               >
                 {t("nav_contact")}
