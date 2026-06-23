@@ -7,6 +7,8 @@ import esTranslations from './es.json';
 import ruTranslations from './ru.json';
 import nlTranslations from './nl.json';
 import cnTranslations from './cn.json';
+import trTranslations from './tr.json';
+import ptTranslations from './pt.json';
 
 export const tolgee = Tolgee()
   .use(DevTools())
@@ -22,10 +24,12 @@ export const tolgee = Tolgee()
       nl: nlTranslations,
       ru: ruTranslations,
       es: esTranslations,
+      tr: trTranslations,
+      pt: ptTranslations,
       cn: cnTranslations
     },
     defaultLanguage: 'en',
-    availableLanguages: ['en', 'ar', 'fr', 'de', 'es', 'nl', 'ru', 'cn'],
+    availableLanguages: ['en', 'ar', 'fr', 'de', 'es', 'nl', 'ru', 'tr', 'pt', 'cn'],
   });
 
 export function getDirection(lang: string): 'rtl' | 'ltr' {

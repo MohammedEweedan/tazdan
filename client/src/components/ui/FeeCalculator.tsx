@@ -13,6 +13,7 @@ import de from 'i18n-iso-countries/langs/de.json';
 import es from 'i18n-iso-countries/langs/es.json';
 import nl from 'i18n-iso-countries/langs/nl.json';
 import ru from 'i18n-iso-countries/langs/ru.json';
+import tr from 'i18n-iso-countries/langs/tr.json';
 import zh from 'i18n-iso-countries/langs/zh.json';
 
 countries.registerLocale(en);
@@ -22,6 +23,7 @@ countries.registerLocale(de);
 countries.registerLocale(es);
 countries.registerLocale(nl);
 countries.registerLocale(ru);
+countries.registerLocale(tr);
 countries.registerLocale(zh);
 
 const DEFAULT_FEES = {
@@ -66,7 +68,7 @@ type DestKey = typeof DESTINATIONS[number]['key'];
 /** Map Tolgee language codes to i18n-iso-countries locale codes */
 const LANG_MAP: Record<string, string> = {
   en: 'en', ar: 'ar', fr: 'fr', de: 'de',
-  es: 'es', nl: 'nl', ru: 'ru', cn: 'zh',
+  es: 'es', nl: 'nl', ru: 'ru', tr: 'tr', cn: 'zh',
 };
 
 function calcFee(amount: number, pct: number, flat = 0): number {

@@ -15,6 +15,8 @@ const LANGUAGES = [
   { code: "de", native: "Deutsch",    flag: "🇩🇪" },
   { code: "nl", native: "Nederlands", flag: "🇳🇱" },
   { code: "ru", native: "Русский",    flag: "🇷🇺" },
+  { code: "pt", native: "Português",  flag: "🇵🇹" },
+  { code: "tr", native: "Türkçe",     flag: "🇹🇷" },
   { code: "cn", native: "中文",        flag: "🇨🇳" },
 ];
 

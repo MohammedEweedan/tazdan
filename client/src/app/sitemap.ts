@@ -30,7 +30,7 @@ const PUBLIC_ROUTES: { path: string; changeFrequency: 'daily' | 'weekly' | 'mont
   { path: '/register',   changeFrequency: 'monthly', priority: 0.9  },
 ];
 
-const LOCALES = ['en', 'ar', 'fr', 'es', 'de', 'nl', 'ru'] as const;
+const LOCALES = ['en', 'ar', 'fr', 'es', 'de', 'nl', 'ru', 'tr'] as const;
 
 export default function sitemap(): MetadataRoute.Sitemap {
   const now = new Date();

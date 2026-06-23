@@ -13,7 +13,7 @@ import { Alert, ActionSheetIOS, I18nManager, Platform } from 'react-native';
 import { useEffect } from 'react';
 import { create } from 'zustand';
 
-export type Locale = 'en' | 'ar' | 'fr' | 'es' | 'de' | 'nl' | 'ru' | 'zh';
+export type Locale = 'en' | 'ar' | 'fr' | 'es' | 'de' | 'nl' | 'ru' | 'tr' | 'zh';
 
 const KEY = 'tazdan.locale';
 
@@ -27,11 +27,12 @@ export const LOCALE_META: Record<Locale, { label: string; flag: string; rtl: boo
   de: { label: 'Deutsch',    flag: '🇩🇪', rtl: false },
   nl: { label: 'Nederlands', flag: '🇳🇱', rtl: false },
   ru: { label: 'Русский',    flag: '🇷🇺', rtl: false },
+  tr: { label: 'Türkçe',     flag: '🇹🇷', rtl: false },
   zh: { label: '中文',        flag: '🇨🇳', rtl: false },
 };
 
 type Strings = Record<string, string>;
-const LOCALES: Locale[] = ['en', 'ar', 'fr', 'es', 'de', 'nl', 'ru', 'zh'];
+const LOCALES: Locale[] = ['en', 'ar', 'fr', 'es', 'de', 'nl', 'ru', 'tr', 'zh'];
 
 const dict: Record<Locale, Strings> = {
   en: {
@@ -3415,6 +3416,8 @@ const dict: Record<Locale, Strings> = {
     'claim.cancelTitle': 'Отменить ссылку запроса?', 'claim.cancelBody': 'Средства немедленно вернутся в ваш кошелёк.',
     'claim.linkUnavailable': 'Поделиться недоступно', 'claim.expiringSoon': 'скоро истекает',
   },
+
+  tr: {},
 
   zh: {
     'onboard.title.1': '一个钱包，走遍世界。',

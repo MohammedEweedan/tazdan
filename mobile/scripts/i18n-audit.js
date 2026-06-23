@@ -9,7 +9,7 @@ const path = require('path');
 const root = path.resolve(__dirname, '..');
 const storePath = path.join(root, 'src/store/i18nStore.ts');
 const srcRoots = [path.join(root, 'app'), path.join(root, 'src')];
-const locales = ['en', 'ar', 'fr', 'es', 'de', 'nl', 'ru', 'zh'];
+const locales = ['en', 'ar', 'fr', 'es', 'de', 'nl', 'ru', 'tr', 'zh'];
 const strict = process.argv.includes('--strict') || process.env.STRICT_I18N === '1';
 
 const source = fs.readFileSync(storePath, 'utf8');
@@ -20,7 +20,7 @@ function blockFor(locale) {
   if (start < 0) return '';
   const bodyStart = source.indexOf('\n', start);
   const rest = source.slice(bodyStart + 1);
-  const next = rest.search(/\n  (en|ar|fr|es|de|nl|ru|zh): \{/);
+  const next = rest.search(/\n  (en|ar|fr|es|de|nl|ru|tr|zh): \{/);
   return next >= 0 ? rest.slice(0, next) : rest;
 }
 
