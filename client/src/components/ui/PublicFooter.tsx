@@ -41,7 +41,7 @@ export default function PublicFooter() {
     {
       title: t("footer_product"),
       links: [
-        { label: t("nav_features"), href: "/#features" },
+        { label: t("nav_features"), href: "/features" },
         { label: t("nav_fees"), href: "/fees" },
         { label: t("footer_cards"), href: "/#cta" },
       ],
@@ -59,7 +59,6 @@ export default function PublicFooter() {
     {
       title: t("footer_support"),
       links: [
-        { label: t("nav_help"), href: "/help" },
         { label: t("nav_faq"), href: "/faq" },
         { label: t("nav_contact"), href: "/contact" },
         { label: t("footer_terms"), href: "/terms" },

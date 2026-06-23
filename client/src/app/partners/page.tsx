@@ -1,23 +1,17 @@
 'use client';
 
 import { useState } from 'react';
-import { motion } from 'framer-motion';
 import NextImage from 'next/image';
 import {
-  Box, Container, Heading, Text, VStack, HStack,
+  Box, Heading, Text, VStack, HStack,
   SimpleGrid, Icon, Flex, useColorMode,
 } from '@chakra-ui/react';
 import { FiArrowUpRight, FiCheck, FiShield, FiZap, FiGlobe, FiCreditCard } from 'react-icons/fi';
 import { useTranslate } from '@tolgee/react';
 import PublicNav from '@/components/ui/PublicNav';
 import PublicFooter from '@/components/ui/PublicFooter';
-
-const fadeUp = {
-  initial: { opacity: 0, y: 28 },
-  whileInView: { opacity: 1, y: 0 },
-  viewport: { once: true, amount: 0.2 },
-  transition: { duration: 0.65, ease: [0.22, 1, 0.36, 1] },
-};
+import { publicPageTheme } from '@/components/ui/publicPageTheme';
+import { Band, BentoCard, CTASection, Graphic, PageHero, Reveal } from '@/components/ui/appleKit';
 
 function PartnerLogo({ src, name, bg, border }: { src: string; name: string; bg: string; border: string }) {
   const [errored, setErrored] = useState(false);
@@ -52,16 +46,11 @@ export default function PartnersPage() {
   const { colorMode } = useColorMode();
   const dark = colorMode === 'dark';
 
-  const pageBg     = dark ? '#000000' : '#ffffff';
-  const textMain   = dark ? '#ffffff' : '#0a0f1e';
-  const textSub    = dark ? 'rgba(255,255,255,0.6)' : '#64748b';
-  const cardBg     = dark ? 'rgba(255,255,255,0.04)' : '#f4f4f4';
-  const cardBorder = dark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.10)';
-  const iconBg     = dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)';
-
-  const titleGradient = dark
-    ? 'linear(to-b, #ffffff 0%, rgba(255,255,255,0.85) 60%, rgba(255,255,255,0.3) 100%)'
-    : 'linear(to-b, #000000 0%, rgba(0,0,0,0.7) 60%, rgba(0,0,0,0.2) 100%)';
+  const {
+    pageBg, textMain, textSub, cardBg, cardBorder,
+    strongBorder, accentText, accentSoft, accentBorder,
+  } = publicPageTheme(dark);
+  const iconBg = accentSoft;
 
   const PARTNERS = [
     {
@@ -115,62 +104,36 @@ export default function PartnersPage() {
     <Box minH="100vh" bg={pageBg} color={textMain} overflowX="clip">
       <PublicNav />
 
-      {/* ── Hero ─────────────────────────────────────────────────────────── */}
-      <motion.div initial={{ opacity: 0, y: 40 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}>
-        <Box pt={{ base: '120px', md: '170px' }} pb={{ base: 14, md: 24 }} textAlign="center" position="relative">
-          <Box
-            position="absolute" inset={0} opacity={dark ? 0.04 : 0.03}
-            backgroundImage="linear-gradient(rgba(128,128,128,1) 1px, transparent 1px), linear-gradient(90deg, rgba(128,128,128,1) 1px, transparent 1px)"
-            backgroundSize="60px 60px" pointerEvents="none"
-          />
-          <Container maxW="860px" position="relative" zIndex={1}>
-            <VStack spacing={6}>
-              <Text fontSize="11px" fontWeight="800" letterSpacing="0.18em" color={textSub} textTransform="uppercase">
-                {t('partners_eyebrow')}
-              </Text>
-              <Heading
-                as="h1" fontWeight="900"
-                fontSize={{ base: '42px', md: '72px' }}
-                lineHeight="1.05" letterSpacing="-0.04em"
-                bgGradient={titleGradient} bgClip="text"
-                maxW="700px"
-              >
-                {t('partners_title')}
-              </Heading>
-              <Text fontSize={{ base: '16px', md: '19px' }} color={textSub} maxW="560px" lineHeight="1.7">
-                {t('partners_sub')}
-              </Text>
-            </VStack>
-          </Container>
-        </Box>
-      </motion.div>
+      {/* ── Hero ── */}
+      <PageHero
+        eyebrow={t('partners_eyebrow')}
+        title={t('partners_title')}
+        subtitle={t('partners_sub')}
+      />
 
-      {/* ── Partner cards ─────────────────────────────────────────────────── */}
-      <Container maxW="960px" pb={{ base: 20, md: 32 }}>
-        <VStack spacing={6} align="stretch">
+      <Band maxW="1060px">
+        <Reveal>
+          <Box mb={{ base: 8, md: 12 }}>
+            <Graphic kind="globe" dark={dark} />
+          </Box>
+        </Reveal>
+        <VStack spacing={5} align="stretch">
           {PARTNERS.map((p, i) => (
-            <motion.div key={p.key} {...fadeUp} transition={{ duration: 0.65, delay: i * 0.1, ease: [0.22, 1, 0.36, 1] }}>
-              <Box
-                bg={cardBg} border="1px solid" borderColor={cardBorder}
-                borderRadius="28px" p={{ base: 8, md: 12 }}
-                transition="border-color 0.2s"
-                _hover={{ borderColor: dark ? 'rgba(255,255,255,0.22)' : 'rgba(0,0,0,0.22)' }}
-              >
+            <Reveal key={p.key} delay={i * 0.06}>
+              <BentoCard title={p.name}>
                 <VStack align="start" spacing={6}>
-                  {/* Header row: logo + name + link */}
                   <HStack spacing={5} justify="space-between" w="100%" align="center">
                     <HStack spacing={5} align="center">
                       <PartnerLogo src={p.logo} name={p.name} bg={p.logoBg} border={cardBorder} />
                       <VStack align="start" spacing={1}>
-                        <Text fontSize="11px" fontWeight="700" letterSpacing="0.12em" color={textSub} textTransform="uppercase">
+                        <Text fontSize="12px" fontWeight="700" color={textSub}>
                           {t(p.roleKey)}
                         </Text>
-                        <Heading fontSize={{ base: '24px', md: '32px' }} fontWeight="900" letterSpacing="-0.02em" color={textMain}>
+                        <Heading fontSize={{ base: '24px', md: '32px' }} fontWeight="800" letterSpacing="-0.02em" color={textMain}>
                           {p.name}
                         </Heading>
                       </VStack>
                     </HStack>
-                    {/* External link */}
                     <Box
                       as="a"
                       href={p.url}
@@ -201,7 +164,6 @@ export default function PartnersPage() {
                     {t(p.descKey)}
                   </Text>
 
-                  {/* Perks */}
                   <SimpleGrid columns={{ base: 1, sm: 3 }} gap={4} w="100%">
                     {p.perks.map((perk) => (
                       <HStack
@@ -212,10 +174,10 @@ export default function PartnersPage() {
                       >
                         <Flex
                           w="32px" h="32px" flexShrink={0}
-                          bg={iconBg} border="1px solid" borderColor={cardBorder}
+                          bg={iconBg} border="1px solid" borderColor={accentBorder}
                           borderRadius="9px" align="center" justify="center"
                         >
-                          <Icon as={perk.icon} color={textMain} boxSize={3.5} />
+                          <Icon as={perk.icon} color={accentText} boxSize={3.5} />
                         </Flex>
                         <Text fontSize="13px" fontWeight="600" color={textSub} lineHeight="1.5">
                           {t(perk.key)}
@@ -224,35 +186,21 @@ export default function PartnersPage() {
                     ))}
                   </SimpleGrid>
                 </VStack>
-              </Box>
-            </motion.div>
+              </BentoCard>
+            </Reveal>
           ))}
         </VStack>
-      </Container>
+      </Band>
 
-      {/* ── Compliance disclaimer ─────────────────────────────────────────── */}
-      <motion.div {...fadeUp}>
-        <Container maxW="960px" pb={{ base: 16, md: 24 }}>
-          <Box
-            bg={cardBg} border="1px solid" borderColor={cardBorder}
-            borderRadius="20px" p={{ base: 6, md: 8 }}
-          >
-            <HStack spacing={3} align="flex-start">
-              <Flex
-                w="36px" h="36px" flexShrink={0}
-                bg={iconBg} border="1px solid" borderColor={cardBorder}
-                borderRadius="10px" align="center" justify="center"
-              >
-                <Icon as={FiShield} color={textMain} boxSize={4} />
-              </Flex>
-              <Text fontSize="13px" color={textSub} lineHeight="1.8">
-                <Box as="span" fontWeight="700" color={textMain}>{t('partners_compliance_note')} </Box>
-                {t('partners_compliance_body')}
-              </Text>
-            </HStack>
-          </Box>
-        </Container>
-      </motion.div>
+      <Band tone="alt" maxW="960px">
+        <BentoCard icon={FiShield} title={t('partners_compliance_note')} desc={t('partners_compliance_body')} />
+      </Band>
+
+      <CTASection
+        title={t('minimal_cta_title')}
+        subtitle={t('minimal_cta_desc')}
+        primary={{ label: t('minimal_cta_primary'), href: '/register' }}
+      />
 
       <PublicFooter />
     </Box>

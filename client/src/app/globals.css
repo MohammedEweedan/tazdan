@@ -59,9 +59,14 @@ html[lang='ar'] h3,
 html[lang='ar'] h4,
 html[lang='ar'] h5,
 html[lang='ar'] h6,
-html[lang='ar'] p,
-html[lang='ar'] [class*="chakra-text"],
 html[lang='ar'] [class*="chakra-heading"] {
+  direction: rtl !important;
+  unicode-bidi: plaintext !important;
+  line-height: 1.16 !important;
+}
+
+html[lang='ar'] p,
+html[lang='ar'] [class*="chakra-text"] {
   direction: rtl !important;
   unicode-bidi: plaintext !important;
   line-height: 1.75 !important;

@@ -1,319 +1,182 @@
-'use client';
+"use client";
 
+import { useTranslate } from "@tolgee/react";
 import {
-  Box, Container, VStack, HStack, Heading, Text, Button, SimpleGrid,
-  Icon, Flex,
-} from '@chakra-ui/react';
+  Box, SimpleGrid, useColorMode,
+} from "@chakra-ui/react";
 import {
-  FiSend, FiShield, FiGlobe, FiZap, FiCreditCard, FiLock,
-  FiArrowRight, FiRepeat, FiBarChart2, FiMessageSquare, FiUser,
-} from 'react-icons/fi';
-import { motion } from 'framer-motion';
-import { useColorMode } from '@chakra-ui/react';
-import PublicNav from '@/components/ui/PublicNav';
-import PublicFooter from '@/components/ui/PublicFooter';
-import { publicPageEase, publicPageTheme } from '@/components/ui/publicPageTheme';
+  FiCreditCard, FiGlobe, FiLock, FiMessageSquare, FiRepeat,
+  FiSearch, FiSend, FiShield, FiZap,
+} from "react-icons/fi";
+import PublicNav from "@/components/ui/PublicNav";
+import PublicFooter from "@/components/ui/PublicFooter";
+import { publicPageTheme } from "@/components/ui/publicPageTheme";
+import {
+  Band,
+  BentoCard,
+  CTASection,
+  Em,
+  FeatureShowcase,
+  GraphicKind,
+  PageHero,
+  SectionHeading,
+  StatStrip,
+} from "@/components/ui/appleKit";
 
-const FEATURE_GROUPS = [
-  {
-    eyebrow: 'P2P MARKETPLACE',
-    title: 'Trade directly,\nnot through middlemen',
-    desc: 'Our order-book P2P marketplace lets you buy and sell crypto directly with verified peers. Makers pay 0%, takers pay 0.25% — no spread, no hidden fees.',
-    features: [
-      { icon: FiRepeat,     label: 'Maker / Taker model' },
-      { icon: FiShield,     label: 'Escrow protection' },
-      { icon: FiUser,       label: 'Verified peer IDs' },
-      { icon: FiBarChart2,  label: '400+ trading pairs' },
-    ],
-  },
-  {
-    eyebrow: 'INSTANT TRANSFERS',
-    title: 'Send money\nin under 2 seconds',
-    desc: 'Transfer crypto or fiat to anyone by @handle. No SWIFT delays, no bank queues, no FX markup. Works across Libya, Egypt, UAE, Saudi Arabia and growing.',
-    features: [
-      { icon: FiZap,    label: '<2s settlement' },
-      { icon: FiGlobe,  label: '120+ countries' },
-      { icon: FiSend,   label: 'Send by @handle' },
-      { icon: FiLock,   label: 'AES-256 encrypted' },
-    ],
-  },
-  {
-    eyebrow: 'SOCIAL WALLET',
-    title: 'Finance meets\nyour social graph',
-    desc: 'Every @handle is a wallet. Pay friends directly from a chat thread, split bills, leave payment notes, and view your full history — all in one feed.',
-    features: [
-      { icon: FiMessageSquare, label: 'In-chat payments' },
-      { icon: FiUser,          label: 'Custom @handles' },
-      { icon: FiRepeat,        label: 'Split bills' },
-      { icon: FiBarChart2,     label: 'Full history' },
-    ],
-  },
-  {
-    eyebrow: 'VISA CARD',
-    title: 'Spend crypto\neverywhere',
-    desc: 'A virtual or physical Visa card that auto-converts your crypto at checkout. Zero FX markup, 1% USDT cashback, and real-time freeze from the app.',
-    features: [
-      { icon: FiCreditCard, label: 'Virtual & physical' },
-      { icon: FiGlobe,      label: '190+ countries' },
-      { icon: FiZap,        label: '1% USDT cashback' },
-      { icon: FiLock,       label: 'Instant freeze' },
-    ],
-  },
-  {
-    eyebrow: 'SECURITY',
-    title: 'Bank-grade\nprotection',
-    desc: 'Every asset is protected by AES-256 encryption, cold-custody storage, biometric authentication, 2FA, and a 24/7 SOC team monitoring for threats.',
-    features: [
-      { icon: FiShield, label: 'AES-256 encryption' },
-      { icon: FiLock,   label: 'Cold custody' },
-      { icon: FiUser,   label: 'Biometric 2FA' },
-      { icon: FiZap,    label: '24/7 SOC monitoring' },
-    ],
-  },
-];
-
-const STAT_STRIP = [
-  { value: '<2s',    label: 'Settlement time' },
-  { value: '0%',     label: 'Maker fee' },
-  { value: '400+',   label: 'Trading pairs' },
-  { value: '120+',   label: 'Countries served' },
-  { value: '2,400+', label: 'Waitlisted users' },
-];
+const stripStars = (value: string) => value.replace(/\*/g, "");
 
 export default function FeaturesPage() {
+  const { t } = useTranslate();
   const { colorMode } = useColorMode();
-  const dark = colorMode === 'dark';
+  const dark = colorMode === "dark";
+  const { pageBg } = publicPageTheme(dark);
 
-  const {
-    pageBg, textMain, textSub, cardBg, cardBgHover, raisedBg,
-    cardBorder, strongBorder, accent, accentText, accentSoft,
-    accentBorder,
-  } = publicPageTheme(dark);
-  const ctaBg = accent;
-  const ctaFg = '#ffffff';
-  const stripBg = dark ? 'rgba(255,255,255,0.025)' : 'rgba(10,10,11,0.022)';
+  const featureRows: Array<{
+    eyebrow: string;
+    title: string;
+    desc: string;
+    kind: GraphicKind;
+    points: { icon: any; label: string }[];
+  }> = [
+    {
+      eyebrow: t("feat_buy_eyebrow"),
+      title: t("feat_buy_title"),
+      desc: t("feat_buy_desc"),
+      kind: "transfer",
+      points: [
+        { icon: FiZap, label: t("feat_buy_f1") },
+        { icon: FiShield, label: t("feat_buy_f2") },
+        { icon: FiCreditCard, label: t("feat_buy_f3") },
+        { icon: FiGlobe, label: t("feat_buy_f4") },
+      ],
+    },
+    {
+      eyebrow: t("feat_search_eyebrow"),
+      title: t("feat_search_title"),
+      desc: t("feat_search_desc"),
+      kind: "chart",
+      points: [
+        { icon: FiSearch, label: t("feat_search_f1") },
+        { icon: FiZap, label: t("feat_search_f2") },
+        { icon: FiRepeat, label: t("feat_search_f3") },
+        { icon: FiSend, label: t("feat_search_f4") },
+      ],
+    },
+    {
+      eyebrow: t("feat_pay_eyebrow"),
+      title: t("feat_pay_title"),
+      desc: t("feat_pay_desc"),
+      kind: "card",
+      points: [
+        { icon: FiCreditCard, label: t("feat_pay_f1") },
+        { icon: FiShield, label: t("feat_pay_f2") },
+        { icon: FiGlobe, label: t("feat_pay_f3") },
+        { icon: FiZap, label: t("feat_pay_f4") },
+      ],
+    },
+    {
+      eyebrow: t("cl_badge"),
+      title: stripStars(t("cl_title")),
+      desc: t("cl_sub"),
+      kind: "transfer",
+      points: [
+        { icon: FiSend, label: t("cl_s1_title") },
+        { icon: FiMessageSquare, label: t("cl_s2_title") },
+        { icon: FiZap, label: t("cl_s3_title") },
+        { icon: FiLock, label: t("pb_f_selfcustody") },
+      ],
+    },
+    {
+      eyebrow: t("rb_badge"),
+      title: stripStars(t("rb_title")),
+      desc: t("rb_sub"),
+      kind: "spark",
+      points: [
+        { icon: FiRepeat, label: t("rb_cad_daily") },
+        { icon: FiRepeat, label: t("rb_cad_weekly") },
+        { icon: FiRepeat, label: t("rb_cad_biweekly") },
+        { icon: FiRepeat, label: t("rb_cad_monthly") },
+      ],
+    },
+  ];
+
+  const capabilityCards = [
+    { icon: FiRepeat, title: t("pb_f_p2p"), desc: t("feature_rates_desc") },
+    { icon: FiGlobe, title: t("pb_f_multichain"), desc: t("feature_local_desc") },
+    { icon: FiCreditCard, title: t("pb_f_cards"), desc: t("cards_desc") },
+    { icon: FiMessageSquare, title: t("pb_f_chat"), desc: t("feat_wallet_desc") },
+    { icon: FiShield, title: t("feature_secure_title"), desc: t("feature_secure_desc") },
+    { icon: FiZap, title: t("feature_instant_title"), desc: t("feature_instant_desc") },
+  ];
 
   return (
-    <Box minH="100vh" bg={pageBg} color={textMain} overflowX="clip">
+    <Box minH="100vh" bg={pageBg} overflowX="clip">
       <PublicNav />
 
-      {/* ── Hero ── */}
-      <Box
-        minH={{ base: '620px', md: '760px' }}
-        pt={{ base: '118px', md: '150px' }}
-        pb={{ base: 12, md: 18 }}
-        textAlign="center"
-        position="relative"
-        overflow="hidden"
-        display="flex"
-        alignItems="center"
-      >
-        <Box
-          position="absolute"
-          inset={0}
-          bg={dark
-            ? 'radial-gradient(circle at 50% 44%, rgba(99,161,219,0.10), transparent 48%)'
-            : 'radial-gradient(circle at 50% 44%, rgba(99,161,219,0.12), transparent 50%)'}
-          pointerEvents="none"
+      <PageHero
+        title={
+          <>
+            {t("pb_phrase_tazdan_prefix")}
+            <Em>tazdan</Em>
+            {t("pb_phrase_tazdan_suffix")}
+          </>
+        }
+        subtitle={t("pb_sub")}
+        primary={{ label: t("minimal_cta_primary"), href: "/register" }}
+        secondary={{ label: t("nav_features"), href: "#features-list" }}
+      />
+
+      <Band tone="alt" maxW="1120px">
+        <StatStrip
+          stats={[
+            { value: "<2s", label: t("biz_stat3_label") },
+            { value: "0%", label: t("page_fees_stat_p2p") },
+            { value: "400+", label: t("feat_search_f3") },
+            { value: "120+", label: t("pb_f_global") },
+          ]}
         />
-        <Container maxW="940px" position="relative" zIndex={1}>
-          <motion.div
-            initial={{ opacity: 0, y: 32 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.65, ease: [...publicPageEase] }}
-          >
-            <VStack spacing={6}>
-              <Box
-                display="inline-block" px={3} py={1} borderRadius="full"
-                bg={accentSoft}
-                border="1px solid" borderColor={accentBorder}
-                fontSize="11px" fontWeight="800" letterSpacing="0.14em"
-                textTransform="uppercase" color={accentText}
-              >
-                Platform Features
-              </Box>
-              <Heading
-                as="h1" fontWeight="700"
-                fontSize={{ base: 'clamp(46px, 13vw, 66px)', md: 'clamp(78px, 8vw, 108px)' }}
-                lineHeight="0.95" letterSpacing="-0.055em"
-                color={textMain}
-              >
-                Everything{'\n'}in one app
-              </Heading>
-              <Text
-                fontSize={{ base: '15px', md: '19px' }} color={textSub}
-                maxW="540px" lineHeight="1.7"
-              >
-                P2P trading, instant transfers, a social wallet, a Visa card, and bank-grade security — built specifically for the MENA region.
-              </Text>
-              <HStack spacing={3} pt={2} flexWrap="wrap" justify="center">
-                <Button
-                h="52px" px={8} bg={ctaBg} color={ctaFg}
-                borderRadius="full" fontWeight="800" fontSize="14px"
-                rightIcon={<Icon as={FiArrowRight} />}
-                  boxShadow={dark ? '0 14px 38px rgba(99,161,219,0.22)' : '0 14px 34px rgba(79,139,196,0.18)'}
-                  _hover={{ opacity: 0.9, transform: 'translateY(-2px)' }}
-                  transition="all 0.15s"
-                >
-                  Join Waitlist
-                </Button>
-                <Button
-                  as="a" href="#features-list"
-                  h="52px" px={8}
-                  bg={cardBg}
-                  color={textMain}
-                  border="1px solid" borderColor={cardBorder}
-                  borderRadius="full" fontWeight="700" fontSize="14px"
-                  _hover={{ bg: cardBgHover, borderColor: strongBorder }}
-                  transition="all 0.15s"
-                >
-                  Explore Features
-                </Button>
-              </HStack>
-            </VStack>
-          </motion.div>
-        </Container>
-      </Box>
+      </Band>
 
-      {/* ── Stat strip ── */}
-      <Box py={{ base: 8, md: 12 }} bg={stripBg} borderY="1px solid" borderColor={cardBorder}>
-        <Container maxW="1100px">
-          <SimpleGrid columns={{ base: 2, sm: 3, md: 5 }} gap={{ base: 6, md: 0 }}>
-            {STAT_STRIP.map((s, i) => (
-              <motion.div
-                key={s.label}
-                initial={{ opacity: 0, y: 16 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true, amount: 0.4 }}
-                transition={{ duration: 0.45, delay: i * 0.06 }}
-              >
-                <VStack
-                  spacing={1} textAlign="center"
-                  borderRight={i < STAT_STRIP.length - 1 ? '1px solid' : 'none'}
-                  borderColor={cardBorder}
-                  px={4}
-                >
-                  <Text
-                    fontSize={{ base: '28px', md: '36px' }}
-                    fontWeight="900" letterSpacing="-0.04em"
-                    color={textMain} lineHeight="1"
-                    fontFamily="'DM Sans', sans-serif"
-                  >
-                    {s.value}
-                  </Text>
-                  <Text fontSize="11px" fontWeight="600" color={textSub} letterSpacing="0.06em" textTransform="uppercase">
-                    {s.label}
-                  </Text>
-                </VStack>
-              </motion.div>
-            ))}
-          </SimpleGrid>
-        </Container>
-      </Box>
-
-      {/* ── Feature groups ── */}
-      <Box id="features-list">
-        {FEATURE_GROUPS.map((group, gi) => (
-          <Box
+      <Band id="features-list" maxW="1120px">
+        {featureRows.map((group, index) => (
+          <FeatureShowcase
             key={group.eyebrow}
-            py={{ base: 18, md: 28 }}
-            bg={pageBg}
-            borderTop={gi === 0 ? '0' : '1px solid'}
-            borderColor={cardBorder}
-          >
-            <Container maxW="1100px">
-              <SimpleGrid columns={{ base: 1, lg: 2 }} gap={{ base: 10, lg: 16 }} alignItems="center">
-
-                {/* Text side */}
-                <motion.div
-                  initial={{ opacity: 0, x: gi % 2 === 0 ? -32 : 32 }}
-                  whileInView={{ opacity: 1, x: 0 }}
-                  viewport={{ once: true, amount: 0.25 }}
-                  transition={{ duration: 0.65, ease: [...publicPageEase] }}
-                  style={{ order: gi % 2 === 0 ? 1 : 2 }}
-                >
-                  <VStack align={{ base: 'center', lg: 'start' }} spacing={6} textAlign={{ base: 'center', lg: 'start' }}>
-                    <Text
-                      fontSize="11px" fontWeight="800" letterSpacing="0.14em"
-                      textTransform="uppercase" color={textSub}
-                    >
-                      {group.eyebrow}
-                    </Text>
-                    <Heading
-                      fontSize={{ base: '36px', md: '56px' }} fontWeight="800"
-                      letterSpacing="-0.04em" color={textMain} lineHeight="1.05"
-                      whiteSpace="pre-line"
-                    >
-                      {group.title}
-                    </Heading>
-                    <Text fontSize={{ base: '14.5px', md: '16.5px' }} color={textSub} maxW="440px" lineHeight="1.7">
-                      {group.desc}
-                    </Text>
-                    <SimpleGrid columns={2} gap={3} w="100%" maxW="440px">
-                      {group.features.map((f, fi) => (
-                        <motion.div
-                          key={f.label}
-                          initial={{ opacity: 0, y: 12 }}
-                          whileInView={{ opacity: 1, y: 0 }}
-                          viewport={{ once: true, amount: 0.3 }}
-                          transition={{ duration: 0.4, delay: 0.08 * fi }}
-                        >
-                          <HStack
-                            h="60px"
-                            bg={cardBg} border="1px solid" borderColor={cardBorder}
-                            borderRadius="16px" px={4} spacing={3}
-                            transition="all 0.2s ease"
-                            _hover={{ transform: 'translateY(-2px)', bg: cardBgHover, borderColor: strongBorder }}
-                          >
-                            <Flex
-                              w="32px" h="32px" borderRadius="9px"
-                              bg={accentSoft}
-                              border="1px solid" borderColor={accentBorder}
-                              align="center" justify="center" flexShrink={0}
-                            >
-                              <Icon as={f.icon} color={accentText} boxSize={3.5} />
-                            </Flex>
-                            <Text fontSize="12.5px" fontWeight="700" color={textMain} lineHeight="1.3">{f.label}</Text>
-                          </HStack>
-                        </motion.div>
-                      ))}
-                    </SimpleGrid>
-                  </VStack>
-                </motion.div>
-
-                {/* Visual side */}
-                <motion.div
-                  initial={{ opacity: 0, x: gi % 2 === 0 ? 32 : -32 }}
-                  whileInView={{ opacity: 1, x: 0 }}
-                  viewport={{ once: true, amount: 0.25 }}
-                  transition={{ duration: 0.65, ease: [...publicPageEase], delay: 0.1 }}
-                  style={{ order: gi % 2 === 0 ? 2 : 1 }}
-                >
-                  <Flex justify="center" align="center">
-                    <Box
-                      w={{ base: '240px', md: '340px' }}
-                      h={{ base: '240px', md: '340px' }}
-                      borderRadius="18px"
-                      bg={raisedBg}
-                      border="1px solid" borderColor={cardBorder}
-                      display="flex" alignItems="center" justifyContent="center"
-                      boxShadow="none"
-                    >
-                      <Icon
-                        as={group.features[0].icon}
-                        boxSize={{ base: '72px', md: '96px' }}
-                        color={accentText}
-                        opacity={0.28}
-                      />
-                    </Box>
-                  </Flex>
-                </motion.div>
-
-              </SimpleGrid>
-            </Container>
-          </Box>
+            title={group.title}
+            desc={group.desc}
+            kind={group.kind}
+            points={group.points}
+            flip={index % 2 === 1}
+          />
         ))}
-      </Box>
+      </Band>
+
+      <Band tone="alt" maxW="1120px">
+        <SectionHeading
+          title={
+            <>
+              {t("tz_bento_title_a")} <Em>{t("tz_bento_title_b")}</Em>
+            </>
+          }
+          lede={t("tz_hero_sub")}
+        />
+        <SimpleGrid columns={{ base: 1, md: 2, lg: 3 }} gap={5}>
+          {capabilityCards.map((card, index) => (
+            <BentoCard
+              key={card.title}
+              icon={card.icon}
+              title={card.title}
+              desc={card.desc}
+              delay={index * 0.04}
+            />
+          ))}
+        </SimpleGrid>
+      </Band>
+
+      <CTASection
+        title={t("minimal_cta_title")}
+        subtitle={t("minimal_cta_desc")}
+        primary={{ label: t("minimal_cta_primary"), href: "/register" }}
+      />
 
       <PublicFooter />
     </Box>

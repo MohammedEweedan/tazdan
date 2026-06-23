@@ -90,15 +90,43 @@ function useScrollProgress(ref: React.RefObject<HTMLElement>): MotionValue<numbe
    VIDEO HERO
    ═══════════════════════════════════════════════════════════════════════════ */
 
-export function VideoHero() {
+export function VideoHero({
+  eyebrow,
+  title,
+  subtitle,
+  children,
+  h = "100vh",
+  minH = "640px",
+  showCue = true,
+  nowrap = false,
+}: {
+  eyebrow?: string;
+  title?: React.ReactNode;
+  subtitle?: string;
+  children?: React.ReactNode;
+  h?: string;
+  minH?: string;
+  showCue?: boolean;
+  nowrap?: boolean;
+} = {}) {
   const { t } = useTranslate();
   const { colorMode } = useColorMode();
   const dark = colorMode === "dark";
   const reduced = !!useReducedMotion();
   useIsAr();
 
+  const isDefault = title == null;
+  const wrap = nowrap || isDefault; // landing title is a fixed single line
+  const titleNode = title ?? (
+    <>
+      {t("tz_hero_title_1", "Money")}{" "}
+      <Box as="span" color="#63a1db" fontStyle="italic">{t("tz_hero_title_2", "without")}</Box>{" "}
+      {t("tz_hero_title_3", "borders.")}
+    </>
+  );
+
   return (
-    <Box as="section" position="relative" h="100vh" minH="640px" overflow="hidden" bg="#05070a">
+    <Box as="section" position="relative" h={h} minH={minH} overflow="hidden" bg="#05070a">
       {/* full-bleed looping video */}
       <Box
         as="video"
@@ -127,30 +155,42 @@ export function VideoHero() {
         {/* opacity stays 1 (visible without/ before JS — this is the hero/LCP);
             only a subtle rise animates in. */}
         <motion.div
-          initial={reduced ? false : { y: 26 }}
-          animate={{ y: 0 }}
+          initial={reduced ? false : { y: 26, opacity: isDefault ? 1 : 0 }}
+          animate={{ y: 0, opacity: 1 }}
           transition={{ duration: 1.0, delay: 0.15, ease: EASE }}
         >
-         <Heading
-          fontWeight="700"
-          fontSize={{ base: "clamp(28px, 8.6vw, 42px)", sm: "clamp(34px, 8vw, 52px)", md: "clamp(72px, 7.4vw, 104px)" }}
-          letterSpacing={{ base: "-0.065em", md: "-0.05em" }}
-          lineHeight={0.98}
-          color="#ffffff"
-          maxW="calc(100vw - 24px)"
-          whiteSpace="nowrap"
-          sx={{ textWrap: "nowrap" }}
-        >
-          {t("tz_hero_title_1", "Money")}{" "}
-          <Box as="span" color="#63a1db" fontStyle="italic">
-            {t("tz_hero_title_2", "without")}
-          </Box>{" "}
-          {t("tz_hero_title_3", "borders.")}
-        </Heading>
+         <VStack spacing={{ base: 4, md: 5 }}>
+          {eyebrow && (
+            <Text fontSize={{ base: "11px", md: "12px" }} fontWeight="800" letterSpacing="0.22em" textTransform="uppercase" color="#7DB4E4">
+              {eyebrow}
+            </Text>
+          )}
+          <Heading
+            fontWeight="700"
+            fontSize={wrap
+              ? { base: "clamp(28px, 8.6vw, 42px)", sm: "clamp(34px, 8vw, 52px)", md: "clamp(72px, 7.4vw, 104px)" }
+              : { base: "clamp(34px, 9vw, 46px)", md: "clamp(52px, 6.6vw, 82px)" }}
+            letterSpacing={{ base: "-0.055em", md: "-0.05em" }}
+            lineHeight={wrap ? 0.98 : 1.02}
+            color="#ffffff"
+            maxW={wrap ? "calc(100vw - 24px)" : "900px"}
+            whiteSpace={wrap ? "nowrap" : "normal"}
+            sx={wrap ? { textWrap: "nowrap" } : undefined}
+          >
+            {titleNode}
+          </Heading>
+          {subtitle && (
+            <Text fontSize={{ base: "15px", md: "19px" }} color="rgba(255,255,255,0.82)" maxW="600px" lineHeight="1.6">
+              {subtitle}
+            </Text>
+          )}
+          {children}
+         </VStack>
         </motion.div>
       </Flex>
 
       {/* scroll cue */}
+      {showCue && (
       <motion.div
         style={{ position: "absolute", bottom: "4vh", left: 0, right: 0, display: "flex", justifyContent: "center" }}
         initial={reduced ? false : { opacity: 0 }}
@@ -161,6 +201,7 @@ export function VideoHero() {
           <Icon as={FiChevronDown} color="rgba(255,255,255,0.6)" boxSize={6} />
         </motion.div>
       </motion.div>
+      )}
 
       {/* fade the video into the page background below */}
       <Box position="absolute" bottom={0} left={0} right={0} h="11vh" bgGradient={`linear(to-t, ${dark ? "#16181C" : "#ffffff"}, transparent)`} pointerEvents="none" />

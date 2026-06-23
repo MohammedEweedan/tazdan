@@ -2,18 +2,18 @@
 
 import { useMemo, useState } from "react";
 import { useTranslate } from "@tolgee/react";
-import NextLink from "next/link";
 import {
-  Box, Button, Container, Flex, Heading, HStack, Icon,
+  Box, Button, Flex, Heading, HStack, Icon,
   Input, InputGroup, InputLeftElement, Text, VStack, useColorMode,
 } from "@chakra-ui/react";
 import {
-  FiArrowRight, FiCreditCard, FiDollarSign, FiGrid, FiMessageSquare,
+  FiCreditCard, FiDollarSign, FiGrid,
   FiMinus, FiPlus, FiRepeat, FiSearch, FiSend, FiShield, FiUserPlus, FiZap,
 } from "react-icons/fi";
 import PublicNav from "@/components/ui/PublicNav";
 import PublicFooter from "@/components/ui/PublicFooter";
 import { publicPageTheme } from "@/components/ui/publicPageTheme";
+import { Band, CTASection, PageHero, Reveal } from "@/components/ui/appleKit";
 
 type FaqCategory = "all" | "getting" | "security" | "trading" | "wallet" | "card" | "fees" | "tokens";
 
@@ -86,31 +86,13 @@ export default function FAQPage() {
     <Box minH="100vh" bg={pageBg} color={textMain} overflowX="clip">
       <PublicNav />
 
-      <Box pt={{ base: "112px", md: "132px" }} pb={{ base: 8, md: 10 }} textAlign="center" position="relative" overflow="hidden">
-        <Box
-          position="absolute"
-          inset={0}
-          bg={dark
-            ? "linear-gradient(180deg, rgba(99,161,219,0.10) 0%, rgba(99,161,219,0.025) 44%, rgba(22,24,28,0) 100%)"
-            : "linear-gradient(180deg, rgba(79,139,196,0.10) 0%, rgba(79,139,196,0.025) 44%, rgba(255,255,255,0) 100%)"}
-          pointerEvents="none"
-        />
-        <Container maxW="820px" position="relative">
-          <VStack spacing={5}>
-            <Heading
-              as="h1"
-              fontWeight="900"
-              fontSize={{ base: "40px", md: "58px" }}
-              lineHeight="1.04"
-              letterSpacing="-0.035em"
-              color={textMain}
-            >
-              {t("page_help_title")}
-            </Heading>
-            <Text fontSize={{ base: "15px", md: "17px" }} color={textSub} maxW="560px" lineHeight="1.65">
-              {t("page_help_sub")}
-            </Text>
-            <InputGroup maxW="640px" size="lg" mt={1}>
+      <PageHero
+        title={t("page_help_title")}
+        subtitle={t("page_help_sub")}
+        size="md"
+        maxW="820px"
+      >
+            <InputGroup maxW="640px" size="lg" mt={2}>
               <InputLeftElement pointerEvents="none" h="56px" ps={5}>
                 <Icon as={FiSearch} color={accentText} />
               </InputLeftElement>
@@ -136,16 +118,12 @@ export default function FAQPage() {
                 }}
               />
             </InputGroup>
-          </VStack>
-        </Container>
-      </Box>
+      </PageHero>
 
-      <Container maxW="1120px" py={{ base: 8, md: 12 }}>
+      <Band maxW="1120px">
+        <Reveal>
         <Flex direction={{ base: "column", lg: "row" }} align="flex-start" gap={{ base: 5, lg: 8 }}>
           <Box w={{ base: "100%", lg: "300px" }} position={{ base: "relative", lg: "sticky" }} top={{ lg: "104px" }}>
-            <Text fontSize="11px" fontWeight="800" color={textSub} letterSpacing="0.14em" textTransform="uppercase" mb={3}>
-              {t("faq_section_tag")}
-            </Text>
             <Flex
               direction={{ base: "row", lg: "column" }}
               gap={2}
@@ -265,53 +243,14 @@ export default function FAQPage() {
             )}
           </Box>
         </Flex>
-      </Container>
+        </Reveal>
+      </Band>
 
-      <Container maxW="1120px" pb={{ base: 10, md: 16 }}>
-        <Box bg={cardBg} border="1px solid" borderColor={cardBorder} borderRadius="20px" p={{ base: 5, md: 6 }}>
-          <Flex direction={{ base: "column", md: "row" }} align={{ base: "flex-start", md: "center" }} justify="space-between" gap={5}>
-            <HStack spacing={4} align="flex-start">
-              <Flex
-                w="44px"
-                h="44px"
-                bg={accentSoft}
-                border="1px solid"
-                borderColor={accentBorder}
-                borderRadius="12px"
-                align="center"
-                justify="center"
-                flexShrink={0}
-              >
-                <Icon as={FiMessageSquare} color={accentText} boxSize={5} />
-              </Flex>
-              <Box>
-                <Heading fontSize={{ base: "19px", md: "22px" }} fontWeight="900" color={textMain} letterSpacing="-0.025em" mb={1}>
-                  {t("page_help_contact_title")}
-                </Heading>
-                <Text fontSize="14px" color={textSub} maxW="560px">
-                  {t("page_help_contact_d")}
-                </Text>
-              </Box>
-            </HStack>
-            <Button
-              as={NextLink}
-              href="/contact"
-              h="44px"
-              px={6}
-              bg={accent}
-              color="#ffffff"
-              borderRadius="12px"
-              fontWeight="800"
-              fontSize="13.5px"
-              rightIcon={<Icon as={FiArrowRight} />}
-              _hover={{ opacity: 0.9, transform: "translateY(-1px)" }}
-              flexShrink={0}
-            >
-              {t("nav_contact")}
-            </Button>
-          </Flex>
-        </Box>
-      </Container>
+      <CTASection
+        title={t("page_help_contact_title")}
+        subtitle={t("page_help_contact_d")}
+        primary={{ label: t("nav_contact"), href: "/contact" }}
+      />
 
       <PublicFooter />
     </Box>
@@ -347,7 +286,7 @@ function FAQItem({ q, a, last, dark, textMain, textSub, rowBorder, defaultOpen =
           flexShrink={0}
           w="24px"
           h="24px"
-          borderRadius="full"
+          borderRadius="8px"
           border="1.5px solid"
           borderColor={iconColor}
           display="flex"
