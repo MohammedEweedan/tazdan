@@ -4,7 +4,7 @@ import NextLink from "next/link";
 import {
   Box, Container, Heading, Text, VStack, HStack, SimpleGrid,
   Table, Thead, Tbody, Tr, Th, Td, TableContainer,
-  Badge, Icon, Button, Flex, useColorMode,
+  Icon, Button, Flex, useColorMode,
 } from "@chakra-ui/react";
 import {
   FiArrowRight, FiCheck, FiShield, FiZap, FiTrendingDown,
@@ -13,8 +13,8 @@ import {
 import { useTranslate } from "@tolgee/react";
 import PublicNav from "@/components/ui/PublicNav";
 import PublicFooter from "@/components/ui/PublicFooter";
-import FeeCalculator from "@/components/ui/FeeCalculator";
 import { publicPageTheme } from "@/components/ui/publicPageTheme";
+import { BentoCard, Band, PageHero } from "@/components/ui/appleKit";
 
 export default function FeesPage() {
   const { t } = useTranslate();
@@ -24,7 +24,7 @@ export default function FeesPage() {
   const {
     pageBg, textMain, textSub, cardBg, cardBgHover, raisedBg,
     cardBorder, rowBorder, strongBorder, accent, accentText, accentSoft,
-    accentBorder, green, greenSoft, shadow,
+    accentBorder, shadow,
   } = publicPageTheme(dark);
   const ctaBg     = accent;
   const ctaFg     = "#ffffff";
@@ -75,108 +75,26 @@ export default function FeesPage() {
       <PublicNav />
 
       {/* Hero */}
-      <Box
-        minH={{ base: "620px", md: "720px" }}
-        pt={{ base: "118px", md: "150px" }}
-        pb={{ base: 12, md: 18 }}
-        textAlign="center"
-        position="relative"
-        overflow="hidden"
-        display="flex"
-        alignItems="center"
-      >
-        <Box
-          position="absolute"
-          inset={0}
-          bg={dark
-            ? "radial-gradient(circle at 50% 44%, rgba(99,161,219,0.10), transparent 48%)"
-            : "radial-gradient(circle at 50% 44%, rgba(99,161,219,0.12), transparent 50%)"}
-          pointerEvents="none"
-        />
-        <Container maxW="940px" position="relative">
-          <VStack spacing={6}>
-            <Text
-              fontSize="11px"
-              fontWeight="800"
-              letterSpacing="0.18em"
-              color={accentText}
-              textTransform="uppercase"
-              border="1px solid"
-              borderColor={accentBorder}
-              bg={accentSoft}
-              borderRadius="full"
-              px={4}
-              py={2}
-            >
-              {t("page_fees_eyebrow")}
-            </Text>
-            <Heading
-              as="h1"
-              fontWeight="700"
-              fontSize={{ base: "clamp(46px, 13vw, 66px)", md: "clamp(78px, 8vw, 108px)" }}
-              lineHeight="0.95"
-              letterSpacing="-0.055em"
-              color={textMain}
-            >
-              {t("page_fees_title")}
-            </Heading>
-            <Text fontSize={{ base: "15px", md: "19px" }} color={textSub} maxW="560px" lineHeight="1.7">
-              {t("page_fees_sub")}
-            </Text>
-
-            {/* Stat chips */}
-            <HStack spacing={{ base: 2, md: 4 }} justify="center" flexWrap="wrap" pt={2}>
-              {[
-                { k: "0.5%",                             v: t("page_fees_stat_p2p") },
-                { k: t("page_fees_stat_deposit_v"),      v: t("page_fees_stat_deposit") },
-                { k: "24/7",                             v: t("page_fees_stat_support") },
-              ].map((s) => (
-                <VStack
-                  key={s.v}
-                  bg={raisedBg} border="1px solid" borderColor={cardBorder}
-                  borderRadius="16px" px={{ base: 4, md: 6 }} py={3} spacing={0}
-                  minW={{ base: "90px", md: "120px" }}
-                  boxShadow="none"
-                >
-                  <Text fontSize={{ base: "20px", md: "24px" }} fontWeight="800" color={textMain} letterSpacing="-0.02em">
-                    {s.k}
-                  </Text>
-                  <Text fontSize="11px" fontWeight="700" color={textSub} letterSpacing="0.12em" textTransform="uppercase">
-                    {s.v}
-                  </Text>
-                </VStack>
-              ))}
-            </HStack>
-          </VStack>
-        </Container>
-      </Box>
+      <PageHero
+        eyebrow={t("page_fees_eyebrow")}
+        title={t("page_fees_title")}
+        subtitle={t("page_fees_sub")}
+      />
 
       {/* Highlights trio */}
-      <Container maxW="1100px" pb={{ base: 10, md: 14 }}>
+      <Band maxW="1100px">
         <SimpleGrid columns={{ base: 1, md: 3 }} gap={4}>
-          {highlights.map((h) => (
-            <VStack
+          {highlights.map((h, index) => (
+            <BentoCard
               key={h.title}
-              align="start" spacing={3}
-              bg={cardBg} border="1px solid" borderColor={cardBorder}
-              borderRadius="18px" p={6} h="100%"
-              transition="all 0.2s ease"
-              _hover={{ transform: "translateY(-3px)", bg: cardBgHover, borderColor: strongBorder, boxShadow: shadow }}
-            >
-              <Flex
-                w="40px" h="40px" borderRadius="12px"
-                bg={accentSoft}
-                border="1px solid" borderColor={accentBorder}
-                align="center" justify="center"
-              >
-                <Icon as={h.icon} color={accentText} />
-              </Flex>
-              <Text fontSize="16px" fontWeight="800" color={textMain} letterSpacing="-0.01em">{h.title}</Text>
-              <Text fontSize="13.5px" color={textSub} lineHeight="1.6">{h.desc}</Text>
-            </VStack>
+              icon={h.icon}
+              title={h.title}
+              desc={h.desc}
+              delay={index * 0.05}
+            />
           ))}
         </SimpleGrid>
-      </Container>
+      </Band>
 
       {/* Fees table */}
       <Container maxW="1100px" pb={{ base: 10, md: 16 }}>
@@ -203,12 +121,6 @@ export default function FeesPage() {
                     <Td borderColor={rowBorder} py={5}>
                       <HStack spacing={2}>
                         <Text fontSize={{ base: "13.5px", md: "15px" }} color={textMain} fontWeight="700">{r.f}</Text>
-                        {r.free && (
-                          <Badge bg={greenSoft} color={green} fontSize="9.5px" px={2} py={0.5} borderRadius="full">FREE</Badge>
-                        )}
-                        {r.highlight && (
-                          <Badge bg={accentSoft} color={accentText} fontSize="9.5px" px={2} py={0.5} borderRadius="full">LOW</Badge>
-                        )}
                       </HStack>
                     </Td>
                     <Td borderColor={rowBorder} py={5} display={{ base: "none", md: "table-cell" }}>
@@ -257,24 +169,16 @@ export default function FeesPage() {
                       <Icon as={tier.icon} color={tier.badge ? accentText : textMain} boxSize={5} />
                     </Flex>
                     <Box flex={1}>
-                      <Text fontSize="11.5px" fontWeight="800" color={textSub} letterSpacing="0.15em" textTransform="uppercase">
-                        {t("page_fees_tier")}
-                      </Text>
                       <Text fontSize="18px" fontWeight="800" color={textMain} letterSpacing="-0.015em">
                         {tier.title}
                       </Text>
                     </Box>
-                    {tier.badge && (
-                      <Badge bg={accentSoft} color={accentText} fontSize="9.5px" fontWeight="800" letterSpacing="0.1em" px={2.5} py={1} borderRadius="full">
-                        POPULAR
-                      </Badge>
-                    )}
                   </HStack>
                   <Text fontSize="14.5px" color={textSub} lineHeight="1.7" fontWeight="500">{tier.desc}</Text>
                   <VStack align="start" spacing={2.5} w="100%" pt={2} borderTop="1px solid" borderColor={cardBorder}>
                     {tier.perks.map((p) => (
                       <HStack key={p} spacing={2.5} pt={2.5}>
-                        <Flex w="18px" h="18px" borderRadius="full" bg={accentSoft} border="1px solid" borderColor={accentBorder} align="center" justify="center" flexShrink={0}>
+                        <Flex w="18px" h="18px" borderRadius="6px" bg={accentSoft} border="1px solid" borderColor={accentBorder} align="center" justify="center" flexShrink={0}>
                           <Icon as={FiCheck} color={accentText} boxSize={2.5} />
                         </Flex>
                         <Text fontSize="13px" color={textMain} fontWeight="600">{p}</Text>
@@ -290,7 +194,7 @@ export default function FeesPage() {
             as={NextLink} href="/register"
             h="56px" px={10}
             bg={ctaBg} color={ctaFg}
-            borderRadius="full" fontWeight="800" fontSize="14px"
+            borderRadius="16px" fontWeight="800" fontSize="14px"
             rightIcon={<Icon as={FiArrowRight} />}
             boxShadow={dark ? "0 14px 38px rgba(99,161,219,0.22)" : "0 14px 34px rgba(79,139,196,0.18)"}
             _hover={{ opacity: 0.9, transform: "translateY(-2px)" }}

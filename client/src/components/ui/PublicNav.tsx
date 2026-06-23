@@ -69,9 +69,13 @@ export default function PublicNav() {
   const ctaFg    = "white";
 
   const NAV_LINKS = [
-    { labelKey: "nav_features", href: "/#features" },
+    { labelKey: "nav_features", href: "/features" },
     { labelKey: "nav_fees",    href: "/fees" },
     { labelKey: "nav_about",   href: "/about" },
+    { labelKey: "nav_contact",  href: "/contact" },
+    { labelKey: "nav_trust",    href: "/trust" },
+    { labelKey: "nav_help",     href: "/help" },
+    { labelKey: "nav_careers",  href: "/careers" },
   ];
 
   const isActive = (href: string) => {

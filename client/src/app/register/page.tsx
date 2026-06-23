@@ -16,21 +16,25 @@ import { useAuthStore } from "@/stores/authStore";
 import { userAPI, authAPI } from "@/lib/api";
 import { COUNTRIES, COUNTRY_BY_ISO } from "@/lib/countries";
 import Logo from "@/components/ui/Logo";
+import { GlowOrb, Graphic, Reveal } from "@/components/ui/appleKit";
 
-// ─── Palette (mirrors mobile themeStore tokens) ───────────────────
+// ─── Palette (mirrors the landing design system + mobile themeStore tokens) ──
+// Charcoal #16181C dark ramp, paper off-white light, #63a1db brand accent —
+// kept 1:1 with publicPageTheme / appTokens so the auth flow shares the same
+// design language as the marketing site.
 function usePalette(dark: boolean) {
   return {
-    bg:      dark ? "#0f1117" : "#f5f5f7",
-    bgElev:  dark ? "#1a1d27" : "#ffffff",
-    fg:      dark ? "#f1f0ee" : "#0f172a",
-    fgMuted: dark ? "#8b92a5" : "#64748b",
-    fgFaint: dark ? "#3a3f52" : "#cbd5e1",
-    border:  dark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.09)",
-    pillBg:  dark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)",
-    ctaBg:   dark ? "#f1f0ee" : "#0f172a",
-    ctaFg:   dark ? "#0f172a" : "#f1f0ee",
+    bg:      dark ? "#16181C" : "#FAFAF7",
+    bgElev:  dark ? "#1E2127" : "#ffffff",
+    fg:      dark ? "#F4F5F7" : "#0A0A0B",
+    fgMuted: dark ? "rgba(244,245,247,0.62)" : "rgba(10,10,11,0.62)",
+    fgFaint: dark ? "rgba(244,245,247,0.36)" : "rgba(10,10,11,0.38)",
+    border:  dark ? "rgba(255,255,255,0.09)" : "rgba(10,10,11,0.09)",
+    pillBg:  dark ? "rgba(255,255,255,0.06)" : "rgba(10,10,11,0.05)",
+    ctaBg:   "#63a1db",
+    ctaFg:   "#ffffff",
     redFg:   "#ef4444",
-    greenFg: "#22c55e",
+    greenFg: dark ? "#3FCF8E" : "#1F8F58",
   };
 }
 
@@ -173,7 +177,7 @@ function PrimaryCTA({
         marginTop: "28px",
         width: "100%",
         height: "58px",
-        borderRadius: "29px",
+        borderRadius: "16px",
         backgroundColor: p.ctaBg,
         border: "none",
         cursor: disabled || loading ? "not-allowed" : "pointer",
@@ -325,7 +329,6 @@ function LegalModal({
   onClose,
   title,
   sections,
-  eyebrow,
   updated,
   intro,
   p,
@@ -333,7 +336,6 @@ function LegalModal({
   open: boolean;
   onClose: () => void;
   title: string;
-  eyebrow: string;
   updated: string;
   intro: string;
   sections: { title: string; body: string }[];
@@ -365,10 +367,7 @@ function LegalModal({
       >
         <Flex justify="space-between" align="center" mb="20px">
           <Box>
-            <Text fontSize="12px" fontWeight="700" color="#63a1db" letterSpacing="0.08em" textTransform="uppercase">
-              {eyebrow}
-            </Text>
-            <Heading fontSize="20px" fontWeight="800" color={p.fg} mt="4px">
+            <Heading fontSize="20px" fontWeight="800" color={p.fg}>
               {title}
             </Heading>
           </Box>
@@ -793,8 +792,29 @@ export default function RegisterPage() {
   };
 
   return (
-    <Box minH="100vh" bg={p.bg} display="flex" flexDirection="column" alignItems="center">
+    <Box minH="100vh" bg={p.bg} position="relative" overflow="hidden">
       <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+      <GlowOrb top="-140px" left="6%" size="420px" opacity={dark ? 0.12 : 0.08} />
+      <GlowOrb bottom="-180px" right="4%" size="460px" opacity={dark ? 0.1 : 0.07} />
+
+      <Flex w="100%" maxW="1120px" mx="auto" align="flex-start" justify="center" gap="72px" position="relative" zIndex={1}>
+      <Box display={{ base: "none", lg: "block" }} w="420px" pt="96px" position="sticky" top="24px">
+        <Reveal>
+          <VStack align="start" spacing={5}>
+            <Graphic kind={accountType === "BUSINESS" ? "chart" : "shield"} dark={dark} />
+            <Box>
+              <Heading fontSize="42px" fontWeight="700" letterSpacing="-0.04em" color={p.fg} lineHeight="1.02">
+                {accountType === "BUSINESS" ? "Open a business account." : "Create your tazdan account."}
+              </Heading>
+              <Text mt={4} color={p.fgMuted} fontSize="17px" lineHeight="1.65">
+                {accountType === "BUSINESS"
+                  ? "Set up verified company access for payments, settlement, and treasury workflows."
+                  : "Verify once, then move money, crypto, and cards from the same account."}
+              </Text>
+            </Box>
+          </VStack>
+        </Reveal>
+      </Box>
 
       <Box w="100%" maxW="480px" px="24px" pb="32px" display="flex" flexDirection="column" flexGrow={1}>
 
@@ -1085,7 +1105,7 @@ export default function RegisterPage() {
                   };
 
                   return (
-                    <Tabs variant="soft-rounded" colorScheme="gray" isFitted>
+                    <Tabs variant="unstyled" isFitted>
                       <TabList
                         overflowX="auto"
                         whiteSpace="nowrap"
@@ -1101,7 +1121,7 @@ export default function RegisterPage() {
                             key={group}
                             fontSize="12px"
                             fontWeight="700"
-                            borderRadius="999px"
+                            borderRadius="12px"
                             minW="fit-content"
                             px="14px"
                             py="8px"
@@ -1177,7 +1197,7 @@ export default function RegisterPage() {
             {/* ── BUSINESS fields (only when accountType = BUSINESS) ── */}
             {accountType === "BUSINESS" && (
               <Box mt="20px" pt="20px" borderTop="1px solid" borderColor={p.border}>
-                <Text fontWeight="800" fontSize="13px" color={p.fgMuted} letterSpacing="0.10em" textTransform="uppercase" mb="14px">
+                <Text fontWeight="800" fontSize="13px" color={p.fgMuted} mb="14px">
                   {t("auth_business_section")}
                 </Text>
                 <VStack spacing="12px">
@@ -1423,12 +1443,12 @@ export default function RegisterPage() {
           <Text color={p.fgMuted} fontSize="14px">Already registered? Sign in on the tazdan mobile app.</Text>
         </Flex>
       </Box>
+      </Flex>
 
       {/* ── Terms Modal ── */}
       <LegalModal
         open={showTerms}
         onClose={() => setShowTerms(false)}
-        eyebrow={t("page_terms_eyebrow") || "Legal"}
         title={t("page_terms_title") || "Terms of Service"}
         updated={t("page_terms_updated") || "Last updated: April 2026"}
         intro={t("page_terms_intro") || ""}
@@ -1451,7 +1471,6 @@ export default function RegisterPage() {
       <LegalModal
         open={showPrivacy}
         onClose={() => setShowPrivacy(false)}
-        eyebrow={t("page_privacy_eyebrow") || "Legal"}
         title={t("page_privacy_title") || "Privacy Policy"}
         updated={t("page_privacy_updated") || "Last updated: April 2026"}
         intro={t("page_privacy_intro") || ""}
