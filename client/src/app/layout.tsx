@@ -128,6 +128,7 @@ export const metadata: Metadata = {
       de: `${SITE_URL}/de`,
       nl: `${SITE_URL}/nl`,
       ru: `${SITE_URL}/ru`,
+      tr: `${SITE_URL}/tr`,
     },
   },
   icons: { icon: '/favicon.ico', apple: '/icon-black.png' },
