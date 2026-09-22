@@ -119,9 +119,13 @@ export function VideoHero({
   const wrap = nowrap || isDefault; // landing title is a fixed single line
   const titleNode = title ?? (
     <>
-      {t("tz_hero_title_1", "Money")}{" "}
-      <Box as="span" color="#63a1db" fontStyle="italic">{t("tz_hero_title_2", "without")}</Box>{" "}
-      {t("tz_hero_title_3", "borders.")}
+      {/* KEEP THIS SHORT. `wrap` below forces the landing title onto ONE line,
+          and the font size is a vw clamp — so length, not the container, is
+          what decides whether it fits. ~24 characters total is the ceiling at
+          the current clamp; longer copy silently overflows the viewport. */}
+      {t("tz_hero_title_1", "Real rates.")}{" "}
+      <Box as="span" color="#63a1db" fontStyle="italic">{t("tz_hero_title_2", "Across")}</Box>{" "}
+      {t("tz_hero_title_3", "MENA.")}
     </>
   );
 
@@ -167,15 +171,22 @@ export function VideoHero({
           )}
           <Heading
             fontWeight="700"
+            /* The `md` size is a vw clamp on a FORCED single line, so title
+               LENGTH is what decides whether it fits — not the container.
+               ~24 characters is the ceiling here; longer copy overflows the
+               viewport silently. Below `md` the title wraps instead. */
             fontSize={wrap
-              ? { base: "clamp(28px, 8.6vw, 42px)", sm: "clamp(34px, 8vw, 52px)", md: "clamp(72px, 7.4vw, 104px)" }
+              ? { base: "clamp(26px, 7.8vw, 40px)", sm: "clamp(32px, 7vw, 50px)", md: "clamp(60px, 6.4vw, 92px)" }
               : { base: "clamp(34px, 9vw, 46px)", md: "clamp(52px, 6.6vw, 82px)" }}
             letterSpacing={{ base: "-0.055em", md: "-0.05em" }}
-            lineHeight={wrap ? 0.98 : 1.02}
+            lineHeight={wrap ? { base: 1.04, md: 0.98 } : 1.02}
             color="#ffffff"
             maxW={wrap ? "calc(100vw - 24px)" : "900px"}
-            whiteSpace={wrap ? "nowrap" : "normal"}
-            sx={wrap ? { textWrap: "nowrap" } : undefined}
+            /* One line from `md` up, where there's room for it. Below that the
+               headline WRAPS — forcing nowrap on a 390px phone clipped any
+               title longer than about two words straight off the viewport. */
+            whiteSpace={wrap ? { base: "normal", md: "nowrap" } : "normal"}
+            sx={wrap ? { textWrap: "balance" } : undefined}
           >
             {titleNode}
           </Heading>
@@ -361,12 +372,12 @@ export function ScrollytellingManifesto() {
 
         <Box position="absolute" inset={0} zIndex={2}>
           <HeroLine progress={p} range={[0.0, 0.4]} reduced={reduced}>
-            <Heading {...headline}>{t("tz_manifesto_1", "Money, the way it should move.")}</Heading>
+            <Heading {...headline}>{t("tz_manifesto_1", "Your money shouldn't lose value crossing a border.")}</Heading>
           </HeroLine>
           <HeroLine progress={p} range={[0.34, 0.72]} reduced={reduced}>
             <Heading {...headline}>
-              {t("tz_manifesto_2a", "Crypto,")}{" "}
-              <Box as="span" color={accent} fontStyle="italic" fontWeight="500">{t("tz_manifesto_2b", "made for everyone.")}</Box>
+              {t("tz_manifesto_2a", "One region.")}{" "}
+              <Box as="span" color={accent} fontStyle="italic" fontWeight="500">{t("tz_manifesto_2b", "One honest rate.")}</Box>
             </Heading>
           </HeroLine>
           <HeroLine progress={p} range={[0.66, 1.0]} reduced={reduced} hold>
