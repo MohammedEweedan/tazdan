@@ -10,7 +10,10 @@ import { FiSmartphone, FiBook, FiMail, FiZap } from 'react-icons/fi';
 import { publicPageTheme } from './publicPageTheme';
 import { SectionHeading } from './appleKit';
 
-export default function SupportSection() {
+/** `showHeading` exists because the contact page's own hero already says
+ *  "pick the channel that works for you" — running this section's heading
+ *  underneath it repeated the same sentence twice in a row. */
+export default function SupportSection({ showHeading = true }: { showHeading?: boolean } = {}) {
   const { t } = useTranslate();
   const { colorMode } = useColorMode();
   const dark = colorMode === 'dark';
@@ -56,13 +59,15 @@ export default function SupportSection() {
   ];
 
   return (
-    <Box id="support" py={{ base: 18, md: 28 }} px={{ base: 5, md: 8 }}>
+    <Box id="support" py={{ base: 8, md: 12 }} px={{ base: 5, md: 8 }}>
       <Box maxW="1100px" mx="auto">
-        <SectionHeading
-          eyebrow={t('support_tag')}
-          title={t('support_title')}
-          lede={t('support_sub')}
-        />
+        {showHeading && (
+          <SectionHeading
+            eyebrow={t('support_tag')}
+            title={t('support_title')}
+            lede={t('support_sub')}
+          />
+        )}
 
         <SimpleGrid columns={{ base: 1, sm: 2, lg: 4 }} spacing={4}>
           {CHANNELS.map((ch) => (
