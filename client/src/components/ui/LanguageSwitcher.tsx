@@ -6,10 +6,11 @@ import {
   Modal, ModalOverlay, ModalContent, ModalBody, SimpleGrid,
 } from "@chakra-ui/react";
 import { useTolgee } from "@tolgee/react";
+import { usePathname, useRouter } from "next/navigation";
 
 const LANGUAGES = [
   { code: "en", native: "English",    flag: "🇬🇧" },
-  { code: "ar", native: "العربية",    flag: "🇸🇦" },
+  { code: "ar", native: "العربية",    flag: "🇱🇾" },
   { code: "fr", native: "Français",   flag: "🇫🇷" },
   { code: "es", native: "Español",    flag: "🇪🇸" },
   { code: "de", native: "Deutsch",    flag: "🇩🇪" },
@@ -21,6 +22,8 @@ const LANGUAGES = [
 ];
 
 export default function LanguageSwitcher() {
+  const pathname = usePathname();
+  const router = useRouter();
   const tolgee      = useTolgee(["language"]);
   const currentLang = tolgee.getLanguage() ?? "en";
   const { colorMode } = useColorMode();
@@ -56,6 +59,9 @@ export default function LanguageSwitcher() {
     document.documentElement.lang = lang;
     document.documentElement.dir = lang === "ar" ? "rtl" : "ltr";
     setOpen(false);
+    if (["/", "/en", "/ar"].includes(pathname) && (lang === "en" || lang === "ar")) {
+      router.push(`/${lang}`);
+    }
   };
 
   const current = LANGUAGES.find((l) => l.code === currentLang) ?? LANGUAGES[0];

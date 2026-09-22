@@ -4,7 +4,9 @@ import { useEffect } from "react";
 import { usePathname } from "next/navigation";
 
 const TITLE_MAP: Record<string, string> = {
-  "/": "tazdan — crypto made simple",
+  "/": "tazdan — Libya. Crypto. Connected.",
+  "/en": "tazdan — Libya. Crypto. Connected.",
+  "/ar": "تزدان — ليبيا، كريبتو وتحويلات دولية",
   "/about": "About - tazdan",
   "/contact": "Contact - tazdan",
   "/careers": "Careers - tazdan",

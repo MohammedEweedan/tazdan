@@ -40,7 +40,8 @@ export default function WaitlistModal({ isOpen, onClose }: WaitlistModalProps) {
       const res = await fetch("/api/waitlist", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ email, locale: document.documentElement.lang, source: "libya-landing" }),
+        signal: AbortSignal.timeout(15000),
       });
       if (!res.ok) throw new Error("Failed");
       setStatus("success");

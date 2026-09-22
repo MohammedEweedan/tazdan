@@ -51,16 +51,16 @@ export const COPY = {
 
   onboarding: {
     step1: {
-      title: 'Money. Crypto. One app.',
-      body: 'Send, spend, and invest across fiat and crypto — anywhere in the world.',
+      title: 'Arab roots. Crypto. Connected.',
+      body: 'Bring everyday money and supported crypto together, from Libya to the wider Arab world.',
     },
     step2: {
-      title: 'Your keys, your coins',
-      body: 'Full custody of your crypto with bank-grade security on every transaction.',
+      title: 'Your crypto, connected',
+      body: 'Manage supported assets and choose the correct network when sending or receiving.',
     },
     step3: {
-      title: 'Instant P2P trading',
-      body: 'Buy and sell directly with verified traders at the best rates.',
+      title: 'Trade with people',
+      body: 'Explore P2P offers in LYD and regional currencies, with terms shown before you trade.',
     },
   },
 
@@ -86,6 +86,7 @@ export const CURRENCY_DESCRIPTIONS: Record<string, string> = {
   MATIC: 'Layer-2 scaling solution for Ethereum.',
   DOT: 'Multi-chain protocol enabling blockchain interoperability.',
   AVAX: 'High-throughput platform for custom blockchain networks.',
+  LYD: 'Libyan Dinar — everyday money at home.',
   USD: 'United States Dollar — the global reserve currency.',
   EUR: 'Euro — official currency of the Eurozone.',
   GBP: 'British Pound Sterling.',

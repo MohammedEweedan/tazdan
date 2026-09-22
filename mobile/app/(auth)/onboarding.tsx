@@ -10,7 +10,7 @@
  */
 
 import { useRef, useState, useEffect } from 'react';
-import { Dimensions, FlatList, Image, Pressable, View } from 'react-native';
+import { useWindowDimensions, FlatList, Image, Pressable, View } from 'react-native';
 import { Text } from '@/components/ui/Text';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -27,7 +27,6 @@ import { secureStore } from '@/lib/secureStore';
 import { STORAGE_KEYS } from '@/constants';
 import { useAuthStore } from '@/store/authStore';
 
-const { width: SCREEN_W } = Dimensions.get('window');
 
 interface Slide { id: string; titleKey: string; variant: 1 | 2 | 3 }
 const SLIDES: Slide[] = [
@@ -43,6 +42,7 @@ const THEME_OPTIONS: { mode: ThemeMode; icon: keyof typeof Ionicons.glyphMap }[]
 ];
 
 export default function Onboarding() {
+  const { width: SCREEN_W } = useWindowDimensions();
   const router = useRouter();
   const h = useHaptics();
   const t = useT();
@@ -266,7 +266,11 @@ export default function Onboarding() {
             onPress={() => {
               h.medium();
               if (last) markOnboardedAndNavigate('/register');
-              else flat.current?.scrollToIndex({ index: page + 1, animated: true });
+              else {
+                const nextPage = Math.min(page + 1, SLIDES.length - 1);
+                setPage(nextPage);
+                flat.current?.scrollToOffset({ offset: nextPage * SCREEN_W, animated: true });
+              }
             }}
             style={({ pressed }) => ({
               alignSelf: 'stretch',
