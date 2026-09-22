@@ -11,6 +11,7 @@ import { Ionicons } from '@expo/vector-icons';
 import Svg, { Circle } from 'react-native-svg';
 
 import { ScreenShell, CTAButton } from '@/components/ui/ScreenShell';
+import { useT } from '@/store/i18nStore';
 import { useThemedPalette, type Palette } from '@/store/themeStore';
 import { useBudgets, useHaptics } from '@/hooks';
 import { fiatSymbol } from '@/constants';
@@ -19,11 +20,12 @@ import type { Budget } from '@/services';
 export default function BudgetsList() {
   const router = useRouter();
   const p = useThemedPalette();
+  const t = useT();
   const h = useHaptics();
   const { data: budgets = [], isLoading, refetch, isFetching } = useBudgets();
 
   return (
-    <ScreenShell title="Budgets" scroll={false} contentStyle={{ paddingHorizontal: 0 }}>
+    <ScreenShell title={t('budgets.title')} scroll={false} contentStyle={{ paddingHorizontal: 0 }}>
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingHorizontal: 24, paddingBottom: 120 }}
@@ -44,7 +46,7 @@ export default function BudgetsList() {
             <View style={{ width: 64, height: 64, borderRadius: 32, backgroundColor: p.accentSoft, borderWidth: 1, borderColor: p.accentBorder, alignItems: 'center', justifyContent: 'center' }}>
               <Ionicons name="flag-outline" size={28} color={p.accentText} />
             </View>
-            <Text style={{ color: p.fg, fontSize: 16, fontWeight: '700', marginTop: 14 }}>No budgets yet</Text>
+            <Text style={{ color: p.fg, fontSize: 16, fontWeight: '700', marginTop: 14 }}>{t('budgets.empty')}</Text>
             <Text style={{ color: p.fgMuted, fontSize: 13, marginTop: 4, textAlign: 'center' }}>
               Create your first savings goal below.
             </Text>
@@ -57,7 +59,7 @@ export default function BudgetsList() {
       </ScrollView>
 
       <View style={{ paddingHorizontal: 24, paddingBottom: 16, paddingTop: 8, backgroundColor: p.bg, borderTopWidth: 1, borderTopColor: p.border }}>
-        <CTAButton label="New budget" icon="add" onPress={() => { h.medium(); router.push('/budgets/new'); }} />
+        <CTAButton label={t('budgets.new')} icon="add" onPress={() => { h.medium(); router.push('/budgets/new'); }} />
       </View>
     </ScreenShell>
   );

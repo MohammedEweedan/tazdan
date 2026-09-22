@@ -12,6 +12,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { ScreenShell, CTAButton, Panel, PanelRow } from '@/components/ui/ScreenShell';
 import { StepUpModal } from '@/components/ui/StepUpModal';
+import { useT } from '@/store/i18nStore';
 import { useThemedPalette, type Palette } from '@/store/themeStore';
 import { useBudget, useCards, useHaptics } from '@/hooks';
 import { budgetService, cardsService } from '@/services';
@@ -24,6 +25,7 @@ export default function BudgetDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const p = useThemedPalette();
+  const t = useT();
   const h = useHaptics();
   const qc = useQueryClient();
   const { data: b } = useBudget(id);
@@ -46,7 +48,7 @@ export default function BudgetDetail() {
   const fundCardMut = useMutation({
     mutationFn: (vars: { cardId: string; amount: number; code?: string }) =>
       cardsService.fundFromBudget(vars.cardId, { budgetId: id!, amount: vars.amount, stepUpCode: vars.code }),
-    onSuccess: () => { h.success(); setStepUp(null); setCardPicker(false); invalidate(); Alert.alert('Loaded to card', 'The money is now available to spend on your card.'); },
+    onSuccess: () => { h.success(); setStepUp(null); setCardPicker(false); invalidate(); Alert.alert(t('budgets.loadedToCard'), t('budgets.loadedToCardBody')); },
     onError: (e: any, vars) => {
       // STEP_UP-locked budget → prompt for the 6-digit code, then retry.
       if (e?.response?.status === 401 && e?.response?.data?.requiresStepUp) {
@@ -55,7 +57,7 @@ export default function BudgetDetail() {
         return;
       }
       h.error();
-      Alert.alert('Could not load card', e?.response?.data?.error ?? 'Try again');
+      Alert.alert(t('budgets.errLoadCard'), e?.response?.data?.error ?? t('budgets.tryAgain'));
     },
   });
 
@@ -68,7 +70,7 @@ export default function BudgetDetail() {
   const contributeMut = useMutation({
     mutationFn: (amt: number) => budgetService.contribute(id!, amt),
     onSuccess: () => { h.success(); setAmount(''); invalidate(); },
-    onError: (e: any) => { h.error(); Alert.alert('Could not save', e?.response?.data?.error ?? 'Try again'); },
+    onError: (e: any) => { h.error(); Alert.alert(t('budgets.errSave'), e?.response?.data?.error ?? t('budgets.tryAgain')); },
   });
 
   const withdrawMut = useMutation({
@@ -81,7 +83,7 @@ export default function BudgetDetail() {
         return;
       }
       h.error();
-      Alert.alert('Could not withdraw', e?.response?.data?.error ?? 'Try again');
+      Alert.alert(t('budgets.errWithdraw'), e?.response?.data?.error ?? t('budgets.tryAgain'));
     },
   });
 
@@ -91,12 +93,12 @@ export default function BudgetDetail() {
     onError: (e: any) => {
       if (e?.response?.status === 401 && e?.response?.data?.requiresStepUp) { setStepUp({ mode: 'close' }); return; }
       h.error();
-      Alert.alert('Could not close', e?.response?.data?.error ?? 'Try again');
+      Alert.alert(t('budgets.errClose'), e?.response?.data?.error ?? t('budgets.tryAgain'));
     },
   });
 
   if (!b) {
-    return <ScreenShell title="Budget"><Text style={{ color: p.fgMuted, marginTop: 24 }}>Loading…</Text></ScreenShell>;
+    return <ScreenShell title={t('budgets.detailTitle')}><Text style={{ color: p.fgMuted, marginTop: 24 }}>{t('budgets.loading')}</Text></ScreenShell>;
   }
 
   const sym = fiatSymbol(b.currency as any);
@@ -106,7 +108,7 @@ export default function BudgetDetail() {
   const remaining = target != null ? Math.max(0, target - saved) : null;
   const completed = b.status === 'COMPLETED';
 
-  // "Available to spend": funds are in the pot and not date-locked. (A STEP_UP
+  // {t('budgets.available')}: funds are in the pot and not date-locked. (A STEP_UP
   // lock still lets you spend, just with a code — so it counts as available.)
   const spendable = saved > 0 && !b.dateLocked;
 
@@ -263,7 +265,7 @@ export default function BudgetDetail() {
         />
         <PanelRow
           icon="trash-outline"
-          label="Close budget"
+          label={t('budgets.close')}
           danger
           onPress={() => Alert.alert('Close budget?', 'This releases any remaining funds and removes the goal.', [
             { text: 'Cancel', style: 'cancel' },
@@ -305,7 +307,7 @@ export default function BudgetDetail() {
       <StepUpModal
         visible={!!stepUp}
         action="withdrawal"
-        subtitle="Enter the code to unlock this budget."
+        subtitle={t('budgets.unlockPrompt')}
         onCancel={() => setStepUp(null)}
         onSubmit={async (code) => {
           if (stepUp?.mode === 'withdraw') await withdrawMut.mutateAsync({ amount: stepUp.amount, code });

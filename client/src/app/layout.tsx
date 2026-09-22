@@ -78,9 +78,9 @@ const SITE_URL = 'https://tazdan.com';
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   description:
-    'Meet tazdan: a Libyan wallet, crypto and international remittance app in the making. Clear costs in LYD. Join the waitlist.',
-  title: 'tazdan — Libya. Crypto. Connected.',
-  keywords: ['Libyan payments', 'LYD wallet', 'Libya payment app', 'tazdan', 'تزدان'],
+    'One account for local money, international payments, remittance, savings and digital assets. Built for Libya, designed for MENA. Join the waitlist.',
+  title: 'tazdan — Money, connected.',
+  keywords: ['Libya fintech', 'LYD wallet', 'MENA payments', 'remittance Libya', 'multicurrency wallet', 'tazdan', 'تزدان'],
   manifest: '/manifest.json',
   applicationName: 'tazdan',
   authors: [{ name: 'tazdan' }],
@@ -92,15 +92,15 @@ export const metadata: Metadata = {
     locale: 'en_US',
     url: SITE_URL,
     siteName: 'tazdan',
-    title: 'tazdan — Libya. Crypto. Connected.',
+    title: 'tazdan — Money, connected.',
     description:
-      'Everyday payments in LYD. Built around life in Libya, with an international outlook. Join the waitlist.',
-    images: [{ url: '/og-image.png', width: 1200, height: 630, alt: 'tazdan — Payments for Libya' }],
+      'Hold, send, exchange, save and spend — from one Arabic-first financial platform. Built for Libya, designed for MENA.',
+    images: [{ url: '/og-image.png', width: 1200, height: 630, alt: 'tazdan — Money, connected.' }],
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'tazdan — Crypto and remittances for Libya',
-    description: 'A new home for your everyday money in Libya. Explore proposed LYD plans.',
+    title: 'tazdan — Money, connected. Built for Libya.',
+    description: 'One account for local money, international payments, remittance, savings and digital assets. Built for Libya, designed for MENA.',
     images: ['/og-image.png'],
     creator: '@tazdan',
   },
@@ -177,11 +177,11 @@ const jsonLd = {
     },
     {
       '@type': 'FinancialProduct',
-      name: 'tazdan payments concept',
+      name: 'tazdan financial platform',
       description:
-        'Proposed Libyan dinar wallet, supported crypto services and international remittances. Availability depends on providers and regulatory approval.',
+        'Arabic-first financial platform connecting local money, international payments, remittance, savings and digital assets. Pre-launch; availability depends on regulatory approval and contracted partners.',
       provider: { '@id': `${SITE_URL}#org` },
-      areaServed: ['Libya'],
+      areaServed: ['Libya', 'MENA'],
     },
   ],
 };

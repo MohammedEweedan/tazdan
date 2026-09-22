@@ -11,6 +11,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { ScreenShell, CTAButton } from '@/components/ui/ScreenShell';
+import { useT } from '@/store/i18nStore';
 import { useThemedPalette, type Palette } from '@/store/themeStore';
 import { useHaptics, useWallets } from '@/hooks';
 import { budgetService, type BudgetLockType } from '@/services';
@@ -35,6 +36,7 @@ function parseDdmmyyyy(s: string): Date | null {
 export default function NewBudget() {
   const router = useRouter();
   const p = useThemedPalette();
+  const t = useT();
   const h = useHaptics();
   const qc = useQueryClient();
   const { data: wallets = [] } = useWallets();
@@ -64,7 +66,7 @@ export default function NewBudget() {
       auto: autoOn && autoAmount ? { amount: Number(autoAmount), frequency: autoFreq, sourceCurrency: currency } : undefined,
     }),
     onSuccess: (b) => { h.success(); qc.invalidateQueries({ queryKey: ['budgets'] }); router.replace(`/budgets/${b.id}`); },
-    onError: (e: any) => { h.error(); Alert.alert('Could not create', e?.response?.data?.error ?? 'Try again'); },
+    onError: (e: any) => { h.error(); Alert.alert(t('budgets.errCreate'), e?.response?.data?.error ?? 'Try again'); },
   });
 
   const needsUnlock = lock === 'DATE' || lock === 'DATE_AND_STEP_UP';
@@ -96,9 +98,9 @@ export default function NewBudget() {
   };
 
   return (
-    <ScreenShell title="New budget" keyboard>
+    <ScreenShell title={t('budgets.new')} keyboard>
       {/* Emoji + name */}
-      <Text style={label(p)}>NAME</Text>
+      <Text style={label(p)}>{t('budgets.name')}</Text>
       <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
         <Pressable onPress={() => { const i = EMOJIS.indexOf(emoji); setEmoji(EMOJIS[(i + 1) % EMOJIS.length]); h.selection(); }}
           style={{ width: 56, height: 56, borderRadius: 16, backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border, alignItems: 'center', justifyContent: 'center' }}>
@@ -119,7 +121,7 @@ export default function NewBudget() {
       </ScrollView>
 
       {/* Currency */}
-      <Text style={label(p)}>CURRENCY</Text>
+      <Text style={label(p)}>{t('budgets.currency')}</Text>
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
         {FIATS.map((c) => (
           <Chip key={c} label={c} active={currency === c} palette={p} onPress={() => { setCurrency(c); h.selection(); }} />
@@ -127,7 +129,7 @@ export default function NewBudget() {
       </View>
 
       {/* Target */}
-      <Text style={label(p)}>GOAL (OPTIONAL)</Text>
+      <Text style={label(p)}>{t('budgets.goal')}</Text>
       <View style={{ flexDirection: 'row', gap: 10 }}>
         <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: p.bgElev, borderRadius: 14, borderWidth: 1, borderColor: p.border, paddingHorizontal: 14 }}>
           <Text style={{ color: p.fgMuted, fontSize: 18, marginRight: 4 }}>{sym}</Text>
@@ -181,13 +183,13 @@ export default function NewBudget() {
       )}
 
       {/* Lock */}
-      <Text style={label(p)}>LOCK</Text>
+      <Text style={label(p)}>{t('budgets.lock')}</Text>
       <View style={{ gap: 8 }}>
         {([
-          ['NONE', 'No lock', 'Withdraw anytime'],
-          ['DATE', 'Until a date', 'Locked until the unlock date'],
-          ['STEP_UP', 'Require a code', '2FA / email code to withdraw'],
-          ['DATE_AND_STEP_UP', 'Date + code', 'Both conditions'],
+          ['NONE', t('budgets.lockNone'), t('budgets.lockNoneSub')],
+          ['DATE', t('budgets.lockDate'), t('budgets.lockDateSub')],
+          ['STEP_UP', t('budgets.lockCode'), '2FA / email code to withdraw'],
+          ['DATE_AND_STEP_UP', 'Date + code', t('budgets.lockBoth')],
         ] as const).map(([key, title, desc]) => (
           <Pressable key={key} onPress={() => { setLock(key); h.selection(); }}
             style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderRadius: 14, backgroundColor: lock === key ? p.accentSoft : p.bgElev, borderWidth: 1.5, borderColor: lock === key ? p.accent : p.border }}>
@@ -208,8 +210,8 @@ export default function NewBudget() {
       {/* Auto-contribution */}
       <Pressable onPress={() => { setAutoOn((v) => !v); h.selection(); }} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 22 }}>
         <View>
-          <Text style={{ color: p.fg, fontSize: 14, fontWeight: '700' }}>Auto-save</Text>
-          <Text style={{ color: p.fgMuted, fontSize: 12 }}>Add a set amount on a schedule</Text>
+          <Text style={{ color: p.fg, fontSize: 14, fontWeight: '700' }}>{t('budgets.autoSave')}</Text>
+          <Text style={{ color: p.fgMuted, fontSize: 12 }}>{t('budgets.autoSaveSub')}</Text>
         </View>
         <View style={{ width: 44, height: 26, borderRadius: 13, padding: 3, backgroundColor: autoOn ? p.accent : p.border, justifyContent: 'center' }}>
           <View style={{ width: 20, height: 20, borderRadius: 10, backgroundColor: '#fff', alignSelf: autoOn ? 'flex-end' : 'flex-start' }} />
@@ -231,7 +233,7 @@ export default function NewBudget() {
       )}
 
       <View style={{ marginTop: 24, marginBottom: 8 }}>
-        <CTAButton label={createMut.isPending ? 'Creating…' : 'Create budget'} icon="checkmark-circle" disabled={!valid || createMut.isPending} onPress={() => createMut.mutate()} />
+        <CTAButton label={createMut.isPending ? 'Creating…' : t('budgets.create')} icon="checkmark-circle" disabled={!valid || createMut.isPending} onPress={() => createMut.mutate()} />
       </View>
     </ScreenShell>
   );

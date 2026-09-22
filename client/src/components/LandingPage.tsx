@@ -40,6 +40,8 @@ import PublicFooter from "@/components/ui/PublicFooter";
 import WaitlistModal from "@/components/ui/WaitlistModal";
 import { VideoHero, ScrollytellingManifesto, AppleBento } from "@/components/ui/AppleShowcase";
 import { useChime, SoundToggle, ReceiptOverlay, FeeLedger, TrioSibling } from "@/components/ui/AppleFilm";
+import { Band, BentoCard, Reveal as KitReveal, SectionHeading } from "@/components/ui/appleKit";
+import { publicPageTheme } from "@/components/ui/publicPageTheme";
 import { useIsAr } from "@/hooks/useIsAr";
 
 /* ─────────────────────────────────────────────────────────────────
@@ -72,6 +74,16 @@ const FILM_PH_TRIO    = { base: "clamp(180px, 32vh, 300px)", md: "clamp(340px, 5
 /** Hero device height in the journey. Used by the phone AND by the centre
  *  trio label, which offsets itself from it — keep them one value. */
 const JOURNEY_PH = "clamp(300px, 58vh, 820px)";
+
+/** Screens the desktop journey never shows, used for the MOBILE finale where
+ *  there is no room for a three-across fan. Each carries its own caption. */
+const MOBILE_FINALE: Array<{ shot: number; alt: string; k: string }> = [
+  { shot: 2140, alt: "tazdan budgets",      k: "a" },
+  { shot: 2141, alt: "tazdan savings goal", k: "b" },
+  { shot: 2146, alt: "tazdan card PIN",     k: "c" },
+  { shot: 2142, alt: "tazdan top up",       k: "d" },
+  { shot: 2145, alt: "tazdan cards",        k: "g" },
+];
 
 const phoneVars: React.CSSProperties = {
   ["--ph" as string]: "clamp(380px, 48vh, 720px)",
@@ -227,7 +239,6 @@ function ScreenshotScreen({
           alt={alt}
           fill
           priority={priority}
-          loading={priority ? undefined : "eager"}
           sizes="(max-width: 480px) 55vw, (max-width: 1024px) 38vw, 340px"
           style={{ objectFit: "cover" }}
         />
@@ -251,7 +262,6 @@ function ScreenshotScreen({
             alt={alt}
             fill
             priority={priority && idx === 0}
-            loading={priority && idx === 0 ? undefined : "eager"}
             sizes="(max-width: 480px) 55vw, (max-width: 1024px) 38vw, 340px"
             style={{ objectFit: "cover" }}
           />
@@ -3278,26 +3288,11 @@ function StageCopy({ op, title, desc, features, textMain, textMuted, hairline, t
           {desc}
         </Text>
       )}
-      {features && features.length > 0 && (
-        <SimpleGrid columns={2} spacing={2.5} maxW="460px" w="100%">
-          {features.map((f) => (
-            <HStack key={f.label} h={{ base: "44px", md: "52px" }} bg={tileBg}
-              border="1px solid" borderColor={hairline}
-              borderRadius="12px" px={3} spacing={2.5}
-            >
-              <Flex w={{ base: "26px", md: "30px" }} h={{ base: "26px", md: "30px" }}
-                borderRadius="8px" border="1px solid" borderColor={hairline}
-                align="center" justify="center" flexShrink={0}
-              >
-                <Icon as={f.icon} color={textMain} boxSize={{ base: "12px", md: "13px" }} />
-              </Flex>
-              <Text fontSize={{ base: "11.5px", md: "12.5px" }} fontWeight="700" color={textMain} noOfLines={1}>
-                {f.label}
-              </Text>
-            </HStack>
-          ))}
-        </SimpleGrid>
-      )}
+      {/* Feature tiles removed. They sat inside a `position:absolute; inset:0`
+          flex column alongside a heading that reaches 92px (and runs taller
+          still in Arabic at lineHeight 1.15), so a long title overran them and
+          the copy read on top of the boxes. Title + description alone is also
+          the cleaner, more premium composition. */}
     </motion.div>
   );
 }
@@ -3404,6 +3399,41 @@ function PhoneJourney() {
   /* Finale layer: comes up for the trio and NEVER fades, so the closing zoom
      drives into a live wallet rather than a dead black rectangle. */
   const opFinale = useTransform(scrollYProgress, [0.846, 0.872], [0, 1]);
+  /* Mobile finale layers. The trio beat runs .836 → .900; split into three
+     so the single device steps through Budgets → Savings → Card PIN as the
+     visitor scrolls, landing on the same power-off and zoom as desktop. */
+  /* Mobile finale: the single device steps through the screens the journey
+     above never showed, each with its own caption. Windows are generated from
+     MOBILE_FINALE so adding a screen needs no new transform by hand. */
+  /* Windows GROW toward the end: each screen lingers longer than the one
+     before it, so the sequence decelerates into the finale instead of
+     flicking past at a constant rate. Weights are normalised, so adding a
+     screen reflows the whole run automatically. */
+  const CYCLE_W = MOBILE_FINALE.map((_, i) => 1 + i * 0.55);
+  const CYCLE_SUM = CYCLE_W.reduce((a, b) => a + b, 0);
+  const CYCLE_START = MOBILE_FINALE.map((_, i) =>
+    0.836 + (0.900 - 0.836) * (CYCLE_W.slice(0, i).reduce((a, b) => a + b, 0) / CYCLE_SUM));
+  const mobileCycle = MOBILE_FINALE.map((_, i) => {
+    const span = (0.900 - 0.836) * (CYCLE_W[i] / CYCLE_SUM);
+    const a = CYCLE_START[i];
+    const last = i === MOBILE_FINALE.length - 1;
+    // eslint-disable-next-line react-hooks/rules-of-hooks
+    return useTransform(
+      scrollYProgress,
+      [a, a + span * 0.22, a + span * 0.78, last ? 0.935 : a + span],
+      [0, 1, 1, last ? 1 : 0],
+    );
+  });
+  const [mobileIdx, setMobileIdx] = useState(0);
+  const mobileLabelIdx = useTransform(scrollYProgress, (v) => {
+    let idx = 0;
+    for (let i = 0; i < CYCLE_START.length; i++) if (v >= CYCLE_START[i]) idx = i;
+    return idx;
+  });
+  useMotionValueEvent(mobileLabelIdx, 'change', (i) => setMobileIdx(Math.round(i)));
+  /* Caption block fades in with the fan beat and clears before the power-off,
+     matching the desktop centre label's window. */
+  const mobileCapOp = useTransform(scrollYProgress, [0.836, 0.852, 0.928, 0.944], [0, 1, 1, 0]);
   // Legacy floating card transforms are kept inert; the real card/top-up UI now
   // lives inside the screenshot stage so the mockup matches the app.
   const cardX    = useTransform(scrollYProgress, [0.82, 0.96], [-80,  0]);
@@ -3447,7 +3477,18 @@ function PhoneJourney() {
      gone, so the group slides to true viewport centre and the three screens
      sit balanced instead of crowding one side. */
   const trioLabelOp = useTransform(scrollYProgress, [0.878, 0.900, 0.932, 0.948], [0, 1, 1, 0]);
-  const trioShiftVw = useBreakpointValue({ base: 0, lg: -22 }) ?? 0;
+  /* The phone sits in the RIGHT grid column under LTR and the LEFT one under
+     RTL, so the centring shift has to flip sign for Arabic — otherwise the
+     fan slides further off-centre instead of into the middle. */
+  const journeyIsAr = useIsAr();
+  const trioShiftBase = useBreakpointValue({ base: 0, lg: 22 }) ?? 0;
+  const trioShiftVw = journeyIsAr ? trioShiftBase : -trioShiftBase;
+
+  /* The three-across fan is DESKTOP ONLY. At phone width three devices cannot
+     sit side by side without becoming unreadable slivers, so mobile gets a
+     different finale (below): the single phone cycles through the same three
+     screens, then powers off and zooms exactly as desktop does. */
+  const trioFan = useBreakpointValue({ base: false, lg: true }) ?? false;
   const groupX = useTransform(
     scrollYProgress,
     journeyTiming.trio,
@@ -3703,7 +3744,7 @@ function PhoneJourney() {
                     they start exactly behind the hero phone and fan out of it. */}
                 <Box position="relative" style={{ perspective: "1600px", ["--ph" as string]: JOURNEY_PH } as React.CSSProperties}>
 
-                <TrioSibling
+                {trioFan && <TrioSibling
                   progress={scrollYProgress} range={journeyTiming.trio as [number, number]}
                   exit={journeyTiming.screensOff as [number, number]}
                   side={-1} spread={trioSpread} endScale={trioEndScale}
@@ -3713,8 +3754,8 @@ function PhoneJourney() {
                   <StaticPhone phOverride={FILM_PH_TRIO}>
                     <ScreenStill shot={tazdanNewShot(2140)} alt="tazdan budgets" />
                   </StaticPhone>
-                </TrioSibling>
-                <TrioSibling
+                </TrioSibling>}
+                {trioFan && <TrioSibling
                   progress={scrollYProgress} range={journeyTiming.trio as [number, number]}
                   exit={journeyTiming.screensOff as [number, number]}
                   side={1} spread={trioSpread} endScale={trioEndScale}
@@ -3724,7 +3765,7 @@ function PhoneJourney() {
                   <StaticPhone phOverride={FILM_PH_TRIO}>
                     <ScreenStill shot={tazdanNewShot(2146)} alt="tazdan card PIN" />
                   </StaticPhone>
-                </TrioSibling>
+                </TrioSibling>}
 
                 <motion.div animate={flinch}>
                 {/* rotateY carries the 360° unlock spin. `preserve-3d` plus the
@@ -3818,12 +3859,25 @@ function PhoneJourney() {
                       <ScreenCardMainShot />
                     </motion.div>
                     {/* Lock screen sits on top, slides off with unlockProgress */}
-                    {/* Centre of the trio — a screen the journey above never
-                        showed, so the finale adds something instead of
-                        repeating itself. */}
-                    <motion.div style={{ ...stageLayerStyle, opacity: opFinale }}>
-                      <ScreenStill shot={tazdanNewShot(2141)} alt="tazdan savings goal" />
-                    </motion.div>
+                    {/* FINALE — two shapes of the same beat.
+                        Desktop: this phone holds the centre of a three-across
+                        fan, so it shows ONE screen the journey never used.
+                        Mobile: there is no fan, so the single device cycles
+                        through all three instead. Both land on the same
+                        power-off and zoom. */}
+                    {trioFan ? (
+                      <motion.div style={{ ...stageLayerStyle, opacity: opFinale }}>
+                        <ScreenStill shot={tazdanNewShot(2141)} alt="tazdan savings goal" />
+                      </motion.div>
+                    ) : (
+                      <>
+                        {MOBILE_FINALE.map((f, i) => (
+                          <motion.div key={f.shot} style={{ ...stageLayerStyle, opacity: mobileCycle[i] }}>
+                            <ScreenStill shot={tazdanNewShot(f.shot)} alt={f.alt} />
+                          </motion.div>
+                        ))}
+                      </>
+                    )}
                     {/* The transfer lands ON the phone already on stage —
                         this is the beat the chime fires with. */}
                     <ReceiptOverlay
@@ -3850,8 +3904,37 @@ function PhoneJourney() {
               </Box>
 
               {/* Centre label — matches the two siblings so the finale reads as
-                  three peers, not one phone with two accessories. */}
-              <motion.div
+                  three peers, not one phone with two accessories. Desktop only:
+                  on mobile the screen cycles, so a fixed caption would contradict
+                  whatever is on screen. */}
+              {/* MOBILE finale caption — the fan's labels have no place to live
+                  on a handset, so the single device carries the title of
+                  whichever screen is currently showing, under one section
+                  heading. Desktop uses the per-phone labels instead. */}
+              {!trioFan && (
+                <motion.div
+                  style={{
+                    opacity: mobileCapOp,
+                    position: "absolute", left: 0, right: 0,
+                    top: "calc(50% + var(--ph) * 0.54)",
+                    textAlign: "center", zIndex: 5, pointerEvents: "none",
+                  }}
+                >
+                  <Text
+                    fontFamily="'DM Sans', sans-serif" fontSize="12px" fontWeight="700"
+                    letterSpacing="0.14em" textTransform="uppercase" color={ACCENT} mb={2}
+                  >
+                    {t("tz_trio_more_title")}
+                  </Text>
+                  <Text fontFamily="'DM Sans', sans-serif" fontSize="15px" fontWeight={700} color={textMain}>
+                    {t(`tz_trio_${MOBILE_FINALE[mobileIdx]?.k ?? "a"}`)}
+                  </Text>
+                  <Text fontFamily="'DM Sans', sans-serif" fontSize="12px" color={textMuted} mt="2px">
+                    {t(`tz_trio_${MOBILE_FINALE[mobileIdx]?.k ?? "a"}_sub`)}
+                  </Text>
+                </motion.div>
+              )}
+              {trioFan && <motion.div
                 style={{
                   opacity: trioLabelOp,
                   position: "absolute", left: 0, right: 0,
@@ -3865,7 +3948,7 @@ function PhoneJourney() {
                 <Text fontFamily="'DM Sans', sans-serif" fontSize={{ base: "10px", md: "12px" }} color={textMuted} mt="2px">
                   {t("tz_trio_b_sub", "Auto-saving, every week")}
                 </Text>
-              </motion.div>
+              </motion.div>}
               </motion.div>
               </Box>
               </motion.div>
@@ -3999,6 +4082,162 @@ function MinimalCtaSection({ dark, onJoinWaitlist }: { dark: boolean; onJoinWait
 /* ═════════════════════════════════════════════════════════════════
    LANDING PAGE
    ═════════════════════════════════════════════════════════════════ */
+/* ═══════════════════════════════════════════════════════════════════════════
+   AUDIENCE SECTIONS — business, partners, infrastructure.
+
+   The page above this point is consumer-first by design. These three sit
+   below it in descending audience breadth: a merchant needs to find their
+   section without scrolling past an investor pitch, and a bank needs to see
+   integration capability without the homepage becoming a deck.
+
+   NB: appleKit's SectionHeading accepts `eyebrow` in its prop type but never
+   destructures it, so it renders nothing. Eyebrows here are explicit.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+const LB_ACCENT = "#63a1db";
+
+function SectionEyebrow({ children }: { children: React.ReactNode }) {
+  const { colorMode } = useColorMode();
+  return (
+    <Text
+      textAlign="center" mb={3}
+      fontSize={{ base: "11px", md: "12px" }} fontWeight="800"
+      letterSpacing="0.22em" textTransform="uppercase"
+      color={colorMode === "dark" ? "#7DB4E4" : "#3E78AE"}
+      fontFamily="'DM Sans', sans-serif"
+    >
+      {children}
+    </Text>
+  );
+}
+
+function SectionFootnote({ children }: { children: React.ReactNode }) {
+  const { colorMode } = useColorMode();
+  const dark = colorMode === "dark";
+  return (
+    <Text
+      mt={6} textAlign="center" fontSize={{ base: "12px", md: "13px" }}
+      color={dark ? "rgba(255,255,255,0.45)" : "rgba(10,15,30,0.45)"}
+      maxW="62ch" mx="auto" lineHeight="1.6"
+    >
+      {children}
+    </Text>
+  );
+}
+
+function SectionPill({ href, label }: { href: string; label: string }) {
+  const { colorMode } = useColorMode();
+  const dark = colorMode === "dark";
+  return (
+    <Flex justify="center" mt={8}>
+      <Box
+        as={NextLink} href={href}
+        px={7} h="46px" display="inline-flex" alignItems="center" gap={2}
+        borderRadius="23px" fontWeight="700" fontSize="14px"
+        border="1px solid" borderColor={dark ? "rgba(255,255,255,0.16)" : "rgba(10,15,30,0.14)"}
+        color={dark ? "#ffffff" : "#0a0f1e"}
+        transition="all .2s ease"
+        _hover={{ borderColor: LB_ACCENT, color: LB_ACCENT, transform: "translateY(-1px)" }}
+      >
+        {label} <Icon as={FiArrowRight} />
+      </Box>
+    </Flex>
+  );
+}
+
+/* ── Merchants / businesses ── */
+function SectionBusiness() {
+  const { t } = useTranslate();
+  const items = [1, 2, 3, 4, 5, 6].map((i) => ({
+    title: t(`lb_biz_${i}_t`),
+    desc: t(`lb_biz_${i}_d`),
+  }));
+  return (
+    <Band maxW="1180px">
+      <SectionEyebrow>{t("lb_biz_eyebrow")}</SectionEyebrow>
+      <SectionHeading title={t("lb_biz_title")} lede={t("lb_biz_sub")} />
+      <SimpleGrid columns={{ base: 1, sm: 2, lg: 3 }} gap={5} w="100%">
+        {items.map((it, i) => (
+          <BentoCard key={it.title} title={it.title} desc={it.desc} delay={i * 0.04} />
+        ))}
+      </SimpleGrid>
+      <SectionPill href="/partners" label={t("lb_biz_cta")} />
+      <SectionFootnote>{t("lb_biz_note")}</SectionFootnote>
+    </Band>
+  );
+}
+
+/* ── Banks, PSPs, telecoms, remittance operators ── */
+function SectionPartnersB2B() {
+  const { t } = useTranslate();
+  const { colorMode } = useColorMode();
+  const dark = colorMode === "dark";
+  const { textMain, textSub, cardBg, cardBorder } = publicPageTheme(dark);
+  const rows = [1, 2, 3, 4].map((i) => ({ title: t(`lb_partner_${i}_t`), desc: t(`lb_partner_${i}_d`) }));
+  return (
+    <Band tone="alt" maxW="1080px">
+      <SectionEyebrow>{t("lb_partner_eyebrow")}</SectionEyebrow>
+      <SectionHeading title={t("lb_partner_title")} lede={t("lb_partner_sub")} />
+      <SimpleGrid columns={{ base: 1, md: 2 }} gap={4} w="100%">
+        {rows.map((r, i) => (
+          <KitReveal key={r.title} delay={i * 0.05}>
+            <Box h="100%" bg={cardBg} border="1px solid" borderColor={cardBorder} borderRadius="20px" p={6}>
+              <Text fontSize={{ base: "16px", md: "17px" }} fontWeight="700" color={textMain} letterSpacing="-0.015em" mb={2}>
+                {r.title}
+              </Text>
+              <Text fontSize={{ base: "13.5px", md: "14.5px" }} color={textSub} lineHeight="1.7">
+                {r.desc}
+              </Text>
+            </Box>
+          </KitReveal>
+        ))}
+      </SimpleGrid>
+      <SectionPill href="/partners" label={t("lb_partner_cta")} />
+      <SectionFootnote>{t("lb_partner_note")}</SectionFootnote>
+    </Band>
+  );
+}
+
+/* ── Infrastructure. Deliberately the LAST thing before the closer: it
+      reassures partners without making a consumer read engineering scope
+      before they understand the product. ── */
+function SectionInfrastructure() {
+  const { t } = useTranslate();
+  const { colorMode } = useColorMode();
+  const dark = colorMode === "dark";
+  const { textMain, textSub, cardBorder } = publicPageTheme(dark);
+  const stats = [1, 2, 3, 4].map((i) => ({ n: t(`lb_infra_${i}_n`), l: t(`lb_infra_${i}_l`) }));
+  return (
+    <Band maxW="1080px">
+      <SectionEyebrow>{t("lb_infra_eyebrow")}</SectionEyebrow>
+      <SectionHeading title={t("lb_infra_title")} lede={t("lb_infra_sub")} />
+      <SimpleGrid columns={{ base: 2, md: 4 }} gap={0} w="100%">
+        {stats.map((s, i) => (
+          <KitReveal key={s.l} delay={i * 0.05}>
+            <Box
+              textAlign="center" px={4} py={{ base: 6, md: 8 }}
+              borderLeft={{ base: "none", md: i === 0 ? "none" : "1px solid" }}
+              borderColor={cardBorder}
+            >
+              <Text
+                fontSize={{ base: "26px", md: "34px" }} fontWeight="800"
+                color={textMain} letterSpacing="-0.035em" lineHeight="1.1"
+                style={{ fontVariantNumeric: "tabular-nums" }}
+              >
+                {s.n}
+              </Text>
+              <Text fontSize={{ base: "12px", md: "13px" }} color={textSub} mt={2} lineHeight="1.5">
+                {s.l}
+              </Text>
+            </Box>
+          </KitReveal>
+        ))}
+      </SimpleGrid>
+      <SectionFootnote>{t("lb_infra_note")}</SectionFootnote>
+    </Band>
+  );
+}
+
 export default function LandingPage() {
   const { colorMode } = useColorMode();
   const { t } = useTranslate();
@@ -4033,8 +4272,46 @@ export default function LandingPage() {
     <Box minH="100vh" color={textMain} bg={pageBg}>
       <PublicNav />
 
-      {/* ── Hero: full-bleed looping video with a text overlay ── */}
-      <VideoHero />
+      {/* ── Hero: full-bleed looping video with a text overlay ──
+          `title` is deliberately NOT passed. VideoHero treats a missing title
+          as "the landing hero", which keeps the single-line treatment and the
+          opacity-1 LCP path. Passing a title would silently switch both. */}
+      <VideoHero
+        subtitle={t("tz_hero_sub")}
+      >
+        <VStack spacing={4} pt={2}>
+          <HStack spacing={3} flexWrap="wrap" justify="center">
+            <Box
+              as={NextLink} href="/register"
+              px={7} h="50px" display="inline-flex" alignItems="center" gap={2}
+              borderRadius="25px" fontWeight="700" fontSize="15px"
+              bg="#ffffff" color="#0a0f1e"
+              transition="all .2s ease"
+              _hover={{ transform: "translateY(-1px)", opacity: 0.92 }}
+            >
+              {t("hero_cta_primary")} <Icon as={FiArrowRight} />
+            </Box>
+            <Box
+              as={NextLink} href="/partners"
+              px={7} h="50px" display="inline-flex" alignItems="center"
+              borderRadius="25px" fontWeight="700" fontSize="15px"
+              border="1px solid rgba(255,255,255,0.32)" color="#ffffff"
+              transition="all .2s ease"
+              _hover={{ borderColor: "#ffffff", transform: "translateY(-1px)" }}
+            >
+              {t("hero_cta_secondary")}
+            </Box>
+          </HStack>
+          {/* Status disclosure sits in the hero on purpose — a visitor should
+              learn this before they read a single feature claim. */}
+          <Text
+            fontSize={{ base: "11.5px", md: "12.5px" }}
+            color="rgba(255,255,255,0.62)" textAlign="center" maxW="46ch" lineHeight="1.55"
+          >
+            {t("hero_status_line")}
+          </Text>
+        </VStack>
+      </VideoHero>
 
       {/* ── Manifesto: a pinned crossfade of three statements; the final line
           holds (sticks) as the last slide before you scroll on. ── */}
@@ -4061,6 +4338,11 @@ export default function LandingPage() {
       <SectionBand dark={dark} tone="plain" size="0 760px"><SectionClaimLink /></SectionBand>
       <SectionBand dark={dark} tone="plain" size="0 820px"><SectionGrowSave /></SectionBand>
       <SectionBand dark={dark} tone="plain" size="0 720px"><SectionSocialProof /></SectionBand>
+
+      {/* ── Audience shift: consumer above, business / partner / infra below ── */}
+      <SectionBand dark={dark} tone="plain" size="0 760px"><SectionBusiness /></SectionBand>
+      <SectionBand dark={dark} tone="plain" size="0 700px"><SectionPartnersB2B /></SectionBand>
+      <SectionBand dark={dark} tone="plain" size="0 560px"><SectionInfrastructure /></SectionBand>
 
       {/* ── Pattern-break closer — sits right above the footer ── */}
       <Box style={{ contentVisibility: "auto", containIntrinsicSize: "0 800px", scrollSnapAlign: "start", scrollSnapStop: "normal" } as React.CSSProperties}>

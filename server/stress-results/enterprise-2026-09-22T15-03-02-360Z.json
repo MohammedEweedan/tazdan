@@ -1,0 +1,208 @@
+{
+  "runId": "entmucsxrvi",
+  "environment": {
+    "commitSha": "a47b6923",
+    "timestamp": "2026-09-22T15:03:02.359Z",
+    "node": "v24.15.0",
+    "postgres": "unknown",
+    "host": {
+      "cpus": 8,
+      "model": "Apple M2",
+      "ramGb": 16,
+      "platform": "darwin 25.5.0",
+      "arch": "arm64"
+    },
+    "loadGenerators": 1,
+    "nodeIndex": 0,
+    "apiBase": "http://localhost:5001/api",
+    "note": "Load generator and API share this host unless BASE points elsewhere — co-located runs understate achievable throughput."
+  },
+  "load": {
+    "stagesRequested": [
+      500,
+      2000
+    ],
+    "peakVirtualClients": 2000,
+    "peakActiveClients": 73,
+    "peakInFlightRequests": 73,
+    "maxInFlightCap": 250,
+    "sessionsProvisioned": 28,
+    "totalRequests": 70791,
+    "financialWrites": 0,
+    "durationSec": 102.8,
+    "peakRps": 688.4,
+    "mix": {
+      "read": 35,
+      "p2p": 15,
+      "fxquote": 10,
+      "fxexec": 10,
+      "message": 10,
+      "deposit": 7,
+      "withdraw": 7,
+      "misc": 6
+    }
+  },
+  "latencyByOperation": [
+    {
+      "operation": "auth",
+      "count": 76,
+      "success": 28,
+      "technicalErrors": 26,
+      "businessRejections": 22,
+      "rps": 0.74,
+      "p50": 578,
+      "p90": 8572,
+      "p95": 8612,
+      "p99": 8700,
+      "max": 8700
+    },
+    {
+      "operation": "fx_quote",
+      "count": 7990,
+      "success": 0,
+      "technicalErrors": 7895,
+      "businessRejections": 95,
+      "rps": 77.69,
+      "p50": 0,
+      "p90": 1,
+      "p95": 2,
+      "p99": 6,
+      "max": 243
+    },
+    {
+      "operation": "message",
+      "count": 7764,
+      "success": 89,
+      "technicalErrors": 7675,
+      "businessRejections": 0,
+      "rps": 75.5,
+      "p50": 0,
+      "p90": 1,
+      "p95": 2,
+      "p99": 7,
+      "max": 253
+    },
+    {
+      "operation": "balance_read",
+      "count": 27511,
+      "success": 335,
+      "technicalErrors": 27176,
+      "businessRejections": 0,
+      "rps": 267.51,
+      "p50": 0,
+      "p90": 1,
+      "p95": 2,
+      "p99": 6,
+      "max": 239
+    },
+    {
+      "operation": "withdrawal",
+      "count": 5585,
+      "success": 0,
+      "technicalErrors": 5575,
+      "businessRejections": 10,
+      "rps": 54.31,
+      "p50": 0,
+      "p90": 1,
+      "p95": 2,
+      "p99": 6,
+      "max": 227
+    },
+    {
+      "operation": "p2p_transfer",
+      "count": 11456,
+      "success": 0,
+      "technicalErrors": 11334,
+      "businessRejections": 122,
+      "rps": 111.4,
+      "p50": 0,
+      "p90": 1,
+      "p95": 2,
+      "p99": 5,
+      "max": 249
+    },
+    {
+      "operation": "deposit",
+      "count": 5492,
+      "success": 0,
+      "technicalErrors": 5413,
+      "businessRejections": 79,
+      "rps": 53.4,
+      "p50": 0,
+      "p90": 1,
+      "p95": 2,
+      "p99": 6,
+      "max": 227
+    },
+    {
+      "operation": "portfolio",
+      "count": 4830,
+      "success": 59,
+      "technicalErrors": 4771,
+      "businessRejections": 0,
+      "rps": 46.97,
+      "p50": 0,
+      "p90": 1,
+      "p95": 2,
+      "p99": 7,
+      "max": 253
+    }
+  ],
+  "statusCodes": {
+    "200": 394,
+    "201": 117,
+    "400": 318,
+    "401": 10,
+    "429": 69952
+  },
+  "reliability": {
+    "technicalErrors": 69865,
+    "technicalErrorRate": 98.813,
+    "businessRejections": 328
+  },
+  "financialIntegrity": {
+    "lostUpdates": 0,
+    "overdrafts": 0,
+    "duplicateExecutions": 0,
+    "unbalancedJournals": 0,
+    "idempotencyViolations": 0,
+    "driftBefore": {},
+    "driftAfter": {},
+    "journalBalanced": true,
+    "journalDelta": "0"
+  },
+  "database": {
+    "peakConnections": 12,
+    "peakActiveConnections": 1,
+    "peakWaiting": 11
+  },
+  "resources": {
+    "peakRssMb": 367.4,
+    "peakHeapMb": 207.2,
+    "peakCpuPct": 48.6,
+    "peakEventLoopLagMs": 66
+  },
+  "stages": [
+    {
+      "clients": 500,
+      "integrityClean": true,
+      "drift": {}
+    },
+    {
+      "clients": 2000,
+      "integrityClean": true,
+      "drift": {}
+    }
+  ],
+  "checks": {
+    "accountingDrift": true,
+    "lostUpdates": true,
+    "overdrafts": true,
+    "duplicateExecutions": true,
+    "unbalancedJournals": true,
+    "idempotency": true,
+    "techErrorRate": false,
+    "p95Financial": true
+  },
+  "result": "FAIL"
+}

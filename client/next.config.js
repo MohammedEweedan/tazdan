@@ -82,6 +82,11 @@ const nextConfig = {
   // breaks App Router routing — unmatched paths fall through to Vercel's own
   // platform 404 instead of our app/not-found.tsx. Vercel sets VERCEL=1, so
   // only emit standalone when NOT on Vercel.
+  // A production build and `next dev` both write to `.next`, so running them
+  // together corrupts the build ("Cannot find module for page: /sitemap.xml").
+  // Setting NEXT_DIST_DIR lets a build run against its own directory while a
+  // dev server stays up. Default behaviour is unchanged.
+  ...(process.env.NEXT_DIST_DIR ? { distDir: process.env.NEXT_DIST_DIR } : {}),
   ...(process.env.VERCEL ? {} : { output: 'standalone' }),
   // Next.js 14 swc minify is on by default; explicit so it survives a Next bump.
   swcMinify: true,
@@ -110,7 +115,9 @@ const nextConfig = {
     ],
   },
   images: {
-    domains: ['bit.ly'],
+    // `domains` is deprecated in Next 14 — remotePatterns is the supported
+    // form and is stricter (scheme + path are matched, not just host).
+    remotePatterns: [{ protocol: 'https', hostname: 'bit.ly', pathname: '/**' }],
     formats: ['image/avif', 'image/webp'],
     minimumCacheTTL: 60 * 60 * 24, // 1 day — bigger than 60s default
     deviceSizes: [320, 420, 768, 1024, 1200],

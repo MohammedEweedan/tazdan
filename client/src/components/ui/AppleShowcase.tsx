@@ -138,7 +138,12 @@ export function VideoHero({
         muted
         loop
         playsInline
-        preload="auto"
+        /* `preload="auto"` pulled the full 2.9 MB hero video before anything
+           else could paint. `metadata` + a 67 KB poster gives the same first
+           frame immediately while the video streams in behind it — the poster
+           becomes the LCP element instead of the video. */
+        preload="metadata"
+        poster="/hero-poster.jpg"
         position="absolute"
         inset={0}
         w="100%"

@@ -32,7 +32,13 @@
     "test": "jest",
     "test:coverage": "jest --coverage",
     "test:watch": "jest --watch",
-    "build:fast": "node scripts/build-fast.mjs"
+    "build:fast": "node scripts/build-fast.mjs",
+    "stress": "ts-node --transpile-only scripts/stress-test.ts",
+    "stress:million": "ts-node --transpile-only scripts/stress-test.ts --users=100000 --tx-per-user=10 --msg-per-user=2",
+    "stress:race": "ts-node --transpile-only scripts/stress-test.ts --skip-seed --concurrency=256 --debits=200",
+    "stress:clean": "ts-node --transpile-only scripts/stress-test.ts --cleanup",
+    "stress:enterprise": "ts-node --transpile-only scripts/stress-enterprise.ts",
+    "fix:opening-balances": "ts-node --transpile-only scripts/fix-opening-balances.ts"
   },
   "overrides": {
     "axios": "^1.17.0"

@@ -2,10 +2,10 @@ import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
   title: 'Partners — tazdan',
-  description: 'Regulated infrastructure behind tazdan. We connect you to regulated partners for payments and liquidity—we don\'t custody funds.',
+  description: 'How tazdan works with licensed partners for payments and liquidity—we don\'t custody funds.',
   openGraph: {
     title: 'Partners — tazdan',
-    description: 'Regulated infrastructure behind tazdan. Buy, sell, and swap through compliant rails powered by Banxa and Crypto.com.',
+    description: 'How tazdan works with banks, payment companies, card issuers and remittance operators across MENA.',
     url: 'https://tazdan.com/partners',
   },
   alternates: { canonical: 'https://tazdan.com/partners' },

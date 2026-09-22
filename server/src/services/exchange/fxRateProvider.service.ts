@@ -64,9 +64,23 @@ function fallbackRate(base: string, quote: string): number | null {
 
 interface Provider {
   name: string;
+  /**
+   * Which market this source prices.
+   *
+   *   'parallel' — the rate people actually transact at.
+   *   'official' — a central-bank / IMF peg.
+   *
+   * For LYD these differ by ~30%, and quoting one when you meant the other is
+   * not a rounding error: it is a materially wrong price on every conversion.
+   * See the guard in fetchProviderMid().
+   */
+  basis: 'parallel' | 'official';
   supports(base: string, quote: string): boolean;
   fetch(base: string, quote: string): Promise<{ mid: number } | null>;
 }
+
+/** Quotes where only a PARALLEL-market source is acceptable. */
+const PARALLEL_ONLY_QUOTES = new Set(['LYD']);
 
 async function fetchJsonTimeout(url: string, ms = 4000): Promise<any | null> {
   try {
@@ -86,6 +100,7 @@ async function fetchJsonTimeout(url: string, ms = 4000): Promise<any | null> {
 // those and the next provider handles them.
 const frankfurter: Provider = {
   name: 'frankfurter',
+  basis: 'official',
   supports: () => true,
   async fetch(base, quote) {
     const json = await fetchJsonTimeout(`https://api.frankfurter.dev/v1/latest?base=${base}&symbols=${quote}`);
@@ -99,6 +114,7 @@ const frankfurter: Provider = {
 // rate vs the base, so we read the quote out of the map.
 const openErApi: Provider = {
   name: 'open.er-api',
+  basis: 'official',
   supports: () => true,
   async fetch(base, quote) {
     const json = await fetchJsonTimeout(`https://open.er-api.com/v6/latest/${base}`);
@@ -168,6 +184,7 @@ export async function getScrapedLydRates(): Promise<Record<string, number>> {
 // Provider: any FIAT/LYD pair (USD/LYD, EUR/LYD, …) sourced from the scrape.
 const lydParallel: Provider = {
   name: 'lyd-parallel-scrape',
+  basis: 'parallel',
   supports: (base, quote) => quote === 'LYD' && LYD_SCRAPE_CODES.includes(base.toUpperCase()),
   async fetch(base) {
     const rates = await scrapeLydRates();
@@ -182,6 +199,7 @@ const lydParallel: Provider = {
 // to the scraper) when no Fulus token is configured.
 const fulusLyd: Provider = {
   name: 'fulus',
+  basis: 'parallel',
   supports: (base, quote) => quote === 'LYD',
   async fetch(base) {
     const { getFulusLydRate } = await import('./fulus.service');
@@ -192,6 +210,7 @@ const fulusLyd: Provider = {
 
 const openExchangeRates: Provider = {
   name: 'openexchangerates',
+  basis: 'official',
   supports: () => Boolean(process.env.OPENEXCHANGERATES_APP_ID),
   async fetch(base, quote) {
     const appId = process.env.OPENEXCHANGERATES_APP_ID!;
@@ -268,8 +287,20 @@ async function applySpread(base: string, quote: string, mid: number): Promise<{ 
  * Sanity bounds (when defined for the pair) reject poisoned API values.
  */
 async function fetchProviderMid(base: string, quote: string): Promise<ProviderMid | null> {
+  const needsParallel = PARALLEL_ONLY_QUOTES.has(quote.toUpperCase());
   for (const provider of RATE_PROVIDERS) {
     if (!provider.supports(base, quote)) continue;
+    // An official peg must NEVER silently stand in for a parallel rate. When
+    // the Fulus feed is down or FULUS_API_TOKEN is unset, the chain used to
+    // fall through to a central-bank source and quote USD/LYD ~6.4 while the
+    // real market was ~9.27 — a ~31% error, served silently, on the exact
+    // number this product exists to get right. Refusing to quote is the
+    // correct failure: a missing rate is visible, a wrong one is not.
+    if (needsParallel && provider.basis !== 'parallel') {
+      // eslint-disable-next-line no-console
+      console.warn(`[fx] ${provider.name} is an OFFICIAL-peg source; refusing to quote ${base}/${quote} from it`);
+      continue;
+    }
     const result = await provider.fetch(base, quote);
     if (!result) continue;
     if (!withinSanity(base, quote, result.mid)) {

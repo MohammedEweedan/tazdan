@@ -22,7 +22,8 @@ import {
   useColorMode,
   useDisclosure,
 } from "@chakra-ui/react";
-import { FiMenu, FiChevronRight } from "react-icons/fi";
+import { FiMenu, FiX } from "react-icons/fi";
+import { motion, AnimatePresence } from "framer-motion";
 import Logo from "@/components/ui/Logo";
 import ColorModeToggle from "@/components/ui/ColorModeToggle";
 import LanguageSwitcher from "@/components/ui/LanguageSwitcher";
@@ -116,6 +117,7 @@ export default function PublicNav() {
           py={{ base: 2, md: 1.5 }}
           h={{ base: "52px", md: "56px" }}
           pointerEvents="auto"
+          position="relative"
         >
           {/* Brand */}
           <Box as={NextLink} href="/" flexShrink={0} display="flex" alignItems="center" px={{ base: 0, md: 2 }}>
@@ -146,8 +148,35 @@ export default function PublicNav() {
             })}
           </HStack>
 
-          {/* Right cluster */}
-          <HStack spacing={{ base: 1, md: 2 }} ms="auto">
+          {/* MOBILE rail — the four controls are pinned to exact positions
+              (0% / 25% / 50% / 100%) rather than flowed, because flexbox
+              spacing gives thirds, not quarters. Desktop keeps the normal
+              right-aligned cluster. */}
+          <Box
+            display={{ base: "block", lg: "none" }}
+            position="absolute" left={0} right={0} top={0} bottom={0}
+            pointerEvents="none"
+          >
+            <Box position="absolute" top="50%" left="25%" transform="translate(-50%,-50%)" pointerEvents="auto">
+              <LanguageSwitcher />
+            </Box>
+            <Box position="absolute" top="50%" left="50%" transform="translate(-50%,-50%)" pointerEvents="auto">
+              <ColorModeToggle />
+            </Box>
+            <Box position="absolute" top="50%" right={3} transform="translateY(-50%)" pointerEvents="auto">
+              <IconButton
+                aria-label="Open menu"
+                icon={<Icon as={FiMenu} boxSize={5} />}
+                onClick={onOpen}
+                variant="ghost"
+                color={textMain}
+                _hover={{ bg: dark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)" }}
+              />
+            </Box>
+          </Box>
+
+          {/* Right cluster (desktop) */}
+          <HStack spacing={{ base: 1, md: 2 }} ms="auto" display={{ base: "none", lg: "flex" }}>
             {/* Theme + locale — now visible on mobile too (was hidden under
                 the hamburger). Locale collapses to a compact flag+code chip and
                 its picker opens as a bottom sheet on small screens. */}
@@ -175,90 +204,107 @@ export default function PublicNav() {
             >
               {t("nav_join_waitlist")}
             </Button>
-            {/* Mobile hamburger */}
-            <IconButton
-              display={{ base: "flex", lg: "none" }}
-              aria-label="Open menu"
-              icon={<Icon as={FiMenu} boxSize={5} />}
-              onClick={onOpen}
-              variant="ghost"
-              color={textMain}
-              _hover={{ bg: dark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)" }}
-            />
           </HStack>
         </Flex>
       </Box>
 
       <WaitlistModal isOpen={isWaitlistOpen} onClose={onWaitlistClose} />
 
-      {/* Mobile drawer */}
-      <Drawer placement="right" onClose={onClose} isOpen={isOpen} size="xs">
-        <DrawerOverlay bg="rgba(0,0,0,0.5)" backdropFilter="blur(6px)" />
-        <DrawerContent
-          bg={dark ? "#11141A" : "#ffffff"}
-          color={textMain}
-          borderLeft="1px solid"
-          borderColor={dark ? "rgba(255,255,255,0.10)" : "rgba(10,15,30,0.08)"}
-        >
-          <DrawerCloseButton top={4} right={4} color={textMain} />
-          <DrawerBody p={0}>
-            <Flex direction="column" h="100%" pt={6}>
-              <Box px={6} pb={4}>
+      {/* ── FULL-SCREEN MENU ──────────────────────────────────────────────
+          Replaces the side drawer. A drawer is a panel that slides over the
+          page; this takes the whole viewport and the links arrive on a
+          stagger with their own parallax offset, so opening the menu reads as
+          a deliberate change of place rather than a tray sliding out.
+          AnimatePresence keeps the exit animation instead of an instant cut. */}
+      <AnimatePresence>
+        {isOpen && (
+          <motion.div
+            key="fullscreen-menu"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+            style={{
+              position: "fixed", inset: 0, zIndex: 1400,
+              background: dark ? "rgba(10,12,16,0.92)" : "rgba(255,255,255,0.94)",
+              backdropFilter: "blur(26px) saturate(170%)",
+              WebkitBackdropFilter: "blur(26px) saturate(170%)",
+            }}
+          >
+            <Flex direction="column" h="100%" px={7} pt={6} pb={10}>
+              <Flex align="center" justify="space-between" mb={10}>
                 <Logo h={34} />
-              </Box>
-              <Divider borderColor={dark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)"} />
+                <IconButton
+                  aria-label="Close menu"
+                  icon={<Icon as={FiX} boxSize={5} />}
+                  onClick={onClose}
+                  variant="ghost"
+                  color={textMain}
+                  borderRadius="full"
+                  _hover={{ bg: dark ? "rgba(255,255,255,0.08)" : "rgba(10,15,30,0.06)" }}
+                />
+              </Flex>
 
-              <VStack align="stretch" spacing={0} py={2}>
-                {NAV_LINKS.map((l) => {
+              <VStack align="stretch" spacing={1} flex={1}>
+                {NAV_LINKS.map((l, i) => {
                   const active = isActive(l.href);
                   return (
-                    <Flex
+                    <motion.div
                       key={l.href}
-                      as={NextLink}
-                      href={l.href}
-                      onClick={onClose}
-                      px={6} py={4}
-                      align="center"
-                      justify="space-between"
-                      bg={active ? (dark ? "rgba(255,255,255,0.07)" : "rgba(10,15,30,0.05)") : "transparent"}
-                      _hover={{ bg: dark ? "rgba(255,255,255,0.045)" : "rgba(10,15,30,0.035)" }}
-                      borderLeft="2px solid"
-                      borderColor={active ? ctaBg : "transparent"}
-                      transition="background 0.15s ease"
+                      initial={{ opacity: 0, y: 26 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: 12 }}
+                      /* Each row trails the one above it — the parallax. */
+                      transition={{ duration: 0.5, delay: 0.05 + i * 0.045, ease: [0.22, 1, 0.36, 1] }}
                     >
-                      <Text fontSize="16px" fontWeight="750" color={textMain}>{t(l.labelKey)}</Text>
-                      <Icon as={FiChevronRight} color={textSub} />
-                    </Flex>
+                      <Flex
+                        as={NextLink}
+                        href={l.href}
+                        onClick={onClose}
+                        align="baseline"
+                        gap={3}
+                        py={2.5}
+                        _hover={{ opacity: 0.65 }}
+                        transition="opacity .18s ease"
+                      >
+                        <Text
+                          fontSize="11px" fontWeight="700" color={textSub}
+                          fontVariant="tabular-nums" minW="22px"
+                        >
+                          {String(i + 1).padStart(2, "0")}
+                        </Text>
+                        <Text
+                          fontFamily="'DM Sans', sans-serif"
+                          fontSize={{ base: "32px", sm: "38px" }}
+                          fontWeight="800" letterSpacing="-0.04em" lineHeight={1.15}
+                          color={active ? ctaBg : textMain}
+                        >
+                          {t(l.labelKey)}
+                        </Text>
+                      </Flex>
+                    </motion.div>
                   );
                 })}
               </VStack>
 
-              <Box flex={1} />
-
-              {/* Theme + locale live in the top bar now (visible on mobile),
-                  so the drawer doesn't duplicate them. */}
-              <Divider borderColor={dark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)"} />
-
-              <Box px={6} pt={4} pb={8}>
+              <motion.div
+                initial={{ opacity: 0, y: 18 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5, delay: 0.05 + NAV_LINKS.length * 0.045, ease: [0.22, 1, 0.36, 1] }}
+              >
                 <Button
                   onClick={() => { onClose(); onWaitlistOpen(); }}
-                  w="100%"
-                  h="46px"
-                  bg={ctaBg}
-                  color={ctaFg}
-                  borderRadius="full"
-                  fontWeight="800"
-                  fontSize="15px"
-                  boxShadow="0 14px 30px rgba(99,161,219,0.26)"
+                  w="100%" h="52px" bg={ctaBg} color="white"
+                  borderRadius="full" fontWeight="700" fontSize="15px"
                   _hover={{ opacity: 0.92 }}
                 >
                   {t("nav_join_waitlist")}
                 </Button>
-              </Box>
+              </motion.div>
             </Flex>
-          </DrawerBody>
-        </DrawerContent>
-      </Drawer>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </>
   );
 }
