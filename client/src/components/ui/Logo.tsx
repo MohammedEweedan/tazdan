@@ -24,10 +24,14 @@ const LOGO_SRC: Record<"color" | "black" | "white", string> = {
   white: "/logo-color.png",
 };
 
+/* The icon-only mark is the ASTERISK from the wordmark — not the wallet
+   glyph (`icon-color.png`), which read as a generic finance app and shares
+   nothing with the logo people see in the nav. Unlike the wordmark files
+   these DO have real per-mode variants, so each one is used. */
 const ICON_SRC: Record<"color" | "black" | "white", string> = {
-  color: "/icon-color.png",
-  black: "/icon-color.png",
-  white: "/icon-color.png",
+  color: "/icon-asterisk.png",
+  black: "/icon-asterisk-black.png",
+  white: "/icon-asterisk-white.png",
 };
 
 // Icon-only logo (mobile + compact UI)

@@ -122,7 +122,15 @@ export const metadata: Metadata = {
       ar: `${SITE_URL}/ar`,
     },
   },
-  icons: { icon: '/favicon.ico', apple: '/icon-black.png' },
+  // The asterisk from the wordmark. `favicon.ico` carries 16→256 so browsers
+  // pick their own size; the SVG wins where it is supported.
+  icons: {
+    icon: [
+      { url: '/favicon.ico', sizes: 'any' },
+      { url: '/icon-asterisk.svg', type: 'image/svg+xml' },
+    ],
+    apple: '/apple-touch-icon.png',
+  },
 };
 
 export const viewport: Viewport = {

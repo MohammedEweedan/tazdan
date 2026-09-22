@@ -17,6 +17,7 @@ import {
   SimpleGrid,
   useColorMode,
   useDisclosure,
+  useBreakpointValue,
 } from "@chakra-ui/react";
 import {
   FiArrowRight, FiZap, FiGlobe, FiShield, FiCheck,
@@ -32,20 +33,13 @@ import { SiRevolut } from "react-icons/si";
 import {
   motion, useTransform, useMotionValue, useScroll, useSpring,
   MotionValue, AnimatePresence, useAnimationControls,
-  useReducedMotion,
+  useReducedMotion, useMotionValueEvent,
 } from "framer-motion";
-// Lazy-mount the shader so its WebGL setup runs AFTER LCP. Until it
-// hydrates the hero shows a static gradient (handled in CSS), keeping
-// LCP image-driven instead of canvas-driven.
-const ShaderAnimation = dynamic(
-  () => import("@/components/ui/shader-lines").then((m) => m.ShaderLines),
-  { ssr: false, loading: () => null },
-);
 import PublicNav from "@/components/ui/PublicNav";
 import PublicFooter from "@/components/ui/PublicFooter";
 import WaitlistModal from "@/components/ui/WaitlistModal";
 import { VideoHero, ScrollytellingManifesto, AppleBento } from "@/components/ui/AppleShowcase";
-import { FilmSlideUp, FilmReceipt, FilmSplitThree } from "@/components/ui/AppleFilm";
+import { useChime, SoundToggle, ReceiptOverlay, FeeLedger, TrioSibling } from "@/components/ui/AppleFilm";
 import { useIsAr } from "@/hooks/useIsAr";
 
 /* ─────────────────────────────────────────────────────────────────
@@ -59,6 +53,25 @@ import { useIsAr } from "@/hooks/useIsAr";
    ALL child elements use calc(var(--ph) * N) for sizes so they
    scale proportionally on every viewport.
    ───────────────────────────────────────────────────────────────── */
+
+/* ── Film phone sizing ───────────────────────────────────────────────────
+   `--ph` drives the whole device (width is --ph * 0.47), so it is the single
+   knob for how large the phone reads in each film chapter.
+
+   Desktop wants a BIG phone: the sticky stage is a full 100vh and the old
+   48vh device left most of it empty. Mobile is the opposite problem — the
+   phone shares that same 100vh with the chapter's copy, so it has to stay
+   small enough that both fit without the stage overflowing.
+
+   STACKED is shorter because FilmReceipt puts copy ABOVE the phone below
+   `lg`; TRIO is shorter again because three phones sit side by side, where
+   width runs out before height does. */
+const FILM_PH         = { base: "clamp(300px, 54vh, 520px)", md: "clamp(460px, 68vh, 880px)" };
+const FILM_PH_STACKED = { base: "clamp(260px, 44vh, 430px)", lg: "clamp(460px, 70vh, 900px)" };
+const FILM_PH_TRIO    = { base: "clamp(180px, 32vh, 300px)", md: "clamp(340px, 58vh, 700px)" };
+/** Hero device height in the journey. Used by the phone AND by the centre
+ *  trio label, which offsets itself from it — keep them one value. */
+const JOURNEY_PH = "clamp(300px, 58vh, 820px)";
 
 const phoneVars: React.CSSProperties = {
   ["--ph" as string]: "clamp(380px, 48vh, 720px)",
@@ -1485,17 +1498,25 @@ function StaticPhone({
   phOverride,
 }: {
   children: React.ReactNode;
-  phOverride?: string;
+  /** Phone height. A plain string sets `--ph` inline; a responsive object
+   *  (e.g. `{ base: "40vh", md: "64vh" }`) goes through Chakra's `sx` so the
+   *  film chapters can run a big phone on desktop and a smaller one that
+   *  still fits inside a 100vh stage on a handset. */
+  phOverride?: string | Partial<Record<string, string>>;
 }) {
   const dark = usePhoneDark();
-  const overrideVars = phOverride
-    ? ({ "--ph": phOverride } as React.CSSProperties)
-    : {};
+  const responsive = phOverride !== undefined && typeof phOverride !== "string";
+  // An inline style always beats a generated class, so when the caller wants a
+  // RESPONSIVE height `--ph` must be left OUT of the inline vars entirely —
+  // otherwise the sx breakpoints below are silently dead.
+  const { ["--ph" as string]: defaultPh, ...varsNoPh } = phoneVars as Record<string, string>;
+  const baseVars = responsive ? varsNoPh : { ...varsNoPh, "--ph": (phOverride as string) ?? defaultPh };
 
   return (
     <Box
       position="relative"
-      style={{ ...phoneVars, ...overrideVars, width: "var(--pw)", height: "var(--ph)" } as React.CSSProperties}
+      style={{ ...baseVars, width: "var(--pw)", height: "var(--ph)" } as React.CSSProperties}
+      sx={responsive ? { "--ph": phOverride } : undefined}
       mx="auto"
     >
       <Box
@@ -3339,16 +3360,31 @@ function PhoneJourney() {
      7 exact chapters, each separated by a narrow fade band:
      0 login, 1 dashboard, 2 messages, 3 buy, 4 market detail,
      5 top up, 6 card/top-up close. */
+  /* One timeline for the whole story. The beats that used to live in the
+     separate AppleFilm sections are now stages 9–11 of THIS journey, so the
+     visitor never meets a second phone or a second sticky stage:
+
+       lock → 360° unlock → home → chat (+ receipt, +chime) → buy → asset
+       → top-up → card → trio fan → zoom into the screen → black. */
   const journeyTiming = useMemo(() => ({
-    unlock: [0.04, 0.13],
-    introCopy: [0.000, 0.035, 0.130, 0.180],
-    homeCopy: [0.145, 0.185, 0.280, 0.325],
-    chat: [0.305, 0.345, 0.455, 0.495],
-    buy: [0.475, 0.515, 0.625, 0.665],
-    asset: [0.645, 0.685, 0.795, 0.835],
-    topUp: [0.815, 0.855, 0.930, 0.965],
-    card: [0.955, 0.982, 1.000],
+    unlock: [0.03, 0.10],
+    introCopy: [0.000, 0.028, 0.100, 0.140],
+    homeCopy: [0.115, 0.148, 0.224, 0.260],
+    chat: [0.244, 0.276, 0.364, 0.396],
+    buy: [0.380, 0.412, 0.500, 0.532],
+    asset: [0.516, 0.548, 0.636, 0.668],
+    topUp: [0.652, 0.684, 0.744, 0.772],
+    card: [0.750, 0.772, 0.812, 0.836],
+    /* Fan out, then HOLD from .900 to .935 — dead air on purpose, so there is
+       time to actually read all three screens before anything else moves. */
+    trio: [0.836, 0.900],
+    /* Screens power off first (the phones visibly go dark), THEN the zoom
+       drives into them, and only then does the stage finish to black. */
+    screensOff: [0.935, 0.962],
+    zoomOut: [0.952, 1.000],
   }), []);
+  /* The transfer lands mid-chat — the one moment the sound belongs to. */
+  const RECEIPT_AT = 0.318;
   const stageLayerStyle = useMemo(
     () => ({ position: "absolute", inset: 0, willChange: "opacity" }) as const,
     [],
@@ -3364,7 +3400,10 @@ function PhoneJourney() {
   const opBuy    = useTransform(scrollYProgress, journeyTiming.buy, [0, 1, 1, 0]);
   const opSearch = useTransform(scrollYProgress, journeyTiming.asset, [0, 1, 1, 0]);
   const opPay    = useTransform(scrollYProgress, journeyTiming.topUp, [0, 1, 1, 0]);
-  const opCard   = useTransform(scrollYProgress, journeyTiming.card, [0, 1, 1]);
+  const opCard   = useTransform(scrollYProgress, journeyTiming.card, [0, 1, 1, 0]);
+  /* Finale layer: comes up for the trio and NEVER fades, so the closing zoom
+     drives into a live wallet rather than a dead black rectangle. */
+  const opFinale = useTransform(scrollYProgress, [0.846, 0.872], [0, 1]);
   // Legacy floating card transforms are kept inert; the real card/top-up UI now
   // lives inside the screenshot stage so the mockup matches the app.
   const cardX    = useTransform(scrollYProgress, [0.82, 0.96], [-80,  0]);
@@ -3378,11 +3417,65 @@ function PhoneJourney() {
   const copyD = useTransform(scrollYProgress, journeyTiming.buy, [0, 1, 1, 0]);
   const copyE = useTransform(scrollYProgress, journeyTiming.asset, [0, 1, 1, 0]);
   const copyF = useTransform(scrollYProgress, journeyTiming.topUp, [0, 1, 1, 0]);
-  const copyG = useTransform(scrollYProgress, journeyTiming.card, [0, 1, 1]);
+  const copyG = useTransform(scrollYProgress, journeyTiming.card, [0, 1, 1, 0]);
 
   // shader background — stays alive through the journey instead of fading out
   // so the line field keeps visibly moving behind every phone chapter.
-  const shaderOp = useTransform(scrollYProgress, [0, 0.25, 0.80, 1], [0.82, 0.78, 0.68, 0.58]);
+  /* ── 360° unlock spin ──────────────────────────────────────────────
+     The phone turns a full revolution as the lock screen slides away, so
+     unlocking reads as one physical gesture rather than a crossfade. It is
+     driven by `unlockProgress` (not raw scroll) so the spin and the lock
+     come apart at exactly the same rate, forwards or backwards. */
+  /* Eased rather than linear (a constant-rate spin reads mechanical), then
+     lightly sprung so it glides instead of tracking the wheel tick-for-tick. */
+  const spinRaw = useTransform(unlockProgress, [0, 0.2, 0.5, 0.8, 1], [0, 42, 180, 318, 360]);
+  const spinY = useSpring(spinRaw, { stiffness: 70, damping: 18, mass: 0.5 });
+
+  /* ── Zoom into the screen, then to black ───────────────────────────
+     The closing move: the device rushes at the viewer, the screen fills the
+     frame, and the stage blacks out just as the next section arrives — so
+     the journey ENDS rather than just scrolling away. */
+  const zoomScale   = useTransform(scrollYProgress, journeyTiming.zoomOut, [1, 9]);
+  const zoomOpacity = useTransform(scrollYProgress, [journeyTiming.zoomOut[0], 0.986, 1], [1, 1, 0]);
+  /* Screens dim to black BEFORE the zoom — the devices power off, then rush
+     the viewer. Applied to the screen stack, not the stage. */
+  const screensOff  = useTransform(scrollYProgress, journeyTiming.screensOff, [1, 0]);
+  /* The stage finishes to black last, so the next section arrives out of it. */
+  const blackout    = useTransform(scrollYProgress, [0.972, 0.998], [0, 1]);
+
+  /* The phone lives in the RIGHT grid column. For the trio finale the copy is
+     gone, so the group slides to true viewport centre and the three screens
+     sit balanced instead of crowding one side. */
+  const trioLabelOp = useTransform(scrollYProgress, [0.878, 0.900, 0.932, 0.948], [0, 1, 1, 0]);
+  const trioShiftVw = useBreakpointValue({ base: 0, lg: -22 }) ?? 0;
+  const groupX = useTransform(
+    scrollYProgress,
+    journeyTiming.trio,
+    ["0vw", `${trioShiftVw}vw`],
+  );
+
+  const reducedMotion = !!useReducedMotion();
+
+  /* Trio geometry. The fan spans roughly phoneWidth * (1 + 2 * spread), so a
+     desktop spread would push the outer two clean off a handset — it comes in
+     and they shrink a little more to buy the room back. Chakra's default
+     `ssr: true` matters here: `{ ssr: false }` reads window.matchMedia during
+     render and throws on the server. */
+  const trioSpread   = useBreakpointValue({ base: 62, md: 100, lg: 116 }) ?? 116;
+  const trioEndScale = useBreakpointValue({ base: 0.66, md: 0.82 }) ?? 0.82;
+
+  /* Chime — fires once on the downward crossing of the receipt beat, and
+     re-arms if the visitor scrolls back out and in again. */
+  const chime = useChime();
+  const chimeFired = useRef(false);
+  useMotionValueEvent(scrollYProgress, "change", (v) => {
+    if (v >= RECEIPT_AT && !chimeFired.current) {
+      chimeFired.current = true;
+      if (chime.armed) chime.play();
+    } else if (v < RECEIPT_AT - 0.02) {
+      chimeFired.current = false;
+    }
+  });
   // ambient halo follows the phone, gently breathing
   const phoneScale = useTransform(scrollYProgress, [0, 0.16], [0.96, 1]);
 
@@ -3420,32 +3513,10 @@ function PhoneJourney() {
   }, [flinch, rawProgress]);
 
   return (
-    <Box ref={ref} position="relative" zIndex={1} h={{ base: "1180vh", md: "1180vh" }}>
+    <Box ref={ref} position="relative" zIndex={1} h={{ base: "1500vh", md: "1560vh" }}>
       <Box position="sticky" top={0} h="100vh" w="100%" overflow="visible"
         style={{ contain: "layout" } as React.CSSProperties}
       >
-        {/* ── Shader background — intentionally overdraws above and below this
-            sticky frame so the line field bleeds into the manifesto and bento. ── */}
-        <motion.div
-          aria-hidden
-          style={{
-            position: "absolute",
-            top: "-72vh",
-            right: 0,
-            bottom: "-68vh",
-            left: 0,
-            opacity: shaderOp,
-            pointerEvents: "none", zIndex: 0,
-            maskImage: "linear-gradient(180deg, transparent 0%, #000 18%, #000 82%, transparent 100%)",
-            WebkitMaskImage: "linear-gradient(180deg, transparent 0%, #000 18%, #000 82%, transparent 100%)",
-          }}
-        >
-          {/* Shader has transparent bg — normal blend works for both light & dark */}
-          <Box position="absolute" inset={0}>
-            <ShaderAnimation mode={colorMode === "dark" ? "dark" : "light"} />
-          </Box>
-        </motion.div>
-
         <Box position="absolute" inset={0} overflow="hidden" zIndex={1}>
         {/* ── Layout grid ── */}
         <Container maxW="1300px" h="100%" position="relative" zIndex={1} px={{ base: 4, md: 10 }}>
@@ -3478,6 +3549,32 @@ function PhoneJourney() {
                 title={<>{t("sec_social_title_1")}<br /><Box as="span" color={ACCENT}>{t("sec_social_title_2")}</Box></>}
                 desc={t("sec_social_desc")}
               />
+              {/* Rides the same beat as the transfer landing on the phone:
+                  the fee strikes through to zero, and the sound the app
+                  actually plays is offered (opt-in — browsers block
+                  un-gestured audio, and a marketing page shouldn't ambush
+                  anyone with noise). */}
+              <motion.div
+                style={{
+                  opacity: copyC, position: "absolute", left: 0, right: 0, bottom: "-16px",
+                  pointerEvents: "auto",
+                }}
+              >
+                <HStack spacing="12px" flexWrap="wrap" justify={{ base: "center", lg: "flex-start" }}>
+                  <FeeLedger
+                    progress={scrollYProgress} at={RECEIPT_AT}
+                    before="$2.40" after="$0.00" dark={dark} reduced={reducedMotion}
+                  />
+                  <SoundToggle
+                    armed={chime.armed}
+                    dark={dark}
+                    onToggle={() => {
+                      if (chime.armed) chime.disarm();
+                      else if (chime.arm()) chime.play(); // confirm the choice audibly
+                    }}
+                  />
+                </HStack>
+              </motion.div>
               <StageCopy op={copyD} accent={ACCENT} textMain={textMain} textMuted={textMuted} hairline={hairline} tileBg={tileBg} isAr={isAr}
                 eyebrow={t("feat_buy_eyebrow")}
                 title={<Box as="span" color={textMain}>{t("feat_buy_title")}</Box>}
@@ -3598,17 +3695,96 @@ function PhoneJourney() {
 
                 {/* Flinch wrapper — gives the locked phone a little upward
                     bounce when the visitor lingers, nudging them to scroll. */}
+                {/* ZOOM-OUT layer — the closing move. Everything inside rushes
+                    at the viewer while `blackout` (rendered over the stage
+                    below) takes the frame to black. */}
+                <motion.div style={{ x: groupX, scale: zoomScale, opacity: zoomOpacity, transformOrigin: "50% 44%" }}>
+                {/* Positioned wrapper: the trio siblings centre on THIS box, so
+                    they start exactly behind the hero phone and fan out of it. */}
+                <Box position="relative" style={{ perspective: "1600px", ["--ph" as string]: JOURNEY_PH } as React.CSSProperties}>
+
+                <TrioSibling
+                  progress={scrollYProgress} range={journeyTiming.trio as [number, number]}
+                  exit={journeyTiming.screensOff as [number, number]}
+                  side={-1} spread={trioSpread} endScale={trioEndScale}
+                  label={t("tz_trio_a", "Budgets")} caption={t("tz_trio_a_sub", "Every plan its own pocket")}
+                  dark={dark} reduced={reducedMotion}
+                >
+                  <StaticPhone phOverride={FILM_PH_TRIO}>
+                    <ScreenStill shot={tazdanNewShot(2140)} alt="tazdan budgets" />
+                  </StaticPhone>
+                </TrioSibling>
+                <TrioSibling
+                  progress={scrollYProgress} range={journeyTiming.trio as [number, number]}
+                  exit={journeyTiming.screensOff as [number, number]}
+                  side={1} spread={trioSpread} endScale={trioEndScale}
+                  label={t("tz_trio_c", "Card PIN")} caption={t("tz_trio_c_sub", "Biometric, auto-hides")}
+                  dark={dark} reduced={reducedMotion}
+                >
+                  <StaticPhone phOverride={FILM_PH_TRIO}>
+                    <ScreenStill shot={tazdanNewShot(2146)} alt="tazdan card PIN" />
+                  </StaticPhone>
+                </TrioSibling>
+
                 <motion.div animate={flinch}>
-                <motion.div style={{ rotateX: tiltX, scale: phoneScale, transformOrigin: "50% 60%" }}>
+                {/* rotateY carries the 360° unlock spin. `preserve-3d` plus the
+                    back face below means the phone genuinely TURNS OVER —
+                    without them you just see a mirrored screenshot sweep past. */}
+                {/* Sizing + CSS vars live on a plain Box; the motion element
+                    below carries only transforms, so the style object stays a
+                    valid MotionStyle. */}
                 <Box
-                  position="relative"
                   style={{
                     ...phoneVars,
-                    /* Larger phone so it reads well on every viewport */
-                    ["--ph" as string]: "clamp(260px, 42vh, 640px)",
+                    /* Big device — the sticky stage is a full 100vh and the old
+                       42vh phone left most of it empty. Still clamped so it
+                       fits a handset alongside the copy column. */
+                    ["--ph" as string]: JOURNEY_PH,
                     width: "var(--pw)", height: "var(--ph)",
+                    margin: "0 auto", position: "relative",
                   } as React.CSSProperties}
-                  mx="auto"
+                >
+                <motion.div
+                  style={{
+                    position: "absolute", inset: 0,
+                    rotateX: tiltX, rotateY: spinY, scale: phoneScale,
+                    transformOrigin: "50% 60%", transformStyle: "preserve-3d",
+                  }}
+                >
+                {/* ── BACK OF THE PHONE ── only visible while the device is
+                    turned away from the viewer mid-spin. The real product
+                    render, trimmed of its transparent margin so its silhouette
+                    lines up with the front frame (`objectFit: fill` closes the
+                    last ~5% of aspect difference; imperceptible at spin speed
+                    and better than the back visibly shrinking). */}
+                <Box
+                  aria-hidden
+                  position="absolute"
+                  inset={0}
+                  style={{
+                    transform: "rotateY(180deg)",
+                    backfaceVisibility: "hidden",
+                    WebkitBackfaceVisibility: "hidden",
+                  } as React.CSSProperties}
+                >
+                  <NextImage
+                    src="/iphone-18-pro-back.png"
+                    alt=""
+                    fill
+                    sizes="(max-width: 480px) 55vw, (max-width: 1024px) 38vw, 320px"
+                    style={{ objectFit: "fill" }}
+                  />
+                </Box>
+
+                {/* ── FRONT OF THE PHONE ── */}
+                <Box
+                  position="absolute"
+                  inset={0}
+                  zIndex={3}
+                  style={{
+                    backfaceVisibility: "hidden",
+                    WebkitBackfaceVisibility: "hidden",
+                  } as React.CSSProperties}
                 >
                   <Box
                     position="absolute"
@@ -3617,6 +3793,9 @@ function PhoneJourney() {
                     bg="#000000"
                     boxShadow="inset 0 0 0 1px rgba(255,255,255,0.04)"
                   >
+                    {/* Whole screen stack dims to black BEFORE the closing zoom
+                        — the device visibly powers off, then rushes forward. */}
+                    <motion.div style={{ position: "absolute", inset: 0, opacity: screensOff }}>
                     {/* Dashboard fades to black after the home section so gaps
                         between feature stages never flash the home screen. */}
                     <motion.div style={{ ...stageLayerStyle, opacity: opHome }}>
@@ -3639,7 +3818,25 @@ function PhoneJourney() {
                       <ScreenCardMainShot />
                     </motion.div>
                     {/* Lock screen sits on top, slides off with unlockProgress */}
+                    {/* Centre of the trio — a screen the journey above never
+                        showed, so the finale adds something instead of
+                        repeating itself. */}
+                    <motion.div style={{ ...stageLayerStyle, opacity: opFinale }}>
+                      <ScreenStill shot={tazdanNewShot(2141)} alt="tazdan savings goal" />
+                    </motion.div>
+                    {/* The transfer lands ON the phone already on stage —
+                        this is the beat the chime fires with. */}
+                    <ReceiptOverlay
+                      progress={scrollYProgress}
+                      at={RECEIPT_AT}
+                      amount="250"
+                      asset="USDT"
+                      dark={dark}
+                      reduced={reducedMotion}
+                    />
+                    {/* Lock screen sits on top, slides off with unlockProgress */}
                     <LockScreen unlockProgress={unlockProgress} />
+                    </motion.div>
                   </Box>
                   <NextImage
                     src="/iphone-frame.png"
@@ -3650,6 +3847,27 @@ function PhoneJourney() {
                   />
                 </Box>
               </motion.div>
+              </Box>
+
+              {/* Centre label — matches the two siblings so the finale reads as
+                  three peers, not one phone with two accessories. */}
+              <motion.div
+                style={{
+                  opacity: trioLabelOp,
+                  position: "absolute", left: 0, right: 0,
+                  top: "calc(50% + var(--ph) * 0.52)",
+                  textAlign: "center", zIndex: 4, pointerEvents: "none",
+                }}
+              >
+                <Text fontFamily="'DM Sans', sans-serif" fontSize={{ base: "12px", md: "14px" }} fontWeight={700} letterSpacing="-0.01em" color={textMain}>
+                  {t("tz_trio_b", "Savings goals")}
+                </Text>
+                <Text fontFamily="'DM Sans', sans-serif" fontSize={{ base: "10px", md: "12px" }} color={textMuted} mt="2px">
+                  {t("tz_trio_b_sub", "Auto-saving, every week")}
+                </Text>
+              </motion.div>
+              </motion.div>
+              </Box>
               </motion.div>
 
               {/* Scroll-to-explore cue — appears if the visitor lingers on the
@@ -3697,6 +3915,20 @@ function PhoneJourney() {
           }} />
         </Box>
         </Box>
+
+        {/* ── Blackout ──────────────────────────────────────────────────
+            The last thing that happens. As the phone rushes toward the
+            viewer the stage fades to black, so the journey ends on a cut
+            rather than sliding limply out of frame — and the section below
+            arrives out of that black. pointerEvents stays off so it never
+            swallows a click on the way past. */}
+        <motion.div
+          aria-hidden
+          style={{
+            position: "absolute", inset: 0, zIndex: 40,
+            background: "#000", opacity: blackout, pointerEvents: "none",
+          }}
+        />
       </Box>
     </Box>
   );
@@ -3816,73 +4048,6 @@ export default function LandingPage() {
       <Box id="features">
         <PhoneJourney />
       </Box>
-
-      {/* ══════════════════════════════════════════════════════════════
-          FILM — three scroll-choreographed chapters. Unlike PhoneJourney
-          (which crossfades screenshots) these are driven ENTIRELY by
-          scroll position: nothing advances on a timer, so the stage is
-          reversible and never moves while the visitor is still.
-          Choreography lives in AppleFilm; the screens are ours.
-          ══════════════════════════════════════════════════════════════ */}
-      <FilmSlideUp
-        eyebrow={t("tz_film_1_eyebrow", "Every market, one list")}
-        headline={t("tz_film_1_head", "Scroll the whole market.")}
-        sub={t("tz_film_1_sub", "Live rates on every asset we carry — the real ones, not the official fiction.")}
-        /* 0 because a still capture is exactly 9:19.5 and `cover`-fits the
-           frame — translating it would expose a gap under the bezel. To turn
-           the inner scroll on, capture a TALL screenshot of the full asset
-           list (scrolled, stitched) and set this to (imageHeight - frameHeight). */
-        innerScroll={0}
-        screen={<StaticPhone><ScreenStill shot={tazdanNewShot(2135)} alt="tazdan wallet and asset list" /></StaticPhone>}
-      />
-
-      <FilmReceipt
-        eyebrow={t("tz_film_2_eyebrow", "Free transfers")}
-        headline={t("tz_film_2_head", "Sent. No fee.")}
-        sub={t("tz_film_2_sub", "Transfers between tazdan accounts settle instantly and cost nothing.")}
-        amount="250"
-        asset="USDT"
-        feeBefore="$2.40"
-        feeAfter="$0.00"
-        screen={<StaticPhone><ScreenStill shot={tazdanNewShot(2143)} alt="tazdan payment conversation" /></StaticPhone>}
-      />
-
-      <FilmSplitThree
-        eyebrow={t("tz_film_3_eyebrow", "Three ways to move")}
-        headline={t("tz_film_3_head", "One app. Every direction.")}
-        panels={[
-          {
-            label: t("tz_film_3_a", "Recurring buy"),
-            caption: t("tz_film_3_a_sub", "Set it once"),
-            screen: (
-              <StaticPhone phOverride="clamp(280px, 34vh, 520px)">
-                <ScreenStill shot={tazdanNewShot(2136)} alt="tazdan recurring buy" />
-              </StaticPhone>
-            ),
-          },
-          {
-            // NOTE: there is no dedicated Send capture in /screenshots/tazdan
-            // yet, so this panel shows Top up — the label matches the pixels.
-            // Drop a send screenshot in and swap the shot + label together.
-            label: t("tz_film_3_b", "Top up"),
-            caption: t("tz_film_3_b_sub", "Card or bank, instantly"),
-            screen: (
-              <StaticPhone phOverride="clamp(280px, 34vh, 520px)">
-                <ScreenStill shot={tazdanNewShot(2142)} alt="tazdan top up" />
-              </StaticPhone>
-            ),
-          },
-          {
-            label: t("tz_film_3_c", "Savings"),
-            caption: t("tz_film_3_c_sub", "Goals that fund themselves"),
-            screen: (
-              <StaticPhone phOverride="clamp(280px, 34vh, 520px)">
-                <ScreenStill shot={tazdanNewShot(2140)} alt="tazdan savings goals" />
-              </StaticPhone>
-            ),
-          },
-        ]}
-      />
 
       {/* ── Feature bento: restrained, asymmetric outline cards on the page
           background — no generic grid boxes. ── */}
