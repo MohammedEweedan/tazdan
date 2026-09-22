@@ -22,9 +22,9 @@ import type { Currency, MarketTicker, P2POffer } from '@/types';
 import { TopGradient } from '@/components/ui/ScreenShell';
 
 type Side = 'BUY' | 'SELL';
-const FIATS: Currency[]   = ['USD', 'AED', 'SAR', 'EUR', 'EGP'];
+const FIATS: Currency[]   = ['LYD', 'AED', 'SAR', 'EGP', 'USD', 'EUR'];
 // CRYPTOS is now dynamic — built from user holdings + market tickers in CreateListingSheet
-const FIAT_OPTIONS        = ['USD', 'EUR', 'GBP', 'AED', 'SAR', 'EGP', 'LYD'] as const;
+const FIAT_OPTIONS        = ['LYD', 'AED', 'SAR', 'EGP', 'USD', 'EUR', 'GBP'] as const;
 const METHODS             = ['Bank Transfer', 'Wise', 'Revolut', 'Cash', 'PayPal', 'Internal Wallet'] as const;
 const FIAT_SET            = new Set<string>(['USD','EUR','GBP','AED','SAR','EGP','LYD','CAD','AUD','CHF','JPY','CNY']);
 
@@ -644,7 +644,7 @@ function CreateListingSheet({ palette: p, t, onClose, onCreated }: {
   const [currency, setCurrency]     = useState<string>('USDT');
   const [showAssetPicker, setShowAssetPicker] = useState(false);
   const [assetSearch, setAssetSearch] = useState('');
-  const [fiatCurrency, setFiat]     = useState<typeof FIAT_OPTIONS[number]>('USD');
+  const [fiatCurrency, setFiat]     = useState<typeof FIAT_OPTIONS[number]>('LYD');
   const [price, setPrice]           = useState('');
   const [amount, setAmount]         = useState('');
   const [minLimit, setMin]          = useState('');

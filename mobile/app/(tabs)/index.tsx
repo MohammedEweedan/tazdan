@@ -48,6 +48,11 @@ import type { Wallet } from '@/types';
 
 type Tab = 'ASSETS' | 'ACTIVITY';
 
+/** Height of both header capsules (@handle + the action track). They must
+ *  match or the header row stops reading as one line — so it lives here
+ *  rather than being typed twice. */
+const HEADER_PILL_H = 38;
+
 export default function Home() {
   const router = useRouter();
   const h = useHaptics();
@@ -354,7 +359,7 @@ export default function Home() {
             accessibilityLabel={showBalance ? 'Hide balance' : 'Show balance'}
             style={{
               position: 'absolute',
-              top: insets.top + 64, right: 20,
+              top: insets.top + 70, right: 20,
               zIndex: 5,
               width: 30, height: 30, borderRadius: 15,
               alignItems: 'center', justifyContent: 'center',
@@ -367,13 +372,19 @@ export default function Home() {
             />
           </Pressable>
 
-          {/* Header */}
+          {/* Header — two hairline-bordered capsules (identity on the left,
+              a segmented action track on the right) sitting on the glass.
+              Both carry a BRIGHTER top border than their sides
+              (`divider` over `border`) so light appears to catch the top
+              edge — the detail that makes the row read as a machined
+              control rather than a flat grey chip. Keep the two capsules
+              the same height (HEADER_PILL_H) or the row stops aligning. */}
           <View style={{
             flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-            paddingHorizontal: 24, paddingTop: insets.top + 8, paddingBottom: 6,
+            paddingHorizontal: 20, paddingTop: insets.top + 10, paddingBottom: 8,
             gap: 10,
           }}>
-            <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10, minWidth: 0 }}>
+            <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, minWidth: 0 }}>
               {/* Tapping the avatar + @handle opens the receive / QR-code
                   sheet (the QR trigger). Long-press still jumps to the
                   full profile. */}
@@ -383,10 +394,21 @@ export default function Home() {
                 hitSlop={6}
                 accessibilityRole="button"
                 accessibilityLabel={t('action.receive')}
-                style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flexShrink: 1, minWidth: 0 }}
+                style={({ pressed }) => ({
+                  flexDirection: 'row', alignItems: 'center', gap: 9,
+                  flexShrink: 1, minWidth: 0,
+                  height: HEADER_PILL_H,
+                  paddingLeft: 3, paddingRight: 13,
+                  borderRadius: HEADER_PILL_H / 2,
+                  backgroundColor: p.pillBg,
+                  borderWidth: 1,
+                  borderColor: p.border,
+                  borderTopColor: p.divider,
+                  opacity: pressed ? 0.72 : 1,
+                })}
               >
                 <View style={{
-                  width: 36, height: 36, borderRadius: 18,
+                  width: 32, height: 32, borderRadius: 16,
                   backgroundColor: p.bgElev,
                   alignItems: 'center', justifyContent: 'center',
                   borderWidth: 1,
@@ -395,18 +417,18 @@ export default function Home() {
                   overflow: 'hidden',
                 }}>
                   {av.kind === 'image' ? (
-                    <Image source={{ uri: av.uri }} style={{ width: 36, height: 36 }} />
+                    <Image source={{ uri: av.uri }} style={{ width: 32, height: 32 }} />
                   ) : av.kind === 'emoji' ? (
-                    <Text style={{ fontSize: 20 }}>{av.char}</Text>
+                    <Text style={{ fontSize: 18 }}>{av.char}</Text>
                   ) : (
-                    <Text style={{ color: p.fg, fontWeight: '700', fontSize: 16 }}>{initial}</Text>
+                    <Text style={{ color: p.fg, fontWeight: '700', fontSize: 15 }}>{initial}</Text>
                   )}
                 </View>
                 <View style={{ flexShrink: 1, minWidth: 0 }}>
                   <Text
                     style={{
                       color: p.fg,
-                      fontSize: (handleLabel.length <= 8 ? 17 : handleLabel.length <= 14 ? 15 : handleLabel.length <= 20 ? 13 : 11),
+                      fontSize: (handleLabel.length <= 8 ? 16 : handleLabel.length <= 14 ? 14.5 : handleLabel.length <= 20 ? 13 : 11),
                       fontWeight: '600',
                       letterSpacing: -0.3,
                     }}
@@ -442,12 +464,18 @@ export default function Home() {
             </View>
             {/* Icon cluster — one segmented track holding all three
                 actions so they read as a single intentional control
-                rather than three heavy floating circles. */}
+                rather than three heavy floating circles. Hairline
+                separators between the segments do the dividing; the
+                brighter top border matches the @handle capsule. */}
             <View style={{
               flexDirection: 'row', alignItems: 'center', flexShrink: 0,
+              height: HEADER_PILL_H,
               backgroundColor: p.pillBg,
-              borderRadius: 17,
-              paddingHorizontal: 3,
+              borderRadius: HEADER_PILL_H / 2,
+              borderWidth: 1,
+              borderColor: p.border,
+              borderTopColor: p.divider,
+              paddingHorizontal: 2,
             }}>
               <HeaderIconButton
                 icon="repeat-outline"
@@ -455,6 +483,7 @@ export default function Home() {
                 palette={p}
                 a11y={t('recurring.title')}
               />
+              <HeaderSegmentDivider palette={p} />
               <HeaderIconButton
                 icon="notifications-outline"
                 onPress={() => { h.selection(); router.push('/notifications'); }}
@@ -462,6 +491,7 @@ export default function Home() {
                 a11y="Notifications"
                 badge={unreadData ?? 0}
               />
+              <HeaderSegmentDivider palette={p} />
               <HeaderIconButton
                 icon="scan-outline"
                 onPress={() => { h.selection(); router.push('/scanner'); }}
@@ -1629,6 +1659,16 @@ function MoreActionButton({ palette: p, onPress, label }: { palette: Palette; on
 }
 
 /**
+ * Hairline separator between segments of the header action track. Short
+ * of the track's full height so it reads as a divider, not a seam.
+ */
+function HeaderSegmentDivider({ palette: p }: { palette: Palette }) {
+  return (
+    <View style={{ width: StyleSheet.hairlineWidth, height: 16, backgroundColor: p.border }} />
+  );
+}
+
+/**
  * Small circular icon used in the home header. Optional badge dot.
  */
 function HeaderIconButton({
@@ -1642,26 +1682,27 @@ function HeaderIconButton({
 }) {
   // Lives inside the header's segmented pill track, so it carries no
   // background/border of its own — just a tappable icon with a soft
-  // pressed-state highlight.
+  // pressed-state highlight. Width is wider than tall so the three
+  // segments divide the track evenly.
   return (
     <Pressable
       onPress={onPress}
-      hitSlop={6}
+      hitSlop={8}
       accessibilityRole="button"
       accessibilityLabel={a11y}
       style={({ pressed }) => ({
-        width: 32, height: 32, borderRadius: 16,
+        width: 36, height: 32, borderRadius: 15,
         backgroundColor: pressed ? p.border : 'transparent',
         alignItems: 'center', justifyContent: 'center',
       })}
     >
-      <Ionicons name={icon} size={16} color={p.fg} />
+      <Ionicons name={icon} size={17} color={p.fg} />
       {badge !== undefined && badge > 0 && (
         <View
           style={{
             position: 'absolute',
-            top: -1, right: -1,
-            minWidth: 16, height: 16, borderRadius: 8,
+            top: -1, right: 1,
+            minWidth: 15, height: 15, borderRadius: 7.5,
             backgroundColor: p.redFg,
             borderWidth: 2, borderColor: p.bg,
             alignItems: 'center', justifyContent: 'center',

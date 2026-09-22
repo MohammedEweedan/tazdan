@@ -403,7 +403,7 @@ io.on('connection', (socket) => {
   });
 });
 
-const PORT = parseInt(process.env.PORT || '5000');
+const PORT = parseInt(process.env.PORT || '5001');
 
 async function start() {
   try {

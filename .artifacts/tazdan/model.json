@@ -1,0 +1,162 @@
+{
+  "currency": "LYD",
+  "date": "2026-09-21",
+  "assumption_status": "Planning assumptions, not quotes or forecasts",
+  "costs": [
+    [
+      "Product development and engineering",
+      2.1,
+      1.5
+    ],
+    [
+      "Operations and compliance personnel",
+      2.1,
+      2.7
+    ],
+    [
+      "Legal, licensing work and application provision",
+      1.0,
+      0.5
+    ],
+    [
+      "Security assurance and external audits",
+      0.5,
+      0.4
+    ],
+    [
+      "Cloud, software and resilience",
+      0.5,
+      0.7
+    ],
+    [
+      "Bank and processor setup and integration",
+      0.7,
+      0.2
+    ],
+    [
+      "Acquisition and merchant activation",
+      1.1,
+      0.4
+    ],
+    [
+      "Office, insurance and administration",
+      0.4,
+      0.2
+    ]
+  ],
+  "years": [
+    {
+      "year": 1,
+      "users": 10000,
+      "merchants": 200,
+      "paid_share": 0.1,
+      "volume": 600,
+      "take": 0.006,
+      "tpv": 72000000,
+      "consumer_revenue": 180000.0,
+      "merchant_revenue": 117600,
+      "payment_revenue": 432000.0,
+      "revenue": 729600.0,
+      "variable": 420000.0,
+      "contribution": 309600.0,
+      "fixed": 8400000.0,
+      "result": -8090400.0
+    },
+    {
+      "year": 2,
+      "users": 45000,
+      "merchants": 800,
+      "paid_share": 0.15,
+      "volume": 800,
+      "take": 0.007,
+      "tpv": 432000000,
+      "consumer_revenue": 1215000.0,
+      "merchant_revenue": 470400,
+      "payment_revenue": 3024000.0,
+      "revenue": 4709400.0,
+      "variable": 2202000.0,
+      "contribution": 2507400.0,
+      "fixed": 6600000.0,
+      "result": -4092600.0
+    },
+    {
+      "year": 3,
+      "users": 120000,
+      "merchants": 2500,
+      "paid_share": 0.2,
+      "volume": 1000,
+      "take": 0.008,
+      "tpv": 1440000000,
+      "consumer_revenue": 4320000.0,
+      "merchant_revenue": 1470000,
+      "payment_revenue": 11520000.0,
+      "revenue": 17310000.0,
+      "variable": 6780000.0,
+      "contribution": 10530000.0,
+      "fixed": 8400000.0,
+      "result": 2130000.0
+    }
+  ],
+  "base_fixed_24m": 15000000.0,
+  "contingency": 5250000.0,
+  "capital_provision": 5000000.0,
+  "settlement_reserve": 2000000.0,
+  "extra_liquidity": 2750000.0,
+  "funding_target": 30000000.0,
+  "sources": [
+    [
+      "S1",
+      "Central Bank of Libya, electronic payments and approved providers directory",
+      "https://cbl.gov.ly/electronic-payment/",
+      "Accessed 21 September 2026. Licence categories and listed expiry dates require direct reconfirmation."
+    ],
+    [
+      "S2",
+      "Central Bank of Libya, National Financial Inclusion Strategy 2025–2029 announcement",
+      "https://cbl.gov.ly/en/governor-of-the-central-bank-of-libya-announces-from-tripoli-the-launch-of-the-national-financial-inclusion-strategy-and-a-number-of-transformative-projects-during-the-opening-of-the-electronic-paymen/",
+      "Accessed 21 September 2026. Policy direction does not confer authorisation on tazdan."
+    ],
+    [
+      "S3",
+      "Central Bank of Libya, revenue and expenditure statement through 30 November 2025, page 6",
+      "https://cbl.gov.ly/en/wp-content/uploads/sites/4/2025/12/Revenue-and-Expenditure-Statemen-from-1st-Jan-to-30-Nov-2025.pdf",
+      "Historical baseline, not a September 2026 market count."
+    ],
+    [
+      "S4",
+      "IMF, Libya 2025 Article IV Consultation, Informational Annex",
+      "https://www.elibrary.imf.org/view/journals/002/2025/148/article-A002-en.xml",
+      "Published 25 June 2025. Historical description of exchange restrictions, not a current transaction permission."
+    ],
+    [
+      "S5",
+      "Central Bank of Libya, Regulatory Rules of the Libyan National Payment Scheme",
+      "https://cbl.gov.ly/micifaf/2024/01/القواعد-التنظيمية-لشبكة-الدفع-المحلية-الليبية.pdf",
+      "Published on the CBL site in January 2024. Partner scope and subsequent amendments need counsel confirmation."
+    ],
+    [
+      "S7",
+      "FATF, virtual assets and virtual asset service providers",
+      "https://www.fatf-gafi.org/en/topics/virtual-assets.html",
+      "Accessed 21 September 2026. International AML standard-setting guidance, not a Libyan operating licence."
+    ],
+    [
+      "S8",
+      "Libyan News Agency, financial inclusion strategy announcement",
+      "https://lana.gov.ly/post.php?id=334548&lang=en",
+      "15 June 2025. Reports preparation of a digital-currency framework, not permission to launch a crypto service."
+    ],
+    [
+      "S9",
+      "Libya Herald, CBL warning on virtual currencies",
+      "https://libyaherald.com/2018/05/cbl-warns-that-dealing-in-virtual-currencies-such-as-bitcoin-are-illegal-in-libya/",
+      "17 May 2018. Historical secondary reporting. Requires current primary legal confirmation."
+    ],
+    [
+      "S6",
+      "World Bank, Libya Economic Monitor release",
+      "https://www.worldbank.org/en/news/press-release/2025/12/17/libya-sustained-strong-growth-requires-structural-change-to-improve-transparency-and-public-financial-management",
+      "Published 17 December 2025. Macroeconomic context, not a forecast of payment-app revenue."
+    ]
+  ]
+}

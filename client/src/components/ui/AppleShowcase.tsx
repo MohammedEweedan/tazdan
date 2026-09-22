@@ -45,7 +45,7 @@ const EASE = [0.22, 1, 0.36, 1] as const;
    event ever arrives). The loop only runs on-screen, so it costs nothing
    otherwise. pin → 0 when the element top hits the viewport top, 1 when its
    bottom hits the viewport bottom. */
-function useScrollProgress(ref: React.RefObject<HTMLElement>): MotionValue<number> {
+export function useScrollProgress(ref: React.RefObject<HTMLElement>): MotionValue<number> {
   const mv = useMotionValue(0);
   useEffect(() => {
     const el = ref.current;

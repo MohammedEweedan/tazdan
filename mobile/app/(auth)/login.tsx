@@ -204,7 +204,7 @@ export default function Login() {
                 name="email"
                 render={({ field: { onChange, onBlur, value } }) => (
                   <Field
-                    label="Email or @handle"
+                    label={t('login.identifier')}
                     value={value}
                     onChangeText={(v) => onChange(v.replace(/\s/g, ''))}
                     onBlur={onBlur}

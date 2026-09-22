@@ -12,12 +12,19 @@ import * as Haptics from 'expo-haptics';
 import { TRANSACTION_SOUND, type TransactionType } from '@/constants';
 import { SUCCESS_SOUND_ASSET, DECLINE_SOUND_ASSET } from '@/utils/soundGenerator';
 
-// `expo-av` was removed in Expo SDK 54, so `import { Audio } from 'expo-av'`
-// resolves to `undefined` and any static access (e.g. `Audio.Sound`) throws
-// "Cannot read property 'prototype' of undefined" — which crashed the Buy/Sell
-// widgets. Resolve the module defensively at runtime: if the audio backend is
-// missing we silently degrade to haptic-only feedback. To restore sound,
-// install `expo-audio` and swap the loaders below.
+// NOTE (corrected): expo-av is NOT gone on this SDK. `expo-av@16.0.8` is a
+// declared dependency, is installed, and does export `Audio` — so sound plays
+// today on SDK 54. (The earlier note here claimed it had been removed, which
+// sent people looking for a bug that wasn't there; the original Buy/Sell crash
+// was a static-access-at-import problem, which the runtime require below fixes.)
+//
+// It IS deprecated, and it is removed in SDK 55+. On the SDK 57 upgrade this
+// defensive branch becomes the live one and the app silently drops to
+// haptic-only. Migration target is `expo-audio`:
+//   const player = createAudioPlayer(SUCCESS_SOUND_ASSET);
+//   player.seekTo(0); player.play();
+// Keep the runtime require either way — a missing audio backend should degrade
+// to haptics, never throw inside a transaction confirmation.
 let Audio: any;
 try {
   // eslint-disable-next-line @typescript-eslint/no-var-requires

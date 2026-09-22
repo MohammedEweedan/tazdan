@@ -55,6 +55,7 @@ async function pushToBackend(email: string, source: string | null, locale: strin
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, source, locale }),
+      signal: AbortSignal.timeout(10000),
     });
     if (!res.ok) {
       console.error('[waitlist] backend responded', res.status, await res.text().catch(() => ''));

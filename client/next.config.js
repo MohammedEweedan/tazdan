@@ -60,7 +60,7 @@ const ContentSecurityPolicy = `
   object-src 'none';
   base-uri 'self';
   form-action 'self';
-  upgrade-insecure-requests;
+  ${isDev ? '' : 'upgrade-insecure-requests;'}
 `.replace(/\s+/g, ' ').trim();
 
 const securityHeaders = [
@@ -73,7 +73,7 @@ const securityHeaders = [
 
 // Cache aggressively for immutable hashed assets.
 const STATIC_CACHE_HEADERS = [
-  { key: 'Cache-Control', value: 'public, max-age=31536000, immutable' },
+  { key: 'Cache-Control', value: isDev ? 'no-store, must-revalidate' : 'public, max-age=31536000, immutable' },
 ];
 
 /** @type {import('next').NextConfig} */
@@ -109,10 +109,6 @@ const nextConfig = {
       'date-fns',
     ],
   },
-  i18n: {
-    locales: ['en', 'ar', 'fr', 'es', 'de', 'nl', 'ru', 'tr'],
-    defaultLocale: 'en',
-  },
   images: {
     domains: ['bit.ly'],
     formats: ['image/avif', 'image/webp'],
@@ -123,6 +119,8 @@ const nextConfig = {
   async headers() {
     return [
       { source: '/(.*)',                           headers: securityHeaders     },
+      // Clear old immutable dev bundles left by earlier configurations.
+      ...(isDev ? ['/', '/en', '/ar'].map(source => ({ source, headers: [{ key: 'Clear-Site-Data', value: '\"cache\"' }] })) : []),
       { source: '/_next/static/(.*)',              headers: STATIC_CACHE_HEADERS },
       { source: '/icon-:rest*.png',                headers: STATIC_CACHE_HEADERS },
       { source: '/og-image.png',                   headers: STATIC_CACHE_HEADERS },

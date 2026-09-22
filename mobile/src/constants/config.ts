@@ -1,61 +1,10 @@
-import Constants from 'expo-constants';
-import { Platform } from 'react-native';
-
-/**
- * Auto-resolve API base URL.
- *  1. Explicit override via `EXPO_PUBLIC_API_BASE` wins.
- *  2. On a physical device or LAN simulator, use Expo's Metro `hostUri`
- *     (your dev machine's LAN IP) — `localhost` would mean the device itself.
- *  3. On Android emulator, `10.0.2.2` reaches the host machine.
- *  4. Web + iOS Simulator can use `localhost` directly.
- */
-const API_PORT = 5000;
-const PRODUCTION_API_BASE = 'https://api.promrkts.com';
-const HOSTED_API_HOSTS = new Set(['api.promrkts.com']);
-
-// Hosted production is reverse-proxied at root; localhost/LAN still needs /api.
-// (Kept in sync with constants/index.ts, which is the module actually imported.)
-function normalizeApiBase(base: string): string {
-  const trimmed = base.replace(/\/+$/, '');
-  try {
-    const url = new URL(trimmed);
-    if (HOSTED_API_HOSTS.has(url.hostname)) {
-      return url.origin;
-    }
-  } catch {
-    // Fall through for relative/custom bases.
-  }
-  return /\/api$/.test(trimmed) ? trimmed : `${trimmed}/api`;
-}
-
-function resolveApiBase(): string {
-  const fromEnv = process.env.EXPO_PUBLIC_API_BASE;
-  if (fromEnv) {
-    if (!__DEV__ && !fromEnv.startsWith('https://')) {
-      throw new Error(
-        `[security] Refusing cleartext API base "${fromEnv}" in a release build. ` +
-        `Set EXPO_PUBLIC_API_BASE to an https:// URL at build time.`,
-      );
-    }
-    return normalizeApiBase(fromEnv);
-  }
-
-  if (!__DEV__) return normalizeApiBase(PRODUCTION_API_BASE);
-
-  const hostUri = (Constants.expoConfig?.hostUri ?? Constants.expoGoConfig?.debuggerHost) as string | undefined;
-  const lanHost = hostUri?.split(':')[0];
-
-  if (Platform.OS === 'web')                 return `http://localhost:${API_PORT}/api`;
-  if (Platform.OS === 'android' && !lanHost) return `http://10.0.2.2:${API_PORT}/api`;
-  if (lanHost && lanHost !== 'localhost')    return `http://${lanHost}:${API_PORT}/api`;
-  return `http://localhost:${API_PORT}/api`;
-}
+import { API_BASE_URL } from './environment';
 
 export const APP = {
   name: 'Tazdan',
-  tagline: 'Money. Crypto. One app.',
+  tagline: 'Arab roots. Crypto. Connected.',
   supportEmail: 'support@tazdan.com',
-  apiBaseUrl: resolveApiBase(),
+  apiBaseUrl: API_BASE_URL,
 } as const;
 
 export const STORAGE_KEYS = {

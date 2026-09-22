@@ -155,7 +155,7 @@ export default function Register() {
     resolver: zodResolver(stepOneSchema),
     defaultValues: {
       firstName: '', lastName: '', email: '',
-      country: '', phone: '', dateOfBirth: '',
+      country: 'LY', phone: '', dateOfBirth: '',
       password: '', username: '', referralCode: '',
     },
   });
@@ -1276,7 +1276,7 @@ function Field({
 function extractErrorMessage(e: unknown): string {
   if (typeof e === 'object' && e !== null) {
     const ax = e as { response?: { data?: { error?: string; message?: string } }; message?: string; code?: string };
-    if (ax.code === 'ERR_NETWORK') return 'Cannot reach the server. Make sure the backend is running on port 5001 and your phone is on the same network.';
+    if (ax.code === 'ERR_NETWORK') return 'Cannot reach the server. Check your connection and try again.';
     return ax.response?.data?.error ?? ax.response?.data?.message ?? ax.message ?? 'Please try again.';
   }
   return 'Please try again.';

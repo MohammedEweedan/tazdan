@@ -85,8 +85,15 @@ function resolveFontFamily(style: any, useCairo: boolean): any {
 export const Text = forwardRef<RNText, TextProps>((props, ref) => {
   const locale = useI18n((s) => s.locale);
   // Arabic uses Cairo — except for numeric/currency content, which stays Outfit.
+  const content = flattenChildrenToString(props.children);
+  const localizedContent = translateLiteral(content, locale) ?? content;
+  const arabicText = locale === 'ar' && ARABIC_LETTER.test(localizedContent);
   const useCairo = locale === 'ar' && !isNumericContent(props.children);
-  const resolvedStyle = resolveFontFamily(props.style, useCairo);
+  const resolvedStyle = resolveFontFamily([
+    { writingDirection: arabicText ? 'rtl' : 'ltr' },
+    arabicText ? { textAlign: 'right' } : undefined,
+    props.style,
+  ], useCairo);
   const localizedChildren = localizeChildren(props.children, locale);
   return <RNText {...props} ref={ref} style={resolvedStyle}>{localizedChildren}</RNText>;
 });
@@ -97,7 +104,13 @@ export const TextInput = forwardRef<RNTextInput, TextInputProps>((props, ref) =>
   // in Arabic. Empty inputs still use the locale-driven placeholder family.
   const typedValue = typeof props.value === 'string' ? props.value : '';
   const inspectable = typedValue.length > 0 ? typedValue : props.placeholder;
-  const resolvedStyle = resolveFontFamily(props.style, locale === 'ar' && !isNumericContent(inspectable));
   const placeholder = translateLiteral(props.placeholder, locale);
+  const technicalInput = props.secureTextEntry || ['email-address', 'url', 'phone-pad', 'number-pad', 'decimal-pad', 'numeric'].includes(props.keyboardType ?? '');
+  const arabicText = !technicalInput && locale === 'ar' && ARABIC_LETTER.test(typedValue || placeholder || '');
+  const resolvedStyle = resolveFontFamily([
+    { writingDirection: arabicText ? 'rtl' : 'ltr' },
+    { textAlign: arabicText ? 'right' : 'left' },
+    props.style,
+  ], locale === 'ar' && !technicalInput && !isNumericContent(inspectable));
   return <RNTextInput {...props} ref={ref} placeholder={placeholder ?? undefined} style={resolvedStyle} />;
 });

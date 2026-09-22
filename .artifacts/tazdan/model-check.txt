@@ -1,0 +1,54 @@
+[
+  {
+    "year": 1,
+    "users": 10000,
+    "merchants": 200,
+    "paid_share": 0.1,
+    "volume": 600,
+    "take": 0.006,
+    "tpv": 72000000,
+    "consumer_revenue": 180000.0,
+    "merchant_revenue": 117600,
+    "payment_revenue": 432000.0,
+    "revenue": 729600.0,
+    "variable": 420000.0,
+    "contribution": 309600.0,
+    "fixed": 8400000.0,
+    "result": -8090400.0
+  },
+  {
+    "year": 2,
+    "users": 45000,
+    "merchants": 800,
+    "paid_share": 0.15,
+    "volume": 800,
+    "take": 0.007,
+    "tpv": 432000000,
+    "consumer_revenue": 1215000.0,
+    "merchant_revenue": 470400,
+    "payment_revenue": 3024000.0,
+    "revenue": 4709400.0,
+    "variable": 2202000.0,
+    "contribution": 2507400.0,
+    "fixed": 6600000.0,
+    "result": -4092600.0
+  },
+  {
+    "year": 3,
+    "users": 120000,
+    "merchants": 2500,
+    "paid_share": 0.2,
+    "volume": 1000,
+    "take": 0.008,
+    "tpv": 1440000000,
+    "consumer_revenue": 4320000.0,
+    "merchant_revenue": 1470000,
+    "payment_revenue": 11520000.0,
+    "revenue": 17310000.0,
+    "variable": 6780000.0,
+    "contribution": 10530000.0,
+    "fixed": 8400000.0,
+    "result": 2130000.0
+  }
+]
+Wrote feasibility study

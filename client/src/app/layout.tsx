@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from 'next';
+import { headers } from 'next/headers';
 import localFont from 'next/font/local';
 import AppProviders from '@/providers/AppProviders';
 import PageTitle from '@/components/PageTitle';
@@ -77,13 +78,9 @@ const SITE_URL = 'https://tazdan.com';
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   description:
-    'Send money to Libya, Egypt & UAE instantly. Buy & sell crypto with a P2P marketplace. Get a virtual Visa card. No SWIFT fees, no bank queues.',
-  keywords: [
-    'Libya crypto', 'LYD USDT', 'send money Libya', 'Libya remittance',
-    'MENA crypto exchange', 'P2P crypto marketplace', 'virtual Visa crypto card',
-    'Egypt crypto', 'UAE crypto', 'crypto to fiat MENA', 'tazdan', 'claim link transfer',
-    'send crypto to email', 'send crypto to phone',
-  ],
+    'Meet tazdan: a Libyan wallet, crypto and international remittance app in the making. Clear costs in LYD. Join the waitlist.',
+  title: 'tazdan — Libya. Crypto. Connected.',
+  keywords: ['Libyan payments', 'LYD wallet', 'Libya payment app', 'tazdan', 'تزدان'],
   manifest: '/manifest.json',
   applicationName: 'tazdan',
   authors: [{ name: 'tazdan' }],
@@ -95,15 +92,15 @@ export const metadata: Metadata = {
     locale: 'en_US',
     url: SITE_URL,
     siteName: 'tazdan',
-    title: 'tazdan — Crypto Exchange & Money Transfer for MENA',
+    title: 'tazdan — Libya. Crypto. Connected.',
     description:
-      'Send money to Libya, Egypt & UAE instantly. Buy & sell crypto. Get a virtual Visa card. No SWIFT fees.',
-    images: [{ url: '/og-image.png', width: 1200, height: 630, alt: 'tazdan — Banking the MENA' }],
+      'Everyday payments in LYD. Built around life in Libya, with an international outlook. Join the waitlist.',
+    images: [{ url: '/og-image.png', width: 1200, height: 630, alt: 'tazdan — Payments for Libya' }],
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'tazdan — Crypto & Money Transfer for MENA',
-    description: 'Send money to Libya instantly. Buy & sell crypto. Virtual Visa card.',
+    title: 'tazdan — Crypto and remittances for Libya',
+    description: 'A new home for your everyday money in Libya. Explore proposed LYD plans.',
     images: ['/og-image.png'],
     creator: '@tazdan',
   },
@@ -123,12 +120,6 @@ export const metadata: Metadata = {
     languages: {
       en: `${SITE_URL}/en`,
       ar: `${SITE_URL}/ar`,
-      fr: `${SITE_URL}/fr`,
-      es: `${SITE_URL}/es`,
-      de: `${SITE_URL}/de`,
-      nl: `${SITE_URL}/nl`,
-      ru: `${SITE_URL}/ru`,
-      tr: `${SITE_URL}/tr`,
     },
   },
   icons: { icon: '/favicon.ico', apple: '/icon-black.png' },
@@ -178,20 +169,21 @@ const jsonLd = {
     },
     {
       '@type': 'FinancialProduct',
-      name: 'tazdan Wallet & Exchange',
+      name: 'tazdan payments concept',
       description:
-        'Multi-currency crypto wallet, P2P exchange, virtual Visa card, and claim-link transfers across MENA.',
+        'Proposed Libyan dinar wallet, supported crypto services and international remittances. Availability depends on providers and regulatory approval.',
       provider: { '@id': `${SITE_URL}#org` },
-      areaServed: ['Libya', 'Egypt', 'United Arab Emirates', 'Saudi Arabia', 'Tunisia', 'Algeria', 'Morocco'],
+      areaServed: ['Libya'],
     },
   ],
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
+  const locale = headers().get('x-tazdan-locale') === 'ar' ? 'ar' : 'en';
   return (
     <html
-      lang="en"
-      dir="ltr"
+      lang={locale}
+      dir={locale === 'ar' ? 'rtl' : 'ltr'}
       className={`${dmSans.variable} ${inter.variable} ${outfit.variable} ${cairo.variable}`}
     >
       <head>
@@ -220,7 +212,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         />
       </head>
       <body>
-        <AppProviders>
+        <AppProviders initialLanguage={locale}>
           <PageTitle />
           {children}
         </AppProviders>

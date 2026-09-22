@@ -12,7 +12,8 @@
     "typecheck": "tsc --noEmit",
     "postinstall": "node scripts/patch-stripe-swift-interop.js",
     "i18n:audit": "node scripts/i18n-audit.js",
-    "i18n:audit:strict": "node scripts/i18n-audit.js --strict"
+    "i18n:audit:strict": "node scripts/i18n-audit.js --strict",
+    "test:api-config": "node scripts/test-api-endpoint.cjs"
   },
   "dependencies": {
     "@expo-google-fonts/cairo": "^0.4.2",

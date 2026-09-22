@@ -3,81 +3,14 @@ export * from './tokens';
 export * from './content';
 export * from './sounds';
 
-import Constants from 'expo-constants';
-import { Platform } from 'react-native';
+import { API_BASE_URL } from './environment';
 import type { Currency, CurrencyMeta } from '@/types';
-
-/**
- * Auto-resolve API base URL.
- *  1. Explicit override via `EXPO_PUBLIC_API_BASE` wins.
- *  2. On a physical device or LAN simulator, use Expo's Metro `hostUri`
- *     (your dev machine's LAN IP) — `localhost` would mean the device itself.
- *  3. On Android emulator, `10.0.2.2` reaches the host machine.
- *  4. Web + iOS Simulator can use `localhost` directly.
- */
-const API_PORT = 5000;
-const PRODUCTION_API_BASE = 'https://api.promrkts.com';
-const HOSTED_API_HOSTS = new Set(['api.promrkts.com']);
-
-/**
- * Local/dev servers expose Express routes under `/api/...`, so LAN and
- * localhost bases need a trailing `/api`. The hosted production domain is
- * already reverse-proxied so `https://api.promrkts.com/auth/login` reaches
- * Express `/api/auth/login`; adding another `/api` produces `/api/api/...`
- * upstream and every request 404s.
- */
-function normalizeApiBase(base: string): string {
-  const trimmed = base.replace(/\/+$/, '');
-  try {
-    const url = new URL(trimmed);
-    if (HOSTED_API_HOSTS.has(url.hostname)) {
-      return url.origin;
-    }
-  } catch {
-    // Fall through for relative/custom bases.
-  }
-  return /\/api$/.test(trimmed) ? trimmed : `${trimmed}/api`;
-}
-
-function resolveApiBase(): string {
-  const fromEnv = process.env.EXPO_PUBLIC_API_BASE;
-  if (fromEnv) {
-    // CRITICAL in release builds: refuse to talk cleartext.  Bearer
-    // tokens, passwords, 2FA codes, withdrawal addresses must NEVER
-    // travel over plaintext HTTP — passive Wi-Fi sniffing yields
-    // total account takeover otherwise.  Dev/Expo Go can still hit
-    // http://LAN_HOST:5001 because __DEV__ is true there.
-    if (!__DEV__ && !fromEnv.startsWith('https://')) {
-      throw new Error(
-        `[security] Refusing cleartext API base "${fromEnv}" in a release build. ` +
-        `Set EXPO_PUBLIC_API_BASE to an https:// URL at build time.`,
-      );
-    }
-    return normalizeApiBase(fromEnv);
-  }
-
-  // Release/TestFlight-style builds should use the hosted API by default.
-  // Dev keeps the LAN/localhost resolver below so Expo Go and simulators
-  // do not accidentally hit production while you are iterating.
-  if (!__DEV__) {
-    return normalizeApiBase(PRODUCTION_API_BASE);
-  }
-
-  // hostUri looks like "192.168.1.42:8081" when launched from `expo start`
-  const hostUri = (Constants.expoConfig?.hostUri ?? Constants.expoGoConfig?.debuggerHost) as string | undefined;
-  const lanHost = hostUri?.split(':')[0];
-
-  if (Platform.OS === 'web')                 return `http://localhost:${API_PORT}/api`;
-  if (Platform.OS === 'android' && !lanHost) return `http://10.0.2.2:${API_PORT}/api`;
-  if (lanHost && lanHost !== 'localhost')    return `http://${lanHost}:${API_PORT}/api`;
-  return `http://localhost:${API_PORT}/api`;
-}
 
 export const APP = {
   name: 'tazdan',
-  tagline: 'Money. Crypto. One app.',
+  tagline: 'Arab roots. Crypto. Connected.',
   supportEmail: 'support@tazdan.com',
-  apiBaseUrl: resolveApiBase(),
+  apiBaseUrl: API_BASE_URL,
 };
 
 /**

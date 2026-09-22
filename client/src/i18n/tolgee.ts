@@ -10,12 +10,10 @@ import cnTranslations from './cn.json';
 import trTranslations from './tr.json';
 import ptTranslations from './pt.json';
 
-export const tolgee = Tolgee()
+export const createTolgee = (language = 'en') => Tolgee()
   .use(DevTools())
   .init({
-    language: typeof window !== 'undefined'
-      ? localStorage.getItem('lang') || 'en'
-      : 'en',
+    language,
     staticData: {
       en: enTranslations,
       ar: arTranslations,
