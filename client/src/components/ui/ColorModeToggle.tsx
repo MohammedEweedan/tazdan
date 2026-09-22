@@ -1,29 +1,16 @@
 'use client';
 
-import { Box, useColorMode } from '@chakra-ui/react';
+import { Box, Icon, useColorMode } from '@chakra-ui/react';
+import { FiMoon, FiSun } from 'react-icons/fi';
 
-/**
- * Theme toggle drawn as a filled disc.
- *
- * The mark is the INVERSE of the surface it sits on, so it is always visible:
- *
- *   light mode → a solid BLACK sun-disc on the light bar
- *   dark mode  → a WHITE crescent on the dark bar
- *
- * (A white disc in light mode — the first pass — was invisible against the
- * bar. Contrast has to come from inverting the surface, not from the icon.)
- *
- * The crescent is drawn, not glyphed: a second offset circle filled with the
- * bar colour bites into the disc. That keeps its weight exact at any size and
- * avoids depending on an icon font's idea of a moon.
- */
+/** A conventional sun/moon control with the same visual language as the nav. */
 export default function ColorModeToggle({ size = 26 }: { size?: number }) {
   const { colorMode, toggleColorMode } = useColorMode();
   const dark = colorMode === 'dark';
-
-  // Surface behind the toggle, used to cut the crescent.
-  const bar = dark ? '#11141A' : '#FFFFFF';
-  const disc = dark ? '#FFFFFF' : '#0A0A0B';
+  const fg = dark ? '#FFFFFF' : '#0A0A0B';
+  const border = dark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.10)';
+  const hoverBg = dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.055)';
+  const iconSize = Math.max(14, Math.round(size * 0.46));
 
   return (
     <Box
@@ -35,26 +22,18 @@ export default function ColorModeToggle({ size = 26 }: { size?: number }) {
       h={`${size}px`}
       borderRadius="50%"
       flexShrink={0}
-      overflow="hidden"
-      bg={disc}
-      boxShadow={dark
-        ? '0 0 0 1px rgba(255,255,255,0.28), 0 2px 10px rgba(0,0,0,0.5)'
-        : '0 0 0 1px rgba(10,15,30,0.18), 0 2px 10px rgba(10,15,30,0.18)'}
-      transition="transform .2s ease, box-shadow .2s ease, background .2s ease"
-      _hover={{ transform: 'scale(1.08)' }}
-      _active={{ transform: 'scale(0.94)' }}
+      display="inline-flex"
+      alignItems="center"
+      justifyContent="center"
+      bg="transparent"
+      color={fg}
+      border="1px solid"
+      borderColor={border}
+      transition="transform .18s ease, background .18s ease, border-color .18s ease"
+      _hover={{ bg: hoverBg, borderColor: fg, transform: 'translateY(-1px)' }}
+      _active={{ transform: 'scale(0.96)' }}
     >
-      {dark && (
-        <Box
-          position="absolute"
-          top="-24%"
-          right="-32%"
-          w={`${size}px`}
-          h={`${size}px`}
-          borderRadius="50%"
-          bg={bar}
-        />
-      )}
+      <Icon as={dark ? FiSun : FiMoon} boxSize={`${iconSize}px`} strokeWidth="2" />
     </Box>
   );
 }

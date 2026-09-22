@@ -24,7 +24,7 @@ import {
 } from "@chakra-ui/react";
 import { FiMenu, FiX } from "react-icons/fi";
 import { motion, AnimatePresence } from "framer-motion";
-import Logo from "@/components/ui/Logo";
+import Logo, { IconLogo } from "@/components/ui/Logo";
 import ColorModeToggle from "@/components/ui/ColorModeToggle";
 import LanguageSwitcher from "@/components/ui/LanguageSwitcher";
 import WaitlistModal from "@/components/ui/WaitlistModal";
@@ -119,8 +119,15 @@ export default function PublicNav() {
           pointerEvents="auto"
           position="relative"
         >
-          {/* Brand */}
-          <Box as={NextLink} href="/" flexShrink={0} display="flex" alignItems="center" px={{ base: 0, md: 2 }}>
+          {/* Desktop brand. Mobile gets its own equal-width grid cell below. */}
+          <Box
+            as={NextLink}
+            href="/"
+            flexShrink={0}
+            display={{ base: "none", lg: "flex" }}
+            alignItems="center"
+            px={2}
+          >
             <Logo h={40} />
           </Box>
 
@@ -148,22 +155,28 @@ export default function PublicNav() {
             })}
           </HStack>
 
-          {/* MOBILE rail — the four controls are pinned to exact positions
-              (0% / 25% / 50% / 100%) rather than flowed, because flexbox
-              spacing gives thirds, not quarters. Desktop keeps the normal
-              right-aligned cluster. */}
+          {/* Mobile and tablet: four equal cells keep the brand, locale,
+              theme and menu controls centred at 12.5 / 37.5 / 62.5 / 87.5%.
+              Using one grid also behaves identically in LTR and RTL. */}
           <Box
-            display={{ base: "block", lg: "none" }}
-            position="absolute" left={0} right={0} top={0} bottom={0}
-            pointerEvents="none"
+            display={{ base: "grid", lg: "none" }}
+            position="absolute"
+            inset={0}
+            gridTemplateColumns="repeat(4, minmax(0, 1fr))"
+            alignItems="center"
           >
-            <Box position="absolute" top="50%" left="25%" transform="translate(-50%,-50%)" pointerEvents="auto">
+            <Flex align="center" justify="center" minW={0}>
+              <Box as={NextLink} href="/" display="inline-flex" aria-label="Tazdan home">
+                <IconLogo size={36} />
+              </Box>
+            </Flex>
+            <Flex align="center" justify="center" minW={0}>
               <LanguageSwitcher />
-            </Box>
-            <Box position="absolute" top="50%" left="50%" transform="translate(-50%,-50%)" pointerEvents="auto">
-              <ColorModeToggle />
-            </Box>
-            <Box position="absolute" top="50%" right={3} transform="translateY(-50%)" pointerEvents="auto">
+            </Flex>
+            <Flex align="center" justify="center" minW={0}>
+              <ColorModeToggle size={36} />
+            </Flex>
+            <Flex align="center" justify="center" minW={0}>
               <IconButton
                 aria-label="Open menu"
                 icon={<Icon as={FiMenu} boxSize={5} />}
@@ -172,7 +185,7 @@ export default function PublicNav() {
                 color={textMain}
                 _hover={{ bg: dark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)" }}
               />
-            </Box>
+            </Flex>
           </Box>
 
           {/* Right cluster (desktop) */}
@@ -182,7 +195,7 @@ export default function PublicNav() {
                 its picker opens as a bottom sheet on small screens. */}
             <HStack spacing={{ base: 0.5, md: 2 }} alignItems="center">
               <LanguageSwitcher />
-              <ColorModeToggle />
+              <ColorModeToggle size={36} />
             </HStack>
             {/* Join Waitlist CTA — hide the label on the smallest screens to
                 keep the bar from crowding once theme+locale are present. */}
@@ -269,7 +282,8 @@ export default function PublicNav() {
                       >
                         <Text
                           fontSize="11px" fontWeight="700" color={textSub}
-                          fontVariant="tabular-nums" minW="22px"
+                          minW="22px"
+                          style={{ fontVariantNumeric: "tabular-nums" }}
                         >
                           {String(i + 1).padStart(2, "0")}
                         </Text>
