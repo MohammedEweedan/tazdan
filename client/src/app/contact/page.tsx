@@ -9,12 +9,12 @@ import {
   Icon, Flex, FormControl, FormLabel,
   useColorMode, useToast,
 } from "@chakra-ui/react";
-import { FiClock, FiSend, FiArrowRight } from "react-icons/fi";
+import { FiClock, FiSend, FiArrowRight, FiMapPin } from "react-icons/fi";
 import PublicNav from "@/components/ui/PublicNav";
 import PublicFooter from "@/components/ui/PublicFooter";
 import SupportSection from "@/components/ui/SupportSection";
 import { publicPageTheme } from "@/components/ui/publicPageTheme";
-import { Band, Graphic, PageHero, Reveal } from "@/components/ui/appleKit";
+import { Band, PageHero, Reveal } from "@/components/ui/appleKit";
 
 export default function ContactPage() {
   const { t } = useTranslate();
@@ -62,16 +62,22 @@ export default function ContactPage() {
         subtitle={t('contact_page_sub')}
       />
 
-      {/* Support channels */}
-      <SupportSection />
+      {/* Support channels. No heading: the hero above already says "pick the
+          channel that works for you", and running the section's own heading
+          under it printed that same sentence twice in a row. */}
+      <SupportSection showHeading={false} />
 
       {/* Contact form + office */}
       <Band maxW="1180px">
         <SimpleGrid columns={{ base: 1, lg: 3 }} gap={8}>
-          {/* Form — spans 2 cols */}
+          {/* Form — spans 2 of 3 columns.
+              The span MUST sit on the direct grid child. `Reveal` renders its
+              own motion.div, so with `<Reveal><Box gridColumn="span 2">` the
+              motion.div was the grid item and the span did nothing — the form
+              rendered at one-third width, the same as the sidebar. */}
+          <Box gridColumn={{ lg: "span 2" }}>
           <Reveal>
           <Box
-            gridColumn={{ lg: "span 2" }}
             bg={raisedBg} border="1px solid" borderColor={cardBorder}
             borderRadius="28px" p={{ base: 6, md: 10 }}
             boxShadow="none"
@@ -161,11 +167,31 @@ export default function ContactPage() {
             </form>
           </Box>
           </Reveal>
+          </Box>
 
           {/* Office + hours */}
           <VStack align="stretch" spacing={4}>
+            {/* Headquarters. This copy already existed in every locale
+                (`contact_hq_label` / `contact_hq_value`) but was never
+                rendered — the slot held a decorative grey chat mockup
+                instead, which told a visitor nothing. */}
             <Reveal delay={0.04}>
-              <Graphic kind="chat" dark={dark} />
+            <Box bg={cardBg} border="1px solid" borderColor={cardBorder} borderRadius="22px" p={6}>
+              <Flex
+                w="42px" h="42px" borderRadius="12px"
+                bg={accentSoft}
+                border="1px solid" borderColor={accentBorder}
+                align="center" justify="center" mb={4}
+              >
+                <Icon as={FiMapPin} color={accentText} boxSize={5} />
+              </Flex>
+              <Text fontSize="12px" fontWeight="700" color={textSub} textTransform="uppercase" letterSpacing="0.08em" mb={1}>
+                {t('contact_hq_label')}
+              </Text>
+              <Text fontSize="15px" color={textMain} fontWeight="600" lineHeight="1.6" whiteSpace="pre-line">
+                {t('contact_hq_value')}
+              </Text>
+            </Box>
             </Reveal>
 
             <Reveal delay={0.08}>
@@ -178,6 +204,9 @@ export default function ContactPage() {
               >
                 <Icon as={FiClock} color={accentText} boxSize={5} />
               </Flex>
+              <Text fontSize="12px" fontWeight="700" color={textSub} textTransform="uppercase" letterSpacing="0.08em" mb={1}>
+                {t('contact_hours_label')}
+              </Text>
               <Text fontSize="15px" color={textMain} fontWeight="600" lineHeight="1.6" whiteSpace="pre-line">
                 {t('contact_hours_value')}
               </Text>
