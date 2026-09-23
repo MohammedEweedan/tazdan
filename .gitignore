@@ -57,3 +57,4 @@ mobile/.expo/
 # ── Misc ──────────────────────────────────────
 *.pem
 .vercel
+client/.next-build/
