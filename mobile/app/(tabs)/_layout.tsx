@@ -1,21 +1,40 @@
-import { Tabs } from 'expo-router';
+import { Tabs, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { Platform, Pressable, Text, View, ActionSheetIOS, Alert, Image } from 'react-native';
+import { useEffect } from 'react';
+import { Platform, Pressable, View, ActionSheetIOS, Alert, StyleSheet } from 'react-native';
+import Animated, {
+  Easing, cancelAnimation, useAnimatedStyle, useReducedMotion, useSharedValue, withRepeat, withTiming,
+} from 'react-native-reanimated';
+import { Text } from '@/components/ui/Text';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useThemedPalette } from '@/store/themeStore';
 import { useAuthStore } from '@/store/authStore';
 import { useT } from '@/store/i18nStore';
-import { useMessageRealtime } from '@/hooks';
+import { useHaptics, useMessageRealtime } from '@/hooks';
 
+/** One full turn of the brand asterisk. Slow enough to read as "alive", not busy. */
+const MARK_TURN_MS = 24000;
+
+/** The brand asterisk. Blue on the white disc; black in mono. Rotates slowly
+ *  unless the OS asks for reduced motion. */
 function BrandMark({ size, mono }: { size: number; mono: boolean }) {
-  const src = mono
-    ? require('../../assets/icon-white.png')
-    : require('../../assets/icon-color.png');
+  const reduceMotion = useReducedMotion();
+  const turn = useSharedValue(0);
+
+  useEffect(() => {
+    if (reduceMotion) return;
+    turn.value = withRepeat(withTiming(360, { duration: MARK_TURN_MS, easing: Easing.linear }), -1, false);
+    return () => cancelAnimation(turn);
+  }, [reduceMotion, turn]);
+
+  const spin = useAnimatedStyle(() => ({ transform: [{ rotate: `${turn.value}deg` }] }));
 
   return (
-    <Image
-      source={src}
-      style={{ width: size, height: size }}
+    <Animated.Image
+      source={mono ? require('../../assets/icon-asterisk-black.png') : require('../../assets/icon-asterisk.png')}
+      style={[{ width: size, height: size }, spin]}
       resizeMode="contain"
+      accessibilityIgnoresInvertColors
     />
   );
 }
@@ -27,33 +46,45 @@ const ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   messages: 'chatbubble-ellipses',
 };
 
-const FAB_SIZE = 69;
+const FAB_SIZE = 62;
+const MARK_SIZE = 30;
 
 export default function TabsLayout() {
   const p = useThemedPalette();
   const t = useT();
+  const router = useRouter();
+  const h = useHaptics();
   const userId = useAuthStore((s) => s.user?.id);
   // FAB is a CONSTANT white disc carrying the brand asterisk, which rotates
-  // slowly. In dark/light it's the true-blue mark (icon-color); in mono it's
-  // the black mark (icon-white) on the same white disc — pure monochrome.
+  // slowly. In dark/light it's the blue mark; in mono it's the black mark on
+  // the same white disc — pure monochrome.
   const isMono    = p.accentText === p.fg; // mono collapses accent → fg
-  const fabFill   = '#FFFFFF';             // white disc, constant across themes
-  const haloColor = isMono ? '#000000' : p.accent;   // soft blue halo (grey in mono)
+  const haloColor = isMono ? '#000000' : p.accent;
 
   useMessageRealtime(userId);
 
-  const barHeight = Platform.OS === 'ios' ? 80 : 72;
+  const insets = useSafeAreaInsets();
+  const barHeight = 64 + Math.max(insets.bottom, 12);
 
+  // Long-press on the home mark: the three money moves people reach for most.
+  const quickActions: { label: string; href: string }[] = [
+    { label: t('quick.send'),    href: '/send' },
+    { label: t('quick.receive'), href: '/receive' },
+    { label: t('quick.topUp'),   href: '/topup' },
+  ];
   const handleQuickActions = () => {
-    const actions = [t('home.sendMoney'), t('cards.orderCard'), t('nav.wallet'), t('common.cancel')];
-
+    h.medium();
+    const go = (i: number) => { const a = quickActions[i]; if (a) router.push(a.href as any); };
     if (Platform.OS === 'ios') {
       ActionSheetIOS.showActionSheetWithOptions(
-        { options: actions, cancelButtonIndex: 3 },
-        () => {}
+        { options: [...quickActions.map((a) => a.label), t('common.cancel')], cancelButtonIndex: quickActions.length },
+        go,
       );
     } else {
-      Alert.alert(t('home.more'), `• ${t('home.sendMoney')}\n• ${t('cards.orderCard')}\n• ${t('nav.wallet')}`);
+      Alert.alert(t('home.more'), undefined, [
+        ...quickActions.map((a, i) => ({ text: a.label, onPress: () => go(i) })),
+        { text: t('common.cancel'), style: 'cancel' as const },
+      ]);
     }
   };
 
@@ -64,12 +95,15 @@ export default function TabsLayout() {
         tabBarActiveTintColor: p.accentText,
         tabBarInactiveTintColor: p.fgFaint,
         tabBarShowLabel: false,
+        tabBarIconStyle: { width: '100%', height: 46 },
         tabBarStyle: {
           height: barHeight,
-          paddingTop: 8,
-          backgroundColor: p.bg,
+          paddingTop: 10,
+          paddingBottom: Math.max(insets.bottom, 12),
+          backgroundColor: p.bgElev,
           borderTopColor: p.border,
-          borderTopWidth: 1,
+          borderTopWidth: StyleSheet.hairlineWidth,
+          elevation: 0,
           overflow: 'visible',
         },
       }}
@@ -103,38 +137,39 @@ export default function TabsLayout() {
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={t('nav.home')}
-              delayLongPress={3000}
+              accessibilityState={props.accessibilityState}
+              accessibilityHint={t('quick.hint')}
+              delayLongPress={450}
               onLongPress={handleQuickActions}
               onPress={props.onPress as any}
-              style={{
-                flex: 1,
-                alignItems: 'center',
-                justifyContent: 'center',
-                marginTop: -10,
-              }}
+              style={{ flex: 1, alignItems: 'center', justifyContent: 'flex-start' }}
             >
-              {/* Constant white disc with a slowly-rotating brand mark. The
-                  "halo" is a soft shadow glow (blue in dark/light, grey in
-                  mono) — no gradient, no concentric rings. */}
-              <View
-                style={{
-                  width: FAB_SIZE,
-                  height: FAB_SIZE,
-                  borderRadius: FAB_SIZE / 2,
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  backgroundColor: fabFill,
-                  borderWidth: 3,
-                  borderColor: p.bg,
-                  shadowColor: haloColor,
-                  shadowOpacity: 0.35,
-                  shadowRadius: 14,
-                  shadowOffset: { width: 0, height: 0 },
-                  elevation: 10,
-                }}
-              >
-                <BrandMark size={FAB_SIZE - 22} mono={isMono} />
-              </View>
+              {({ pressed }) => (
+                // White disc lifted out of the bar. The page-coloured ring
+                // cuts it cleanly from the bar's hairline; the halo is a soft
+                // shadow (blue in dark/light, grey in mono).
+                <View
+                  style={{
+                    marginTop: -22,
+                    width: FAB_SIZE,
+                    height: FAB_SIZE,
+                    borderRadius: FAB_SIZE / 2,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    backgroundColor: '#FFFFFF',
+                    borderWidth: 4,
+                    borderColor: p.bgElev,
+                    shadowColor: haloColor,
+                    shadowOpacity: 0.16,
+                    shadowRadius: 16,
+                    shadowOffset: { width: 0, height: 4 },
+                    elevation: 8,
+                    transform: [{ scale: pressed ? 0.94 : 1 }],
+                  }}
+                >
+                  <BrandMark size={MARK_SIZE} mono={isMono} />
+                </View>
+              )}
             </Pressable>
           ),
         }}
@@ -174,19 +209,20 @@ function BarIcon({
   color: string;
   label: string;
 }) {
-  const iconName = focused
-    ? name
-    : (`${name}-outline` as keyof typeof Ionicons.glyphMap);
+  const p = useThemedPalette();
+  const outline = `${name}-outline` as keyof typeof Ionicons.glyphMap;
+  const iconName = !focused && outline in Ionicons.glyphMap ? outline : name;
 
   return (
-    <View style={{ alignItems: 'center', justifyContent: 'center', gap: 3, width: '100%' }}>
-      <Ionicons name={iconName} size={22} color={color} />
+    <View style={{ alignItems: 'center', justifyContent: 'center', gap: 4, width: '100%' }}>
+      <Ionicons name={iconName} size={21} color={color} />
       <Text
         numberOfLines={1}
         adjustsFontSizeToFit
         style={{
-          fontSize: 10,
-          fontWeight: focused ? '600' : '400',
+          fontSize: 10.5,
+          fontWeight: focused ? '600' : '500',
+          letterSpacing: 0.1,
           color,
           textAlign: 'center',
           width: '100%',
@@ -194,6 +230,11 @@ function BarIcon({
       >
         {label}
       </Text>
+      {/* Active marker — a small accent dot, the one bit of colour in the bar. */}
+      <View style={{
+        width: 4, height: 4, borderRadius: 2, marginTop: -1,
+        backgroundColor: focused ? p.accent : 'transparent',
+      }} />
     </View>
   );
 }

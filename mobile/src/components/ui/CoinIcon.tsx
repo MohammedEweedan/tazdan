@@ -13,7 +13,9 @@
  */
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { Image, Text, View } from 'react-native';
+import { Image, View, type ImageSourcePropType } from 'react-native';
+import { Text } from './Text';
+import { useTheme, useThemedPalette } from '@/store/themeStore';
 import { useCoinIcons } from '@/hooks/useCoinIcons';
 
 // Strip Binance pair suffixes and variant suffixes so BTCUSDT → btc, ETH_ERC20 → eth
@@ -50,32 +52,55 @@ interface Props {
   color?: string;
 }
 
+const LOCAL_ICONS: Record<string, ImageSourcePropType> = {
+  BTC: require('../../../assets/coins/btc.png'),
+  ETH: require('../../../assets/coins/eth.png'),
+  USDT: require('../../../assets/coins/usdt.png'),
+  SOL: require('../../../assets/coins/sol.png'),
+  BNB: require('../../../assets/coins/bnb.png'),
+  XRP: require('../../../assets/coins/xrp.png'),
+  ADA: require('../../../assets/coins/ada.png'),
+  LINK: require('../../../assets/coins/link.png'),
+  LTC: require('../../../assets/coins/ltc.png'),
+  USDC: require('../../../assets/coins/usdc.png'),
+  DOGE: require('../../../assets/coins/doge.png'),
+  DOT: require('../../../assets/coins/dot.png'),
+};
+
+const MONO_ICONS: Record<string, ImageSourcePropType> = {
+  BTC: require('../../../assets/coins/btc-mono.png'),
+  ETH: require('../../../assets/coins/eth-mono.png'),
+  USDT: require('../../../assets/coins/usdt-mono.png'),
+  SOL: require('../../../assets/coins/sol-mono.png'),
+  BNB: require('../../../assets/coins/bnb-mono.png'),
+  XRP: require('../../../assets/coins/xrp-mono.png'),
+  ADA: require('../../../assets/coins/ada-mono.png'),
+  LINK: require('../../../assets/coins/link-mono.png'),
+  LTC: require('../../../assets/coins/ltc-mono.png'),
+  USDC: require('../../../assets/coins/usdc-mono.png'),
+  DOGE: require('../../../assets/coins/doge-mono.png'),
+  DOT: require('../../../assets/coins/dot-mono.png'),
+};
+
 export function CoinIcon({ symbol, size = 40, color }: Props) {
-  const getIconUrl = useCoinIcons();
   const sym = normalise(symbol);
+  const local = LOCAL_ICONS[sym];
+  const mono = useTheme((s) => s.mode === 'mono');
+  const p = useThemedPalette();
+  if (local) return <Image source={mono ? MONO_ICONS[sym] : local} style={{ width: size, height: size }} resizeMode="contain" accessibilityLabel={sym} />;
+  return <RemoteCoinIcon symbol={sym} size={size} color={mono ? p.fg : color} mono={mono} />;
+}
+
+function RemoteCoinIcon({ symbol: sym, size = 40, color, mono }: Props & { mono: boolean }) {
+  const getIconUrl = useCoinIcons();
   const uri = getIconUrl(sym);
   const [failed, setFailed] = useState(false);
-
   useEffect(() => { setFailed(false); }, [uri]);
-
   const source = useMemo(() => ({ uri }), [uri]);
-
-  if (failed) {
-    return (
-      <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
-        <Text style={{ color: color ?? coinColor(sym), fontSize: size * 0.45, fontWeight: '800' }}>
-          {sym[0] ?? '?'}
-        </Text>
-      </View>
-    );
-  }
-
-  return (
-    <Image
-      source={source}
-      style={{ width: size, height: size }}
-      resizeMode="contain"
-      onError={() => setFailed(true)}
-    />
+  if (failed || !uri) return (
+    <View style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: `${coinColor(sym)}18`, alignItems: 'center', justifyContent: 'center' }}>
+      <Text style={{ color: color ?? coinColor(sym), fontSize: size * 0.38, fontWeight: '600' }}>{sym.slice(0, 2)}</Text>
+    </View>
   );
+  return <Image source={source} style={{ width: size, height: size, tintColor: mono ? color : undefined }} resizeMode="contain" onError={() => setFailed(true)} accessibilityLabel={sym} />;
 }

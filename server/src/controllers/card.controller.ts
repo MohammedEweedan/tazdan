@@ -7,6 +7,8 @@ import { AppError } from '../middleware/errorHandler';
 import { AuthRequest } from '../types';
 import { collectFee } from '../services/fee/feeCollector.service';
 import { postLedger, isLedgerCurrency } from '../services/ledger/ledger.service';
+import { assertTransitioned, debitAvailable, lockBudget, settleReserve } from '../services/wallet/atomicWallet';
+import { enforceKycLimit } from '../utils/kycLimits';
 import { emitActivity } from '../utils/realtime';
 import { isDateLocked, requiresStepUp } from '../services/budget.service';
 import { issueStepUp, verifyStepUp } from '../services/security/stepUp.service';
@@ -357,14 +359,11 @@ export class CardController {
       const wallet = await prisma.wallet.findFirst({ where: { userId, currency: currency as any } });
       if (!wallet) throw new AppError(`No ${currency} wallet`, 400);
 
-      const available = Number(wallet.balance) - Number(wallet.frozen ?? 0);
-      if (available < amount) throw new AppError('Insufficient balance', 400);
+      await enforceKycLimit(userId, 'SEND', amount, currency);
 
       const tx = await prisma.$transaction(async (prismaTx) => {
-        await prismaTx.wallet.update({
-          where: { id: wallet.id },
-          data:  { balance: { decrement: amount } },
-        });
+        // Checked against spendable balance in the same statement.
+        await debitAvailable(prismaTx, userId, currency, amount);
         // Double-entry: funds leave the user's wallet onto the card spend rail
         // (SYSTEM_OFFRAMP is the off-platform counterparty).
         if (isLedgerCurrency(currency)) {
@@ -441,7 +440,14 @@ export class CardController {
       if (!funding) throw new AppError(`Insufficient balance — the physical card costs $${fee.toFixed(2)}`, 400);
 
       const updated = await prisma.$transaction(async (tx) => {
-        await tx.wallet.update({ where: { id: funding!.id }, data: { balance: { decrement: fee } } });
+        // Claim the order before charging: a second concurrent order finds
+        // the card no longer NONE and is not charged again.
+        const claimed = await tx.card.updateMany({
+          where: { id: card.id, userId, physicalStatus: 'NONE' },
+          data: { physicalStatus: 'REQUESTED', physicalOrderedAt: new Date() },
+        });
+        assertTransitioned(claimed, 'A physical card is already on the way');
+        await debitAvailable(tx, userId, funding!.currency, fee);
         // Double-entry: physical-card fee leaves the user to the platform.
         if (isLedgerCurrency(funding!.currency)) {
           await postLedger(tx, {
@@ -531,13 +537,18 @@ export class CardController {
         await verifyStepUp(userId, 'withdrawal', stepUpCode);
       }
 
+      await enforceKycLimit(userId, 'SEND', amount, budget.currency);
+
       const amt = new Decimal(amount);
       const result = await prisma.$transaction(async (tx) => {
+        // Re-read the budget under its row lock: the balance checked above
+        // may have changed, and two loads must not both spend it.
+        await lockBudget(tx, budget.id);
+        const locked = await tx.budgetWallet.findUniqueOrThrow({ where: { id: budget.id } });
+        if (new Decimal(locked.balance.toString()).lt(amt)) throw new AppError('Amount exceeds budget balance', 400);
+
         // Release the budget hold AND move the money off the wallet onto the card.
-        await tx.wallet.update({
-          where: { userId_currency: { userId, currency: budget.currency } },
-          data: { frozen: { decrement: amt }, balance: { decrement: amt } },
-        });
+        await settleReserve(tx, userId, budget.currency, amt);
         // Double-entry: budget funds leave the user's wallet onto the card rail.
         if (isLedgerCurrency(budget.currency)) {
           await postLedger(tx, {

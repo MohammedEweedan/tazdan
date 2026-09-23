@@ -74,11 +74,11 @@ function resolveFontFamily(style: any, useCairo: boolean): any {
   const explicitFamily = String(flattened.fontFamily || '');
 
   if (useCairo && !explicitFamily.startsWith('Outfit')) {
-    const mapped = CAIRO_WEIGHT_MAP[weight] ?? 'Cairo_400Regular';
+    const mapped = explicitFamily.startsWith('Cairo_') ? explicitFamily : CAIRO_WEIGHT_MAP[weight] ?? 'Cairo_400Regular';
     return { ...flattened, fontFamily: mapped, fontWeight: undefined };
   }
 
-  const mapped = OUTFIT_WEIGHT_MAP[weight] ?? (explicitFamily || 'Outfit_400Regular');
+  const mapped = explicitFamily || OUTFIT_WEIGHT_MAP[weight] || 'Outfit_400Regular';
   return { ...flattened, fontFamily: mapped, fontWeight: undefined };
 }
 

@@ -1,3 +1,4 @@
+import { StackHeader } from '@/components/ui/ScreenHeader';
 /**
  * Admin Database Browser — paginated reads of every core table.
  * Each tab shows raw rows with key columns surfaced + JSON drill-down on tap.
@@ -156,13 +157,7 @@ export default function AdminData() {
       <SafeAreaView style={{ flex: 1 }} edges={['top']}>
 
         {/* Header */}
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingTop: 8, paddingBottom: 6 }}>
-          <Pressable onPress={() => router.back()} hitSlop={8}>
-            <Ionicons name="chevron-back" size={26} color={p.fg} />
-          </Pressable>
-          <Text style={{ flex: 1, color: p.fg, fontSize: 18, fontWeight: '600', letterSpacing: -0.3 }}>Database</Text>
-          <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '700' }}>{q.data?.total ?? 0}</Text>
-        </View>
+        <StackHeader title="Database" right={<><Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '700' }}>{q.data?.total ?? 0}</Text></>} />
 
         {/* Tab strip */}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, gap: 8, paddingBottom: 8 }}>

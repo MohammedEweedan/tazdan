@@ -182,7 +182,7 @@ export default function Login() {
                   />
                 </Pressable>
                 <Image
-                  source={require('../../assets/icon-color.png')}
+                  source={require('../../assets/icon-asterisk.png')}
                   style={{ width: 32, height: 32 }}
                   resizeMode="contain"
                 />
@@ -475,7 +475,7 @@ function Field({
       <View
         style={{
           height: 60,
-          borderRadius: 16,
+          borderRadius: 18,
           paddingHorizontal: 16,
           paddingTop: value || focused ? 18 : 0,
           backgroundColor: p.bgElev,
@@ -498,6 +498,7 @@ function Field({
         </Text>
         <TextInput
           {...rest}
+          accessibilityLabel={label}
           value={value}
           onChangeText={onChangeText}
           onFocus={() => setFocused(true)}

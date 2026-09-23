@@ -69,9 +69,14 @@ async function fulusGet<T = any>(path: string, timeoutMs = 5000): Promise<T | nu
     return res.data;
   } catch (err: any) {
     if (err?.response?.status === 429) {
+      // Several requests can be in flight when the quota runs out; log once,
+      // when the breaker actually opens, not once per rejected request.
+      const wasOpen = fulusBreakerOpen();
       breakerOpenUntil = Date.now() + FULUS_429_COOLDOWN_MS;
-      // eslint-disable-next-line no-console
-      console.warn(`[fulus] 429 — pausing ALL Fulus calls for ${Math.round(FULUS_429_COOLDOWN_MS / 60_000)}min (cache/scraper take over)`);
+      if (!wasOpen) {
+        // eslint-disable-next-line no-console
+        console.warn(`[fulus] 429 — pausing ALL Fulus calls for ${Math.round(FULUS_429_COOLDOWN_MS / 60_000)}min (cache/scraper take over)`);
+      }
     }
     return null;
   }
@@ -101,7 +106,7 @@ export function fulusEnabled(): boolean {
 
 /** Sanity window per currency (LYD per 1 unit) — rejects a poisoned value. */
 const BOUNDS: Record<string, [number, number]> = {
-  USD: [4, 12], EUR: [4, 14], GBP: [5, 16],
+  USD: [4, 15], EUR: [4, 17], GBP: [5, 20],
   TRY: [0.05, 1], EGP: [0.05, 1], TND: [1, 5],
   SAR: [1, 4], AED: [1, 4],
 };

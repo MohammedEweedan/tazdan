@@ -1,0 +1,4 @@
+Icons: cryptocurrency-icons 0.18.1, by Christopher Downer and contributors.
+Source: https://github.com/spothq/cryptocurrency-icons
+License: CC0 1.0 Universal (public domain dedication).
+https://creativecommons.org/publicdomain/zero/1.0/

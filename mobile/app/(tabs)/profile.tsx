@@ -16,6 +16,7 @@ import { useHaptics } from '@/hooks';
 import { useTheme, useThemedPalette } from '@/store/themeStore';
 import { useI18n, useT, LOCALE_META } from '@/store/i18nStore';
 import { Panel, PanelRow, StickyTopBar } from '@/components/ui/ScreenShell';
+import { HEADER_ROW_HEIGHT, TabHeader } from '@/components/ui/ScreenHeader';
 import { LocalePickerModal } from '@/components/ui/LocalePickerModal';
 import { profileAPI } from '@/lib/api';
 import { realHandle, displayHandle, avatarMode } from '@/utils/displayUser';
@@ -268,6 +269,7 @@ export default function Profile() {
       rows: [
         { icon: 'notifications-outline', label: t('profile.row.notifications'), href: '/notifications' },
         { icon: 'settings-outline',      label: t('settings.title'),            href: '/settings' },
+        { icon: 'compass-outline',       label: t('tour.replay'),               href: '/guide' },
       ],
     },
     {
@@ -291,7 +293,7 @@ export default function Profile() {
   const insets = useSafeAreaInsets();
   // Same offset math ScreenShell uses internally — keeps the first
   // panel from being hidden under the sticky bar on first paint.
-  const stickyH = insets.top + 18 + 38 + 10;
+  const stickyH = insets.top + HEADER_ROW_HEIGHT;
 
   return (
     <View style={{ flex: 1, backgroundColor: p.bg }}>
@@ -406,14 +408,7 @@ export default function Profile() {
           title style, so we hand-build the header content but reuse
           the StickyTopBar shell. */}
       <StickyTopBar>
-        <View style={{
-          flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-          paddingHorizontal: 24, paddingTop: 18, paddingBottom: 10,
-        }}>
-          <Text style={{ color: p.fg, fontSize: 22, fontWeight: '700', letterSpacing: -0.4 }}>
-            {t('nav.profile')}
-          </Text>
-        </View>
+        <TabHeader title={t('nav.profile')} />
       </StickyTopBar>
 
       {/* Avatar Picker Modal */}

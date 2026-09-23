@@ -76,6 +76,7 @@ import { startOperationalReadinessAlerts } from './services/ops/operationalReadi
 import { globalLimiter, authLimiter, registerLimiter, withdrawalLimiter, webhookLimiter } from './middleware/rateLimiters';
 import { protectedUploadsRouter } from './middleware/protectedUploads';
 import { ipBanMiddleware } from './middleware/ipBan';
+import { featureFlags } from './utils/features';
 
 // ── Cluster load balancing ────────────────────────────────────────────────
 // Default to ONE production worker. Each worker has its own Prisma pool, so
@@ -284,6 +285,11 @@ app.use('/api/budgets', budgetRouter);
 app.use('/api/asset-discussions', assetDiscussionRouter);
 app.use('/api/waitlist', waitlistRouter);
 
+// Feature switches — public so the apps can hide surfaces that are off.
+app.get('/api/features', (_req, res) => {
+  res.json({ features: featureFlags() });
+});
+
 // Health check
 app.get('/api/health', async (_req, res) => {
   const checks: Record<string, 'ok' | 'error'> = {};
@@ -475,6 +481,14 @@ async function start() {
     if (isSchedulerWorker) {
       startFundIntegrityAudit();
       startOperationalReadinessAlerts();
+
+      // Return expired claim-link reservations to their senders. Without
+      // this, an unclaimed link's funds stay frozen until someone tries to
+      // open it.
+      const { sweepExpiredClaimLinks } = await import('./controllers/claimLink.controller');
+      setInterval(() => {
+        void sweepExpiredClaimLinks().catch((e) => logger.error('[claimLink] expiry sweep failed', { err: e }));
+      }, Number(process.env.CLAIM_LINK_SWEEP_MS ?? 5 * 60_000)).unref?.();
     }
   } catch (error) {
     logger.error('Failed to start server:', { err: error });

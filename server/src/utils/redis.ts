@@ -79,6 +79,23 @@ export async function redisSet(key: string, value: unknown, ttlSeconds: number):
   }
 }
 
+/**
+ * Read and delete a key in one atomic step (GETDEL). Of several concurrent
+ * callers, exactly one receives the value — used to make one-time tokens
+ * such as price quotes single-use.
+ */
+export async function redisGetDel<T>(key: string): Promise<T | null> {
+  const cache = getClient();
+  if (!cache) return null;
+  try {
+    const raw = await cache.getDel(key);
+    return raw ? (JSON.parse(String(raw)) as T) : null;
+  } catch (error) {
+    logger.error(`[redis] GETDEL ${key} failed`, { err: error });
+    return null;
+  }
+}
+
 export async function redisDel(key: string): Promise<void> {
   const cache = getClient();
   if (!cache) return;

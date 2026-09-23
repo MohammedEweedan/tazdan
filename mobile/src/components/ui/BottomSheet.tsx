@@ -20,6 +20,8 @@
  *   - Theme-aware bg / border / divider
  *   - Safe-area aware bottom padding
  */
+import { ui } from '@/theme';
+import { useT } from '@/store/i18nStore';
 import type { ReactNode } from 'react';
 import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, View, type StyleProp, type ViewStyle } from 'react-native';
 import { Text } from '@/components/ui/Text';
@@ -52,6 +54,7 @@ export function BottomSheet({
   contentStyle, children,
 }: Props) {
   const p = useThemedPalette();
+  const t = useT();
   const insets = useSafeAreaInsets();
 
   const Body = scroll ? ScrollView : View;
@@ -59,9 +62,9 @@ export function BottomSheet({
     ? {
         showsVerticalScrollIndicator: false,
         keyboardShouldPersistTaps: 'handled' as const,
-        contentContainerStyle: [{ paddingHorizontal: 20, paddingTop: 6 }, contentStyle],
+        contentContainerStyle: [{ paddingHorizontal: ui.gutter, paddingTop: 6 }, contentStyle],
       }
-    : { style: [{ flex: 0, paddingHorizontal: 20, paddingTop: 6 }, contentStyle] };
+    : { style: [{ flex: 0, paddingHorizontal: ui.gutter, paddingTop: 6 }, contentStyle] };
 
   return (
     <Modal
@@ -84,9 +87,9 @@ export function BottomSheet({
           <Pressable
             onPress={(e) => e.stopPropagation()}
             style={{
-              backgroundColor: p.bg,
-              borderTopLeftRadius: 28,
-              borderTopRightRadius: 28,
+              backgroundColor: p.bgElev,
+              borderTopLeftRadius: ui.sheetRadius,
+              borderTopRightRadius: ui.sheetRadius,
               borderTopWidth: 1, borderColor: p.border,
               paddingBottom: Math.max(insets.bottom, 16) + 8,
               maxHeight: `${maxHeightPct}%`,
@@ -112,7 +115,7 @@ export function BottomSheet({
               <View
                 style={{
                   flexDirection: 'row', alignItems: 'center',
-                  paddingHorizontal: 20, paddingTop: 6, paddingBottom: 12,
+                  paddingHorizontal: ui.gutter, paddingTop: 6, paddingBottom: 12,
                   gap: 12,
                 }}
               >
@@ -120,7 +123,7 @@ export function BottomSheet({
                   {title && (
                     <Text
                       style={{
-                        color: p.fg, fontSize: 19, fontWeight: '600',
+                        color: p.fg, fontSize: 21, fontWeight: '600',
                         letterSpacing: -0.4,
                       }}
                       numberOfLines={1}
@@ -140,10 +143,12 @@ export function BottomSheet({
                 {right}
                 {closeButton && (
                   <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={t("common.close")}
                     onPress={onClose}
                     hitSlop={10}
                     style={{
-                      width: 32, height: 32, borderRadius: 16,
+                      width: ui.control, height: ui.control, borderRadius: ui.control / 2,
                       alignItems: 'center', justifyContent: 'center',
                       backgroundColor: p.pillBg,
                     }}

@@ -8,6 +8,8 @@ import { AppError } from '../middleware/errorHandler';
 import { AuthRequest } from '../types';
 import { SPREAD_SETTING_KEY, invalidateSpreadCache, getMarketPrice, getConfiguredSpread } from '../services/exchange/priceEngine.service';
 import { postLedger, isLedgerCurrency } from '../services/ledger/ledger.service';
+import { assertTransitioned, releaseReserve, settleReserve } from '../services/wallet/atomicWallet';
+import { collectFee } from '../services/fee/feeCollector.service';
 import { generateReferralCode } from '../utils/helpers';
 import { createUserWallets } from '../services/wallet/walletDerivation.service';
 
@@ -411,12 +413,13 @@ export class AdminController {
       }
 
       await prisma.$transaction(async (tx: any) => {
-        const fresh = await tx.deposit.findUnique({ where: { id: deposit.id } });
-        if (!fresh || !['WAITING_CONFIRMATION', 'PENDING'].includes(fresh.status)) {
-          throw new AppError('Deposit already processed', 409);
-        }
-
-        await tx.deposit.update({ where: { id: deposit.id }, data: { status: 'CONFIRMED', confirmedAt: new Date(), confirmedBy: req.user!.id, adminNotes: req.body.notes } });
+        // Conditional transition — a concurrent confirm/reject finds the
+        // deposit already processed and nothing is credited twice.
+        const moved = await tx.deposit.updateMany({
+          where: { id: deposit.id, status: { in: ['WAITING_CONFIRMATION', 'PENDING'] } },
+          data: { status: 'CONFIRMED', confirmedAt: new Date(), confirmedBy: req.user!.id, adminNotes: req.body.notes },
+        });
+        assertTransitioned(moved, 'Deposit already processed');
         const wallet = await tx.wallet.findUnique({ where: { userId_currency: { userId: deposit.userId, currency: deposit.currency } } });
         const balanceBefore = parseFloat(wallet?.balance.toString() || '0');
         const amount = new Decimal(deposit.amount.toString());
@@ -453,7 +456,11 @@ export class AdminController {
         throw new AppError('Deposit is not awaiting confirmation', 400);
       }
 
-      await prisma.deposit.update({ where: { id: deposit.id }, data: { status: 'REJECTED', adminNotes: req.body.reason || 'Rejected by admin', confirmedBy: req.user!.id } });
+      const moved = await prisma.deposit.updateMany({
+        where: { id: deposit.id, status: { in: ['WAITING_CONFIRMATION', 'PENDING'] } },
+        data: { status: 'REJECTED', adminNotes: req.body.reason || 'Rejected by admin', confirmedBy: req.user!.id },
+      });
+      assertTransitioned(moved, 'Deposit already processed');
       await prisma.notification.create({ data: { userId: deposit.userId, title: 'Deposit Rejected', message: `Your deposit of ${deposit.amount} ${deposit.currency} has been rejected. Reason: ${req.body.reason || 'N/A'}`, type: 'deposit' } });
       res.json({ message: 'Deposit rejected' });
     } catch (error) { next(error); }
@@ -524,12 +531,20 @@ export class AdminController {
       }
 
       await prisma.$transaction(async (tx: any) => {
-        await tx.withdrawal.update({ where: { id: withdrawal.id }, data: { status: 'COMPLETED', processedAt: new Date(), processedBy: req.user!.id, adminNotes: req.body.notes } });
+        // Claim the transition first: a second concurrent approval (another
+        // admin, a double-click) finds it no longer PENDING and pays nothing.
+        const moved = await tx.withdrawal.updateMany({
+          where: { id: withdrawal.id, status: 'PENDING' },
+          data: { status: 'COMPLETED', processedAt: new Date(), processedBy: req.user!.id, adminNotes: req.body.notes },
+        });
+        assertTransitioned(moved, 'Withdrawal already processed');
         const wallet = await tx.wallet.findUnique({ where: { userId_currency: { userId: withdrawal.userId, currency: withdrawal.currency } } });
         const balanceBefore = parseFloat(wallet?.balance.toString() || '0');
         const amount = parseFloat(withdrawal.amount.toString());
 
-        await tx.wallet.update({ where: { userId_currency: { userId: withdrawal.userId, currency: withdrawal.currency } }, data: { balance: { decrement: withdrawal.amount }, frozen: { decrement: withdrawal.amount } } });
+        // Spend the reservation made at request time. Refuses (409) if the
+        // reserved funds don't cover it rather than pushing the wallet negative.
+        await settleReserve(tx, withdrawal.userId, withdrawal.currency, withdrawal.amount);
         await tx.transaction.create({ data: { userId: withdrawal.userId, type: 'WITHDRAWAL', currency: withdrawal.currency, amount: new Decimal(-amount), fee: withdrawal.fee, balanceBefore, balanceAfter: balanceBefore - amount, reference: withdrawal.reference, description: `Withdrawal processed` } });
 
         // Ledger mirror: user balance leaves — net goes off-platform, fee to platform.
@@ -544,6 +559,22 @@ export class AdminController {
               ...(feeD.gt(0) ? [{ type: 'PLATFORM' as const, currency: withdrawal.currency as any, amount: feeD }] : []),
             ],
           }, { allowNegativeUser: true });
+        }
+
+        // The fee is revenue only once the withdrawal actually completes —
+        // booking it at request time kept it even when the user cancelled or
+        // the request was rejected.
+        if (new Decimal(withdrawal.fee.toString()).gt(0)) {
+          await collectFee({
+            tx,
+            source: 'withdrawal',
+            sourceId: withdrawal.id,
+            payerId: withdrawal.userId,
+            amount: new Decimal(withdrawal.fee.toString()),
+            currency: withdrawal.currency,
+            description: `Withdrawal fee · ${withdrawal.currency}`,
+            metadata: { network: withdrawal.network ?? null },
+          });
         }
 
         // If USDT withdrawal, queue on-chain send
@@ -576,8 +607,12 @@ export class AdminController {
       // releases the `frozen` reservation — no real balance ever moved (the
       // settlement, which does move money, is the only ledgered withdrawal step).
       await prisma.$transaction(async (tx) => {
-        await tx.wallet.update({ where: { userId_currency: { userId: withdrawal.userId, currency: withdrawal.currency } }, data: { frozen: { decrement: withdrawal.amount } } });
-        await tx.withdrawal.update({ where: { id: withdrawal.id }, data: { status: 'REJECTED', adminNotes: req.body.reason || 'Rejected by admin', processedBy: req.user!.id } });
+        const moved = await tx.withdrawal.updateMany({
+          where: { id: withdrawal.id, status: 'PENDING' },
+          data: { status: 'REJECTED', adminNotes: req.body.reason || 'Rejected by admin', processedBy: req.user!.id },
+        });
+        assertTransitioned(moved, 'Withdrawal already processed');
+        await releaseReserve(tx, withdrawal.userId, withdrawal.currency, withdrawal.amount);
         await tx.notification.create({ data: { userId: withdrawal.userId, title: 'Withdrawal Rejected', message: `Your withdrawal has been rejected. Reason: ${req.body.reason || 'N/A'}`, type: 'withdrawal' } });
       });
       res.json({ message: 'Withdrawal rejected and funds unfrozen' });
@@ -606,7 +641,13 @@ export class AdminController {
 
   static async approveKYC(req: AuthRequest, res: Response, next: NextFunction) {
     try {
-      await prisma.user.update({ where: { id: req.params.userId }, data: { kycStatus: 'APPROVED' } });
+      // The tier drives every transaction limit, so approval must set it.
+      // Identity documents alone justify TIER_1; the reviewer passes TIER_2
+      // (address verified) or TIER_3 (source of funds reviewed) explicitly.
+      const { tier } = z.object({
+        tier: z.enum(['TIER_1', 'TIER_2', 'TIER_3']).default('TIER_1'),
+      }).parse(req.body ?? {});
+      await prisma.user.update({ where: { id: req.params.userId }, data: { kycStatus: 'APPROVED', kycTier: tier } });
       await prisma.kYCDocument.updateMany({ where: { userId: req.params.userId, status: 'PENDING' }, data: { status: 'APPROVED', reviewedBy: req.user!.id, reviewedAt: new Date() } });
       await prisma.notification.create({ data: { userId: req.params.userId, title: 'KYC Approved', message: 'Your identity verification has been approved. You can now trade.', type: 'kyc' } });
       res.json({ message: 'KYC approved' });
@@ -615,7 +656,7 @@ export class AdminController {
 
   static async rejectKYC(req: AuthRequest, res: Response, next: NextFunction) {
     try {
-      await prisma.user.update({ where: { id: req.params.userId }, data: { kycStatus: 'REJECTED' } });
+      await prisma.user.update({ where: { id: req.params.userId }, data: { kycStatus: 'REJECTED', kycTier: 'TIER_0' } });
       await prisma.kYCDocument.updateMany({ where: { userId: req.params.userId, status: 'PENDING' }, data: { status: 'REJECTED', rejectionReason: req.body.reason, reviewedBy: req.user!.id, reviewedAt: new Date() } });
       await prisma.notification.create({ data: { userId: req.params.userId, title: 'KYC Rejected', message: `Your identity verification was rejected. Reason: ${req.body.reason || 'N/A'}`, type: 'kyc' } });
       res.json({ message: 'KYC rejected' });

@@ -11,6 +11,7 @@ import { pushCopy, pushTxEvent } from '../services/push.service';
 import { postLedger, isLedgerCurrency } from '../services/ledger/ledger.service';
 import { enforceStepUp } from '../services/security/stepUp.service';
 import { collectFee } from '../services/fee/feeCollector.service';
+import { enforceKycLimit } from '../utils/kycLimits';
 
 // Internal-transfer accepts the same set as wallet creation, including
 // the USDT on-chain variants. We normalise them to a single logical
@@ -107,6 +108,7 @@ export class TransferController {
         } catch { /* fall back to raw amount */ }
       }
       await enforceStepUp({ userId: req.user!.id, action: 'transfer', valueUsd: usdValue, req, code: data.stepUpCode });
+      await enforceKycLimit(req.user!.id, 'SEND', data.amount, logicalCurrency);
 
       const reference = generateReference('TRF');
 

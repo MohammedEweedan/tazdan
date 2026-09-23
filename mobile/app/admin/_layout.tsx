@@ -1,3 +1,4 @@
+import { useThemedPalette } from '@/store/themeStore';
 /**
  * Admin route layout — all admin pages share a hidden header (each
  * screen builds its own) and are stack-nested under /admin.
@@ -13,6 +14,7 @@ import { Stack, useRouter } from 'expo-router';
 import { useAuthStore } from '@/store/authStore';
 
 export default function AdminLayout() {
+  const p = useThemedPalette();
   const router = useRouter();
   const { user, isHydrating, isAuthenticated } = useAuthStore();
   const isAdmin = isAuthenticated && user?.role === 'ADMIN';
@@ -29,6 +31,7 @@ export default function AdminLayout() {
     <Stack
       screenOptions={{
         headerShown: false,
+        contentStyle: { backgroundColor: p.bg },
         animation: 'slide_from_right',
       }}
     />

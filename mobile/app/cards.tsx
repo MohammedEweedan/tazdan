@@ -16,6 +16,9 @@ import Svg, { Circle, Path, Rect } from 'react-native-svg';
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { HeaderIconButton, StackHeader } from '@/components/ui/ScreenHeader';
+import { StatusBanner } from '@/components/ui/StatusBanner';
+import { useFeatures } from '@/hooks/useFeatures';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
 
@@ -1271,6 +1274,7 @@ export default function Cards() {
   const theme  = useTheme(s => s.mode);
   const router = useRouter();
   const qc     = useQueryClient();
+  const features = useFeatures();
 
   const { data: fetched, isLoading } = useCards();
   const { data: wallets = [] }       = useWallets();
@@ -1297,7 +1301,8 @@ export default function Cards() {
   const activeCard = allCards[activeIdx] ?? null;
 
   const { data: realTxs = [], isLoading: txsLoading } = useCardTransactions(activeCard?.id ?? null);
-  const txs = realTxs.length > 0 ? realTxs : (activeCard ? mockTxsForCard(activeCard.id) : []);
+  // Real transactions only — a money app must never show made-up activity.
+  const txs = realTxs;
 
   const toggleFreeze = async (c: CardEntity) => {
     const isFrozen = c.status === 'FROZEN';
@@ -1322,18 +1327,17 @@ export default function Cards() {
       <SafeAreaView style={{ flex: 1 }} edges={['top']}>
 
         {/* Header */}
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 24, paddingTop: 12, paddingBottom: 8 }}>
-          <Pressable onPress={() => router.back()} hitSlop={8}>
-            <Ionicons name="chevron-back" size={24} color={p.fg} />
-          </Pressable>
-          <Text style={{ color: p.fg, fontSize: 18, fontWeight: '600', letterSpacing: -0.4 }}>{t('cards.title')}</Text>
-          <Pressable
-            onPress={() => { h.medium(); setIssueOpen(true); }}
-            style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: p.pillBg, borderWidth: 1, borderColor: p.border, alignItems: 'center', justifyContent: 'center' }}
-          >
-            <Ionicons name="add" size={20} color={p.fg} />
-          </Pressable>
-        </View>
+        <StackHeader
+          title={t('cards.title')}
+          right={features.cards
+            ? <HeaderIconButton icon="add" label={t('cards.orderCard')} onPress={() => setIssueOpen(true)} />
+            : undefined}
+        />
+        {!features.cards && (
+          <View style={{ marginHorizontal: 24, marginTop: 4 }}>
+            <StatusBanner kind="info" message={t('features.cardsPaused')} />
+          </View>
+        )}
 
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 120 }}>
 
@@ -1366,7 +1370,7 @@ export default function Cards() {
               <Text style={{ color: p.fgMuted, fontSize: 14, textAlign: 'center', marginTop: 8, lineHeight: 20 }}>
                 {t('cards.emptySubtitle')}
               </Text>
-              <Pressable
+              {features.cards && <Pressable
                 onPress={() => { h.medium(); setIssueOpen(true); }}
                 style={({ pressed }) => ({
                   marginTop: 28, paddingHorizontal: 32, height: 52, borderRadius: 26,
@@ -1377,7 +1381,7 @@ export default function Cards() {
               >
                 <Ionicons name="add-circle-outline" size={20} color="#fff" />
                 <Text style={{ color: '#fff', fontSize: 16, fontWeight: '600' }}>{t('cards.orderCard')}</Text>
-              </Pressable>
+              </Pressable>}
             </View>
           ) : (
             <>
@@ -1523,20 +1527,23 @@ export default function Cards() {
                       <Text style={{ color: p.fg, fontSize: 10, fontWeight: '700' }}>{t('cards.topup')}</Text>
                     </Pressable>
 
-                    {/* Simulate Purchase */}
-                    <Pressable
-                      onPress={() => { h.selection(); setSimulateCard(activeCard); }}
-                      disabled={activeCard.status !== 'ACTIVE'}
-                      style={({ pressed }) => ({
-                        flex: 1, height: 56, borderRadius: 16,
-                        backgroundColor: p.pillBg, borderWidth: 1, borderColor: p.border,
-                        alignItems: 'center', justifyContent: 'center', gap: 4,
-                        opacity: pressed || activeCard.status !== 'ACTIVE' ? 0.5 : 1,
-                      })}
-                    >
-                      <Ionicons name="storefront-outline" size={20} color={p.fg} />
-                      <Text style={{ color: p.fg, fontSize: 10, fontWeight: '700' }}>Simulate</Text>
-                    </Pressable>
+                    {/* Simulate Purchase — development builds only; the server
+                        rejects simulated card spend in production. */}
+                    {__DEV__ && (
+                      <Pressable
+                        onPress={() => { h.selection(); setSimulateCard(activeCard); }}
+                        disabled={activeCard.status !== 'ACTIVE'}
+                        style={({ pressed }) => ({
+                          flex: 1, height: 56, borderRadius: 16,
+                          backgroundColor: p.pillBg, borderWidth: 1, borderColor: p.border,
+                          alignItems: 'center', justifyContent: 'center', gap: 4,
+                          opacity: pressed || activeCard.status !== 'ACTIVE' ? 0.5 : 1,
+                        })}
+                      >
+                        <Ionicons name="storefront-outline" size={20} color={p.fg} />
+                        <Text style={{ color: p.fg, fontSize: 10, fontWeight: '700' }}>Simulate</Text>
+                      </Pressable>
+                    )}
                   </View>
 
                   {/* Add to wallet */}
@@ -1609,7 +1616,7 @@ export default function Cards() {
               )}
 
               {/* New card CTA */}
-              <Pressable
+              {features.cards && <Pressable
                 onPress={() => { h.medium(); setIssueOpen(true); }}
                 style={({ pressed }) => ({
                   marginHorizontal: 24, marginTop: 20, height: 52, borderRadius: 26,
@@ -1620,7 +1627,7 @@ export default function Cards() {
               >
                 <Ionicons name="add-circle-outline" size={18} color={p.fg} />
                 <Text style={{ color: p.fg, fontSize: 14, fontWeight: '700' }}>{t('cards.issueAnother')}</Text>
-              </Pressable>
+              </Pressable>}
             </>
           )}
         </ScrollView>

@@ -20,6 +20,7 @@ import { detectChain, validateAddress } from '../utils/addressValidation';
 import { logger } from '../utils/logger';
 import { sendWithdrawalConfirmed } from '../services/email';
 import { pushCopy, pushTxEvent } from '../services/push.service';
+import { enforceKycLimit } from '../utils/kycLimits';
 
 const initiateSchema = z.object({
   asset: z.enum(['ETH', 'BTC', 'SOL', 'USDT']),
@@ -121,6 +122,8 @@ export class CryptoWithdrawalController {
           403
         );
       }
+
+      await enforceKycLimit(req.user!.id, 'WITHDRAW', body.amount, body.asset);
 
       const tx = await initiateWithdrawal({
         userId: req.user!.id,

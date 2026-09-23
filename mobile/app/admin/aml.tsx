@@ -1,3 +1,4 @@
+import { StackHeader } from '@/components/ui/ScreenHeader';
 /**
  * Admin AML — open / reviewing / escalated flags with resolution action.
  */
@@ -57,12 +58,7 @@ export default function AdminAML() {
       <TopGradient />
       <StatusBar style={themeMode === 'light' ? 'dark' : 'light'} />
       <SafeAreaView style={{ flex: 1 }} edges={['top']}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingTop: 8, paddingBottom: 8 }}>
-          <Pressable onPress={() => router.back()} hitSlop={8}>
-            <Ionicons name="chevron-back" size={26} color={p.fg} />
-          </Pressable>
-          <Text style={{ flex: 1, color: p.fg, fontSize: 18, fontWeight: '600' }}>AML Flags</Text>
-        </View>
+        <StackHeader title="AML Flags" />
 
         {/* Summary chips */}
         <View style={{ flexDirection: 'row', gap: 8, paddingHorizontal: 16, marginBottom: 10, flexWrap: 'wrap' }}>

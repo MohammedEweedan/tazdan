@@ -11,9 +11,8 @@
 import { ReactNode } from 'react';
 import { ActivityIndicator, Pressable, View, type StyleProp, type ViewStyle } from 'react-native';
 import { Text } from '@/components/ui/Text';
-import { LinearGradient } from 'expo-linear-gradient';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
-import { gradients, shadows } from '@/theme';
+import { ui } from '@/theme';
 import { useThemedPalette } from '@/store/themeStore';
 import { useHaptics } from '@/hooks/useHaptics';
 
@@ -35,9 +34,9 @@ interface ButtonProps {
 }
 
 const sizeMap: Record<Size, { height: number; padX: number; font: number; radius: number }> = {
-  sm: { height: 40, padX: 16, font: 14, radius: 12 },
-  md: { height: 52, padX: 20, font: 15, radius: 16 },
-  lg: { height: 60, padX: 24, font: 17, radius: 20 },
+  sm: { height: 44, padX: 18, font: 14, radius: 22 },
+  md: { height: 52, padX: 22, font: 15, radius: 26 },
+  lg: { height: ui.button, padX: 24, font: 16, radius: 28 },
 };
 
 export function Button({
@@ -66,11 +65,10 @@ export function Button({
 
   const inner = (
     <View
-      className="flex-row items-center justify-center"
-      style={{ height: dims.height, paddingHorizontal: dims.padX, gap: 8 }}
+      style={{ minHeight: dims.height, paddingVertical: 12, paddingHorizontal: dims.padX, gap: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}
     >
       {loading ? (
-        <ActivityIndicator color={variant === 'primary' ? p.accentFg : p.fg} />
+        <ActivityIndicator color={variant === 'primary' ? p.ctaFg : p.fg} />
       ) : (
         <>
           {iconLeft}
@@ -78,8 +76,8 @@ export function Button({
             style={{
               fontSize: dims.font,
               letterSpacing: -0.2,
-              fontWeight: variant === 'primary' ? '700' : '600',
-              color: variant === 'primary' ? p.accentFg : p.fg,
+              fontWeight: '600',
+              color: variant === 'primary' ? p.ctaFg : p.fg,
             }}
           >
             {label}
@@ -92,6 +90,9 @@ export function Button({
 
   return (
     <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ disabled: !!isDisabled, busy: !!loading }}
       onPressIn={onIn}
       onPressOut={onOut}
       onPress={onTap}
@@ -105,7 +106,7 @@ export function Button({
             borderRadius: dims.radius,
             overflow: 'hidden',
             opacity: isDisabled ? 0.55 : 1,
-            ...(variant === 'primary' ? shadows.card : {}),
+
           },
         ]}
       >

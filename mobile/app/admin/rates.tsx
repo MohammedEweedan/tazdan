@@ -1,3 +1,4 @@
+import { StackHeader } from '@/components/ui/ScreenHeader';
 /**
  * Admin Rates — a USD/LYD price chart on top, with the editable rate pairs
  * below it. Each pair shows the STORED value next to the current LIVE value so
@@ -109,16 +110,10 @@ export default function AdminRates() {
       <StatusBar style={themeMode === 'light' ? 'dark' : 'light'} />
       <TopGradient />
       <SafeAreaView style={{ flex: 1 }} edges={['top']}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingTop: 8, paddingBottom: 8 }}>
-          <Pressable onPress={() => router.back()} hitSlop={8}>
-            <Ionicons name="chevron-back" size={26} color={p.fg} />
-          </Pressable>
-          <Text style={{ flex: 1, color: p.fg, fontSize: 18, fontWeight: '600', letterSpacing: -0.3 }}>Exchange Rates</Text>
-          <Pressable onPress={() => setCreating(true)} hitSlop={8} style={{ paddingHorizontal: 11, paddingVertical: 7, borderRadius: 10, backgroundColor: p.ctaBg, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+        <StackHeader title="Exchange Rates" right={<><Pressable onPress={() => setCreating(true)} hitSlop={8} style={{ paddingHorizontal: 11, paddingVertical: 7, borderRadius: 10, backgroundColor: p.ctaBg, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
             <Ionicons name="add" size={15} color={p.ctaFg} />
             <Text style={{ color: p.ctaFg, fontSize: 12, fontWeight: '600' }}>NEW</Text>
-          </Pressable>
-        </View>
+          </Pressable></>} />
 
         <ScrollView
           contentContainerStyle={{ padding: 16, paddingBottom: 80 }}

@@ -1,3 +1,4 @@
+import { StackHeader } from '@/components/ui/ScreenHeader';
 /**
  * Admin Platform Banks — full CRUD over the deposit-rail bank accounts.
  *  • List banks (active/inactive badge)
@@ -88,19 +89,13 @@ export default function AdminPlatformBanks() {
       <TopGradient />
       <StatusBar style={themeMode === 'light' ? 'dark' : 'light'} />
       <SafeAreaView style={{ flex: 1 }} edges={['top']}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingTop: 8, paddingBottom: 6 }}>
-          <Pressable onPress={() => router.back()} hitSlop={8}>
-            <Ionicons name="chevron-back" size={26} color={p.fg} />
-          </Pressable>
-          <Text style={{ flex: 1, color: p.fg, fontSize: 18, fontWeight: '600' }}>Platform Banks</Text>
-          <Pressable
+        <StackHeader title="Platform Banks" right={<><Pressable
             onPress={() => setEditing({ form: { ...EMPTY } })}
             hitSlop={8}
             style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: p.fg, alignItems: 'center', justifyContent: 'center' }}
           >
             <Ionicons name="add" size={20} color={p.bg} />
-          </Pressable>
-        </View>
+          </Pressable></>} />
 
         {q.isLoading ? (
           <LoadingPulse fullscreen icon="business-outline" label="Loading banks…" />

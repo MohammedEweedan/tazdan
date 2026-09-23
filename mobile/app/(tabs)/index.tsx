@@ -13,6 +13,9 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { cryptoWalletAPI } from '@/lib/cryptoApi';
+import { Skeleton } from '@/components/ui/Skeleton';
+import { EmptyState } from '@/components/ui/EmptyState';
+import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import { TopGradient } from '@/components/ui/ScreenShell';
 import { ActivityIndicator, Animated, Dimensions, Image, KeyboardAvoidingView, Modal, PanResponder, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { BlurView } from 'expo-blur';
@@ -59,7 +62,7 @@ export default function Home() {
   const t = useT();
   const insets = useSafeAreaInsets();
   const user = useAuthStore((s) => s.user);
-  const { data: wallets, refetch: refetchWallets } = useWallets();
+  const { data: wallets, refetch: refetchWallets, isPending: walletsLoading, isError: walletsError } = useWallets();
   const { data: budgets = [] } = useBudgets();
   // `useTransactions` still feeds screens that need the raw Transaction
   // ledger. The home Activity tab uses the unified `useActivities` feed
@@ -501,6 +504,7 @@ export default function Home() {
             </View>
           </View>
 
+          {walletsLoading ? <View style={{ alignItems: 'center', paddingVertical: 24 }}><Skeleton width={200} height={60} /></View> : walletsError ? <EmptyState icon="cloud-offline-outline" title={t('wallet.loadError')} actionLabel={t('common.retry')} onAction={() => refetchWallets()} /> : <>
           <AnimatedTotal
             value={totalUsd}
             palette={p}
@@ -546,6 +550,8 @@ export default function Home() {
             </View>
           </View>
 
+          </>}
+
           {/* ── PRIMARY ACTIONS ── */}
           <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 6, paddingHorizontal: 16, marginTop: 18 }}>
             {ACTIONS.map((a) => (
@@ -564,19 +570,11 @@ export default function Home() {
               between the pinned hero and the scrolling feed. */}
           <AnnouncementBanner />
 
-          {/* Assets / Activity — segmented control. No longer pinned; it
-              sits above the asset/activity rows and scrolls with them. */}
-          <View style={{ paddingHorizontal: 24, alignItems: 'center', marginTop: 18, marginBottom: 4 }}>
-            <View style={{
-              flexDirection: 'row',
-              backgroundColor: p.pillBg,
-              borderRadius: 12,
-              padding: 3,
-              alignSelf: 'center',
-            }}>
-              <TabBtn label={t('home.assets')}   active={tab === 'ASSETS'}   palette={p} onPress={() => { h.selection(); setTab('ASSETS'); }} />
-              <TabBtn label={t('home.activity')} active={tab === 'ACTIVITY'} palette={p} onPress={() => { h.selection(); setTab('ACTIVITY'); }} />
-            </View>
+          <View style={{ paddingHorizontal: 24, marginTop: 18, marginBottom: 4 }}>
+            <SegmentedControl<Tab> value={tab} onChange={setTab} options={[
+              { key: 'ASSETS', label: t('home.assets') },
+              { key: 'ACTIVITY', label: t('home.activity') },
+            ]} />
           </View>
 
           {/* Rows */}
@@ -2554,7 +2552,7 @@ function QrModal({
               backgroundColor="#ffffff"
               color="#000000"
               ecl="H"
-              logo={require('../../assets/icon-color.png')}
+              logo={require('../../assets/icon-asterisk.png')}
               logoSize={42}
               logoBackgroundColor="#ffffff"
               logoMargin={4}

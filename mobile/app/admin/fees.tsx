@@ -1,3 +1,4 @@
+import { StackHeader } from '@/components/ui/ScreenHeader';
 /**
  * Admin Fee Ledger — every fee the platform has collected, grouped
  * by currency with USD totals, and filterable by source.
@@ -58,12 +59,7 @@ export default function AdminFees() {
     <View style={{ flex: 1, backgroundColor: p.bg }}>
       <StatusBar style={themeMode === 'light' ? 'dark' : 'light'} />
       <SafeAreaView style={{ flex: 1 }} edges={['top']}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingTop: 8, paddingBottom: 8 }}>
-          <Pressable onPress={() => router.back()} hitSlop={8}>
-            <Ionicons name="chevron-back" size={26} color={p.fg} />
-          </Pressable>
-          <Text style={{ flex: 1, color: p.fg, fontSize: 18, fontWeight: '600', letterSpacing: -0.3 }}>Fee Ledger</Text>
-        </View>
+        <StackHeader title="Fee Ledger" />
 
         <ScrollView
           contentContainerStyle={{ padding: 16, paddingBottom: 80 }}

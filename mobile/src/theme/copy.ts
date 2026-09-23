@@ -1,0 +1,26 @@
+export const designEn = {
+  'common.back': 'Back', 'common.error': 'Something went wrong',
+  'wallet.estimate': 'Estimated total · USD',
+  'wallet.overview': 'A clearer view of your money.',
+  'wallet.hideBalances': 'Hide balances', 'wallet.showBalances': 'Show balances',
+  'wallet.emptyTitle': 'Your wallet starts here',
+  'wallet.emptyBody': 'Add money or receive a payment to build your balances.',
+  'wallet.loadError': 'Your balances are unavailable',
+  'wallet.loadErrorBody': 'Refresh to get the latest balances before making your next move.',
+  'wallet.valueNote': 'Values are estimates based on available prices. They may differ from an exchange quote.',
+  'wallet.hide': 'Hide', 'wallet.show': 'Show',
+  'wallet.cardBalance': 'Card balances',
+};
+export const designAr: Record<keyof typeof designEn, string> = {
+  'common.back': 'رجوع', 'common.error': 'حدث خطأ ما',
+  'wallet.estimate': 'الإجمالي التقديري · USD',
+  'wallet.overview': 'صورة أوضح لأموالك.',
+  'wallet.hideBalances': 'إخفاء الأرصدة', 'wallet.showBalances': 'إظهار الأرصدة',
+  'wallet.emptyTitle': 'محفظتك تبدأ هنا',
+  'wallet.emptyBody': 'أضف أموالاً أو استلم دفعة لتبدأ بناء أرصدتك.',
+  'wallet.loadError': 'أرصدتك غير متاحة',
+  'wallet.loadErrorBody': 'حدّث الصفحة للحصول على أحدث الأرصدة قبل خطوتك التالية.',
+  'wallet.valueNote': 'القيم تقديرية حسب الأسعار المتاحة وقد تختلف عن عرض الصرف.',
+  'wallet.hide': 'إخفاء', 'wallet.show': 'إظهار',
+  'wallet.cardBalance': 'أرصدة البطاقات',
+};

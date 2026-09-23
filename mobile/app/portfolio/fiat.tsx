@@ -1,3 +1,4 @@
+import { StackHeader } from '@/components/ui/ScreenHeader';
 /**
  * Fiat Portfolio Detail Page
  * Shows detailed charts and KPIs for the user's fiat holdings.
@@ -98,27 +99,7 @@ export default function FiatPortfolio() {
           contentContainerStyle={{ paddingBottom: 40 }}
         >
           {/* Header */}
-          <View style={{
-            flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-            paddingHorizontal: 24, paddingTop: 18, paddingBottom: 8,
-          }}>
-            <Pressable
-              hitSlop={6}
-              onPress={() => router.back()}
-              style={{
-                width: 36, height: 36, borderRadius: 18,
-                backgroundColor: p.pillBg,
-                borderWidth: 1, borderColor: p.border,
-                alignItems: 'center', justifyContent: 'center',
-              }}
-            >
-              <Ionicons name="chevron-back" size={18} color={p.fg} />
-            </Pressable>
-            <Text style={{ color: p.fg, fontSize: 18, fontWeight: '700', letterSpacing: -0.3 }}>
-              Fiat Portfolio
-            </Text>
-            <View style={{ width: 36 }} />
-          </View>
+          <StackHeader title="Fiat Portfolio" />
 
           {/* Total Value Card */}
           <View style={{

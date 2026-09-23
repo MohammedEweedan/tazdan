@@ -1,3 +1,4 @@
+import { StackHeader } from '@/components/ui/ScreenHeader';
 /**
  * Admin WhatsApp — message log, stats, and compose pane.
  */
@@ -53,13 +54,9 @@ export default function AdminWhatsApp() {
       <TopGradient />
       <StatusBar style={themeMode === 'light' ? 'dark' : 'light'} />
       <SafeAreaView style={{ flex: 1 }} edges={['top']}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingTop: 8, paddingBottom: 6 }}>
-          <Pressable onPress={() => router.back()} hitSlop={8}><Ionicons name="chevron-back" size={26} color={p.fg} /></Pressable>
-          <Text style={{ flex: 1, color: p.fg, fontSize: 18, fontWeight: '600' }}>WhatsApp</Text>
-          <Pressable onPress={() => setCompose(true)} style={{ paddingHorizontal: 12, paddingVertical: 7, borderRadius: 9, backgroundColor: '#25d366' }}>
+        <StackHeader title="WhatsApp" right={<><Pressable onPress={() => setCompose(true)} style={{ paddingHorizontal: 12, paddingVertical: 7, borderRadius: 9, backgroundColor: '#25d366' }}>
             <Text style={{ color: '#fff', fontSize: 12, fontWeight: '600' }}>+ Send</Text>
-          </Pressable>
-        </View>
+          </Pressable></>} />
 
         {/* Stats strip */}
         {stats && (

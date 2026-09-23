@@ -32,8 +32,12 @@ services:
       REDIS_URL: redis://:${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env}@redis:6379
       CLUSTER_WORKERS: ${CLUSTER_WORKERS:-1}
       CLIENT_URL: ${CLIENT_URL:-https://promrkts.com,https://www.promrkts.com}
+    # Loopback only: host nginx proxies api.promrkts.com → 127.0.0.1:5000.
+    # Publishing on 0.0.0.0 would let clients skip nginx (TLS, rate limits)
+    # and spoof X-Forwarded-For past the IP limits and admin allowlist —
+    # Docker-published ports bypass UFW, so the firewall would not stop it.
     ports:
-      - '5000:5000'
+      - '127.0.0.1:5000:5000'
     volumes:
       - uploads:/app/uploads
     networks:

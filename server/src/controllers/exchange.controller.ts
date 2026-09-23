@@ -18,13 +18,19 @@ import { enforceStepUp } from '../services/security/stepUp.service';
 import { sendBuyConfirmed, sendSellConfirmed } from '../services/email';
 import { pushCopy, pushTxEvent } from '../services/push.service';
 import { logger } from '../utils/logger';
+import { isFeatureEnabled } from '../utils/features';
+
+const positiveAmount = z.union([z.string(), z.number()]).refine(
+  (v) => { const n = Number(v); return Number.isFinite(n) && n > 0; },
+  { message: 'Amount must be greater than zero' },
+);
 
 const quoteSchema = z.object({
   asset: z.string().min(1).max(20).transform((s) => s.toUpperCase()),
   network: z.string().min(1),
   side: z.enum(['BUY', 'SELL']),
-  fiatAmount: z.union([z.string(), z.number()]).optional(),
-  cryptoAmount: z.union([z.string(), z.number()]).optional(),
+  fiatAmount: positiveAmount.optional(),
+  cryptoAmount: positiveAmount.optional(),
   // BUY: fiat wallet to fund from. SELL: fiat/stablecoin wallet to receive into.
   // Required. Never default, because defaulting silently moves the wrong wallet.
   receiveCurrency: z.string().min(1).max(10).optional(),
@@ -203,6 +209,13 @@ export class ExchangeController {
         throw new AppError(`Settlement currency must differ from the asset (${body.asset})`, 400);
       }
 
+      // Long-tail coins (outside the ledger's currency set) have no
+      // double-entry coverage yet. While FEATURE_ALT_TRADING is off, users
+      // can still sell what they hold but not buy more.
+      if (body.side === 'BUY' && !isLedgerCurrency(body.asset) && !isFeatureEnabled('altTrading')) {
+        throw new AppError(`Buying ${body.asset} is temporarily unavailable`, 503);
+      }
+
       const quote = await buildQuote({
         asset: body.asset,
         network: body.network,
@@ -210,6 +223,7 @@ export class ExchangeController {
         fiatAmount: body.fiatAmount,
         cryptoAmount: body.cryptoAmount,
         settlementCurrency: requested,
+        userId: req.user!.id,
       });
       res.json({ quote });
     } catch (error) {
@@ -224,7 +238,9 @@ export class ExchangeController {
       // Surface the quote before consumption so the client can re-render
       // even on the 400 expired path.
       const peek = await getQuote(body.quoteId);
-      if (!peek) throw new AppError('Quote expired or not found', 400);
+      if (!peek || (peek.userId && peek.userId !== req.user!.id)) {
+        throw new AppError('Quote expired or not found', 400);
+      }
 
       // Step-up gate (biometric-or-code).
       //  - Trusted device + Face ID (biometricVerified) → no code needed.

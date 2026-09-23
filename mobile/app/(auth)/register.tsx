@@ -350,7 +350,7 @@ export default function Register() {
                   />
                 </Pressable>
                 <Image
-                  source={require('../../assets/icon-color.png')}
+                  source={require('../../assets/icon-asterisk.png')}
                   style={{ width: 32, height: 32 }}
                   resizeMode="contain"
                 />

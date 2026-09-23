@@ -1,3 +1,4 @@
+import { StackHeader } from '@/components/ui/ScreenHeader';
 /**
  * tazdan Business Dashboard
  *
@@ -157,34 +158,11 @@ export default function BusinessDashboard() {
 
   return (
     <View style={{ flex: 1, backgroundColor: p.bg }}>
-      <StatusBar style={mode === 'dark' ? 'light' : 'dark'} />
+      <StatusBar style={mode === 'light' ? 'dark' : 'light'} />
       <TopGradient />
       <SafeAreaView style={{ flex: 1 }} edges={['top']}>
-        {/* Header */}
-        <View style={{
-          flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-          paddingHorizontal: 20, paddingTop: 16, paddingBottom: 12,
-        }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-            <Pressable onPress={() => router.back()} hitSlop={8}
-              style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: p.bgElev,
-                borderWidth: 1, borderColor: p.border, alignItems: 'center', justifyContent: 'center' }}>
-              <Ionicons name="chevron-back" size={20} color={p.fg} />
-            </Pressable>
-            <View>
-              <Text style={{ color: p.fg, fontSize: 18, fontWeight: '800', letterSpacing: -0.5 }}>
-                tazdan Business
-              </Text>
-              {profile && (
-                <Text style={{ color: p.fgMuted, fontSize: 11.5, fontWeight: '600' }}>
-                  {profile.legalName}
-                </Text>
-              )}
-            </View>
-          </View>
-
-          {/* KYB badge */}
-          {profile && (
+        <StackHeader title="tazdan Business" subtitle={profile?.legalName} right={
+          profile && (
             <View style={{
               paddingHorizontal: 10, paddingVertical: 5, borderRadius: 10,
               backgroundColor: profile.kybStatus === 'APPROVED'
@@ -201,8 +179,8 @@ export default function BusinessDashboard() {
                 KYB {profile.kybStatus}
               </Text>
             </View>
-          )}
-        </View>
+          )
+        } />
 
         <ScrollView
           showsVerticalScrollIndicator={false}

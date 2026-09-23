@@ -13,6 +13,8 @@ import { emitActivity } from '../utils/realtime';
 import { sendP2PTradeUpdate } from '../services/email';
 import { pushP2PTradeUpdate } from '../services/push.service';
 import { logger } from '../utils/logger';
+import { assertTransitioned, lockUserWallets, reserveFunds } from '../services/wallet/atomicWallet';
+import { enforceKycLimit } from '../utils/kycLimits';
 
 async function notifyTradeParties(
   tradeId: string, buyerId: string, sellerId: string,
@@ -364,21 +366,32 @@ export class P2PController {
 
       const isEnumCrypto = ENUM_CURRENCIES.has(realTicker);
 
-      // Lock escrow from seller's wallet. Wrapped in a transaction so the
-      // `frozen` reservation and its double-entry ledger leg (seller USER →
-      // SYSTEM_ESCROW) commit atomically — they can never drift apart.
-      if (isEnumCrypto) {
-        await prisma.$transaction(async (tx) => {
-          const sellerWallet = await tx.wallet.findUnique({
-            where: { userId_currency: { userId: sellerId, currency: realTicker as any } },
-          });
-          if (!sellerWallet) throw new AppError('Seller wallet not found', 404);
-          const available = parseFloat(sellerWallet.balance.toString()) - parseFloat(sellerWallet.frozen.toString());
-          if (data.amount > available) throw new AppError('Seller has insufficient balance for escrow', 400);
-          await tx.wallet.update({
-            where: { userId_currency: { userId: sellerId, currency: realTicker as any } },
-            data: { frozen: { increment: new Decimal(data.amount) } },
-          });
+      // Handing crypto to a counterparty counts against the seller's limits.
+      await enforceKycLimit(sellerId, 'SEND', data.amount, isEnumCrypto ? realTicker : normaliseAsset(realTicker));
+
+      // One transaction: claim capacity on the listing, lock the seller's
+      // escrow, create the trade. Claiming capacity with a conditional UPDATE
+      // means two buyers can never both take the last units of a listing, and
+      // the escrow reservation is checked and applied in a single statement.
+      const trade = await prisma.$transaction(async (tx) => {
+        const amt = new Decimal(data.amount).toFixed();
+        const claimed = await tx.$executeRaw`
+          UPDATE "P2PListing"
+          SET "filled" = "filled" + ${amt}::numeric, "updatedAt" = NOW()
+          WHERE "id" = ${listing.id}
+            AND "status" = 'ACTIVE'
+            AND "amount" - "filled" >= ${amt}::numeric
+        `;
+        if (claimed !== 1) throw new AppError('This listing no longer has that amount available', 409);
+        await tx.$executeRaw`
+          UPDATE "P2PListing" SET "status" = 'COMPLETED', "updatedAt" = NOW()
+          WHERE "id" = ${listing.id} AND "filled" >= "amount"
+        `;
+
+        if (isEnumCrypto) {
+          // `frozen` reservation plus its double-entry leg (seller USER →
+          // SYSTEM_ESCROW), committed atomically with the trade.
+          await reserveFunds(tx, sellerId, realTicker, data.amount);
           if (isLedgerCurrency(realTicker)) {
             await postLedger(tx, {
               refType: 'p2p_escrow_lock',
@@ -390,14 +403,15 @@ export class P2PController {
               ],
             });
           }
-        });
-      } else {
-        const uw = await prisma.userWallet.findUnique({ where: { userId: sellerId } });
-        if (!uw) throw new AppError('Seller crypto wallet not provisioned', 404);
-        const alts = (uw.altBalances && typeof uw.altBalances === 'object' ? uw.altBalances : {}) as Record<string, string>;
-        const available = parseFloat(alts[realTicker] ?? '0');
-        if (data.amount > available) throw new AppError('Seller has insufficient balance for escrow', 400);
-        await prisma.$transaction(async (tx) => {
+        } else {
+          // Lock the seller's crypto row so the balance read below cannot be
+          // raced by another trade or transfer from the same wallet.
+          await lockUserWallets(tx, [sellerId]);
+          const uw = await tx.userWallet.findUnique({ where: { userId: sellerId } });
+          if (!uw) throw new AppError('Seller crypto wallet not provisioned', 404);
+          const alts = (uw.altBalances && typeof uw.altBalances === 'object' ? uw.altBalances : {}) as Record<string, string>;
+          const available = new Decimal(alts[realTicker] ?? '0');
+          if (available.lt(data.amount)) throw new AppError('Seller has insufficient balance for escrow', 400);
           await postAssetLedger(tx as any, {
             refType: 'p2p_escrow_lock',
             refId: listing.id,
@@ -407,38 +421,29 @@ export class P2PController {
               { type: 'SYSTEM_ESCROW', asset: normaliseAsset(realTicker), amount: new Decimal(data.amount) },
             ],
           }, { allowNegativeUser: process.env.LEDGER_ALLOW_NEGATIVE_USER !== '0' });
+        }
+
+        return (tx as any).p2PTrade.create({
+          data: {
+            listingId:    listing.id,
+            buyerId,
+            sellerId,
+            currency:     isEnumCrypto ? realTicker : 'USDT',
+            baseAsset:    isEnumCrypto ? null : realTicker,
+            fiatCurrency: listing.fiatCurrency,
+            fiatAsset:    listing.fiatAsset ?? null,
+            cryptoAmount: data.amount,
+            fiatAmount,
+            price:        parseFloat(listing.price.toString()),
+            escrowAmount: data.amount,
+            status:       'ESCROW_FUNDED',
+            reference,
+            buyerNote:    listing.side === 'SELL' ? data.note : undefined,
+            sellerNote:   listing.side === 'BUY' ? data.note : undefined,
+            paymentMethod: data.paymentMethod || listing.paymentMethods[0],
+            expiresAt:    new Date(Date.now() + (listing.timeframeMins ?? 30) * 60 * 1000),
+          },
         });
-      }
-
-      const trade = await (prisma as any).p2PTrade.create({
-        data: {
-          listingId:    listing.id,
-          buyerId,
-          sellerId,
-          currency:     isEnumCrypto ? realTicker : 'USDT',
-          baseAsset:    isEnumCrypto ? null : realTicker,
-          fiatCurrency: listing.fiatCurrency,
-          fiatAsset:    listing.fiatAsset ?? null,
-          cryptoAmount: data.amount,
-          fiatAmount,
-          price:        parseFloat(listing.price.toString()),
-          escrowAmount: data.amount,
-          status:       'ESCROW_FUNDED',
-          reference,
-          buyerNote:    listing.side === 'SELL' ? data.note : undefined,
-          sellerNote:   listing.side === 'BUY' ? data.note : undefined,
-          paymentMethod: data.paymentMethod || listing.paymentMethods[0],
-          expiresAt:    new Date(Date.now() + (listing.timeframeMins ?? 30) * 60 * 1000),
-        },
-      });
-
-      // Update listing filled amount
-      await (prisma as any).p2PListing.update({
-        where: { id: listing.id },
-        data: {
-          filled: { increment: new Decimal(data.amount) },
-          status: parseFloat(listing.filled.toString()) + data.amount >= parseFloat(listing.amount.toString()) ? 'COMPLETED' : 'ACTIVE',
-        },
       });
 
       // Notify seller
@@ -466,10 +471,11 @@ export class P2PController {
       if (!trade) throw new AppError('Trade not found', 404);
       if (trade.status !== 'ESCROW_FUNDED') throw new AppError('Trade is not in the correct state', 400);
 
-      await (prisma as any).p2PTrade.update({
-        where: { id: trade.id },
+      const moved = await (prisma as any).p2PTrade.updateMany({
+        where: { id: trade.id, buyerId: req.user!.id, status: 'ESCROW_FUNDED' },
         data: { status: 'PAYMENT_SENT' },
       });
+      assertTransitioned(moved, 'Trade is not in the correct state');
 
       // Notify seller
       await prisma.notification.create({
@@ -508,6 +514,14 @@ export class P2PController {
       const isEnumCrypto = ENUM_CURRENCIES.has(realTicker);
 
       await prisma.$transaction(async (tx: any) => {
+        // Claim the transition before moving escrow: a second concurrent
+        // confirm finds the trade already PAYMENT_CONFIRMED and moves nothing.
+        const moved = await tx.p2PTrade.updateMany({
+          where: { id: trade.id, sellerId: req.user!.id, status: 'PAYMENT_SENT' },
+          data: { status: 'PAYMENT_CONFIRMED' },
+        });
+        assertTransitioned(moved, 'This trade has already been processed');
+
         if (isEnumCrypto) {
           await tx.wallet.update({
             where: { userId_currency: { userId: trade.sellerId, currency: realTicker } },
@@ -532,6 +546,7 @@ export class P2PController {
             }, { allowNegativeUser: true });
           }
         } else {
+          await lockUserWallets(tx, [trade.sellerId, trade.buyerId]);
           const [sellerUW, buyerUW] = await Promise.all([
             tx.userWallet.findUnique({ where: { userId: trade.sellerId } }),
             tx.userWallet.findUnique({ where: { userId: trade.buyerId } }),
@@ -556,10 +571,6 @@ export class P2PController {
             ],
           }, { allowNegativeUser: process.env.LEDGER_ALLOW_NEGATIVE_USER !== '0' });
         }
-        await (tx as any).p2PTrade.update({
-          where: { id: trade.id },
-          data: { status: 'PAYMENT_CONFIRMED' },
-        });
       });
 
       await prisma.notification.create({
@@ -587,11 +598,6 @@ export class P2PController {
       if (trade.status !== 'PAYMENT_CONFIRMED')
         throw new AppError('Seller has not confirmed payment yet', 400);
 
-      await (prisma as any).p2PTrade.update({
-        where: { id: trade.id },
-        data: { status: 'COMPLETED', completedAt: new Date() },
-      });
-
       const realTicker = (trade.baseAsset ?? trade.currency) as string;
       const isEnumCrypto = ENUM_CURRENCIES.has(realTicker);
       // Ledger currency for Transaction records — must be a valid enum value
@@ -606,6 +612,12 @@ export class P2PController {
       const p2pFee = cryptoAmount.mul(feePercent).div(100);
 
       await prisma.$transaction(async (tx: any) => {
+        const moved = await tx.p2PTrade.updateMany({
+          where: { id: trade.id, buyerId: req.user!.id, status: 'PAYMENT_CONFIRMED' },
+          data: { status: 'COMPLETED', completedAt: new Date() },
+        });
+        assertTransitioned(moved, 'This trade has already been completed');
+
         const sellerWallet = isEnumCrypto ? await tx.wallet.findUnique({
           where: { userId_currency: { userId: trade.sellerId, currency: realTicker } },
         }) : null;
@@ -683,18 +695,20 @@ export class P2PController {
       if (!['PAYMENT_SENT', 'PAYMENT_CONFIRMED'].includes(trade.status))
         throw new AppError('Can only deny during payment verification', 400);
 
-      await (prisma as any).p2PTrade.update({
-        where: { id: trade.id },
-        data: { status: 'DISPUTED' },
-      });
-
       const { reason } = req.body;
-      await (prisma as any).p2PDispute.create({
-        data: {
-          tradeId: trade.id,
-          raisedById: req.user!.id,
-          reason: reason || 'Payment denied by counterparty',
-        },
+      await prisma.$transaction(async (tx: any) => {
+        const moved = await tx.p2PTrade.updateMany({
+          where: { id: trade.id, status: { in: ['PAYMENT_SENT', 'PAYMENT_CONFIRMED'] } },
+          data: { status: 'DISPUTED' },
+        });
+        assertTransitioned(moved, 'This trade has already moved on');
+        await tx.p2PDispute.create({
+          data: {
+            tradeId: trade.id,
+            raisedById: req.user!.id,
+            reason: reason || 'Payment denied by counterparty',
+          },
+        });
       });
 
       const otherId = req.user!.id === trade.buyerId ? trade.sellerId : trade.buyerId;
@@ -729,13 +743,21 @@ export class P2PController {
         throw new AppError('Cannot cancel trade after payment is sent. Raise a dispute instead.', 400);
       }
 
-      // Unfreeze escrow if it was funded. The `frozen` release and the ledger
-      // refund (SYSTEM_ESCROW → seller USER) commit atomically; this pairs with
-      // the p2p_escrow_lock group so escrow nets back to zero on cancel.
-      if (trade.status === 'ESCROW_FUNDED') {
-        const realTicker = (trade.baseAsset ?? trade.currency) as string;
-        if (ENUM_CURRENCIES.has(realTicker)) {
-          await prisma.$transaction(async (tx) => {
+      // One transaction, transitioning from exactly the status we read: the
+      // cancel, the escrow refund and the listing update commit together, and
+      // a second concurrent cancel moves nothing.
+      await prisma.$transaction(async (tx) => {
+        const moved = await (tx as any).p2PTrade.updateMany({
+          where: { id: trade.id, status: trade.status },
+          data: { status: 'CANCELLED', cancelledAt: new Date() },
+        });
+        assertTransitioned(moved, 'This trade has already been processed');
+
+        if (trade.status === 'ESCROW_FUNDED') {
+          const realTicker = (trade.baseAsset ?? trade.currency) as string;
+          if (ENUM_CURRENCIES.has(realTicker)) {
+            // Release the reservation and refund the ledger escrow
+            // (SYSTEM_ESCROW → seller USER), pairing with p2p_escrow_lock.
             await tx.wallet.update({
               where: { userId_currency: { userId: trade.sellerId, currency: realTicker as any } },
               data: { frozen: { decrement: trade.escrowAmount } },
@@ -751,10 +773,8 @@ export class P2PController {
                 ],
               }, { allowNegativeUser: true });
             }
-          });
-        }
-        else {
-          await prisma.$transaction(async (tx) => {
+          } else {
+            await lockUserWallets(tx, [trade.sellerId]);
             await postAssetLedger(tx as any, {
               refType: 'p2p_escrow_refund',
               refId: trade.id,
@@ -764,22 +784,19 @@ export class P2PController {
                 { type: 'USER', userId: trade.sellerId, asset: normaliseAsset(realTicker), amount: new Decimal(trade.escrowAmount.toString()) },
               ],
             }, { allowNegativeUser: process.env.LEDGER_ALLOW_NEGATIVE_USER !== '0' });
-          });
+          }
         }
-      }
 
-      await (prisma as any).p2PTrade.update({
-        where: { id: trade.id },
-        data: { status: 'CANCELLED', cancelledAt: new Date() },
-      });
-
-      // Return filled amount to listing
-      await (prisma as any).p2PListing.update({
-        where: { id: trade.listingId },
-        data: {
-          filled: { decrement: trade.cryptoAmount },
-          status: 'ACTIVE',
-        },
+        // Return the amount to the listing. Only a listing that filled up
+        // re-opens; one the owner cancelled stays cancelled.
+        await (tx as any).p2PListing.update({
+          where: { id: trade.listingId },
+          data: { filled: { decrement: trade.cryptoAmount } },
+        });
+        await (tx as any).p2PListing.updateMany({
+          where: { id: trade.listingId, status: 'COMPLETED' },
+          data: { status: 'ACTIVE' },
+        });
       });
 
       const realTickerX = (trade.baseAsset ?? trade.currency) as string;
@@ -817,17 +834,21 @@ export class P2PController {
         throw new AppError('Cannot dispute a completed/cancelled trade', 400);
       }
 
-      await (prisma as any).p2PTrade.update({
-        where: { id: trade.id },
-        data: { status: 'DISPUTED' },
-      });
-
-      const dispute = await (prisma as any).p2PDispute.create({
-        data: {
-          tradeId: trade.id,
-          raisedById: req.user!.id,
-          reason,
-        },
+      // Transition from exactly the state we read, so a dispute can't race a
+      // cancel/complete and leave the trade reopened after it settled.
+      const dispute = await prisma.$transaction(async (tx: any) => {
+        const moved = await tx.p2PTrade.updateMany({
+          where: { id: trade.id, status: trade.status },
+          data: { status: 'DISPUTED' },
+        });
+        assertTransitioned(moved, 'This trade has already moved on — refresh and try again');
+        return tx.p2PDispute.create({
+          data: {
+            tradeId: trade.id,
+            raisedById: req.user!.id,
+            reason,
+          },
+        });
       });
 
       // Notify admins — do not embed user-supplied text in the title;

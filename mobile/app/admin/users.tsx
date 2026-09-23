@@ -1,3 +1,4 @@
+import { StackHeader } from '@/components/ui/ScreenHeader';
 /**
  * Admin Users — searchable user directory with:
  *  - freeze / unfreeze controls
@@ -240,20 +241,14 @@ export default function AdminUsers() {
     <View style={{ flex: 1, backgroundColor: p.bg }}>
       <StatusBar style={themeMode === 'light' ? 'dark' : 'light'} />
       <SafeAreaView style={{ flex: 1 }} edges={['top']}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingTop: 8, paddingBottom: 8 }}>
-          <Pressable onPress={() => router.back()} hitSlop={8}>
-            <Ionicons name="chevron-back" size={26} color={p.fg} />
-          </Pressable>
-          <Text style={{ flex: 1, color: p.fg, fontSize: 18, fontWeight: '600', letterSpacing: -0.3 }}>Users</Text>
-          <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '700' }}>{q.data?.total ?? users.length}</Text>
-          <Pressable
+        <StackHeader title="Users" right={<><Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '700' }}>{q.data?.total ?? users.length}</Text>
+<Pressable
             onPress={() => { resetCreateForm(); setModalKind('create'); }}
             hitSlop={8}
             style={{ width: 34, height: 34, borderRadius: 10, backgroundColor: p.fg, alignItems: 'center', justifyContent: 'center' }}
           >
             <Ionicons name="person-add-outline" size={17} color={p.bg} />
-          </Pressable>
-        </View>
+          </Pressable></>} />
 
         {/* Search */}
         <View style={{ paddingHorizontal: 16, marginTop: 4 }}>

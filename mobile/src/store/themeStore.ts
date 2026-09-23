@@ -69,8 +69,8 @@ export const palettes: Record<ThemeMode, Palette> = {
     bgRaised:  '#262A31',   // popovers / hovered rows
     surface:   '#1E2127',
     fg:        '#F4F5F7',
-    fgMuted:   'rgba(244,245,247,0.62)',
-    fgFaint:   'rgba(244,245,247,0.36)',
+    fgMuted:   '#AEB6C3',
+    fgFaint:   '#8C96A6',
     border:    'rgba(255,255,255,0.09)',
     divider:   'rgba(255,255,255,0.15)',
     // CTA — bright near-white inverse so primary actions read as urgent
@@ -96,13 +96,13 @@ export const palettes: Record<ThemeMode, Palette> = {
   },
   light: {
     // Paper off-white, cards step UP from page
-    bg:        '#FAFAF7',
-    bgElev:    '#F1F0EB',
-    bgRaised:  '#FFFFFF',
-    surface:   '#F1F0EB',
+    bg:        '#F6F7FA',
+    bgElev:    '#FFFFFF',
+    bgRaised:  '#EEF1F6',
+    surface:   '#FFFFFF',
     fg:        '#0A0A0B',
-    fgMuted:   'rgba(10,10,11,0.62)',
-    fgFaint:   'rgba(10,10,11,0.38)',
+    fgMuted:   '#586579',
+    fgFaint:   '#697589',
     border:    'rgba(10,10,11,0.08)',
     divider:   'rgba(10,10,11,0.14)',
     // CTA — solid black for maximum mono contrast
@@ -137,8 +137,8 @@ export const palettes: Record<ThemeMode, Palette> = {
     bgRaised:  '#1E1E20',
     surface:   '#161617',
     fg:        '#F5F5F5',                  // near-white, less glare than #FFF
-    fgMuted:   'rgba(245,245,245,0.62)',
-    fgFaint:   'rgba(245,245,245,0.36)',
+    fgMuted:   '#B3B3B8',
+    fgFaint:   '#94949C',
     border:    'rgba(255,255,255,0.12)',
     divider:   'rgba(255,255,255,0.18)',
     ctaBg:     '#F5F5F5',

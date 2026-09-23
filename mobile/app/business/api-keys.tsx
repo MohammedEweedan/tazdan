@@ -1,3 +1,4 @@
+import { StackHeader, HeaderTextButton } from '@/components/ui/ScreenHeader';
 /**
  * API Key management screen.
  *
@@ -85,34 +86,10 @@ export default function ApiKeysScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: p.bg }}>
-      <StatusBar style={mode === 'dark' ? 'light' : 'dark'} />
+      <StatusBar style={mode === 'light' ? 'dark' : 'light'} />
       <TopGradient />
       <SafeAreaView style={{ flex: 1 }} edges={['top']}>
-        {/* Header */}
-        <View style={{
-          flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-          paddingHorizontal: 20, paddingTop: 16, paddingBottom: 12,
-        }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-            <Pressable onPress={() => router.back()} hitSlop={8}
-              style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: p.bgElev,
-                borderWidth: 1, borderColor: p.border, alignItems: 'center', justifyContent: 'center' }}>
-              <Ionicons name="chevron-back" size={20} color={p.fg} />
-            </Pressable>
-            <Text style={{ color: p.fg, fontSize: 18, fontWeight: '800', letterSpacing: -0.4 }}>API Keys</Text>
-          </View>
-          <Pressable
-            onPress={() => { h.selection(); setCreateOpen(true); }}
-            style={({ pressed }) => ({
-              flexDirection: 'row', alignItems: 'center', gap: 6,
-              paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20,
-              backgroundColor: pressed ? `${ACCENT}CC` : ACCENT,
-            })}
-          >
-            <Ionicons name="add" size={16} color="#fff" />
-            <Text style={{ color: '#fff', fontSize: 13, fontWeight: '700' }}>New key</Text>
-          </Pressable>
-        </View>
+        <StackHeader title="API Keys" right={<HeaderTextButton label="New key" icon="add" onPress={() => setCreateOpen(true)} />} />
 
         <ScrollView
           showsVerticalScrollIndicator={false}

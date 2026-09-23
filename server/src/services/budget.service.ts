@@ -15,6 +15,7 @@ import { prisma } from '../utils/prisma';
 import { logger } from '../utils/logger';
 import type { RecurringFrequency } from '@prisma/client';
 import { AppError } from '../middleware/errorHandler';
+import { lockBudget, releaseReserve, reserveFunds } from './wallet/atomicWallet';
 
 /** Next run time for an auto-contribution cadence (same rules as recurringBuy). */
 export function computeNextRun(from: Date, frequency: RecurringFrequency): Date {
@@ -26,13 +27,6 @@ export function computeNextRun(from: Date, frequency: RecurringFrequency): Date 
     case 'MONTHLY':  d.setMonth(d.getMonth() + 1); break;
   }
   return d;
-}
-
-/** Spendable = balance - frozen for the given user+currency (0 if no wallet). */
-async function spendable(tx: any, userId: string, currency: string): Promise<Decimal> {
-  const w = await tx.wallet.findUnique({ where: { userId_currency: { userId, currency } } });
-  if (!w) return new Decimal(0);
-  return new Decimal(w.balance).sub(new Decimal(w.frozen));
 }
 
 /**
@@ -50,21 +44,20 @@ export async function contribute(
   if (amt.lte(0)) throw new AppError('Amount must be positive', 400);
 
   return prisma.$transaction(async (tx: any) => {
+    // Lock the budget row so concurrent contributions/withdrawals (manual +
+    // the auto scheduler) read and write its balance one at a time.
+    await lockBudget(tx, budgetId);
     const budget = await tx.budgetWallet.findFirst({ where: { id: budgetId, userId } });
     if (!budget) throw new AppError('Budget not found', 404);
     if (budget.status === 'CLOSED') throw new AppError('Budget is closed', 400);
 
-    const avail = await spendable(tx, userId, budget.currency);
-    if (avail.lt(amt)) throw new AppError(`Insufficient ${budget.currency} balance`, 400);
-
     const wallet = await tx.wallet.findUnique({ where: { userId_currency: { userId, currency: budget.currency } } });
+    if (!wallet) throw new AppError(`Insufficient ${budget.currency} balance`, 400);
     const balanceBefore = new Decimal(wallet.balance);
 
-    // Reclassify spendable → frozen (total wallet balance is unchanged).
-    await tx.wallet.update({
-      where: { userId_currency: { userId, currency: budget.currency } },
-      data: { frozen: { increment: amt } },
-    });
+    // Reclassify spendable → frozen (total wallet balance is unchanged),
+    // checked against spendable in the same statement.
+    await reserveFunds(tx, userId, budget.currency, amt);
 
     const newBudgetBalance = new Decimal(budget.balance).add(amt);
     const reachedTarget = budget.targetAmount != null && newBudgetBalance.gte(new Decimal(budget.targetAmount));
@@ -98,35 +91,53 @@ export async function release(
   amount?: Decimal | number | string,
 ) {
   return prisma.$transaction(async (tx: any) => {
+    await lockBudget(tx, budgetId);
     const budget = await tx.budgetWallet.findFirst({ where: { id: budgetId, userId } });
     if (!budget) throw new AppError('Budget not found', 404);
-
-    const have = new Decimal(budget.balance);
-    const amt = amount != null ? new Decimal(amount) : have;
-    if (amt.lte(0)) throw new AppError('Amount must be positive', 400);
-    if (amt.gt(have)) throw new AppError('Amount exceeds budget balance', 400);
-
-    const wallet = await tx.wallet.findUnique({ where: { userId_currency: { userId, currency: budget.currency } } });
-    const balanceBefore = new Decimal(wallet.balance);
-
-    await tx.wallet.update({
-      where: { userId_currency: { userId, currency: budget.currency } },
-      data: { frozen: { decrement: amt } },
-    });
-    const updated = await tx.budgetWallet.update({
-      where: { id: budget.id },
-      data: { balance: have.sub(amt) },
-    });
-    await tx.budgetContribution.create({ data: { budgetId: budget.id, amount: amt.neg(), kind: 'WITHDRAWAL' } });
-    await tx.transaction.create({
-      data: {
-        userId, type: 'BUDGET_RELEASE', currency: budget.currency, amount: amt,
-        balanceBefore, balanceAfter: balanceBefore,
-        description: `Released from budget "${budget.name}"`,
-      },
-    });
-    return updated;
+    return releaseLocked(tx, userId, budget, amount);
   });
+}
+
+/**
+ * Release everything left in the budget and mark it CLOSED, in one
+ * transaction — a contribution can't land between the release and the close
+ * and end up frozen inside a closed budget.
+ */
+export async function close(userId: string, budgetId: string) {
+  return prisma.$transaction(async (tx: any) => {
+    await lockBudget(tx, budgetId);
+    const budget = await tx.budgetWallet.findFirst({ where: { id: budgetId, userId } });
+    if (!budget) throw new AppError('Budget not found', 404);
+    if (budget.status === 'CLOSED') return budget;
+    if (new Decimal(budget.balance).gt(0)) await releaseLocked(tx, userId, budget);
+    return tx.budgetWallet.update({ where: { id: budget.id }, data: { status: 'CLOSED', autoEnabled: false } });
+  });
+}
+
+/** Release from a budget whose row the caller has already locked. */
+async function releaseLocked(tx: any, userId: string, budget: any, amount?: Decimal | number | string) {
+  const have = new Decimal(budget.balance);
+  const amt = amount != null ? new Decimal(amount) : have;
+  if (amt.lte(0)) throw new AppError('Amount must be positive', 400);
+  if (amt.gt(have)) throw new AppError('Amount exceeds budget balance', 400);
+
+  const wallet = await tx.wallet.findUnique({ where: { userId_currency: { userId, currency: budget.currency } } });
+  const balanceBefore = new Decimal(wallet?.balance ?? 0);
+
+  await releaseReserve(tx, userId, budget.currency, amt);
+  const updated = await tx.budgetWallet.update({
+    where: { id: budget.id },
+    data: { balance: have.sub(amt) },
+  });
+  await tx.budgetContribution.create({ data: { budgetId: budget.id, amount: amt.neg(), kind: 'WITHDRAWAL' } });
+  await tx.transaction.create({
+    data: {
+      userId, type: 'BUDGET_RELEASE', currency: budget.currency, amount: amt,
+      balanceBefore, balanceAfter: balanceBefore,
+      description: `Released from budget "${budget.name}"`,
+    },
+  });
+  return updated;
 }
 
 /** True when the budget's lock currently blocks a withdrawal. */

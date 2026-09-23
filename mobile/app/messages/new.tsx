@@ -1,3 +1,4 @@
+import { StackHeader } from '@/components/ui/ScreenHeader';
 /**
  * "Start a new chat" picker.
  *
@@ -77,27 +78,7 @@ export default function NewChat() {
       <StatusBar style={themeMode === 'light' ? 'dark' : 'light'} />
       <SafeAreaView style={{ flex: 1 }} edges={['top']}>
         {/* Header */}
-        <View style={{
-          flexDirection: 'row', alignItems: 'center',
-          paddingHorizontal: 16, paddingTop: 6, paddingBottom: 10,
-          gap: 10,
-        }}>
-          <Pressable
-            onPress={() => { h.selection(); router.back(); }}
-            hitSlop={8}
-            style={{
-              width: 36, height: 36, borderRadius: 18,
-              backgroundColor: p.pillBg,
-              borderWidth: 1, borderColor: p.border,
-              alignItems: 'center', justifyContent: 'center',
-            }}
-          >
-            <Ionicons name="chevron-back" size={18} color={p.fg} />
-          </Pressable>
-          <Text style={{ color: p.fg, fontSize: 18, fontWeight: '600', letterSpacing: -0.3 }}>
-            New chat
-          </Text>
-        </View>
+        <StackHeader title="New chat" />
 
         {/* Search box */}
         <View style={{

@@ -1,3 +1,4 @@
+import { StackHeader } from '@/components/ui/ScreenHeader';
 /**
  * Admin P2P — listings, trades, disputes with moderation actions.
  */
@@ -60,11 +61,7 @@ export default function AdminP2P() {
       <TopGradient />
       <StatusBar style={themeMode === 'light' ? 'dark' : 'light'} />
       <SafeAreaView style={{ flex: 1 }} edges={['top']}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingTop: 8, paddingBottom: 6 }}>
-          <Pressable onPress={() => router.back()} hitSlop={8}><Ionicons name="chevron-back" size={26} color={p.fg} /></Pressable>
-          <Text style={{ flex: 1, color: p.fg, fontSize: 18, fontWeight: '600' }}>P2P Admin</Text>
-          <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '700' }}>{q.data?.total ?? 0}</Text>
-        </View>
+        <StackHeader title="P2P Admin" right={<><Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '700' }}>{q.data?.total ?? 0}</Text></>} />
 
         <View style={{ flexDirection: 'row', gap: 8, paddingHorizontal: 16, marginBottom: 10 }}>
           {(['TRADES', 'LISTINGS', 'DISPUTES'] as Tab[]).map((t) => {

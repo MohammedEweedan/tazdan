@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { authenticate } from '../middleware/auth';
+import { authenticate, requireAdmin } from '../middleware/auth';
 import { ClaimLinkController } from '../controllers/claimLink.controller';
 
 const router = Router();
@@ -17,9 +17,8 @@ router.get('/by-token/:token', ClaimLinkController.previewByToken);
 // claim screen needs a single base URL.
 router.post('/by-token/:token/claim', authenticate, ClaimLinkController.claim);
 
-// Internal sweep endpoint — meant to be triggered by a cron worker every
-// minute. Lock down with an admin auth wrapper or an X-Internal header in
-// production; for now it's mounted bare.
-router.post('/sweep', ClaimLinkController.sweepExpired);
+// Expiry sweep — refunds expired links. Admin-only: it changes money state,
+// so it must never be callable anonymously.
+router.post('/sweep', authenticate, requireAdmin, ClaimLinkController.sweepExpired);
 
 export { router as claimLinkRouter };

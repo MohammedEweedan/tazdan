@@ -18,6 +18,8 @@
  * dominates. The optional `youReceive` row is split below a divider
  * — visually distinct from the cost stack.
  */
+import { ui } from '@/theme';
+import { useT } from '@/store/i18nStore';
 import { View } from 'react-native';
 import { Text } from '@/components/ui/Text';
 import { useThemedPalette } from '@/store/themeStore';
@@ -44,14 +46,15 @@ interface Props {
 
 export function FeeBreakdown({ rows, total, youReceive, compact = false }: Props) {
   const p = useThemedPalette();
+  const t = useT();
   const padV = compact ? 7 : 10;
-  const padH = compact ? 12 : 14;
+  const padH = compact ? 12 : 18;
 
   return (
     <View
       style={{
         backgroundColor: p.bgElev,
-        borderRadius: 16,
+        borderRadius: ui.cardRadius,
         borderWidth: 1,
         borderColor: p.border,
         overflow: 'hidden',
@@ -87,7 +90,7 @@ export function FeeBreakdown({ rows, total, youReceive, compact = false }: Props
       {youReceive && (
         <Row
           row={{
-            label: 'You receive',
+            label: t('onboard2.v.youReceive'),
             amount: youReceive.amount,
             currency: youReceive.currency,
             hint: youReceive.hint,
@@ -131,7 +134,7 @@ function Row({
       }}
     >
       <View style={{ flex: 1 }}>
-        <Text style={{ color: fg, fontSize: 13, fontWeight: bold ? '800' : '600' }}>
+        <Text style={{ color: fg, fontSize: 13, fontWeight: bold ? '600' : '500' }}>
           {row.label}
         </Text>
         {row.hint && (
@@ -142,7 +145,7 @@ function Row({
       </View>
       <Text
         style={{
-          color: fg, fontSize: 13.5, fontWeight: bold ? '800' : '600',
+          color: fg, fontSize: 13.5, fontWeight: bold ? '600' : '500',
           fontVariant: ['tabular-nums'],
         }}
       >

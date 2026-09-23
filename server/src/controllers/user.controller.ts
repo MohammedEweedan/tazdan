@@ -65,13 +65,13 @@ export class UserController {
 
       await prisma.kYCDocument.createMany({ data: documents });
 
-      // When no real KYC provider is wired (KYC_PROVIDER=MOCK, the default in
-      // dev), auto-approve on submit so the rest of the app — deposits,
-      // withdrawals, card issuing — is actually testable end-to-end without a
-      // manual admin step. With a real provider configured, we stay PENDING and
-      // let the provider's webhook (or an admin) flip the status in production.
-      const provider = (process.env.KYC_PROVIDER || 'MOCK').toUpperCase();
-      if (provider === 'MOCK') {
+      // Uploaded documents always go to review. The MOCK provider auto-approves
+      // so flows are testable locally, but it can never run in production:
+      // there the default is MANUAL (admin review) and validateEnv refuses to
+      // boot with KYC_PROVIDER=MOCK. The NODE_ENV check is a second guard.
+      const isProd = process.env.NODE_ENV === 'production';
+      const provider = (process.env.KYC_PROVIDER || (isProd ? 'MANUAL' : 'MOCK')).toUpperCase();
+      if (provider === 'MOCK' && !isProd) {
         await prisma.user.update({
           where: { id: req.user!.id },
           data: { kycStatus: 'APPROVED', kycTier: 'TIER_2' },

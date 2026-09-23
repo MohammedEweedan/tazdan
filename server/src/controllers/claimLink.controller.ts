@@ -32,6 +32,8 @@ import {
 import { pushCopy, pushTxEvent } from '../services/push.service';
 import { Currency, ClaimLinkStatus } from '@prisma/client';
 import { isLedgerCurrency, postLedger } from '../services/ledger/ledger.service';
+import { assertTransitioned, releaseReserve, reserveFunds, settleReserve } from '../services/wallet/atomicWallet';
+import { enforceKycLimit } from '../utils/kycLimits';
 
 const SUPPORTED_ASSETS = [
   'USDT', 'USD', 'LYD', 'BTC', 'ETH', 'BNB', 'SOL', 'XRP',
@@ -110,12 +112,7 @@ export class ClaimLinkController {
       });
       if (!senderWallet) throw new AppError(`${asset} wallet not found`, 404);
 
-      const balance = parseFloat(senderWallet.balance.toString());
-      const frozen  = parseFloat(senderWallet.frozen.toString());
-      const available = balance - frozen;
-      if (body.amount > available) {
-        throw new AppError(`Insufficient ${asset}. Available: ${available.toFixed(8)}`, 400);
-      }
+      await enforceKycLimit(senderId, 'SEND', body.amount, asset);
 
       const expiresInDays = body.expiresInDays ?? DEFAULT_EXPIRY_DAYS;
       const expiresAt = new Date(Date.now() + expiresInDays * 24 * 60 * 60 * 1000);
@@ -129,13 +126,10 @@ export class ClaimLinkController {
       // recipient's tap feel intentional. Same behaviour either way.
 
       const link = await prisma.$transaction(async (tx) => {
-        // Reserve the funds: increment frozen, balance stays put so the
-        // refund path is a trivial decrement. The user's spendable
-        // balance shrinks by `amount`.
-        await tx.wallet.update({
-          where: { id: senderWallet.id },
-          data: { frozen: { increment: new Decimal(body.amount) } },
-        });
+        // Reserve the funds: frozen grows, balance stays put, so the
+        // refund path is a plain release. Checked and applied in one
+        // statement so concurrent sends can't reserve more than is spendable.
+        await reserveFunds(tx, senderId, currency, body.amount);
         return tx.claimLink.create({
           data: {
             senderId,
@@ -295,18 +289,20 @@ export class ClaimLinkController {
       }
 
       const result = await prisma.$transaction(async (tx) => {
-        // Release sender's frozen amount + decrement balance.
+        // Claim the link before moving money: a concurrent claim, cancel or
+        // expiry finds it no longer PENDING and moves nothing.
+        const moved = await tx.claimLink.updateMany({
+          where: { id: link.id, status: 'PENDING' },
+          data: { status: 'CLAIMED', claimedAt: new Date(), claimedById: claimerId },
+        });
+        assertTransitioned(moved, 'This claim link has already been used');
+
+        // Spend the sender's reservation (balance and frozen together).
         const senderWallet = await tx.wallet.findUnique({
           where: { userId_currency: { userId: link.senderId, currency: link.asset } },
         });
         if (!senderWallet) throw new AppError('Sender wallet missing', 500);
-        await tx.wallet.update({
-          where: { id: senderWallet.id },
-          data: {
-            balance: { decrement: link.amount },
-            frozen:  { decrement: link.amount },
-          },
-        });
+        await settleReserve(tx, link.senderId, link.asset, link.amount);
 
         // Credit recipient (upsert their wallet if they didn't have one).
         const recipientWalletExisting = await tx.wallet.findUnique({
@@ -366,15 +362,7 @@ export class ClaimLinkController {
           ],
         });
 
-        const updated = await tx.claimLink.update({
-          where: { id: link.id },
-          data: {
-            status:     'CLAIMED',
-            claimedAt:  new Date(),
-            claimedById: claimerId,
-          },
-        });
-        return updated;
+        return tx.claimLink.findUniqueOrThrow({ where: { id: link.id } });
       });
 
       // Fire-and-forget — notify the sender that their gift was claimed.
@@ -447,18 +435,16 @@ export class ClaimLinkController {
       if (link.status !== 'PENDING') throw new AppError(`Cannot cancel — already ${link.status.toLowerCase()}`, 400);
 
       await prisma.$transaction(async (tx) => {
-        await tx.wallet.update({
-          where: { userId_currency: { userId: link.senderId, currency: link.asset } },
-          data: { frozen: { decrement: link.amount } },
-        });
-        await tx.claimLink.update({
-          where: { id: link.id },
+        const moved = await tx.claimLink.updateMany({
+          where: { id: link.id, senderId: req.user!.id, status: 'PENDING' },
           data: {
             status:       'CANCELLED',
             refundedAt:   new Date(),
             cancelReason: req.body?.reason ?? null,
           },
         });
+        assertTransitioned(moved, 'This claim link has already been used or cancelled');
+        await releaseReserve(tx, link.senderId, link.asset, link.amount);
       });
 
       res.json({ ok: true });
@@ -497,26 +483,12 @@ export class ClaimLinkController {
   ───────────────────────────────────────────────────────────── */
   static async sweepExpired(_req: Request, res: Response, next: NextFunction) {
     try {
-      const expiredIds = await prisma.claimLink.findMany({
-        where: { status: 'PENDING', expiresAt: { lt: new Date() } },
-        select: { id: true },
-        take: 200,
-      });
-      let refunded = 0;
-      for (const { id } of expiredIds) {
-        try {
-          await ClaimLinkController._refundExpired(id);
-          refunded++;
-        } catch (err) {
-          logger.warn('[claimLink.sweep] refund failed', { id, err });
-        }
-      }
-      res.json({ refunded });
+      res.json({ refunded: await sweepExpiredClaimLinks() });
     } catch (e) { next(e); }
   }
 
   /* ───────────────────────── internal ───────────────────────── */
-  private static async _refundExpired(linkId: string): Promise<void> {
+  static async _refundExpired(linkId: string): Promise<void> {
     await prisma.$transaction(async (tx) => {
       const link = await tx.claimLink.findUnique({
         where: { id: linkId },
@@ -524,14 +496,35 @@ export class ClaimLinkController {
       });
       if (!link) return;
       if (link.status !== 'PENDING') return;
-      await tx.wallet.update({
-        where: { userId_currency: { userId: link.senderId, currency: link.asset } },
-        data: { frozen: { decrement: link.amount } },
-      });
-      await tx.claimLink.update({
-        where: { id: linkId },
+      const moved = await tx.claimLink.updateMany({
+        where: { id: linkId, status: 'PENDING', expiresAt: { lt: new Date() } },
         data: { status: 'EXPIRED', refundedAt: new Date() },
       });
+      if (moved.count !== 1) return; // claimed, cancelled or expired concurrently
+      await releaseReserve(tx, link.senderId, link.asset, link.amount);
     });
   }
+}
+
+/**
+ * Refund expired PENDING links back to their senders. Runs on a schedule
+ * (index.ts) and from the admin sweep endpoint; safe to run concurrently
+ * because each refund transitions the link conditionally.
+ */
+export async function sweepExpiredClaimLinks(limit = 200): Promise<number> {
+  const expired = await prisma.claimLink.findMany({
+    where: { status: 'PENDING', expiresAt: { lt: new Date() } },
+    select: { id: true },
+    take: limit,
+  });
+  let refunded = 0;
+  for (const { id } of expired) {
+    try {
+      await ClaimLinkController._refundExpired(id);
+      refunded++;
+    } catch (err) {
+      logger.warn('[claimLink.sweep] refund failed', { id, err });
+    }
+  }
+  return refunded;
 }

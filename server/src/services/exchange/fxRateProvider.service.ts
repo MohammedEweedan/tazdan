@@ -37,7 +37,10 @@ const CACHE_TTL_MS = Number(process.env.FX_CACHE_TTL_MS ?? 60_000);
 // window we treat the data as poisoned and refuse to use it. Update
 // these as the macro picture shifts.
 const SANITY_BOUNDS: Record<string, [number, number]> = {
-  'USD/LYD': [3.5, 9.5],   // CBL official ~4.5, parallel ~7.0 as of 2026
+  // Wide enough for the parallel market's drift (Fulus reported 9.81 in
+  // Sept 2026, above the old 9.5 ceiling, so the real rate was being thrown
+  // away); still narrow enough to reject a decimal-shifted or inverted value.
+  'USD/LYD': [4, 15],
 };
 
 // Approximate mid-market rates expressed as USD per 1 unit of the base
@@ -48,9 +51,10 @@ const SANITY_BOUNDS: Record<string, [number, number]> = {
 const FALLBACK_USD_PER_UNIT: Record<string, number> = {
   USD: 1,     EUR: 1.08,  GBP: 1.27,
   AED: 0.272, SAR: 0.266, EGP: 0.019,
-  // LYD reflects the parallel-market level (~7.2 LYD/USD), not the official
-  // CBL peg, since that's the rate we transact at. Last-resort only.
-  LYD: 0.139, CAD: 0.73,  AUD: 0.66,
+  // LYD reflects the parallel-market level (~9.8 LYD/USD in Sept 2026), not
+  // the official CBL peg, since that's the rate we transact at. Last-resort
+  // only — keep it near the live feed so a feed outage doesn't misprice.
+  LYD: 0.102, CAD: 0.73,  AUD: 0.66,
   CHF: 1.12,  JPY: 0.0067, CNY: 0.14,
 };
 
@@ -136,7 +140,7 @@ const LYD_SCRAPE_URL = process.env.LYD_PARALLEL_URL || 'https://en.blackmarketli
 const LYD_SCRAPE_CODES = ['USD', 'EUR', 'GBP', 'AED', 'SAR', 'CAD', 'CHF', 'TND', 'KWD', 'TRY'];
 // LYD-per-1-unit sanity window per currency — rejects a poisoned/garbled scrape.
 const LYD_SCRAPE_BOUNDS: Record<string, [number, number]> = {
-  USD: [4, 12], EUR: [4, 14], GBP: [5, 16], AED: [1, 4], SAR: [1, 4],
+  USD: [4, 15], EUR: [4, 17], GBP: [5, 20], AED: [1, 4.5], SAR: [1, 4.5],
   CAD: [3, 9], CHF: [5, 16], TND: [1, 5], KWD: [15, 40], TRY: [0.05, 1],
 };
 

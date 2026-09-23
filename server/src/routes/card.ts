@@ -1,6 +1,8 @@
 import { Router } from 'express';
 import { CardController } from '../controllers/card.controller';
 import { authenticate } from '../middleware/auth';
+import { requireFeature } from '../utils/features';
+import { AppError } from '../middleware/errorHandler';
 
 const router = Router();
 
@@ -11,7 +13,9 @@ router.get('/tiers', CardController.tiers);
 router.use(authenticate);
 
 router.get('/', CardController.list);
-router.post('/', CardController.create);
+// New card activity is behind FEATURE_CARDS (off in production until a real
+// issuer is integrated). Reading, freezing and cancelling stay available.
+router.post('/', requireFeature('cards'), CardController.create);
 router.get('/physical-fee', CardController.physicalFee);
 router.get('/:id', CardController.getOne);
 router.patch('/:id', CardController.update);
@@ -21,10 +25,16 @@ router.post('/:id/freeze', CardController.freeze);
 router.post('/:id/unfreeze', CardController.unfreeze);
 
 router.get('/:id/transactions', CardController.transactions);
-router.post('/:id/transactions', CardController.recordTransaction);
-router.post('/:id/topup', CardController.topup);
-router.post('/:id/order-physical', CardController.orderPhysical);
-router.post('/:id/fund-from-budget', CardController.fundFromBudget);
+// Simulated purchases exist only for development. There is no card network
+// behind them, so in production they would book fees and cashback for
+// spending that never happened.
+router.post('/:id/transactions', (_req, _res, next) => {
+  if (process.env.NODE_ENV === 'production') return next(new AppError('Not found', 404));
+  next();
+}, CardController.recordTransaction);
+router.post('/:id/topup', requireFeature('cards'), CardController.topup);
+router.post('/:id/order-physical', requireFeature('cards'), CardController.orderPhysical);
+router.post('/:id/fund-from-budget', requireFeature('cards'), CardController.fundFromBudget);
 
 export const cardRouter = router;
 export default router;

@@ -4,14 +4,17 @@
  * Tapping other notifications routes to the relevant screen.
  */
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Image, Modal, Pressable, ScrollView, View } from 'react-native';
 import { Text } from '@/components/ui/Text';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { ScreenShell, Panel } from '@/components/ui/ScreenShell';
+import { ScreenShell, Panel, SectionLabel } from '@/components/ui/ScreenShell';
+import { HeaderTextButton } from '@/components/ui/ScreenHeader';
+import { EmptyState } from '@/components/ui/EmptyState';
 import { LoadingPulse } from '@/components/ui/LoadingPulse';
 import { useThemedPalette } from '@/store/themeStore';
+import { useT } from '@/store/i18nStore';
 import { useHaptics, useNotifications, useMarkRead, useMarkAllRead } from '@/hooks';
 import { formatRelativeTime } from '@/utils/format';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -46,7 +49,9 @@ const ICON_MAP: Record<string, keyof typeof Ionicons.glyphMap> = {
 
 function AnnouncementModal({ notification, onClose }: { notification: any; onClose: () => void }) {
   const p = useThemedPalette();
+  const t = useT();
   const insets = useSafeAreaInsets();
+  const media = notification.mediaType !== 'none' ? resolveMediaUrl(notification.mediaUrl) : undefined;
 
   return (
     <Modal visible animationType="slide" transparent onRequestClose={onClose}>
@@ -64,67 +69,55 @@ function AnnouncementModal({ notification, onClose }: { notification: any; onClo
           </View>
 
           <ScrollView contentContainerStyle={{ padding: 24 }}>
-            {/* Media */}
-            {notification.mediaUrl && notification.mediaType !== 'none' && resolveMediaUrl(notification.mediaUrl) && (
+            {media && (
               <Image
-                source={{ uri: resolveMediaUrl(notification.mediaUrl) }}
-                style={{
-                  width: '100%', aspectRatio: 16 / 9,
-                  borderRadius: 16, marginBottom: 20,
-                }}
+                source={{ uri: media }}
+                style={{ width: '100%', aspectRatio: 16 / 9, borderRadius: 16, marginBottom: 20 }}
                 resizeMode="cover"
               />
             )}
 
-            {/* Icon + type */}
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 }}>
               <View style={{
                 width: 32, height: 32, borderRadius: 10,
-                backgroundColor: p.ctaBg,
+                backgroundColor: p.accentSoft,
                 alignItems: 'center', justifyContent: 'center',
               }}>
-                <Ionicons name="megaphone" size={16} color={p.ctaFg} />
+                <Ionicons name="megaphone" size={16} color={p.accentText} />
               </View>
-              <Text style={{ color: p.fgFaint, fontSize: 12, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                Announcement
+              <Text style={{ color: p.fgFaint, fontSize: 12, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.6 }}>
+                {t('notifications.announcement')}
               </Text>
             </View>
 
-            {/* Title */}
-            <Text style={{ color: p.fg, fontSize: 22, fontWeight: '800', lineHeight: 28, marginBottom: 8 }}>
+            <Text style={{ color: p.fg, fontSize: 22, fontWeight: '700', lineHeight: 28, marginBottom: 8 }}>
               {notification.title}
             </Text>
-
-            {/* Subtitle */}
             {notification.subtitle && (
               <Text style={{ color: p.fgMuted, fontSize: 15, fontWeight: '600', marginBottom: 12 }}>
                 {notification.subtitle}
               </Text>
             )}
-
-            {/* Body */}
             <Text style={{ color: p.fgMuted, fontSize: 14, lineHeight: 22 }}>
               {notification.description ?? notification.message}
             </Text>
-
-            {/* Timestamp */}
             <Text style={{ color: p.fgFaint, fontSize: 11, marginTop: 16 }}>
               {formatRelativeTime(notification.createdAt)}
             </Text>
           </ScrollView>
 
-          {/* Close button */}
           <Pressable
             onPress={onClose}
+            accessibilityRole="button"
             style={({ pressed }) => ({
               marginHorizontal: 24, marginTop: 4,
-              height: 50, borderRadius: 14,
+              height: 52, borderRadius: 26,
               backgroundColor: p.ctaBg,
               alignItems: 'center', justifyContent: 'center',
-              opacity: pressed ? 0.8 : 1,
+              opacity: pressed ? 0.85 : 1,
             })}
           >
-            <Text style={{ color: p.ctaFg, fontSize: 15, fontWeight: '700' }}>Got it</Text>
+            <Text style={{ color: p.ctaFg, fontSize: 15, fontWeight: '600' }}>{t('notifications.gotIt')}</Text>
           </Pressable>
         </View>
       </View>
@@ -132,19 +125,96 @@ function AnnouncementModal({ notification, onClose }: { notification: any; onClo
   );
 }
 
+type DayGroup = 'today' | 'yesterday' | 'earlier';
+
+/** Split notifications (already newest-first) into Today / Yesterday / Earlier. */
+function groupByDay(items: any[]): { key: DayGroup; items: any[] }[] {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const yesterday = today.getTime() - 24 * 60 * 60 * 1000;
+  const groups: Record<DayGroup, any[]> = { today: [], yesterday: [], earlier: [] };
+  for (const n of items) {
+    const at = new Date(n.createdAt).getTime();
+    groups[at >= today.getTime() ? 'today' : at >= yesterday ? 'yesterday' : 'earlier'].push(n);
+  }
+  return (['today', 'yesterday', 'earlier'] as const)
+    .filter((key) => groups[key].length > 0)
+    .map((key) => ({ key, items: groups[key] }));
+}
+
+function NotificationRow({ n, last, onPress }: { n: any; last: boolean; onPress: () => void }) {
+  const p = useThemedPalette();
+  const t = useT();
+  const unread = !n.isRead;
+  const isAnnouncement = n.type === 'announcement';
+  const highlight = unread || isAnnouncement;
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={`${n.title}. ${n.message}`}
+      accessibilityState={{ selected: unread }}
+      style={({ pressed }) => ({
+        flexDirection: 'row', alignItems: 'flex-start', gap: 12,
+        padding: 14,
+        backgroundColor: pressed ? p.border : 'transparent',
+        borderBottomWidth: last ? 0 : 1, borderBottomColor: p.border,
+      })}
+    >
+      <View style={{
+        width: 36, height: 36, borderRadius: 12,
+        alignItems: 'center', justifyContent: 'center',
+        backgroundColor: highlight ? p.accentSoft : p.pillBg,
+      }}>
+        <Ionicons name={ICON_MAP[n.type] ?? ICON_MAP.info} size={17} color={highlight ? p.accentText : p.fgMuted} />
+      </View>
+      <View style={{ flex: 1 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <Text style={{ flex: 1, color: p.fg, fontSize: 14, fontWeight: unread ? '600' : '500' }} numberOfLines={1}>
+            {n.title}
+          </Text>
+          <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '500' }}>
+            {formatRelativeTime(n.createdAt)}
+          </Text>
+        </View>
+        <Text style={{ color: p.fgMuted, fontSize: 13, lineHeight: 18, marginTop: 2 }} numberOfLines={2}>
+          {n.message}
+        </Text>
+        {isAnnouncement && (
+          <Text style={{ color: p.accentText, fontSize: 12, fontWeight: '600', marginTop: 6 }}>
+            {t('notifications.readMore')}
+          </Text>
+        )}
+      </View>
+      {unread && (
+        <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: p.accent, marginTop: 5 }} />
+      )}
+    </Pressable>
+  );
+}
+
 export default function Notifications() {
   const h = useHaptics();
-  const p = useThemedPalette();
+  const t = useT();
   const router = useRouter();
 
-  const { data, isLoading, error } = useNotifications();
+  const { data, isLoading, error, refetch } = useNotifications();
   const markRead = useMarkRead();
   const markAll = useMarkAllRead();
 
   const [expandedNotif, setExpandedNotif] = useState<any | null>(null);
+  // Pull-to-refresh spinner. Tracked locally because the list also refetches
+  // in the background every 15s, which must not show a spinner.
+  const [pulling, setPulling] = useState(false);
 
   const notifications = data?.notifications ?? [];
   const unreadCount = data?.unreadCount ?? 0;
+  const groups = useMemo(() => groupByDay(notifications), [notifications]);
+
+  const onRefresh = async () => {
+    setPulling(true);
+    try { await refetch(); } finally { setPulling(false); }
+  };
 
   const handlePress = (n: any) => {
     h.selection();
@@ -166,101 +236,53 @@ export default function Notifications() {
 
   return (
     <ScreenShell
-      title="Notifications"
-      subtitle={unreadCount > 0 ? `${unreadCount} unread` : 'All caught up'}
+      title={t('notifications.title')}
+      subtitle={unreadCount > 0 ? t('notifications.unread', { count: unreadCount }) : t('notifications.allCaughtUp')}
       right={unreadCount > 0 ? (
-        <Pressable
-          hitSlop={6}
-          onPress={() => { h.selection(); markAll.mutate(); }}
-          style={{ paddingHorizontal: 10, paddingVertical: 8 }}
+        <HeaderTextButton
+          icon="checkmark-done"
+          label={t('notifications.markAllRead')}
+          onPress={() => markAll.mutate()}
           disabled={markAll.isPending}
-        >
-          <Text style={{ color: p.fg, fontSize: 12, fontWeight: '700' }}>
-            {markAll.isPending ? 'Marking…' : 'Mark all read'}
-          </Text>
-        </Pressable>
+        />
       ) : undefined}
+      onRefresh={onRefresh}
+      refreshing={pulling}
     >
-      {isLoading && (
+      {isLoading ? (
         <View style={{ padding: 48, alignItems: 'center' }}>
           <LoadingPulse size={56} icon="notifications-outline" />
         </View>
-      )}
-
-      {error && (
-        <View style={{ padding: 32, alignItems: 'center' }}>
-          <Ionicons name="warning-outline" size={28} color={p.fgFaint} />
-          <Text style={{ color: p.fgMuted, fontSize: 13, marginTop: 10, textAlign: 'center' }}>
-            Couldn't load notifications.{'\n'}Pull to retry.
-          </Text>
-        </View>
-      )}
-
-      {!isLoading && !error && (
-        <Panel style={{ marginTop: 12 }}>
-          {notifications.map((n: any, i: number) => {
-            const icon = ICON_MAP[n.type] ?? ICON_MAP.info;
-            const isAnnouncement = n.type === 'announcement';
-            return (
-              <Pressable
-                key={n.id}
-                onPress={() => handlePress(n)}
-                style={({ pressed }) => ({
-                  flexDirection: 'row', alignItems: 'flex-start',
-                  padding: 14,
-                  backgroundColor: pressed ? p.border : 'transparent',
-                  borderBottomWidth: i === notifications.length - 1 ? 0 : 1,
-                  borderBottomColor: p.border,
-                  gap: 12,
-                })}
-              >
-                <View style={{
-                  width: 36, height: 36, borderRadius: 12,
-                  backgroundColor: !n.isRead ? p.greenBg : (isAnnouncement ? `${p.ctaBg}20` : p.pillBg),
-                  alignItems: 'center', justifyContent: 'center',
-                  borderWidth: 1, borderColor: p.border,
-                }}>
-                  <Ionicons
-                    name={icon}
-                    size={17}
-                    color={!n.isRead ? p.greenFg : (isAnnouncement ? p.ctaBg : p.fgMuted)}
-                  />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                    <Text style={{ color: p.fg, fontSize: 14, fontWeight: '700', flex: 1 }} numberOfLines={1}>
-                      {n.title}
-                    </Text>
-                    {!n.isRead && (
-                      <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: p.greenFg, flexShrink: 0 }} />
-                    )}
-                  </View>
-                  <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '500', marginTop: 2 }} numberOfLines={2}>
-                    {n.message}
-                  </Text>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 }}>
-                    <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '500' }}>
-                      {formatRelativeTime(n.createdAt)}
-                    </Text>
-                    {isAnnouncement && (
-                      <Text style={{ color: p.ctaBg, fontSize: 11, fontWeight: '600' }}>
-                        Tap to read →
-                      </Text>
-                    )}
-                  </View>
-                </View>
-              </Pressable>
-            );
-          })}
-          {notifications.length === 0 && (
-            <View style={{ padding: 32, alignItems: 'center' }}>
-              <Ionicons name="notifications-off-outline" size={28} color={p.fgFaint} />
-              <Text style={{ color: p.fgMuted, fontSize: 13, marginTop: 10 }}>
-                You're all caught up.
-              </Text>
-            </View>
-          )}
-        </Panel>
+      ) : error ? (
+        <EmptyState
+          icon="cloud-offline-outline"
+          title={t('notifications.errorTitle')}
+          message={t('notifications.errorBody')}
+          actionLabel={t('common.retry')}
+          onAction={() => { refetch(); }}
+        />
+      ) : groups.length === 0 ? (
+        <EmptyState
+          icon="notifications-outline"
+          title={t('notifications.emptyTitle')}
+          message={t('notifications.emptyBody')}
+        />
+      ) : (
+        groups.map((group, gi) => (
+          <View key={group.key}>
+            <SectionLabel first={gi === 0}>{t(`notifications.${group.key}`)}</SectionLabel>
+            <Panel>
+              {group.items.map((n, i) => (
+                <NotificationRow
+                  key={n.id}
+                  n={n}
+                  last={i === group.items.length - 1}
+                  onPress={() => handlePress(n)}
+                />
+              ))}
+            </Panel>
+          </View>
+        ))
       )}
 
       {/* Re-enable announcements if user opted out */}

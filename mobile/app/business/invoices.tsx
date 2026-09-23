@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 import { Text } from '@/components/ui/Text';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { StackHeader } from '@/components/ui/ScreenHeader';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -341,31 +342,10 @@ export default function Invoices() {
       <SafeAreaView style={{ flex: 1 }} edges={['top']}>
 
         {/* Header */}
-        <View style={{
-          flexDirection: 'row', alignItems: 'center', gap: 12,
-          paddingHorizontal: 20, paddingTop: 16, paddingBottom: 12,
-        }}>
-          <Pressable
-            onPress={() => router.back()}
-            hitSlop={8}
-            style={{
-              width: 36, height: 36, borderRadius: 18, backgroundColor: p.bgElev,
-              borderWidth: 1, borderColor: p.border, alignItems: 'center', justifyContent: 'center',
-            }}
-          >
-            <Ionicons name="chevron-back" size={20} color={p.fg} />
-          </Pressable>
-          <View style={{ flex: 1 }}>
-            <Text style={{ color: p.fg, fontSize: 18, fontWeight: '800', letterSpacing: -0.5 }}>
-              Payouts
-            </Text>
-            {params.batchId && (
-              <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '500' }} numberOfLines={1}>
-                Batch {params.batchId.slice(0, 8)}…
-              </Text>
-            )}
-          </View>
-        </View>
+        <StackHeader
+          title="Payouts"
+          subtitle={params.batchId ? `Batch ${params.batchId.slice(0, 8)}…` : undefined}
+        />
 
         {/* Status filter chips */}
         <ScrollView

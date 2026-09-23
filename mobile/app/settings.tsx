@@ -3,10 +3,11 @@
  */
 
 import { useState } from 'react';
-import { ActivityIndicator, Alert, Image, Modal, Pressable, Switch, View } from 'react-native';
+import { ActivityIndicator, Alert, Image, Modal, Pressable, View } from 'react-native';
 import { Text, TextInput } from '@/components/ui/Text';
 import { Ionicons } from '@expo/vector-icons';
-import { ScreenShell, Panel, PanelRow } from '@/components/ui/ScreenShell';
+import { ScreenShell, Panel, PanelRow, SectionLabel, ToggleRow } from '@/components/ui/ScreenShell';
+import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import { useTheme, useThemedPalette } from '@/store/themeStore';
 import { useI18n, useT, LOCALE_META } from '@/store/i18nStore';
 import { useAuthStore } from '@/store/authStore';
@@ -21,7 +22,6 @@ export default function Settings() {
   const t = useT();
   const p = useThemedPalette();
   const themeMode = useTheme((s) => s.mode);
-  const toggleTheme = useTheme((s) => s.toggle);
   const setMode = useTheme((s) => s.setMode);
   const locale = useI18n((s) => s.locale);
   const { user, updateUser } = useAuthStore();
@@ -123,178 +123,118 @@ export default function Settings() {
 
   return (
     <ScreenShell title={t('settings.title')}>
-      {/* Account info */}
-      <Panel style={{ marginTop: 18, padding: 16 }}>
-        <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '700', letterSpacing: 0.6 }}>
-          {t('settings.account').toUpperCase()}
-        </Text>
-        <Text style={{ color: p.fg, fontSize: 16, fontWeight: '700', marginTop: 6 }}>
-          {user ? `${user.firstName} ${user.lastName}` : t('settings.notSignedIn')}
-        </Text>
-        <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '500', marginTop: 2 }}>
-          {user?.email ?? '—'}
-        </Text>
+      {/* Account */}
+      <SectionLabel first>{t('settings.account')}</SectionLabel>
+      <Panel style={{ padding: 16, flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+        <View style={{
+          width: 44, height: 44, borderRadius: 22,
+          alignItems: 'center', justifyContent: 'center',
+          backgroundColor: p.accentSoft,
+        }}>
+          <Text style={{ color: p.accentText, fontSize: 18, fontWeight: '700' }}>
+            {(user?.firstName?.[0] ?? '?').toUpperCase()}
+          </Text>
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={{ color: p.fg, fontSize: 16, fontWeight: '600' }} numberOfLines={1}>
+            {user ? `${user.firstName} ${user.lastName}` : t('settings.notSignedIn')}
+          </Text>
+          <Text style={{ color: p.fgMuted, fontSize: 13, marginTop: 2 }} numberOfLines={1}>
+            {user?.email ?? '—'}
+          </Text>
+        </View>
       </Panel>
 
       {/* Privacy */}
-      <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '700', letterSpacing: 1.2, marginTop: 22, marginLeft: 4 }}>
-        {t('settings.privacy').toUpperCase()}
-      </Text>
-      <Panel style={{ marginTop: 8 }}>
-        <View style={{
-          flexDirection: 'row', alignItems: 'center', gap: 12,
-          padding: 14, borderBottomWidth: 1, borderBottomColor: p.border,
-        }}>
-          <View style={{ width: 32, height: 32, borderRadius: 10, backgroundColor: p.pillBg, alignItems: 'center', justifyContent: 'center' }}>
-            <Ionicons name={isPublic ? 'globe-outline' : 'lock-closed-outline'} size={16} color={p.fg} />
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={{ color: p.fg, fontSize: 14, fontWeight: '700' }}>{t('settings.publicProfile')}</Text>
-            <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '500', marginTop: 2 }}>
-              {isPublic
-                ? `${t('settings.visibleAt')} tazdan.com/u/${user?.username ?? 'me'}`
-                : t('settings.privateProfile')}
-            </Text>
-          </View>
-          <Switch
-            value={isPublic}
-            onValueChange={togglePublic}
-            disabled={!user?.username || updateProfile.isPending}
-            trackColor={{ false: p.border, true: p.ctaBg }}
-            thumbColor="#fff"
-            style={{ transform: [{ scaleX: 0.85 }, { scaleY: 0.85 }] }}
-          />
-        </View>
+      <SectionLabel>{t('settings.privacy')}</SectionLabel>
+      <Panel>
+        <ToggleRow
+          icon={isPublic ? 'globe-outline' : 'lock-closed-outline'}
+          label={t('settings.publicProfile')}
+          description={isPublic
+            ? `${t('settings.visibleAt')} tazdan.com/u/${user?.username ?? 'me'}`
+            : t('settings.privateProfile')}
+          value={isPublic}
+          onValueChange={togglePublic}
+          disabled={!user?.username || updateProfile.isPending}
+        />
         <PanelRow
           icon="at-outline"
           label={user?.username ? `@${user.username}` : t('settings.setHandle')}
           right={<Ionicons name="create-outline" size={16} color={p.fgFaint} />}
           onPress={openHandleModal}
         />
-        {/* Read receipts toggle.  When off, we suppress the "read"
-            double-check on outbound bubbles so the local UI doesn't
-            leak read state.  Server-side suppression is a follow-up
-            (next step would be propagating this flag to message-read
-            broadcasting). */}
-        <View style={{
-          flexDirection: 'row', alignItems: 'center', gap: 12,
-          padding: 14,
-        }}>
-          <View style={{ width: 32, height: 32, borderRadius: 10, backgroundColor: p.pillBg, alignItems: 'center', justifyContent: 'center' }}>
-            <Ionicons name={readReceiptsOn ? 'checkmark-done-outline' : 'eye-off-outline'} size={16} color={p.fg} />
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={{ color: p.fg, fontSize: 14, fontWeight: '700' }}>
-              {t('chat.readReceipts')}
-            </Text>
-            <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '500', marginTop: 2 }}>
-              {t('chat.readReceiptsDesc')}
-            </Text>
-          </View>
-          <Switch
-            value={readReceiptsOn}
-            onValueChange={(on) => useChatPrefs.getState().setReadReceiptsOn(on)}
-            trackColor={{ false: p.border, true: p.ctaBg }}
-            thumbColor="#fff"
-            style={{ transform: [{ scaleX: 0.85 }, { scaleY: 0.85 }] }}
-          />
-        </View>
+        {/* When read receipts are off we suppress the "read" double-check on
+            outbound bubbles so the local UI doesn't leak read state. */}
+        <ToggleRow
+          icon={readReceiptsOn ? 'checkmark-done-outline' : 'eye-off-outline'}
+          label={t('chat.readReceipts')}
+          description={t('chat.readReceiptsDesc')}
+          value={readReceiptsOn}
+          onValueChange={(on) => { h.selection(); useChatPrefs.getState().setReadReceiptsOn(on); }}
+          last
+        />
+      </Panel>
+
+      {/* Security */}
+      <SectionLabel>{t('settings.security')}</SectionLabel>
+      <Panel>
+        <PanelRow
+          icon="shield-checkmark-outline"
+          label={t('settings.twoFactor')}
+          value={user?.twoFactorEnabled ? t('settings.on') : t('settings.off')}
+          right={twoFALoading ? <ActivityIndicator size="small" color={p.fgMuted} /> : undefined}
+          onPress={press2FA}
+        />
+        <PanelRow
+          icon="phone-portrait-outline"
+          label={t('settings.trustedDevices')}
+          last
+          onPress={() => { h.selection(); router.push('/settings/devices' as any); }}
+        />
       </Panel>
 
       {/* Notifications */}
-      <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '700', letterSpacing: 1.2, marginTop: 22, marginLeft: 4 }}>
-        {(t('settings.notifications') || 'NOTIFICATIONS').toUpperCase()}
-      </Text>
-      <Panel style={{ marginTop: 8 }}>
+      <SectionLabel>{t('settings.notifications') || 'Notifications'}</SectionLabel>
+      <Panel>
         <PanelRow
           icon="notifications-outline"
           label={t('settings.manageNotifications') || 'Email + push preferences'}
           last
           onPress={() => { h.selection(); router.push('/notif-settings' as any); }}
-          right={<Ionicons name="chevron-forward" size={16} color={p.fgFaint} />}
         />
       </Panel>
 
-      {/* Security */}
-      <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '700', letterSpacing: 1.2, marginTop: 22, marginLeft: 4 }}>
-        SECURITY
-      </Text>
-      <Panel style={{ marginTop: 8 }}>
-        <PanelRow
-          icon="shield-outline"
-          label={`Two-Factor Auth · ${user?.twoFactorEnabled ? 'ON' : 'OFF'}`}
-          right={
-            twoFALoading
-              ? <ActivityIndicator size="small" color={p.fgMuted} />
-              : user?.twoFactorEnabled
-                ? <View style={{ paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, backgroundColor: p.greenBg }}>
-                    <Text style={{ color: p.greenFg, fontSize: 10, fontWeight: '600' }}>ON</Text>
-                  </View>
-                : <Ionicons name="chevron-forward" size={16} color={p.fgFaint} />
-          }
-          onPress={press2FA}
-        />
-        <PanelRow
-          icon="phone-portrait-outline"
-          label="Trusted Devices"
-          last
-          right={<Ionicons name="chevron-forward" size={16} color={p.fgFaint} />}
-          onPress={() => { h.selection(); router.push('/settings/devices' as any); }}
-        />
-      </Panel>
-
-      {/* Appearance */}
-      <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '700', letterSpacing: 1.2, marginTop: 22, marginLeft: 4 }}>
-        {t('settings.appearance').toUpperCase()}
-      </Text>
-      <Panel style={{ marginTop: 8 }}>
-        <PanelRow
-          icon="contrast-outline"
-          label={`${t('settings.theme')} · ${themeMode === 'mono' ? 'Mono' : themeMode === 'dark' ? t('settings.dark') : t('settings.light')}`}
-          onPress={() => { h.selection(); toggleTheme(); }}
-          right={<Ionicons name="swap-horizontal" size={16} color={p.fgFaint} />}
-        />
-        <PanelRow
-          icon="sunny-outline"
-          label={t('settings.light')}
-          onPress={() => { h.selection(); setMode('light'); }}
-          right={themeMode === 'light' ? <Ionicons name="checkmark-circle" size={18} color={p.greenFg} /> : null}
-        />
-        <PanelRow
-          icon="moon-outline"
-          label={t('settings.dark')}
-          onPress={() => { h.selection(); setMode('dark'); }}
-          right={themeMode === 'dark' ? <Ionicons name="checkmark-circle" size={18} color={p.greenFg} /> : null}
-        />
-        <PanelRow
-          icon="contrast"
-          label="Monochrome"
-          last
-          onPress={() => { h.selection(); setMode('mono'); }}
-          right={themeMode === 'mono' ? <Ionicons name="checkmark-circle" size={18} color={p.greenFg} /> : null}
+      {/* Appearance — one control instead of a toggle plus three rows */}
+      <SectionLabel>{t('settings.appearance')}</SectionLabel>
+      <Panel style={{ padding: 12 }}>
+        <SegmentedControl
+          value={themeMode}
+          onChange={(mode) => setMode(mode)}
+          options={[
+            { key: 'light', label: t('settings.light'), icon: 'sunny-outline' },
+            { key: 'dark',  label: t('settings.dark'),  icon: 'moon-outline' },
+            { key: 'mono',  label: t('settings.mono'),  icon: 'contrast-outline' },
+          ]}
         />
       </Panel>
 
       {/* Language */}
-      <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '700', letterSpacing: 1.2, marginTop: 22, marginLeft: 4 }}>
-        {t('settings.language').toUpperCase()}
-      </Text>
-      <Panel style={{ marginTop: 8 }}>
+      <SectionLabel>{t('settings.language')}</SectionLabel>
+      <Panel>
         <PanelRow
           icon="language-outline"
-          label={`${LOCALE_META[locale].flag}  ${LOCALE_META[locale].label}`}
+          label={t('settings.language')}
+          value={`${LOCALE_META[locale].flag}  ${LOCALE_META[locale].label}`}
           last
           onPress={() => { h.selection(); setLangPickerVisible(true); }}
-          right={<Ionicons name="chevron-forward" size={16} color={p.fgFaint} />}
         />
       </Panel>
       <LocalePickerModal visible={langPickerVisible} onClose={() => setLangPickerVisible(false)} />
 
       {/* About */}
-      <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '700', letterSpacing: 1.2, marginTop: 22, marginLeft: 4 }}>
-        {t('settings.about').toUpperCase()}
-      </Text>
-      <Panel style={{ marginTop: 8 }}>
+      <SectionLabel>{t('settings.about')}</SectionLabel>
+      <Panel>
         <PanelRow icon="document-text-outline" label={t('settings.terms')}
           onPress={() => Alert.alert(t('settings.terms'), t('settings.termsAlert'))} />
         <PanelRow icon="lock-closed-outline" label={t('settings.privacyPolicy')}

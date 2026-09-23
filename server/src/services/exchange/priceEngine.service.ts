@@ -14,7 +14,7 @@
 import axios from 'axios';
 import Decimal from 'decimal.js';
 import { randomUUID } from 'crypto';
-import { redisGet, redisSet, redisDel, getRedisClient } from '../../utils/redis';
+import { redisGet, redisSet, redisDel, redisGetDel, getRedisClient } from '../../utils/redis';
 import { prisma } from '../../utils/prisma';
 import { isLedgerCurrency } from '../ledger/ledger.service';
 import { logger } from '../../utils/logger';
@@ -356,6 +356,8 @@ export interface Quote {
 
   totalUserPays: string;   // BUY: settlementAmount | SELL: cryptoAmount
   expiresAt: number;       // unix ms
+  /** The user the quote was issued to. Only they can execute it. */
+  userId?: string;
 }
 
 // ── Quote cache (Redis-backed with in-memory fallback) ───────────────
@@ -413,17 +415,27 @@ export async function getQuote(id: string): Promise<Quote | null> {
   return q;
 }
 
-export async function consumeQuote(id: string): Promise<Quote | null> {
-  const q = await getQuote(id);
-  if (q) {
-    try {
-      await redisDel(`quote:${id}`);
-    } catch {
-      // ignore Redis errors
+/**
+ * Take a quote for execution. Single-use: GETDEL (or the in-process map's
+ * synchronous get+delete) guarantees that of several concurrent executions
+ * of the same quote, exactly one receives it. A quote issued to another user
+ * is treated as not found and left in place for its owner.
+ */
+export async function consumeQuote(id: string, userId?: string): Promise<Quote | null> {
+  const peek = await getQuote(id);
+  if (!peek) return null;
+  if (peek.userId && peek.userId !== userId) return null;
+
+  let taken = await redisGetDel<Quote>(`quote:${id}`);
+  if (!taken) {
+    const local = quoteStore.get(id);
+    if (local) {
+      quoteStore.delete(id);
+      taken = local;
     }
-    quoteStore.delete(id);
   }
-  return q;
+  if (!taken || taken.expiresAt <= Date.now()) return null;
+  return taken;
 }
 
 /**
@@ -475,6 +487,7 @@ export async function buildQuote(opts: {
   cryptoAmount?: string | number;  // required for SELL
   side: Side;
   settlementCurrency: string;      // fiat/stablecoin wallet; required, never defaulted
+  userId?: string;                 // who may execute this quote
 }): Promise<Quote> {
   const asset = opts.asset.toUpperCase();
   const network = opts.network.toUpperCase();
@@ -589,6 +602,7 @@ export async function buildQuote(opts: {
     networkFeeSettlement: networkFeeSettlement.toFixed(8),
     totalUserPays: side === 'BUY' ? settlementAmount.toFixed(8) : cryptoAmount.toFixed(18),
     expiresAt: Date.now() + QUOTE_TTL_MS,
+    userId: opts.userId,
   };
   await setQuote(quote);
   return quote;

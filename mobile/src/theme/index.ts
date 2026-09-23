@@ -1,13 +1,5 @@
-/**
- * tazdan design tokens — monochrome v1.
- *
- * The visual language is pure grayscale + status (red/green/amber) only.
- * No brand blue, no colored glow shadows, no rainbow card colorways. The
- * mono palette uses an accent that is the inverse of the surface: white in
- * dark mode, black in light mode, so CTAs always have maximum contrast.
- *
- * Mirrors the NativeWind config in `tailwind.config.js`. Use this file from
- * any non-NW context (e.g. LinearGradient `colors`, ShadowOffset).
+/** Shared tazdan tokens: quiet surfaces, blue accents, generous spacing and neutral primary actions.
+ * Runtime colours live in themeStore; use these static tokens for geometry and typography.
  */
 
 export const colors = {
@@ -27,9 +19,9 @@ export const colors = {
     accentFg:   '#0A0A0B',  // text/icon on accent
 
     // Light mode mirror
-    bgL:        '#FAFAF7',
-    bgElevL:    '#F1F0EB',
-    bgRaisedL:  '#FFFFFF',
+    bgL:        '#F6F7FA',
+    bgElevL:    '#FFFFFF',
+    bgRaisedL:  '#EEF1F6',
     lineL:      'rgba(0,0,0,0.08)',
     lineStrongL:'rgba(0,0,0,0.14)',
     fgL:        '#0A0A0B',
@@ -159,7 +151,7 @@ export const spacing = {
 /**
  * Font families:
  *   English / LTR → Outfit (geometric humanist, MENA-leaning proportions)
- *   Arabic  / RTL → IBM Plex Sans Arabic (same density + x-height as Outfit,
+ *   Arabic  / RTL → Cairo (same density + x-height as Outfit,
  *                   tabular numerals that align perfectly when language switches)
  *
  * Each token is a weight-specific font name matching the key passed to
@@ -185,15 +177,15 @@ export const F = {
 } as const;
 
 export const FAR = {
-  // IBM Plex Sans Arabic weight map — same slots as F for easy swapping
-  thin:      'IBMPlexSansArabic_300Light',
-  regular:   'IBMPlexSansArabic_400Regular',
-  medium:    'IBMPlexSansArabic_500Medium',
-  semibold:  'IBMPlexSansArabic_600SemiBold',
-  bold:      'IBMPlexSansArabic_700Bold',
-  // IBM Plex tops at 700 — map heavier slots to bold
-  extrabold: 'IBMPlexSansArabic_700Bold',
-  black:     'IBMPlexSansArabic_700Bold',
+  // Cairo weight map — same slots as F for easy swapping
+  thin:      'Cairo_300Light',
+  regular:   'Cairo_400Regular',
+  medium:    'Cairo_500Medium',
+  semibold:  'Cairo_600SemiBold',
+  bold:      'Cairo_700Bold',
+  // Cairo tops at 700 — map heavier slots to bold
+  extrabold: 'Cairo_700Bold',
+  black:     'Cairo_700Bold',
 } as const;
 
 export const typography = {
@@ -210,7 +202,7 @@ export const typography = {
 /**
  * Locale-aware font hook. Returns the correct family map (F or FAR)
  * based on the currently active language — call this instead of
- * importing F/FAR directly so Arabic users automatically get IBM Plex.
+ * importing F/FAR directly so Arabic users automatically get Cairo.
  *
  *   const fonts = useFonts();
  *   <Text style={{ fontFamily: fonts.bold, fontSize: 16 }}>…</Text>
@@ -273,3 +265,15 @@ export const motion = {
 
 export type ColorToken = keyof typeof colors;
 export type GradientToken = keyof typeof gradients;
+
+/** Shared geometry for navigation, forms, cards and sheets. */
+export const ui = {
+  gutter: 24,
+  control: 44,
+  button: 56,
+  input: 64,
+  cardRadius: 24,
+  fieldRadius: 18,
+  sheetRadius: 32,
+  pillRadius: 999,
+} as const;

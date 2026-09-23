@@ -41,6 +41,7 @@ import {
   Cairo_800ExtraBold,
 } from '@expo-google-fonts/cairo';
 
+import { useTheme, useThemedPalette } from '@/store/themeStore';
 import { queryClient } from '@/lib/queryClient';
 import { useConnectivity } from '@/hooks/useConnectivity';
 import { OfflineScreen } from '@/components/ui/OfflineScreen';
@@ -128,8 +129,8 @@ const { height: SH } = Dimensions.get('screen');
 function SplashOverlay() {
   const isHydrating = useAuthStore((s) => s.isHydrating);
   const [show, setShow] = useState(true);
-  const scheme = useColorScheme();
-  const dark = scheme === 'dark';
+  const p = useThemedPalette();
+  const dark = useTheme((s) => s.mode !== 'light');
 
   const scanY = useSharedValue(0);
 
@@ -169,7 +170,7 @@ function SplashOverlay() {
     >
       {/* Base — inverts with system colour scheme */}
       <LinearGradient
-        colors={dark ? ['#121418', '#16181C', '#121418'] : ['#FFFFFF', '#FAFAF7', '#FFFFFF']}
+        colors={[p.bg, p.bgElev, p.bg]}
         locations={[0, 0.5, 1]}
         style={StyleSheet.absoluteFillObject}
       />
@@ -180,6 +181,9 @@ function SplashOverlay() {
 }
 
 export default function RootLayout() {
+  const p = useThemedPalette();
+  const mode = useTheme((s) => s.mode);
+  useEffect(() => { SystemUI.setBackgroundColorAsync(p.bg).catch(() => {}); }, [p.bg]);
   const [fontsLoaded] = useFonts({
     Outfit_300Light,
     Outfit_400Regular,
@@ -203,7 +207,7 @@ export default function RootLayout() {
   if (!fontsLoaded) return null;
 
   return (
-    <GestureHandlerRootView style={{ flex: 1, backgroundColor: '#16181C' }}>
+    <GestureHandlerRootView style={{ flex: 1, backgroundColor: p.bg }}>
       <ErrorBoundary>
       <SafeAreaProvider>
         <QueryClientProvider client={queryClient}>
@@ -212,13 +216,13 @@ export default function RootLayout() {
             merchantIdentifier={STRIPE.merchantIdentifier}
             urlScheme="tazdan"
           >
-          <StatusBar style="light" />
+          <StatusBar style={mode === "light" ? "dark" : "light"} />
           <AuthGate />
           <Stack
             screenOptions={{
               headerShown: false,
               animation: 'fade',
-              contentStyle: { backgroundColor: '#16181C' },
+              contentStyle: { backgroundColor: p.bg },
             }}
           >
             <Stack.Screen name="(auth)" options={{ animation: 'fade' }} />

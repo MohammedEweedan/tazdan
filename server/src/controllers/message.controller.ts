@@ -26,6 +26,11 @@ import { AuthRequest } from '../types';
 import { TransactionController } from './transaction.controller';
 import { postLedger } from '../services/ledger/ledger.service';
 import { postAssetLedger, normaliseAsset } from '../services/ledger/assetLedger.service';
+import { parsePositiveAmount } from '../services/wallet/atomicWallet';
+import {
+  USER_WALLET_COLUMNS, moveAltBalance, moveUserWalletColumn, moveWalletBalance, type UserWalletColumn,
+} from '../services/wallet/userTransfer';
+import { enforceKycLimit } from '../utils/kycLimits';
 
 const EDIT_WINDOW_MS = 5 * 60_000;
 
@@ -216,129 +221,32 @@ export class MessageController {
         // was always 0, hence "Insufficient BTC balance, Available: 0"
         // even though the user had thousands.  We now route each
         // currency to the table it actually lives in.
-        const amountNum = m.amount;
-        const currency: string = m.currency;
+        // Validate before anything moves: a finite, positive amount only.
+        const amountDec = parsePositiveAmount(m.amount, 'metadata.amount');
+        const currency: string = String(m.currency).toUpperCase();
         const feeNum = 0;
-        const totalDeduction = amountNum + feeNum;
 
         // Fiat (and bare-USDT) live in the `Wallet` table.
         const WALLET_TABLE_CURRENCIES = new Set([
           'USD', 'EUR', 'GBP', 'AED', 'SAR', 'EGP', 'LYD', 'USDT',
         ]);
-        // Crypto with dedicated UserWallet columns.  Map currency to
-        // column name so we can decrement the right field.
-        const UW_COLUMN: Record<string, string> = {
-          ETH: 'ethBalance',
-          BTC: 'btcBalance',
-          SOL: 'solBalance',
-          USDT_ERC20: 'usdtErc20Bal',
-          USDT_TRC20: 'usdtTrc20Bal',
-        };
+        // Crypto with a dedicated UserWallet column.
+        const uwColumn = (USER_WALLET_COLUMNS as Record<string, UserWalletColumn>)[currency];
         const isWalletTable = WALLET_TABLE_CURRENCIES.has(currency);
-        const uwColumn      = UW_COLUMN[currency];
+
+        await enforceKycLimit(senderId, 'SEND', amountDec, currency.replace(/_(ERC20|TRC20)$/, ''));
 
         const result = await prisma.$transaction(async (tx) => {
           const reference = `TRF-${require('uuid').v4().slice(0, 8).toUpperCase()}`;
 
-          let senderBalBefore = 0;
-          let senderBalAfter  = 0;
-          let receiverBalBefore = 0;
-          let receiverBalAfter  = 0;
-
-          if (isWalletTable) {
-            // ── Wallet-table path: USDT + fiat ────────────────────────
-            const [senderWallet, receiverWallet] = await Promise.all([
-              tx.wallet.upsert({
-                where: { userId_currency: { userId: senderId, currency: currency as any } },
-                create: { userId: senderId, currency: currency as any, balance: 0, frozen: 0 },
-                update: {},
-              }),
-              tx.wallet.upsert({
-                where: { userId_currency: { userId: data.receiverId, currency: currency as any } },
-                create: { userId: data.receiverId, currency: currency as any, balance: 0, frozen: 0 },
-                update: {},
-              }),
-            ]);
-
-            senderBalBefore   = Number(senderWallet.balance);
-            receiverBalBefore = Number(receiverWallet.balance);
-            const available   = senderBalBefore - Number(senderWallet.frozen ?? 0);
-
-            if (available < totalDeduction) {
-              throw new AppError(`Insufficient ${currency} balance. Available: ${available}`, 400);
-            }
-
-            senderBalAfter   = senderBalBefore - totalDeduction;
-            receiverBalAfter = receiverBalBefore + amountNum;
-
-            await Promise.all([
-              tx.wallet.update({ where: { id: senderWallet.id },   data: { balance: senderBalAfter } }),
-              tx.wallet.update({ where: { id: receiverWallet.id }, data: { balance: receiverBalAfter } }),
-            ]);
-          } else if (uwColumn) {
-            // ── Crypto with dedicated UserWallet column ──────────────
-            // BTC, ETH, SOL, USDT_ERC20, USDT_TRC20.  This is where
-            // the on-chain custody balance actually lives and is the
-            // figure the mobile shows the user.
-            const [senderUW, receiverUW] = await Promise.all([
-              tx.userWallet.findUnique({ where: { userId: senderId } }),
-              tx.userWallet.findUnique({ where: { userId: data.receiverId } }),
-            ]);
-            if (!senderUW)   throw new AppError('Sender crypto wallet not provisioned', 404);
-            if (!receiverUW) throw new AppError('Recipient crypto wallet not provisioned', 404);
-
-            senderBalBefore   = parseFloat(((senderUW as any)[uwColumn] ?? '0').toString());
-            receiverBalBefore = parseFloat(((receiverUW as any)[uwColumn] ?? '0').toString());
-
-            if (senderBalBefore < totalDeduction) {
-              throw new AppError(`Insufficient ${currency} balance. Available: ${senderBalBefore}`, 400);
-            }
-
-            senderBalAfter   = senderBalBefore - totalDeduction;
-            receiverBalAfter = receiverBalBefore + amountNum;
-
-            await Promise.all([
-              tx.userWallet.update({
-                where: { userId: senderId },
-                data:  { [uwColumn]: senderBalAfter.toFixed(uwColumn === 'ethBalance' ? 18 : 8) } as any,
-              }),
-              tx.userWallet.update({
-                where: { userId: data.receiverId },
-                data:  { [uwColumn]: receiverBalAfter.toFixed(uwColumn === 'ethBalance' ? 18 : 8) } as any,
-              }),
-            ]);
-          } else {
-            // ── Altcoin path: UserWallet.altBalances JSON ────────────
-            // Everything else crypto (BNB, XRP, DOGE, MATIC, …).
-            const [senderUW, receiverUW] = await Promise.all([
-              tx.userWallet.findUnique({ where: { userId: senderId } }),
-              tx.userWallet.findUnique({ where: { userId: data.receiverId } }),
-            ]);
-
-            const senderAlts   = (senderUW?.altBalances   && typeof senderUW.altBalances   === 'object' ? senderUW.altBalances   : {}) as Record<string, string>;
-            const receiverAlts = (receiverUW?.altBalances && typeof receiverUW.altBalances === 'object' ? receiverUW.altBalances : {}) as Record<string, string>;
-
-            senderBalBefore   = parseFloat(senderAlts[currency]   ?? '0');
-            receiverBalBefore = parseFloat(receiverAlts[currency] ?? '0');
-
-            if (senderBalBefore < totalDeduction) {
-              throw new AppError(`Insufficient ${currency} balance. Available: ${senderBalBefore}`, 400);
-            }
-
-            senderBalAfter   = senderBalBefore - totalDeduction;
-            receiverBalAfter = receiverBalBefore + amountNum;
-
-            const newSenderAlts   = { ...senderAlts,   [currency]: senderBalAfter.toFixed(8) };
-            const newReceiverAlts = { ...receiverAlts, [currency]: receiverBalAfter.toFixed(8) };
-
-            if (!senderUW)   throw new AppError('Sender crypto wallet not found', 404);
-            if (!receiverUW) throw new AppError('Receiver crypto wallet not found', 404);
-
-            await Promise.all([
-              tx.userWallet.update({ where: { userId: senderId },          data: { altBalances: newSenderAlts } }),
-              tx.userWallet.update({ where: { userId: data.receiverId }, data: { altBalances: newReceiverAlts } }),
-            ]);
-          }
+          // Each branch locks (or atomically checks) before it reads, so two
+          // payments from the same wallet can never both spend one balance.
+          const moved = isWalletTable
+            ? await moveWalletBalance(tx, senderId, data.receiverId, currency, amountDec)
+            : uwColumn
+              ? await moveUserWalletColumn(tx, senderId, data.receiverId, uwColumn, currency, amountDec)
+              : await moveAltBalance(tx, senderId, data.receiverId, currency, amountDec);
+          const { senderBalBefore, senderBalAfter, receiverBalBefore, receiverBalAfter } = moved;
 
           // Pick the ledger-currency value safely.  Anything in the
           // Prisma Currency enum can be stored directly; off-enum
@@ -361,7 +269,7 @@ export class MessageController {
               senderId,
               receiverId: data.receiverId,
               currency: ledgerCurrency as any,
-              amount: amountNum,
+              amount: amountDec,
               fee: feeNum,
               reference,
               note: m.note || undefined,
@@ -369,7 +277,6 @@ export class MessageController {
           });
 
           if (canPostLedger) {
-            const amountDec = new Decimal(amountNum);
             await postLedger(tx as any, {
               refType: 'message_payment',
               refId: reference,
@@ -380,7 +287,6 @@ export class MessageController {
               ],
             }, { allowNegativeUser: true });
           } else {
-            const amountDec = new Decimal(amountNum);
             const asset = normaliseAsset(currency);
             await postAssetLedger(tx as any, {
               refType: 'message_payment',
@@ -398,7 +304,7 @@ export class MessageController {
               userId: senderId,
               type: 'TRANSFER_OUT',
               currency: ledgerCurrency as any,
-              amount: amountNum,
+              amount: amountDec,
               fee: feeNum,
               balanceBefore: senderBalBefore,
               balanceAfter:  senderBalAfter,
@@ -413,7 +319,7 @@ export class MessageController {
               userId: data.receiverId,
               type: 'TRANSFER_IN',
               currency: ledgerCurrency as any,
-              amount: amountNum,
+              amount: amountDec,
               fee: 0,
               balanceBefore: receiverBalBefore,
               balanceAfter:  receiverBalAfter,

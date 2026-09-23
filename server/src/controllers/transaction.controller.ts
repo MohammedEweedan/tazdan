@@ -6,8 +6,8 @@
  *     records and updates balances.
  *
  * All operations are wrapped in a Prisma transaction to guarantee
- * consistency. The controller validates balance sufficiency, applies
- * optional fees, and records balanceBefore / balanceAfter for audit.
+ * consistency. The controller validates balance sufficiency and records
+ * balanceBefore / balanceAfter for audit. Internal transfers carry no fee.
  */
 
 import { Response, NextFunction } from 'express';
@@ -16,8 +16,9 @@ import { AppError } from '../middleware/errorHandler';
 import { AuthRequest } from '../types';
 import { v4 as uuidv4 } from 'uuid';
 import { emitActivity } from '../utils/realtime';
-import { Decimal } from '@prisma/client/runtime/library';
-import { collectFee } from '../services/fee/feeCollector.service';
+import { parsePositiveAmount } from '../services/wallet/atomicWallet';
+import { moveAltBalance, moveWalletBalance } from '../services/wallet/userTransfer';
+import { enforceKycLimit } from '../utils/kycLimits';
 import { isLedgerCurrency, postLedger } from '../services/ledger/ledger.service';
 import { postAssetLedger, normaliseAsset } from '../services/ledger/assetLedger.service';
 
@@ -34,100 +35,45 @@ export class TransactionController {
    *   - In-chat PAYMENT messages (MessageController will link the Transfer to the Message)
    *   - /send page (future)
    *
-   * Body: { receiverId, currency, amount, note?, fee? }
+   * Body: { receiverId, currency, amount, note? }
    */
   static async internalTransfer(req: AuthRequest, res: Response, next: NextFunction) {
-    const { receiverId, currency, amount, note, fee = 0 } = req.body;
-    const senderId = req.user!.id;
-
-    const amountNum = Number(amount);
-    const feeNum = Number(fee);
-    const totalDeduction = amountNum + feeNum;
-
-    if (!receiverId || !currency || isNaN(amountNum) || amountNum <= 0) {
-      throw new AppError('Invalid transfer parameters', 400);
-    }
-    if (receiverId === senderId) {
-      throw new AppError('Cannot transfer to yourself', 400);
-    }
-
-    // Currencies that exist in the Prisma Currency enum
-    const ENUM_CURRENCIES = new Set([
-      'USDT','BTC','ETH','BNB','SOL','XRP','ADA','DOGE','MATIC','DOT','AVAX',
-      'USD','EUR','GBP','AED','SAR','EGP','LYD',
-    ]);
-    const isEnumCurrency = ENUM_CURRENCIES.has(currency);
-
     try {
+      const { receiverId, currency: rawCurrency, amount, note } = req.body ?? {};
+      const senderId = req.user!.id;
+
+      // Internal transfers are free (see feeCollector). A client-supplied
+      // fee is ignored — it must never change what the sender is debited.
+      const feeNum = 0;
+      if (!receiverId || typeof receiverId !== 'string' || !rawCurrency) {
+        throw new AppError('Invalid transfer parameters', 400);
+      }
+      const amountDec = parsePositiveAmount(amount);
+      const currency = String(rawCurrency).toUpperCase();
+      if (receiverId === senderId) {
+        throw new AppError('Cannot transfer to yourself', 400);
+      }
+      const receiver = await prisma.user.findUnique({ where: { id: receiverId }, select: { status: true } });
+      if (!receiver) throw new AppError('Recipient not found', 404);
+      if (receiver.status !== 'ACTIVE') throw new AppError('Recipient account is not active', 400);
+
+      // Currencies that exist in the Prisma Currency enum
+      const ENUM_CURRENCIES = new Set([
+        'USDT','BTC','ETH','BNB','SOL','XRP','ADA','DOGE','MATIC','DOT','AVAX',
+        'USD','EUR','GBP','AED','SAR','EGP','LYD',
+      ]);
+      const isEnumCurrency = ENUM_CURRENCIES.has(currency);
+
+      await enforceKycLimit(senderId, 'SEND', amountDec, currency);
+
       const result = await prisma.$transaction(async (tx) => {
         const reference = `TRF-${uuidv4().slice(0, 8).toUpperCase()}`;
 
-        let senderBalBefore = 0;
-        let senderBalAfter  = 0;
-        let receiverBalBefore = 0;
-        let receiverBalAfter  = 0;
-
-        if (isEnumCurrency) {
-          // ── Enum path: standard Wallet table ───────────────────────
-          const [senderWallet, receiverWallet] = await Promise.all([
-            tx.wallet.upsert({
-              where: { userId_currency: { userId: senderId, currency: currency as any } },
-              create: { userId: senderId, currency: currency as any, balance: 0, frozen: 0 },
-              update: {},
-            }),
-            tx.wallet.upsert({
-              where: { userId_currency: { userId: receiverId, currency: currency as any } },
-              create: { userId: receiverId, currency: currency as any, balance: 0, frozen: 0 },
-              update: {},
-            }),
-          ]);
-
-          senderBalBefore   = Number(senderWallet.balance);
-          receiverBalBefore = Number(receiverWallet.balance);
-          const available   = senderBalBefore - Number(senderWallet.frozen ?? 0);
-
-          if (available < totalDeduction) {
-            throw new AppError(`Insufficient ${currency} balance. Available: ${available}`, 400);
-          }
-
-          senderBalAfter   = senderBalBefore - totalDeduction;
-          receiverBalAfter = receiverBalBefore + amountNum;
-
-          await Promise.all([
-            tx.wallet.update({ where: { id: senderWallet.id },   data: { balance: senderBalAfter } }),
-            tx.wallet.update({ where: { id: receiverWallet.id }, data: { balance: receiverBalAfter } }),
-          ]);
-        } else {
-          // ── Altcoin path: UserWallet.altBalances JSON ───────────────
-          const [senderUW, receiverUW] = await Promise.all([
-            tx.userWallet.findUnique({ where: { userId: senderId } }),
-            tx.userWallet.findUnique({ where: { userId: receiverId } }),
-          ]);
-
-          const senderAlts   = (senderUW?.altBalances   && typeof senderUW.altBalances   === 'object' ? senderUW.altBalances   : {}) as Record<string, string>;
-          const receiverAlts = (receiverUW?.altBalances && typeof receiverUW.altBalances === 'object' ? receiverUW.altBalances : {}) as Record<string, string>;
-
-          senderBalBefore   = parseFloat(senderAlts[currency]   ?? '0');
-          receiverBalBefore = parseFloat(receiverAlts[currency] ?? '0');
-
-          if (senderBalBefore < totalDeduction) {
-            throw new AppError(`Insufficient ${currency} balance. Available: ${senderBalBefore}`, 400);
-          }
-
-          senderBalAfter   = senderBalBefore - totalDeduction;
-          receiverBalAfter = receiverBalBefore + amountNum;
-
-          const newSenderAlts   = { ...senderAlts,   [currency]: senderBalAfter.toFixed(8) };
-          const newReceiverAlts = { ...receiverAlts, [currency]: receiverBalAfter.toFixed(8) };
-
-          if (!senderUW)   throw new AppError(`Sender crypto wallet not provisioned`, 404);
-          if (!receiverUW) throw new AppError(`Receiver crypto wallet not provisioned`, 404);
-
-          await Promise.all([
-            tx.userWallet.update({ where: { userId: senderId },   data: { altBalances: newSenderAlts } }),
-            tx.userWallet.update({ where: { userId: receiverId }, data: { altBalances: newReceiverAlts } }),
-          ]);
-        }
+        // Enum currencies live in the Wallet table, everything else in
+        // UserWallet.altBalances. Both moves lock/check before reading.
+        const { senderBalBefore, senderBalAfter, receiverBalBefore, receiverBalAfter } = isEnumCurrency
+          ? await moveWalletBalance(tx, senderId, receiverId, currency, amountDec)
+          : await moveAltBalance(tx, senderId, receiverId, currency, amountDec);
 
         // Transfer record — altcoins stored with USDT as ledger currency; asset in metadata
         const transfer = await tx.transfer.create({
@@ -135,7 +81,7 @@ export class TransactionController {
             senderId,
             receiverId,
             currency: isEnumCurrency ? (currency as any) : 'USDT',
-            amount: amountNum,
+            amount: amountDec,
             fee: feeNum,
             reference,
             note: note || undefined,
@@ -143,49 +89,24 @@ export class TransactionController {
         });
 
         if (isLedgerCurrency(currency)) {
-          const amountDec = new Decimal(amountNum);
-          const feeDec = new Decimal(feeNum);
-          const totalDec = amountDec.add(feeDec);
           await postLedger(tx as any, {
             refType: 'transfer',
             refId: reference,
             memo: `Legacy internal transfer ${currency}`,
             legs: [
-              { type: 'USER', userId: senderId, currency: currency as any, amount: totalDec.neg() },
+              { type: 'USER', userId: senderId, currency: currency as any, amount: amountDec.neg() },
               { type: 'USER', userId: receiverId, currency: currency as any, amount: amountDec },
-              ...(feeDec.gt(0)
-                ? [{ type: 'PLATFORM' as const, currency: currency as any, amount: feeDec }]
-                : []),
             ],
           }, { allowNegativeUser: true });
-
-          if (feeDec.gt(0)) {
-            await collectFee({
-              tx,
-              source: 'manual',
-              sourceId: transfer.id,
-              payerId: senderId,
-              amount: feeDec,
-              currency,
-              description: `Internal transfer fee · ${currency}`,
-              metadata: { reference, receiverId, legacyRoute: true },
-            });
-          }
         } else {
           const asset = normaliseAsset(currency);
-          const amountDec = new Decimal(amountNum);
-          const feeDec = new Decimal(feeNum);
-          const totalDec = amountDec.add(feeDec);
           await postAssetLedger(tx as any, {
             refType: 'transfer',
             refId: reference,
             memo: `Legacy internal transfer ${asset}`,
             legs: [
-              { type: 'USER', userId: senderId, asset, amount: totalDec.neg() },
+              { type: 'USER', userId: senderId, asset, amount: amountDec.neg() },
               { type: 'USER', userId: receiverId, asset, amount: amountDec },
-              ...(feeDec.gt(0)
-                ? [{ type: 'PLATFORM' as const, asset, amount: feeDec }]
-                : []),
             ],
           }, { allowNegativeUser: process.env.LEDGER_ALLOW_NEGATIVE_USER !== '0' });
         }
@@ -195,7 +116,7 @@ export class TransactionController {
             userId: senderId,
             type: 'TRANSFER_OUT',
             currency: isEnumCurrency ? (currency as any) : 'USDT',
-            amount: amountNum,
+            amount: amountDec,
             fee: feeNum,
             balanceBefore: senderBalBefore,
             balanceAfter:  senderBalAfter,
@@ -210,7 +131,7 @@ export class TransactionController {
             userId: receiverId,
             type: 'TRANSFER_IN',
             currency: isEnumCurrency ? (currency as any) : 'USDT',
-            amount: amountNum,
+            amount: amountDec,
             fee: 0,
             balanceBefore: receiverBalBefore,
             balanceAfter:  receiverBalAfter,

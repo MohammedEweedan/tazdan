@@ -9,7 +9,7 @@ import { prisma } from '../utils/prisma';
 import { AppError } from '../middleware/errorHandler';
 import { AuthRequest } from '../types';
 import {
-  contribute, release, computeNextRun,
+  contribute, release, close, computeNextRun,
   isDateLocked, requiresStepUp,
 } from '../services/budget.service';
 import { issueStepUp, verifyStepUp } from '../services/security/stepUp.service';
@@ -202,9 +202,8 @@ export class BudgetController {
           }
           await verifyStepUp(req.user!.id, 'withdrawal', stepUpCode);
         }
-        await release(req.user!.id, b.id);
       }
-      await prisma.budgetWallet.update({ where: { id: b.id }, data: { status: 'CLOSED', autoEnabled: false } });
+      await close(req.user!.id, b.id);
       res.json({ message: 'Budget closed' });
     } catch (e) { next(e); }
   }

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { authenticate } from '../middleware/auth';
 import { P2PController } from '../controllers/p2p.controller';
+import { requireFeature } from '../utils/features';
 
 export const p2pRouter = Router();
 
@@ -11,12 +12,15 @@ p2pRouter.get('/offers', P2PController.getOffers);
 // Listings
 p2pRouter.get('/listings', authenticate, P2PController.getListings);
 p2pRouter.get('/listings/mine', authenticate, P2PController.getMyListings);
-p2pRouter.post('/listings', authenticate, P2PController.createListing);
+// New listings and trades are behind FEATURE_P2P (off in production until the
+// escrow accounting is unified with the ledger). Everything that lets users
+// finish or unwind an existing trade stays open so escrow is never stranded.
+p2pRouter.post('/listings', authenticate, requireFeature('p2p'), P2PController.createListing);
 p2pRouter.put('/listings/:id/cancel', authenticate, P2PController.cancelListing);
 
 // Trades
 p2pRouter.get('/trades', authenticate, P2PController.getMyTrades);
-p2pRouter.post('/trades', authenticate, P2PController.initiateTrade);
+p2pRouter.post('/trades', authenticate, requireFeature('p2p'), P2PController.initiateTrade);
 p2pRouter.put('/trades/:id/payment-sent', authenticate, P2PController.markPaymentSent);
 p2pRouter.put('/trades/:id/confirm', authenticate, P2PController.confirmPayment);
 p2pRouter.put('/trades/:id/buyer-confirm', authenticate, P2PController.buyerConfirm);

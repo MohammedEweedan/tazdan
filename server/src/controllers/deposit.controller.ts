@@ -3,6 +3,7 @@ import { z } from 'zod';
 import crypto from 'node:crypto';
 import { prisma } from '../utils/prisma';
 import { AppError } from '../middleware/errorHandler';
+import { assertTransitioned } from '../services/wallet/atomicWallet';
 import { generateReference } from '../utils/helpers';
 import { AuthRequest } from '../types';
 import { getOnRampProvider } from '../services/onramp';
@@ -100,24 +101,20 @@ export class DepositController {
       const adminId     = req.user!.id;
 
       await prisma.$transaction(async (tx) => {
-        // Idempotency guard inside the tx — re-check status under the
-        // row lock so two admins clicking confirm at the same time
-        // can't double-credit.
-        const fresh = await tx.deposit.findUnique({ where: { id: deposit.id } });
-        if (!fresh || fresh.status !== 'WAITING_CONFIRMATION') {
-          throw new AppError('Deposit already processed', 409);
-        }
-
-        await tx.deposit.update({
-          where: { id: deposit.id },
+        // Claim the transition before crediting: the conditional UPDATE
+        // makes a second concurrent confirm (two admins, a double-click, a
+        // retry) find the deposit no longer waiting and credit nothing.
+        const note = `Confirmed by admin ${adminId} at ${new Date().toISOString()}`;
+        const moved = await tx.deposit.updateMany({
+          where: { id: deposit.id, status: 'WAITING_CONFIRMATION' },
           data: {
             status: 'CONFIRMED',
             confirmedAt: new Date(),
-            adminNotes: fresh.adminNotes
-              ? `${fresh.adminNotes}\nConfirmed by admin ${adminId} at ${new Date().toISOString()}`
-              : `Confirmed by admin ${adminId} at ${new Date().toISOString()}`,
+            confirmedBy: adminId,
+            adminNotes: deposit.adminNotes ? `${deposit.adminNotes}\n${note}` : note,
           },
         });
+        assertTransitioned(moved, 'Deposit already processed');
 
         // Credit the DEPOSITOR's wallet, not the admin's.
         const wallet = await tx.wallet.findUnique({
@@ -217,7 +214,11 @@ export class DepositController {
       if (!deposit) throw new AppError('Deposit not found', 404);
       if (deposit.status !== 'PENDING') throw new AppError('Only pending deposits can be cancelled', 400);
 
-      await prisma.deposit.update({ where: { id: deposit.id }, data: { status: 'CANCELLED' } });
+      const moved = await prisma.deposit.updateMany({
+        where: { id: deposit.id, userId: req.user!.id, status: 'PENDING' },
+        data: { status: 'CANCELLED' },
+      });
+      assertTransitioned(moved, 'Only pending deposits can be cancelled');
       res.json({ message: 'Deposit cancelled' });
     } catch (error) {
       next(error);

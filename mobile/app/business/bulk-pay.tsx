@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 import { Text } from '@/components/ui/Text';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { StackHeader } from '@/components/ui/ScreenHeader';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -470,46 +471,21 @@ export default function BulkPay() {
       <StatusBar style={mode === 'dark' ? 'light' : 'dark'} />
       <SafeAreaView style={{ flex: 1 }} edges={['top']}>
         {/* Header */}
-        <View style={{
-          flexDirection: 'row', alignItems: 'center', gap: 12,
-          paddingHorizontal: 20, paddingTop: 16, paddingBottom: 12,
-        }}>
-          <Pressable
-            onPress={() => {
-              if (step === 'preview') { setStep('build'); return; }
-              router.back();
-            }}
-            hitSlop={8}
-            style={{
-              width: 36, height: 36, borderRadius: 18, backgroundColor: p.bgElev,
-              borderWidth: 1, borderColor: p.border, alignItems: 'center', justifyContent: 'center',
-            }}
-          >
-            <Ionicons name="chevron-back" size={20} color={p.fg} />
-          </Pressable>
-          <View style={{ flex: 1 }}>
-            <Text style={{ color: p.fg, fontSize: 18, fontWeight: '800', letterSpacing: -0.5 }}>
-              {step === 'done' ? 'Batch sent' : 'Bulk Pay'}
-            </Text>
-            {step === 'build' && (
-              <Text style={{ color: p.fgMuted, fontSize: 11.5, fontWeight: '500' }}>
-                {drafts.length} recipient{drafts.length !== 1 ? 's' : ''}
-              </Text>
-            )}
-          </View>
-
-          {/* Step indicator */}
-          {step !== 'done' && (
+        <StackHeader
+          title={step === 'done' ? 'Batch sent' : 'Bulk Pay'}
+          subtitle={step === 'build' ? `${drafts.length} recipient${drafts.length !== 1 ? 's' : ''}` : undefined}
+          onBack={step === 'preview' ? () => setStep('build') : undefined}
+          right={step !== 'done' ? (
             <View style={{ flexDirection: 'row', gap: 5, alignItems: 'center' }}>
-              {(['build', 'preview'] as const).map((s, i) => (
+              {(['build', 'preview'] as const).map((s) => (
                 <View key={s} style={{
                   width: s === step ? 20 : 6, height: 6, borderRadius: 3,
                   backgroundColor: s === step ? ACCENT : p.border,
                 }} />
               ))}
             </View>
-          )}
-        </View>
+          ) : undefined}
+        />
 
         <KeyboardAvoidingView
           style={{ flex: 1 }}

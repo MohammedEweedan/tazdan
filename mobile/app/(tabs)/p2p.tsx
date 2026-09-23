@@ -20,6 +20,10 @@ import { useTheme, useThemedPalette, type Palette } from '@/store/themeStore';
 import { useT } from '@/store/i18nStore';
 import type { Currency, MarketTicker, P2POffer } from '@/types';
 import { TopGradient } from '@/components/ui/ScreenShell';
+import { HeaderIconButton, HeaderTextButton, TabHeader } from '@/components/ui/ScreenHeader';
+import { SegmentedControl } from '@/components/ui/SegmentedControl';
+import { StatusBanner } from '@/components/ui/StatusBanner';
+import { useFeatures } from '@/hooks/useFeatures';
 
 type Side = 'BUY' | 'SELL';
 const FIATS: Currency[]   = ['LYD', 'AED', 'SAR', 'EGP', 'USD', 'EUR'];
@@ -45,6 +49,7 @@ export default function P2P() {
   const p = useThemedPalette();
   const t = useT();
   const themeMode = useTheme((s) => s.mode);
+  const features = useFeatures();
   const [side, setSide] = useState<Side>('BUY');
   const [fiat, setFiat] = useState<Currency | 'ALL'>('ALL');
   const { data: offers } = useP2POffers(side);
@@ -66,69 +71,28 @@ export default function P2P() {
       <StatusBar style={themeMode === 'light' ? 'dark' : 'light'} />
       <SafeAreaView style={{ flex: 1 }} edges={['top']}>
         {/* Header */}
-        <View style={{
-          flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-          paddingHorizontal: 24, paddingTop: 18, paddingBottom: 8,
-        }}>
-          <Text style={{ color: p.fg, fontSize: 22, fontWeight: '700', letterSpacing: -0.4 }}>
-            {t('p2p.title')}
-          </Text>
-          <View style={{ flexDirection: 'row', gap: 8 }}>
-            <Pressable
-              onPress={() => { h.light(); router.push('/p2p/trades'); }}
-              hitSlop={6}
-              style={{
-                height: 36, borderRadius: 18, paddingHorizontal: 12,
-                alignItems: 'center', justifyContent: 'center',
-                backgroundColor: p.pillBg, borderWidth: 1, borderColor: p.border,
-                flexDirection: 'row', gap: 6,
-              }}
-            >
-              <Ionicons name="lock-closed-outline" size={14} color={p.fg} />
-              <Text style={{ color: p.fg, fontSize: 12, fontWeight: '700' }}>
-                {t('p2p.trades')}
-              </Text>
-            </Pressable>
-            <Pressable
-              onPress={() => { h.medium(); setShowCreate(true); }}
-              hitSlop={6}
-              style={{
-                width: 36, height: 36, borderRadius: 18,
-                alignItems: 'center', justifyContent: 'center',
-                backgroundColor: p.ctaBg,
-              }}
-            >
-              <Ionicons name="add" size={20} color={p.ctaFg} />
-            </Pressable>
+        <TabHeader
+          title={t('p2p.title')}
+          right={
+            <>
+              <HeaderTextButton icon="lock-closed-outline" label={t('p2p.trades')} onPress={() => router.push('/p2p/trades')} />
+              {features.p2p && (
+                <HeaderIconButton icon="add" label="Create listing" variant="primary" onPress={() => setShowCreate(true)} />
+              )}
+            </>
+          }
+        />
+        {!features.p2p && (
+          <View style={{ marginHorizontal: 24, marginTop: 4 }}>
+            <StatusBanner kind="info" message={t('features.p2pPaused')} />
           </View>
-        </View>
+        )}
 
-        {/* Segmented BUY / SELL */}
-        <View style={{
-          flexDirection: 'row', padding: 4,
-          marginHorizontal: 24, marginTop: 14,
-          borderRadius: 14, backgroundColor: p.bgElev,
-          borderWidth: 1, borderColor: p.border, gap: 4,
-        }}>
-          {(['BUY', 'SELL'] as Side[]).map((s) => (
-            <Pressable
-              key={s}
-              onPress={() => { h.selection(); setSide(s); }}
-              style={{ flex: 1 }}
-            >
-              <View style={{
-                paddingVertical: 10, borderRadius: 10, alignItems: 'center',
-                backgroundColor: side === s ? p.ctaBg : 'transparent',
-              }}>
-                <Text style={{
-                  color: side === s ? p.ctaFg : p.fgMuted,
-                  fontWeight: '700', fontSize: 13, letterSpacing: 0.4,
-                }}>
-                  {t('p2p.listingType').toUpperCase()} {s === 'BUY' ? t('p2p.buy').toUpperCase() : t('p2p.sell').toUpperCase()}
-                </Text>
-              </View>
-            </Pressable>
-          ))}
+        <View style={{ marginHorizontal: 24, marginTop: 16 }}>
+          <SegmentedControl<Side> value={side} onChange={setSide} options={[
+            { key: 'BUY', label: `${t('p2p.listingType')} ${t('p2p.buy')}` },
+            { key: 'SELL', label: `${t('p2p.listingType')} ${t('p2p.sell')}` },
+          ]} />
         </View>
 
         {/* Fiat chips */}
