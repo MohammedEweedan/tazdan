@@ -26,6 +26,7 @@ import { businessService } from '@/services/business';
 import type { TeamMember, TeamRole } from '@/types/business';
 import { TopGradient } from '@/components/ui/ScreenShell';
 
+import { BottomSheet } from '@/components/ui/BottomSheet';
 const ACCENT = '#737373';
 
 const ROLE_META: Record<TeamRole, { label: string; desc: string; color: string }> = {
@@ -304,16 +305,7 @@ function InviteModal({ visible, palette: p, accent, onClose, onInvite }: {
   };
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'flex-end' }} onPress={onClose}>
-        <Pressable onPress={(e) => e.stopPropagation()}
-          style={{ backgroundColor: p.bg, borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingTop: 12, paddingBottom: 36, paddingHorizontal: 22 }}>
-          <View style={{ alignItems: 'center', marginBottom: 16 }}>
-            <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: p.border }} />
-          </View>
-
-          <Text style={{ color: p.fg, fontSize: 19, fontWeight: '800', marginBottom: 20 }}>Invite team member</Text>
-
+    <BottomSheet visible={visible} onClose={onClose} title={"Invite team member"}>
           {/* Email */}
           <Text style={{ color: p.fgMuted, fontSize: 11.5, fontWeight: '700', marginBottom: 6 }}>EMAIL</Text>
           <TextInput
@@ -365,8 +357,6 @@ function InviteModal({ visible, palette: p, accent, onClose, onInvite }: {
                 : <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>Send invite</Text>}
             </LinearGradient>
           </Pressable>
-        </Pressable>
-      </Pressable>
-    </Modal>
+        </BottomSheet>
   );
 }

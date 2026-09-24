@@ -228,12 +228,15 @@ export default function RootLayout() {
             <Stack.Screen name="(auth)" options={{ animation: 'fade' }} />
             <Stack.Screen name="(tabs)" options={{ animation: 'fade' }} />
             <Stack.Screen name="role-select" options={{ animation: 'fade' }} />
-            <Stack.Screen name="buy"      options={{ presentation: 'modal' }} />
-            <Stack.Screen name="sell"     options={{ presentation: 'modal' }} />
-            <Stack.Screen name="send"     options={{ presentation: 'modal' }} />
-            <Stack.Screen name="receive"  options={{ presentation: 'modal' }} />
-            <Stack.Screen name="transfer" options={{ presentation: 'modal' }} />
-            <Stack.Screen name="topup"    options={{ presentation: 'modal' }} />
+            {/* Money moves are full pages (pushed, swipe-back), never sheets. */}
+            <Stack.Screen name="buy"      options={{ animation: 'slide_from_right' }} />
+            <Stack.Screen name="sell"     options={{ animation: 'slide_from_right' }} />
+            <Stack.Screen name="send"     options={{ animation: 'slide_from_right' }} />
+            <Stack.Screen name="receive"  options={{ animation: 'slide_from_right' }} />
+            <Stack.Screen name="transfer" options={{ animation: 'slide_from_right' }} />
+            <Stack.Screen name="topup"    options={{ animation: 'slide_from_right' }} />
+            <Stack.Screen name="withdraw" options={{ animation: 'slide_from_right' }} />
+            <Stack.Screen name="recurring" options={{ animation: 'slide_from_right' }} />
           </Stack>
           <SplashGate />
           <OfflineGate />

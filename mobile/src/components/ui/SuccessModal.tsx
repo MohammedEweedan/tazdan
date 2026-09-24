@@ -4,6 +4,7 @@ import { Text } from '@/components/ui/Text';
 import { Ionicons } from '@expo/vector-icons';
 import { useThemedPalette } from '@/store/themeStore';
 
+import { BottomSheet } from '@/components/ui/BottomSheet';
 const { height: H } = Dimensions.get('window');
 
 const CURRENCY_SYMBOLS: Record<string, string> = { USD: '$', EUR: '€', GBP: '£', AED: 'د.إ', SAR: '﷼' };
@@ -69,28 +70,7 @@ export const SuccessModal = memo(function SuccessModal({
   ];
 
   return (
-    <Modal visible={!!data} transparent animationType="none" statusBarTranslucent onRequestClose={onClose}>
-      {/* Dimmed backdrop */}
-      <Animated.View style={[StyleSheet.absoluteFill, { opacity: backdropA }]}>
-        <Pressable
-          style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.62)' }]}
-          onPress={onClose}
-        />
-      </Animated.View>
-
-      {/* Bottom sheet */}
-      <Animated.View
-        style={{ position: 'absolute', bottom: 0, left: 0, right: 0, zIndex: 5, transform: [{ translateY: slideY }] }}
-      >
-        <Pressable
-          style={{ backgroundColor: p.bg, borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingTop: 12, paddingBottom: 40, paddingHorizontal: 24 }}
-          onPress={(e) => e.stopPropagation()}
-        >
-          {/* Handle */}
-          <View style={{ alignItems: 'center', marginBottom: 26 }}>
-            <View style={{ width: 38, height: 4, borderRadius: 2, backgroundColor: p.border }} />
-          </View>
-
+    <BottomSheet visible={!!data} onClose={onClose}>
           {/* Minimal check + title — no heavy ringed badge */}
           <View style={{ alignItems: 'center', marginBottom: 24 }}>
             <Ionicons name="checkmark-circle" size={44} color={p.greenFg} style={{ marginBottom: 14 }} />
@@ -139,8 +119,6 @@ export const SuccessModal = memo(function SuccessModal({
           >
             <Text style={{ color: p.ctaFg, fontSize: 16, fontWeight: '700' }}>Done</Text>
           </Pressable>
-        </Pressable>
-      </Animated.View>
-    </Modal>
+        </BottomSheet>
   );
 });

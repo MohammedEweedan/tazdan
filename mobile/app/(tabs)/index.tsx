@@ -16,7 +16,9 @@ import { cryptoWalletAPI } from '@/lib/cryptoApi';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { SegmentedControl } from '@/components/ui/SegmentedControl';
-import { TopGradient } from '@/components/ui/ScreenShell';
+import { TopGradient, Panel, PanelRow } from '@/components/ui/ScreenShell';
+import { HeaderIconButton as ChromeIconButton } from '@/components/ui/ScreenHeader';
+import { ShimmerBackdrop, useShimmerInk } from '@/components/home/ShimmerBackdrop';
 import { ActivityIndicator, Animated, Dimensions, Image, KeyboardAvoidingView, Modal, PanResponder, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { Text, TextInput } from '@/components/ui/Text';
@@ -29,6 +31,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 
 import { useAuthStore } from '@/store/authStore';
+import { useUiStore } from '@/store/uiStore';
 import { realHandle, avatarMode } from '@/utils/displayUser';
 import { useWallets, useHaptics, useTransactions, useActivities, useActivityRealtime, useNotificationRealtime, useUnreadCount, useMarkets, useDisplayCurrency, useBudgets } from '@/hooks';
 import { useMarkets as useCoinGeckoMarkets, ID_TO_SYM } from '@/hooks/useMarkets';
@@ -49,6 +52,7 @@ import { AnnouncementBanner } from '@/components/ui/AnnouncementBanner';
 import { F } from '@/theme';
 import type { Wallet } from '@/types';
 
+import { BottomSheet } from '@/components/ui/BottomSheet';
 type Tab = 'ASSETS' | 'ACTIVITY';
 
 /** Height of both header capsules (@handle + the action track). They must
@@ -98,13 +102,7 @@ export default function Home() {
   const dc = useDisplayCurrency();
   const themeMode = useTheme((s) => s.mode);
   const [tab, setTab] = useState<Tab>('ASSETS');
-  const [buyModalVisible, setBuyModalVisible] = useState(false);
-  const [sellModalVisible, setSellModalVisible] = useState(false);
-  const [sendModalVisible, setSendModalVisible] = useState(false);
-  const [receiveModalVisible, setReceiveModalVisible] = useState(false);
-  const [recurringModalVisible, setRecurringModalVisible] = useState(false);
   const [swapModalVisible, setSwapModalVisible] = useState(false);
-  const [withdrawModalVisible, setWithdrawModalVisible] = useState(false);
   const [moreMenuVisible, setMoreMenuVisible] = useState(false);
   const [balanceChartVisible, setBalanceChartVisible] = useState(false);
 
@@ -133,16 +131,14 @@ export default function Home() {
   // Two interpolations: blur ramps from 0→1, gradient ramps from a
   // visible 0.55 baseline → 1.  Keeping them separate means the
   // gradient never disappears, even at scrollY=0.
-  const blurOpacity = scrollY.interpolate({
-    inputRange: [0, 30, 110],
-    outputRange: [0.92, 0.96, 1],
-    extrapolate: 'clamp',
-  });
-  const gradientOpacity = scrollY.interpolate({
-    inputRange: [0, 110],
-    outputRange: [1, 1],
-    extrapolate: 'clamp',
-  });
+  // Once the hero (balance + actions) has scrolled away, a compact bar with
+  // the balance fades in at the top.
+  // The bar takes over exactly when the actions have scrolled under it.
+  const [heroH, setHeroH] = useState(0);
+  const COMPACT_AT = Math.max(120, heroH - (insets.top + 58));
+  const compactRef = useRef(false);
+  const [compact, setCompact] = useState(false);
+  const compactOpacity = scrollY.interpolate({ inputRange: [COMPACT_AT - 24, COMPACT_AT], outputRange: [0, 1], extrapolate: 'clamp' });
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -241,24 +237,25 @@ export default function Home() {
     }, 0);
   }, [list, priceMap]);
 
-  // Aggregate 24h change weighted by USD exposure.
-  const deltaPct = useMemo(() => {
+  // 24h change of the WHOLE balance. Only priced assets move; cash held in
+  // fiat doesn't, so it dilutes the percentage rather than scaling the move.
+  // Each asset's USD move is value × pct / (100 + pct) — its change since the
+  // price 24h ago, measured from today's value.
+  const deltaUsd = useMemo(() => {
     if (totalUsd <= 0 || !tickers || tickers.length === 0) return 0;
-    let weightedChange = 0;
-    let totalCryptoExposure = 0;
+    let moved = 0;
     list.forEach((w) => {
       const m = tickers.find((t) => t.base === tickerKey(w.currency));
-      if (!m || m.changePct24h === undefined || m.changePct24h === 0) return;
-      const exposure = Number(w.balance) * m.price;
-      weightedChange += exposure * m.changePct24h;
-      totalCryptoExposure += exposure;
+      if (!m || !m.changePct24h || m.changePct24h <= -100) return;
+      moved += (Number(w.balance) * m.price * m.changePct24h) / (100 + m.changePct24h);
     });
-    if (totalCryptoExposure <= 0) return 0;
-    return weightedChange / totalCryptoExposure;
+    return moved;
   }, [list, tickers, totalUsd]);
-  const deltaUsd = (totalUsd * deltaPct) / 100;
+  const deltaPct = totalUsd - deltaUsd > 0 ? (deltaUsd / (totalUsd - deltaUsd)) * 100 : 0;
   const positive = deltaPct >= 0;
-  const [showBalance, setShowBalance] = useState(true);
+  // Privacy mode is shared with the Wallet tab and persisted.
+  const showBalance = !useUiStore((st) => st.balancesHidden);
+  const toggleBalancesHidden = useUiStore((st) => st.toggleBalancesHidden);
   const [cryptoOpen, setCryptoOpen] = useState(true);
   const [fiatOpen, setFiatOpen] = useState(true);
 
@@ -272,11 +269,14 @@ export default function Home() {
 
   // Primary actions sit directly under the balance — Buy, Sell, Send, Top up,
   // then the More (···) overflow. Everything else lives in the More modal.
-  const ACTIONS: ActionDef[] = [
-    { key: 'buy',   icon: 'trending-up-outline',   label: t('action.buy'),   tone: 'white', onPress: () => setBuyModalVisible(true) },
-    { key: 'sell',  icon: 'trending-down-outline', label: t('action.sell'),  tone: 'grey',  onPress: () => setSellModalVisible(true) },
-    { key: 'send',  icon: 'paper-plane-outline',   label: t('action.send'),  tone: 'grey',  onPress: () => setSendModalVisible(true) },
-    { key: 'topup', icon: 'download-outline',      label: t('action.topup'), tone: 'black', onPress: () => router.push('/topup' as any) },
+  // The dock: the three moves people make most, plus More. Each opens a
+  // full page (never an in-place modal), so back/swipe and deep links work.
+  const ink = useShimmerInk();
+  const DOCK: { key: string; icon: keyof typeof Ionicons.glyphMap; label: string; onPress: () => void }[] = [
+    { key: 'topup', icon: 'add',          label: t('action.topup'), onPress: () => router.push('/topup' as any) },
+    { key: 'send',  icon: 'arrow-up',     label: t('action.send'),  onPress: () => router.push('/send' as any) },
+    { key: 'buy',   icon: 'trending-up',  label: t('action.buy'),   onPress: () => router.push('/buy' as any) },
+    { key: 'more',  icon: 'grid-outline', label: t('home.more'),    onPress: () => setMoreMenuVisible(true) },
   ];
 
   return (
@@ -285,13 +285,19 @@ export default function Home() {
       <TopGradient />
         <Animated.ScrollView
           showsVerticalScrollIndicator={false}
-          style={{ backgroundColor: 'transparent', borderRadius: 10, borderWidth: 1, borderColor: p.border }}
+          style={{ backgroundColor: 'transparent' }}
           contentContainerStyle={{ paddingBottom: 140 }}
-          stickyHeaderIndices={[0]}
           scrollEventThrottle={16}
           onScroll={Animated.event(
             [{ nativeEvent: { contentOffset: { y: scrollY } } }],
-            { useNativeDriver: true },
+            {
+              useNativeDriver: true,
+              // Only flips at the threshold, so this re-renders twice per pass, not per frame.
+              listener: (e: any) => {
+                const past = e.nativeEvent.contentOffset.y > COMPACT_AT;
+                if (past !== compactRef.current) { compactRef.current = past; setCompact(past); }
+              },
+            },
           )}
           refreshControl={
             <RefreshControl
@@ -303,268 +309,117 @@ export default function Home() {
             />
           }
         >
-          {/* Index 0 — sticky TOP block.  Contains header + balance
-              + 24h delta + primary actions + Assets/Activity tabs so
-              the entire top of the screen pins as a single unit
-              while feed rows scroll underneath it.  Glass-morphism
-              (BlurView + soft gradient) fades in only after the
-              user starts scrolling; at rest the block reads naked
-              on the page bg.  No hairline — the glass does the
-              separation. The block carries its own `paddingTop:
-              insets.top` so the avatar / icon row never tucks under
-              the Dynamic Island while the block is pinned. */}
-          <View style={{ borderBottomLeftRadius: 32, borderBottomRightRadius: 32, overflow: 'hidden' }}>
-          {/* Gradient layer — covers the full block including safe-area. */}
-          <Animated.View
-            pointerEvents="none"
-            style={{
-              position: 'absolute',
-              top: 0, left: 0, right: 0, bottom: 0,
-              opacity: gradientOpacity,
-            }}
-          >
-            <BreathingGradient mode={themeMode} />
-          </Animated.View>
+          {/* Hero — header, balance and actions on the shimmer. It scrolls
+              away with the feed; the compact bar (after the ScrollView)
+              takes over at the top once it's gone. */}
+          <View onLayout={(e) => setHeroH(e.nativeEvent.layout.height)}>
+          {/* Full-bleed shimmer behind the whole top section; it dissolves
+              into the page at the bottom. */}
+          <ShimmerBackdrop pageColor={p.bg} />
 
-          {/* Blur layer — only fades in once scrolling so the at-rest
-              state stays "open" (gradient-only) and the scrolled
-              state reads as proper frosted glass. */}
-          <Animated.View
-            pointerEvents="none"
-            style={{
-              position: 'absolute',
-              top: 0, left: 0, right: 0, bottom: 0,
-              opacity: blurOpacity,
-            }}
-          >
-            <BlurView
-              intensity={Platform.OS === 'ios' ? 48 : 0}
-              tint={themeMode === 'light' ? 'light' : 'dark'}
-              style={{
-                position: 'absolute',
-                top: 0, left: 0, right: 0, bottom: 0,
-                backgroundColor: Platform.OS === 'ios'
-                  ? 'transparent'
-                  : (themeMode === 'dark'
-                      ? 'rgba(22,24,28,0.80)'
-                      : 'rgba(250,250,247,0.82)'),
-              }}
-            />
-          </Animated.View>
-
-          {/* Show/hide balance — pinned to the upper-right corner of the
-              card, level with the balance (clear of the header icon
-              cluster). Sits above the gradient/blur so it stays tappable. */}
-          <Pressable
-            onPress={() => { h.selection(); setShowBalance((v) => !v); }}
-            hitSlop={12}
-            accessibilityRole="button"
-            accessibilityLabel={showBalance ? 'Hide balance' : 'Show balance'}
-            style={{
-              position: 'absolute',
-              top: insets.top + 70, right: 20,
-              zIndex: 5,
-              width: 30, height: 30, borderRadius: 15,
-              alignItems: 'center', justifyContent: 'center',
-            }}
-          >
-            <Ionicons
-              name={showBalance ? 'eye-outline' : 'eye-off-outline'}
-              size={18}
-              color={p.fgFaint}
-            />
-          </Pressable>
-
-          {/* Header — two hairline-bordered capsules (identity on the left,
-              a segmented action track on the right) sitting on the glass.
-              Both carry a BRIGHTER top border than their sides
-              (`divider` over `border`) so light appears to catch the top
-              edge — the detail that makes the row read as a machined
-              control rather than a flat grey chip. Keep the two capsules
-              the same height (HEADER_PILL_H) or the row stops aligning. */}
+          {/* Header — who you are on the left (tap for your QR, hold for
+              profile), scan + notifications on the right. */}
           <View style={{
-            flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-            paddingHorizontal: 20, paddingTop: insets.top + 10, paddingBottom: 8,
-            gap: 10,
+            flexDirection: 'row', alignItems: 'center', gap: 10,
+            paddingHorizontal: 24, paddingTop: insets.top + 4, paddingBottom: 0,
           }}>
-            <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, minWidth: 0 }}>
-              {/* Tapping the avatar + @handle opens the receive / QR-code
-                  sheet (the QR trigger). Long-press still jumps to the
-                  full profile. */}
-              <Pressable
-                onPress={() => { h.selection(); setReceiveModalVisible(true); }}
-                onLongPress={() => { h.selection(); router.push('/profile'); }}
-                hitSlop={6}
-                accessibilityRole="button"
-                accessibilityLabel={t('action.receive')}
-                style={({ pressed }) => ({
-                  flexDirection: 'row', alignItems: 'center', gap: 9,
-                  flexShrink: 1, minWidth: 0,
-                  height: HEADER_PILL_H,
-                  paddingLeft: 3, paddingRight: 13,
-                  borderRadius: HEADER_PILL_H / 2,
-                  backgroundColor: p.pillBg,
-                  borderWidth: 1,
-                  borderColor: p.border,
-                  borderTopColor: p.divider,
-                  opacity: pressed ? 0.72 : 1,
-                })}
-              >
-                <View style={{
-                  width: 32, height: 32, borderRadius: 16,
-                  backgroundColor: p.bgElev,
-                  alignItems: 'center', justifyContent: 'center',
-                  borderWidth: 1,
-                  borderColor: p.border,
-                  flexShrink: 0,
-                  overflow: 'hidden',
-                }}>
-                  {av.kind === 'image' ? (
-                    <Image source={{ uri: av.uri }} style={{ width: 32, height: 32 }} />
-                  ) : av.kind === 'emoji' ? (
-                    <Text style={{ fontSize: 18 }}>{av.char}</Text>
-                  ) : (
-                    <Text style={{ color: p.fg, fontWeight: '700', fontSize: 15 }}>{initial}</Text>
-                  )}
-                </View>
-                <View style={{ flexShrink: 1, minWidth: 0 }}>
-                  <Text
-                    style={{
-                      color: p.fg,
-                      fontSize: (handleLabel.length <= 8 ? 16 : handleLabel.length <= 14 ? 14.5 : handleLabel.length <= 20 ? 13 : 11),
-                      fontWeight: '600',
-                      letterSpacing: -0.3,
-                    }}
-                    numberOfLines={1}
-                    ellipsizeMode="tail"
-                    adjustsFontSizeToFit
-                    minimumFontScale={0.7}
-                  >
-                    {handleLabel}
-                  </Text>
-                </View>
-              </Pressable>
-              {(user?.role === 'ADMIN') && (
+            <Pressable
+              onPress={() => { h.selection(); router.push('/receive'); }}
+              onLongPress={() => { h.selection(); router.push('/profile'); }}
+              hitSlop={6}
+              accessibilityRole="button"
+              accessibilityLabel={t('action.receive')}
+              style={({ pressed }) => ({ flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 10, opacity: pressed ? 0.7 : 1 })}
+            >
+              <View style={{
+                width: 38, height: 38, borderRadius: 19, overflow: 'hidden',
+                backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border,
+                alignItems: 'center', justifyContent: 'center',
+              }}>
+                {av.kind === 'image' ? (
+                  <Image source={{ uri: av.uri }} style={{ width: 38, height: 38 }} />
+                ) : av.kind === 'emoji' ? (
+                  <Text style={{ fontSize: 19 }}>{av.char}</Text>
+                ) : (
+                  <Text style={{ color: p.fg, fontWeight: '700', fontSize: 15 }}>{initial}</Text>
+                )}
+              </View>
+              <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75} style={{ flexShrink: 1, color: p.fg, fontSize: 21, fontWeight: '700', letterSpacing: -0.5 }}>
+                {handleLabel || user?.firstName || ''}
+              </Text>
+              {user?.role === 'ADMIN' && (
                 <Pressable
                   onPress={() => { h.selection(); router.push('/admin' as any); }}
                   hitSlop={6}
                   style={({ pressed }) => ({
-                    flexDirection: 'row', alignItems: 'center', gap: 4,
-                    paddingHorizontal: 8, paddingVertical: 4,
-                    borderRadius: 7,
-                    backgroundColor: p.accentSoft,
-                    borderWidth: 1, borderColor: p.accentBorder,
+                    paddingHorizontal: 7, paddingVertical: 3, borderRadius: 7,
+                    backgroundColor: p.accentSoft, borderWidth: 1, borderColor: p.accentBorder,
                     opacity: pressed ? 0.7 : 1,
-                    flexShrink: 0,
                   })}
                 >
-                  <Ionicons name="shield-checkmark" size={11} color={p.accentText} />
-                  <Text style={{ color: p.accentText, fontSize: 10, fontWeight: '600', letterSpacing: 0.6 }}>
-                    ADMIN
-                  </Text>
+                  <Text style={{ color: p.accentText, fontSize: 10, fontWeight: '600', letterSpacing: 0.6 }}>ADMIN</Text>
                 </Pressable>
               )}
-            </View>
-            {/* Icon cluster — one segmented track holding all three
-                actions so they read as a single intentional control
-                rather than three heavy floating circles. Hairline
-                separators between the segments do the dividing; the
-                brighter top border matches the @handle capsule. */}
-            <View style={{
-              flexDirection: 'row', alignItems: 'center', flexShrink: 0,
-              height: HEADER_PILL_H,
-              backgroundColor: p.pillBg,
-              borderRadius: HEADER_PILL_H / 2,
-              borderWidth: 1,
-              borderColor: p.border,
-              borderTopColor: p.divider,
-              paddingHorizontal: 2,
-            }}>
-              <HeaderIconButton
-                icon="repeat-outline"
-                onPress={() => { h.selection(); setRecurringModalVisible(true); }}
-                palette={p}
-                a11y={t('recurring.title')}
-              />
-              <HeaderSegmentDivider palette={p} />
-              <HeaderIconButton
-                icon="notifications-outline"
-                onPress={() => { h.selection(); router.push('/notifications'); }}
-                palette={p}
-                a11y="Notifications"
-                badge={unreadData ?? 0}
-              />
-              <HeaderSegmentDivider palette={p} />
-              <HeaderIconButton
-                icon="scan-outline"
-                onPress={() => { h.selection(); router.push('/scanner'); }}
-                palette={p}
-                a11y="Scan QR"
-              />
-            </View>
+            </Pressable>
+            <ChromeIconButton icon="scan-outline" label={t('home.scan')} onPress={() => router.push('/scanner')} />
+            <ChromeIconButton icon="notifications-outline" label={t('notifications.title')} badge={unreadData ?? 0} onPress={() => router.push('/notifications')} />
           </View>
 
-          {walletsLoading ? <View style={{ alignItems: 'center', paddingVertical: 24 }}><Skeleton width={200} height={60} /></View> : walletsError ? <EmptyState icon="cloud-offline-outline" title={t('wallet.loadError')} actionLabel={t('common.retry')} onAction={() => refetchWallets()} /> : <>
-          <AnimatedTotal
-            value={totalUsd}
-            palette={p}
-            dc={dc}
-            showBalance={showBalance}
-            onPress={() => { h.selection(); setBalanceChartVisible(true); }}
-          />
+          {/* Balance */}
+            <Pressable
+              onPress={() => { h.selection(); toggleBalancesHidden(); }}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel={t(showBalance ? 'wallet.hideBalances' : 'wallet.showBalances')}
+              style={{ flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'center', marginTop: 14 }}
+            >
+              <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '500' }}>{t('wallet.totalBalance')}</Text>
+              <Ionicons name={showBalance ? 'eye-outline' : 'eye-off-outline'} size={14} color={p.fgMuted} />
+            </Pressable>
 
-          {/* 24h delta — compact, directly under balance */}
-          <View style={{
-            flexDirection: 'row', alignItems: 'center', gap: 5,
-            justifyContent: 'center',
-            paddingHorizontal: 24, marginTop: 1,
-          }}>
-            <Text style={{
-              color: p.fgMuted,
-              fontSize: 10, fontWeight: '500', fontVariant: ['tabular-nums'],
-            }}>
-              {showBalance
-                ? `${positive ? '+' : '-'}${dc.fmt(Math.abs(deltaUsd))}`
-                : `${dc.symbol}****`}
-            </Text>
-            <View style={{
-              flexDirection: 'row', alignItems: 'center', gap: 2,
-              paddingHorizontal: 5, paddingVertical: 1, borderRadius: 5,
-              backgroundColor: showBalance
-                ? (positive ? 'rgba(34,197,94,0.12)' : 'rgba(239,68,68,0.12)')
-                : p.pillBg,
-              borderWidth: 1,
-              borderColor: showBalance
-                ? (positive ? 'rgba(34,197,94,0.25)' : 'rgba(239,68,68,0.25)')
-                : p.border,
-            }}>
-              {showBalance && (
-                <Ionicons name={positive ? 'caret-up' : 'caret-down'} size={7} color={positive ? p.greenFg : p.redFg} />
-              )}
-              <Text style={{
-                color: showBalance ? (positive ? p.greenFg : p.redFg) : p.fgFaint,
-                fontSize: 9, fontWeight: '600',
-              }}>
-                {showBalance ? `${Math.abs(deltaPct).toFixed(2)}%` : '**.**%'}
-              </Text>
+            {walletsLoading ? <View style={{ alignItems: 'center', paddingVertical: 10 }}><Skeleton width={200} height={48} /></View> : walletsError ? <EmptyState icon="cloud-offline-outline" title={t('wallet.loadError')} actionLabel={t('common.retry')} onAction={() => refetchWallets()} /> : <>
+            <AnimatedTotal
+              value={totalUsd}
+              palette={p}
+              dc={dc}
+              showBalance={showBalance}
+              onPress={() => { h.selection(); setBalanceChartVisible(true); }}
+            />
+            {/* Today's move — one plain line, hidden when nothing moved. */}
+            {Math.abs(deltaUsd) >= 0.005 && (
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, paddingHorizontal: 24, marginTop: 2 }}>
+                <Ionicons name={positive ? 'caret-up' : 'caret-down'} size={10} color={showBalance ? (positive ? p.greenFg : p.redFg) : p.fgFaint} />
+                <Text style={{ color: showBalance ? (positive ? p.greenFg : p.redFg) : p.fgFaint, fontSize: 13, fontWeight: '600', fontVariant: ['tabular-nums'] }}>
+                  {showBalance ? `${positive ? '+' : '−'}${dc.fmt(Math.abs(deltaUsd))} (${Math.abs(deltaPct).toFixed(2)}%)` : '••••'}
+                </Text>
+                <Text style={{ color: p.fgMuted, fontSize: 13 }}>{t('home.today')}</Text>
+              </View>
+            )}
+            </>}
+
+            {/* Actions — compact glass circles on the gradient; only Top up is filled. */}
+            <View style={{ flexDirection: 'row', marginTop: 20, marginHorizontal: 12, paddingBottom: 22 }}>
+              {DOCK.map((a, i) => (
+                <Pressable
+                  key={a.key}
+                  onPress={() => { h.light(); a.onPress(); }}
+                  accessibilityRole="button"
+                  accessibilityLabel={a.label}
+                  style={({ pressed }) => ({ flex: 1, alignItems: 'center', gap: 6, opacity: pressed ? 0.7 : 1 })}
+                >
+                  <View style={{
+                    width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center',
+                    backgroundColor: i === 0 ? p.ctaBg : ink.glass,
+                    borderWidth: i === 0 ? 0 : 1, borderColor: ink.glassBorder,
+                  }}>
+                    <Ionicons name={a.icon} size={18} color={i === 0 ? p.ctaFg : p.fg} />
+                  </View>
+                  <Text numberOfLines={1} style={{ color: p.fg, fontSize: 11.5, fontWeight: '600' }}>{a.label}</Text>
+                </Pressable>
+              ))}
             </View>
           </View>
-
-          </>}
-
-          {/* ── PRIMARY ACTIONS ── */}
-          <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 6, paddingHorizontal: 16, marginTop: 18 }}>
-            {ACTIONS.map((a) => (
-              <ActionButton key={a.key} label={a.label} icon={a.icon} to={a.to} tone={a.tone} onPress={a.onPress} palette={p} />
-            ))}
-            <MoreActionButton palette={p} label={t('home.more')} onPress={() => { h.selection(); setMoreMenuVisible(true); }} />
-          </View>
-
-          {/* Spacer between the action pills and the Assets/Activity
-              switcher so the pinned hero block has breathing room. */}
-          <View style={{ height: 16 }} />
-          </View>
-          {/* /sticky top block */}
+          {/* /hero */}
 
           {/* Announcement Banner — out of the sticky region; lives
               between the pinned hero and the scrolling feed. */}
@@ -599,7 +454,7 @@ export default function Home() {
                           const tk = tickerKey(w.currency);
                           const price = priceMap[tk] ?? (tk === 'USDT' ? 1 : 0);
                           return s + Number(w.balance) * price;
-                        }, 0)) : '****'}
+                        }, 0)) : '••••••'}
                       </Text>
                       <Pressable
                         onPress={() => { h.selection(); setShowSparkline((v) => !v); }}
@@ -633,7 +488,7 @@ export default function Home() {
                       actually convert the dust. Only the X dismisses it. */}
                   {cryptoOpen && dustAssets.length > 0 && !dustPromptDismissed && (
                     <Pressable
-                      onPress={() => { h.selection(); router.push(`/asset/${dustAssets[0].currency}?action=sell`); }}
+                      onPress={() => { h.selection(); router.push({ pathname: '/sell', params: { asset: dustAssets[0].currency } } as any); }}
                       style={({ pressed }) => ({
                         marginHorizontal: 16, marginTop: 8, marginBottom: 4,
                         paddingHorizontal: 16, paddingVertical: 12,
@@ -674,7 +529,7 @@ export default function Home() {
                     </Text>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                       <Text style={{ color: p.fgFaint, fontSize: 12, fontWeight: '600', fontVariant: ['tabular-nums'] }}>
-                        {showBalance ? dc.fmt(fiatAssets.reduce((s, w) => s + Number(w.fiatValueUsd), 0)) : '****'}
+                        {showBalance ? dc.fmt(fiatAssets.reduce((s, w) => s + Number(w.fiatValueUsd), 0)) : '••••••'}
                       </Text>
                       <Ionicons name={fiatOpen ? 'chevron-up' : 'chevron-down'} size={14} color={p.fgFaint} />
                     </View>
@@ -743,7 +598,7 @@ export default function Home() {
                         </View>
                       </View>
                       <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '600', fontVariant: ['tabular-nums'] }}>
-                        {showBalance ? `${bsym}${bsaved.toLocaleString('en-US', { maximumFractionDigits: 0 })}` : '****'}
+                        {showBalance ? `${bsym}${bsaved.toLocaleString('en-US', { maximumFractionDigits: 0 })}` : '••••'}
                       </Text>
                     </Pressable>
                   );
@@ -780,7 +635,7 @@ export default function Home() {
               </Text>
               <View style={{ flexDirection: 'row', gap: 10, marginTop: 18 }}>
                 <Pressable
-                  onPress={() => { h.medium(); setBuyModalVisible(true); }}
+                  onPress={() => { h.medium(); router.push('/buy' as any); }}
                   style={({ pressed }) => ({
                     paddingHorizontal: 20, paddingVertical: 12, borderRadius: 22,
                     backgroundColor: p.ctaBg, opacity: pressed ? 0.85 : 1,
@@ -807,210 +662,80 @@ export default function Home() {
           )}
         </Animated.ScrollView>
 
-
-      {/* Buy Widget Modal */}
-      <Modal visible={buyModalVisible} animationType="slide" presentationStyle="fullScreen" onRequestClose={() => setBuyModalVisible(false)}>
-        <View style={{ flex: 1, backgroundColor: p.bg, paddingTop: insets.top }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 10 }}>
-            <Text style={{ color: p.fg, fontSize: 20, fontWeight: '700', letterSpacing: -0.4 }}>{t('action.buy')}</Text>
-            <Pressable onPress={() => setBuyModalVisible(false)} hitSlop={8} style={{ width: 34, height: 34, borderRadius: 17, backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border, alignItems: 'center', justifyContent: 'center' }}>
-              <Ionicons name="close" size={18} color={p.fg} />
-            </Pressable>
-          </View>
-          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-            <View style={{ flex: 1, paddingBottom: insets.bottom + 16 }}>
-              <BuyWidget />
-            </View>
-          </KeyboardAvoidingView>
-        </View>
-      </Modal>
-
-      {/* Sell Widget Modal */}
-      <Modal visible={sellModalVisible} animationType="slide" presentationStyle="fullScreen" onRequestClose={() => setSellModalVisible(false)}>
-        <View style={{ flex: 1, backgroundColor: p.bg, paddingTop: insets.top }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 10 }}>
-            <Text style={{ color: p.fg, fontSize: 20, fontWeight: '700', letterSpacing: -0.4 }}>{t('action.sell')}</Text>
-            <Pressable onPress={() => setSellModalVisible(false)} hitSlop={8} style={{ width: 34, height: 34, borderRadius: 17, backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border, alignItems: 'center', justifyContent: 'center' }}>
-              <Ionicons name="close" size={18} color={p.fg} />
-            </Pressable>
-          </View>
-          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-            <View style={{ flex: 1, paddingBottom: insets.bottom + 16 }}>
-              <SellWidget />
-            </View>
-          </KeyboardAvoidingView>
-        </View>
-      </Modal>
-
-      {/* Send Widget Modal */}
-      <Modal visible={sendModalVisible} animationType="slide" presentationStyle="fullScreen" onRequestClose={() => setSendModalVisible(false)}>
-        <View style={{ flex: 1, backgroundColor: p.bg, paddingTop: insets.top }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 10 }}>
-            <Text style={{ color: p.fg, fontSize: 20, fontWeight: '700', letterSpacing: -0.4 }}>{t('home.sendMoney')}</Text>
-            <Pressable onPress={() => setSendModalVisible(false)} hitSlop={8} style={{ width: 34, height: 34, borderRadius: 17, backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border, alignItems: 'center', justifyContent: 'center' }}>
-              <Ionicons name="close" size={18} color={p.fg} />
-            </Pressable>
-          </View>
-          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-            <View style={{ flex: 1, paddingBottom: insets.bottom + 16 }}>
-              <SendWidget />
-            </View>
-          </KeyboardAvoidingView>
-        </View>
-      </Modal>
-
-      {/* Withdraw Widget Modal */}
-      <Modal visible={withdrawModalVisible} transparent animationType="slide" onRequestClose={() => setWithdrawModalVisible(false)}>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-          <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' }} onPress={() => setWithdrawModalVisible(false)}>
-            <Pressable style={{ backgroundColor: p.bg, borderTopLeftRadius: 28, borderTopRightRadius: 28, maxHeight: '85%' }} onPress={(e) => e.stopPropagation()}>
-              <View style={{ alignItems: 'center', paddingTop: 10, paddingBottom: 2 }}>
-                <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: p.border }} />
-              </View>
-              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 24, paddingTop: 8, paddingBottom: 4 }}>
-                <Text style={{ color: p.fg, fontSize: 20, fontWeight: '600', letterSpacing: -0.4 }}>{t('action.withdraw')}</Text>
-                <Pressable onPress={() => setWithdrawModalVisible(false)} hitSlop={8} style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border, alignItems: 'center', justifyContent: 'center' }}>
-                  <Ionicons name="close" size={16} color={p.fg} />
-                </Pressable>
-              </View>
-              <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: insets.bottom + 8 }}>
-                <WithdrawWidget />
-              </ScrollView>
-            </Pressable>
-          </Pressable>
-        </KeyboardAvoidingView>
-      </Modal>
-
-      {/* Receive Widget Modal */}
-      <Modal visible={receiveModalVisible} transparent animationType="slide" onRequestClose={() => setReceiveModalVisible(false)}>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-          <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' }} onPress={() => setReceiveModalVisible(false)}>
-            <Pressable style={{ backgroundColor: p.bg, borderTopLeftRadius: 28, borderTopRightRadius: 28, maxHeight: '85%' }} onPress={(e) => e.stopPropagation()}>
-              <View style={{ alignItems: 'center', paddingTop: 10, paddingBottom: 2 }}>
-                <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: p.border }} />
-              </View>
-              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 24, paddingTop: 8, paddingBottom: 4 }}>
-                <Text style={{ color: p.fg, fontSize: 20, fontWeight: '600', letterSpacing: -0.4 }}>{t('action.receive')}</Text>
-                <Pressable onPress={() => setReceiveModalVisible(false)} hitSlop={8} style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border, alignItems: 'center', justifyContent: 'center' }}>
-                  <Ionicons name="close" size={16} color={p.fg} />
-                </Pressable>
-              </View>
-              <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: insets.bottom + 8 }}>
-                <ReceiveWidget />
-              </ScrollView>
-            </Pressable>
-          </Pressable>
-        </KeyboardAvoidingView>
-      </Modal>
-
-      {/* Recurring Buy Widget Modal */}
-      <Modal visible={recurringModalVisible} transparent animationType="slide" onRequestClose={() => setRecurringModalVisible(false)}>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-          <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' }} onPress={() => setRecurringModalVisible(false)}>
-            <Pressable style={{ backgroundColor: p.bg, borderTopLeftRadius: 28, borderTopRightRadius: 28, maxHeight: '90%' }} onPress={(e) => e.stopPropagation()}>
-              <View style={{ alignItems: 'center', paddingTop: 10, paddingBottom: 2 }}>
-                <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: p.border }} />
-              </View>
-              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 24, paddingTop: 8, paddingBottom: 4 }}>
-                <Text style={{ color: p.fg, fontSize: 20, fontWeight: '600', letterSpacing: -0.4 }}>{t('recurring.title')}</Text>
-                <Pressable onPress={() => setRecurringModalVisible(false)} hitSlop={8} style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border, alignItems: 'center', justifyContent: 'center' }}>
-                  <Ionicons name="close" size={16} color={p.fg} />
-                </Pressable>
-              </View>
-              <RecurringBuyWidget onDone={() => setRecurringModalVisible(false)} />
-            </Pressable>
-          </Pressable>
-        </KeyboardAvoidingView>
-      </Modal>
-
-      {/* More Menu Modal */}
-      <Modal
-        visible={moreMenuVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setMoreMenuVisible(false)}
+      {/* Compact bar — appears once the hero has scrolled off: frosted
+          glass, the balance centred, notifications on the right. */}
+      <Animated.View
+        pointerEvents={compact ? 'box-none' : 'none'}
+        style={{ position: 'absolute', top: 0, left: 0, right: 0, opacity: compactOpacity }}
       >
-        <Pressable
-          style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', padding: 20 }}
-          onPress={() => setMoreMenuVisible(false)}
+        <BlurView
+          intensity={Platform.OS === 'ios' ? 50 : 0}
+          tint={themeMode === 'light' ? 'light' : 'dark'}
+          style={{
+            paddingTop: insets.top + 6, paddingBottom: 10, paddingHorizontal: 24,
+            flexDirection: 'row', alignItems: 'center',
+            backgroundColor: Platform.OS === 'ios' ? 'transparent' : (themeMode === 'light' ? 'rgba(250,250,247,0.94)' : 'rgba(22,24,28,0.94)'),
+            borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: p.border,
+          }}
         >
+          <View style={{ width: 38 }} />
           <Pressable
-            style={{ backgroundColor: p.bg, borderRadius: 24, paddingTop: 20, paddingBottom: 8, width: '100%', maxWidth: 360 }}
-            onPress={(e) => e.stopPropagation()}
+            onPress={() => { h.selection(); setBalanceChartVisible(true); }}
+            accessibilityRole="button"
+            accessibilityLabel={t('wallet.totalBalance')}
+            style={{ flex: 1, alignItems: 'center' }}
           >
-
-            {/* Primary actions — matches web three-dot */}
-            <View style={{ flexDirection: 'row', paddingHorizontal: 16, paddingVertical: 16, gap: 10, borderBottomWidth: 1, borderBottomColor: p.border }}>
-              {[
-                { icon: 'arrow-up-circle-outline' as const, label: t('action.withdraw'), onPress: () => { setMoreMenuVisible(false); setWithdrawModalVisible(true); } },
-                { icon: 'swap-horizontal-outline' as const, label: t('action.swap'),     onPress: () => { setMoreMenuVisible(false); router.push('/transfer'); } },
-                { icon: 'qr-code-outline' as const,       label: t('action.receive'),  onPress: () => { setMoreMenuVisible(false); setReceiveModalVisible(true); } },
-              ].map((item) => (
-                <Pressable
-                  key={item.label}
-                  onPress={item.onPress}
-                  style={({ pressed }) => ({
-                    flex: 1, alignItems: 'center', gap: 8,
-                    paddingVertical: 14, borderRadius: 16,
-                    backgroundColor: pressed ? p.bgElev : p.pillBg,
-                    borderWidth: 1, borderColor: p.border,
-                  })}
-                >
-                  <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: p.bgElev, alignItems: 'center', justifyContent: 'center' }}>
-                    <Ionicons name={item.icon} size={20} color={p.fg} />
-                  </View>
-                  <Text style={{ color: p.fg, fontSize: 12, fontWeight: '600' }}>{item.label}</Text>
-                </Pressable>
-              ))}
-            </View>
-
-            {/* Secondary options */}
-            <View style={{ paddingVertical: 8 }}>
-              {[
-                { icon: 'flag-outline' as const,         label: t('home.budgets'),         onPress: () => { setMoreMenuVisible(false); router.push('/budgets'); } },
-                { icon: 'card-outline' as const,         label: t('home.cards'),           onPress: () => { setMoreMenuVisible(false); router.push('/cards'); } },
-                { icon: 'time-outline' as const,         label: t('home.history'),         onPress: () => { setMoreMenuVisible(false); router.push('/history'); } },
-                { icon: 'document-text-outline' as const, label: 'Statements',              onPress: () => { setMoreMenuVisible(false); router.push('/statements'); } },
-                { icon: 'pie-chart-outline' as const,    label: t('home.cryptoPortfolio'), onPress: () => { setMoreMenuVisible(false); router.push('/portfolio/crypto'); } },
-                { icon: 'wallet-outline' as const,       label: t('home.fiatPortfolio'),   onPress: () => { setMoreMenuVisible(false); router.push('/portfolio/fiat'); } },
-                { icon: 'people-outline' as const,       label: t('home.referral'),        onPress: () => { setMoreMenuVisible(false); router.push('/referral'); } },
-                { icon: 'settings-outline' as const,     label: t('settings.title'),       onPress: () => { setMoreMenuVisible(false); router.push('/settings'); } },
-              ].map((item) => (
-                <Pressable
-                  key={item.label}
-                  onPress={item.onPress}
-                  style={({ pressed }) => ({
-                    flexDirection: 'row', alignItems: 'center', gap: 14,
-                    paddingVertical: 14, paddingHorizontal: 20,
-                    backgroundColor: pressed ? p.bgElev : 'transparent',
-                  })}
-                >
-                  <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: p.pillBg, borderWidth: 1, borderColor: p.border, alignItems: 'center', justifyContent: 'center' }}>
-                    <Ionicons name={item.icon} size={18} color={p.fg} />
-                  </View>
-                  <Text style={{ color: p.fg, fontSize: 15, fontWeight: '600', flex: 1 }}>{item.label}</Text>
-                  <Ionicons name="chevron-forward" size={16} color={p.fgMuted} />
-                </Pressable>
-              ))}
-            </View>
-
-            {/* Close pill */}
-            <View style={{ paddingHorizontal: 20, paddingBottom: 16 }}>
-              <Pressable
-                onPress={() => setMoreMenuVisible(false)}
-                style={({ pressed }) => ({
-                  height: 46, borderRadius: 23,
-                  backgroundColor: pressed ? p.bgElev : p.pillBg,
-                  borderWidth: 1, borderColor: p.border,
-                  alignItems: 'center', justifyContent: 'center',
-                })}
-              >
-                <Text style={{ color: p.fg, fontSize: 15, fontWeight: '600' }}>{t('common.close')}</Text>
-              </Pressable>
-            </View>
+            <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '500' }}>{t('wallet.totalBalance')}</Text>
+            <Text style={{ color: p.fg, fontSize: 17, fontWeight: '700', letterSpacing: -0.3, fontVariant: ['tabular-nums'] }}>
+              {showBalance ? dc.fmt(totalUsd) : '••••••'}
+            </Text>
           </Pressable>
-        </Pressable>
-      </Modal>
+          <ChromeIconButton icon="notifications-outline" label={t('notifications.title')} badge={unreadData ?? 0} onPress={() => router.push('/notifications')} />
+        </BlurView>
+      </Animated.View>
+
+
+      {/* More — the rest of the money moves, then everything else. */}
+      <BottomSheet visible={moreMenuVisible} onClose={() => setMoreMenuVisible(false)} title={t('home.more')}>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
+          {[
+            { icon: 'trending-down' as const,      label: t('action.sell'),     href: '/sell' },
+            { icon: 'arrow-down' as const,         label: t('action.receive'),  href: '/receive' },
+            { icon: 'arrow-up-circle-outline' as const, label: t('action.withdraw'), href: '/withdraw' },
+            { icon: 'swap-horizontal' as const,    label: t('action.swap'),     href: '/transfer' },
+            { icon: 'repeat' as const,             label: t('recurring.title'), href: '/recurring' },
+            { icon: 'scan-outline' as const,       label: t('home.scan'),       href: '/scanner' },
+          ].map((item) => (
+            <Pressable
+              key={item.href}
+              onPress={() => { h.selection(); setMoreMenuVisible(false); router.push(item.href as any); }}
+              accessibilityRole="button"
+              style={({ pressed }) => ({
+                width: '31.5%', alignItems: 'center', gap: 8, paddingVertical: 16, borderRadius: 18,
+                backgroundColor: pressed ? p.bgRaised : p.bg, borderWidth: 1, borderColor: p.border,
+              })}
+            >
+              <Ionicons name={item.icon} size={21} color={p.fg} />
+              <Text numberOfLines={1} style={{ color: p.fg, fontSize: 12.5, fontWeight: '600' }}>{item.label}</Text>
+            </Pressable>
+          ))}
+        </View>
+        <Panel style={{ marginTop: 18 }}>
+          {[
+            { icon: 'flag-outline' as const,          label: t('home.budgets'),         href: '/budgets' },
+            { icon: 'card-outline' as const,          label: t('home.cards'),           href: '/cards' },
+            { icon: 'time-outline' as const,          label: t('home.history'),         href: '/history' },
+            { icon: 'document-text-outline' as const, label: 'Statements',              href: '/statements' },
+            { icon: 'pie-chart-outline' as const,     label: t('home.cryptoPortfolio'), href: '/portfolio/crypto' },
+            { icon: 'wallet-outline' as const,        label: t('home.fiatPortfolio'),   href: '/portfolio/fiat' },
+            { icon: 'people-outline' as const,        label: t('home.referral'),        href: '/referral' },
+            { icon: 'settings-outline' as const,      label: t('settings.title'),       href: '/settings' },
+          ].map((item, i, all) => (
+            <PanelRow key={item.href} icon={item.icon} label={item.label} last={i === all.length - 1}
+              onPress={() => { setMoreMenuVisible(false); router.push(item.href as any); }} />
+          ))}
+        </Panel>
+      </BottomSheet>
 
       <BalanceHistoryModal
         visible={balanceChartVisible}
@@ -1170,26 +895,7 @@ function BalanceHistoryModal({
   if (!visible) return null;
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <View style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.5)' }}>
-        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
-        <View style={{
-          backgroundColor: p.bg,
-          borderTopLeftRadius: 28, borderTopRightRadius: 28,
-          paddingBottom: insets.bottom + 24,
-        }}>
-          {/* Drag handle */}
-          <View style={{ alignItems: 'center', paddingTop: 12, paddingBottom: 4 }}>
-            <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: p.border }} />
-          </View>
-
-          {/* Title row */}
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 24, paddingVertical: 12 }}>
-            <Pressable onPress={onClose} hitSlop={8}>
-              <Ionicons name="close" size={22} color={p.fgMuted} />
-            </Pressable>
-          </View>
-
+    <BottomSheet visible={visible} onClose={onClose} contentStyle={{ paddingHorizontal: 0 }}>
           {/* Active balance */}
           <View style={{ paddingHorizontal: 24, marginBottom: 16 }}>
             <Text style={{
@@ -1317,9 +1023,7 @@ function BalanceHistoryModal({
               </Pressable>
             ))}
           </View>
-        </View>
-      </View>
-    </Modal>
+        </BottomSheet>
   );
 }
 
@@ -1332,78 +1036,6 @@ function BalanceHistoryModal({
  * re-rendered everything ~25×/s. Memoised so parent re-renders don't reset it.
  * Flat charcoal (no motion) in mono theme.
  */
-/**
- * Static brand-glow backdrop behind the balance hero.
- *
- * Was an animated "breathing" radial driven by a 20fps requestAnimationFrame
- * loop — it caused jank (every frame re-rendered the SVG) and never quite
- * read right. Replaced with a STATIC two-layer glow: no rAF, no state, zero
- * re-renders. A soft off-axis brand-blue core sits over a deeper page-bg
- * fill, giving the hero depth and a calm blue aura without any runtime cost.
- *
- * `mono` stays a flat charcoal (no colour, by design).
- */
-const BreathingGradient = memo(function BreathingGradient({ mode }: { mode: 'dark' | 'light' | 'mono' }) {
-  // Two LinearGradient layers cross-fade via native-driver opacity animation.
-  // No SVG radial re-renders, no JS-thread rAF, no setInterval state. The
-  // Animated.loop drives opacity on the native thread at true 60fps.
-  const shimmer = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(shimmer, { toValue: 1, duration: 7000, useNativeDriver: true }),
-        Animated.timing(shimmer, { toValue: 0, duration: 7000, useNativeDriver: true }),
-      ])
-    ).start();
-    return () => shimmer.stopAnimation();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  if (mode === 'mono') {
-    return <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#161617' }} />;
-  }
-
-  const isDark = mode === 'dark';
-
-  // Base: deep charcoal-navy → dark teal, top-to-bottom
-  // Shimmer layer: diagonal accent glow that cross-fades in/out
-  const { LinearGradient } = require('expo-linear-gradient');
-
-  return (
-    <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}>
-      {/* Base layer — always visible */}
-      <LinearGradient
-        colors={isDark
-          ? ['#0b1220', '#0f1c2e', '#111f35']
-          : ['#e8f2fb', '#daeaf8', '#cce1f5']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
-      />
-      {/* Shimmer layer — cross-fades over base */}
-      <Animated.View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, opacity: shimmer }}>
-        <LinearGradient
-          colors={isDark
-            ? ['#1b355b', '#64b6f9', '#3b79b0', '#0f1c2e']
-            : ['#daeaf8', '#b8d9f4', '#9dc8ef', '#cce1f5']}
-          start={{ x: 0.1, y: 0 }}
-          end={{ x: 0.9, y: 1 }}
-          style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
-        />
-      </Animated.View>
-      {/* Persistent top-edge accent glow */}
-      <LinearGradient
-        colors={isDark
-          ? ['#63a1db18', '#63a1db08', 'transparent']
-          : ['#63a1db22', '#63a1db0a', 'transparent']}
-        start={{ x: 0.3, y: 0 }}
-        end={{ x: 0.7, y: 0.6 }}
-        style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
-      />
-    </View>
-  );
-});
-
 function AnimatedTotal({
   value,
   palette: p,
@@ -1461,11 +1093,11 @@ function AnimatedTotal({
 
   const converted = dc.convert(displayed);
   const totalStr = converted.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: dc.isCrypto ? 6 : 2 });
-  const visibleTotal = showBalance ? totalStr : totalStr.replace(/[0-9]/g, '*');
+  const visibleTotal = showBalance ? totalStr : '••••••';
   const digitCount = totalStr.replace(/[^0-9]/g, '').length;
-  const amountSize = digitCount <= 7 ? 66 : digitCount <= 9 ? 58 : digitCount <= 11 ? 40 : 32;
-  const symbolSize = Math.max(30, Math.round(amountSize * 0.30));
-  const fractionSize = Math.max(24, Math.round(amountSize * 0.54));
+  const amountSize = digitCount <= 7 ? 48 : digitCount <= 9 ? 42 : digitCount <= 11 ? 34 : 28;
+  const symbolSize = Math.max(22, Math.round(amountSize * 0.5));
+  const fractionSize = Math.max(18, Math.round(amountSize * 0.6));
   const lineHeight = Math.round(amountSize * 1.06);
 
   // One clean numeric lockup: all parts use Outfit with tabular numerals,
@@ -1474,9 +1106,8 @@ function AnimatedTotal({
   const [whole, frac] = visibleTotal.split('.');
 
   return (
-    <View style={{ alignItems: 'center', paddingHorizontal: 24, paddingTop: 8, paddingBottom: 2 }}>
-      {/* Balance centers cleanly — the show/hide eye now lives pinned in
-          the sticky block's top-right corner, not beside the number. */}
+    <View style={{ alignItems: 'center', paddingHorizontal: 24, paddingTop: 2, paddingBottom: 2 }}>
+      {/* Centred under its label. Tap for the balance history chart. */}
       <Pressable
         onPress={onPress}
         hitSlop={12}
@@ -1487,7 +1118,6 @@ function AnimatedTotal({
           alignItems: 'flex-start',
           justifyContent: 'center',
           maxWidth: '100%',
-          paddingHorizontal: 6,
         }}
       >
         <Text style={{
@@ -1521,7 +1151,7 @@ function AnimatedTotal({
           {whole}
           {frac != null && (
             <Text style={{
-              color: p.fgMuted,
+              color: p.fgFaint,
               fontFamily: F.semibold,
               fontSize: fractionSize,
               lineHeight,
@@ -1538,188 +1168,6 @@ function AnimatedTotal({
   );
 }
 
-/* ── Action buttons — pill row (Revolut / Robinhood style) ────────── */
-type ActionTone = 'white' | 'grey' | 'black';
-interface ActionDef { key: string; icon: keyof typeof Ionicons.glyphMap; label: string; tone?: ActionTone; to?: string; onPress?: () => void }
-
-/**
- * Visual recipe for an action pill. Clean flat solids (gradients read muddy at
- * this size) with three clear weights:
- *   • Buy    → solid brand blue, white ink — the hero, only one that's coloured
- *   • Sell   → elevated surface + hairline, full-contrast fg ink (neutral)
- *   • Top up → fg inverse (white-on-charcoal / black-on-paper), max contrast
- * `mono` collapses all three to the original white / grey / black.
- */
-type ActionLook = {
-  bg: string;                    // flat fill
-  fg: string;                    // ink (label + icon)
-  border?: string;               // optional hairline
-  glow?: string;                 // shadow colour (only Buy glows)
-};
-
-function actionLook(tone: ActionTone, p: Palette, mono: boolean): ActionLook {
-  if (mono) {
-    const m = {
-      white: { bg: '#FFFFFF', fg: '#111111' },
-      grey:  { bg: p.bgElev,  fg: p.fg, border: p.divider },
-      black: { bg: '#111111', fg: '#FFFFFF' },
-    } as const;
-    return m[tone];
-  }
-  switch (tone) {
-    case 'white': // Buy — solid brand blue, white ink, blue glow.
-      return { bg: p.accent, fg: '#FFFFFF', glow: p.accent };
-    case 'grey':  // Sell — raised surface so it reads clearly above the gradient card.
-      return { bg: p.bgRaised, fg: p.fg, border: p.divider };
-    case 'black': // Top up — soft brand-blue tint (deposit = additive, blue family).
-      return { bg: p.accentSoft, fg: p.accentText, border: p.accentBorder };
-  }
-}
-
-/**
- * Action pill — icon + label, three distinct high-contrast looks. The Buy
- * hero gets a brand-blue gradient; Sell and Top up are crisp solids.
- */
-function ActionButton({
-  label, icon, onPress, to, tone = 'white', palette: p,
-}: {
-  label: string;
-  icon?: keyof typeof Ionicons.glyphMap;
-  onPress?: () => void;
-  to?: string;
-  tone?: ActionTone;
-  palette: Palette;
-}) {
-  const router = useRouter();
-  const mono = isMonochrome(useTheme((s) => s.mode));
-  const look = actionLook(tone, p, mono);
-
-  const handlePress = () => {
-    if (onPress) onPress();
-    else if (to) router.push(to as any);
-  };
-
-  const glowing = !!look.glow;
-  // Vertical layout: circular icon chip + label underneath. The label lives on
-  // its own line so any locale (nl/ru/de/fr/es/ar) fits — it just shrinks and
-  // truncates within the column instead of pushing the row off the sides.
-  return (
-    <PressableScale onPress={handlePress} style={{ flex: 1, minWidth: 0, alignItems: 'center' }}>
-      <View style={{
-        width: 52, height: 52, borderRadius: 26,
-        alignItems: 'center', justifyContent: 'center',
-        backgroundColor: look.bg,
-        borderWidth: look.border ? 1 : 0,
-        borderColor: look.border,
-        shadowColor: look.glow ?? '#000000',
-        shadowOffset: { width: 0, height: glowing ? 5 : 2 },
-        shadowOpacity: glowing ? 0.28 : 0.08,
-        shadowRadius: glowing ? 12 : 4,
-        elevation: glowing ? 5 : 1,
-      }}>
-        {icon && <Ionicons name={icon} size={22} color={look.fg} />}
-      </View>
-      <Text
-        numberOfLines={1}
-        adjustsFontSizeToFit
-        minimumFontScale={0.7}
-        style={{ color: p.fgMuted, fontSize: 11.5, fontWeight: '600', letterSpacing: -0.1, marginTop: 6, maxWidth: '100%' }}
-      >
-        {label}
-      </Text>
-    </PressableScale>
-  );
-}
-
-function MoreActionButton({ palette: p, onPress, label }: { palette: Palette; onPress: () => void; label: string }) {
-  // Matches the vertical action columns — neutral chip + label so it lines up
-  // with Buy/Sell/Send/Top up regardless of locale.
-  return (
-    <PressableScale onPress={onPress} style={{ flex: 1, minWidth: 0, alignItems: 'center' }}>
-      <View style={{
-        width: 52, height: 52, borderRadius: 26,
-        backgroundColor: p.bgRaised,
-        borderWidth: 1, borderColor: p.divider,
-        alignItems: 'center', justifyContent: 'center',
-      }}>
-        <Ionicons name="ellipsis-horizontal" size={20} color={p.fg} />
-      </View>
-      <Text
-        numberOfLines={1}
-        adjustsFontSizeToFit
-        minimumFontScale={0.7}
-        style={{ color: p.fgMuted, fontSize: 11.5, fontWeight: '600', letterSpacing: -0.1, marginTop: 6, maxWidth: '100%' }}
-      >
-        {label}
-      </Text>
-    </PressableScale>
-  );
-}
-
-/**
- * Hairline separator between segments of the header action track. Short
- * of the track's full height so it reads as a divider, not a seam.
- */
-function HeaderSegmentDivider({ palette: p }: { palette: Palette }) {
-  return (
-    <View style={{ width: StyleSheet.hairlineWidth, height: 16, backgroundColor: p.border }} />
-  );
-}
-
-/**
- * Small circular icon used in the home header. Optional badge dot.
- */
-function HeaderIconButton({
-  icon, onPress, palette: p, a11y, badge,
-}: {
-  icon: keyof typeof Ionicons.glyphMap;
-  onPress: () => void;
-  palette: Palette;
-  a11y: string;
-  badge?: number;
-}) {
-  // Lives inside the header's segmented pill track, so it carries no
-  // background/border of its own — just a tappable icon with a soft
-  // pressed-state highlight. Width is wider than tall so the three
-  // segments divide the track evenly.
-  return (
-    <Pressable
-      onPress={onPress}
-      hitSlop={8}
-      accessibilityRole="button"
-      accessibilityLabel={a11y}
-      style={({ pressed }) => ({
-        width: 36, height: 32, borderRadius: 15,
-        backgroundColor: pressed ? p.border : 'transparent',
-        alignItems: 'center', justifyContent: 'center',
-      })}
-    >
-      <Ionicons name={icon} size={17} color={p.fg} />
-      {badge !== undefined && badge > 0 && (
-        <View
-          style={{
-            position: 'absolute',
-            top: -1, right: 1,
-            minWidth: 15, height: 15, borderRadius: 7.5,
-            backgroundColor: p.redFg,
-            borderWidth: 2, borderColor: p.bg,
-            alignItems: 'center', justifyContent: 'center',
-            paddingHorizontal: 3,
-          }}
-        >
-          <Text style={{ color: '#fff', fontSize: 9, fontWeight: '600' }}>
-            {badge > 9 ? '9+' : badge}
-          </Text>
-        </View>
-      )}
-    </Pressable>
-  );
-}
-
-/**
- * One segment of the Assets / Activity switcher. Active segment is a
- * filled ctaBg pill; inactive is transparent muted text.
- */
 function TabBtn({ label, active, palette: p, onPress }: {
   label: string; active: boolean; palette: Palette; onPress: () => void;
 }) {
@@ -1856,13 +1304,13 @@ function TxDetailModal({
   const isIncoming = type === 'BUY' || type === 'RECEIVE' || type === 'TRANSFER_IN'
     || type === 'DEPOSIT' || type === 'CASHBACK' || type === 'P2P_BUY' || isCredit;
   const accent   = isIncoming ? p.greenFg : p.redFg;
-  const accentBg = isIncoming ? p.greenBg : 'rgba(239,68,68,0.15)';
+  const accentBg = isIncoming ? p.greenBg : p.redBg;
 
   const statusColors: Record<string, { bg: string; fg: string }> = {
     COMPLETED:  { bg: p.greenBg,               fg: p.greenFg  },
     PENDING:    { bg: 'rgba(245,158,11,0.15)',  fg: '#f59e0b'  },
     PROCESSING: { bg: 'rgba(99,102,241,0.15)',  fg: '#818cf8'  },
-    FAILED:     { bg: 'rgba(239,68,68,0.15)',   fg: p.redFg    },
+    FAILED:     { bg: p.redBg,   fg: p.redFg    },
     CANCELLED:  { bg: p.pillBg,                fg: p.fgMuted  },
   };
   const sc = statusColors[status] ?? statusColors.COMPLETED;
@@ -1876,35 +1324,7 @@ function TxDetailModal({
   }
 
   return (
-    <Modal visible transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable
-        style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' }}
-        onPress={onClose}
-      >
-        <Pressable
-          style={{ backgroundColor: p.bg, borderTopLeftRadius: 32, borderTopRightRadius: 32, maxHeight: '92%' }}
-          onPress={(e) => e.stopPropagation()}
-        >
-          {/* Handle */}
-          <View style={{ alignItems: 'center', paddingTop: 12, paddingBottom: 4 }}>
-            <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: p.border }} />
-          </View>
-
-          {/* Close */}
-          <View style={{ flexDirection: 'row', justifyContent: 'flex-end', paddingHorizontal: 20, paddingBottom: 4 }}>
-            <Pressable
-              onPress={onClose} hitSlop={8}
-              style={({ pressed }) => ({
-                width: 32, height: 32, borderRadius: 16,
-                backgroundColor: pressed ? p.border : p.bgElev,
-                borderWidth: 1, borderColor: p.border,
-                alignItems: 'center', justifyContent: 'center',
-              })}
-            >
-              <Ionicons name="close" size={15} color={p.fg} />
-            </Pressable>
-          </View>
-
+    <BottomSheet visible={true} onClose={onClose} scroll={false} contentStyle={{ paddingHorizontal: 0 }}>
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: insets.bottom + 32 }}>
 
             {/* ── Hero ── */}
@@ -2070,9 +1490,7 @@ function TxDetailModal({
             </View>
 
           </ScrollView>
-        </Pressable>
-      </Pressable>
-    </Modal>
+        </BottomSheet>
   );
 }
 
@@ -2706,8 +2124,11 @@ function AssetRow({ wallet, palette: p, onPress, liveUsd, unitPrice, sparkline, 
       ? '$' + unitPrice.toLocaleString('en-US', { maximumFractionDigits: 2 })
       : '$' + unitPrice.toLocaleString('en-US', { maximumFractionDigits: 6 })
     : dc.fmt(usd);
-  const maskedBalance = balanceStr.replace(/[0-9]/g, '*');
-  const maskedRight = rightStr.replace(/[0-9]/g, '*');
+  // Privacy mode hides what you HOLD (amounts, holding values) — never the
+  // market (unit prices, 24h change), which is public information.
+  const maskedBalance = '••••';
+  const rightIsPrice = unitPrice !== undefined;
+  const maskedRight = rightIsPrice ? rightStr : '••••••';
 
   return (
     <Pressable
@@ -2739,13 +2160,11 @@ function AssetRow({ wallet, palette: p, onPress, liveUsd, unitPrice, sparkline, 
             <View style={{
               flexDirection: 'row', alignItems: 'center', gap: 2, marginTop: 4,
               paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6,
-              backgroundColor: !showBalance ? p.pillBg : positive ? p.greenBg : p.redBg,
+              backgroundColor: positive ? p.greenBg : p.redBg,
             }}>
-              {showBalance && (
-                <Ionicons name={positive ? 'caret-up' : 'caret-down'} size={8} color={positive ? p.greenFg : p.redFg} />
-              )}
-              <Text style={{ color: showBalance ? (positive ? p.greenFg : p.redFg) : p.fgFaint, fontSize: 10.5, fontWeight: '700', fontVariant: ['tabular-nums'] }}>
-                {showBalance ? `${Math.abs(changePct).toFixed(2)}%` : '**.**%'}
+              <Ionicons name={positive ? 'caret-up' : 'caret-down'} size={8} color={positive ? p.greenFg : p.redFg} />
+              <Text style={{ color: positive ? p.greenFg : p.redFg, fontSize: 10.5, fontWeight: '700', fontVariant: ['tabular-nums'] }}>
+                {`${Math.abs(changePct).toFixed(2)}%`}
               </Text>
             </View>
           )}

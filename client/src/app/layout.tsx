@@ -122,8 +122,8 @@ export const metadata: Metadata = {
       ar: `${SITE_URL}/ar`,
     },
   },
-  // The asterisk from the wordmark. `favicon.ico` carries 16→256 so browsers
-  // pick their own size; the SVG wins where it is supported.
+  // The wallet mark. `favicon.ico` carries 16→256 so browsers pick their own
+  // size; the SVG wins where it is supported.
   icons: {
     icon: [
       { url: '/favicon.ico', sizes: 'any' },

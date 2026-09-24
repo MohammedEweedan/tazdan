@@ -77,10 +77,10 @@ export const useActivities = (page = 1, type: string = 'ALL', limit = 20) =>
     staleTime: 10_000,
   });
 
-export const useP2POffers = (filter: 'BUY' | 'SELL' | 'ALL' = 'ALL') =>
+export const useP2POffers = (filter: 'BUY' | 'SELL' | 'ALL' = 'ALL', near?: { lat: number; lng: number } | null) =>
   useQuery({
-    queryKey: QUERY_KEYS.p2pOffers(filter),
-    queryFn: () => p2pService.offers(filter),
+    queryKey: [...QUERY_KEYS.p2pOffers(filter), near ? `${near.lat},${near.lng}` : 'any'],
+    queryFn: () => p2pService.offers(filter, near),
   });
 
 export const useMyP2PListings = () =>

@@ -420,8 +420,11 @@ export interface P2PListing {
 }
 
 export const p2pService = {
-  offers: (filter: 'BUY' | 'SELL' | 'ALL' = 'ALL') => withFallback<P2POffer[]>(
-    async () => (await api.get('/p2p/offers', { params: { side: filter } })).data.offers,
+  /** `near` sorts listings that share a location by distance (signed-in only). */
+  offers: (filter: 'BUY' | 'SELL' | 'ALL' = 'ALL', near?: { lat: number; lng: number } | null) => withFallback<P2POffer[]>(
+    async () => (await api.get('/p2p/offers', {
+      params: { side: filter, ...(near ? { near: `${near.lat},${near.lng}` } : {}) },
+    })).data.offers,
   ),
   myListings: (): Promise<P2PListing[]> =>
     withFallback<P2PListing[]>(
@@ -446,6 +449,8 @@ export const p2pService = {
     anonymous?: boolean;
     city?: string;
     timeframeMins?: number;
+    /** Approximate (rounded) position — opts the listing in to "near me". */
+    location?: { lat: number; lng: number };
   }): Promise<P2PListing> => {
     const { data } = await api.post('/p2p/listings', payload);
     return data.listing;

@@ -19,6 +19,7 @@ import { cardsService, bankAccountService } from '@/services';
 import type { CardEntity, BankAccount } from '@/types';
 import { TopGradient } from '@/components/ui/ScreenShell';
 
+import { BottomSheet } from '@/components/ui/BottomSheet';
 export default function LinkedAccountsPage() {
   const p = useThemedPalette();
   const t = useT();
@@ -303,20 +304,7 @@ export default function LinkedAccountsPage() {
       </View>
 
       {/* Delete Bank Account Modal */}
-      <Modal visible={!!deleteBankModal} transparent animationType="slide">
-        <Pressable onPress={() => setDeleteBankModal(null)} style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)' }}>
-          <Pressable
-            onPress={(e) => e.stopPropagation()}
-            style={{
-              marginTop: 'auto',
-              backgroundColor: p.bg,
-              borderTopLeftRadius: 24, borderTopRightRadius: 24,
-              padding: 24, paddingBottom: 36, gap: 16,
-            }}
-          >
-            <View style={{ alignItems: 'center', marginBottom: 16 }}>
-              <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: p.border }} />
-            </View>
+      <BottomSheet visible={!!deleteBankModal} onClose={() => setDeleteBankModal(null)}>
             <View style={{
               width: 56, height: 56, borderRadius: 28,
               backgroundColor: 'rgba(239, 68, 68, 0.1)',
@@ -357,9 +345,7 @@ export default function LinkedAccountsPage() {
                 <Text style={{ color: p.fg, fontSize: 16, fontWeight: '600' }}>Cancel</Text>
               </Pressable>
             </View>
-          </Pressable>
-        </Pressable>
-      </Modal>
+          </BottomSheet>
     </SafeAreaView>
   );
 }

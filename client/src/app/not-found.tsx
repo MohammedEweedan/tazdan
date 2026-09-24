@@ -218,7 +218,7 @@ export default function NotFound() {
             />
             <Box position="relative" zIndex={1}>
               <Image
-                src={dark ? "/icon-black.png" : "/icon-white.png"}
+                src={dark ? "/icon-white.png" : "/icon-black.png"}
                 alt="tazdan"
                 width={64}
                 height={64}

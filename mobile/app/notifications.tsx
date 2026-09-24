@@ -21,6 +21,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AnnouncementOptInButton } from '@/components/ui/AnnouncementBanner';
 import { APP } from '@/constants';
 
+import { BottomSheet } from '@/components/ui/BottomSheet';
 function resolveMediaUrl(raw?: string | null): string | undefined {
   if (!raw) return undefined;
   const apiBase = APP.apiBaseUrl.replace(/\/api\/?$/, '');
@@ -54,21 +55,8 @@ function AnnouncementModal({ notification, onClose }: { notification: any; onClo
   const media = notification.mediaType !== 'none' ? resolveMediaUrl(notification.mediaUrl) : undefined;
 
   return (
-    <Modal visible animationType="slide" transparent onRequestClose={onClose}>
-      <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' }}>
-        <View style={{
-          backgroundColor: p.bg,
-          borderTopLeftRadius: 28,
-          borderTopRightRadius: 28,
-          paddingBottom: insets.bottom + 16,
-          maxHeight: '85%',
-        }}>
-          {/* Handle */}
-          <View style={{ alignItems: 'center', paddingTop: 12, paddingBottom: 4 }}>
-            <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: p.border }} />
-          </View>
-
-          <ScrollView contentContainerStyle={{ padding: 24 }}>
+    <BottomSheet visible={true} onClose={onClose} scroll={false} contentStyle={{ paddingHorizontal: 0 }}>
+          <ScrollView contentContainerStyle={{ paddingHorizontal: 24, paddingBottom: 24 }}>
             {media && (
               <Image
                 source={{ uri: media }}
@@ -119,9 +107,7 @@ function AnnouncementModal({ notification, onClose }: { notification: any; onClo
           >
             <Text style={{ color: p.ctaFg, fontSize: 15, fontWeight: '600' }}>{t('notifications.gotIt')}</Text>
           </Pressable>
-        </View>
-      </View>
-    </Modal>
+        </BottomSheet>
   );
 }
 

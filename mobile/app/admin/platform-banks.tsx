@@ -20,6 +20,7 @@ import { adminService } from '@/services';
 import { LoadingPulse } from '@/components/ui/LoadingPulse';
 import { TopGradient } from '@/components/ui/ScreenShell';
 
+import { BottomSheet } from '@/components/ui/BottomSheet';
 interface BankForm {
   bankName: string;
   currency: string;
@@ -142,14 +143,7 @@ export default function AdminPlatformBanks() {
         )}
       </SafeAreaView>
 
-      <Modal visible={!!editing} transparent animationType="slide" onRequestClose={() => setEditing(null)}>
-        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' }}>
-          <View style={{ backgroundColor: p.bg, borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 20, paddingBottom: 36, maxHeight: '92%' }}>
-            <View style={{ alignSelf: 'center', width: 36, height: 4, borderRadius: 2, backgroundColor: p.border, marginBottom: 14 }} />
-            <Text style={{ color: p.fg, fontSize: 18, fontWeight: '700', marginBottom: 16 }}>
-              {editing?.id ? 'Edit bank' : 'Add platform bank'}
-            </Text>
-
+      <BottomSheet visible={!!editing} onClose={() => setEditing(null)} title={editing?.id ? 'Edit bank' : 'Add platform bank'} scroll={false}>
             <ScrollView showsVerticalScrollIndicator={false}>
               {editing && (
                 <>
@@ -227,9 +221,7 @@ export default function AdminPlatformBanks() {
                 </Text>
               </Pressable>
             </View>
-          </View>
-        </View>
-      </Modal>
+          </BottomSheet>
     </View>
   );
 }

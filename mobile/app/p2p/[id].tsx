@@ -130,7 +130,9 @@ export default function OfferDetail() {
                 )}
               </View>
               <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '600', marginTop: 2 }}>
-                ★ {offer.trader.rating.toFixed(1)} · {offer.trader.orders} orders
+                {offer.trader.completedTrades
+                  ? `${t('p2p.tradesCount', { count: offer.trader.completedTrades })}${offer.trader.completionRate != null ? ` · ${offer.trader.completionRate}%` : ''}`
+                  : t('p2p.newTrader')}
               </Text>
             </View>
             <View style={{

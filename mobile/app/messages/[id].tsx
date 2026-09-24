@@ -36,6 +36,7 @@ import { REPORT_REASONS, type ApiMessage, type Conversation } from '@/types/mess
 import { TopGradient } from '@/components/ui/ScreenShell';
 import { useTransactionSound } from '@/hooks/useTransactionSound';
 
+import { BottomSheet } from '@/components/ui/BottomSheet';
 const BRAND_BLUE = '#63a1db'; // soft brand blue — my bubbles, send button, accents
 
 export default function MessageThread() {
@@ -1084,14 +1085,7 @@ function ProfileSheet({
   };
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable onPress={onClose} style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }}>
-        <Pressable
-          onPress={(e) => e.stopPropagation()}
-          style={{ backgroundColor: p.bg, borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 20, paddingBottom: 34 }}
-        >
-          <View style={{ alignItems: 'center', marginBottom: 18 }}>
-            <View style={{ width: 42, height: 4, borderRadius: 2, backgroundColor: p.border, marginBottom: 18 }} />
+    <BottomSheet visible={visible} onClose={onClose} contentStyle={{ paddingHorizontal: 0 }}>
             <View style={{
               width: 86, height: 86, borderRadius: 43,
               backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border,
@@ -1108,62 +1102,7 @@ function ProfileSheet({
             {partner?.username && (
               <Text style={{ color: p.fgFaint, fontSize: 12, fontWeight: '600', marginTop: 3 }}>{presence}</Text>
             )}
-          </View>
-
-          {!!partner?.bio && (
-            <View style={{ backgroundColor: p.bgElev, borderRadius: 18, borderWidth: 1, borderColor: p.border, padding: 14, marginBottom: 12 }}>
-              <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '800', letterSpacing: 0.8, marginBottom: 5 }}>{t('chat.profileBio')}</Text>
-              <Text style={{ color: p.fg, fontSize: 14, fontWeight: '600', lineHeight: 20 }}>{partner.bio}</Text>
-            </View>
-          )}
-
-          <View style={{ backgroundColor: p.bgElev, borderRadius: 18, borderWidth: 1, borderColor: p.border, overflow: 'hidden', marginBottom: 12 }}>
-            <ProfileInfoRow
-              icon="at-outline"
-              label={t('chat.handle')}
-              value={partner?.username ? `@${partner.username}` : t('chat.noHandle')}
-              palette={p}
-            />
-            <ProfileInfoRow
-              icon="globe-outline"
-              label={t('chat.publicProfile')}
-              value={partner?.profilePublic ? t('chat.publicProfileOn') : t('chat.publicProfileOff')}
-              palette={p}
-              borderTop
-            />
-            <ProfileInfoRow
-              icon="calendar-outline"
-              label={t('chat.signupDate')}
-              value={joinedDate ?? '-'}
-              palette={p}
-              borderTop
-            />
-          </View>
-
-          <View style={{ backgroundColor: p.bgElev, borderRadius: 18, borderWidth: 1, borderColor: p.border, overflow: 'hidden' }}>
-            <PrivacyRow
-              icon="checkmark-done-outline"
-              title={t('chat.readReceipts')}
-              subtitle={t('chat.readReceiptsDescMutual')}
-              value={privacy.readReceiptsOn}
-              disabled={busy !== null}
-              palette={p}
-              onValueChange={(v) => toggle('read', v)}
-            />
-            <PrivacyRow
-              icon="time-outline"
-              title={t('chat.lastSeenTitle')}
-              subtitle={t('chat.lastSeenDesc')}
-              value={privacy.lastSeenOn}
-              disabled={busy !== null}
-              palette={p}
-              borderTop
-              onValueChange={(v) => toggle('seen', v)}
-            />
-          </View>
-        </Pressable>
-      </Pressable>
-    </Modal>
+          </BottomSheet>
   );
 }
 
@@ -1239,23 +1178,7 @@ function ReportSheet({
   useEffect(() => { if (!visible) { setReason(null); setDetails(''); } }, [visible]);
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable onPress={onClose} style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)' }}>
-        <Pressable
-          onPress={(e) => e.stopPropagation()}
-          style={{
-            marginTop: 'auto',
-            backgroundColor: p.bg,
-            borderTopLeftRadius: 22, borderTopRightRadius: 22,
-            padding: 20, paddingBottom: 32, gap: 12,
-          }}
-        >
-          <View style={{ alignItems: 'center', marginBottom: 4 }}>
-            <View style={{ width: 42, height: 4, borderRadius: 2, backgroundColor: p.border }} />
-          </View>
-          <Text style={{ color: p.fg, fontSize: 18, fontWeight: '600', letterSpacing: -0.3 }}>
-            {t('chat.reportTitle')}
-          </Text>
+    <BottomSheet visible={visible} onClose={onClose} title={t('chat.reportTitle')}>
           <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '500' }}>
             {t('chat.reportBody')}
           </Text>
@@ -1309,9 +1232,7 @@ function ReportSheet({
               {t('chat.submitReport')}
             </Text>
           </Pressable>
-        </Pressable>
-      </Pressable>
-    </Modal>
+        </BottomSheet>
   );
 }
 

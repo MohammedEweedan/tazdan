@@ -36,6 +36,7 @@ import { QUERY_KEYS } from '@/constants';
 import type { P2PTrade } from '@/services';
 import type { ApiMessage } from '@/types/messages';
 
+import { BottomSheet } from '@/components/ui/BottomSheet';
 const BRAND_BLUE = '#737373'; // mono accent neutral
 
 /* ── Helpers ───────────────────────────────────────────────────── */
@@ -735,17 +736,7 @@ function DisputeModal({ visible, tradeId, onClose, onSubmit, palette: p, accent 
   };
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'flex-end' }} onPress={onClose}>
-        <Pressable onPress={(e) => e.stopPropagation()}
-          style={{ backgroundColor: p.bg, borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingTop: 12, paddingBottom: 34, paddingHorizontal: 20 }}
-        >
-          {/* Drag handle */}
-          <View style={{ alignItems: 'center', marginBottom: 12 }}>
-            <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: p.border }} />
-          </View>
-
-          <Text style={{ color: p.fg, fontSize: 19, fontWeight: '700', marginBottom: 4 }}>Open a dispute</Text>
+    <BottomSheet visible={visible} onClose={onClose} title={"Open a dispute"}>
           <Text style={{ color: p.fgMuted, fontSize: 13, lineHeight: 18, marginBottom: 18 }}>
             A support agent will be assigned within 24 hours. Only open a dispute if you have a genuine issue.
           </Text>
@@ -806,8 +797,6 @@ function DisputeModal({ visible, tradeId, onClose, onSubmit, palette: p, accent 
                 : <Text style={{ color: '#fff', fontSize: 14.5, fontWeight: '700' }}>Submit dispute</Text>}
             </LinearGradient>
           </Pressable>
-        </Pressable>
-      </Pressable>
-    </Modal>
+        </BottomSheet>
   );
 }

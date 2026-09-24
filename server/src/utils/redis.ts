@@ -105,3 +105,40 @@ export async function redisDel(key: string): Promise<void> {
     logger.error(`[redis] DEL ${key} failed`, { err: error });
   }
 }
+
+// ── Failed-attempt counters (OTP brute-force guard) ──────────────────
+// Redis when connected; an in-process fallback otherwise, so a Redis blip
+// never turns the guard off.
+const localAttempts = new Map<string, { n: number; exp: number }>();
+
+/** Increment a failure counter that expires `ttlSeconds` after the first hit. Returns the new count. */
+export async function incrAttempts(key: string, ttlSeconds: number): Promise<number> {
+  const client = getRedisClient();
+  if (client) {
+    try {
+      const n = await client.incr(key);
+      if (n === 1) await client.expire(key, ttlSeconds);
+      return n;
+    } catch { /* fall through to local */ }
+  }
+  const now = Date.now();
+  const cur = localAttempts.get(key);
+  const next = cur && cur.exp > now ? { n: cur.n + 1, exp: cur.exp } : { n: 1, exp: now + ttlSeconds * 1000 };
+  localAttempts.set(key, next);
+  return next.n;
+}
+
+export async function getAttempts(key: string): Promise<number> {
+  const client = getRedisClient();
+  if (client) {
+    try { return Number(await client.get(key)) || 0; } catch { /* fall through */ }
+  }
+  const cur = localAttempts.get(key);
+  return cur && cur.exp > Date.now() ? cur.n : 0;
+}
+
+export async function clearAttempts(key: string): Promise<void> {
+  localAttempts.delete(key);
+  const client = getRedisClient();
+  if (client) await client.del(key).catch(() => {});
+}

@@ -34,7 +34,7 @@ export default function Receive() {
   const profileLink = `https://tazdan.com/u/${linkSlug}`;
 
   return (
-    <ScreenShell title="Receive money">
+    <ScreenShell closeOnly title="Receive money">
       {/* Tabs */}
       <View style={{
         flexDirection: 'row', padding: 4, marginTop: 12,
@@ -89,7 +89,7 @@ export default function Receive() {
               backgroundColor="#ffffff"
               color="#000000"
               ecl="H"
-              logo={require('../assets/icon-white.png')}
+              logo={require('../assets/icon-black.png')}
               logoSize={40}
               logoBackgroundColor="#ffffff"
               logoMargin={4}

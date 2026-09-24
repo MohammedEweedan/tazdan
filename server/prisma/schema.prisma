@@ -1057,6 +1057,12 @@ model P2PListing {
   paymentMethods String[]         @default(["BANK_TRANSFER"])
   country        String? // ISO 3166-1 alpha-2 — restrict to traders in this jurisdiction
   city           String? // city shown only when cash payment is offered
+  // "Near me" discovery (opt-in per listing). Coordinates are stored rounded
+  // to 2 decimals (~1 km) and are NEVER returned to clients — only a rounded
+  // distance from the viewer is.
+  locationEnabled Boolean         @default(false)
+  geoLat          Float?
+  geoLng          Float?
   timeframeMins  Int              @default(30) // buyer payment window in minutes
   terms          String? // seller's terms
   autoReply      String? // auto message to buyer
@@ -1074,6 +1080,7 @@ model P2PListing {
   @@index([country])
   @@index([status])
   @@index([createdAt])
+  @@index([locationEnabled, status])
 }
 
 model P2PTrade {

@@ -15,6 +15,7 @@ import { adminService } from '@/services';
 import { LoadingPulse } from '@/components/ui/LoadingPulse';
 import { AdminScreen, AdminTabs } from '@/components/admin/AdminScreen';
 
+import { BottomSheet } from '@/components/ui/BottomSheet';
 type WdFilter = 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'REJECTED';
 
 export default function AdminWithdrawals() {
@@ -128,11 +129,7 @@ export default function AdminWithdrawals() {
         </>
       ))()}
 
-      <Modal visible={!!rejecting} transparent animationType="slide" onRequestClose={() => setRejecting(null)}>
-          <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' }}>
-            <View style={{ backgroundColor: p.bg, borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 20, paddingBottom: 36 }}>
-              <View style={{ alignSelf: 'center', width: 36, height: 4, borderRadius: 2, backgroundColor: p.border, marginBottom: 14 }} />
-              <Text style={{ color: p.fg, fontSize: 18, fontWeight: '600', marginBottom: 14 }}>Reject Withdrawal</Text>
+      <BottomSheet visible={!!rejecting} onClose={() => setRejecting(null)} title={"Reject Withdrawal"}>
               <View style={{ backgroundColor: p.bgElev, borderRadius: 12, borderWidth: 1, borderColor: p.border, padding: 12, marginBottom: 18 }}>
                 <TextInput
                   value={reason}
@@ -156,9 +153,7 @@ export default function AdminWithdrawals() {
                   <Text style={{ color: '#fff', fontWeight: '600' }}>{rejectMut.isPending ? 'Rejecting…' : 'Reject'}</Text>
                 </Pressable>
               </View>
-            </View>
-          </View>
-        </Modal>
+            </BottomSheet>
     </AdminScreen>
   );
 }

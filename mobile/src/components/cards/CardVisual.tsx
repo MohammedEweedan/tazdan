@@ -316,7 +316,7 @@ function CardFront({
               monochrome cards are always dark. Placed in the upper
               right corner per the design spec. */}
           <Image
-            source={require('../../../assets/icon-black.png')}
+            source={require('../../../assets/icon-white.png')}
             style={{ width: 26, height: 26, opacity: 0.95 }}
             resizeMode="contain"
           />

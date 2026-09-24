@@ -30,6 +30,7 @@ import { cryptoExchangeAPI, type CryptoQuote } from '@/lib/cryptoApi';
 import { isStepUpChallengeError, stepUpErrorMessage } from '@/lib/stepUpErrors';
 import { fiatSymbol as fiatGlyph, getCurrencyMeta } from '@/constants';
 
+import { BottomSheet } from '@/components/ui/BottomSheet';
 // ── Shared metadata ───────────────────────────────────────────────────────────
 const KNOWN: Record<string, { label: string; color: string; icon: string }> = {
   BTC:   { label: 'Bitcoin',      color: '#f7931a', icon: '₿'  },
@@ -636,15 +637,7 @@ export function SellWidget({ defaultAsset, lockAsset = false }: SellWidgetProps 
       </Modal>
 
       {/* ══ NETWORK SHEET ═════════════════════════════════════════════ */}
-      <Modal visible={networkSheetOpen} transparent animationType="slide" onRequestClose={() => setNetworkSheetOpen(false)}>
-        <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' }} onPress={() => setNetworkSheetOpen(false)}>
-          <Pressable style={{ backgroundColor: p.bg, borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingTop: 10, paddingBottom: 48 }} onPress={(e) => e.stopPropagation()}>
-            <View style={{ alignItems: 'center', marginBottom: 16 }}>
-              <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: p.border }} />
-            </View>
-            <Text style={{ color: p.fg, fontSize: 18, fontWeight: '600', paddingHorizontal: 20, marginBottom: 6 }}>
-              {tr('sell.selectNetwork')}
-            </Text>
+      <BottomSheet visible={networkSheetOpen} onClose={() => setNetworkSheetOpen(false)} title={tr('sell.selectNetwork')} contentStyle={{ paddingHorizontal: 0 }}>
             <Text style={{ color: p.fgMuted, fontSize: 13, paddingHorizontal: 20, marginBottom: 16 }}>
               {tr('sell.selectNetworkHint')}
             </Text>
@@ -676,20 +669,10 @@ export function SellWidget({ defaultAsset, lockAsset = false }: SellWidgetProps 
                 </Pressable>
               );
             })}
-          </Pressable>
-        </Pressable>
-      </Modal>
+          </BottomSheet>
 
       {/* ══ RECEIVE-TO SHEET ══════════════════════════════════════════ */}
-      <Modal visible={receiveSheetOpen} transparent animationType="slide" onRequestClose={() => setReceiveSheetOpen(false)}>
-        <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' }} onPress={() => setReceiveSheetOpen(false)}>
-          <Pressable style={{ backgroundColor: p.bg, borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingTop: 10, paddingBottom: 48 }} onPress={(e) => e.stopPropagation()}>
-            <View style={{ alignItems: 'center', marginBottom: 16 }}>
-              <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: p.border }} />
-            </View>
-            <Text style={{ color: p.fg, fontSize: 18, fontWeight: '600', paddingHorizontal: 20, marginBottom: 4 }}>
-              {tr('sell.receiveProceeds')}
-            </Text>
+      <BottomSheet visible={receiveSheetOpen} onClose={() => setReceiveSheetOpen(false)} title={tr('sell.receiveProceeds')} scroll={false} contentStyle={{ paddingHorizontal: 0 }}>
             <Text style={{ color: p.fgMuted, fontSize: 13, paddingHorizontal: 20, marginBottom: 16 }}>
               {tr('sell.receiveProceedsHint')}
             </Text>
@@ -736,9 +719,7 @@ export function SellWidget({ defaultAsset, lockAsset = false }: SellWidgetProps 
                 })
               )}
             </ScrollView>
-          </Pressable>
-        </Pressable>
-      </Modal>
+          </BottomSheet>
     </View>
   );
 }

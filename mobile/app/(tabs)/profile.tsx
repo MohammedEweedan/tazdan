@@ -313,24 +313,29 @@ export default function Profile() {
                     h.selection();
                     setAvatarModalVisible(true);
                   }}
-                  style={{
+                  accessibilityRole="button"
+                  accessibilityLabel={t('profile.changeAvatar')}
+                  style={{ width: 56, height: 56 }}>
+                  {/* The circle clips the photo; the edit badge sits outside it. */}
+                  <View style={{
                     width: 56, height: 56, borderRadius: 28,
-                    backgroundColor: p.bgElev,
+                    backgroundColor: p.bgRaised,
                     alignItems: 'center', justifyContent: 'center',
                     borderWidth: 1, borderColor: p.border,
                     overflow: 'hidden',
                   }}>
-                  {av.kind === 'image' ? (
-                    <Image source={{ uri: av.uri }} style={{ width: 56, height: 56 }} />
-                  ) : av.kind === 'emoji' ? (
-                    <Text style={{ fontSize: 28 }}>{av.char}</Text>
-                  ) : (
-                    <Text style={{ color: p.fg, fontWeight: '700', fontSize: 22 }}>{initial}</Text>
-                  )}
+                    {av.kind === 'image' ? (
+                      <Image source={{ uri: av.uri }} style={{ width: 56, height: 56 }} />
+                    ) : av.kind === 'emoji' ? (
+                      <Text style={{ fontSize: 28 }}>{av.char}</Text>
+                    ) : (
+                      <Text style={{ color: p.fg, fontWeight: '700', fontSize: 22 }}>{initial}</Text>
+                    )}
+                  </View>
                   {/* Small "edit" badge on the avatar to hint it's editable */}
                   <View style={{
                     position: 'absolute', bottom: -2, right: -2,
-                    backgroundColor: p.bg, borderRadius: 10, padding: 2,
+                    backgroundColor: p.bgElev, borderRadius: 10, padding: 2,
                   }}>
                     <View style={{
                       backgroundColor: p.ctaBg, width: 16, height: 16, borderRadius: 8,

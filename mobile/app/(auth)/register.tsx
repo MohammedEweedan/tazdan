@@ -31,6 +31,7 @@ import { COUNTRIES, COUNTRY_BY_ISO, type Country } from '@/data/countries';
 import { Modal, FlatList } from 'react-native';
 import { TopGradient } from '@/components/ui/ScreenShell';
 
+import { BottomSheet } from '@/components/ui/BottomSheet';
 /* ── Schemas ─────────────────────────────────────── */
 
 /**
@@ -894,33 +895,7 @@ export default function Register() {
       </KeyboardAvoidingView>
 
       {/* Country picker modal */}
-      <Modal
-        visible={showCountryPicker}
-        animationType="slide"
-        transparent
-        onRequestClose={() => setShowCountryPicker(false)}
-      >
-        <Pressable
-          onPress={() => setShowCountryPicker(false)}
-          style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' }}
-        >
-          <Pressable
-            onPress={() => {}}
-            style={{
-              backgroundColor: p.bg,
-              borderTopLeftRadius: 24, borderTopRightRadius: 24,
-              maxHeight: '80%', paddingTop: 12,
-            }}
-          >
-            <View style={{ alignItems: 'center', paddingVertical: 8 }}>
-              <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: p.border }} />
-            </View>
-            <Text style={{
-              color: p.fg, fontSize: 18, fontWeight: '600',
-              paddingHorizontal: 20, paddingVertical: 12,
-            }}>
-              Select your country
-            </Text>
+      <BottomSheet visible={showCountryPicker} onClose={() => setShowCountryPicker(false)} title={"Select your country"} scroll={false} contentStyle={{ paddingHorizontal: 0 }}>
             <FlatList
               data={COUNTRIES}
               keyExtractor={(c) => c.code}
@@ -954,9 +929,7 @@ export default function Register() {
                 );
               }}
             />
-          </Pressable>
-        </Pressable>
-      </Modal>
+          </BottomSheet>
 
       {/* Date-of-birth wheel picker (18+ enforced) */}
       <DatePickerModal
@@ -1043,15 +1016,7 @@ function DatePickerModal({
   );
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable onPress={onClose} style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' }}>
-        <Pressable onPress={() => {}} style={{ backgroundColor: p.bg, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingBottom: 28 }}>
-          <View style={{ alignItems: 'center', paddingVertical: 10 }}>
-            <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: p.border }} />
-          </View>
-          <Text style={{ color: p.fg, fontSize: 18, fontWeight: '700', paddingHorizontal: 20, paddingBottom: 4 }}>
-            Date of birth
-          </Text>
+    <BottomSheet visible={visible} onClose={onClose} title={"Date of birth"} contentStyle={{ paddingHorizontal: 0 }}>
           <Text style={{ color: p.fgMuted, fontSize: 13, paddingHorizontal: 20, paddingBottom: 8 }}>
             You must be 18 or older to use tazdan.
           </Text>
@@ -1080,9 +1045,7 @@ function DatePickerModal({
               <Text style={{ color: p.accentFg, fontSize: 16, fontWeight: '700' }}>Confirm</Text>
             </Pressable>
           </View>
-        </Pressable>
-      </Pressable>
-    </Modal>
+        </BottomSheet>
   );
 }
 
@@ -1106,18 +1069,7 @@ function LegalModal({
   const sections = isTerms ? TERMS_SECTIONS : PRIVACY_SECTIONS;
 
   return (
-    <Modal visible transparent animationType="slide" onRequestClose={onClose}>
-      <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }}>
-        <View style={{ backgroundColor: p.bg, borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: '88%', paddingBottom: 24 }}>
-          <View style={{ alignItems: 'center', paddingVertical: 10 }}>
-            <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: p.border }} />
-          </View>
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingBottom: 8 }}>
-            <Text style={{ color: p.fg, fontSize: 20, fontWeight: '700' }}>{title}</Text>
-            <Pressable onPress={onClose} hitSlop={8} style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: p.pillBg, alignItems: 'center', justifyContent: 'center' }}>
-              <Ionicons name="close" size={16} color={p.fg} />
-            </Pressable>
-          </View>
+    <BottomSheet visible={true} onClose={onClose} title={title} scroll={false} contentStyle={{ paddingHorizontal: 0 }}>
           <ScrollView style={{ paddingHorizontal: 20 }} contentContainerStyle={{ paddingBottom: 16 }} showsVerticalScrollIndicator={false}>
             {sections.map((s) => (
               <View key={s.h} style={{ marginTop: 16 }}>
@@ -1137,9 +1089,7 @@ function LegalModal({
               <Text style={{ color: p.accentFg, fontSize: 16, fontWeight: '700' }}>I've read & agree</Text>
             </Pressable>
           </View>
-        </View>
-      </View>
-    </Modal>
+        </BottomSheet>
   );
 }
 

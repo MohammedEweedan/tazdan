@@ -26,6 +26,7 @@ import { useHaptics } from '@/hooks';
 import { businessService } from '@/services/business';
 import type { BusinessPayout, PayoutStatus } from '@/types/business';
 
+import { BottomSheet } from '@/components/ui/BottomSheet';
 const ACCENT = '#737373';
 const PAGE_SIZE = 20;
 
@@ -172,44 +173,9 @@ function DetailModal({
   ];
 
   return (
-    <Modal visible={!!payout} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable
-        style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' }}
-        onPress={onClose}
-      >
-        <Pressable
-          style={{ backgroundColor: p.bg, borderTopLeftRadius: 24, borderTopRightRadius: 24 }}
-          onPress={(e) => e.stopPropagation()}
-        >
-          {/* Handle */}
-          <View style={{ alignItems: 'center', paddingTop: 12, paddingBottom: 4 }}>
-            <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: p.border }} />
-          </View>
-
+    <BottomSheet visible={!!payout} onClose={onClose} title={"Payout detail"} scroll={false} contentStyle={{ paddingHorizontal: 0 }}>
           {/* Title */}
-          <View style={{
-            flexDirection: 'row', alignItems: 'center', gap: 12,
-            paddingHorizontal: 20, paddingVertical: 14,
-            borderBottomWidth: 1, borderBottomColor: p.border,
-          }}>
-            <View style={{
-              width: 44, height: 44, borderRadius: 22,
-              backgroundColor: p.bgElev, alignItems: 'center', justifyContent: 'center',
-            }}>
-              <Ionicons name={statusIcon(payout.status)} size={22} color={col} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={{ color: p.fg, fontSize: 16, fontWeight: '800', letterSpacing: -0.3 }}>
-                Payout detail
-              </Text>
-              <Text style={{ color: col, fontSize: 11.5, fontWeight: '700', marginTop: 1 }}>
-                {payout.status}
-              </Text>
-            </View>
-            <Pressable onPress={onClose} hitSlop={8}>
-              <Ionicons name="close" size={20} color={p.fgMuted} />
-            </Pressable>
-          </View>
+          
 
           <ScrollView style={{ maxHeight: 420 }} contentContainerStyle={{ padding: 20 }}>
             {rows.map(({ label, value, copyKey }, i) => (
@@ -269,9 +235,7 @@ function DetailModal({
           {payout.status !== 'PENDING' && (
             <View style={{ height: 32 }} />
           )}
-        </Pressable>
-      </Pressable>
-    </Modal>
+        </BottomSheet>
   );
 }
 

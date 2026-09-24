@@ -14,6 +14,7 @@ import { CoinIcon } from '@/components/ui/CoinIcon';
 import { useHaptics } from '@/hooks';
 import type { Palette } from '@/store/themeStore';
 
+import { BottomSheet } from '@/components/ui/BottomSheet';
 export interface CurrencyItem {
   id?: string;        // stable selection id; defaults to currency
   currency: string;
@@ -139,12 +140,7 @@ export const CurrencyPicker = memo(function CurrencyPicker({
       </View>
 
       {/* Full list with balances */}
-      <Modal visible={listOpen} transparent animationType="slide" onRequestClose={() => setListOpen(false)}>
-        <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' }} onPress={() => setListOpen(false)}>
-          <Pressable style={{ backgroundColor: p.bg, borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingTop: 10, paddingBottom: 40, maxHeight: '72%' }} onPress={(e) => e.stopPropagation()}>
-            <View style={{ alignItems: 'center', marginBottom: 14 }}>
-              <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: p.border }} />
-            </View>
+      <BottomSheet visible={listOpen} onClose={() => setListOpen(false)} scroll={false} contentStyle={{ paddingHorizontal: 0 }}>
             <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 8 }}>
               {items.map((it) => {
                 const key = itemId(it);
@@ -176,9 +172,7 @@ export const CurrencyPicker = memo(function CurrencyPicker({
                 );
               })}
             </ScrollView>
-          </Pressable>
-        </Pressable>
-      </Modal>
+          </BottomSheet>
     </>
   );
 });

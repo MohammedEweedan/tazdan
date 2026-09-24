@@ -18,7 +18,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { useTheme, useThemedPalette } from '@/store/themeStore';
-import { HEADER, HEADER_ROW_HEIGHT, StackHeader } from './ScreenHeader';
+import { HEADER, HEADER_ROW_HEIGHT, HeaderBackButton, StackHeader } from './ScreenHeader';
 
 /**
  * Shared top-of-screen accent gradient — matches the one on the home tab.
@@ -171,6 +171,9 @@ interface Props {
    *  existing screens are unaffected. */
   keyboard?: boolean;
   contentStyle?: StyleProp<ViewStyle>;
+  /** Money-flow pages (buy, sell, send, top up, receive…): no title, no back
+   *  arrow, no rule under the bar — just a ✕ in the top-right corner. */
+  closeOnly?: boolean;
   /** Pull-to-refresh (scroll mode only). */
   onRefresh?: () => void;
   refreshing?: boolean;
@@ -179,7 +182,7 @@ interface Props {
 
 export function ScreenShell({
   title, subtitle, back = true, onBack, backIcon, right, scroll = true, keyboard = false, contentStyle,
-  onRefresh, refreshing = false, children,
+  closeOnly = false, onRefresh, refreshing = false, children,
 }: Props) {
   const p         = useThemedPalette();
   const themeMode = useTheme((s) => s.mode);
@@ -225,7 +228,16 @@ export function ScreenShell({
       }
     : { style: [bodyPadStyle, contentStyle] };
 
-  const header = <StackHeader title={title} subtitle={subtitle} back={back} onBack={onBack} backIcon={backIcon} right={right} />;
+  const header = closeOnly ? (
+    <View style={{
+      flexDirection: 'row', justifyContent: 'flex-end',
+      paddingHorizontal: HEADER.gutter, paddingTop: HEADER.padTop, paddingBottom: HEADER.padBottom,
+    }}>
+      <HeaderBackButton icon="close" onPress={onBack} />
+    </View>
+  ) : (
+    <StackHeader title={title} subtitle={subtitle} back={back} onBack={onBack} backIcon={backIcon} right={right} />
+  );
 
   return (
     <View style={{ flex: 1, backgroundColor: p.bg }}>
@@ -252,7 +264,7 @@ export function ScreenShell({
       {/* The sticky bar floats on top — gradient + blur + header
           composited as a single layer the scroll content slides
           under. */}
-      <StickyTopBar>{header}</StickyTopBar>
+      <StickyTopBar hairline={!closeOnly}>{header}</StickyTopBar>
     </View>
   );
 }
@@ -493,6 +505,8 @@ export function ToggleRow({
         trackColor={{ false: p.border, true: p.accent }}
         thumbColor="#FFFFFF"
         ios_backgroundColor={p.border}
+        // react-native-web colours the "on" thumb separately (default teal).
+        {...({ activeThumbColor: '#FFFFFF' } as object)}
       />
     </View>
   );

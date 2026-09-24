@@ -46,6 +46,7 @@ import {
   type FiatRange,
 } from '@/hooks/useFiatRateHistory';
 
+import { BottomSheet } from '@/components/ui/BottomSheet';
 type Range = '1H' | '24H' | '7D' | '30D' | '1Y' | 'ALL';
 type Tab = 'activity' | 'news' | 'discussion';
 type ChartType = 'line' | 'candle';
@@ -147,11 +148,17 @@ export default function AssetDetail() {
   const { data: wallets } = useWallets();
   const [range, setRange] = useState<Range>('24H');
   const [tab, setTab] = useState<Tab>('activity');
-  const [buyOpen, setBuyOpen] = useState(false);
   const [depositOpen, setDepositOpen] = useState(false);
-  // Deep-link: /asset/DOGE?action=sell opens straight into the sell sheet
-  // (used by the dust-convert prompt on the home screen).
-  const [sellOpen, setSellOpen] = useState(action === 'sell');
+  // Buy / sell are full pages. Fiat opens them unlocked (the user picks the
+  // crypto side); crypto preselects and locks this asset.
+  const openTrade = (kind: 'buy' | 'sell') => {
+    router.push({ pathname: kind === 'buy' ? '/buy' : '/sell', params: FIAT_CODES.has(sym) ? {} : { asset: sym } } as any);
+  };
+  // Deep-link: /asset/DOGE?action=sell goes straight to selling it (used by
+  // the dust-convert prompt on Home).
+  useEffect(() => {
+    if (action === 'sell') openTrade('sell');
+  }, [action]); // eslint-disable-line react-hooks/exhaustive-deps
   const [hoverPrice, setHoverPrice] = useState<number | null>(null);
 
   const isFiat = FIAT_CODES.has(sym);
@@ -307,41 +314,6 @@ export default function AssetDetail() {
   const visiblePrice = hoverPrice !== null ? hoverPrice : price;
   const changeUsd = Math.abs((visiblePrice || 0) * (change / 100));
 
-  // ── Modals ──
-  const buyModal = (
-    <Modal visible={buyOpen} transparent animationType="slide" onRequestClose={() => setBuyOpen(false)}>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-        <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' }} onPress={() => setBuyOpen(false)}>
-          <Pressable style={{ backgroundColor: p.bg, borderTopLeftRadius: 28, borderTopRightRadius: 28, height: '92%' }} onPress={(e) => e.stopPropagation()}>
-            <View style={{ alignItems: 'center', paddingTop: 10, paddingBottom: 2 }}>
-              <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: p.border }} />
-            </View>
-            <View style={{ flex: 1, paddingBottom: Math.max(insets.bottom, 12) }}>
-              <BuyWidget defaultAsset={sym} lockAsset={!isFiat} />
-            </View>
-          </Pressable>
-        </Pressable>
-      </KeyboardAvoidingView>
-    </Modal>
-  );
-
-  const sellModal = (
-    <Modal visible={sellOpen} transparent animationType="slide" onRequestClose={() => setSellOpen(false)}>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-        <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' }} onPress={() => setSellOpen(false)}>
-          <Pressable style={{ backgroundColor: p.bg, borderTopLeftRadius: 28, borderTopRightRadius: 28, height: '92%' }} onPress={(e) => e.stopPropagation()}>
-            <View style={{ alignItems: 'center', paddingTop: 10, paddingBottom: 2 }}>
-              <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: p.border }} />
-            </View>
-            <View style={{ flex: 1, paddingBottom: Math.max(insets.bottom, 12) }}>
-              <SellWidget defaultAsset={sym} lockAsset={!isFiat} />
-            </View>
-          </Pressable>
-        </Pressable>
-      </KeyboardAvoidingView>
-    </Modal>
-  );
-
   // ── Sticky action bar ──
   const actionBar = (
     <View style={{
@@ -353,7 +325,7 @@ export default function AssetDetail() {
       borderTopWidth: 1, borderTopColor: p.border,
     }}>
       <Pressable
-        onPress={() => { h.medium(); setSellOpen(true); }}
+        onPress={() => { h.medium(); openTrade('sell'); }}
         disabled={!wallet || balance <= 0}
         style={({ pressed }) => ({
           flex: 1, height: 52, borderRadius: 26,
@@ -368,7 +340,7 @@ export default function AssetDetail() {
         <Text style={{ color: p.fg, fontSize: 15, fontWeight: '600' }}>Sell</Text>
       </Pressable>
       <Pressable
-        onPress={() => { h.medium(); setBuyOpen(true); }}
+        onPress={() => { h.medium(); openTrade('buy'); }}
         style={({ pressed }) => ({
           flex: 1, height: 52, borderRadius: 26,
           backgroundColor: pressed ? p.fgMuted : p.ctaBg,
@@ -393,8 +365,8 @@ export default function AssetDetail() {
           <FiatAssetView sym={sym as Currency} wallet={wallet} p={p} h={h} />
         </ScrollView>
         {actionBar}
-        {buyModal}
-        {sellModal}
+        
+        
       </View>
     );
   }
@@ -503,8 +475,8 @@ export default function AssetDetail() {
       </ScrollView>
 
       {actionBar}
-      {buyModal}
-      {sellModal}
+      
+      
       <DepositAddressModal
         visible={depositOpen}
         onClose={() => setDepositOpen(false)}

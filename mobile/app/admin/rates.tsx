@@ -7,7 +7,8 @@ import { StackHeader } from '@/components/ui/ScreenHeader';
  */
 
 import { useMemo, useState } from 'react';
-import { Alert, KeyboardAvoidingView, Modal, Platform, Pressable, RefreshControl, ScrollView, View } from 'react-native';
+import { Alert, Pressable, RefreshControl, ScrollView, View } from 'react-native';
+import { BottomSheet } from '@/components/ui/BottomSheet';
 import { Text, TextInput } from '@/components/ui/Text';
 import { Ionicons } from '@expo/vector-icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -213,7 +214,7 @@ export default function AdminRates() {
         </ScrollView>
 
         {/* Edit modal */}
-        <Modal visible={!!editing} transparent animationType="slide" onRequestClose={() => setEditing(null)}>
+        {!!editing && (
           <RateForm
             mode="edit"
             initial={editing}
@@ -221,10 +222,10 @@ export default function AdminRates() {
             onSaved={() => { setEditing(null); qc.invalidateQueries({ queryKey: ['admin-rates'] }); }}
             p={p}
           />
-        </Modal>
+        )}
 
         {/* Create modal */}
-        <Modal visible={creating} transparent animationType="slide" onRequestClose={() => setCreating(false)}>
+        {creating && (
           <RateForm
             mode="create"
             initial={null}
@@ -232,7 +233,7 @@ export default function AdminRates() {
             onSaved={() => { setCreating(false); qc.invalidateQueries({ queryKey: ['admin-rates'] }); }}
             p={p}
           />
-        </Modal>
+        )}
       </SafeAreaView>
     </View>
   );
@@ -375,12 +376,7 @@ function RateForm({ mode, initial, onClose, onSaved, p }: { mode: 'create' | 'ed
   });
 
   return (
-    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' }}>
-      <View style={{ backgroundColor: p.bg, borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 20, paddingBottom: 36 }}>
-        <View style={{ alignSelf: 'center', width: 36, height: 4, borderRadius: 2, backgroundColor: p.border, marginBottom: 14 }} />
-        <Text style={{ color: p.fg, fontSize: 18, fontWeight: '600', marginBottom: 16 }}>
-          {mode === 'create' ? 'Create Pair' : `Edit ${base}/${quote}`}
-        </Text>
+    <BottomSheet visible onClose={onClose} title={mode === 'create' ? 'Create Pair' : `Edit ${base}/${quote}`}>
 
         {mode === 'create' && (
           <View style={{ flexDirection: 'row', gap: 10, marginBottom: 12 }}>
@@ -434,7 +430,6 @@ function RateForm({ mode, initial, onClose, onSaved, p }: { mode: 'create' | 'ed
             <Text style={{ color: p.ctaFg, fontWeight: '600' }}>{mut.isPending ? 'Saving…' : 'Save'}</Text>
           </Pressable>
         </View>
-      </View>
-    </KeyboardAvoidingView>
+    </BottomSheet>
   );
 }

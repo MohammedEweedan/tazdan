@@ -24,6 +24,10 @@ import {
 } from '../services/email';
 import { createUserWallets } from '../services/wallet/walletDerivation.service';
 import { startVerification, checkVerification } from '../services/whatsapp';
+import { clearAttempts, getAttempts, incrAttempts } from '../utils/redis';
+
+const PHONE_OTP_MAX_ATTEMPTS = 5;
+const PHONE_OTP_LOCK_SECONDS = 15 * 60;
 
 const refreshSchema = z.object({
   refreshToken: z.string().min(10),
@@ -839,6 +843,7 @@ export class AuthController {
       const phone = `+${dbUser.phoneCountryCode}${dbUser.phone}`;
       const result = await startVerification({ phone, channel, userId: user.id });
       if (!result.ok) throw new AppError(result.reason ?? 'Failed to send code', 502);
+      await clearAttempts(`otp:phone:fail:${user.id}`);
 
       res.json({ message: 'Verification code sent', status: result.status, mode: result.mode, simulated: result.reason === 'simulated' });
     } catch (error) {
@@ -860,9 +865,24 @@ export class AuthController {
       if (!dbUser) throw new AppError('User not found', 404);
       if (dbUser.phoneVerified) throw new AppError('Phone already verified', 400);
 
+      // 5 wrong codes burns the pending code — a 6-digit code must not be
+      // guessable by retrying, whichever provider issued it.
+      const attemptsKey = `otp:phone:fail:${user.id}`;
+      if (await getAttempts(attemptsKey) >= PHONE_OTP_MAX_ATTEMPTS) {
+        throw new AppError('Too many attempts. Request a new code.', 429);
+      }
+
       const phone = `+${dbUser.phoneCountryCode}${dbUser.phone}`;
       const result = await checkVerification({ phone, code, userId: user.id });
-      if (!result.valid) throw new AppError('Invalid or expired code', 400);
+      if (!result.valid) {
+        const n = await incrAttempts(attemptsKey, PHONE_OTP_LOCK_SECONDS);
+        if (n >= PHONE_OTP_MAX_ATTEMPTS) {
+          await prisma.user.update({ where: { id: user.id }, data: { phoneOtpCode: null, phoneOtpExpires: null } });
+          throw new AppError('Too many attempts. Request a new code.', 429);
+        }
+        throw new AppError('Invalid or expired code', 400);
+      }
+      await clearAttempts(attemptsKey);
 
       await prisma.user.update({
         where: { id: user.id },

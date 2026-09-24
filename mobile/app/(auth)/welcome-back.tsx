@@ -200,8 +200,8 @@ export default function WelcomeBack() {
                   always contrasts the background. */}
               <Image
                 source={themeMode === 'light'
-                  ? require('../../assets/icon-white.png')   // black mark
-                  : require('../../assets/icon-black.png')}  // white mark
+                  ? require('../../assets/icon-black.png')   // dark mark
+                  : require('../../assets/icon-white.png')}  // light mark
                 style={{ width: 54, height: 54 }}
                 resizeMode="contain"
               />

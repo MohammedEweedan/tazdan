@@ -4,8 +4,8 @@
  * no page navigation required.
  */
 
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, View } from 'react-native';
+import React, { useMemo, useState } from 'react';
+import { ActivityIndicator, Alert, Modal, Pressable, RefreshControl, ScrollView, View } from 'react-native';
 import { Text, TextInput } from '@/components/ui/Text';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -15,17 +15,21 @@ import { Ionicons } from '@expo/vector-icons';
 import {
   useP2POffers, useHaptics, useCreateP2PListing, useInitiateP2PTrade, useWallets, useMarkets,
 } from '@/hooks';
-import { CURRENCY_META } from '@/constants';
 import { useTheme, useThemedPalette, type Palette } from '@/store/themeStore';
-import { useT } from '@/store/i18nStore';
+import { useI18n, useT } from '@/store/i18nStore';
 import type { Currency, MarketTicker, P2POffer } from '@/types';
-import { TopGradient } from '@/components/ui/ScreenShell';
-import { HeaderIconButton, HeaderTextButton, TabHeader } from '@/components/ui/ScreenHeader';
+import { TopGradient, SectionLabel, Panel, ToggleRow } from '@/components/ui/ScreenShell';
+import { HEADER, HeaderIconButton, TabHeader } from '@/components/ui/ScreenHeader';
+import { EmptyState } from '@/components/ui/EmptyState';
+import { Skeleton } from '@/components/ui/Skeleton';
+import { useApproxLocation, openLocationSettings } from '@/hooks/useApproxLocation';
 import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import { StatusBanner } from '@/components/ui/StatusBanner';
 import { useFeatures } from '@/hooks/useFeatures';
 
+import { BottomSheet } from '@/components/ui/BottomSheet';
 type Side = 'BUY' | 'SELL';
+type TFn = (k: string, v?: Record<string, string | number>) => string;
 const FIATS: Currency[]   = ['LYD', 'AED', 'SAR', 'EGP', 'USD', 'EUR'];
 // CRYPTOS is now dynamic — built from user holdings + market tickers in CreateListingSheet
 const FIAT_OPTIONS        = ['LYD', 'AED', 'SAR', 'EGP', 'USD', 'EUR', 'GBP'] as const;
@@ -48,11 +52,19 @@ export default function P2P() {
   const h = useHaptics();
   const p = useThemedPalette();
   const t = useT();
+  const rtl = useI18n((s) => s.locale === 'ar');
   const themeMode = useTheme((s) => s.mode);
   const features = useFeatures();
+  const location = useApproxLocation();
+  // The tab is what the USER wants to do. Buying means taking someone's
+  // SELL listing (the server makes the taker the buyer), and vice versa.
   const [side, setSide] = useState<Side>('BUY');
   const [fiat, setFiat] = useState<Currency | 'ALL'>('ALL');
-  const { data: offers } = useP2POffers(side);
+  const [nearMe, setNearMe] = useState(false);
+  const near = nearMe && location.status === 'granted' ? location.coords : null;
+  const offersQuery = useP2POffers(side === 'BUY' ? 'SELL' : 'BUY', near);
+  const offers = offersQuery.data;
+  const [refreshing, setRefreshing] = useState(false);
 
   const [selectedOffer, setSelectedOffer] = useState<P2POffer | null>(null);
   const [showCreate, setShowCreate]       = useState(false);
@@ -64,105 +76,155 @@ export default function P2P() {
     const q = cryptoSearch.trim().toLowerCase();
     return q ? byFiat.filter((o) => o.base.toLowerCase().includes(q)) : byFiat;
   }, [offers, fiat, cryptoSearch]);
+  const nearby = near ? filtered.filter((o) => o.distanceKm !== undefined) : [];
+  const others = near ? filtered.filter((o) => o.distanceKm === undefined) : filtered;
+
+  const toggleNearMe = async () => {
+    h.selection();
+    if (nearMe) { setNearMe(false); return; }
+    setNearMe(true);
+    if (location.status !== 'granted') await location.request();
+  };
+  const refresh = async () => {
+    setRefreshing(true);
+    try {
+      if (nearMe) await location.request();
+      await offersQuery.refetch();
+    } finally { setRefreshing(false); }
+  };
+
+  const card = (o: P2POffer) => (
+    <OfferCard key={o.id} offer={o} palette={p} t={t} rtl={rtl} userSide={side}
+      onPress={() => { h.light(); setSelectedOffer(o); }} />
+  );
 
   return (
     <View style={{ flex: 1, backgroundColor: p.bg }}>
       <TopGradient />
       <StatusBar style={themeMode === 'light' ? 'dark' : 'light'} />
       <SafeAreaView style={{ flex: 1 }} edges={['top']}>
-        {/* Header */}
         <TabHeader
           title={t('p2p.title')}
           right={
             <>
-              <HeaderTextButton icon="lock-closed-outline" label={t('p2p.trades')} onPress={() => router.push('/p2p/trades')} />
+              <HeaderIconButton icon="receipt-outline" label={t('p2p.trades')} onPress={() => router.push('/p2p/trades')} />
               {features.p2p && (
-                <HeaderIconButton icon="add" label="Create listing" variant="primary" onPress={() => setShowCreate(true)} />
+                <HeaderIconButton icon="add" label={t('p2p.createListing')} variant="primary" onPress={() => setShowCreate(true)} />
               )}
             </>
           }
         />
-        {!features.p2p && (
-          <View style={{ marginHorizontal: 24, marginTop: 4 }}>
-            <StatusBanner kind="info" message={t('features.p2pPaused')} />
-          </View>
-        )}
 
-        <View style={{ marginHorizontal: 24, marginTop: 16 }}>
-          <SegmentedControl<Side> value={side} onChange={setSide} options={[
-            { key: 'BUY', label: `${t('p2p.listingType')} ${t('p2p.buy')}` },
-            { key: 'SELL', label: `${t('p2p.listingType')} ${t('p2p.sell')}` },
-          ]} />
-        </View>
-
-        {/* Fiat chips */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 14, gap: 8 }}
-          style={{ flexGrow: 0 }}
-        >
-          <Chip palette={p} active={fiat === 'ALL'} onPress={() => { h.selection(); setFiat('ALL'); }} label="···" />
-          {FIATS.map((f) => (
-            <Chip
-              key={f}
-              palette={p}
-              active={fiat === f}
-              onPress={() => { h.selection(); setFiat(f); }}
-              flag={CURRENCY_META[f].flagOrIcon}
-              label={f}
-            />
-          ))}
-        </ScrollView>
-
-        {/* Crypto search — BUY side only */}
-        {side === 'BUY' && (
-          <View style={{
-            marginHorizontal: 20, marginTop: 10,
-            flexDirection: 'row', alignItems: 'center', gap: 10,
-            height: 44, borderRadius: 12,
-            backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border,
-            paddingHorizontal: 12,
-          }}>
-            <Ionicons name="search-outline" size={16} color={p.fgFaint} />
-            <TextInput
-              value={cryptoSearch}
-              onChangeText={setCryptoSearch}
-              placeholder="Search by asset (BTC, ETH, SOL…)"
-              placeholderTextColor={p.fgFaint}
-              autoCapitalize="characters"
-              style={{ flex: 1, color: p.fg, fontSize: 14, fontWeight: '600' }}
-            />
-            {cryptoSearch.length > 0 && (
-              <Pressable onPress={() => setCryptoSearch('')} hitSlop={8}>
-                <Ionicons name="close-circle" size={16} color={p.fgFaint} />
-              </Pressable>
-            )}
-          </View>
-        )}
-
-        {/* Offers list */}
         <ScrollView
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 14, paddingBottom: 140 }}
+          keyboardShouldPersistTaps="handled"
+          stickyHeaderIndices={[1]}
+          contentContainerStyle={{ paddingBottom: 140 }}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={p.accentText} colors={[p.accent]} />}
         >
-          {filtered.length === 0 ? (
-            <View style={{ alignItems: 'center', paddingVertical: 56 }}>
-              <Ionicons name="search-outline" size={28} color={p.fgFaint} />
-              <Text style={{ color: p.fgMuted, fontSize: 13, marginTop: 12 }}>
-                {t('p2p.noOffers')}
-              </Text>
-            </View>
-          ) : (
-            filtered.map((o) => (
-              <OfferCard
-                key={o.id}
-                offer={o}
-                palette={p}
-                onPress={() => { h.light(); setSelectedOffer(o); }}
+          <View style={{ paddingHorizontal: HEADER.gutter }}>
+            {!features.p2p && (
+              <View style={{ marginBottom: 12 }}>
+                <StatusBanner kind="info" message={t('features.p2pPaused')} />
+              </View>
+            )}
+            <SegmentedControl<Side> value={side} onChange={(v) => { setSide(v); setSelectedOffer(null); }} options={[
+              { key: 'BUY', label: t('p2p.buy') },
+              { key: 'SELL', label: t('p2p.sell') },
+            ]} />
+            <Text style={{ color: p.fgMuted, fontSize: 12.5, lineHeight: 18, marginTop: 10, marginHorizontal: 4 }}>
+              {side === 'BUY' ? t('p2p.buyHint') : t('p2p.sellHint')}
+            </Text>
+          </View>
+
+          {/* Filters stay pinned while the list scrolls. */}
+          <View style={{ backgroundColor: p.bg, paddingTop: 12, paddingBottom: 10 }}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={{ paddingHorizontal: HEADER.gutter, gap: 8 }}
+            >
+              <Chip palette={p} active={nearMe} onPress={toggleNearMe} label={t('p2p.nearMe')}
+                icon={location.status === 'locating' ? undefined : 'navigate'} loading={location.status === 'locating'} />
+              <View style={{ width: 1, marginVertical: 8, backgroundColor: p.border }} />
+              <Chip palette={p} active={fiat === 'ALL'} onPress={() => { h.selection(); setFiat('ALL'); }} label={t('wallet.all')} />
+              {FIATS.map((f) => (
+                <Chip key={f} palette={p} active={fiat === f} onPress={() => { h.selection(); setFiat(f); }} label={f} />
+              ))}
+            </ScrollView>
+
+            <View style={{
+              marginHorizontal: HEADER.gutter, marginTop: 10,
+              flexDirection: rtl ? 'row-reverse' : 'row', alignItems: 'center', gap: 10,
+              height: 44, borderRadius: 14,
+              backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border,
+              paddingHorizontal: 14,
+            }}>
+              <Ionicons name="search" size={16} color={p.fgFaint} />
+              <TextInput
+                value={cryptoSearch}
+                onChangeText={setCryptoSearch}
+                placeholder={t('p2p.searchAsset')}
+                placeholderTextColor={p.fgFaint}
+                autoCapitalize="characters"
+                autoCorrect={false}
+                accessibilityLabel={t('p2p.searchAsset')}
+                style={{ flex: 1, color: p.fg, fontSize: 14, fontWeight: '500', textAlign: rtl ? 'right' : 'left' }}
               />
-            ))
-          )}
+              {cryptoSearch.length > 0 && (
+                <Pressable onPress={() => setCryptoSearch('')} hitSlop={10} accessibilityRole="button" accessibilityLabel={t('common.close')}>
+                  <Ionicons name="close-circle" size={16} color={p.fgFaint} />
+                </Pressable>
+              )}
+            </View>
+          </View>
+
+          <View style={{ paddingHorizontal: HEADER.gutter, paddingTop: 6 }}>
+            {nearMe && (location.status === 'denied' || location.status === 'unavailable') && (
+              <View style={{
+                flexDirection: rtl ? 'row-reverse' : 'row', alignItems: 'center', gap: 12,
+                padding: 14, borderRadius: 16, marginBottom: 14,
+                backgroundColor: p.accentSoft, borderWidth: 1, borderColor: p.accentBorder,
+              }}>
+                <Ionicons name="location-outline" size={18} color={p.accentText} />
+                <Text style={{ flex: 1, color: p.fg, fontSize: 13, lineHeight: 19 }}>
+                  {location.status === 'denied' ? t('p2p.locationDenied') : t('p2p.locationUnavailable')}
+                </Text>
+                {location.status === 'denied' && !location.canAskAgain ? (
+                  <Pressable onPress={openLocationSettings} hitSlop={8} accessibilityRole="button">
+                    <Text style={{ color: p.accentText, fontSize: 13, fontWeight: '600' }}>{t('p2p.openSettings')}</Text>
+                  </Pressable>
+                ) : (
+                  <Pressable onPress={() => location.request()} hitSlop={8} accessibilityRole="button">
+                    <Text style={{ color: p.accentText, fontSize: 13, fontWeight: '600' }}>{t('common.retry')}</Text>
+                  </Pressable>
+                )}
+              </View>
+            )}
+
+            {offersQuery.isPending ? (
+              <View style={{ gap: 12 }}>{[0, 1, 2].map((n) => <Skeleton key={n} height={168} radius={22} />)}</View>
+            ) : offersQuery.isError ? (
+              <EmptyState icon="cloud-offline-outline" title={t('common.error')} actionLabel={t('common.retry')} onAction={refresh} />
+            ) : filtered.length === 0 ? (
+              <EmptyState icon="storefront-outline" title={t('p2p.noOffers')} message={t('p2p.noOffersBody')}
+                actionLabel={features.p2p ? t('p2p.createListing') : undefined}
+                onAction={features.p2p ? () => setShowCreate(true) : undefined} />
+            ) : near ? (
+              <>
+                <SectionLabel first>{t('p2p.nearYou')}</SectionLabel>
+                {nearby.length > 0 ? <View style={{ gap: 12 }}>{nearby.map(card)}</View> : (
+                  <Text style={{ color: p.fgMuted, fontSize: 13, lineHeight: 19, marginHorizontal: 4 }}>{t('p2p.noneNearby')}</Text>
+                )}
+                {others.length > 0 && <>
+                  <SectionLabel>{t('p2p.elsewhere')}</SectionLabel>
+                  <View style={{ gap: 12 }}>{others.map(card)}</View>
+                </>}
+              </>
+            ) : (
+              <View style={{ gap: 12 }}>{filtered.map(card)}</View>
+            )}
+          </View>
         </ScrollView>
       </SafeAreaView>
 
@@ -194,125 +256,134 @@ export default function P2P() {
 }
 
 /* ── Chip ── */
-function Chip({ active, onPress, label, flag, palette: p }: {
-  active: boolean; onPress: () => void; label: string; flag?: string; palette: Palette;
+function Chip({ active, onPress, label, icon, loading, palette: p }: {
+  active: boolean; onPress: () => void; label: string;
+  icon?: keyof typeof Ionicons.glyphMap; loading?: boolean; palette: Palette;
 }) {
+  const fg = active ? p.accentFg : p.fg;
   return (
     <Pressable
       onPress={onPress}
+      accessibilityRole="button"
+      accessibilityState={{ selected: active }}
       style={({ pressed }) => ({
-        paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999,
+        height: 36, paddingHorizontal: 14, borderRadius: 18,
         backgroundColor: active ? p.accent : p.bgElev,
         borderWidth: 1, borderColor: active ? p.accent : p.border,
-        opacity: pressed ? 0.7 : 1,
-        flexDirection: 'row', alignItems: 'center', gap: 4,
+        opacity: pressed ? 0.75 : 1,
+        flexDirection: 'row', alignItems: 'center', gap: 6,
       })}
     >
-      {flag ? (
-        <>
-          <Text style={{ fontSize: 14, lineHeight: 18 }}>{flag}</Text>
-          <Text style={{ color: active ? p.accentFg : p.fgMuted, fontSize: 13, fontWeight: '700' }}>{label}</Text>
-        </>
-      ) : (
-        <Text style={{ color: active ? p.accentFg : p.fgMuted, fontSize: 13, fontWeight: '700' }}>{label}</Text>
-      )}
+      {loading ? <ActivityIndicator size="small" color={fg} /> : icon ? <Ionicons name={icon} size={13} color={fg} /> : null}
+      <Text style={{ color: fg, fontSize: 13, fontWeight: '600' }}>{label}</Text>
     </Pressable>
   );
 }
 
+/** "128 trades · 98%" once a trader has history; "New trader" before. */
+function traderStatsLabel(trader: P2POffer['trader'], t: TFn): string {
+  const n = trader.completedTrades ?? trader.orders ?? 0;
+  if (!n) return t('p2p.newTrader');
+  const rate = trader.completionRate;
+  return rate == null ? t('p2p.tradesCount', { count: n }) : `${t('p2p.tradesCount', { count: n })} · ${rate}%`;
+}
+
+// Stored method names → translation keys. Brand names (Wise, Revolut, PayPal) stay as-is.
+const METHOD_KEYS: Record<string, string> = {
+  'Bank Transfer': 'p2p.method.bank', BANK_TRANSFER: 'p2p.method.bank',
+  'Cash': 'p2p.method.cash', CASH: 'p2p.method.cash',
+  'Internal Wallet': 'p2p.method.internal', INTERNAL_WALLET: 'p2p.method.internal',
+};
+const methodLabel = (m: string, t: TFn) => (METHOD_KEYS[m] ? t(METHOD_KEYS[m]) : m);
+
 /* ── Offer card ── */
-function OfferCard({ offer, palette: p, onPress }: {
-  offer: P2POffer; palette: Palette; onPress: () => void;
+function OfferCard({ offer, palette: p, t, rtl, userSide, onPress }: {
+  offer: P2POffer; palette: Palette; t: TFn; rtl: boolean; userSide: Side; onPress: () => void;
 }) {
-  const isBuy = offer.side === 'BUY';
-  const traderInitial = offer.trader.name.charAt(0).toUpperCase();
+  const row = rtl ? 'row-reverse' as const : 'row' as const;
+  const price = Number(offer.price);
+  const initial = offer.trader.anonymous ? '' : offer.trader.handle.replace('@', '').charAt(0).toUpperCase();
+  const place = [offer.distanceKm !== undefined ? t('p2p.kmAway', { km: offer.distanceKm }) : null, offer.city]
+    .filter(Boolean).join(' · ');
+  const action = userSide === 'BUY' ? t('p2p.actionBuy', { asset: offer.base }) : t('p2p.actionSell', { asset: offer.base });
 
   return (
     <Pressable
       onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={`${offer.trader.anonymous ? t('p2p.anonymous') : offer.trader.handle}, ${price} ${offer.quote} ${offer.base}${place ? `, ${place}` : ''}`}
       style={({ pressed }) => ({
-        marginBottom: 10, padding: 16, borderRadius: 18,
-        backgroundColor: pressed ? p.border : p.bgElev,
-        borderWidth: 1, borderColor: p.border,
+        padding: 18, borderRadius: 22,
+        backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border,
+        transform: [{ scale: pressed ? 0.985 : 1 }],
       })}
     >
-      {/* Trader row */}
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+      {/* Trader */}
+      <View style={{ flexDirection: row, alignItems: 'center', gap: 12 }}>
         <View style={{
-          width: 38, height: 38, borderRadius: 19,
+          width: 40, height: 40, borderRadius: 20,
           backgroundColor: p.pillBg, alignItems: 'center', justifyContent: 'center',
         }}>
-          <Text style={{ color: p.fg, fontWeight: '700', fontSize: 14 }}>{traderInitial}</Text>
+          {offer.trader.anonymous
+            ? <Ionicons name="eye-off-outline" size={17} color={p.fgMuted} />
+            : <Text style={{ color: p.fg, fontWeight: '700', fontSize: 15 }}>{initial}</Text>}
         </View>
-        <View style={{ flex: 1 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-            {!offer.trader.anonymous
-              ? <Text style={{ color: p.fg, fontSize: 14, fontWeight: '700' }}>{offer.trader.handle}</Text>
-              : <Text style={{ color: p.fgMuted, fontSize: 14, fontWeight: '700' }}>🥷 Anonymous</Text>
-            }
-            {offer.trader.verified && <Ionicons name="shield-checkmark" size={12} color={p.greenFg} />}
-          </View>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
-            <Ionicons name="star" size={11} color="#f59e0b" />
-            <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '600' }}>
-              {offer.trader.rating.toFixed(1)} · {offer.trader.orders} orders
+        <View style={{ flex: 1, alignItems: rtl ? 'flex-end' : 'flex-start' }}>
+          <View style={{ flexDirection: row, alignItems: 'center', gap: 5 }}>
+            <Text numberOfLines={1} style={{ color: offer.trader.anonymous ? p.fgMuted : p.fg, fontSize: 15, fontWeight: '600' }}>
+              {offer.trader.anonymous ? t('p2p.anonymous') : offer.trader.handle}
             </Text>
+            {offer.trader.verified && <Ionicons name="checkmark-circle" size={14} color={p.accentText} accessibilityLabel={t('p2p.verified')} />}
           </View>
+          <Text style={{ color: p.fgMuted, fontSize: 12, marginTop: 2 }}>{traderStatsLabel(offer.trader, t)}</Text>
         </View>
-        <View style={{
-          paddingHorizontal: 10, paddingVertical: 5, borderRadius: 10,
-          backgroundColor: isBuy ? p.greenBg : 'rgba(239,68,68,0.16)',
-        }}>
-          <Text style={{
-            color: isBuy ? p.greenFg : p.redFg,
-            fontSize: 10.5, fontWeight: '600', letterSpacing: 0.5,
+        {!!place && (
+          <View style={{
+            flexDirection: row, alignItems: 'center', gap: 4, maxWidth: '42%',
+            paddingHorizontal: 9, height: 26, borderRadius: 13, backgroundColor: p.accentSoft,
           }}>
-            {offer.side}
-          </Text>
-        </View>
-      </View>
-
-      {/* Rate */}
-      <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 6, marginTop: 14 }}>
-        <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '600' }}>RATE</Text>
-        <Text style={{ color: p.fg, fontSize: 22, fontWeight: '600', letterSpacing: -0.5 }}>
-          {Number(offer.price).toLocaleString('en-US', { maximumFractionDigits: 4 })}
-        </Text>
-        <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '600' }}>
-          {offer.quote} / {offer.base}
-        </Text>
-      </View>
-
-      {/* Limits + available */}
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 10 }}>
-        <View>
-          <Text style={{ color: p.fgFaint, fontSize: 10, fontWeight: '700', letterSpacing: 0.6 }}>LIMITS</Text>
-          <Text style={{ color: p.fg, fontSize: 12, fontWeight: '700', marginTop: 2 }}>
-            {offer.minLimit} – {offer.maxLimit} {offer.quote}
-          </Text>
-        </View>
-        <View style={{ alignItems: 'flex-end' }}>
-          <Text style={{ color: p.fgFaint, fontSize: 10, fontWeight: '700', letterSpacing: 0.6 }}>AVAILABLE</Text>
-          <Text style={{ color: p.fg, fontSize: 12, fontWeight: '700', marginTop: 2 }}>
-            {offer.available} {offer.base}
-          </Text>
-        </View>
-      </View>
-
-      {/* Methods */}
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 12 }}>
-        {offer.paymentMethods.map((m) => (
-          <View key={m} style={{ paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, backgroundColor: p.pillBg, borderWidth: 1, borderColor: p.border }}>
-            <Text style={{ color: p.fgMuted, fontSize: 10.5, fontWeight: '700' }}>{m}</Text>
-          </View>
-        ))}
-        {offer.paymentMethods.includes('Cash') && offer.city && (
-          <View style={{ paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, backgroundColor: 'rgba(245,158,11,0.12)', borderWidth: 1, borderColor: 'rgba(245,158,11,0.35)', flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-            <Ionicons name="location-outline" size={11} color="#f59e0b" />
-            <Text style={{ color: '#f59e0b', fontSize: 10.5, fontWeight: '700' }}>{offer.city}</Text>
+            <Ionicons name="location" size={11} color={p.accentText} />
+            <Text numberOfLines={1} style={{ color: p.accentText, fontSize: 11.5, fontWeight: '600' }}>{place}</Text>
           </View>
         )}
       </View>
+
+      {/* Price + action */}
+      <View style={{ flexDirection: row, alignItems: 'flex-end', justifyContent: 'space-between', marginTop: 18 }}>
+        <View style={{ alignItems: rtl ? 'flex-end' : 'flex-start' }}>
+          <Text style={{ color: p.fg, fontSize: 26, fontWeight: '600', letterSpacing: -0.8, fontVariant: ['tabular-nums'] }}>
+            {price.toLocaleString('en-US', { maximumFractionDigits: 4 })}
+            <Text style={{ color: p.fgMuted, fontSize: 14, fontWeight: '600', letterSpacing: 0 }}> {offer.quote}</Text>
+          </Text>
+          <Text style={{ color: p.fgFaint, fontSize: 12, marginTop: 2 }}>{t('p2p.perUnit', { asset: offer.base })}</Text>
+        </View>
+        <View style={{ height: 36, paddingHorizontal: 16, borderRadius: 18, backgroundColor: p.ctaBg, alignItems: 'center', justifyContent: 'center' }}>
+          <Text style={{ color: p.ctaFg, fontSize: 13, fontWeight: '600' }}>{action}</Text>
+        </View>
+      </View>
+
+      <View style={{ height: 1, backgroundColor: p.border, marginVertical: 14 }} />
+
+      {/* Terms */}
+      <View style={{ flexDirection: row, justifyContent: 'space-between', gap: 12 }}>
+        <View style={{ flex: 1, alignItems: rtl ? 'flex-end' : 'flex-start' }}>
+          <Text style={{ color: p.fgFaint, fontSize: 11.5 }}>{t('p2p.limits')}</Text>
+          <Text numberOfLines={1} style={{ color: p.fg, fontSize: 13, fontWeight: '600', marginTop: 3, fontVariant: ['tabular-nums'] }}>
+            {Number(offer.minLimit).toLocaleString('en-US', { maximumFractionDigits: 2 })} – {Number(offer.maxLimit).toLocaleString('en-US', { maximumFractionDigits: 2 })} {offer.quote}
+          </Text>
+        </View>
+        <View style={{ alignItems: rtl ? 'flex-start' : 'flex-end' }}>
+          <Text style={{ color: p.fgFaint, fontSize: 11.5 }}>{t('p2p.available')}</Text>
+          <Text numberOfLines={1} style={{ color: p.fg, fontSize: 13, fontWeight: '600', marginTop: 3, fontVariant: ['tabular-nums'] }}>
+            {Number(offer.available).toLocaleString('en-US', { maximumFractionDigits: 6 })} {offer.base}
+          </Text>
+        </View>
+      </View>
+      {offer.paymentMethods.length > 0 && (
+        <Text numberOfLines={1} style={{ color: p.fgMuted, fontSize: 12, marginTop: 10, textAlign: rtl ? 'right' : 'left' }}>
+          {offer.paymentMethods.map((m) => methodLabel(m, t)).join(' · ')}
+        </Text>
+      )}
     </Pressable>
   );
 }
@@ -371,24 +442,14 @@ function OfferDetailSheet({ offer, palette: p, t, onClose, onTradeStarted }: {
       : t('p2p.startTrade');
 
   return (
-    <Modal visible animationType="slide" transparent onRequestClose={onClose}>
-      <Pressable
-        style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }}
-        onPress={onClose}
-      >
-          <Pressable
-            style={{
-              backgroundColor: p.bg,
-              borderTopLeftRadius: 24, borderTopRightRadius: 24,
-              maxHeight: '92%',
-            }}
-            onPress={(e) => e.stopPropagation()}
-          >
-            {/* Handle */}
-            <View style={{ alignItems: 'center', paddingTop: 12, paddingBottom: 4 }}>
-              <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: p.border }} />
-            </View>
-
+    <BottomSheet
+      visible
+      onClose={onClose}
+      // What the viewer does here — taking a BUY listing means selling.
+      title={isBuy ? t('p2p.actionSell', { asset: offer.base }) : t('p2p.actionBuy', { asset: offer.base })}
+      scroll={false}
+      contentStyle={{ paddingHorizontal: 0 }}
+    >
             <ScrollView
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
@@ -397,25 +458,22 @@ function OfferDetailSheet({ offer, palette: p, t, onClose, onTradeStarted }: {
               {/* Trader info */}
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 8 }}>
                 <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: p.pillBg, alignItems: 'center', justifyContent: 'center' }}>
-                  <Text style={{ color: p.fg, fontSize: 18, fontWeight: '600' }}>
-                    {offer.trader.anonymous ? '🥷' : offer.trader.name.charAt(0).toUpperCase()}
-                  </Text>
+                  {offer.trader.anonymous
+                    ? <Ionicons name="eye-off-outline" size={19} color={p.fgMuted} />
+                    : <Text style={{ color: p.fg, fontSize: 18, fontWeight: '600' }}>{offer.trader.handle.replace('@', '').charAt(0).toUpperCase()}</Text>}
                 </View>
                 <View style={{ flex: 1 }}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                     {offer.trader.anonymous
-                      ? <Text style={{ color: p.fgMuted, fontSize: 16, fontWeight: '600' }}>Anonymous</Text>
+                      ? <Text style={{ color: p.fgMuted, fontSize: 16, fontWeight: '600' }}>{t('p2p.anonymous')}</Text>
                       : <Text style={{ color: p.fg, fontSize: 16, fontWeight: '600' }}>{offer.trader.handle}</Text>
                     }
-                    {offer.trader.verified && <Ionicons name="shield-checkmark" size={14} color={p.greenFg} />}
+                    {offer.trader.verified && <Ionicons name="checkmark-circle" size={15} color={p.accentText} />}
                   </View>
-                  <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '600', marginTop: 2 }}>
-                    ★ {offer.trader.rating.toFixed(1)} · {offer.trader.orders} orders
-                    {offer.timeframeMins !== 30 ? ` · ⏱ ${offer.timeframeMins}min` : ''}
+                  <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '500', marginTop: 2 }}>
+                    {traderStatsLabel(offer.trader, t)}
+                    {offer.timeframeMins ? ` · ${t('p2p.payWithin', { mins: offer.timeframeMins })}` : ''}
                   </Text>
-                </View>
-                <View style={{ paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10, backgroundColor: isBuy ? p.greenBg : 'rgba(239,68,68,0.16)' }}>
-                  <Text style={{ color: isBuy ? p.greenFg : p.redFg, fontSize: 11, fontWeight: '600' }}>{offer.side}</Text>
                 </View>
               </View>
 
@@ -459,11 +517,17 @@ function OfferDetailSheet({ offer, palette: p, t, onClose, onTradeStarted }: {
                       );
                     })}
                   </View>
-                  {selectedMethod === 'Cash' && offer.city && (
-                    <View style={{ marginTop: 10, flexDirection: 'row', alignItems: 'center', gap: 6, padding: 10, borderRadius: 10, backgroundColor: 'rgba(245,158,11,0.10)', borderWidth: 1, borderColor: 'rgba(245,158,11,0.3)' }}>
-                      <Ionicons name="location" size={14} color="#f59e0b" />
-                      <Text style={{ color: '#f59e0b', fontSize: 12, fontWeight: '700' }}>Meet in {offer.city}{offer.country ? `, ${offer.country}` : ''}</Text>
+                  {selectedMethod === 'Cash' && (offer.city || offer.distanceKm !== undefined) && (
+                    <View style={{ marginTop: 10, flexDirection: 'row', alignItems: 'center', gap: 8, padding: 12, borderRadius: 12, backgroundColor: p.accentSoft, borderWidth: 1, borderColor: p.accentBorder }}>
+                      <Ionicons name="location" size={14} color={p.accentText} />
+                      <Text style={{ flex: 1, color: p.fg, fontSize: 12.5, fontWeight: '500', lineHeight: 18 }}>
+                        {[offer.city ? t('p2p.meetIn', { place: [offer.city, offer.country].filter(Boolean).join(', ') }) : null,
+                          offer.distanceKm !== undefined ? t('p2p.kmAway', { km: offer.distanceKm }) : null].filter(Boolean).join(' · ')}
+                      </Text>
                     </View>
+                  )}
+                  {selectedMethod === 'Cash' && (
+                    <Text style={{ color: p.fgMuted, fontSize: 12, lineHeight: 18, marginTop: 8 }}>{t('p2p.cashSafety')}</Text>
                   )}
                 </View>
               )}
@@ -565,9 +629,7 @@ function OfferDetailSheet({ offer, palette: p, t, onClose, onTradeStarted }: {
                 </Text>
               </Pressable>
             </View>
-          </Pressable>
-      </Pressable>
-    </Modal>
+          </BottomSheet>
   );
 }
 
@@ -621,7 +683,24 @@ function CreateListingSheet({ palette: p, t, onClose, onCreated }: {
   const [timeframeMins, setTimeframe] = useState('30');
   const [terms, setTerms]           = useState('');
   const [showTerms, setShowTerms]   = useState(false);
+  const [shareLocation, setShareLocation] = useState(false);
+  const location = useApproxLocation();
   const hasCash = methods.includes('Cash');
+
+  const toggleShareLocation = async (on: boolean) => {
+    h.selection();
+    if (!on) { setShareLocation(false); return; }
+    setShareLocation(true);
+    const coords = location.coords ?? await location.request();
+    if (!coords) {
+      setShareLocation(false);
+      Alert.alert(t('p2p.shareDistance'),
+        useApproxLocation.getState().status === 'denied' ? t('p2p.locationDenied') : t('p2p.locationUnavailable'),
+        useApproxLocation.getState().canAskAgain
+          ? [{ text: t('common.done') }]
+          : [{ text: t('common.cancel'), style: 'cancel' }, { text: t('p2p.openSettings'), onPress: openLocationSettings }]);
+    }
+  };
 
   const priceN  = Number(price);
   const amountN = Number(amount);
@@ -672,6 +751,7 @@ function CreateListingSheet({ palette: p, t, onClose, onCreated }: {
         anonymous,
         city: hasCash && city.trim() ? city.trim() : undefined,
         timeframeMins: tfMins,
+        location: shareLocation && location.coords ? location.coords : undefined,
       });
       h.success();
       Alert.alert(
@@ -686,75 +766,20 @@ function CreateListingSheet({ palette: p, t, onClose, onCreated }: {
   };
 
   return (
-    <Modal visible animationType="slide" transparent onRequestClose={onClose}>
-      <Pressable
-        style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }}
-        onPress={onClose}
-      >
-          <Pressable
-            style={{
-              backgroundColor: p.bg,
-              borderTopLeftRadius: 32,
-              borderTopRightRadius: 32,
-              height: '88%',
-              overflow: 'hidden',
-            }}
-            onPress={(e) => e.stopPropagation()}
-          >
-            {/* Handle + header */}
-           <View style={{ alignItems: 'center', paddingTop: 12 }}>
-            <View
-              style={{
-                width: 42,
-                height: 5,
-                borderRadius: 3,
-                backgroundColor: p.border,
-                marginBottom: 20,
-              }}
-            />
-
-            <View
-              style={{
-                flexDirection: 'row',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                width: '100%',
-                paddingHorizontal: 24,
-                paddingBottom: 18,
-                borderBottomWidth: 1,
-                borderBottomColor: p.border,
-              }}
-            >
-              <Text
-                style={{
-                  color: p.fg,
-                  fontSize: 22,
-                  fontWeight: '600',
-                  letterSpacing: -0.4,
-                }}
-              >
-                {t('p2p.createListing')}
-              </Text>
-
-              <Pressable onPress={() => router.back()}>
-                <Ionicons name="close" size={22} color={p.fgMuted} />
-              </Pressable>
-            </View>
-          </View>
-
+    <BottomSheet visible={true} onClose={onClose} title={t('p2p.createListing')} scroll={false} contentStyle={{ paddingHorizontal: 0 }}>
             <ScrollView
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
               contentContainerStyle={{
-                paddingHorizontal: 20,
-                paddingTop: 18,
+                paddingHorizontal: 24,
+                paddingTop: 4,
                 paddingBottom: 120,
               }}
             >
               {/* BUY / SELL toggle */}
               <View style={{
                 flexDirection: 'row', backgroundColor: p.pillBg,
-                borderRadius: 14, padding: 4, gap: 4, marginTop: 16,
+                borderRadius: 14, padding: 4, gap: 4,
               }}>
                 {(['BUY', 'SELL'] as const).map((s) => (
                   <Pressable
@@ -822,21 +847,7 @@ function CreateListingSheet({ palette: p, t, onClose, onCreated }: {
                     </Pressable>
 
                     {/* Asset picker modal */}
-                    <Modal visible={showAssetPicker} animationType="slide" transparent onRequestClose={() => setShowAssetPicker(false)}>
-                      <Pressable
-                        style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' }}
-                        onPress={() => setShowAssetPicker(false)}
-                      >
-                        <Pressable
-                          style={{ backgroundColor: p.bg, borderTopLeftRadius: 28, borderTopRightRadius: 28, maxHeight: '72%' }}
-                          onPress={(e) => e.stopPropagation()}
-                        >
-                          <View style={{ alignItems: 'center', paddingTop: 12, paddingBottom: 8 }}>
-                            <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: p.border }} />
-                          </View>
-                          <Text style={{ color: p.fg, fontSize: 17, fontWeight: '600', paddingHorizontal: 20, paddingBottom: 12 }}>
-                            Select Asset
-                          </Text>
+                    <BottomSheet visible={showAssetPicker} onClose={() => setShowAssetPicker(false)} title={"Select Asset"} scroll={false} contentStyle={{ paddingHorizontal: 0 }}>
                           {/* Search */}
                           <View style={{
                             marginHorizontal: 20, marginBottom: 10,
@@ -953,9 +964,7 @@ function CreateListingSheet({ palette: p, t, onClose, onCreated }: {
                             )}
                             <View style={{ height: 32 }} />
                           </ScrollView>
-                        </Pressable>
-                      </Pressable>
-                    </Modal>
+                        </BottomSheet>
                   </>
                 ) : (
                   /* BUY side: same dropdown as SELL */
@@ -986,21 +995,7 @@ function CreateListingSheet({ palette: p, t, onClose, onCreated }: {
                       <Ionicons name="chevron-down" size={16} color={p.fgMuted} />
                     </Pressable>
 
-                    <Modal visible={showAssetPicker} animationType="slide" transparent onRequestClose={() => setShowAssetPicker(false)}>
-                      <Pressable
-                        style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' }}
-                        onPress={() => setShowAssetPicker(false)}
-                      >
-                        <Pressable
-                          style={{ backgroundColor: p.bg, borderTopLeftRadius: 28, borderTopRightRadius: 28, maxHeight: '72%' }}
-                          onPress={(e) => e.stopPropagation()}
-                        >
-                          <View style={{ alignItems: 'center', paddingTop: 12, paddingBottom: 8 }}>
-                            <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: p.border }} />
-                          </View>
-                          <Text style={{ color: p.fg, fontSize: 17, fontWeight: '600', paddingHorizontal: 20, paddingBottom: 12 }}>
-                            Select Asset to Buy
-                          </Text>
+                    <BottomSheet visible={showAssetPicker} onClose={() => setShowAssetPicker(false)} title={"Select Asset to Buy"} scroll={false} contentStyle={{ paddingHorizontal: 0 }}>
                           <View style={{
                             marginHorizontal: 20, marginBottom: 10,
                             flexDirection: 'row', alignItems: 'center', gap: 8,
@@ -1066,9 +1061,7 @@ function CreateListingSheet({ palette: p, t, onClose, onCreated }: {
                               })}
                             <View style={{ height: 32 }} />
                           </ScrollView>
-                        </Pressable>
-                      </Pressable>
-                    </Modal>
+                        </BottomSheet>
                   </>
                 )}
               </SheetSection>
@@ -1207,6 +1200,21 @@ function CreateListingSheet({ palette: p, t, onClose, onCreated }: {
                 </SheetSection>
               )}
 
+              {/* Near-me discovery (opt-in) */}
+              <SheetSection title={t('p2p.discovery').toUpperCase()} palette={p}>
+                <Panel>
+                  <ToggleRow
+                    icon="navigate-outline"
+                    label={t('p2p.shareDistance')}
+                    description={t('p2p.shareDistanceBody')}
+                    value={shareLocation}
+                    onValueChange={toggleShareLocation}
+                    disabled={location.status === 'locating'}
+                    last
+                  />
+                </Panel>
+              </SheetSection>
+
               {/* Payment timeframe */}
               <SheetSection title="PAYMENT WINDOW (MINUTES)" palette={p}>
                 <NumberField palette={p} value={timeframeMins} onChangeText={setTimeframe} placeholder="30" suffix="min" />
@@ -1319,9 +1327,7 @@ function CreateListingSheet({ palette: p, t, onClose, onCreated }: {
                 </Text>
               </Pressable>
             </View>
-          </Pressable>
-      </Pressable>
-    </Modal>
+          </BottomSheet>
   );
 }
 

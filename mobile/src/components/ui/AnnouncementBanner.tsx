@@ -19,6 +19,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { APP } from '@/constants';
 
+import { BottomSheet } from '@/components/ui/BottomSheet';
 const OPT_OUT_KEY = '@announcements_opted_out';
 
 function resolveMediaUrl(raw?: string | null): string | undefined {
@@ -134,20 +135,7 @@ export function AnnouncementBanner() {
       </Animated.View>
 
       {/* ── Full sheet (BuyWidget modal style) ── */}
-      <Modal visible={open} transparent animationType="slide" onRequestClose={() => setOpen(false)}>
-        <Pressable
-          style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' }}
-          onPress={() => setOpen(false)}
-        >
-          <Pressable
-            style={{ backgroundColor: p.bg, borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingTop: 10, paddingBottom: insets.bottom + 12, maxHeight: '90%' }}
-            onPress={(e) => e.stopPropagation()}
-          >
-            {/* Handle */}
-            <View style={{ alignItems: 'center', marginBottom: 12 }}>
-              <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: p.border }} />
-            </View>
-
+      <BottomSheet visible={open} onClose={() => setOpen(false)} scroll={false} contentStyle={{ paddingHorizontal: 0 }}>
             <ScrollView contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 8 }}>
               {/* Hero image */}
               {hasImage && (
@@ -215,9 +203,7 @@ export function AnnouncementBanner() {
                 <Text style={{ color: p.fgFaint, fontSize: 12, fontWeight: '500' }}>Don't show announcements</Text>
               </Pressable>
             </View>
-          </Pressable>
-        </Pressable>
-      </Modal>
+          </BottomSheet>
     </>
   );
 }

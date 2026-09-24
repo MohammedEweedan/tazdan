@@ -88,6 +88,27 @@ export function authenticate(req: AuthRequest, res: Response, next: NextFunction
     .catch(() => { req.user = decoded; next(); });
 }
 
+/**
+ * For public endpoints that show more to signed-in users. A valid token sets
+ * `req.user`; a missing, invalid or revoked one leaves the request anonymous
+ * instead of failing it.
+ */
+export function optionalAuthenticate(req: AuthRequest, _res: Response, next: NextFunction) {
+  const authHeader = req.headers.authorization;
+  const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
+  if (!token) return next();
+
+  let decoded: { id: string; email: string; role: string; iat?: number };
+  try {
+    decoded = jwt.verify(token, jwtSecret(), { algorithms: ['HS256'] }) as typeof decoded;
+  } catch {
+    return next();
+  }
+  isRevokedByCutoff(decoded.id, decoded.iat)
+    .then((revoked) => { if (!revoked) req.user = decoded; next(); })
+    .catch(() => next());
+}
+
 // ── Admin gate ───────────────────────────────────────────────────────
 // The JWT role claim alone is not enough for the admin surface: a demoted
 // or suspended admin keeps a valid token until expiry. Re-check the DB

@@ -1,9 +1,16 @@
 import { useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
+import { Redirect } from 'expo-router';
 import { ShaderLines } from '@/components/ui/ShaderLines';
 import { Text } from '@/components/ui/Text';
 
-export default function DevShaderScreen() {
+// Development-only visual test. Release builds redirect deep links home.
+export default function DevShaderRoute() {
+  if (!__DEV__) return <Redirect href="/" />;
+  return <DevShaderScreen />;
+}
+
+function DevShaderScreen() {
   const [shaderOn, setShaderOn] = useState(true);
   const [mode, setMode] = useState<'dark' | 'light'>('dark');
 

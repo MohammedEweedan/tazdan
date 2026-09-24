@@ -15,6 +15,7 @@ import { pushP2PTradeUpdate } from '../services/push.service';
 import { logger } from '../utils/logger';
 import { assertTransitioned, lockUserWallets, reserveFunds } from '../services/wallet/atomicWallet';
 import { enforceKycLimit } from '../utils/kycLimits';
+import { coarsenCoord, displayDistanceKm, haversineKm, isValidLatLng, parseNear } from '../utils/geo';
 
 async function notifyTradeParties(
   tradeId: string, buyerId: string, sellerId: string,
@@ -44,11 +45,19 @@ function resolveTicker(asset: string | null | undefined, fallback: string) {
   return asset ?? fallback;
 }
 
+/** Page size from the query string, clamped so one request can't pull the table. */
+function pageLimit(raw: unknown, fallback: number, max = 100): number {
+  const n = parseInt(raw as string);
+  return Number.isFinite(n) && n > 0 ? Math.min(n, max) : fallback;
+}
+
 function resolveListingAssets(listing: any) {
   const currency = resolveTicker(listing.baseAsset, listing.currency);
   const fiatCurrency = resolveTicker(listing.fiatAsset, listing.fiatCurrency);
+  // Stored coordinates never leave the server — viewers only get a distance.
+  const { geoLat: _lat, geoLng: _lng, ...rest } = listing;
   return {
-    ...listing,
+    ...rest,
     currency,
     fiatCurrency,
     resolvedCurrency: currency,
@@ -72,6 +81,8 @@ const createListingSchema = z.object({
   anonymous: z.boolean().optional(),
   city: z.string().max(100).optional(),
   timeframeMins: z.number().int().min(5).max(10080).optional(),
+  /** Opt-in: lets nearby traders see roughly how far away this listing is. */
+  location: z.object({ lat: z.number(), lng: z.number() }).optional(),
 });
 
 const initTradeSchema = z.object({
@@ -80,6 +91,35 @@ const initTradeSchema = z.object({
   paymentMethod: z.string().optional(),
   note: z.string().max(500).optional(),
 });
+
+/**
+ * Completed vs finished trade counts per user, across both sides. "Finished"
+ * is any terminal state — a trader who lets trades expire or cancels them
+ * sees their completion rate drop.
+ */
+async function traderStats(userIds: string[]): Promise<Map<string, { completed: number; finished: number }>> {
+  const ids = [...new Set(userIds)];
+  const out = new Map<string, { completed: number; finished: number }>();
+  if (ids.length === 0) return out;
+  const terminal = ['COMPLETED', 'CANCELLED', 'EXPIRED'];
+  const [asSeller, asBuyer] = await Promise.all([
+    (prisma as any).p2PTrade.groupBy({
+      by: ['sellerId', 'status'], where: { sellerId: { in: ids }, status: { in: terminal } }, _count: { _all: true },
+    }),
+    (prisma as any).p2PTrade.groupBy({
+      by: ['buyerId', 'status'], where: { buyerId: { in: ids }, status: { in: terminal } }, _count: { _all: true },
+    }),
+  ]);
+  const add = (userId: string, status: string, n: number) => {
+    const cur = out.get(userId) ?? { completed: 0, finished: 0 };
+    cur.finished += n;
+    if (status === 'COMPLETED') cur.completed += n;
+    out.set(userId, cur);
+  };
+  for (const r of asSeller) add(r.sellerId, r.status, r._count._all);
+  for (const r of asBuyer) add(r.buyerId, r.status, r._count._all);
+  return out;
+}
 
 // ── Controller ──────────────────────────────────────────────────────
 
@@ -100,6 +140,9 @@ export class P2PController {
       if (data.minLimit > data.maxLimit) throw new AppError('Min limit must be <= max limit', 400);
       if (data.minLimit > totalFiat) throw new AppError(`Min limit must be <= total listing value (${totalFiat} ${fiatTicker})`, 400);
       if (data.maxLimit > totalFiat) throw new AppError(`Max limit must be <= total listing value (${totalFiat} ${fiatTicker})`, 400);
+      if (data.location && !isValidLatLng(data.location.lat, data.location.lng)) {
+        throw new AppError('Invalid location', 400);
+      }
 
       // For SELL listings, verify seller has enough balance
       if (data.side === 'SELL') {
@@ -136,6 +179,9 @@ export class P2PController {
           anonymous:     data.anonymous ?? false,
           city:          data.city,
           timeframeMins: data.timeframeMins ?? 30,
+          locationEnabled: !!data.location,
+          geoLat:        data.location ? coarsenCoord(data.location.lat) : null,
+          geoLng:        data.location ? coarsenCoord(data.location.lng) : null,
         },
         include: {
           user: { select: { id: true, firstName: true, lastName: true, username: true, kycStatus: true } },
@@ -153,8 +199,8 @@ export class P2PController {
   /** Get active listings (public marketplace) */
   static async getListings(req: AuthRequest, res: Response, next: NextFunction) {
     try {
-      const page = parseInt(req.query.page as string) || 1;
-      const limit = parseInt(req.query.limit as string) || 20;
+      const page = Math.max(1, parseInt(req.query.page as string) || 1);
+      const limit = pageLimit(req.query.limit, 20);
       const side = req.query.side as string | undefined;
       const currency = req.query.currency as string | undefined;
 
@@ -194,14 +240,19 @@ export class P2PController {
    *
    * Reshapes `P2PListing` rows into the `P2POffer` shape consumed by the
    * mobile + web UI. No auth required.
+   *
+   * `near=lat,lng` (signed-in users only) sorts listings that opted in to
+   * location by distance and adds a rounded `distanceKm`; listings without a
+   * location follow, newest first. Coordinates are never returned.
    */
   static async getOffers(req: AuthRequest, res: Response, next: NextFunction) {
     try {
-      const limit  = parseInt(req.query.limit as string)  || 50;
+      const limit  = pageLimit(req.query.limit, 50);
       const sideQ  = (req.query.side as string | undefined)?.toUpperCase();
       const currencyQ = (req.query.currency as string | undefined)?.toUpperCase();
+      const near = req.user ? parseNear(req.query.near) : null;
 
-      const canUseCache = !sideQ && !currencyQ && limit <= 100;
+      const canUseCache = !sideQ && !currencyQ && !near;
       let offers: any[] | undefined;
 
       if (canUseCache) {
@@ -222,32 +273,41 @@ export class P2PController {
         const listings = await (prisma as any).p2PListing.findMany({
           where,
           orderBy: { createdAt: 'desc' },
-          take: Math.min(limit, 100),
+          // Sorting by distance needs a wider pool than the page it returns.
+          take: near ? 200 : 100,
           include: {
             user: {
               select: {
                 id: true, firstName: true, lastName: true, username: true,
                 kycStatus: true, country: true, avatarUrl: true,
-                _count: { select: { p2pTradesAsBuyer: true, p2pTradesAsSeller: true } },
               },
             },
           },
         });
 
-        offers = listings.map((l: any) => {
-          const orders = (l.user._count?.p2pTradesAsBuyer ?? 0)
-                       + (l.user._count?.p2pTradesAsSeller ?? 0);
+        const stats = await traderStats(listings.map((l: any) => l.userId));
+
+        let built: any[] = listings.map((l: any) => {
+          const st = stats.get(l.userId) ?? { completed: 0, finished: 0 };
           const remaining = Math.max(
             0,
             parseFloat(l.amount.toString()) - parseFloat(l.filled.toString()),
           );
+          const shared = {
+            completedTrades: st.completed,
+            // Share of finished trades that completed; null until there are any.
+            completionRate: st.finished > 0 ? Math.round((st.completed / st.finished) * 100) : null,
+            // Kept for older app builds that still read it: the real
+            // completion rate on a 5-point scale, never an invented score.
+            rating: st.finished > 0 ? Math.round((st.completed / st.finished) * 50) / 10 : 0,
+            orders: st.completed,
+            verified: l.user.kycStatus === 'APPROVED',
+          };
           const trader = l.anonymous
             ? {
                 handle: `@anon_${String(l.id).slice(0, 6)}`,
                 name: 'Anonymous trader',
-                rating: 4.7,
-                orders,
-                verified: l.user.kycStatus === 'APPROVED',
+                ...shared,
                 avatarUrl: undefined,
                 anonymous: true,
               }
@@ -255,13 +315,16 @@ export class P2PController {
                 handle: l.user.username
                   ? `@${l.user.username}`
                   : `@${(l.user.firstName ?? 'user').toLowerCase()}`,
-                name: `${l.user.firstName ?? ''} ${l.user.lastName ?? ''}`.trim() || 'Trader',
-                rating: 4.7,
-                orders,
-                verified: l.user.kycStatus === 'APPROVED',
+                // First name + last initial — the public feed never carries full names.
+                name: [l.user.firstName, l.user.lastName ? `${l.user.lastName.charAt(0)}.` : '']
+                  .filter(Boolean).join(' ') || 'Trader',
+                ...shared,
                 avatarUrl: l.user.avatarUrl ?? undefined,
                 anonymous: false,
               };
+          const distance = near && l.locationEnabled && l.geoLat != null && l.geoLng != null
+            ? haversineKm(near, { lat: l.geoLat, lng: l.geoLng })
+            : undefined;
           return {
             id: l.id,
             side: l.side,
@@ -276,8 +339,24 @@ export class P2PController {
             country: l.anonymous ? undefined : (l.country ?? l.user.country ?? undefined),
             city: l.anonymous ? undefined : (l.city ?? undefined),
             timeframeMins: l.timeframeMins ?? 30,
+            hasLocation: !!l.locationEnabled,
+            distanceKm: distance !== undefined ? displayDistanceKm(distance) : undefined,
+            _distance: distance,
           };
         });
+
+        if (near) {
+          // Nearest first; listings without a location keep their recency order after.
+          built = built
+            .map((o, i) => ({ o, i }))
+            .sort((a, b) => {
+              const da = a.o._distance ?? Infinity;
+              const db = b.o._distance ?? Infinity;
+              return da === db ? a.i - b.i : da - db;
+            })
+            .map(({ o }) => o);
+        }
+        offers = built.map(({ _distance, ...o }: any) => o);
 
         if (canUseCache) {
           await redisSet(P2P_OFFERS_CACHE_KEY, { offers }, P2P_OFFERS_TTL);
@@ -873,8 +952,8 @@ export class P2PController {
   /** Get my trades */
   static async getMyTrades(req: AuthRequest, res: Response, next: NextFunction) {
     try {
-      const page = parseInt(req.query.page as string) || 1;
-      const limit = parseInt(req.query.limit as string) || 20;
+      const page = Math.max(1, parseInt(req.query.page as string) || 1);
+      const limit = pageLimit(req.query.limit, 20);
 
       const where = {
         OR: [{ buyerId: req.user!.id }, { sellerId: req.user!.id }],

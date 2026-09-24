@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { authenticate } from '../middleware/auth';
+import { authenticate, optionalAuthenticate } from '../middleware/auth';
 import { P2PController } from '../controllers/p2p.controller';
 import { requireFeature } from '../utils/features';
 
@@ -7,7 +7,8 @@ export const p2pRouter = Router();
 
 // Public marketplace feed (used by mobile dashboard + landing page)
 // Returns listings reshaped into the `P2POffer` shape consumed by the UI.
-p2pRouter.get('/offers', P2PController.getOffers);
+// Signed-in callers can also sort by distance (`near=lat,lng`).
+p2pRouter.get('/offers', optionalAuthenticate, P2PController.getOffers);
 
 // Listings
 p2pRouter.get('/listings', authenticate, P2PController.getListings);

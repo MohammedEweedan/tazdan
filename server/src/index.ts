@@ -21,6 +21,8 @@ validateEnv();
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
+import { optionalAuthenticate } from './middleware/auth';
+import type { AuthRequest } from './types';
 import compression from 'compression';
 import cookieParser from 'cookie-parser';
 import { createServer } from 'http';
@@ -218,6 +220,11 @@ app.use('/api/auth/forgot-password', authLimiter);
 app.use('/api/auth/reset-password', authLimiter);
 app.use('/api/auth/verify-email-code', authLimiter);
 app.use('/api/auth/2fa/recover', authLimiter);
+// Code checks (brute force) and code sends (SMS/email cost + spam).
+app.use('/api/auth/2fa/verify', authLimiter);
+app.use('/api/auth/2fa/disable', authLimiter);
+app.use('/api/auth/phone', authLimiter);
+app.use('/api/auth/resend-verification', authLimiter);
 app.use('/api/auth/refresh', authLimiter);
 app.use('/api/auth/register', registerLimiter);
 app.use('/api/withdrawals', withdrawalLimiter);
@@ -291,7 +298,9 @@ app.get('/api/features', (_req, res) => {
 });
 
 // Health check
-app.get('/api/health', async (_req, res) => {
+// Public: status + dependency checks only. Config details (email transport,
+// sender addresses, missing env names, pid) go to signed-in admins only.
+app.get('/api/health', optionalAuthenticate, async (req: AuthRequest, res) => {
   const checks: Record<string, 'ok' | 'error'> = {};
 
   // DB check
@@ -319,17 +328,18 @@ app.get('/api/health', async (_req, res) => {
   const healthy = Object.values(checks).every(v => v === 'ok');
   const status = healthy ? 200 : 503;
 
+  const isAdmin = req.user?.role === 'ADMIN';
   res.status(status).json({
     status: healthy ? 'ok' : 'degraded',
-    version: process.env.npm_package_version ?? '1.0.0',
-    environment: process.env.NODE_ENV ?? 'development',
-    uptime: Math.floor(process.uptime()),
     timestamp: new Date().toISOString(),
     checks,
-    diagnostics: {
-      email: getEmailStatus(),
-    },
-    worker: process.pid,
+    ...(isAdmin ? {
+      version: process.env.npm_package_version ?? '1.0.0',
+      environment: process.env.NODE_ENV ?? 'development',
+      uptime: Math.floor(process.uptime()),
+      diagnostics: { email: getEmailStatus() },
+      worker: process.pid,
+    } : {}),
   });
 });
 

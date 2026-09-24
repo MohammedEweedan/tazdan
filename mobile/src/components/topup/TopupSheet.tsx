@@ -52,8 +52,6 @@ export interface TopupSheetProps {
 export function TopupSheet({ visible, onClose, initialCurrency }: TopupSheetProps) {
   const p = useThemedPalette();
   const country = useAuthStore((s) => s.user?.country ?? null);
-  const { height } = useWindowDimensions();
-
   return (
     <BottomSheet
       visible={visible}
@@ -61,8 +59,7 @@ export function TopupSheet({ visible, onClose, initialCurrency }: TopupSheetProp
       title="Top up balance"
       subtitle={country ? `Available methods for your country (${country})` : undefined}
       scroll={false}
-      maxHeightPct={94}
-      contentStyle={{ paddingHorizontal: 0, height: Math.round(height * 0.74) }}
+      contentStyle={{ paddingHorizontal: 0, paddingBottom: 0 }}
     >
       <TopupBody
         palette={p}

@@ -27,6 +27,7 @@ import { cryptoExchangeAPI, type CryptoQuote, type AssetSearchResult } from '@/l
 import { isStepUpChallengeError, stepUpErrorMessage } from '@/lib/stepUpErrors';
 import { STRIPE, fiatSymbol as fiatGlyph, getCurrencyMeta } from '@/constants';
 
+import { BottomSheet } from '@/components/ui/BottomSheet';
 // ── Static metadata for well-known coins ─────────────────────────────────────
 // Everything else gets a generated colour from its ticker symbol.
 const KNOWN: Record<string, { label: string; color: string; icon: string }> = {
@@ -751,15 +752,7 @@ export function BuyWidget({ defaultAsset, lockAsset = false }: BuyWidgetProps = 
       {/* ══════════════════════════════════════════════════════════════
           NETWORK PICKER
       ══════════════════════════════════════════════════════════════ */}
-      <Modal visible={networkSheetOpen} transparent animationType="slide" onRequestClose={() => setNetworkSheetOpen(false)}>
-        <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' }} onPress={() => setNetworkSheetOpen(false)}>
-          <Pressable style={{ backgroundColor: p.bg, borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingTop: 10, paddingBottom: 48 }} onPress={(e) => e.stopPropagation()}>
-            <View style={{ alignItems: 'center', marginBottom: 16 }}>
-              <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: p.border }} />
-            </View>
-            <Text style={{ color: p.fg, fontSize: 18, fontWeight: '600', paddingHorizontal: 20, marginBottom: 6 }}>
-              Select network
-            </Text>
+      <BottomSheet visible={networkSheetOpen} onClose={() => setNetworkSheetOpen(false)} title={"Select network"} contentStyle={{ paddingHorizontal: 0 }}>
             <Text style={{ color: p.fgMuted, fontSize: 13, paddingHorizontal: 20, marginBottom: 16 }}>
               Choose which network to receive {serverAsset(asset)} on.
             </Text>
@@ -791,9 +784,7 @@ export function BuyWidget({ defaultAsset, lockAsset = false }: BuyWidgetProps = 
                 </Pressable>
               );
             })}
-          </Pressable>
-        </Pressable>
-      </Modal>
+          </BottomSheet>
 
       {/* ══════════════════════════════════════════════════════════════
           ASSET PICKER — full Binance search
@@ -980,13 +971,7 @@ export function BuyWidget({ defaultAsset, lockAsset = false }: BuyWidgetProps = 
       {/* ══════════════════════════════════════════════════════════════
           PAY METHOD PICKER
       ══════════════════════════════════════════════════════════════ */}
-      <Modal visible={paySheetOpen} transparent animationType="slide" onRequestClose={() => setPaySheetOpen(false)}>
-        <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' }} onPress={() => setPaySheetOpen(false)}>
-          <Pressable style={{ backgroundColor: p.bg, borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingTop: 10, paddingBottom: 48 }} onPress={(e) => e.stopPropagation()}>
-            <View style={{ alignItems: 'center', marginBottom: 12 }}>
-              <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: p.border }} />
-            </View>
-            <Text style={{ color: p.fg, fontSize: 20, fontWeight: '500', paddingHorizontal: 20, marginBottom: 16 }}>{tr('buy.payWith')}</Text>
+      <BottomSheet visible={paySheetOpen} onClose={() => setPaySheetOpen(false)} title={tr('buy.payWith')} scroll={false} contentStyle={{ paddingHorizontal: 0 }}>
             {showExpressPay && (
               <View style={{ paddingHorizontal: 20, marginBottom: 16 }}>
                 <View style={{ backgroundColor: p.bgElev, borderRadius: 18, borderWidth: 1, borderColor: p.border, padding: 14 }}>
@@ -1057,9 +1042,7 @@ export function BuyWidget({ defaultAsset, lockAsset = false }: BuyWidgetProps = 
                 );
               })}
             </ScrollView>
-          </Pressable>
-        </Pressable>
-      </Modal>
+          </BottomSheet>
 
       <SuccessModal
         data={successModal}

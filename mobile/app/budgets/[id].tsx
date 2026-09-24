@@ -21,6 +21,7 @@ import { fiatSymbol } from '@/constants';
 import { etaForContribution, humanizeDays, fmtGoalDate, freqAdverb, suggestPlan, type Frequency } from '@/utils/budgetMath';
 import { ProgressRing } from './index';
 
+import { BottomSheet } from '@/components/ui/BottomSheet';
 export default function BudgetDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
@@ -276,11 +277,7 @@ export default function BudgetDetail() {
       </Panel>
 
       {/* Card picker — choose which card to load the budget onto. */}
-      <Modal visible={cardPicker} transparent animationType="slide" onRequestClose={() => setCardPicker(false)}>
-        <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }} onPress={() => setCardPicker(false)}>
-          <Pressable style={{ backgroundColor: p.bg, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: 40, borderTopWidth: 1, borderColor: p.border }} onPress={() => {}}>
-            <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: p.border, alignSelf: 'center', marginBottom: 16 }} />
-            <Text style={{ color: p.fg, fontSize: 18, fontWeight: '800' }}>Spend with card</Text>
+      <BottomSheet visible={cardPicker} onClose={() => setCardPicker(false)} title={"Spend with card"}>
             <Text style={{ color: p.fgMuted, fontSize: 13, marginTop: 4, marginBottom: 16 }}>
               Move {sym}{saved.toLocaleString()} onto a card to spend it.
             </Text>
@@ -299,9 +296,7 @@ export default function BudgetDetail() {
                 <Ionicons name="arrow-forward-circle" size={22} color={p.accent} />
               </Pressable>
             ))}
-          </Pressable>
-        </Pressable>
-      </Modal>
+          </BottomSheet>
 
       {/* Step-up modal — shown when the server requires a code to unlock. */}
       <StepUpModal

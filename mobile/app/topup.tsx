@@ -2,7 +2,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { StackHeader } from '@/components/ui/ScreenHeader';
+import { HEADER, HeaderBackButton } from '@/components/ui/ScreenHeader';
 import { TopupBody } from '@/components/topup/TopupSheet';
 import { useTheme, useThemedPalette } from '@/store/themeStore';
 import type { Currency } from '@/types';
@@ -18,8 +18,12 @@ export default function Topup() {
   return (
     <View style={{ flex: 1, backgroundColor: p.bg }}>
       <StatusBar style={themeMode === 'light' ? 'dark' : 'light'} />
-      <View style={{ paddingTop: insets.top }}>
-        <StackHeader title="Top up" backIcon="close" />
+      {/* Money-flow page: just a ✕, top-right — no title, no rule. */}
+      <View style={{
+        paddingTop: insets.top + HEADER.padTop, paddingBottom: HEADER.padBottom, paddingHorizontal: HEADER.gutter,
+        flexDirection: 'row', justifyContent: 'flex-end',
+      }}>
+        <HeaderBackButton icon="close" />
       </View>
       <TopupBody
         palette={p}

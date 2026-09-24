@@ -39,7 +39,7 @@ import PublicNav from "@/components/ui/PublicNav";
 import PublicFooter from "@/components/ui/PublicFooter";
 import WaitlistModal from "@/components/ui/WaitlistModal";
 import { VideoHero, ScrollytellingManifesto, AppleBento } from "@/components/ui/AppleShowcase";
-import { useChime, SoundToggle, ReceiptOverlay, FeeLedger, TrioSibling } from "@/components/ui/AppleFilm";
+import { ReceiptOverlay, TrioSibling } from "@/components/ui/AppleFilm";
 import { Band, BentoCard, Reveal as KitReveal, SectionHeading } from "@/components/ui/appleKit";
 import { publicPageTheme } from "@/components/ui/publicPageTheme";
 import { useIsAr } from "@/hooks/useIsAr";
@@ -390,9 +390,8 @@ function ScreenMedia({
 /* ═════════════════════════════════════════════════════════════════
    LOCK SCREEN — a real "locked phone" face. Falls back to a rendered
    lock screen (clock + lock + swipe-up cue) when no `lock.mp4` clip is
-   present. Slides up and fades as `unlockProgress` advances.
+   present. Slides sideways to reveal the home screen as `unlockProgress` advances.
    ═════════════════════════════════════════════════════════════════ */
-const LOCK_SLIDE_PX = -4000;
 
 function IosFlashlightIcon({ color, size }: { color: string; size: string }) {
   return (
@@ -548,7 +547,7 @@ function LockedPhoneFace() {
 
       <VStack position="absolute" left={0} right={0} bottom={v(0.014)} spacing={v(0.008)}>
         <Text color="rgba(255,255,255,0.68)" fontSize={v(0.014)} fontWeight="700">
-          Swipe up to open
+          Swipe to open
         </Text>
         <Box borderRadius="full" bg="rgba(255,255,255,0.92)" style={{ width: v(0.15), height: v(0.005) }} />
       </VStack>
@@ -572,10 +571,10 @@ const LockScreen = memo(function LockScreen({
   // Start in the rendered-face state; only show the video if it actually loads.
   const [useVideo, setUseVideo] = useState(false);
   const ref = useRef<HTMLVideoElement>(null);
-  const slideY = useTransform(
+  const slideX = useTransform(
     unlockProgress,
-    [0, 0.3, 0.7, 1],
-    [0, LOCK_SLIDE_PX * 0.05, LOCK_SLIDE_PX * 0.6, LOCK_SLIDE_PX],
+    [0, 0.2, 0.8, 1],
+    ["0%", "-6%", "-82%", "-110%"],
   );
   const lockOpacity = useTransform(unlockProgress, [0, 0.7, 0.8], [1, 1, 0]);
   const lockPointerEvents = useTransform(unlockProgress, (v: number) =>
@@ -588,7 +587,7 @@ const LockScreen = memo(function LockScreen({
     <motion.div
       style={{
         position: "absolute", inset: 0,
-        y: slideY, opacity: lockOpacity,
+        x: slideX, opacity: lockOpacity,
         pointerEvents: lockPointerEvents as unknown as "auto" | "none",
         zIndex: 6, overflow: "hidden",
         borderRadius: "inherit", willChange: "transform, opacity",
@@ -2580,7 +2579,7 @@ function TazdanWordmarkInline({ dark }: { dark: boolean }) {
         alt="tazdan"
         fill
         sizes="340px"
-        onError={() => setSrc("/logo-color.png")}
+        onError={() => setSrc("/text-logo-color.png")}
         style={{ objectFit: "contain" }}
       />
     </Box>
@@ -3326,6 +3325,11 @@ function useHeroSnap(_ref: React.RefObject<HTMLDivElement>, _stages: number) {
  * Returned MotionValue is wired to the journey's scrollYProgress.
  */
 
+/** Scroll runway the journey's story plays over, per breakpoint (vh). */
+const JOURNEY_RUNWAY_VH = { base: 1500, md: 1560 } as const;
+/** Extra scroll that holds on the end card after the story finishes (vh). */
+const JOURNEY_HOLD_VH = 90;
+
 function PhoneJourney() {
   const { colorMode } = useColorMode();
   const dark = colorMode === "dark";
@@ -3338,12 +3342,20 @@ function PhoneJourney() {
   // Smooth the raw scroll value through a spring so the ~20 derived transforms
   // below glide instead of snapping to each discrete scroll event — this is the
   // fix for the jittery journey. Tuned for a responsive-but-buttery feel.
-  const scrollYProgress = useSpring(rawProgress, {
+  const smoothProgress = useSpring(rawProgress, {
     stiffness: 260,
     damping: 38,
     mass: 0.24,
     restDelta: 0.0005,
   });
+  /* The story plays over the first part of the runway; the last JOURNEY_HOLD_VH
+     is a hold on the end card (logo + line) so it can actually be read before
+     the section scrolls away. Every beat below keeps its 0→1 timing. */
+  const storyEnd = useBreakpointValue({
+    base: (JOURNEY_RUNWAY_VH.base - 100) / (JOURNEY_RUNWAY_VH.base - 100 + JOURNEY_HOLD_VH),
+    md: (JOURNEY_RUNWAY_VH.md - 100) / (JOURNEY_RUNWAY_VH.md - 100 + JOURNEY_HOLD_VH),
+  }) ?? (JOURNEY_RUNWAY_VH.md - 100) / (JOURNEY_RUNWAY_VH.md - 100 + JOURNEY_HOLD_VH);
+  const scrollYProgress = useTransform(smoothProgress, [0, storyEnd], [0, 1]);
 
   const textMain  = dark ? "#ffffff" : "#0a0a0a";
   const textMuted = dark ? "rgba(255,255,255,0.55)" : "rgba(0,0,0,0.55)";
@@ -3359,7 +3371,7 @@ function PhoneJourney() {
      separate AppleFilm sections are now stages 9–11 of THIS journey, so the
      visitor never meets a second phone or a second sticky stage:
 
-       lock → 360° unlock → home → chat (+ receipt, +chime) → buy → asset
+       lock → sideways unlock → home → chat (+ receipt) → buy → asset
        → top-up → card → trio fan → zoom into the screen → black. */
   const journeyTiming = useMemo(() => ({
     unlock: [0.03, 0.10],
@@ -3378,14 +3390,13 @@ function PhoneJourney() {
     screensOff: [0.935, 0.962],
     zoomOut: [0.952, 1.000],
   }), []);
-  /* The transfer lands mid-chat — the one moment the sound belongs to. */
+  /* The transfer lands mid-chat — the receipt beat. */
   const RECEIPT_AT = 0.318;
   const stageLayerStyle = useMemo(
     () => ({ position: "absolute", inset: 0, willChange: "opacity" }) as const,
     [],
   );
 
-  const tiltX          = useTransform(scrollYProgress, [0, 0.12], [22, 0]);
   const unlockProgress = useTransform(scrollYProgress, journeyTiming.unlock, [0, 1]);
 
   // screen cross-fades — dashboard is the base layer during unlock/home,
@@ -3451,15 +3462,16 @@ function PhoneJourney() {
 
   // shader background — stays alive through the journey instead of fading out
   // so the line field keeps visibly moving behind every phone chapter.
-  /* ── 360° unlock spin ──────────────────────────────────────────────
-     The phone turns a full revolution as the lock screen slides away, so
-     unlocking reads as one physical gesture rather than a crossfade. It is
-     driven by `unlockProgress` (not raw scroll) so the spin and the lock
-     come apart at exactly the same rate, forwards or backwards. */
-  /* Eased rather than linear (a constant-rate spin reads mechanical), then
-     lightly sprung so it glides instead of tracking the wheel tick-for-tick. */
-  const spinRaw = useTransform(unlockProgress, [0, 0.2, 0.5, 0.8, 1], [0, 42, 180, 318, 360]);
-  const spinY = useSpring(spinRaw, { stiffness: 70, damping: 18, mass: 0.5 });
+  /* The whole phone crosses the desktop copy and returns to its column.
+     On a narrow screen it travels to both sides without leaving the viewport.
+     The lock face also slides sideways, exposing the home screen underneath. */
+  const sweepLeft = useBreakpointValue({ base: 14, md: 28, lg: 44 }) ?? 44;
+  const sweepRight = useBreakpointValue({ base: 13, md: 8, lg: 5 }) ?? 5;
+  const unlockSwipeX = useTransform(
+    unlockProgress,
+    [0, 0.18, 0.52, 0.82, 1],
+    ["0vw", `-${sweepLeft * 0.26}vw`, `-${sweepLeft}vw`, `${sweepRight}vw`, "0vw"],
+  );
 
   /* ── Zoom into the screen, then to black ───────────────────────────
      The closing move: the device rushes at the viewer, the screen fills the
@@ -3472,6 +3484,10 @@ function PhoneJourney() {
   const screensOff  = useTransform(scrollYProgress, journeyTiming.screensOff, [1, 0]);
   /* The stage finishes to black last, so the next section arrives out of it. */
   const blackout    = useTransform(scrollYProgress, [0.972, 0.998], [0, 1]);
+  /* End card on the black: the logo and one line arrive as the screen
+     finishes blacking out, settling from a touch small as the zoom lands. */
+  const endCardOp    = useTransform(scrollYProgress, [0.978, 0.994], [0, 1]);
+  const endCardScale = useTransform(scrollYProgress, [0.978, 1], [0.94, 1]);
 
   /* The phone lives in the RIGHT grid column. For the trio finale the copy is
      gone, so the group slides to true viewport centre and the three screens
@@ -3505,18 +3521,6 @@ function PhoneJourney() {
   const trioSpread   = useBreakpointValue({ base: 62, md: 100, lg: 116 }) ?? 116;
   const trioEndScale = useBreakpointValue({ base: 0.66, md: 0.82 }) ?? 0.82;
 
-  /* Chime — fires once on the downward crossing of the receipt beat, and
-     re-arms if the visitor scrolls back out and in again. */
-  const chime = useChime();
-  const chimeFired = useRef(false);
-  useMotionValueEvent(scrollYProgress, "change", (v) => {
-    if (v >= RECEIPT_AT && !chimeFired.current) {
-      chimeFired.current = true;
-      if (chime.armed) chime.play();
-    } else if (v < RECEIPT_AT - 0.02) {
-      chimeFired.current = false;
-    }
-  });
   // ambient halo follows the phone, gently breathing
   const phoneScale = useTransform(scrollYProgress, [0, 0.16], [0.96, 1]);
 
@@ -3554,7 +3558,10 @@ function PhoneJourney() {
   }, [flinch, rawProgress]);
 
   return (
-    <Box ref={ref} position="relative" zIndex={1} h={{ base: "1500vh", md: "1560vh" }}>
+    <Box id="phone-journey" ref={ref} position="relative" zIndex={1} h={{
+      base: `${JOURNEY_RUNWAY_VH.base + JOURNEY_HOLD_VH}vh`,
+      md: `${JOURNEY_RUNWAY_VH.md + JOURNEY_HOLD_VH}vh`,
+    }}>
       <Box position="sticky" top={0} h="100vh" w="100%" overflow="visible"
         style={{ contain: "layout" } as React.CSSProperties}
       >
@@ -3590,32 +3597,6 @@ function PhoneJourney() {
                 title={<>{t("sec_social_title_1")}<br /><Box as="span" color={ACCENT}>{t("sec_social_title_2")}</Box></>}
                 desc={t("sec_social_desc")}
               />
-              {/* Rides the same beat as the transfer landing on the phone:
-                  the fee strikes through to zero, and the sound the app
-                  actually plays is offered (opt-in — browsers block
-                  un-gestured audio, and a marketing page shouldn't ambush
-                  anyone with noise). */}
-              <motion.div
-                style={{
-                  opacity: copyC, position: "absolute", left: 0, right: 0, bottom: "-16px",
-                  pointerEvents: "auto",
-                }}
-              >
-                <HStack spacing="12px" flexWrap="wrap" justify={{ base: "center", lg: "flex-start" }}>
-                  <FeeLedger
-                    progress={scrollYProgress} at={RECEIPT_AT}
-                    before="$2.40" after="$0.00" dark={dark} reduced={reducedMotion}
-                  />
-                  <SoundToggle
-                    armed={chime.armed}
-                    dark={dark}
-                    onToggle={() => {
-                      if (chime.armed) chime.disarm();
-                      else if (chime.arm()) chime.play(); // confirm the choice audibly
-                    }}
-                  />
-                </HStack>
-              </motion.div>
               <StageCopy op={copyD} accent={ACCENT} textMain={textMain} textMuted={textMuted} hairline={hairline} tileBg={tileBg} isAr={isAr}
                 eyebrow={t("feat_buy_eyebrow")}
                 title={<Box as="span" color={textMain}>{t("feat_buy_title")}</Box>}
@@ -3767,13 +3748,9 @@ function PhoneJourney() {
                   </StaticPhone>
                 </TrioSibling>}
 
-                <motion.div animate={flinch}>
-                {/* rotateY carries the 360° unlock spin. `preserve-3d` plus the
-                    back face below means the phone genuinely TURNS OVER —
-                    without them you just see a mirrored screenshot sweep past. */}
-                {/* Sizing + CSS vars live on a plain Box; the motion element
-                    below carries only transforms, so the style object stays a
-                    valid MotionStyle. */}
+                <motion.div animate={flinch} style={{ x: reducedMotion ? undefined : unlockSwipeX, position: "relative", zIndex: 6 }}>
+                {/* The device crosses the copy during unlock, then settles
+                    back into its place as the lock face reveals the app. */}
                 <Box
                   style={{
                     ...phoneVars,
@@ -3788,44 +3765,14 @@ function PhoneJourney() {
                 <motion.div
                   style={{
                     position: "absolute", inset: 0,
-                    rotateX: tiltX, rotateY: spinY, scale: phoneScale,
-                    transformOrigin: "50% 60%", transformStyle: "preserve-3d",
+                    scale: phoneScale,
+                    transformOrigin: "50% 60%",
                   }}
                 >
-                {/* ── BACK OF THE PHONE ── only visible while the device is
-                    turned away from the viewer mid-spin. The real product
-                    render, trimmed of its transparent margin so its silhouette
-                    lines up with the front frame (`objectFit: fill` closes the
-                    last ~5% of aspect difference; imperceptible at spin speed
-                    and better than the back visibly shrinking). */}
-                <Box
-                  aria-hidden
-                  position="absolute"
-                  inset={0}
-                  style={{
-                    transform: "rotateY(180deg)",
-                    backfaceVisibility: "hidden",
-                    WebkitBackfaceVisibility: "hidden",
-                  } as React.CSSProperties}
-                >
-                  <NextImage
-                    src="/iphone-18-pro-back.png"
-                    alt=""
-                    fill
-                    sizes="(max-width: 480px) 55vw, (max-width: 1024px) 38vw, 320px"
-                    style={{ objectFit: "fill" }}
-                  />
-                </Box>
-
-                {/* ── FRONT OF THE PHONE ── */}
                 <Box
                   position="absolute"
                   inset={0}
                   zIndex={3}
-                  style={{
-                    backfaceVisibility: "hidden",
-                    WebkitBackfaceVisibility: "hidden",
-                  } as React.CSSProperties}
                 >
                   <Box
                     position="absolute"
@@ -3878,8 +3825,7 @@ function PhoneJourney() {
                         ))}
                       </>
                     )}
-                    {/* The transfer lands ON the phone already on stage —
-                        this is the beat the chime fires with. */}
+                    {/* The transfer lands ON the phone already on stage. */}
                     <ReceiptOverlay
                       progress={scrollYProgress}
                       at={RECEIPT_AT}
@@ -4012,7 +3958,67 @@ function PhoneJourney() {
             background: "#000", opacity: blackout, pointerEvents: "none",
           }}
         />
+
+        {/* ── End card ─────────────────────────────────────────────────
+            On the black: the colour logo with a light sweeping across it
+            left → right, and one line inviting the visitor to keep going. */}
+        <motion.div
+          style={{
+            position: "absolute", inset: 0, zIndex: 41, pointerEvents: "none",
+            display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+            gap: 22, padding: "0 24px", textAlign: "center",
+            opacity: endCardOp, scale: endCardScale,
+          }}
+        >
+          <ShimmerLogo animate={!reducedMotion} />
+          <Text
+            fontSize={{ base: "17px", md: "21px" }}
+            fontWeight={500}
+            letterSpacing="-0.01em"
+            color="rgba(245,245,247,0.72)"
+          >
+            {t("journey_end_subtitle")}
+          </Text>
+        </motion.div>
       </Box>
+    </Box>
+  );
+}
+
+/**
+ * The colour wordmark with a band of light sweeping across it left → right.
+ * The sweep is a gradient masked to the logo's own alpha, so it only ever
+ * lights the letterforms — never the black around them.
+ */
+function ShimmerLogo({ animate }: { animate: boolean }) {
+  const mask = {
+    WebkitMaskImage: "url(/logo-color.png)", maskImage: "url(/logo-color.png)",
+    WebkitMaskSize: "contain", maskSize: "contain",
+    WebkitMaskRepeat: "no-repeat", maskRepeat: "no-repeat",
+    WebkitMaskPosition: "center", maskPosition: "center",
+  } as const;
+  return (
+    <Box
+      position="relative"
+      w={{ base: "62vw", md: "440px" }}
+      maxW="520px"
+      style={{ aspectRatio: "937 / 240", filter: "drop-shadow(0 14px 44px rgba(99,161,219,0.32))" }}
+    >
+      <NextImage src="/logo-color.png" alt="tazdan" fill sizes="(max-width: 768px) 62vw, 440px" style={{ objectFit: "contain" }} />
+      {animate && (
+        <motion.div
+          aria-hidden
+          style={{
+            position: "absolute", inset: 0, ...mask,
+            backgroundImage: "linear-gradient(100deg, rgba(255,255,255,0) 38%, rgba(255,255,255,0.92) 50%, rgba(255,255,255,0) 62%)",
+            backgroundSize: "260% 100%",
+            backgroundRepeat: "no-repeat",
+          }}
+          initial={{ backgroundPosition: "100% 0%" }}
+          animate={{ backgroundPosition: "0% 0%" }}
+          transition={{ duration: 2.2, ease: "easeInOut", repeat: Infinity, repeatDelay: 0.8 }}
+        />
+      )}
     </Box>
   );
 }

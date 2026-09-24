@@ -24,6 +24,7 @@ import { useDebounce } from '@/hooks/useDebounce';
 import { LoadingPulse } from '@/components/ui/LoadingPulse';
 import { TopGradient } from '@/components/ui/ScreenShell';
 
+import { BottomSheet } from '@/components/ui/BottomSheet';
 type Filter = 'ALL' | 'ACTIVE' | 'SUSPENDED' | 'PENDING_KYC';
 type UserStatus = 'ACTIVE' | 'SUSPENDED' | 'BANNED';
 type ModalKind = 'create' | 'freeze' | 'kyc' | 'credit' | 'status' | null;
@@ -319,16 +320,7 @@ export default function AdminUsers() {
       </SafeAreaView>
 
       {/* ── CREATE USER MODAL ────────────────────────── */}
-      <Modal visible={modalKind === 'create'} transparent animationType="slide" onRequestClose={closeModal}>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
-          <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' }}>
-            <ScrollView
-              keyboardShouldPersistTaps="handled"
-              style={{ maxHeight: '92%' }}
-              contentContainerStyle={{ backgroundColor: p.bg, borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 20, paddingBottom: 36 }}
-            >
-              <View style={{ alignSelf: 'center', width: 36, height: 4, borderRadius: 2, backgroundColor: p.border, marginBottom: 14 }} />
-              <Text style={{ color: p.fg, fontSize: 18, fontWeight: '700' }}>Create relationship user</Text>
+      <BottomSheet visible={modalKind === 'create'} onClose={closeModal} title={"Create relationship user"}>
               <Text style={{ color: p.fgMuted, fontSize: 12, marginTop: 4, marginBottom: 16 }}>
                 For trusted close friends and family. Audit log and optional opening balance are recorded.
               </Text>
@@ -398,19 +390,10 @@ export default function AdminUsers() {
                   <Text style={{ color: p.bg, fontWeight: '700' }}>{createMut.isPending ? 'Creating…' : 'Create user'}</Text>
                 </Pressable>
               </View>
-            </ScrollView>
-          </View>
-        </KeyboardAvoidingView>
-      </Modal>
+            </BottomSheet>
 
       {/* ── FREEZE MODAL ─────────────────────────────── */}
-      <Modal visible={modalKind === 'freeze'} transparent animationType="slide" onRequestClose={closeModal}>
-        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' }}>
-          <View style={{ backgroundColor: p.bg, borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 20, paddingBottom: 36 }}>
-            <View style={{ alignSelf: 'center', width: 36, height: 4, borderRadius: 2, backgroundColor: p.border, marginBottom: 14 }} />
-            <Text style={{ color: p.fg, fontSize: 18, fontWeight: '600', marginBottom: 6 }}>
-              Freeze {actionUser?.email}
-            </Text>
+      <BottomSheet visible={modalKind === 'freeze'} onClose={closeModal} title={`Freeze ${actionUser?.email}`}>
             <Text style={{ color: p.fgMuted, fontSize: 13, marginBottom: 16 }}>
               Suspends the account and locks all wallet balances.
             </Text>
@@ -438,16 +421,10 @@ export default function AdminUsers() {
                 <Text style={{ color: '#fff', fontWeight: '600' }}>{freezeMut.isPending ? 'Freezing…' : 'Freeze'}</Text>
               </Pressable>
             </View>
-          </View>
-        </View>
-      </Modal>
+          </BottomSheet>
 
       {/* ── KYC OVERRIDE MODAL ───────────────────────── */}
-      <Modal visible={modalKind === 'kyc'} transparent animationType="slide" onRequestClose={closeModal}>
-        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' }}>
-          <View style={{ backgroundColor: p.bg, borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 20, paddingBottom: 36 }}>
-            <View style={{ alignSelf: 'center', width: 36, height: 4, borderRadius: 2, backgroundColor: p.border, marginBottom: 14 }} />
-            <Text style={{ color: p.fg, fontSize: 18, fontWeight: '600', marginBottom: 14 }}>KYC Override — {actionUser?.email}</Text>
+      <BottomSheet visible={modalKind === 'kyc'} onClose={closeModal} title={`KYC Override — ${actionUser?.email}`}>
             <View style={{ flexDirection: 'row', gap: 10, marginBottom: 16 }}>
               {(['approve', 'reject'] as const).map((a) => {
                 const on = kycAction === a;
@@ -501,21 +478,10 @@ export default function AdminUsers() {
                 <Text style={{ color: '#fff', fontWeight: '600' }}>{kycMut.isPending ? 'Processing…' : 'Confirm'}</Text>
               </Pressable>
             </View>
-          </View>
-        </View>
-      </Modal>
+          </BottomSheet>
 
       {/* ── CREDIT WALLET MODAL ──────────────────────── */}
-      <Modal visible={modalKind === 'credit'} transparent animationType="slide" onRequestClose={closeModal}>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
-        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' }}>
-          <ScrollView
-            keyboardShouldPersistTaps="handled"
-            style={{ maxHeight: '88%' }}
-            contentContainerStyle={{ backgroundColor: p.bg, borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 20, paddingBottom: 36 }}
-          >
-            <View style={{ alignSelf: 'center', width: 36, height: 4, borderRadius: 2, backgroundColor: p.border, marginBottom: 14 }} />
-            <Text style={{ color: p.fg, fontSize: 18, fontWeight: '600', marginBottom: 4 }}>Credit Wallet</Text>
+      <BottomSheet visible={modalKind === 'credit'} onClose={closeModal} title={"Credit Wallet"}>
             <Text style={{ color: p.fgMuted, fontSize: 13, marginBottom: 14 }}>{actionUser?.email}</Text>
 
             {/* Current balances — what the user holds right now */}
@@ -593,17 +559,10 @@ export default function AdminUsers() {
                 </Text>
               </Pressable>
             </View>
-          </ScrollView>
-        </View>
-        </KeyboardAvoidingView>
-      </Modal>
+          </BottomSheet>
 
       {/* ── CHANGE STATUS MODAL ──────────────────────── */}
-      <Modal visible={modalKind === 'status'} transparent animationType="slide" onRequestClose={closeModal}>
-        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' }}>
-          <View style={{ backgroundColor: p.bg, borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 20, paddingBottom: 36 }}>
-            <View style={{ alignSelf: 'center', width: 36, height: 4, borderRadius: 2, backgroundColor: p.border, marginBottom: 14 }} />
-            <Text style={{ color: p.fg, fontSize: 18, fontWeight: '600', marginBottom: 6 }}>Change Status</Text>
+      <BottomSheet visible={modalKind === 'status'} onClose={closeModal} title={"Change Status"}>
             <Text style={{ color: p.fgMuted, fontSize: 13, marginBottom: 16 }}>{actionUser?.email}</Text>
             {(['ACTIVE', 'SUSPENDED', 'BANNED'] as UserStatus[]).map((s) => {
               const on = newStatus === s;
@@ -637,9 +596,7 @@ export default function AdminUsers() {
                 <Text style={{ color: p.bg, fontWeight: '600' }}>{statusMut.isPending ? 'Updating…' : 'Apply'}</Text>
               </Pressable>
             </View>
-          </View>
-        </View>
-      </Modal>
+          </BottomSheet>
     </View>
   );
 }

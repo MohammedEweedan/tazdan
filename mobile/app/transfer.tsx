@@ -36,7 +36,7 @@ export default function Transfer() {
   const swap = () => { h.medium(); setFrom(to); setTo(from); setAmount(''); };
 
   return (
-    <ScreenShell title="Convert">
+    <ScreenShell closeOnly title="Convert">
       {/* From */}
       <CurrencySelector
         title="FROM"

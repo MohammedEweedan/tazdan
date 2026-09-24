@@ -31,6 +31,7 @@ import { QUERY_KEYS } from '@/constants';
 import { LoadingPulse } from '@/components/ui/LoadingPulse';
 import type { CardEntity } from '@/types';
 
+import { BottomSheet } from '@/components/ui/BottomSheet';
 const { width: SCREEN_W } = Dimensions.get('window');
 const CARD_W  = SCREEN_W - 48;
 const CARD_H  = Math.round(CARD_W * 0.628); // ISO 7810 credit card ratio
@@ -517,28 +518,7 @@ function SimulatePurchaseModal({
   };
 
   return (
-    <Modal visible={!!card} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable onPress={onClose} style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)' }}>
-        <Pressable
-          onPress={(e) => e.stopPropagation()}
-          style={{
-            marginTop: 'auto',
-            backgroundColor: p.bg,
-            borderTopLeftRadius: 24, borderTopRightRadius: 24,
-            padding: 24, paddingBottom: 36, gap: 14,
-          }}
-        >
-          <View style={{ alignItems: 'center', marginBottom: 4 }}>
-            <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: p.border }} />
-          </View>
-          <Text style={{ color: p.fg, fontSize: 20, fontWeight: '600', letterSpacing: -0.4 }}>
-            {t('cards.simulatePurchase')}
-          </Text>
-          {card && (
-            <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '500', marginTop: -8 }}>
-              •••• {card.last4}
-            </Text>
-          )}
+    <BottomSheet visible={!!card} onClose={onClose} title={t('cards.simulatePurchase')} subtitle={card ? `•••• ${card.last4}` : undefined}>
 
           {/* Merchant */}
           <View style={{
@@ -607,9 +587,7 @@ function SimulatePurchaseModal({
               {loading ? 'Processing…' : t('cards.simulatePurchase')}
             </Text>
           </Pressable>
-        </Pressable>
-      </Pressable>
-    </Modal>
+        </BottomSheet>
   );
 }
 
@@ -659,29 +637,7 @@ function TopUpModal({
   };
 
   return (
-    <Modal visible={!!card} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable onPress={onClose} style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)' }}>
-        <Pressable
-          onPress={(e) => e.stopPropagation()}
-          style={{
-            marginTop: 'auto',
-            backgroundColor: p.bg,
-            borderTopLeftRadius: 24, borderTopRightRadius: 24,
-            padding: 24, paddingBottom: 36, gap: 16,
-          }}
-        >
-          <View style={{ alignItems: 'center', marginBottom: 4 }}>
-            <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: p.border }} />
-          </View>
-
-          <Text style={{ color: p.fg, fontSize: 20, fontWeight: '600', letterSpacing: -0.4 }}>
-            Top Up Card
-          </Text>
-          {card && (
-            <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '500', marginTop: -10 }}>
-              •••• {card.last4} — {card.tier}
-            </Text>
-          )}
+    <BottomSheet visible={!!card} onClose={onClose} title={"Top Up Card"} subtitle={card ? `•••• ${card.last4} — ${card.tier}` : undefined}>
 
           {/* Currency selector */}
           {fundable.length > 1 && (
@@ -774,9 +730,7 @@ function TopUpModal({
               {loading ? 'Processing…' : `Top Up ${amt > 0 ? amt.toLocaleString() : ''}`}
             </Text>
           </Pressable>
-        </Pressable>
-      </Pressable>
-    </Modal>
+        </BottomSheet>
   );
 }
 
@@ -839,23 +793,7 @@ function OrderPhysicalModal({
   );
 
   return (
-    <Modal visible={!!card} transparent animationType="slide" onRequestClose={onClose}>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
-        <Pressable onPress={onClose} style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)' }}>
-          <Pressable
-            onPress={(e) => e.stopPropagation()}
-            style={{ marginTop: 'auto', backgroundColor: p.bg, borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: '88%' }}
-          >
-            <ScrollView contentContainerStyle={{ padding: 24, paddingBottom: 40, gap: 12 }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-              <View style={{ alignItems: 'center', marginBottom: 4 }}>
-                <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: p.border }} />
-              </View>
-              <Text style={{ color: p.fg, fontSize: 20, fontWeight: '700', letterSpacing: -0.4 }}>{t('cards.orderPhysical')}</Text>
-              {card && (
-                <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '500', marginTop: -6 }}>
-                  •••• {card.last4} — {card.tier}
-                </Text>
-              )}
+    <BottomSheet visible={!!card} onClose={onClose} title={t('cards.orderPhysical')} subtitle={card ? `•••• ${card.last4} — ${card.tier}` : undefined}>
 
               {field(t('cards.shipName'), name, setName)}
               {field(t('cards.shipLine1'), line1, setLine1)}
@@ -888,11 +826,7 @@ function OrderPhysicalModal({
                   {loading ? t('cards.ordering') : `${t('cards.placeOrder')} · $${fee.toFixed(0)}`}
                 </Text>
               </Pressable>
-            </ScrollView>
-          </Pressable>
-        </Pressable>
-      </KeyboardAvoidingView>
-    </Modal>
+            </BottomSheet>
   );
 }
 
@@ -1039,18 +973,7 @@ function IssueCardModal({
   const miniW = SCREEN_W - 120;
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={handleClose}>
-      <Pressable
-        style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' }}
-        onPress={step === 'SUCCESS' ? handleClose : undefined}
-      >
-        <Pressable onPress={e => e.stopPropagation()} style={{ backgroundColor: p.bg, borderTopLeftRadius: 32, borderTopRightRadius: 32, overflow: 'hidden' }}>
-
-          {/* Drag pill */}
-          <View style={{ alignItems: 'center', paddingTop: 12, paddingBottom: 4 }}>
-            <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: p.border }} />
-          </View>
-
+    <BottomSheet visible={visible} onClose={handleClose} contentStyle={{ paddingHorizontal: 0 }}>
           {/* ── STEP 1: Pick tier ── */}
           {step === 'PICK' && (
             <View style={{ paddingHorizontal: 24, paddingBottom: 40 }}>
@@ -1258,9 +1181,7 @@ function IssueCardModal({
               </Pressable>
             </View>
           )}
-        </Pressable>
-      </Pressable>
-    </Modal>
+        </BottomSheet>
   );
 }
 
