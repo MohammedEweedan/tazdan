@@ -29,7 +29,11 @@
       ],
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
-        "NSFaceIDUsageDescription": "tazdan uses Face ID to unlock your account and authorise sensitive actions."
+        "NSFaceIDUsageDescription": "tazdan uses Face ID to unlock your account and authorise sensitive actions.",
+        "NSLocalNetworkUsageDescription": "tazdan connects to the development server on your Mac for local testing.",
+        "NSAppTransportSecurity": {
+          "NSAllowsLocalNetworking": true
+        }
       },
       "entitlements": {
         "com.apple.developer.in-app-payments": [
