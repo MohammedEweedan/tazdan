@@ -5,6 +5,7 @@
  */
 
 import { useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Pressable, RefreshControl, ScrollView, View } from 'react-native';
 import { Text } from '@/components/ui/Text';
 import { Ionicons } from '@expo/vector-icons';
@@ -22,19 +23,35 @@ export default function BudgetsList() {
   const p = useThemedPalette();
   const t = useT();
   const h = useHaptics();
+  const insets = useSafeAreaInsets();
   const { data: budgets = [], isLoading, refetch, isFetching } = useBudgets();
+  const savedByCurrency = budgets.reduce<Record<string, number>>((totals, budget) => {
+    totals[budget.currency] = (totals[budget.currency] ?? 0) + Number(budget.balance);
+    return totals;
+  }, {});
 
   return (
     <ScreenShell title={t('budgets.title')} scroll={false} contentStyle={{ paddingHorizontal: 0 }}>
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingHorizontal: 24, paddingBottom: 120 }}
+        contentContainerStyle={{ paddingHorizontal: 24, paddingBottom: 24 }}
         refreshControl={<RefreshControl refreshing={isFetching} onRefresh={refetch} tintColor={p.fg} />}
       >
         <Text style={{ color: p.fgMuted, fontSize: 14, lineHeight: 20, marginTop: 4, marginBottom: 18 }}>
-          Set money aside for a goal — a trip, a gift, a rainy day. Save manually
-          or on a schedule, and lock it until you're ready.
+          {t('budgets.intro')}
         </Text>
+        {!!budgets.length && <View style={{ paddingTop: 16, paddingBottom: 32 }}>
+          <Text style={{ color: p.fgMuted, fontSize: 13, marginBottom: 10 }}>{t('budgets.totalSaved')}</Text>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 20 }}>
+            {Object.entries(savedByCurrency).map(([currency, amount]) => <View key={currency}>
+              <Text style={{ color: p.fg, fontSize: 34, fontWeight: '600', letterSpacing: -1, fontVariant: ['tabular-nums'] }}>
+                {fiatSymbol(currency as any)}{amount.toLocaleString('en-US', { maximumFractionDigits: 2 })}
+              </Text>
+              <Text style={{ color: p.fgFaint, fontSize: 12, marginTop: 3 }}>{currency}</Text>
+            </View>)}
+          </View>
+          <Text style={{ color: p.fgFaint, fontSize: 12, marginTop: 28 }}>{t('budgets.goals')} · {budgets.length}</Text>
+        </View>}
 
         {isLoading ? (
           <View style={{ paddingTop: 60, alignItems: 'center' }}>
@@ -48,7 +65,7 @@ export default function BudgetsList() {
             </View>
             <Text style={{ color: p.fg, fontSize: 16, fontWeight: '700', marginTop: 14 }}>{t('budgets.empty')}</Text>
             <Text style={{ color: p.fgMuted, fontSize: 13, marginTop: 4, textAlign: 'center' }}>
-              Create your first savings goal below.
+              {t('budgets.emptyBody')}
             </Text>
           </View>
         ) : (
@@ -58,7 +75,7 @@ export default function BudgetsList() {
         )}
       </ScrollView>
 
-      <View style={{ paddingHorizontal: 24, paddingBottom: 16, paddingTop: 8, backgroundColor: p.bg, borderTopWidth: 1, borderTopColor: p.border }}>
+      <View style={{ paddingHorizontal: 24, paddingBottom: Math.max(insets.bottom, 16), paddingTop: 8, backgroundColor: p.bg }}>
         <CTAButton label={t('budgets.new')} icon="add" onPress={() => { h.medium(); router.push('/budgets/new'); }} />
       </View>
     </ScreenShell>
@@ -78,7 +95,7 @@ function BudgetCard({ budget: b, palette: p, onPress }: { budget: Budget; palett
       style={({ pressed }) => ({
         flexDirection: 'row', alignItems: 'center', gap: 14,
         backgroundColor: pressed ? p.bgRaised : p.bgElev,
-        borderWidth: 1, borderColor: p.border, borderRadius: 18,
+        borderRadius: 20,
         padding: 16, marginBottom: 12,
       })}
     >

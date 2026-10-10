@@ -15,6 +15,7 @@ const TITLE_MAP: Record<string, string> = {
   "/privacy": "Privacy - tazdan",
   "/terms": "Terms - tazdan",
   "/trust": "Trust - tazdan",
+  "/security": "Security - tazdan",
   "/dashboard": "Dashboard - tazdan",
   "/dashboard/trade": "Trade - tazdan",
   "/dashboard/wallet": "Wallet - tazdan",

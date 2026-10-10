@@ -1,3 +1,4 @@
+import { DEFAULT_ACCENT } from './accent';
 /** Shared tazdan tokens: quiet surfaces, blue accents, generous spacing and neutral primary actions.
  * Runtime colours live in themeStore; use these static tokens for geometry and typography.
  */
@@ -37,12 +38,12 @@ export const colors = {
      the active tab. Not on primary CTAs. The `text` variants are
      contrast-tuned per surface so small blue text stays legible. */
   accent: {
-    base:      '#63A1DB',          // dark-surface chip fill
-    baseLight: '#4F8BC4',          // light-surface chip fill (deepened)
-    text:      '#7DB4E4',          // blue text/icon on dark page bg (AA)
-    textLight: '#3E78AE',          // blue text/icon on light page bg (AA)
-    soft:      'rgba(99,161,219,0.14)',
-    border:    'rgba(99,161,219,0.40)',
+    base:      DEFAULT_ACCENT,          // dark-surface chip fill
+    baseLight: DEFAULT_ACCENT,          // light-surface chip fill (deepened)
+    text:      '#9BA8B7',          // blue text/icon on dark page bg (AA)
+    textLight: DEFAULT_ACCENT,          // blue text/icon on light page bg (AA)
+    soft:      'rgba(36,56,79,0.14)',
+    border:    'rgba(36,56,79,0.40)',
   },
 
   /* ── Status (kept — confirmed by user) ──────────────────────────── */
@@ -115,7 +116,7 @@ export const gradients = {
   glass:        ['rgba(255,255,255,0.08)', 'rgba(255,255,255,0.03)'],
   // Soft brand-blue glow — a barely-there wash for hero / logo backdrops.
   // Top-stop is deliberately low-alpha so it reads as mist, never a fill.
-  accentGlow:   ['rgba(99,161,219,0.16)', 'rgba(99,161,219,0)'],
+  accentGlow:   ['rgba(36,56,79,0.16)', 'rgba(36,56,79,0)'],
   // Status fills (kept colored — these are accessibility signals)
   success:      ['#1F8F58', '#2BB36F'],
   danger:       ['#B7373B', '#E5484D'],

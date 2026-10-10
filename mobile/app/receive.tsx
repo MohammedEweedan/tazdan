@@ -89,7 +89,7 @@ export default function Receive() {
               backgroundColor="#ffffff"
               color="#000000"
               ecl="H"
-              logo={require('../assets/icon-black.png')}
+              logo={require('../assets/icon-asterisk-black.png')}
               logoSize={40}
               logoBackgroundColor="#ffffff"
               logoMargin={4}
@@ -172,20 +172,18 @@ export default function Receive() {
         </View>
       ) : (
         <View style={{ marginTop: 22 }}>
+          {/* Personal account numbers are not issued. Bank money reaches a wallet through
+              Tazdan's own bank accounts plus the customer's reference, shown in Top up. */}
           <Panel>
-            <View style={{ padding: 16, gap: 14 }}>
-              <BankRow label="Account holder" value={user ? `${user.firstName} ${user.lastName}` : 'tazdan user'} palette={p} />
-              <BankRow label="IBAN"            value="DE89 3704 0044 0532 0130 00" palette={p} />
-              <BankRow label="BIC / SWIFT"     value="COBADEFFXXX" palette={p} />
-              <BankRow label="Reference"       value={`PRMK-${linkSlug.toUpperCase()}`} palette={p} />
+            <View style={{ padding: 16, gap: 10 }}>
+              <Text style={{ color: p.fg, fontSize: 15, fontWeight: '700' }}>Receive by bank transfer</Text>
+              <Text style={{ color: p.fgMuted, fontSize: 13, lineHeight: 19 }}>
+                Bank transfers are paid into Tazdan's bank account for your currency, with your personal reference so we can credit your wallet. Open Top up to see the account details.
+              </Text>
             </View>
           </Panel>
           <Pressable
-            onPress={async () => {
-              h.success();
-              await Clipboard.setStringAsync('DE89 3704 0044 0532 0130 00');
-              Alert.alert('Copied', 'IBAN copied to clipboard.');
-            }}
+            onPress={() => { h.selection(); router.push('/topup' as never); }}
             style={({ pressed }) => ({
               marginTop: 16, height: 50, borderRadius: 25,
               backgroundColor: pressed ? p.border : p.pillBg,
@@ -194,24 +192,11 @@ export default function Receive() {
               gap: 8,
             })}
           >
-            <Ionicons name="copy-outline" size={16} color={p.fg} />
-            <Text style={{ color: p.fg, fontSize: 14, fontWeight: '700' }}>Copy IBAN</Text>
+            <Ionicons name="business-outline" size={16} color={p.fg} />
+            <Text style={{ color: p.fg, fontSize: 14, fontWeight: '700' }}>Show bank details</Text>
           </Pressable>
         </View>
       )}
     </ScreenShell>
-  );
-}
-
-function BankRow({ label, value, palette: p }: { label: string; value: string; palette: ReturnType<typeof useThemedPalette> }) {
-  return (
-    <View>
-      <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '700', letterSpacing: 0.6 }}>
-        {label.toUpperCase()}
-      </Text>
-      <Text selectable style={{ color: p.fg, fontSize: 14, fontWeight: '600', marginTop: 2 }}>
-        {value}
-      </Text>
-    </View>
   );
 }

@@ -65,10 +65,11 @@ export default function AdminPlatformBanks() {
       if (editing.id) return adminService.updatePlatformBank(editing.id, payload);
       return adminService.createPlatformBank(payload);
     },
-    onSuccess: () => {
+    onSuccess: (res: any) => {
       qc.invalidateQueries({ queryKey: ['admin-platform-banks'] });
       setEditing(null);
-      Alert.alert('Saved', 'Platform bank updated.');
+      // In production, new accounts and payment-detail changes wait for a second approver.
+      Alert.alert(res?.pendingApproval ? 'Sent for approval' : 'Saved', res?.pendingApproval ? res.message : 'Deposit account updated.');
     },
     onError: (e: any) => Alert.alert('Failed', e?.response?.data?.error ?? 'Could not save'),
   });
@@ -197,9 +198,9 @@ export default function AdminPlatformBanks() {
               </Pressable>
               {editing?.id && (
                 <Pressable
-                  onPress={() => Alert.alert('Delete bank?', 'This cannot be undone.', [
+                  onPress={() => Alert.alert('Turn off this account?', 'Customers stop seeing it for top-ups. Its history is kept.', [
                     { text: 'Cancel', style: 'cancel' },
-                    { text: 'Delete', style: 'destructive', onPress: () => deleteMut.mutate(editing.id!) },
+                    { text: 'Turn off', style: 'destructive', onPress: () => deleteMut.mutate(editing.id!) },
                   ])}
                   style={{ width: 50, height: 50, borderRadius: 12, backgroundColor: 'rgba(239,68,68,0.15)', borderWidth: 1, borderColor: 'rgba(239,68,68,0.3)', alignItems: 'center', justifyContent: 'center' }}
                 >

@@ -65,7 +65,7 @@ export default function AdminAML() {
         <View style={{ flexDirection: 'row', gap: 8, paddingHorizontal: 16, marginBottom: 10, flexWrap: 'wrap' }}>
           {[
             ['Open', summary.open ?? 0, '#f59e0b'],
-            ['Reviewing', summary.reviewing ?? 0, '#63a1db'],
+            ['Reviewing', summary.reviewing ?? 0, p.accentText],
             ['Escalated', summary.escalated ?? 0, '#a855f7'],
             ['Critical', summary.critical ?? 0, '#ef4444'],
           ].map(([label, val, col]) => (

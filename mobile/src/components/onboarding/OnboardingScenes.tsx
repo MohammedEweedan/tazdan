@@ -139,7 +139,7 @@ function IntroScene({ p, width, height }: SceneProps) {
           backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.accentBorder,
           shadowColor: p.accent, shadowOpacity: 0.35, shadowRadius: 30, shadowOffset: { width: 0, height: 0 },
         }}>
-          <Image source={require('../../../assets/icon-asterisk.png')} style={{ width: 64, height: 64 }} resizeMode="contain" />
+          <Image source={require('../../../assets/icon-asterisk.png')} style={{ width: 64, height: 64, tintColor: p.accentText }} resizeMode="contain" />
         </Animated.View>
         {chips.map((c) => (
           <Animated.View

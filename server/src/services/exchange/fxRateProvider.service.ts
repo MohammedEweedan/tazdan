@@ -18,6 +18,13 @@
 import Decimal from 'decimal.js';
 import { Currency } from '@prisma/client';
 import { prisma } from '../../utils/prisma';
+import { FULUS_CURRENCIES, getFulusLydRate } from './fulus.service';
+
+/** Cash LYD pairs are priced from Fulus in either direction. */
+export function isFulusPair(base: string, quote: string): boolean {
+  const other = base === 'LYD' ? quote : quote === 'LYD' ? base : '';
+  return (FULUS_CURRENCIES as readonly string[]).includes(other);
+}
 
 /** ExchangeRate rows use the Currency enum — symbols outside it (a Fulus
  *  currency added before its enum value ships) must skip the DB override/
@@ -291,7 +298,13 @@ async function applySpread(base: string, quote: string, mid: number): Promise<{ 
  * Sanity bounds (when defined for the pair) reject poisoned API values.
  */
 async function fetchProviderMid(base: string, quote: string): Promise<ProviderMid | null> {
-  const needsParallel = PARALLEL_ONLY_QUOTES.has(quote.toUpperCase());
+  if (isFulusPair(base, quote)) {
+    const currency = quote === 'LYD' ? base : quote;
+    const rate = await getFulusLydRate(currency);
+    if (rate == null) return null;
+    return { mid: quote === 'LYD' ? rate : 1 / rate, source: 'fulus', derived: base === 'LYD' };
+  }
+  const needsParallel = PARALLEL_ONLY_QUOTES.has(quote.toUpperCase()) || PARALLEL_ONLY_QUOTES.has(base.toUpperCase());
   for (const provider of RATE_PROVIDERS) {
     if (!provider.supports(base, quote)) continue;
     // An official peg must NEVER silently stand in for a parallel rate. When
@@ -315,6 +328,38 @@ async function fetchProviderMid(base: string, quote: string): Promise<ProviderMi
     return { mid: result.mid, source: provider.name };
   }
   return null;
+}
+
+/**
+ * Jump guard for parallel-market (LYD) rates. Two feeds price the dinar and
+ * they can disagree badly (in testing: 6.42 vs 9.37 when the primary feed was
+ * rate-limited and a fallback took over), so a quote must not silently jump.
+ * A move larger than FX_MAX_JUMP_PCT (default 8%) from the last accepted rate
+ * is held: quotes keep the previous rate for up to 15 minutes and an error is
+ * logged; after that, quoting stops (503) until treasury confirms a rate
+ * through an approved FX override, or FX_JUMP_WINDOW_MS (default 2 h) passes.
+ */
+const acceptedRates = new Map<string, { mid: number; at: number }>();
+export function resetRateJumpGuard(): void { acceptedRates.clear(); }
+export function noteAcceptedRate(key: string, mid: number, at = Date.now()): void {
+  if (Number.isFinite(mid) && mid > 0) acceptedRates.set(key, { mid, at });
+}
+export function guardRateJump(key: string, mid: number, source: string, now = Date.now()): { mid: number; held: boolean } {
+  if (!Number.isFinite(mid) || mid <= 0) throw Object.assign(new Error('Invalid FX rate'), { statusCode: 503 });
+  if (source === 'fulus') {
+    acceptedRates.set(key, { mid, at: now });
+    return { mid, held: false };
+  }
+  const maxJump = Number(process.env.FX_MAX_JUMP_PCT ?? '0.08');
+  const window = Number(process.env.FX_JUMP_WINDOW_MS ?? 2 * 3600_000);
+  const prev = acceptedRates.get(key);
+  if (!prev || now - prev.at > window) { acceptedRates.set(key, { mid, at: now }); return { mid, held: false }; }
+  const jump = Math.abs(mid / prev.mid - 1);
+  if (jump <= maxJump) { acceptedRates.set(key, { mid, at: now }); return { mid, held: false }; }
+  // eslint-disable-next-line no-console
+  console.error(`[fx] ${key} moved ${(jump * 100).toFixed(1)}% (${prev.mid} → ${mid}, source ${source}); holding the previous rate`);
+  if (now - prev.at <= 15 * 60_000) return { mid: prev.mid, held: true };
+  throw Object.assign(new Error(`The ${key} rate moved ${(jump * 100).toFixed(1)}%. Quotes are paused until treasury confirms the rate.`), { statusCode: 503 });
 }
 
 /**
@@ -344,7 +389,14 @@ export async function getRate(base: string, quote: string): Promise<RatePair> {
         where: { baseCurrency_quoteCurrency: { baseCurrency: base as any, quoteCurrency: quote as any } },
       }).catch(() => null)
     : null;
-  if (override && override.isActive && override.setBy && (now - override.updatedAt.getTime() < MAX_OVERRIDE_AGE_MS)) {
+  // An approved treasury override carries its own expiry; a legacy manual
+  // rate falls back to the age window.
+  const overrideLive = override && override.isActive && override.setBy && (
+    override.overrideExpiresAt ? override.overrideExpiresAt.getTime() > now : now - override.updatedAt.getTime() < MAX_OVERRIDE_AGE_MS
+  );
+  if (override && overrideLive && !isFulusPair(base, quote)) {
+    // A confirmed override is the new reference for the jump guard.
+    noteAcceptedRate(k, (Number(override.buyPrice) + Number(override.sellPrice)) / 2, now);
     const pair: RatePair = {
       buyPrice:  override.buyPrice.toString(),
       sellPrice: override.sellPrice.toString(),
@@ -370,18 +422,28 @@ export async function getRate(base: string, quote: string): Promise<RatePair> {
     // when platform demand is low. Applied to both USD/LYD and the derived
     // LYD/USD (where the skew makes LYD/USD slightly *cheaper*, consistently).
     let skewSource = '';
-    if (base === 'USD' && quote === 'LYD') {
+    if (base === 'USD' && quote === 'LYD' && providerRate.source !== 'fulus') {
       const { applyLydDemandSkew, currentLydSkewPct, noteLydPrice } = await import('./lydOrderBook.service');
       mid = (applyLydDemandSkew(mid)).toNumber();
       noteLydPrice(mid); // feed the history sampler the live effective price
       if (currentLydSkewPct() > 0) skewSource = '+skew';
-    } else if (base === 'LYD' && quote === 'USD') {
+    } else if (base === 'LYD' && quote === 'USD' && providerRate.source !== 'fulus') {
       const { currentLydSkewPct } = await import('./lydOrderBook.service');
       const skew = currentLydSkewPct();
       if (skew > 0) { mid = mid / (1 + skew); skewSource = '+skew'; }
     }
+    if (base === 'USD' && quote === 'LYD' && providerRate.source === 'fulus') {
+      const { noteLydPrice } = await import('./lydOrderBook.service');
+      noteLydPrice(mid);
+    }
+    // Parallel-market pairs: never let a feed switch move the quote silently.
+    let heldSource = '';
+    if (PARALLEL_ONLY_QUOTES.has(quote.toUpperCase()) || PARALLEL_ONLY_QUOTES.has(base.toUpperCase())) {
+      const g = guardRateJump(k, mid, providerRate.source, now);
+      if (g.held) { mid = g.mid; heldSource = '+held'; }
+    }
     const { buy, sell } = await applySpread(base, quote, mid);
-    const baseSource = `${providerRate.derived ? 'derived' : 'live'}:${providerRate.source}`;
+    const baseSource = `${providerRate.derived ? 'derived' : 'live'}:${providerRate.source}${heldSource}`;
     const pair: RatePair = { buyPrice: buy, sellPrice: sell, source: baseSource + skewSource, fetchedAt: new Date() };
     memoryCache.set(k, { value: pair, expires: now + CACHE_TTL_MS });
 
@@ -396,6 +458,11 @@ export async function getRate(base: string, quote: string): Promise<RatePair> {
     }
 
     return pair;
+  }
+
+  // A missing Fulus rate stays unavailable, never substituted by another source.
+  if (isFulusPair(base, quote)) {
+    throw Object.assign(new Error(`Fulus rate unavailable for ${base}/${quote}`), { statusCode: 503 });
   }
 
   // 3. Stale override (even if outside the freshness window) beats nothing.
@@ -442,11 +509,11 @@ export async function getLiveProviderRate(base: string, quote: string): Promise<
   // Mirror getRate's USD/LYD demand-skew so the "live" figure matches what a
   // user would actually transact at.
   let skewSource = '';
-  if (base === 'USD' && quote === 'LYD') {
+  if (base === 'USD' && quote === 'LYD' && providerRate.source !== 'fulus') {
     const { applyLydDemandSkew, currentLydSkewPct } = await import('./lydOrderBook.service');
     mid = applyLydDemandSkew(mid).toNumber();
     if (currentLydSkewPct() > 0) skewSource = '+skew';
-  } else if (base === 'LYD' && quote === 'USD') {
+  } else if (base === 'LYD' && quote === 'USD' && providerRate.source !== 'fulus') {
     const { currentLydSkewPct } = await import('./lydOrderBook.service');
     const skew = currentLydSkewPct();
     if (skew > 0) { mid = mid / (1 + skew); skewSource = '+skew'; }

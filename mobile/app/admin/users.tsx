@@ -173,9 +173,12 @@ export default function AdminUsers() {
       resetCreateForm();
       Alert.alert(
         'User created',
-        res.temporaryPassword
+        (res.temporaryPassword
           ? `Created ${res.user.email}.\n\nTemporary password:\n${res.temporaryPassword}\n\nShare it securely and ask them to change it after signing in.`
-          : `Created ${res.user.email}.`,
+          : `Created ${res.user.email}.`)
+          + (res.openingBalances?.some((b) => b.pendingApproval)
+            ? '\n\nThe opening balance is above the single-person limit and is waiting for a second approver in the Control Cockpit.'
+            : ''),
       );
     },
     onError: (e: any) => Alert.alert('Create user failed', e?.response?.data?.error ?? e?.response?.data?.message ?? e?.message ?? 'Try again'),
@@ -700,7 +703,7 @@ function UserCard({ u, p, onMessage, onFreeze, onUnfreeze, onKyc, onCredit, onSt
               </View>
             )}
             {u.role === 'ADMIN' && (
-              <View style={{ paddingHorizontal: 6, paddingVertical: 2, borderRadius: 5, backgroundColor: 'rgba(99,161,219,0.15)' }}>
+              <View style={{ paddingHorizontal: 6, paddingVertical: 2, borderRadius: 5, backgroundColor: p.accentSoft }}>
                 <Text style={{ color: '#A3A3A3', fontSize: 9, fontWeight: '600', letterSpacing: 0.5 }}>ADMIN</Text>
               </View>
             )}

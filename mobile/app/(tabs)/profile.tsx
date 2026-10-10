@@ -17,6 +17,7 @@ import { useTheme, useThemedPalette } from '@/store/themeStore';
 import { useI18n, useT, LOCALE_META } from '@/store/i18nStore';
 import { Panel, PanelRow, StickyTopBar } from '@/components/ui/ScreenShell';
 import { HEADER_ROW_HEIGHT, TabHeader } from '@/components/ui/ScreenHeader';
+import { AppearancePicker } from '@/components/ui/AppearancePicker';
 import { LocalePickerModal } from '@/components/ui/LocalePickerModal';
 import { profileAPI } from '@/lib/api';
 import { realHandle, displayHandle, avatarMode } from '@/utils/displayUser';
@@ -88,7 +89,7 @@ export default function Profile() {
     }
   };
 
-  const currencies = ['USD', 'EUR', 'GBP', 'AED', 'SAR', 'EGP', 'USDT', 'BTC', 'ETH', 'BNB', 'SOL'];
+  const currencies = ['LYD', 'USD', 'EUR', 'GBP', 'AED', 'SAR', 'EGP', 'USDT', 'BTC', 'ETH', 'BNB', 'SOL'];
 
   const handleBiometricToggle = async () => {
     setBioLoading(true);
@@ -154,33 +155,7 @@ export default function Profile() {
   const groups: { title: string; rows: Row[]; headerExtra?: ReactNode }[] = [
     {
       title: t('profile.section.preferences'),
-      headerExtra: (
-        <View style={{
-          flexDirection: 'row', gap: 8, marginBottom: 10,
-          backgroundColor: p.bgElev, borderRadius: 18,
-          borderWidth: 1, borderColor: p.border, padding: 4,
-        }}>
-          {THEMES.map(({ mode, label, icon }) => {
-            const active = themeMode === mode;
-            return (
-              <Pressable
-                key={mode}
-                onPress={() => { h.selection(); setMode(mode); }}
-                style={{
-                  flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-                  gap: 6, paddingVertical: 11, borderRadius: 14,
-                  backgroundColor: active ? p.ctaBg : 'transparent',
-                }}
-              >
-                <Ionicons name={icon} size={14} color={active ? p.ctaFg : p.fgMuted} />
-                <Text style={{ color: active ? p.ctaFg : p.fgMuted, fontSize: 13, fontWeight: active ? '700' : '600' }}>
-                  {label}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
-      ),
+      headerExtra: <View style={{ marginBottom: 18 }}><AppearancePicker /></View>,
       rows: [
         // Theme is now a 3-step segment control rendered separately — hidden here.
         { icon: 'contrast-outline', label: 'theme-segment-placeholder', hidden: true },
@@ -256,9 +231,9 @@ export default function Profile() {
           right: (
             <View style={{
               paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6,
-              backgroundColor: `${ACCENT}18`, borderWidth: 1, borderColor: `${ACCENT}30`,
+              backgroundColor: p.accentSoft,
             }}>
-              <Text style={{ color: ACCENT, fontSize: 10, fontWeight: '700', letterSpacing: 0.4 }}>B2B</Text>
+              <Text style={{ color: p.accentText, fontSize: 10, fontWeight: '700', letterSpacing: 0.4 }}>B2B</Text>
             </View>
           ),
         },
@@ -286,6 +261,7 @@ export default function Profile() {
           danger: true,
           onPress: async () => { h.warning(); await logout(); router.replace('/(auth)/welcome-back'); },
         },
+        { icon: 'trash-outline', label: t('profile.row.deleteAccount'), danger: true, href: '/settings/delete-account' },
       ],
     },
   ];
@@ -306,8 +282,8 @@ export default function Profile() {
       >
             {/* User panel */}
           <View style={{ paddingHorizontal: 24, marginTop: 18 }}>
-            <Panel>
-              <View style={{ flexDirection: 'row', alignItems: 'center', padding: 18, gap: 14 }}>
+            <Panel style={{ backgroundColor: 'transparent', borderWidth: 0 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 12, gap: 16 }}>
                 <Pressable
                   onPress={() => {
                     h.selection();
@@ -346,7 +322,7 @@ export default function Profile() {
                   </View>
                 </Pressable>
                 <View style={{ flex: 1 }}>
-                  <Text style={{ color: p.fg, fontSize: 16, fontWeight: '700' }}>{fullName}</Text>
+                  <Text style={{ color: p.fg, fontSize: 23, fontWeight: '600', letterSpacing: -.5 }}>{fullName}</Text>
                   <Text style={{ color: handleSlug ? p.fgMuted : p.fgFaint, fontSize: 13, fontWeight: '500', marginTop: 2 }}>
                     {handleLabel}
                   </Text>

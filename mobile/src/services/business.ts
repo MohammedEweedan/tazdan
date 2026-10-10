@@ -18,6 +18,7 @@ import type {
   BusinessStats,
   BusinessProfile,
   WebhookEndpoint,
+  PayoutBatch,
 } from '@/types/business';
 
 export const businessService = {
@@ -35,6 +36,22 @@ export const businessService = {
   }): Promise<BusinessProfile> => {
     const { data } = await api.patch('/business/profile', patch);
     return data.profile;
+  },
+
+  /** Owner sends the business for KYB review. */
+  submitKyb: async (): Promise<{ kybStatus: string }> => {
+    const { data } = await api.post('/business/kyb/submit');
+    return data;
+  },
+
+  /** Team invitations addressed to the signed-in user. */
+  myInvitations: async (): Promise<Array<{ id: string; role: string; invitedAt: string; business: { companyName: string; tradingName: string | null; country: string } }>> => {
+    const { data } = await api.get('/business/invitations');
+    return data.invitations ?? [];
+  },
+
+  acceptInvitation: async (id: string): Promise<void> => {
+    await api.post(`/business/invitations/${id}/accept`);
   },
 
   /* ── Dashboard stats ──────────────────────────────────────────── */
@@ -104,8 +121,14 @@ export const businessService = {
     recipients: BulkPayRecipient[];
     currency:   string;
     note?:      string;
-  }): Promise<{ batchId: string; payouts: BusinessPayout[] }> => {
-    const { data } = await api.post('/business/bulk-pay', payload);
+    /** 6-digit code when the server asks for step-up (single-signatory, large batch). */
+    stepUpCode?: string;
+  }, idempotencyKey?: string): Promise<{
+    batchId: string; payouts: BusinessPayout[];
+    status?: string; pendingApproval?: boolean; complianceReview?: boolean; approvalReason?: string | null;
+  }> => {
+    // The key makes a retried or double-tapped submit return the same batch instead of paying twice.
+    const { data } = await api.post('/business/bulk-pay', payload, idempotencyKey ? { headers: { 'Idempotency-Key': idempotencyKey } } : undefined);
     return data;
   },
 
@@ -125,6 +148,23 @@ export const businessService = {
   getPayout: async (id: string): Promise<BusinessPayout> => {
     const { data } = await api.get(`/business/payouts/${id}`);
     return data.payout;
+  },
+
+  /** Batches, e.g. status=PENDING_APPROVAL for the approvals queue. */
+  listBatches: async (status?: string): Promise<PayoutBatch[]> => {
+    const { data } = await api.get('/business/batches', { params: status ? { status } : undefined });
+    return data.batches ?? [];
+  },
+
+  /** Second owner/admin approves (the server refuses the person who created it). */
+  approveBatch: async (id: string): Promise<PayoutBatch> => {
+    const { data } = await api.post(`/business/batches/${id}/approve`);
+    return data.batch;
+  },
+
+  rejectBatch: async (id: string, reason: string): Promise<PayoutBatch> => {
+    const { data } = await api.post(`/business/batches/${id}/reject`, { reason });
+    return data.batch;
   },
 
   cancelPayout: async (id: string): Promise<BusinessPayout> => {

@@ -1,3 +1,4 @@
+import { useThemedPalette } from '@/store/themeStore';
 import { useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 import { Redirect } from 'expo-router';
@@ -11,6 +12,7 @@ export default function DevShaderRoute() {
 }
 
 function DevShaderScreen() {
+  const p = useThemedPalette();
   const [shaderOn, setShaderOn] = useState(true);
   const [mode, setMode] = useState<'dark' | 'light'>('dark');
 
@@ -33,7 +35,7 @@ function DevShaderScreen() {
       />
 
       <View style={styles.center} pointerEvents="none">
-        <ActivityIndicator size="large" color="#63A1DB" style={styles.loader} />
+        <ActivityIndicator size="large" color={p.accentText} style={styles.loader} />
         <Text style={[styles.title, { color: isDark ? '#fff' : '#0f1c2e' }]}>Loading</Text>
         <Text style={[styles.sub, { color: isDark ? 'rgba(255,255,255,0.48)' : 'rgba(15,28,46,0.5)' }]}>
           ShaderLines live test · {mode}
@@ -43,7 +45,7 @@ function DevShaderScreen() {
       {/* Mode toggle — top center */}
       <Pressable
         onPress={() => setMode((m) => (m === 'dark' ? 'light' : 'dark'))}
-        style={[styles.devBtn, styles.topBtn]}
+        style={[styles.devBtn, styles.topBtn, { backgroundColor: p.accentSoft }]}
         hitSlop={12}
       >
         <Text style={styles.devText}>{isDark ? 'Mode: DARK' : 'Mode: LIGHT'}</Text>
@@ -52,7 +54,7 @@ function DevShaderScreen() {
       {/* Shader off — bottom left */}
       <Pressable
         onPress={() => setShaderOn(false)}
-        style={[styles.devBtn, styles.leftBtn, !shaderOn && styles.activeBtn]}
+        style={[styles.devBtn, styles.leftBtn, !shaderOn && { backgroundColor: p.accent }]}
         hitSlop={12}
       >
         <Text style={styles.devText}>Shader OFF</Text>
@@ -61,7 +63,7 @@ function DevShaderScreen() {
       {/* Shader on — bottom right */}
       <Pressable
         onPress={() => setShaderOn(true)}
-        style={[styles.devBtn, styles.rightBtn, shaderOn && styles.activeBtn]}
+        style={[styles.devBtn, styles.rightBtn, shaderOn && { backgroundColor: p.accent }]}
         hitSlop={12}
       >
         <Text style={styles.devText}>Shader ON</Text>
@@ -99,7 +101,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     zIndex: 9999,
     elevation: 9999,
-    backgroundColor: 'rgba(99,161,219,0.35)',
+    backgroundColor: 'transparent',
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: 999,
@@ -117,7 +119,7 @@ const styles = StyleSheet.create({
     right: 20,
   },
   activeBtn: {
-    backgroundColor: '#63A1DB',
+    backgroundColor: 'transparent',
   },
   devText: {
     color: '#fff',

@@ -3,6 +3,7 @@ import { Decimal } from '@prisma/client/runtime/library';
 import { prisma } from '../utils/prisma';
 import { AuthRequest } from '../types';
 import { AppError } from '../middleware/errorHandler';
+import { assertMovementAllowed } from '../services/platform/controls.service';
 import { postLedger, isLedgerCurrency } from '../services/ledger/ledger.service';
 
 // Tiered commission rates
@@ -80,21 +81,30 @@ export class ReferralController {
   static async claimRewards(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const userId = req.user!.id;
-      const pending = await prisma.referralReward.findMany({
-        where: { referrerId: userId, paid: false },
-      });
-      if (pending.length === 0) throw new AppError('No pending rewards', 400);
+      await assertMovementAllowed({ userId, feature: 'transfers' });
 
-      const totalByCurrency: Record<string, number> = {};
-      pending.forEach((r: any) => {
-        const c = r.currency;
-        totalByCurrency[c] = (totalByCurrency[c] || 0) + parseFloat(r.amount.toString());
-      });
+      // Lock the unpaid rows, mark exactly those paid, then credit their sum —
+      // all in one transaction. Two concurrent claims cannot both pay: the
+      // second waits on the row locks and then finds nothing unpaid.
+      const claimed = await prisma.$transaction(async (tx) => {
+        const pending = await tx.$queryRaw<Array<{ id: string; amount: string; currency: string }>>`
+          SELECT "id", "amount"::text AS "amount", "currency"::text AS "currency"
+          FROM "ReferralReward"
+          WHERE "referrerId" = ${userId} AND "paid" = false
+          FOR UPDATE
+        `;
+        if (pending.length === 0) throw new AppError('No pending rewards', 400);
 
-      // Credit wallets, mirror to the ledger, and mark paid — all atomic so a
-      // crash can't credit a wallet without recording the payout (or vice-versa).
-      await prisma.$transaction(async (tx) => {
-        for (const [currency, amount] of Object.entries(totalByCurrency)) {
+        const marked = await tx.referralReward.updateMany({
+          where: { id: { in: pending.map((p) => p.id) }, paid: false },
+          data: { paid: true, paidAt: new Date() },
+        });
+        if (marked.count !== pending.length) throw new AppError('Rewards changed while claiming — try again', 409);
+
+        const totals = new Map<string, Decimal>();
+        for (const r of pending) totals.set(r.currency, (totals.get(r.currency) ?? new Decimal(0)).plus(r.amount));
+
+        for (const [currency, amount] of totals) {
           await tx.wallet.upsert({
             where: { userId_currency: { userId, currency: currency as any } },
             create: { userId, currency: currency as any, balance: amount },
@@ -104,23 +114,19 @@ export class ReferralController {
           if (isLedgerCurrency(currency)) {
             await postLedger(tx, {
               refType: 'referral_reward',
-              refId: userId,
-              memo: `Referral reward ${currency}`,
+              refId: `${userId}:${pending.map((p) => p.id).sort()[0]}`,
+              memo: `Referral reward ${currency} (${pending.length} reward rows)`,
               legs: [
-                { type: 'PLATFORM', currency: currency as any, amount: new Decimal(-amount) },
-                { type: 'USER', userId, currency: currency as any, amount: new Decimal(amount) },
+                { type: 'PLATFORM', currency: currency as any, amount: amount.neg() },
+                { type: 'USER', userId, currency: currency as any, amount },
               ],
             }, { allowNegativeUser: true });
           }
         }
-
-        await tx.referralReward.updateMany({
-          where: { referrerId: userId, paid: false },
-          data: { paid: true, paidAt: new Date() },
-        });
+        return Object.fromEntries([...totals].map(([c, a]) => [c, a.toNumber()]));
       });
 
-      res.json({ message: 'Rewards claimed successfully', claimed: totalByCurrency });
+      res.json({ message: 'Rewards claimed successfully', claimed });
     } catch (error) {
       next(error);
     }

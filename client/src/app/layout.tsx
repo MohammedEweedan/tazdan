@@ -29,6 +29,7 @@ const dmSans = localFont({
   ],
   display: 'swap',
   variable: '--font-dm-sans',
+  preload: false,
 });
 
 const inter = localFont({
@@ -40,6 +41,7 @@ const inter = localFont({
   ],
   display: 'swap',
   variable: '--font-inter',
+  preload: false,
 });
 
 const outfit = localFont({
@@ -52,6 +54,7 @@ const outfit = localFont({
   ],
   display: 'swap',
   variable: '--font-outfit',
+  preload: false,
 });
 
 // Cairo includes Arabic glyphs and stays as the fallback for Arabic characters
@@ -71,6 +74,7 @@ const cairo = localFont({
   ],
   display: 'swap',
   variable: '--font-cairo',
+  preload: false,
 });
 
 const SITE_URL = 'https://tazdan.com';
@@ -126,7 +130,6 @@ export const metadata: Metadata = {
   // size; the SVG wins where it is supported.
   icons: {
     icon: [
-      { url: '/favicon.ico', sizes: 'any' },
       { url: '/icon-asterisk.svg', type: 'image/svg+xml' },
     ],
     apple: '/apple-touch-icon.png',
@@ -139,8 +142,8 @@ export const viewport: Viewport = {
   // Don't lock zoom — accessibility (WCAG 2.5.5) requires user-pinch-zoom.
   maximumScale: 5,
   themeColor: [
-    { media: '(prefers-color-scheme: dark)',  color: '#0A0A0B' },
-    { media: '(prefers-color-scheme: light)', color: '#FAFAF7' },
+    { media: '(prefers-color-scheme: dark)',  color: '#16181C' },
+    { media: '(prefers-color-scheme: light)', color: '#F6F7FA' },
   ],
 };
 
@@ -157,7 +160,7 @@ const jsonLd = {
       '@id': `${SITE_URL}#org`,
       name: 'tazdan',
       url: SITE_URL,
-      logo: `${SITE_URL}/icon-black.png`,
+      logo: `${SITE_URL}/icon-asterisk-black.png`,
       sameAs: [
         'https://twitter.com/tazdan',
         'https://www.linkedin.com/company/tazdan',
@@ -200,11 +203,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             pay the full handshake cost. */}
         <link rel="preconnect" href="https://api.tazdan.com" />
         <link rel="dns-prefetch" href="https://api.tazdan.com" />
-
-        {/* Only preload the actual LCP image. Stacking 5+ image preloads
-            (the old layout) burns the high-priority queue on assets
-            that aren't on the critical path and HURTS Lighthouse. */}
-        <link rel="preload" href="/icon-black.png" as="image" type="image/png" fetchPriority="high" />
 
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />

@@ -54,8 +54,8 @@ export default function RoleSelectScreen() {
       {/* Subtle ambient gradient */}
       <LinearGradient
         colors={themeMode === 'dark'
-          ? ['rgba(99,161,219,0.16)', 'rgba(99,161,219,0.06)', 'transparent']
-          : ['rgba(99,161,219,0.13)', 'rgba(99,161,219,0.05)', 'transparent']}
+          ? [p.accentSoft, p.accentSoft, 'transparent']
+          : [p.accentSoft, p.accentSoft, 'transparent']}
         locations={[0, 0.5, 1]}
         style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 480 }}
         pointerEvents="none"
@@ -85,13 +85,13 @@ export default function RoleSelectScreen() {
                 borderRadius: 22,
                 overflow: 'hidden',
                 borderWidth: 1,
-                borderColor: 'rgba(99,161,219,0.45)',
+                borderColor: p.accentBorder,
                 opacity: pressed ? 0.85 : 1,
                 transform: [{ scale: pressed ? 0.98 : 1 }],
               })}
             >
               <LinearGradient
-                colors={['rgba(99,161,219,0.20)', 'rgba(99,161,219,0.05)']}
+                colors={[p.accentSoft, p.accentSoft]}
                 start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
                 style={{ padding: 22 }}
               >

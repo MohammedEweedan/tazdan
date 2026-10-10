@@ -15,6 +15,13 @@ import { prisma } from '../utils/prisma';
 jest.mock('../services/wallet/walletDerivation.service', () => ({
   createUserWallets: jest.fn(),
 }));
+// Step-up codes are covered elsewhere; here they would only add noise.
+jest.mock('../services/security/stepUp.service', () => ({
+  enforceStepUp: jest.fn().mockResolvedValue(undefined),
+  enforceRiskBasedStepUp: jest.fn().mockResolvedValue(undefined),
+  issueStepUp: jest.fn(),
+  verifyStepUp: jest.fn(),
+}));
 
 const RUN_DB = process.env.CI === 'true' || process.env.RUN_DB_TESTS === '1';
 const describeDb = RUN_DB ? describe : describe.skip;
@@ -105,7 +112,7 @@ describeDb('balance mutations mirror to the double-entry ledger', () => {
     await expectBalanced('deposit', deposit.id);
   });
 
-  it('admin manual credit records the external source in the ledger', async () => {
+  it('admin manual credit posts a controlled adjustment journal', async () => {
     const admin = await createUser('ADMIN');
     const user = await createUser('USER');
 
@@ -119,10 +126,16 @@ describeDb('balance mutations mirror to the double-entry ledger', () => {
     expect(wallet?.balance.toString()).toBe('42');
     const ledger = await prisma.ledgerAccount.findFirst({ where: { type: 'USER', userId: user.id, currency: 'USDT' } });
     expect(ledger?.balance.toString()).toBe('42');
-    const tx = await prisma.transaction.findFirst({ where: { userId: user.id, reference: { startsWith: 'ADMIN-' } }, orderBy: { createdAt: 'desc' } });
+    // A manual credit is an ADJUSTMENT journal (not a fake on-ramp deposit),
+    // shown to the customer as ADMIN_CREDIT, and audited.
+    const tx = await prisma.transaction.findFirst({ where: { userId: user.id, type: 'ADMIN_CREDIT' }, orderBy: { createdAt: 'desc' } });
     expect(tx).toBeTruthy();
-    expect(tx!.reference).toBeTruthy();
-    await expectBalanced('admin_credit', tx!.reference!);
+    expect(tx!.reference).toMatch(/^ADJ-/);
+    await expectBalanced('adjustment', tx!.reference!);
+    const legs = await prisma.ledgerEntry.findMany({ where: { refType: 'adjustment', refId: tx!.reference! }, include: { account: true } });
+    expect(legs.map((l) => l.account.type).sort()).toEqual(['ADJUSTMENT', 'USER']);
+    const audit = await prisma.auditLog.findFirst({ where: { action: 'LEDGER_ADJUSTMENT_CREDIT', entityId: user.id } });
+    expect(audit).toBeTruthy();
   });
 
   it('claim-link redemption moves sender and recipient balances in the ledger', async () => {

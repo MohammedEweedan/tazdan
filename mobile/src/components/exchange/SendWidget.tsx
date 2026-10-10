@@ -15,7 +15,12 @@ import { useQuery } from '@tanstack/react-query';
 import { useThemedPalette } from '@/store/themeStore';
 import { useT } from '@/store/i18nStore';
 import { useHaptics, useWallets, extractErrorMessage, useStepUpAuth, StepUpDeniedError, useTransactionSound } from '@/hooks';
-import { useForexRates } from '@/hooks/useForexRates';
+import { useLimitBlock, LIMITS_QUERY_KEY } from '@/hooks/useLimits';
+import { useQueryClient } from '@tanstack/react-query';
+import { LimitNotice } from '@/components/limits/LimitNotice';
+import { StepUpModal } from '@/components/ui/StepUpModal';
+import { isStepUpChallengeError } from '@/lib/stepUpErrors';
+import { useUsdValue } from '@/hooks/useForexRates';
 import { profileService, messageService, claimLinkService } from '@/services';
 import type { Currency } from '@/types';
 import { useRouter } from 'expo-router';
@@ -62,8 +67,8 @@ const KNOWN_META: Record<string, { label: string; color: string; bg: string; ico
   OP:   { label: 'Optimism',    color: '#ff0420', bg: 'rgba(255,4,32,0.14)',    icon: '○' },
   SUI:  { label: 'Sui',         color: '#6fbcf0', bg: 'rgba(111,188,240,0.14)', icon: '◎' },
   TON:  { label: 'TON',         color: '#0098ea', bg: 'rgba(0,152,234,0.14)',   icon: '◈' },
-  USD:  { label: 'US Dollar',   color: '#63a1db', bg: 'rgba(99,161,219,0.14)',  icon: '$' },
-  EUR:  { label: 'Euro',        color: '#63a1db', bg: 'rgba(99,161,219,0.14)',  icon: '€' },
+  USD:  { label: 'US Dollar',   color: '', bg: '',  icon: '$' },
+  EUR:  { label: 'Euro',        color: '', bg: '',  icon: '€' },
   GBP:  { label: 'Pound',       color: '#7c3aed', bg: 'rgba(124,58,237,0.14)',  icon: '£' },
   AED:  { label: 'UAE Dirham',  color: '#0f766e', bg: 'rgba(15,118,110,0.14)',  icon: 'د' },
   SAR:  { label: 'Saudi Riyal', color: '#15803d', bg: 'rgba(21,128,61,0.14)',   icon: '﷼' },
@@ -82,7 +87,7 @@ function assetMeta(currency: string) {
 type Mode    = 'FIAT' | 'CRYPTO';
 type Profile = { id: string; username: string; firstName: string; lastName: string; avatarUrl?: string; kycTier?: string };
 
-export function SendWidget() {
+export function SendWidget({ initialRecipient }: { initialRecipient?: Profile } = {}) {
   const p       = useThemedPalette();
   const t       = useT();
   const haptics = useHaptics();
@@ -94,19 +99,21 @@ export function SendWidget() {
   const keypadHeight = tight ? 42 : compact ? 48 : 56;
   const keypadFont = tight ? 22 : compact ? 24 : 27;
   const { playSuccess, playError } = useTransactionSound();
+  const qc = useQueryClient();
   const { data: wallets } = useWallets();
-  const { data: fxRates } = useForexRates();
+  const toUsd = useUsdValue();
   const stepUp = useStepUpAuth();
 
   const [currency,  setCurrency]  = useState<string>('USD');
-  const [recipient, setRecipient] = useState('');
-  const [picked,    setPicked]    = useState<Profile | null>(null);
+  const [recipient, setRecipient] = useState(initialRecipient ? `@${initialRecipient.username}` : '');
+  const [picked,    setPicked]    = useState<Profile | null>(initialRecipient ?? null);
   const [amount,    setAmount]    = useState('');
   const [note,      setNote]      = useState('');
   const [noteOpen,  setNoteOpen]  = useState(false);
   const [ctaState,  setCta]       = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [ctaError,  setCtaErr]    = useState<string | null>(null);
   const [qrUrl,     setQrUrl]     = useState<string | null>(null);
+  const [stepUpOpen, setStepUpOpen] = useState(false);
 
   // One unified holdings list — fiat AND crypto the user actually holds (>0),
   // plus the core fiats so they can always send those. No fiat/crypto toggle.
@@ -118,7 +125,7 @@ export function SendWidget() {
     return [...held.entries()]
       .map(([cur, bal]) => {
         const m = assetMeta(cur);
-        return { currency: cur, balance: bal, label: m.label, icon: m.icon, color: m.color, bg: m.bg, isFiat: FIAT_SET.has(cur) };
+        return { currency: cur, balance: bal, label: m.label, icon: m.icon, color: FIAT_SET.has(cur) ? p.accentText : m.color, bg: FIAT_SET.has(cur) ? p.accentSoft : m.bg, isFiat: FIAT_SET.has(cur) };
       })
       // Fiat first, then crypto; within each, higher balance first.
       .sort((a, b) => {
@@ -127,7 +134,7 @@ export function SendWidget() {
         if (af !== bf) return af - bf;
         return b.balance - a.balance;
       });
-  }, [wallets]);
+  }, [wallets, p.accentText, p.accentSoft]);
 
   const wallet     = wallets?.find((w) => w.currency === currency);
   const balance    = wallet ? Number(wallet.balance) : 0;
@@ -147,21 +154,33 @@ export function SendWidget() {
     staleTime: 30_000,
   });
 
-  const valid = !!picked && sendAmount > 0 && !overspend;
+  // Limits before confirming (and before any Face ID / security code).
+  const sendUsd = sendAmount > 0 ? toUsd(sendAmount, currency) : null;
+  const limit = useLimitBlock('SEND', sendUsd);
+  const valid = !!picked && sendAmount > 0 && !overspend && !limit.blocked;
 
-  const onSend = async () => {
+  const onSend = async (stepUpCode?: string) => {
     if (!valid || !picked) return;
     setCta('loading'); setCtaErr(null);
     try {
-      const usdRate = fxRates?.[currency as Currency] ?? 1;
-      const usdValue = sendAmount * usdRate;
-      await stepUp.guard({
-        usdValue,
-        reason: `Send ${sendAmount} ${currency} to @${picked.username}`,
-      });
+      let biometricVerified = false;
+      if (!stepUpCode) {
+        // Unknown price → treat as high value so the check is never skipped.
+        const usdValue = toUsd(sendAmount, currency) ?? Number.POSITIVE_INFINITY;
+        biometricVerified = await stepUp.guard({
+          usdValue,
+          reason: `Send ${sendAmount} ${currency} to @${picked.username}`,
+        });
+      }
 
-      await messageService.transfer({ receiverId: picked.id, currency: currency as Currency, amount: sendAmount, note: note || undefined });
+      await messageService.transfer({
+        receiverId: picked.id, currency: currency as Currency, amount: sendAmount, note: note || undefined,
+        ...(stepUpCode ? { stepUpCode } : {}),
+        ...(biometricVerified ? { biometricVerified: true } : {}),
+      });
+      setStepUpOpen(false);
       playSuccess('transfer');
+      void qc.invalidateQueries({ queryKey: LIMITS_QUERY_KEY });
       setCta('success');
       // Money successfully sent = peak-happiness moment; the prompt lib
       // self-throttles (2nd success, once per install) and never throws.
@@ -176,6 +195,13 @@ export function SendWidget() {
         setTimeout(() => setCta('idle'), 2000);
         return;
       }
+      // New device or high value: the server emailed (or wants) a 6-digit code.
+      if (isStepUpChallengeError(e) && !stepUpCode) {
+        setCta('idle');
+        setStepUpOpen(true);
+        return;
+      }
+      if (stepUpCode) { setCta('idle'); throw e; } // the modal shows a wrong-code error
       playError();
       setCtaErr(extractErrorMessage(e, t('send.failed')));
       setCta('error');
@@ -433,6 +459,7 @@ export function SendWidget() {
         <NumericKeypad value={amount} onChange={setAmount} palette={p} keyHeight={keypadHeight} fontSize={keypadFont} />
       </View>
 
+      <LimitNotice action="SEND" amountUsd={sendUsd} style={{ marginBottom: 10 }} />
       <SlideToConfirm
         label={valid ? (t('send.cta') || 'Slide to send') : (picked ? 'Enter amount' : 'Select recipient')}
         onConfirm={() => { if (valid && ctaState === 'idle') onSend(); }}
@@ -481,6 +508,15 @@ export function SendWidget() {
           </View>
         </Pressable>
       </Modal>
+
+      {/* Server-requested 6-digit confirmation (new device or high value) */}
+      <StepUpModal
+        visible={stepUpOpen}
+        action="transfer"
+        subtitle={picked ? `Sending ${sendAmount} ${currency} to @${picked.username}` : undefined}
+        onSubmit={(code) => onSend(code)}
+        onCancel={() => { setStepUpOpen(false); setCta('idle'); }}
+      />
     </View>
   );
 }

@@ -1,3 +1,4 @@
+import { FiatFlag, hasFiatFlag } from './FiatFlag';
 /**
  * CoinLogo — premium currency chip.
  *
@@ -28,6 +29,7 @@ export function CoinLogo({ currency, size = 44 }: Props) {
   const isCrypto = meta?.kind === 'crypto';
   const iconUrl = isCrypto ? getIconUrl(currency) : null;
 
+  if (hasFiatFlag(currency)) return <FiatFlag currency={currency} size={size} />;
   if (!iconUrl) {
     return (
       <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>

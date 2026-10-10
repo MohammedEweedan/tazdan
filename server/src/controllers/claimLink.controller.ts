@@ -33,7 +33,14 @@ import { pushCopy, pushTxEvent } from '../services/push.service';
 import { Currency, ClaimLinkStatus } from '@prisma/client';
 import { isLedgerCurrency, postLedger } from '../services/ledger/ledger.service';
 import { assertTransitioned, releaseReserve, reserveFunds, settleReserve } from '../services/wallet/atomicWallet';
-import { enforceKycLimit } from '../utils/kycLimits';
+import { enforceKycLimit, valueInUsd } from '../utils/kycLimits';
+import { assertMovementAllowed } from '../services/platform/controls.service';
+import { enforceRiskBasedStepUp } from '../services/security/stepUp.service';
+import { incrAttempts, getAttempts } from '../utils/redis';
+
+// Wrong-PIN attempts allowed per link before it locks for the window.
+const MAX_PIN_ATTEMPTS = 5;
+const PIN_LOCK_SECONDS = 24 * 60 * 60;
 
 const SUPPORTED_ASSETS = [
   'USDT', 'USD', 'LYD', 'BTC', 'ETH', 'BNB', 'SOL', 'XRP',
@@ -52,6 +59,8 @@ const createSchema = z.object({
   note:            z.string().max(200).optional(),
   expiresInDays:   z.number().int().min(1).max(MAX_EXPIRY_DAYS).optional(),
   pin:             z.string().min(4).max(8).regex(/^\d+$/).optional(),
+  stepUpCode:      z.string().regex(/^\d{6}$/).optional(),
+  biometricVerified: z.boolean().optional(),
 }).refine(
   (d) => d.recipientEmail || d.recipientPhone || d.recipientHandle,
   { message: 'recipientEmail, recipientPhone, or recipientHandle is required' },
@@ -112,7 +121,16 @@ export class ClaimLinkController {
       });
       if (!senderWallet) throw new AppError(`${asset} wallet not found`, 404);
 
-      await enforceKycLimit(senderId, 'SEND', body.amount, asset);
+      await assertMovementAllowed({ userId: senderId, feature: 'transfers', currency: asset });
+      await enforceKycLimit(senderId, 'SEND', body.amount, asset); // before any security code
+      await enforceRiskBasedStepUp({
+        userId: senderId,
+        action: 'transfer',
+        valueUsd: await valueInUsd(body.amount, asset),
+        req,
+        code: body.stepUpCode,
+        biometricVerified: body.biometricVerified === true,
+      });
 
       const expiresInDays = body.expiresInDays ?? DEFAULT_EXPIRY_DAYS;
       const expiresAt = new Date(Date.now() + expiresInDays * 24 * 60 * 60 * 1000);
@@ -283,9 +301,19 @@ export class ClaimLinkController {
       }
 
       if (link.pinHash) {
+        // A 4-digit PIN has 10,000 values; cap guesses per link so an
+        // unbound link cannot be brute-forced.
+        const attemptsKey = `claimlink:pin:${link.id}`;
+        if ((await getAttempts(attemptsKey)) >= MAX_PIN_ATTEMPTS) {
+          throw new AppError('Too many incorrect PIN attempts. Ask the sender to send a new link.', 429, 'RATE_LIMITED');
+        }
         if (!body.pin) throw new AppError('PIN required', 401);
-        const expected = hashPin(body.pin, link.claimToken.slice(0, 16));
-        if (expected !== link.pinHash) throw new AppError('Incorrect PIN', 401);
+        const expected = Buffer.from(hashPin(body.pin, link.claimToken.slice(0, 16)), 'hex');
+        const stored = Buffer.from(link.pinHash, 'hex');
+        if (expected.length !== stored.length || !crypto.timingSafeEqual(expected, stored)) {
+          await incrAttempts(attemptsKey, PIN_LOCK_SECONDS);
+          throw new AppError('Incorrect PIN', 401);
+        }
       }
 
       const result = await prisma.$transaction(async (tx) => {

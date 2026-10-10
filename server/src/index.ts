@@ -56,6 +56,7 @@ import { marketsRouter } from './routes/markets';
 import transactionRouter from './routes/transactions';
 import activitiesRouter from './routes/activities';
 import geoRouter from './routes/geo';
+import { contactsRouter } from './routes/contacts';
 import platformBanksRouter from './routes/platformBanks';
 import ratesRouter from './routes/rates';
 import { waitlistRouter } from './routes/waitlist';
@@ -79,6 +80,11 @@ import { globalLimiter, authLimiter, registerLimiter, withdrawalLimiter, webhook
 import { protectedUploadsRouter } from './middleware/protectedUploads';
 import { ipBanMiddleware } from './middleware/ipBan';
 import { featureFlags } from './utils/features';
+import { metricsMiddleware, startMetricsSampler } from './services/platform/metrics';
+import { cockpitRouter } from './routes/cockpit';
+import { remittanceRouter } from './routes/remittance';
+import { businessRouter } from './routes/business';
+import { publicApiRouter } from './routes/publicApi';
 
 // ── Cluster load balancing ────────────────────────────────────────────────
 // Default to ONE production worker. Each worker has its own Prisma pool, so
@@ -160,6 +166,9 @@ app.set('trust proxy', 1);
 // Block banned IPs before any processing
 app.use(ipBanMiddleware);
 
+// Latency / throughput / error-rate samples for the cockpit (in-process).
+app.use(metricsMiddleware);
+
 // ── Vary header for CDN / proxy caching ───────────────────────────────
 // Tell every cache layer that the response varies by Accept-Encoding so a
 // gzip-compressed cached response is never served to a client that doesn't
@@ -194,7 +203,8 @@ app.use((req, res, next) => {
   // The body is still parsed into req.body.
   const needsRawBody =
     req.path === '/api/whatsapp/webhook/meta' ||
-    req.path === '/api/exchange/webhook/fulus';
+    req.path === '/api/exchange/webhook/fulus' ||
+    req.path.startsWith('/api/remittance/webhooks/');
   return express.json({
     limit:  '1mb',
     verify: needsRawBody
@@ -267,6 +277,7 @@ app.use('/api/whatsapp', whatsappRouter);
 app.use('/api/profile', profileRouter);
 app.use('/api/p2p', p2pRouter);
 app.use('/api/messages', messageRouter);
+app.use('/api/contacts', contactsRouter);
 app.use('/api/referrals', referralRouter);
 app.use('/api/notifications', notificationRouter);
 // News proxy/cache — wraps CryptoCompare (and future feeds) so the
@@ -291,6 +302,13 @@ app.use('/api/recurring-buys', recurringBuyRouter);
 app.use('/api/budgets', budgetRouter);
 app.use('/api/asset-discussions', assetDiscussionRouter);
 app.use('/api/waitlist', waitlistRouter);
+app.use('/api/remittance/webhooks', webhookLimiter);
+app.use('/api/remittance', remittanceRouter);
+// Control Cockpit (staff-only, permission-gated per route).
+app.use('/api/cockpit', cockpitRouter);
+// Business dashboard (customer auth) and the public business API (API keys).
+app.use('/api/business', businessRouter);
+app.use('/api/v1', publicApiRouter);
 
 // Feature switches — public so the apps can hide surfaces that are off.
 app.get('/api/features', (_req, res) => {
@@ -486,11 +504,25 @@ async function start() {
     if (isSchedulerWorker) {
       startReconciliation();
     }
-    // Fund-integrity audit against the live Wallet tables — detects missing or
-    // conjured funds (internal balances vs net external deposits/withdrawals).
+    // Fund-integrity audit — every unit held traced to value that entered
+    // from outside, boundary postings matched to their records.
+    // Operating platform reference data (rules, corridors, providers, pools)
+    // on every worker; background jobs on the scheduler worker only.
+    {
+      const { bootstrapPlatform } = await import('./services/platform/bootstrap');
+      await bootstrapPlatform({ workers: isSchedulerWorker });
+    }
     if (isSchedulerWorker) {
+      startMetricsSampler();
       startFundIntegrityAudit();
       startOperationalReadinessAlerts();
+      // Official sanctions lists (UN, OFAC SDN, UK): first download soon after
+      // boot when missing or stale, then daily.
+      const { startSanctionsRefresh } = await import('./services/compliance/sanctionsLists.service');
+      startSanctionsRefresh();
+      // Anonymise closed accounts once their record-keeping period ends.
+      const { startAnonymisationJob } = await import('./services/account/closure.service');
+      startAnonymisationJob();
 
       // Return expired claim-link reservations to their senders. Without
       // this, an unclaimed link's funds stay frozen until someone tries to
@@ -508,7 +540,9 @@ async function start() {
 
 // Workers and single-process dev start the Express server.
 // The cluster primary only forks workers (handled above) and never listens.
-if (!CLUSTER_ENABLED) {
+// Tests import `app` directly and drive it with supertest, so they skip the
+// listener, the schedulers and the boot tasks.
+if (!CLUSTER_ENABLED && process.env.NODE_ENV !== 'test') {
   start();
 }
 

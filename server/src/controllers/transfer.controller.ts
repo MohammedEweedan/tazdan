@@ -12,6 +12,8 @@ import { postLedger, isLedgerCurrency } from '../services/ledger/ledger.service'
 import { enforceStepUp } from '../services/security/stepUp.service';
 import { collectFee } from '../services/fee/feeCollector.service';
 import { enforceKycLimit } from '../utils/kycLimits';
+import { assertMovementAllowed } from '../services/platform/controls.service';
+import { parsePositiveAmount } from '../services/wallet/atomicWallet';
 
 // Internal-transfer accepts the same set as wallet creation, including
 // the USDT on-chain variants. We normalise them to a single logical
@@ -45,8 +47,16 @@ function baseOf(currency: string): string {
  *  rolls up into a single logical balance. */
 function variantsOf(currency: string): readonly string[] {
   const base = baseOf(currency);
-  return SUPPORTED_CURRENCIES.filter((c) => baseOf(c) === base);
+  // Only values that exist in the Currency enum can be Wallet rows. Chain
+  // variants (USDT_TRC20 …) live in UserWallet columns, not the Wallet table;
+  // querying them here made Prisma reject every USDT transfer.
+  return SUPPORTED_CURRENCIES.filter((c) => baseOf(c) === base && WALLET_ENUM.has(c));
 }
+
+const WALLET_ENUM = new Set([
+  'USDT', 'BTC', 'ETH', 'BNB', 'SOL', 'XRP', 'ADA', 'DOGE', 'MATIC', 'DOT', 'AVAX',
+  'USD', 'EUR', 'GBP', 'AED', 'SAR', 'EGP', 'LYD', 'TRY', 'TND',
+]);
 
 const transferSchema = z.object({
   recipientEmail: z.string().email().optional(),
@@ -70,6 +80,8 @@ export class TransferController {
       // below.
       const logicalCurrency = baseOf(data.currency);
       const variants = variantsOf(data.currency);
+      const amountDec = parsePositiveAmount(data.amount);
+      await assertMovementAllowed({ userId: req.user!.id, feature: 'transfers', currency: logicalCurrency });
 
       // Find recipient by any of email / phone / profile username
       let recipient: any = null;
@@ -90,8 +102,11 @@ export class TransferController {
       // Fee lookup (per-currency, with a sensible default)
       const feeKey = `transfer_fee_${logicalCurrency.toLowerCase()}`;
       const feeSetting = await prisma.platformSettings.findUnique({ where: { key: feeKey } });
-      const fee = parseFloat(feeSetting?.value || '0');
-      const totalDeducted = data.amount + fee;
+      const feeDec = new Decimal(feeSetting?.value || '0');
+      if (!feeDec.isFinite() || feeDec.lt(0)) throw new AppError('Transfer fee is misconfigured', 500);
+      const totalDec = amountDec.plus(feeDec);
+      const fee = feeDec.toNumber();
+      const totalDeducted = totalDec.toNumber();
 
       // Minimum amount sanity check (low dust for crypto, $1 for fiat-like)
       const MIN: Record<string, number> = { USDT: 1, USD: 1, LYD: 1 };
@@ -107,8 +122,9 @@ export class TransferController {
           usdValue = data.amount * Number(pair.buyPrice || pair.sellPrice || 1);
         } catch { /* fall back to raw amount */ }
       }
-      await enforceStepUp({ userId: req.user!.id, action: 'transfer', valueUsd: usdValue, req, code: data.stepUpCode });
+      // Limits first: never send a security code for a transfer that cannot go through.
       await enforceKycLimit(req.user!.id, 'SEND', data.amount, logicalCurrency);
+      await enforceStepUp({ userId: req.user!.id, action: 'transfer', valueUsd: usdValue, req, code: data.stepUpCode });
 
       const reference = generateReference('TRF');
 
@@ -129,10 +145,10 @@ export class TransferController {
         const senderWallet = senderVariants
           .map((w: any) => ({
             w,
-            available: parseFloat(w.balance.toString()) - parseFloat(w.frozen.toString()),
+            available: new Decimal(w.balance.toString()).minus(w.frozen.toString()),
           }))
-          .filter((row: any) => row.available >= totalDeducted)
-          .sort((a: any, b: any) => b.available - a.available)[0]?.w;
+          .filter((row: any) => row.available.gte(totalDec))
+          .sort((a: any, b: any) => b.available.comparedTo(a.available))[0]?.w;
 
         if (!senderWallet) {
           const aggregate = senderVariants.reduce((sum: number, w: any) => {
@@ -151,7 +167,7 @@ export class TransferController {
 
         await tx.wallet.update({
           where: { userId_currency: { userId: req.user!.id, currency: senderCurrencyOnRow as any } },
-          data: { balance: { decrement: new Decimal(totalDeducted) } },
+          data: { balance: { decrement: totalDec } },
         });
 
         // Recipient: prefer the variant they already have (so we don't
@@ -167,8 +183,8 @@ export class TransferController {
 
         await tx.wallet.upsert({
           where: { userId_currency: { userId: recipient.id, currency: recipientCurrencyOnRow as any } },
-          update: { balance: { increment: new Decimal(data.amount) } },
-          create: { userId: recipient.id, currency: recipientCurrencyOnRow as any, balance: data.amount },
+          update: { balance: { increment: amountDec } },
+          create: { userId: recipient.id, currency: recipientCurrencyOnRow as any, balance: amountDec },
         });
 
         await tx.transfer.create({
@@ -176,8 +192,8 @@ export class TransferController {
             senderId: req.user!.id,
             receiverId: recipient.id,
             currency: logicalCurrency as any,
-            amount: data.amount,
-            fee,
+            amount: amountDec,
+            fee: feeDec,
             reference,
             note: data.note,
           },
@@ -187,9 +203,9 @@ export class TransferController {
         // amount+fee; recipient gets amount; platform gets the fee — nets to 0.
         if (isLedgerCurrency(logicalCurrency)) {
           const legs = [
-            { type: 'USER' as const, userId: req.user!.id, currency: logicalCurrency as any, amount: new Decimal(-totalDeducted) },
-            { type: 'USER' as const, userId: recipient.id, currency: logicalCurrency as any, amount: new Decimal(data.amount) },
-            ...(fee > 0 ? [{ type: 'PLATFORM' as const, currency: logicalCurrency as any, amount: new Decimal(fee) }] : []),
+            { type: 'USER' as const, userId: req.user!.id, currency: logicalCurrency as any, amount: totalDec.neg() },
+            { type: 'USER' as const, userId: recipient.id, currency: logicalCurrency as any, amount: amountDec },
+            ...(feeDec.gt(0) ? [{ type: 'PLATFORM' as const, currency: logicalCurrency as any, amount: feeDec }] : []),
           ];
           await postLedger(tx, { refType: 'transfer', refId: reference, memo: `Transfer ${logicalCurrency}`, legs }, { allowNegativeUser: true });
           if (fee > 0) {
@@ -198,7 +214,7 @@ export class TransferController {
               source: 'manual',
               sourceId: reference,
               payerId: req.user!.id,
-              amount: new Decimal(fee),
+              amount: feeDec,
               currency: logicalCurrency,
               description: `Transfer fee · ${logicalCurrency}`,
               metadata: { recipientId: recipient.id, reference },
@@ -217,10 +233,10 @@ export class TransferController {
               // variant we found above). That keeps per-wallet
               // reconciliation honest.
               currency: senderCurrencyOnRow as any,
-              amount: new Decimal(-totalDeducted),
-              fee,
+              amount: totalDec.neg(),
+              fee: feeDec,
               balanceBefore: senderBalanceBefore,
-              balanceAfter: senderBalanceBefore - totalDeducted,
+              balanceAfter: new Decimal(senderBalanceBefore).minus(totalDec),
               reference,
               // The description is user-facing — collapse to the
               // logical name so the activity feed reads "Sent 10 USDT"
@@ -231,10 +247,10 @@ export class TransferController {
               userId: recipient.id,
               type: 'TRANSFER_IN',
               currency: recipientCurrencyOnRow as any,
-              amount: new Decimal(data.amount),
+              amount: amountDec,
               fee: 0,
               balanceBefore: recipientBalanceBefore,
-              balanceAfter: recipientBalanceBefore + data.amount,
+              balanceAfter: new Decimal(recipientBalanceBefore).plus(amountDec),
               reference,
               description: `Received ${data.amount} ${logicalCurrency} from transfer`,
             },

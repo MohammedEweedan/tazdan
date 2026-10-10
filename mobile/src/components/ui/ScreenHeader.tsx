@@ -42,14 +42,15 @@ export function HeaderIconButton({
   onPress: () => void;
   /** Spoken by screen readers — required because the button has no text. */
   label: string;
-  /** `primary` is for the screen's main create/add action. */
-  variant?: 'default' | 'primary';
+  /** `primary` is for the screen's main create/add action; `onBrand` sits on a brand-blue surface. */
+  variant?: 'default' | 'primary' | 'onBrand';
   badge?: number;
   disabled?: boolean;
 }) {
   const p = useThemedPalette();
   const h = useHaptics();
   const primary = variant === 'primary';
+  const onBrand = variant === 'onBrand';
   return (
     <Pressable
       onPress={() => { h.selection(); onPress(); }}
@@ -60,20 +61,20 @@ export function HeaderIconButton({
       style={({ pressed }) => ({
         width: HEADER.control, height: HEADER.control, borderRadius: HEADER.control / 2,
         alignItems: 'center', justifyContent: 'center',
-        backgroundColor: primary ? p.ctaBg : p.bgElev,
-        borderWidth: primary ? 0 : 1, borderColor: p.border,
+        backgroundColor: primary ? p.ctaBg : onBrand ? 'rgba(255,255,255,0.16)' : p.bgElev,
+        borderWidth: primary ? 0 : 1, borderColor: onBrand ? 'rgba(255,255,255,0.22)' : p.border,
         opacity: disabled ? 0.4 : pressed ? 0.7 : 1,
       })}
     >
-      <Ionicons name={icon} size={18} color={primary ? p.ctaFg : p.fg} />
+      <Ionicons name={icon} size={18} color={primary ? p.ctaFg : onBrand ? '#FFFFFF' : p.fg} />
       {!!badge && badge > 0 && (
         <View style={{
           position: 'absolute', top: -3, right: -3,
           minWidth: 18, height: 18, borderRadius: 9, paddingHorizontal: 4,
           alignItems: 'center', justifyContent: 'center',
-          backgroundColor: p.accent, borderWidth: 2, borderColor: p.bg,
+          backgroundColor: onBrand ? '#FFFFFF' : p.accent, borderWidth: 2, borderColor: onBrand ? 'transparent' : p.bg,
         }}>
-          <Text style={{ color: p.accentFg, fontSize: 10, fontWeight: '700' }}>
+          <Text style={{ color: onBrand ? p.balanceGradient[0] : p.accentFg, fontSize: 10, fontWeight: '700' }}>
             {badge > 99 ? '99+' : badge}
           </Text>
         </View>

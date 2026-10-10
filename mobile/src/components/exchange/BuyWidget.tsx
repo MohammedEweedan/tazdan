@@ -20,6 +20,9 @@ import { StepUpModal } from '@/components/ui/StepUpModal';
 import { SuccessModal, type TxSuccessData } from '@/components/ui/SuccessModal';
 import { ExpressPayButton } from '@/components/ui/ExpressPayButton';
 import { useWallets, useCards, useMarkets, useTransactionSound } from '@/hooks';
+import { useLimitBlock, LIMITS_QUERY_KEY } from '@/hooks/useLimits';
+import { LimitNotice } from '@/components/limits/LimitNotice';
+import { useQueryClient } from '@tanstack/react-query';
 import * as LocalAuthentication from 'expo-local-authentication';
 import { CoinAvatar } from '@/components/ui/CoinAvatar';
 import { CurrencyPicker, type CurrencyItem } from '@/components/ui/CurrencyPicker';
@@ -194,6 +197,7 @@ export function BuyWidget({ defaultAsset, lockAsset = false }: BuyWidgetProps = 
   const { data: cards } = useCards();
   const { data: tickers } = useMarkets();
   const { playSuccess, playError } = useTransactionSound();
+  const qc = useQueryClient();
   const baseCurrency = (user as any)?.baseCurrency ?? 'USD';
 
   // ── Asset picker state ────────────────────────────────────────────
@@ -449,6 +453,7 @@ export function BuyWidget({ defaultAsset, lockAsset = false }: BuyWidgetProps = 
         ...(biometricVerified ? { biometricVerified: true } : {}),
       } as any) as any;
       playSuccess('buy');
+      void qc.invalidateQueries({ queryKey: LIMITS_QUERY_KEY });
       // First/second completed buy is the moment a user decides this app is
       // real — the prompt lib self-throttles and never throws.
       import('@/lib/reviewPrompt').then(({ maybeAskForReview }) => maybeAskForReview());
@@ -475,6 +480,8 @@ export function BuyWidget({ defaultAsset, lockAsset = false }: BuyWidgetProps = 
         return;
       }
       playError();
+      // A limit refused it: refresh limits so the notice explains when it frees up.
+      if (e?.response?.data?.code === 'LIMIT_EXCEEDED') { void qc.invalidateQueries({ queryKey: LIMITS_QUERY_KEY }); setStepUpOpen(false); setError(null); return; }
       if (stepUpCode) throw e;
       setError(msg || tr('buy.errOrder'));
     } finally { setExec(false); }
@@ -486,7 +493,9 @@ export function BuyWidget({ defaultAsset, lockAsset = false }: BuyWidgetProps = 
   const livePrice  = tickerBase === 'USDT' ? 1 : (tickers?.find((t) => t.base === tickerBase)?.price ?? searchResults.find((r) => r.symbol === tickerBase)?.price ?? 0);
   const change24h  = searchResults.find((r) => r.symbol === tickerBase)?.change24h;
   const timerCritical = seconds > 0 && seconds < 8;
-  const canConfirm    = !!quote && !!payMethod && !exec && seconds > 0;
+  // Limits are shown before confirming; the quote carries the order's USD value.
+  const limit = useLimitBlock('ONRAMP_BUY', quote ? Number(quote.fiatAmount) : null);
+  const canConfirm    = !!quote && !!payMethod && !exec && seconds > 0 && !limit.blocked;
 
   // Instant price estimate: shown while no quote exists but amount + livePrice are known
   const fiatNum       = parseFloat(fiat) || 0;
@@ -494,6 +503,8 @@ export function BuyWidget({ defaultAsset, lockAsset = false }: BuyWidgetProps = 
 
   const slideLabel = !payMethod
     ? 'Select a payment method'
+    : limit.blocked
+    ? tr('limits.reached')
     : canConfirm
     ? tr('buy.slideToBuy').replace('{asset}', asset)
     : tr('buy.enterAmount');
@@ -725,6 +736,7 @@ export function BuyWidget({ defaultAsset, lockAsset = false }: BuyWidgetProps = 
       )}
 
       {/* ── CTA — pinned at the bottom ── */}
+      <LimitNotice action="ONRAMP_BUY" amountUsd={quote ? Number(quote.fiatAmount) : null} style={{ marginBottom: 10 }} />
       <SlideToConfirm
         label={slideLabel}
         onConfirm={() => { if (canConfirm && !error && !exec) doExecute(payMethod); }}

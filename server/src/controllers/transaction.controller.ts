@@ -21,6 +21,9 @@ import { moveAltBalance, moveWalletBalance } from '../services/wallet/userTransf
 import { enforceKycLimit } from '../utils/kycLimits';
 import { isLedgerCurrency, postLedger } from '../services/ledger/ledger.service';
 import { postAssetLedger, normaliseAsset } from '../services/ledger/assetLedger.service';
+import { assertMovementAllowed } from '../services/platform/controls.service';
+import { enforceRiskBasedStepUp } from '../services/security/stepUp.service';
+import { valueInUsd } from '../utils/kycLimits';
 
 export class TransactionController {
   /**
@@ -39,7 +42,7 @@ export class TransactionController {
    */
   static async internalTransfer(req: AuthRequest, res: Response, next: NextFunction) {
     try {
-      const { receiverId, currency: rawCurrency, amount, note } = req.body ?? {};
+      const { receiverId, currency: rawCurrency, amount, note, stepUpCode, biometricVerified } = req.body ?? {};
       const senderId = req.user!.id;
 
       // Internal transfers are free (see feeCollector). A client-supplied
@@ -60,11 +63,23 @@ export class TransactionController {
       // Currencies that exist in the Prisma Currency enum
       const ENUM_CURRENCIES = new Set([
         'USDT','BTC','ETH','BNB','SOL','XRP','ADA','DOGE','MATIC','DOT','AVAX',
-        'USD','EUR','GBP','AED','SAR','EGP','LYD',
+        'USD','EUR','GBP','AED','SAR','EGP','LYD','TRY','TND',
       ]);
       const isEnumCurrency = ENUM_CURRENCIES.has(currency);
 
+      await assertMovementAllowed({ userId: senderId, feature: 'transfers', currency });
+      // Limits first: never send a security code for a transfer that cannot go through.
       await enforceKycLimit(senderId, 'SEND', amountDec, currency);
+      // This is the path the mobile Send screen uses; it must apply the same
+      // step-up policy as /transfers/send.
+      await enforceRiskBasedStepUp({
+        userId: senderId,
+        action: 'transfer',
+        valueUsd: await valueInUsd(amountDec.toString(), currency),
+        req,
+        code: typeof stepUpCode === 'string' ? stepUpCode : undefined,
+        biometricVerified: biometricVerified === true,
+      });
 
       const result = await prisma.$transaction(async (tx) => {
         const reference = `TRF-${uuidv4().slice(0, 8).toUpperCase()}`;

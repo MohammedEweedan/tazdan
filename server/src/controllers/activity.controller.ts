@@ -140,7 +140,16 @@ export class ActivityController {
 
       const merged: Activity[] = [];
 
+      // Deposits and withdrawals are listed from their own records, which
+      // carry the live status. Skip the matching history rows so the same
+      // movement doesn't appear twice in the feed.
+      const entityRefs = new Set<string>([
+        ...(deposits as any[]).map((d) => d.reference),
+        ...(withdrawals as any[]).map((w) => w.reference),
+      ].filter(Boolean));
+
       for (const t of txs as any[]) {
+        if ((t.type === 'WITHDRAWAL' || t.type === 'DEPOSIT') && t.reference && entityRefs.has(t.reference)) continue;
         merged.push({
           id: t.id,
           kind: 'transaction',

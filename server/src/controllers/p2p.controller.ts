@@ -7,13 +7,15 @@ import { generateReference } from '../utils/helpers';
 import { AuthRequest } from '../types';
 import { redisGet, redisSet, redisDel } from '../utils/redis';
 import { collectFee } from '../services/fee/feeCollector.service';
-import { postLedger, isLedgerCurrency } from '../services/ledger/ledger.service';
-import { postAssetLedger, normaliseAsset } from '../services/ledger/assetLedger.service';
+import { normaliseAsset } from '../services/ledger/assetLedger.service';
 import { emitActivity } from '../utils/realtime';
 import { sendP2PTradeUpdate } from '../services/email';
 import { pushP2PTradeUpdate } from '../services/push.service';
 import { logger } from '../utils/logger';
-import { assertTransitioned, lockUserWallets, reserveFunds } from '../services/wallet/atomicWallet';
+import { assertTransitioned } from '../services/wallet/atomicWallet';
+import { lockEscrow, releaseEscrowToBuyer, refundEscrowToSeller, P2P_ENUM_CURRENCIES } from '../services/p2p/escrow';
+import { assertMovementAllowed } from '../services/platform/controls.service';
+import { recordTransition } from '../services/platform/lifecycle';
 import { enforceKycLimit } from '../utils/kycLimits';
 import { coarsenCoord, displayDistanceKm, haversineKm, isValidLatLng, parseNear } from '../utils/geo';
 
@@ -33,10 +35,7 @@ async function notifyTradeParties(
 }
 
 // ── Currencies that live in the Prisma Currency enum ────────────────
-const ENUM_CURRENCIES = new Set([
-  'USDT','BTC','ETH','BNB','SOL','XRP','ADA','DOGE','MATIC','DOT','AVAX',
-  'USD','EUR','GBP','AED','SAR','EGP','LYD',
-]);
+const ENUM_CURRENCIES = P2P_ENUM_CURRENCIES;
 
 const P2P_OFFERS_CACHE_KEY = 'p2p:offers:active';
 const P2P_OFFERS_TTL = 10;
@@ -130,6 +129,7 @@ export class P2PController {
   static async createListing(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const data = createListingSchema.parse(req.body);
+      await assertMovementAllowed({ userId: req.user!.id, feature: 'p2p' });
 
       const ticker    = data.currency.toUpperCase();
       const fiatTicker = data.fiatCurrency.toUpperCase();
@@ -417,6 +417,7 @@ export class P2PController {
     try {
       const data = initTradeSchema.parse(req.body);
 
+      await assertMovementAllowed({ userId: req.user!.id, feature: 'p2p' });
       const listing = await (prisma as any).p2PListing.findUnique({
         where: { id: data.listingId },
         include: { user: true },
@@ -467,42 +468,7 @@ export class P2PController {
           WHERE "id" = ${listing.id} AND "filled" >= "amount"
         `;
 
-        if (isEnumCrypto) {
-          // `frozen` reservation plus its double-entry leg (seller USER →
-          // SYSTEM_ESCROW), committed atomically with the trade.
-          await reserveFunds(tx, sellerId, realTicker, data.amount);
-          if (isLedgerCurrency(realTicker)) {
-            await postLedger(tx, {
-              refType: 'p2p_escrow_lock',
-              refId: listing.id,
-              memo: `P2P escrow lock ${realTicker}`,
-              legs: [
-                { type: 'USER', userId: sellerId, currency: realTicker as any, amount: new Decimal(data.amount).neg() },
-                { type: 'SYSTEM_ESCROW', currency: realTicker as any, amount: new Decimal(data.amount) },
-              ],
-            });
-          }
-        } else {
-          // Lock the seller's crypto row so the balance read below cannot be
-          // raced by another trade or transfer from the same wallet.
-          await lockUserWallets(tx, [sellerId]);
-          const uw = await tx.userWallet.findUnique({ where: { userId: sellerId } });
-          if (!uw) throw new AppError('Seller crypto wallet not provisioned', 404);
-          const alts = (uw.altBalances && typeof uw.altBalances === 'object' ? uw.altBalances : {}) as Record<string, string>;
-          const available = new Decimal(alts[realTicker] ?? '0');
-          if (available.lt(data.amount)) throw new AppError('Seller has insufficient balance for escrow', 400);
-          await postAssetLedger(tx as any, {
-            refType: 'p2p_escrow_lock',
-            refId: listing.id,
-            memo: `P2P escrow lock ${realTicker}`,
-            legs: [
-              { type: 'USER', userId: sellerId, asset: normaliseAsset(realTicker), amount: new Decimal(data.amount).neg() },
-              { type: 'SYSTEM_ESCROW', asset: normaliseAsset(realTicker), amount: new Decimal(data.amount) },
-            ],
-          }, { allowNegativeUser: process.env.LEDGER_ALLOW_NEGATIVE_USER !== '0' });
-        }
-
-        return (tx as any).p2PTrade.create({
+        const created = await (tx as any).p2PTrade.create({
           data: {
             listingId:    listing.id,
             buyerId,
@@ -523,6 +489,11 @@ export class P2PController {
             expiresAt:    new Date(Date.now() + (listing.timeframeMins ?? 30) * 60 * 1000),
           },
         });
+        // Seller funds move into SYSTEM_ESCROW in the same transaction as the
+        // trade (see services/p2p/escrow.ts).
+        await lockEscrow(tx, created);
+        await recordTransition(tx, { entityType: 'P2P_TRADE', entityId: created.id, fromState: null, toState: 'ESCROW_FUNDED', actorType: 'USER', actorId: req.user!.id });
+        return created;
       });
 
       // Notify seller
@@ -601,55 +572,8 @@ export class P2PController {
         });
         assertTransitioned(moved, 'This trade has already been processed');
 
-        if (isEnumCrypto) {
-          await tx.wallet.update({
-            where: { userId_currency: { userId: trade.sellerId, currency: realTicker } },
-            data: { balance: { decrement: trade.escrowAmount }, frozen: { decrement: trade.escrowAmount } },
-          });
-          await tx.wallet.upsert({
-            where: { userId_currency: { userId: trade.buyerId, currency: realTicker } },
-            update: { balance: { increment: trade.cryptoAmount } },
-            create: { userId: trade.buyerId, currency: realTicker, balance: trade.cryptoAmount },
-          });
-          // Release escrow in the ledger: SYSTEM_ESCROW → buyer USER. Pairs
-          // with the p2p_escrow_lock group; escrow nets back to zero.
-          if (isLedgerCurrency(realTicker)) {
-            await postLedger(tx, {
-              refType: 'p2p_escrow_release',
-              refId: trade.id,
-              memo: `P2P escrow release ${realTicker}`,
-              legs: [
-                { type: 'SYSTEM_ESCROW', currency: realTicker as any, amount: new Decimal(trade.escrowAmount.toString()).neg() },
-                { type: 'USER', userId: trade.buyerId, currency: realTicker as any, amount: new Decimal(trade.cryptoAmount.toString()) },
-              ],
-            }, { allowNegativeUser: true });
-          }
-        } else {
-          await lockUserWallets(tx, [trade.sellerId, trade.buyerId]);
-          const [sellerUW, buyerUW] = await Promise.all([
-            tx.userWallet.findUnique({ where: { userId: trade.sellerId } }),
-            tx.userWallet.findUnique({ where: { userId: trade.buyerId } }),
-          ]);
-          if (!sellerUW) throw new AppError('Seller crypto wallet not found', 404);
-          if (!buyerUW)  throw new AppError('Buyer crypto wallet not found', 404);
-          const sellerAlts = (sellerUW.altBalances && typeof sellerUW.altBalances === 'object' ? sellerUW.altBalances : {}) as Record<string, string>;
-          const buyerAlts  = (buyerUW.altBalances  && typeof buyerUW.altBalances  === 'object' ? buyerUW.altBalances  : {}) as Record<string, string>;
-          const escrow = parseFloat(trade.escrowAmount.toString());
-          const crypto = parseFloat(trade.cryptoAmount.toString());
-          const newSeller = Math.max(0, parseFloat(sellerAlts[realTicker] ?? '0') - escrow);
-          const newBuyer  = parseFloat(buyerAlts[realTicker] ?? '0') + crypto;
-          await tx.userWallet.update({ where: { userId: trade.sellerId }, data: { altBalances: { ...sellerAlts, [realTicker]: newSeller.toFixed(8) } } });
-          await tx.userWallet.update({ where: { userId: trade.buyerId  }, data: { altBalances: { ...buyerAlts,  [realTicker]: newBuyer.toFixed(8)  } } });
-          await postAssetLedger(tx as any, {
-            refType: 'p2p_escrow_release',
-            refId: trade.id,
-            memo: `P2P escrow release ${realTicker}`,
-            legs: [
-              { type: 'SYSTEM_ESCROW', asset: normaliseAsset(realTicker), amount: new Decimal(trade.escrowAmount.toString()).neg() },
-              { type: 'USER', userId: trade.buyerId, asset: normaliseAsset(realTicker), amount: new Decimal(trade.cryptoAmount.toString()) },
-            ],
-          }, { allowNegativeUser: process.env.LEDGER_ALLOW_NEGATIVE_USER !== '0' });
-        }
+        await releaseEscrowToBuyer(tx, trade);
+        await recordTransition(tx, { entityType: 'P2P_TRADE', entityId: trade.id, fromState: 'PAYMENT_SENT', toState: 'PAYMENT_CONFIRMED', actorType: 'USER', actorId: req.user!.id, reason: 'Seller confirmed fiat received; escrow released' });
       });
 
       await prisma.notification.create({
@@ -833,38 +757,9 @@ export class P2PController {
         assertTransitioned(moved, 'This trade has already been processed');
 
         if (trade.status === 'ESCROW_FUNDED') {
-          const realTicker = (trade.baseAsset ?? trade.currency) as string;
-          if (ENUM_CURRENCIES.has(realTicker)) {
-            // Release the reservation and refund the ledger escrow
-            // (SYSTEM_ESCROW → seller USER), pairing with p2p_escrow_lock.
-            await tx.wallet.update({
-              where: { userId_currency: { userId: trade.sellerId, currency: realTicker as any } },
-              data: { frozen: { decrement: trade.escrowAmount } },
-            });
-            if (isLedgerCurrency(realTicker)) {
-              await postLedger(tx, {
-                refType: 'p2p_escrow_refund',
-                refId: trade.id,
-                memo: `P2P escrow refund ${realTicker}`,
-                legs: [
-                  { type: 'SYSTEM_ESCROW', currency: realTicker as any, amount: new Decimal(trade.escrowAmount.toString()).neg() },
-                  { type: 'USER', userId: trade.sellerId, currency: realTicker as any, amount: new Decimal(trade.escrowAmount.toString()) },
-                ],
-              }, { allowNegativeUser: true });
-            }
-          } else {
-            await lockUserWallets(tx, [trade.sellerId]);
-            await postAssetLedger(tx as any, {
-              refType: 'p2p_escrow_refund',
-              refId: trade.id,
-              memo: `P2P escrow refund ${realTicker}`,
-              legs: [
-                { type: 'SYSTEM_ESCROW', asset: normaliseAsset(realTicker), amount: new Decimal(trade.escrowAmount.toString()).neg() },
-                { type: 'USER', userId: trade.sellerId, asset: normaliseAsset(realTicker), amount: new Decimal(trade.escrowAmount.toString()) },
-              ],
-            }, { allowNegativeUser: process.env.LEDGER_ALLOW_NEGATIVE_USER !== '0' });
-          }
+          await refundEscrowToSeller(tx, trade);
         }
+        await recordTransition(tx, { entityType: 'P2P_TRADE', entityId: trade.id, fromState: trade.status, toState: 'CANCELLED', actorType: 'USER', actorId: req.user!.id });
 
         // Return the amount to the listing. Only a listing that filled up
         // re-opens; one the owner cancelled stays cancelled.

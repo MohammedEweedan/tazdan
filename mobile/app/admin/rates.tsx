@@ -270,7 +270,7 @@ function RateCard({ r, p, onEdit, onRefresh, onClear }: { r: Rate; p: any; onEdi
   const shownSpread = shownMid > 0 ? Math.abs(shownBuy - shownSell) / shownMid * 100 : 0;
 
   return (
-    <View style={{ backgroundColor: p.bgElev, borderRadius: 14, borderWidth: 1, borderColor: stale ? 'rgba(245,158,11,0.45)' : (activeOverride ? p.border : 'rgba(99,161,219,0.25)'), padding: 14, marginBottom: 10 }}>
+    <View style={{ backgroundColor: p.bgElev, borderRadius: 14, borderWidth: 1, borderColor: stale ? 'rgba(245,158,11,0.45)' : (activeOverride ? p.border : p.accentBorder), padding: 14, marginBottom: 10 }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
         <View style={{ paddingHorizontal: 10, paddingVertical: 6, borderRadius: 9, backgroundColor: p.fg }}>
           <Text style={{ color: p.bg, fontSize: 14, fontWeight: '600', letterSpacing: 0.3 }}>{r.baseCurrency}/{r.quoteCurrency}</Text>
@@ -287,7 +287,7 @@ function RateCard({ r, p, onEdit, onRefresh, onClear }: { r: Rate; p: any; onEdi
         </View>
         <View style={{
           paddingHorizontal: 7, paddingVertical: 3, borderRadius: 6,
-          backgroundColor: activeOverride ? 'rgba(245,158,11,0.15)' : 'rgba(99,161,219,0.15)',
+          backgroundColor: activeOverride ? 'rgba(245,158,11,0.15)' : p.accentSoft,
         }}>
           <Text style={{ color: activeOverride ? '#f59e0b' : p.accent, fontSize: 10, fontWeight: '700', letterSpacing: 0.4 }}>
             {liveLabel}

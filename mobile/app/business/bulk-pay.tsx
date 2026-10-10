@@ -1,3 +1,4 @@
+import { ScreenShell, CTAButton } from '@/components/ui/ScreenShell';
 /**
  * Bulk Pay — send payouts to multiple recipients in one batch.
  *
@@ -8,27 +9,26 @@
  *   ④ Submit   — calls /business/bulk-pay, shows batchId
  */
 
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import {
   ActivityIndicator, Alert, KeyboardAvoidingView, Platform,
   Pressable, ScrollView, TextInput, View,
 } from 'react-native';
 import { Text } from '@/components/ui/Text';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { StackHeader } from '@/components/ui/ScreenHeader';
-import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import * as Clipboard from 'expo-clipboard';
 
 import { useTheme, useThemedPalette } from '@/store/themeStore';
 import { useHaptics } from '@/hooks';
+import { StepUpModal } from '@/components/ui/StepUpModal';
+import { isStepUpChallengeError, stepUpErrorMessage } from '@/lib/stepUpErrors';
 import { businessService } from '@/services/business';
 import type { BulkPayRecipient, BulkPayPreview, BusinessPayout } from '@/types/business';
 
-const ACCENT = '#737373';
 
-const CURRENCIES = ['USD', 'EUR', 'GBP', 'USDT', 'AED', 'SAR', 'EGP'];
+const CURRENCIES = ['LYD', 'USD', 'EUR', 'GBP', 'USDT', 'AED', 'SAR', 'EGP'];
 
 function makeDraft(): BulkPayRecipient & { _id: string } {
   return { _id: Math.random().toString(36).slice(2), handle: '', email: '', amount: 0, currency: 'USD', note: '' };
@@ -60,22 +60,21 @@ function RecipientEditor({
 
   return (
     <View style={{
-      borderRadius: 16, borderWidth: 1, borderColor: p.border,
+      borderRadius: 24,
       backgroundColor: p.bgElev, marginBottom: 10, overflow: 'hidden',
     }}>
       {/* Row header */}
       <View style={{
         flexDirection: 'row', alignItems: 'center',
-        paddingHorizontal: 14, paddingTop: 12, paddingBottom: 4,
-        borderBottomWidth: 1, borderBottomColor: p.border,
+        paddingHorizontal: 16, paddingTop: 16, paddingBottom: 10,
       }}>
         <View style={{
           width: 22, height: 22, borderRadius: 11,
-          backgroundColor: `${ACCENT}20`, alignItems: 'center', justifyContent: 'center', marginRight: 8,
+          backgroundColor: `${p.accent}20`, alignItems: 'center', justifyContent: 'center', marginRight: 8,
         }}>
-          <Text style={{ color: ACCENT, fontSize: 10, fontWeight: '800' }}>{index + 1}</Text>
+          <Text style={{ color: p.accentText, fontSize: 10, fontWeight: '600' }}>{index + 1}</Text>
         </View>
-        <Text style={{ color: p.fg, fontSize: 13, fontWeight: '700', flex: 1 }}>Recipient {index + 1}</Text>
+        <Text style={{ color: p.fg, fontSize: 13, fontWeight: '600', flex: 1 }}>Recipient {index + 1}</Text>
         <Pressable onPress={() => onRemove(row._id)} hitSlop={8}>
           <Ionicons name="trash-outline" size={16} color={p.redFg} />
         </Pressable>
@@ -83,7 +82,7 @@ function RecipientEditor({
 
       {/* Handle or email */}
       <View style={{ paddingHorizontal: 14, paddingTop: 10, paddingBottom: 4 }}>
-        <Text style={{ color: p.fgFaint, fontSize: 10, fontWeight: '700', letterSpacing: 0.6, marginBottom: 6 }}>
+        <Text style={{ color: p.fgFaint, fontSize: 10, fontWeight: '600', letterSpacing: 0.6, marginBottom: 6 }}>
           HANDLE OR EMAIL
         </Text>
         <View style={{
@@ -114,7 +113,7 @@ function RecipientEditor({
       {/* Amount + Currency */}
       <View style={{ flexDirection: 'row', gap: 8, paddingHorizontal: 14, paddingBottom: 4 }}>
         <View style={{ flex: 1 }}>
-          <Text style={{ color: p.fgFaint, fontSize: 10, fontWeight: '700', letterSpacing: 0.6, marginBottom: 6 }}>
+          <Text style={{ color: p.fgFaint, fontSize: 10, fontWeight: '600', letterSpacing: 0.6, marginBottom: 6 }}>
             AMOUNT
           </Text>
           <View style={{
@@ -133,14 +132,14 @@ function RecipientEditor({
         </View>
 
         <View style={{ width: 90 }}>
-          <Text style={{ color: p.fgFaint, fontSize: 10, fontWeight: '700', letterSpacing: 0.6, marginBottom: 6 }}>
+          <Text style={{ color: p.fgFaint, fontSize: 10, fontWeight: '600', letterSpacing: 0.6, marginBottom: 6 }}>
             CURRENCY
           </Text>
           <Pressable
             onPress={() => setCurrOpen((o) => !o)}
             style={{
               backgroundColor: p.bg, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 10,
-              borderWidth: 1, borderColor: currOpen ? ACCENT : p.border,
+              borderWidth: 1, borderColor: currOpen ? p.accent : p.border,
               flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
             }}
           >
@@ -164,13 +163,13 @@ function RecipientEditor({
               style={({ pressed }) => ({
                 paddingHorizontal: 12, paddingVertical: 10,
                 backgroundColor: c === row.currency
-                  ? `${ACCENT}14`
+                  ? `${p.accent}14`
                   : pressed ? p.bgElev : 'transparent',
                 flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
               })}
             >
               <Text style={{ color: p.fg, fontSize: 13, fontWeight: '600' }}>{c}</Text>
-              {c === row.currency && <Ionicons name="checkmark" size={14} color={ACCENT} />}
+              {c === row.currency && <Ionicons name="checkmark" size={14} color={p.accentText} />}
             </Pressable>
           ))}
         </View>
@@ -178,7 +177,7 @@ function RecipientEditor({
 
       {/* Note */}
       <View style={{ paddingHorizontal: 14, paddingBottom: 12 }}>
-        <Text style={{ color: p.fgFaint, fontSize: 10, fontWeight: '700', letterSpacing: 0.6, marginBottom: 6 }}>
+        <Text style={{ color: p.fgFaint, fontSize: 10, fontWeight: '600', letterSpacing: 0.6, marginBottom: 6 }}>
           NOTE (OPTIONAL)
         </Text>
         <View style={{
@@ -219,9 +218,9 @@ function PreviewPanel({
   return (
     <View style={{ gap: 14 }}>
       {/* Summary card */}
-      <View style={{ borderRadius: 18, borderWidth: 1, borderColor: p.border, backgroundColor: p.bgElev, overflow: 'hidden' }}>
+      <View style={{ borderRadius: 24, borderWidth: 1, borderColor: p.border, backgroundColor: p.bgElev, overflow: 'hidden' }}>
         <View style={{ padding: 16, borderBottomWidth: 1, borderBottomColor: p.border }}>
-          <Text style={{ color: p.fgFaint, fontSize: 10, fontWeight: '700', letterSpacing: 0.6 }}>PREVIEW</Text>
+          <Text style={{ color: p.fgFaint, fontSize: 10, fontWeight: '600', letterSpacing: 0.6 }}>PREVIEW</Text>
         </View>
         {[
           { label: 'Recipients', value: String(preview.recipients) },
@@ -235,7 +234,7 @@ function PreviewPanel({
             borderBottomWidth: i < arr.length - 1 ? 1 : 0, borderBottomColor: p.border,
           }}>
             <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '500' }}>{label}</Text>
-            <Text style={{ color: p.fg, fontSize: 13, fontWeight: '700', fontVariant: ['tabular-nums'] }}>{value}</Text>
+            <Text style={{ color: p.fg, fontSize: 13, fontWeight: '600', fontVariant: ['tabular-nums'] }}>{value}</Text>
           </View>
         ))}
       </View>
@@ -248,7 +247,7 @@ function PreviewPanel({
         }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
             <Ionicons name="warning-outline" size={16} color={p.redFg} />
-            <Text style={{ color: p.redFg, fontSize: 12.5, fontWeight: '700' }}>
+            <Text style={{ color: p.redFg, fontSize: 12.5, fontWeight: '600' }}>
               {preview.invalid.length} invalid row{preview.invalid.length !== 1 ? 's' : ''} — will be skipped
             </Text>
           </View>
@@ -262,7 +261,7 @@ function PreviewPanel({
 
       {/* Batch note */}
       <View>
-        <Text style={{ color: p.fgFaint, fontSize: 10, fontWeight: '700', letterSpacing: 0.6, marginBottom: 8 }}>
+        <Text style={{ color: p.fgFaint, fontSize: 10, fontWeight: '600', letterSpacing: 0.6, marginBottom: 8 }}>
           BATCH NOTE (OPTIONAL)
         </Text>
         <View style={{
@@ -284,25 +283,25 @@ function PreviewPanel({
         <Pressable
           onPress={onBack}
           style={({ pressed }) => ({
-            flex: 1, paddingVertical: 14, borderRadius: 14, alignItems: 'center',
+            flex: 1, paddingVertical: 16, borderRadius: 28, alignItems: 'center',
             backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border,
             opacity: pressed ? 0.75 : 1,
           })}
         >
-          <Text style={{ color: p.fg, fontSize: 14, fontWeight: '700' }}>Back</Text>
+          <Text style={{ color: p.fg, fontSize: 14, fontWeight: '600' }}>Back</Text>
         </Pressable>
         <Pressable
           onPress={onSubmit}
           disabled={submitting || preview.valid.length === 0}
           style={({ pressed }) => ({
-            flex: 2, paddingVertical: 14, borderRadius: 14, alignItems: 'center',
-            backgroundColor: ACCENT,
+            flex: 2, paddingVertical: 16, borderRadius: 28, alignItems: 'center',
+            backgroundColor: p.ctaBg,
             opacity: pressed || submitting || preview.valid.length === 0 ? 0.6 : 1,
           })}
         >
           {submitting
-            ? <ActivityIndicator color="#fff" size="small" />
-            : <Text style={{ color: '#fff', fontSize: 14, fontWeight: '800' }}>
+            ? <ActivityIndicator color={p.ctaFg} size="small" />
+            : <Text style={{ color: p.ctaFg, fontSize: 14, fontWeight: '600' }}>
                 Send to {preview.valid.length} recipient{preview.valid.length !== 1 ? 's' : ''}
               </Text>
           }
@@ -316,14 +315,27 @@ function PreviewPanel({
 function DonePanel({
   batchId,
   payouts,
+  status,
   onDone,
   palette: p,
 }: {
   batchId: string;
   payouts: BusinessPayout[];
+  status: string;
   onDone: () => void;
   palette: ReturnType<typeof useThemedPalette>;
 }) {
+  const paid = payouts.filter((x) => x.status === 'COMPLETED').length;
+  const failed = payouts.filter((x) => x.status === 'FAILED').length;
+  const waiting = status === 'PENDING_APPROVAL' || status === 'COMPLIANCE_REVIEW';
+  const title = status === 'PENDING_APPROVAL' ? 'Waiting for approval'
+    : status === 'COMPLIANCE_REVIEW' ? 'Being checked'
+    : status === 'FAILED' ? 'Batch not paid'
+    : failed ? 'Partly paid' : 'Batch paid';
+  const body = status === 'PENDING_APPROVAL' ? 'Another owner or admin must approve this batch. The funds are reserved until then.'
+    : status === 'COMPLIANCE_REVIEW' ? 'This batch is being checked before payment. The funds are reserved and we will notify you.'
+    : status === 'FAILED' ? 'None of these payments could be made. Any reserved funds were returned to your balance.'
+    : `${paid} payout${paid !== 1 ? 's' : ''} paid${failed ? `, ${failed} could not be paid (funds returned)` : ''}.`;
   const [copied, setCopied] = useState(false);
   const copy = async () => {
     await Clipboard.setStringAsync(batchId);
@@ -335,18 +347,18 @@ function DonePanel({
     <View style={{ alignItems: 'center', gap: 20, paddingTop: 16 }}>
       <View style={{
         width: 72, height: 72, borderRadius: 36,
-        backgroundColor: p.greenBg, borderWidth: 1, borderColor: `${p.greenFg}40`,
+        backgroundColor: waiting ? p.bgElev : p.greenBg, borderWidth: 1, borderColor: waiting ? p.border : `${p.greenFg}40`,
         alignItems: 'center', justifyContent: 'center',
       }}>
-        <Ionicons name="checkmark-circle" size={40} color={p.greenFg} />
+        <Ionicons name={waiting ? 'time-outline' : status === 'FAILED' ? 'close-circle-outline' : 'checkmark-circle'} size={40} color={waiting ? p.fgMuted : p.greenFg} />
       </View>
 
       <View style={{ alignItems: 'center', gap: 6 }}>
-        <Text style={{ color: p.fg, fontSize: 20, fontWeight: '800', letterSpacing: -0.5 }}>
-          Batch submitted
+        <Text style={{ color: p.fg, fontSize: 20, fontWeight: '600', letterSpacing: -0.5 }}>
+          {title}
         </Text>
         <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '500', textAlign: 'center' }}>
-          {payouts.length} payout{payouts.length !== 1 ? 's' : ''} are being processed.
+          {body}
         </Text>
       </View>
 
@@ -360,7 +372,7 @@ function DonePanel({
         })}
       >
         <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '600' }}>Batch ID:</Text>
-        <Text style={{ color: p.fg, fontSize: 11, fontWeight: '700', fontVariant: ['tabular-nums'] }}>
+        <Text style={{ color: p.fg, fontSize: 11, fontWeight: '600', fontVariant: ['tabular-nums'] }}>
           {batchId.slice(0, 8)}…{batchId.slice(-6)}
         </Text>
         <Ionicons name={copied ? 'checkmark' : 'copy-outline'} size={14} color={copied ? p.greenFg : p.fgFaint} />
@@ -369,11 +381,11 @@ function DonePanel({
       <Pressable
         onPress={onDone}
         style={({ pressed }) => ({
-          width: '100%', paddingVertical: 16, borderRadius: 16, alignItems: 'center',
-          backgroundColor: ACCENT, opacity: pressed ? 0.8 : 1, marginTop: 8,
+          width: '100%', height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center',
+          backgroundColor: p.ctaBg, opacity: pressed ? 0.8 : 1, marginTop: 8,
         })}
       >
-        <Text style={{ color: '#fff', fontSize: 15, fontWeight: '800' }}>Done</Text>
+        <Text style={{ color: p.ctaFg, fontSize: 15, fontWeight: '600' }}>Done</Text>
       </Pressable>
     </View>
   );
@@ -394,6 +406,10 @@ export default function BulkPay() {
   const [submitting, setSubmitting] = useState(false);
   const [batchId,    setBatchId]    = useState('');
   const [payouts,    setPayouts]    = useState<BusinessPayout[]>([]);
+  const [batchStatus, setBatchStatus] = useState('EXECUTED');
+  const [stepUpOpen, setStepUpOpen] = useState(false);
+  // One key per previewed batch: a retry or double tap returns the same batch.
+  const idemKey = useRef(`bp_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`);
 
   const updateRow = useCallback((id: string, patch: Partial<DraftRow>) => {
     setDrafts((prev) => prev.map((d) => (d._id === id ? { ...d, ...patch } : d)));
@@ -428,17 +444,18 @@ export default function BulkPay() {
         currency: valid[0].currency,
       });
       setPreview(result);
+      idemKey.current = `bp_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
       setStep('preview');
       h.success();
     } catch (err: any) {
       h.error();
-      Alert.alert('Preview failed', err?.response?.data?.message ?? 'Please check your recipients and try again.');
+      Alert.alert('Preview failed', err?.response?.data?.error ?? err?.response?.data?.message ?? 'Please check your recipients and try again.');
     } finally {
       setPreviewing(false);
     }
   };
 
-  const handleSubmit = async () => {
+  const handleSubmit = async (stepUpCode?: string) => {
     if (!preview) return;
     setSubmitting(true);
     h.selection();
@@ -453,25 +470,27 @@ export default function BulkPay() {
         recipients,
         currency: recipients[0]?.currency ?? 'USD',
         ...(batchNote ? { note: batchNote } : {}),
-      });
+        ...(stepUpCode ? { stepUpCode } : {}),
+      }, idemKey.current);
+      setStepUpOpen(false);
       setBatchId(result.batchId);
       setPayouts(result.payouts);
+      setBatchStatus(result.status ?? 'EXECUTED');
       setStep('done');
       h.success();
     } catch (err: any) {
+      // Large batch on a single-signatory account: confirm with a security code.
+      if (isStepUpChallengeError(err) && !stepUpCode) { setStepUpOpen(true); return; }
+      if (stepUpCode) throw err; // the modal shows a wrong-code error
       h.error();
-      Alert.alert('Submission failed', err?.response?.data?.message ?? 'Please try again.');
+      Alert.alert('Submission failed', stepUpErrorMessage(err) || 'Please try again.');
     } finally {
       setSubmitting(false);
     }
   };
 
   return (
-    <View style={{ flex: 1, backgroundColor: p.bg }}>
-      <StatusBar style={mode === 'dark' ? 'light' : 'dark'} />
-      <SafeAreaView style={{ flex: 1 }} edges={['top']}>
-        {/* Header */}
-        <StackHeader
+    <ScreenShell
           title={step === 'done' ? 'Batch sent' : 'Bulk Pay'}
           subtitle={step === 'build' ? `${drafts.length} recipient${drafts.length !== 1 ? 's' : ''}` : undefined}
           onBack={step === 'preview' ? () => setStep('build') : undefined}
@@ -480,12 +499,12 @@ export default function BulkPay() {
               {(['build', 'preview'] as const).map((s) => (
                 <View key={s} style={{
                   width: s === step ? 20 : 6, height: 6, borderRadius: 3,
-                  backgroundColor: s === step ? ACCENT : p.border,
+                  backgroundColor: s === step ? p.accent : p.border,
                 }} />
               ))}
             </View>
           ) : undefined}
-        />
+         scroll={false} contentStyle={{ paddingHorizontal: 0 }}>
 
         <KeyboardAvoidingView
           style={{ flex: 1 }}
@@ -494,14 +513,15 @@ export default function BulkPay() {
         >
           <ScrollView
             showsVerticalScrollIndicator={false}
-            contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 80 }}
+            contentContainerStyle={{ paddingHorizontal: 24, paddingBottom: 80 }}
             keyboardShouldPersistTaps="handled"
           >
             {step === 'build' && (
               <>
-                <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '700', letterSpacing: 0.7, marginBottom: 12, marginTop: 8 }}>
-                  RECIPIENTS
-                </Text>
+                <View style={{ paddingTop: 20, paddingBottom: 24 }}>
+                  <Text style={{ color: p.fg, fontSize: 28, fontWeight: '500', letterSpacing: -.7 }}>Create a payout batch</Text>
+                  <Text style={{ color: p.fgMuted, fontSize: 14, lineHeight: 21, marginTop: 8 }}>Add recipients, then review the total and fees before sending.</Text>
+                </View>
 
                 {drafts.map((row, i) => (
                   <RecipientEditor
@@ -520,13 +540,13 @@ export default function BulkPay() {
                   style={({ pressed }) => ({
                     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
                     paddingVertical: 14, borderRadius: 14,
-                    borderWidth: 1, borderColor: `${ACCENT}40`, borderStyle: 'dashed',
-                    backgroundColor: `${ACCENT}08`,
+                    borderWidth: 1, borderColor: `${p.accent}40`, borderStyle: 'dashed',
+                    backgroundColor: `${p.accent}08`,
                     opacity: pressed ? 0.7 : 1, marginBottom: 20,
                   })}
                 >
-                  <Ionicons name="add-circle-outline" size={18} color={ACCENT} />
-                  <Text style={{ color: ACCENT, fontSize: 13, fontWeight: '700' }}>Add recipient</Text>
+                  <Ionicons name="add-circle-outline" size={18} color={p.accentText} />
+                  <Text style={{ color: p.accentText, fontSize: 13, fontWeight: '600' }}>Add recipient</Text>
                 </Pressable>
 
                 {/* Preview CTA */}
@@ -534,14 +554,14 @@ export default function BulkPay() {
                   onPress={handlePreview}
                   disabled={previewing}
                   style={({ pressed }) => ({
-                    paddingVertical: 16, borderRadius: 16, alignItems: 'center',
-                    backgroundColor: ACCENT,
+                    height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center',
+                    backgroundColor: p.ctaBg,
                     opacity: pressed || previewing ? 0.7 : 1,
                   })}
                 >
                   {previewing
-                    ? <ActivityIndicator color="#fff" size="small" />
-                    : <Text style={{ color: '#fff', fontSize: 15, fontWeight: '800' }}>Preview batch</Text>
+                    ? <ActivityIndicator color={p.ctaFg} size="small" />
+                    : <Text style={{ color: p.ctaFg, fontSize: 15, fontWeight: '600' }}>Preview batch</Text>
                   }
                 </Pressable>
               </>
@@ -552,7 +572,7 @@ export default function BulkPay() {
                 preview={preview}
                 batchNote={batchNote}
                 onNoteChange={setBatchNote}
-                onSubmit={handleSubmit}
+                onSubmit={() => { void handleSubmit(); }}
                 onBack={() => setStep('build')}
                 submitting={submitting}
                 palette={p}
@@ -563,13 +583,21 @@ export default function BulkPay() {
               <DonePanel
                 batchId={batchId}
                 payouts={payouts}
+                status={batchStatus}
                 onDone={() => router.replace('/business' as never)}
                 palette={p}
               />
             )}
           </ScrollView>
         </KeyboardAvoidingView>
-      </SafeAreaView>
-    </View>
+
+      <StepUpModal
+        visible={stepUpOpen}
+        action="transfer"
+        subtitle={preview ? `${preview.recipients} payouts · ${preview.totalAmount} ${preview.currency}` : undefined}
+        onSubmit={(code) => handleSubmit(code)}
+        onCancel={() => setStepUpOpen(false)}
+      />
+    </ScreenShell>
   );
 }

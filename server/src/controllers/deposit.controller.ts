@@ -6,7 +6,7 @@ import { AppError } from '../middleware/errorHandler';
 import { assertTransitioned } from '../services/wallet/atomicWallet';
 import { generateReference } from '../utils/helpers';
 import { AuthRequest } from '../types';
-import { getOnRampProvider } from '../services/onramp';
+import { getOnRampProvider, getActiveOnRampProvider } from '../services/onramp';
 import { processDeposit } from '../services/wallet/onchainSettlement.service';
 import { logger } from '../utils/logger';
 import { Decimal } from '@prisma/client/runtime/library';
@@ -277,7 +277,7 @@ export class DepositController {
         paymentMethod: z.string().default('CARD'),
       }).parse(req.body);
 
-      const provider = getOnRampProvider();
+      const provider = getActiveOnRampProvider();
       const quote = await provider.quote({
         fiatCurrency: body.fiatCurrency.toUpperCase() as Currency,
         fiatAmount: body.fiatAmount,
@@ -300,7 +300,7 @@ export class DepositController {
         idempotencyKey: z.string().min(8).max(128).optional(),
       }).parse(req.body);
 
-      const provider = getOnRampProvider();
+      const provider = getActiveOnRampProvider();
       const reference = generateReference('ONR');
 
       // Persist the intent BEFORE calling the provider so we can
@@ -352,7 +352,7 @@ export class DepositController {
    */
   static async webhookStripe(req: Request, res: Response, next: NextFunction) {
     try {
-      const provider = getOnRampProvider();
+      const provider = getActiveOnRampProvider();
       if (provider.name !== 'STRIPE') {
         // Always 200 unknown providers — Stripe will mark the endpoint
         // as failing otherwise and disable it.

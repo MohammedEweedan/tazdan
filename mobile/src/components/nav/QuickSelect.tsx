@@ -1,3 +1,4 @@
+import { accentTokens } from '@/theme/accent';
 /**
  * Home button + quick select.
  *
@@ -127,10 +128,12 @@ export type QuickSelectController = ReturnType<typeof useQuickSelect>;
 /* ── Brand mark ─────────────────────────────────────────────────────── */
 
 function BrandMark({ size, mono }: { size: number; mono: boolean }) {
+  const p = useThemedPalette();
+  const tint = accentTokens(p.accent, [p.ctaBg], p.ctaBg !== '#0A0A0B').accentText;
   return (
     <Image
       source={mono ? require('../../../assets/icon-asterisk-black.png') : require('../../../assets/icon-asterisk.png')}
-      style={{ width: size, height: size }}
+      style={{ width: size, height: size, tintColor: tint }}
       resizeMode="contain"
       accessibilityIgnoresInvertColors
     />

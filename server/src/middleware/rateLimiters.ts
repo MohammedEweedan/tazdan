@@ -190,6 +190,27 @@ export const webhookLimiter = rateLimit({
   message: { error: 'Webhook rate limit exceeded.' },
 });
 
+/**
+ * Public API limiter — counted per API key (not per IP), so one customer's
+ * integration cannot exhaust another's allowance. Runs after requireApiKey.
+ */
+export const apiKeyLimiter = rateLimit({
+  ...baseOpts('apikey'),
+  windowMs: minutes(1),
+  max: Number(process.env.API_KEY_RATE_PER_MIN ?? 120),
+  keyGenerator: (req: any) => `key:${req.apiKey?.id ?? req.ip}`,
+  message: { error: 'API rate limit exceeded for this key.', code: 'RATE_LIMITED' },
+});
+
+/** AI assistant — per staff member; each request can run several model calls. */
+export const aiLimiter = rateLimit({
+  ...baseOpts('ai'),
+  windowMs: minutes(10),
+  max: Number(process.env.AI_RATE_PER_10MIN ?? 40),
+  keyGenerator: (req: any) => `staff:${req.user?.id ?? req.ip}`,
+  message: { error: 'Too many assistant requests — wait a few minutes.', code: 'RATE_LIMITED' },
+});
+
 // Loud one-time notice if production is running without Redis — limits
 // still enforce per-process, but cross-worker/cross-deploy consistency
 // is gone.

@@ -11,6 +11,8 @@ import { assertTransitioned, debitAvailable, lockBudget, settleReserve } from '.
 import { enforceKycLimit } from '../utils/kycLimits';
 import { emitActivity } from '../utils/realtime';
 import { isDateLocked, requiresStepUp } from '../services/budget.service';
+import { getActiveCardIssuer, getCardIssuer } from '../services/cardIssuer';
+import { assertMovementAllowed } from '../services/platform/controls.service';
 import { issueStepUp, verifyStepUp } from '../services/security/stepUp.service';
 
 /** Physical card order fee (USD). Admin-configurable via PlatformSettings,
@@ -60,7 +62,6 @@ const transactionSchema = z.object({
 
 /* ── Helpers ─────────────────────────────────────────────── */
 
-const genLast4 = () => crypto.randomInt(1000, 9999).toString();
 const genRef = () => `card_${crypto.randomBytes(8).toString('hex')}`;
 
 export class CardController {
@@ -105,15 +106,26 @@ export class CardController {
 
       const cfg = TIER_CONFIG[data.tier];
       const now = new Date();
+      // Issuance goes through the issuer adapter. Production refuses MOCK.
+      const issuer = getActiveCardIssuer();
+      const issued = await issuer.issueVirtualCard({
+        userId: user.id,
+        tier: data.tier as any,
+        currency: data.currency as any,
+        cardHolder: `${user.firstName} ${user.lastName}`.toUpperCase(),
+        nickname: data.nickname,
+      });
       const card = await prisma.card.create({
         data: {
           userId: user.id,
           tier: data.tier,
           status: 'ACTIVE',
           nickname: data.nickname,
-          last4: genLast4(),
-          expiryMonth: ((now.getMonth() + 1 + 48 - 1) % 12) + 1,
-          expiryYear: now.getFullYear() + 4,
+          issuerName: issuer.name,
+          externalCardId: issued.externalCardId,
+          last4: issued.last4,
+          expiryMonth: issued.expiryMonth,
+          expiryYear: issued.expiryYear,
           cardHolder: `${user.firstName} ${user.lastName}`.toUpperCase(),
           currency: data.currency as any,
           dailyLimit: cfg.dailyLimit,
@@ -160,6 +172,8 @@ export class CardController {
       });
       if (!card) throw new AppError('Card not found', 404);
       if (card.status === 'CANCELLED') throw new AppError('Card is cancelled', 400);
+      // The issuer is the authority for authorisations — mirror the change there.
+      if (card.externalCardId) await getCardIssuer().freezeCard({ externalCardId: card.externalCardId });
 
       const updated = await prisma.card.update({
         where: { id: card.id },
@@ -179,6 +193,8 @@ export class CardController {
       });
       if (!card) throw new AppError('Card not found', 404);
       if (card.status === 'CANCELLED') throw new AppError('Card is cancelled', 400);
+      // The issuer is the authority for authorisations — mirror the change there.
+      if (card.externalCardId) await getCardIssuer().unfreezeCard({ externalCardId: card.externalCardId });
 
       const updated = await prisma.card.update({
         where: { id: card.id },
@@ -197,6 +213,7 @@ export class CardController {
         where: { id: req.params.id, userId: req.user!.id },
       });
       if (!card) throw new AppError('Card not found', 404);
+      if (card.externalCardId) await getCardIssuer().cancelCard({ externalCardId: card.externalCardId });
 
       const updated = await prisma.card.update({
         where: { id: card.id },
@@ -355,6 +372,9 @@ export class CardController {
       const card = await prisma.card.findFirst({ where: { id: req.params.id, userId } });
       if (!card)                              throw new AppError('Card not found', 404);
       if (card.status === 'CANCELLED')        throw new AppError('Card is cancelled', 400);
+      // Real money only funds a card held at a real issuer.
+      getActiveCardIssuer();
+      await assertMovementAllowed({ userId, feature: 'cards', currency });
 
       const wallet = await prisma.wallet.findFirst({ where: { userId, currency: currency as any } });
       if (!wallet) throw new AppError(`No ${currency} wallet`, 400);
@@ -427,6 +447,8 @@ export class CardController {
       if (!card)                       throw new AppError('Card not found', 404);
       if (card.status === 'CANCELLED') throw new AppError('Card is cancelled', 400);
       if (card.physicalStatus !== 'NONE') throw new AppError('A physical card is already on the way', 400);
+      getActiveCardIssuer();
+      await assertMovementAllowed({ userId, feature: 'cards' });
 
       const fee = await getPhysicalCardFee();
 
@@ -517,6 +539,8 @@ export class CardController {
       const card = await prisma.card.findFirst({ where: { id: req.params.id, userId } });
       if (!card)                       throw new AppError('Card not found', 404);
       if (card.status === 'CANCELLED') throw new AppError('Card is cancelled', 400);
+      getActiveCardIssuer();
+      await assertMovementAllowed({ userId, feature: 'cards' });
 
       const budget = await prisma.budgetWallet.findFirst({ where: { id: budgetId, userId } });
       if (!budget) throw new AppError('Budget not found', 404);

@@ -37,7 +37,6 @@ import type { P2PTrade } from '@/services';
 import type { ApiMessage } from '@/types/messages';
 
 import { BottomSheet } from '@/components/ui/BottomSheet';
-const BRAND_BLUE = '#737373'; // mono accent neutral
 
 /* ── Helpers ───────────────────────────────────────────────────── */
 
@@ -65,17 +64,17 @@ function useCountdown(expiresAt: string | null) {
 
 /* ── Status config ─────────────────────────────────────────────── */
 
-const STATUS_META: Record<string, { label: string; color: string; bg: string; icon: any }> = {
+const statusMeta = (p: Palette): Record<string, { label: string; color: string; bg: string; icon: any }> => ({
   PENDING:           { label: 'Awaiting payment',       color: '#f59e0b', bg: 'rgba(245,158,11,0.12)',  icon: 'time-outline' },
   ESCROW_FUNDED:     { label: 'Escrow funded — pay now', color: '#f59e0b', bg: 'rgba(245,158,11,0.12)', icon: 'lock-closed-outline' },
-  PAYMENT_SENT:      { label: 'Payment sent — awaiting confirmation', color: '#63a1db', bg: 'rgba(99,161,219,0.12)', icon: 'hourglass-outline' },
+  PAYMENT_SENT:      { label: 'Payment sent — awaiting confirmation', color: p.accentText, bg: p.accentSoft, icon: 'hourglass-outline' },
   PAYMENT_CONFIRMED: { label: 'Payment confirmed',       color: '#4ade80', bg: 'rgba(74,222,128,0.12)', icon: 'checkmark-circle-outline' },
   COMPLETED:         { label: 'Trade completed ✓',       color: '#4ade80', bg: 'rgba(74,222,128,0.12)', icon: 'checkmark-done-outline' },
   ESCROW_RELEASED:   { label: 'Escrow released ✓',       color: '#4ade80', bg: 'rgba(74,222,128,0.12)', icon: 'checkmark-done-outline' },
   DISPUTED:          { label: 'Dispute opened — support reviewing', color: '#f87171', bg: 'rgba(248,113,113,0.12)', icon: 'alert-circle-outline' },
   CANCELLED:         { label: 'Trade cancelled',         color: '#6b7280', bg: 'rgba(107,114,128,0.12)', icon: 'close-circle-outline' },
   EXPIRED:           { label: 'Trade expired',           color: '#6b7280', bg: 'rgba(107,114,128,0.12)', icon: 'timer-outline' },
-};
+});
 
 const DONE_STATUSES = new Set(['COMPLETED', 'ESCROW_RELEASED', 'CANCELLED', 'EXPIRED', 'DISPUTED']);
 
@@ -89,7 +88,7 @@ export default function TradeChat() {
   const h       = useHaptics();
   const p       = useThemedPalette();
   const mode    = useTheme((s) => s.mode);
-  const accent  = mode === 'dark' ? brand.primaryDark : brand.primary;
+  const accent = p.accentText;
   const me      = useAuthStore((s) => s.user);
   const qc      = useQueryClient();
 
@@ -143,6 +142,7 @@ export default function TradeChat() {
 
   /* ── Composer state ── */
   const [text, setText]             = useState('');
+  const [composerHeight, setComposerHeight] = useState(40);
   const [pickedImage, setPickedImage] = useState<{ uri: string; name: string; type: string } | null>(null);
   const [sending, setSending]       = useState(false);
   const scrollRef = useRef<ScrollView>(null);
@@ -282,7 +282,7 @@ export default function TradeChat() {
     );
   }
 
-  const status    = STATUS_META[trade.status] ?? STATUS_META.PENDING;
+  const status = statusMeta(p)[trade.status] ?? statusMeta(p).PENDING;
   const isDone    = DONE_STATUSES.has(trade.status);
   const cpName    = counterparty
     ? `${counterparty.firstName ?? ''} ${counterparty.lastName ?? ''}`.trim() || counterparty.username || 'Trader'
@@ -298,7 +298,6 @@ export default function TradeChat() {
         <View style={{
           flexDirection: 'row', alignItems: 'center', gap: 10,
           paddingHorizontal: 14, paddingTop: 10, paddingBottom: 10,
-          borderBottomWidth: 1, borderBottomColor: p.border,
         }}>
           <Pressable onPress={() => router.back()} hitSlop={8}
             style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: p.bgElev,
@@ -308,11 +307,11 @@ export default function TradeChat() {
 
           {/* Avatar */}
           <View style={{
-            width: 38, height: 38, borderRadius: 19, backgroundColor: `${BRAND_BLUE}22`,
-            borderWidth: 1, borderColor: `${BRAND_BLUE}44`,
+            width: 38, height: 38, borderRadius: 19, backgroundColor: `${p.accent}22`,
+            borderWidth: 1, borderColor: `${p.accent}44`,
             alignItems: 'center', justifyContent: 'center',
           }}>
-            <Text style={{ color: BRAND_BLUE, fontSize: 16, fontWeight: '700' }}>
+            <Text style={{ color: p.accent, fontSize: 16, fontWeight: '700' }}>
               {cpName.charAt(0).toUpperCase()}
             </Text>
           </View>
@@ -467,7 +466,7 @@ export default function TradeChat() {
                 </View>
               )}
 
-              <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 8 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                 {/* Image attach */}
                 <Pressable onPress={pickProof} hitSlop={6}
                   style={({ pressed }) => ({
@@ -488,8 +487,9 @@ export default function TradeChat() {
                   placeholderTextColor={p.fgFaint}
                   multiline
                   maxLength={2000}
+                  onContentSizeChange={e => setComposerHeight(Math.max(40, Math.min(110, e.nativeEvent.contentSize.height)))}
                   style={{
-                    flex: 1, minHeight: 40, maxHeight: 110,
+                    flex: 1, height: composerHeight, minHeight: 40, maxHeight: 110,
                     borderRadius: 20, backgroundColor: p.bgElev,
                     borderWidth: 1, borderColor: p.border,
                     paddingHorizontal: 14, paddingVertical: 10,
@@ -508,13 +508,13 @@ export default function TradeChat() {
                   })}
                 >
                   <LinearGradient
-                    colors={[brand.primaryDark, brand.deep]}
+                    colors={[p.ctaBg, p.ctaBg]}
                     start={{ x: 0.1, y: 0 }} end={{ x: 0.9, y: 1 }}
                     style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}
                   >
                     {sending
-                      ? <ActivityIndicator color="#fff" size="small" />
-                      : <Ionicons name="send" size={16} color="#fff" />}
+                      ? <ActivityIndicator color={p.ctaFg} size="small" />
+                      : <Ionicons name="arrow-up" size={18} color={p.ctaFg} />}
                   </LinearGradient>
                 </Pressable>
               </View>
@@ -575,7 +575,7 @@ function ChatBubble({ msg, isMine, senderName, showHeader, palette: p, accent }:
         paddingHorizontal: hasImage ? 6 : 12, paddingVertical: hasImage ? 6 : 8,
         borderRadius: 18,
         borderTopRightRadius: isMine ? 4 : 18, borderTopLeftRadius: isMine ? 18 : 4,
-        backgroundColor: isMine ? accent : p.bgElev,
+        backgroundColor: isMine ? p.accent : p.bgElev,
         borderWidth: isMine ? 0 : 1, borderColor: p.border,
       }}>
         {hasImage && (
@@ -596,14 +596,14 @@ function ChatBubble({ msg, isMine, senderName, showHeader, palette: p, accent }:
         )}
         {!!msg.content && msg.content !== 'Payment proof' && (
           <Text style={{
-            color: isMine ? '#fff' : p.fg, fontSize: 14, fontWeight: '500',
+            color: isMine ? p.accentFg : p.fg, fontSize: 14, fontWeight: '500',
             marginTop: hasImage ? 6 : 0, paddingHorizontal: hasImage ? 6 : 0,
           }}>
             {msg.deletedAt ? 'Message deleted' : msg.content}
           </Text>
         )}
         <Text style={{
-          color: isMine ? 'rgba(255,255,255,0.6)' : p.fgFaint,
+          color: isMine ? p.accentFg : p.fgFaint,
           fontSize: 9.5, fontWeight: '600', marginTop: 3,
           alignSelf: 'flex-end', paddingHorizontal: hasImage ? 6 : 0,
         }}>
@@ -679,13 +679,13 @@ function ActionBar({ trade, amBuyer, loading, palette: p, accent, onMarkPaid, on
         >
           {b.primary ? (
             <LinearGradient
-              colors={[brand.primaryDark, brand.deep]}
+              colors={[p.ctaBg, p.ctaBg]}
               start={{ x: 0.1, y: 0 }} end={{ x: 0.9, y: 1 }}
               style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}
             >
               {isLoading(b.label.toLowerCase())
-                ? <ActivityIndicator color="#fff" size="small" />
-                : <Text style={{ color: '#fff', fontSize: 13.5, fontWeight: '700' }}>{b.label}</Text>}
+                ? <ActivityIndicator color={p.ctaFg} size="small" />
+                : <Text style={{ color: p.ctaFg, fontSize: 13.5, fontWeight: '700' }}>{b.label}</Text>}
             </LinearGradient>
           ) : (
             <View style={{

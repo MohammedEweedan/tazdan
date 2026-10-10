@@ -1,6 +1,11 @@
 const withPWA = require('next-pwa')({
   dest: 'public',
-  register: true,
+  // Register after the page is usable. Cache assets as they are visited;
+  // precaching every route, screenshot and video used to fetch 22 MB at startup.
+  register: false,
+  cacheStartUrl: false,
+  publicExcludes: ['!**/*'],
+  buildExcludes: [/./],
   skipWaiting: true,
   disable: process.env.NODE_ENV === 'development',
   // Don't let the service worker serve a cached SPA shell for unknown URLs —
@@ -33,7 +38,10 @@ const withPWA = require('next-pwa')({
   ],
 });
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://api.promrkts.com';
+// `next dev` proxies /api to the local server (server/.env PORT=5001);
+// production builds default to the public API. NEXT_PUBLIC_API_URL wins.
+const API_BASE = process.env.NEXT_PUBLIC_API_URL
+  || (process.env.NODE_ENV !== 'production' ? 'http://localhost:5001/api' : 'https://api.promrkts.com');
 const API_URL = new URL(API_BASE);
 const API_ORIGIN = API_URL.origin;
 const API_PATH = API_URL.pathname.replace(/\/$/, '');
@@ -126,8 +134,7 @@ const nextConfig = {
   async headers() {
     return [
       { source: '/(.*)',                           headers: securityHeaders     },
-      // Clear old immutable dev bundles left by earlier configurations.
-      ...(isDev ? ['/', '/en', '/ar'].map(source => ({ source, headers: [{ key: 'Clear-Site-Data', value: '\"cache\"' }] })) : []),
+      { source: '/sw.js', headers: [{ key: 'Cache-Control', value: 'no-cache, no-store, must-revalidate' }] },
       { source: '/_next/static/(.*)',              headers: STATIC_CACHE_HEADERS },
       { source: '/icon-:rest*.png',                headers: STATIC_CACHE_HEADERS },
       { source: '/og-image.png',                   headers: STATIC_CACHE_HEADERS },

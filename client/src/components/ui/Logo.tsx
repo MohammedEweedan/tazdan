@@ -28,8 +28,8 @@ const LOGO_SRC: Record<"color" | "black" | "white", string> = {
    variants separate so it remains legible on both surfaces. */
 const ICON_SRC: Record<"color" | "black" | "white", string> = {
   color: "/icon-color.png",
-  black: "/icon-black.png",
-  white: "/icon-white.png",
+  black: "/icon-asterisk-black.png",
+  white: "/icon-asterisk-white.png",
 };
 
 // Icon-only logo (mobile + compact UI)

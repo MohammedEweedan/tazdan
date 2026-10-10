@@ -92,7 +92,7 @@ export default function AdminWhatsApp() {
               <View key={row.id} style={{ backgroundColor: p.bgElev, borderWidth: 1, borderColor: row.direction === 'IN' ? 'rgba(37,211,102,0.3)' : p.border, borderRadius: 12, padding: 14, marginBottom: 8 }}>
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                    <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: row.direction === 'IN' ? '#25d366' : '#63a1db' }} />
+                    <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: row.direction === 'IN' ? '#25d366' : p.accentText }} />
                     <Text style={{ color: p.fgMuted, fontSize: 10, fontWeight: '600' }}>{row.direction} · +{row.phoneNumber}</Text>
                   </View>
                   <Text style={{ color: p.fgFaint, fontSize: 10 }}>{formatRelativeTime(row.createdAt)}</Text>

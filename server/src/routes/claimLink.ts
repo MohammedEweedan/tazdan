@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { authenticate, requireAdmin } from '../middleware/auth';
 import { ClaimLinkController } from '../controllers/claimLink.controller';
+import { requirePermission } from '../services/platform/rbac';
 
 const router = Router();
 
@@ -19,6 +20,6 @@ router.post('/by-token/:token/claim', authenticate, ClaimLinkController.claim);
 
 // Expiry sweep — refunds expired links. Admin-only: it changes money state,
 // so it must never be callable anonymously.
-router.post('/sweep', authenticate, requireAdmin, ClaimLinkController.sweepExpired);
+router.post('/sweep', authenticate, requireAdmin, requirePermission('controls.operate'), ClaimLinkController.sweepExpired);
 
 export { router as claimLinkRouter };

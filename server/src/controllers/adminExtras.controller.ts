@@ -12,6 +12,10 @@ import { z } from 'zod';
 import { Prisma } from '@prisma/client';
 import { prisma } from '../utils/prisma';
 import { AppError } from '../middleware/errorHandler';
+import { assertTransitioned } from '../services/wallet/atomicWallet';
+import { escrowState, releaseEscrowToBuyer, refundEscrowToSeller, clawBackFromBuyer } from '../services/p2p/escrow';
+import { recordTransition } from '../services/platform/lifecycle';
+import { writeAudit } from '../services/platform/audit';
 import { AuthRequest } from '../types';
 import { emitNotification } from '../utils/realtime';
 import {
@@ -29,6 +33,29 @@ function pageLimit(req: AuthRequest): { page: number; limit: number; skip: numbe
 
 function packPage<T>(items: T[], total: number, page: number, limit: number) {
   return { items, total, page, limit, totalPages: Math.max(1, Math.ceil(total / limit)) };
+}
+
+const bankSchema = z.object({
+  currency:      z.string().min(2).max(8),
+  country:       z.string().length(2),
+  bankName:      z.string().min(1).max(120),
+  accountName:   z.string().min(1).max(120),
+  accountNumber: z.string().optional(),
+  iban:          z.string().optional(),
+  swift:         z.string().optional(),
+  sortCode:      z.string().optional(),
+  routingNumber: z.string().optional(),
+  branch:        z.string().optional(),
+  memo:          z.string().optional(),
+  isActive:      z.boolean().default(true),
+});
+
+async function changeDepositAccountFor(req: AuthRequest, id: string | null, data: Record<string, unknown>, reason?: string) {
+  const { changeDepositAccount } = await import('../services/platform/depositAccounts.service');
+  const { loadStaffContext } = await import('../services/platform/rbac');
+  const staff = await loadStaffContext(req.user!.id);
+  if (!staff) throw new AppError('Staff access required', 403);
+  return changeDepositAccount({ id, data: data as any, staffId: req.user!.id, permissions: staff.permissions, reason: reason?.trim() || (id ? 'Deposit account edited' : 'New deposit account'), req });
 }
 
 export class AdminExtrasController {
@@ -86,18 +113,92 @@ export class AdminExtrasController {
     } catch (e) { next(e); }
   }
 
+  /**
+   * Decide a P2P dispute and settle the escrow accordingly.
+   *   outcome BUYER  → escrow released to the buyer; trade COMPLETED
+   *   outcome SELLER → escrow refunded to the seller (or, if it had already
+   *                    been released, clawed back from the buyer); trade CANCELLED
+   * The decision is a conditional transition on both dispute and trade, so a
+   * double submit cannot move money twice.
+   */
   static async resolveP2PDispute(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const { id } = req.params;
-      const { resolution, status = 'RESOLVED' } = z.object({
-        resolution: z.string().min(1),
-        status: z.enum(['RESOLVED', 'CLOSED', 'ESCALATED']).optional(),
+      const body = z.object({
+        resolution: z.string().trim().min(5).max(2000),
+        outcome: z.enum(['BUYER', 'SELLER']).optional(),
+        status: z.string().optional(), // accepted for older clients; ignored
       }).parse(req.body);
-      const dispute = await (prisma as any).p2PDispute.update({
-        where: { id },
-        data: { status, resolution, resolvedAt: new Date() },
+      if (!body.outcome) {
+        throw new AppError('Choose who the dispute is decided for: outcome BUYER (release escrow) or SELLER (refund seller).', 400);
+      }
+      const outcome = body.outcome;
+      const actorId = req.user!.id;
+
+      const result = await prisma.$transaction(async (tx) => {
+        const dispute = await tx.p2PDispute.findUnique({ where: { id }, include: { trade: true } });
+        if (!dispute) throw new AppError('Dispute not found', 404);
+        if (!['OPEN', 'UNDER_REVIEW'].includes(dispute.status)) {
+          throw new AppError(`Dispute is already ${dispute.status.toLowerCase()}`, 409);
+        }
+        const trade = dispute.trade;
+        const movedTrade = await tx.p2PTrade.updateMany({
+          where: { id: trade.id, status: 'DISPUTED' },
+          data: outcome === 'BUYER'
+            ? { status: 'COMPLETED', completedAt: new Date() }
+            : { status: 'CANCELLED', cancelledAt: new Date() },
+        });
+        assertTransitioned(movedTrade, 'Trade is no longer in dispute');
+        const movedDispute = await tx.p2PDispute.updateMany({
+          where: { id, status: { in: ['OPEN', 'UNDER_REVIEW'] } },
+          data: {
+            status: outcome === 'BUYER' ? 'RESOLVED_BUYER' : 'RESOLVED_SELLER',
+            resolution: body.resolution,
+            resolvedBy: actorId,
+            resolvedAt: new Date(),
+          },
+        });
+        assertTransitioned(movedDispute, 'Dispute was decided by someone else');
+
+        const state = await escrowState(tx, trade);
+        let money: string;
+        if (outcome === 'BUYER') {
+          if (state === 'HELD' || state === 'HELD_LEGACY') { await releaseEscrowToBuyer(tx, trade); money = 'ESCROW_RELEASED_TO_BUYER'; }
+          else money = state === 'RELEASED' ? 'ALREADY_WITH_BUYER' : `NO_MOVEMENT_${state}`;
+        } else {
+          if (state === 'HELD' || state === 'HELD_LEGACY') { await refundEscrowToSeller(tx, trade); money = 'ESCROW_REFUNDED_TO_SELLER'; }
+          else if (state === 'RELEASED') { await clawBackFromBuyer(tx, trade); money = 'CLAWED_BACK_FROM_BUYER'; }
+          else money = `NO_MOVEMENT_${state}`;
+        }
+        // A trade that was cancelled returns its capacity to the listing.
+        if (outcome === 'SELLER') {
+          await tx.p2PListing.update({ where: { id: trade.listingId }, data: { filled: { decrement: trade.cryptoAmount } } });
+        }
+
+        await recordTransition(tx, {
+          entityType: 'P2P_TRADE', entityId: trade.id, fromState: 'DISPUTED',
+          toState: outcome === 'BUYER' ? 'COMPLETED' : 'CANCELLED', actorType: 'STAFF', actorId,
+          reason: `Dispute ${id} decided for ${outcome}: ${body.resolution}`.slice(0, 1000),
+        });
+        await writeAudit(tx, {
+          actorId, action: 'P2P_DISPUTE_RESOLVE', entity: 'P2PDispute', entityId: id,
+          before: { disputeStatus: dispute.status, tradeStatus: trade.status, escrow: state },
+          after: { outcome, money, tradeStatus: outcome === 'BUYER' ? 'COMPLETED' : 'CANCELLED' },
+          reason: body.resolution, req,
+        });
+        return { tradeId: trade.id, buyerId: trade.buyerId, sellerId: trade.sellerId, money, reference: trade.reference };
       });
-      res.json({ dispute });
+
+      await prisma.notification.createMany({
+        data: [result.buyerId, result.sellerId].map((userId) => ({
+          userId,
+          title: 'P2P dispute decided',
+          message: `Support has decided the dispute on trade ${result.reference} in favour of the ${outcome.toLowerCase()}.`,
+          type: 'p2p',
+        })),
+      });
+      const dispute = await prisma.p2PDispute.findUnique({ where: { id } });
+      res.json({ dispute, outcome, money: result.money });
     } catch (e) { next(e); }
   }
 
@@ -206,8 +307,9 @@ export class AdminExtrasController {
     try {
       const { page, limit, skip } = pageLimit(req);
       const [items, total] = await Promise.all([
-        (prisma as any).aPIKey.findMany({
+        prisma.aPIKey.findMany({
           orderBy: { createdAt: 'desc' }, skip, take: limit,
+          select: { id: true, userId: true, businessId: true, name: true, prefix: true, last4: true, permissions: true, isActive: true, revokedAt: true, lastUsedAt: true, usageCount: true, expiresAt: true, createdAt: true },
         }),
         (prisma as any).aPIKey.count(),
       ]);
@@ -217,23 +319,29 @@ export class AdminExtrasController {
 
   static async revokeApiKey(req: AuthRequest, res: Response, next: NextFunction) {
     try {
-      const key = await (prisma as any).aPIKey.update({
+      const existing = await prisma.aPIKey.findUnique({ where: { id: req.params.id } });
+      if (!existing) throw new AppError('API key not found', 404);
+      const key = await prisma.aPIKey.update({
         where: { id: req.params.id },
-        data: { revokedAt: new Date() },
+        data: { revokedAt: new Date(), isActive: false },
+        select: { id: true, name: true, prefix: true, isActive: true, revokedAt: true, userId: true, businessId: true },
       });
+      await writeAudit(prisma, { actorId: req.user!.id, action: 'API_KEY_REVOKE', entity: 'APIKey', entityId: key.id, before: { isActive: existing.isActive }, after: { isActive: false }, reason: req.body?.reason ?? null, req });
       res.json({ apiKey: key });
     } catch (e) { next(e); }
   }
 
+  /** Active sign-in sessions are refresh-token chains (the legacy Session table is unused). */
   static async listSessions(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const { page, limit, skip } = pageLimit(req);
+      const where = { revokedAt: null, expiresAt: { gt: new Date() } };
       const [items, total] = await Promise.all([
-        prisma.session.findMany({
-          orderBy: { createdAt: 'desc' }, skip, take: limit,
-          include: { user: { select: { id: true, email: true, username: true } } },
+        prisma.refreshToken.findMany({
+          where, orderBy: { createdAt: 'desc' }, skip, take: limit,
+          select: { id: true, userId: true, ipAddress: true, userAgent: true, createdAt: true, expiresAt: true, user: { select: { id: true, email: true, username: true } } },
         }),
-        prisma.session.count(),
+        prisma.refreshToken.count({ where }),
       ]);
       res.json(packPage(items, total, page, limit));
     } catch (e) { next(e); }
@@ -241,7 +349,12 @@ export class AdminExtrasController {
 
   static async revokeSession(req: AuthRequest, res: Response, next: NextFunction) {
     try {
-      await prisma.session.delete({ where: { id: req.params.id } });
+      const token = await prisma.refreshToken.findUnique({ where: { id: req.params.id }, select: { id: true, userId: true, revokedAt: true } });
+      if (!token) throw new AppError('Session not found', 404);
+      if (!token.revokedAt) {
+        await prisma.refreshToken.update({ where: { id: token.id }, data: { revokedAt: new Date() } });
+      }
+      await writeAudit(prisma, { actorId: req.user!.id, action: 'SESSION_REVOKE', entity: 'RefreshToken', entityId: token.id, after: { userId: token.userId }, reason: req.body?.reason ?? null, req });
       res.json({ ok: true });
     } catch (e) { next(e); }
   }
@@ -602,22 +715,10 @@ export class AdminExtrasController {
 
   static async createPlatformBank(req: AuthRequest, res: Response, next: NextFunction) {
     try {
-      const data = z.object({
-        currency:      z.string().min(2).max(8),
-        country:       z.string().length(2),
-        bankName:      z.string().min(1).max(120),
-        accountName:   z.string().min(1).max(120),
-        accountNumber: z.string().optional(),
-        iban:          z.string().optional(),
-        swift:         z.string().optional(),
-        sortCode:      z.string().optional(),
-        routingNumber: z.string().optional(),
-        branch:        z.string().optional(),
-        memo:          z.string().optional(),
-        isActive:      z.boolean().default(true),
-      }).parse(req.body);
-      const row = await (prisma as any).platformBankAccount.create({ data });
-      res.status(201).json({ bank: row });
+      const { reason, ...data } = bankSchema.extend({ reason: z.string().trim().max(500).optional() }).parse(req.body);
+      const result = await changeDepositAccountFor(req, null, data, reason);
+      if (result.pendingApproval) { res.status(202).json({ ...result, message: 'Sent to a second approver: new deposit accounts need approval before customers see them.' }); return; }
+      res.status(201).json({ bank: result.bank });
     } catch (e) {
       if (e instanceof z.ZodError) return next(new AppError('Invalid payload', 400));
       next(e);
@@ -626,35 +727,26 @@ export class AdminExtrasController {
 
   static async updatePlatformBank(req: AuthRequest, res: Response, next: NextFunction) {
     try {
-      const data = z.object({
-        currency:      z.string().min(2).max(8).optional(),
-        country:       z.string().length(2).optional(),
-        bankName:      z.string().min(1).max(120).optional(),
-        accountName:   z.string().min(1).max(120).optional(),
-        accountNumber: z.string().optional().nullable(),
-        iban:          z.string().optional().nullable(),
-        swift:         z.string().optional().nullable(),
-        sortCode:      z.string().optional().nullable(),
-        routingNumber: z.string().optional().nullable(),
-        branch:        z.string().optional().nullable(),
-        memo:          z.string().optional().nullable(),
-        isActive:      z.boolean().optional(),
+      const { reason, ...data } = bankSchema.partial().extend({
+        accountNumber: z.string().optional().nullable(), iban: z.string().optional().nullable(), swift: z.string().optional().nullable(),
+        sortCode: z.string().optional().nullable(), routingNumber: z.string().optional().nullable(), branch: z.string().optional().nullable(),
+        memo: z.string().optional().nullable(), isActive: z.boolean().optional(), reason: z.string().trim().max(500).optional(),
       }).parse(req.body);
-      const row = await (prisma as any).platformBankAccount.update({
-        where: { id: req.params.id },
-        data,
-      });
-      res.json({ bank: row });
+      const result = await changeDepositAccountFor(req, req.params.id, data, reason);
+      if (result.pendingApproval) { res.status(202).json({ ...result, message: 'Sent to a second approver: changes to payment details need approval.' }); return; }
+      res.json({ bank: result.bank });
     } catch (e) {
       if (e instanceof z.ZodError) return next(new AppError('Invalid payload', 400));
       next(e);
     }
   }
 
+  /** Accounts are never deleted (their history matters); this deactivates. */
   static async deletePlatformBank(req: AuthRequest, res: Response, next: NextFunction) {
     try {
-      await (prisma as any).platformBankAccount.delete({ where: { id: req.params.id } });
-      res.json({ ok: true });
+      const { applyDepositAccountChange } = await import('../services/platform/depositAccounts.service');
+      const bank = await applyDepositAccountChange(req.params.id, { isActive: false }, req.user!.id, 'Removed by staff', req);
+      res.json({ ok: true, deactivated: true, bank });
     } catch (e) { next(e); }
   }
 

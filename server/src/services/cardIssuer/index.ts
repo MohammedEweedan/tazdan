@@ -8,6 +8,7 @@
 
 import { v4 as uuidv4 } from 'uuid';
 import type { CardTier, Currency } from '@prisma/client';
+import { assertAdapterUsable } from '../providers/guard';
 
 export interface CardIssuanceRequest {
   userId: string;
@@ -68,6 +69,16 @@ class StripeIssuingCardIssuer implements CardIssuer {
 }
 
 let cached: CardIssuer | null = null;
+
+/**
+ * The configured issuer. In production a MOCK issuer is refused: cards are
+ * INTERNAL IMPLEMENTATION COMPLETE — EXTERNAL PROVIDER ACTIVATION REQUIRED.
+ */
+export function getActiveCardIssuer(): CardIssuer {
+  const issuer = getCardIssuer();
+  assertAdapterUsable('Card issuing', issuer.name);
+  return issuer;
+}
 
 export function getCardIssuer(): CardIssuer {
   if (cached) return cached;

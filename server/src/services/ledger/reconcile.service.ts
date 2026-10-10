@@ -22,6 +22,8 @@ const HALT_KEY = 'ledger_trading_halt';
 const EPS = new Decimal('0.000001'); // 1e-6 tolerance on aggregate sums
 
 let _haltedMemo: boolean | null = null;
+let _haltedAt = 0;
+const HALT_MEMO_MS = 5_000;
 
 export interface ReconcileResult {
   ok: boolean;
@@ -33,18 +35,20 @@ export interface ReconcileResult {
 /** Full reconciliation pass. Read-only except for setting the halt flag. */
 export async function reconcileLedger(): Promise<ReconcileResult> {
   // 1) Cache integrity — compare each account's cached balance to entry sum.
-  const accounts = await prisma.ledgerAccount.findMany({ select: { id: true, balance: true } });
-  const sums = await prisma.ledgerEntry.groupBy({ by: ['accountId'], _sum: { amount: true } });
-  const sumByAccount = new Map(sums.map((s) => [s.accountId, new Decimal((s._sum.amount ?? 0).toString())]));
-
-  const cacheDrift: ReconcileResult['cacheDrift'] = [];
-  for (const a of accounts) {
-    const derived = sumByAccount.get(a.id) ?? new Decimal(0);
-    const cached = new Decimal(a.balance.toString());
-    if (cached.minus(derived).abs().gt(EPS)) {
-      cacheDrift.push({ accountId: a.id, cached: cached.toString(), derived: derived.toString(), diff: cached.minus(derived).toString() });
-    }
-  }
+  // One statement = one snapshot. Reading accounts and entry sums in two
+  // queries let a posting that committed in between look like drift — and
+  // drift halts trading — so under live traffic the check could stop the
+  // platform for nothing.
+  const drift = await prisma.$queryRaw<Array<{ id: string; cached: string; derived: string }>>`
+    SELECT a."id", a."balance"::text AS cached, COALESCE(s.total, 0)::text AS derived
+    FROM "LedgerAccount" a
+    LEFT JOIN (SELECT "accountId", SUM("amount") AS total FROM "LedgerEntry" GROUP BY "accountId") s ON s."accountId" = a."id"
+    WHERE ABS(a."balance" - COALESCE(s.total, 0)) > ${EPS.toString()}::numeric
+  `;
+  const cacheDrift: ReconcileResult['cacheDrift'] = drift.map((d) => {
+    const cached = new Decimal(d.cached); const derived = new Decimal(d.derived);
+    return { accountId: d.id, cached: cached.toString(), derived: derived.toString(), diff: cached.minus(derived).toString() };
+  });
 
   // 2) Global conservation — signed entry sum per currency must be ~0.
   const byCurrency = await prisma.ledgerEntry.groupBy({ by: ['currency'], _sum: { amount: true } });
@@ -64,6 +68,7 @@ export async function reconcileLedger(): Promise<ReconcileResult> {
 
 export async function setTradingHalt(halted: boolean, reason?: string): Promise<void> {
   _haltedMemo = halted;
+  _haltedAt = Date.now();
   await prisma.platformSettings.upsert({
     where: { key: HALT_KEY },
     update: { value: halted ? '1' : '0', description: reason ?? 'ledger trading halt' },
@@ -71,11 +76,17 @@ export async function setTradingHalt(halted: boolean, reason?: string): Promise<
   }).catch(() => { /* non-fatal — memo flag still protects this instance */ });
 }
 
+/**
+ * The halt is shared through the database. Each process re-reads it every few
+ * seconds, so a halt set by the scheduler worker (or lifted from the console
+ * by another process or a script) reaches every API process promptly. If the
+ * read fails, the last known value stands.
+ */
 export async function isTradingHalted(): Promise<boolean> {
-  if (_haltedMemo !== null) return _haltedMemo;
-  const row = await prisma.platformSettings.findUnique({ where: { key: HALT_KEY } }).catch(() => null);
-  _haltedMemo = row?.value === '1';
-  return _haltedMemo;
+  if (_haltedMemo !== null && Date.now() - _haltedAt < HALT_MEMO_MS) return _haltedMemo;
+  const row = await prisma.platformSettings.findUnique({ where: { key: HALT_KEY } }).catch(() => undefined);
+  if (row !== undefined) { _haltedMemo = row?.value === '1'; _haltedAt = Date.now(); }
+  return _haltedMemo ?? false;
 }
 
 let started = false;

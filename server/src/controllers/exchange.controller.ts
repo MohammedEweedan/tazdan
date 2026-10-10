@@ -2,6 +2,7 @@ import { Response, NextFunction } from 'express';
 import { z } from 'zod';
 import type { Server as IOServer } from 'socket.io';
 import { prisma } from '../utils/prisma';
+import { enforceKycLimit } from '../utils/kycLimits';
 import { AuthRequest } from '../types';
 import { AppError } from '../middleware/errorHandler';
 import axios from 'axios';
@@ -134,7 +135,7 @@ export class ExchangeController {
       };
       const d = body?.data;
       if (body?.event === 'rate.created' && d?.currency && d?.rate != null) {
-        const rate = typeof d.rate === 'string' ? parseFloat(d.rate) : d.rate;
+        const rate = typeof d.rate === 'string' && d.rate.trim() ? Number(d.rate) : typeof d.rate === 'number' ? d.rate : NaN;
         // Only cash rates feed FIAT/LYD pricing; bank rates are logged for now.
         if (d.rate_type === 'bank') {
           logger.info('[fulus.webhook] bank rate (not yet priced)', { bank: d.bank_name, currency: d.currency, rate });
@@ -251,6 +252,9 @@ export class ExchangeController {
       if (!me?.twoFactorEnabled && process.env.EXCHANGE_REQUIRE_2FA === '1') {
         throw new AppError('Enable 2FA before trading', 403);
       }
+      // Limits first: never send a security code for an order that cannot go
+      // through (executeQuote checks again just before the write).
+      await enforceKycLimit(req.user!.id, (peek as any).side === 'SELL' ? 'OFFRAMP_SELL' : 'ONRAMP_BUY', Number((peek as any).fiatAmount ?? 0), 'USD');
       try {
         await enforceStepUp({
           userId: req.user!.id,

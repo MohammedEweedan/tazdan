@@ -33,7 +33,6 @@ import { HeaderIconButton, TabHeader } from '@/components/ui/ScreenHeader';
 
 type Filter = 'ALL' | 'UNREAD' | 'PAYMENTS' | 'SUPPORT';
 
-const BRAND_BLUE = '#63a1db'; // soft brand blue (accent for badges, support, avatars)
 
 export default function Messages() {
   const router = useRouter();
@@ -230,12 +229,12 @@ export default function Messages() {
                       >
                         <View style={{
                           width: 52, height: 52, borderRadius: 26,
-                          backgroundColor: '#5b86b0',
+                          backgroundColor: p.accent,
                           alignItems: 'center', justifyContent: 'center',
                         }}>
                           {c.avatarUrl
                             ? <Text style={{ fontSize: 24 }}>{c.avatarUrl}</Text>
-                            : <Text style={{ color: '#fff', fontSize: 18, fontWeight: '700' }}>
+                            : <Text style={{ color: p.accentFg, fontSize: 18, fontWeight: '700' }}>
                                 {(c.name?.[0] ?? c.handle?.[0] ?? '?').toUpperCase()}
                               </Text>
                           }
@@ -305,17 +304,17 @@ function Row({
     >
       <View style={{
         width: 46, height: 46, borderRadius: 23,
-        backgroundColor: isSupport ? BRAND_BLUE : (c.partner.avatarUrl ? p.bgElev : '#5b86b0'),
+        backgroundColor: isSupport ? p.accent : (c.partner.avatarUrl ? p.bgElev : p.accent),
         alignItems: 'center', justifyContent: 'center',
         borderWidth: !isSupport && c.partner.avatarUrl ? 1 : 0,
         borderColor: p.border,
       }}>
         {isSupport ? (
-          <Ionicons name="headset" size={20} color="#fff" />
+          <Ionicons name="headset" size={20} color={p.accentFg} />
         ) : c.partner.avatarUrl ? (
           <Text style={{ fontSize: 22 }}>{c.partner.avatarUrl}</Text>
         ) : (
-          <Text style={{ color: '#fff', fontSize: 17, fontWeight: '600' }}>
+          <Text style={{ color: p.accentFg, fontSize: 17, fontWeight: '600' }}>
             {(fullName[0] ?? '?').toUpperCase()}
           </Text>
         )}
@@ -338,13 +337,13 @@ function Row({
           {isSupport && (
             <View style={{
               paddingHorizontal: 6, paddingVertical: 1.5, borderRadius: 5,
-              backgroundColor: BRAND_BLUE,
+              backgroundColor: p.accent,
             }}>
-              <Text style={{ color: '#fff', fontSize: 9, fontWeight: '600', letterSpacing: 0.5 }}>STAFF</Text>
+              <Text style={{ color: p.accentFg, fontSize: 9, fontWeight: '600', letterSpacing: 0.5 }}>STAFF</Text>
             </View>
           )}
           {c.partner.kycStatus === 'APPROVED' && !isSupport && (
-            <Ionicons name="checkmark-circle" size={13} color={BRAND_BLUE} />
+            <Ionicons name="checkmark-circle" size={13} color={p.accent} />
           )}
           <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '600' }}>
             {relTime(c.lastMessage.createdAt, t)}
@@ -365,10 +364,10 @@ function Row({
           {c.unread > 0 && (
             <View style={{
               minWidth: 18, height: 18, paddingHorizontal: 5, borderRadius: 9,
-              backgroundColor: BRAND_BLUE,
+              backgroundColor: p.accent,
               alignItems: 'center', justifyContent: 'center',
             }}>
-              <Text style={{ color: '#fff', fontSize: 10, fontWeight: '600' }}>
+              <Text style={{ color: p.accentFg, fontSize: 10, fontWeight: '600' }}>
                 {c.unread}
               </Text>
             </View>

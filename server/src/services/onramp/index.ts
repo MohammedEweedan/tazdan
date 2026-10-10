@@ -9,6 +9,7 @@
  * The current default is `MockOnRampProvider`, which fakes a successful
  * quote + settlement. Replace with a real provider once API keys are wired.
  */
+import { assertAdapterUsable } from '../providers/guard';
 
 import { v4 as uuidv4 } from 'uuid';
 import type {
@@ -117,6 +118,13 @@ class MoonPayOnRampProvider implements OnRampProvider {
 
 // ─── Factory ──────────────────────────────────────────────────────────
 let cached: OnRampProvider | null = null;
+
+/** The configured on-ramp, refusing MOCK in production (no fake COMPLETED payments). */
+export function getActiveOnRampProvider(): OnRampProvider {
+  const provider = getOnRampProvider();
+  assertAdapterUsable('Card and gateway deposits', provider.name);
+  return provider;
+}
 
 export function getOnRampProvider(): OnRampProvider {
   if (cached) return cached;

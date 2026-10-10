@@ -23,13 +23,14 @@ export default function WaitlistModal({ isOpen, onClose }: WaitlistModalProps) {
   const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [errorMsg, setErrorMsg] = useState("");
 
-  const bg     = dark ? "#0a0a0a" : "#ffffff";
-  const fg     = dark ? "#ffffff" : "#000000";
-  const muted  = dark ? "rgba(255,255,255,0.55)" : "rgba(0,0,0,0.50)";
-  const border = dark ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.10)";
-  const inputBg = dark ? "rgba(255,255,255,0.04)" : "#f4f4f4";
-  const ctaBg  = dark ? "#ffffff" : "#0a0f1e";
-  const ctaFg  = dark ? "#000000" : "#ffffff";
+  // App surfaces (mobile/src/store/themeStore.ts): charcoal sheet, paper light.
+  const bg     = dark ? "#1E2127" : "#ffffff";
+  const fg     = dark ? "#F4F5F7" : "#0A0A0B";
+  const muted  = dark ? "#AEB6C3" : "#586579";
+  const border = dark ? "rgba(255,255,255,0.09)" : "rgba(10,10,11,0.08)";
+  const inputBg = dark ? "#262A31" : "#EEF1F6";
+  const ctaBg  = dark ? "#F4F5F7" : "#0A0A0B";
+  const ctaFg  = dark ? "#16181C" : "#ffffff";
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -117,7 +118,7 @@ export default function WaitlistModal({ isOpen, onClose }: WaitlistModalProps) {
             {/* Form / Success */}
             {status === "success" ? (
               <HStack
-                bg={dark ? "rgba(255,255,255,0.04)" : "#f4f4f4"}
+                bg={inputBg}
                 border="1px solid"
                 borderColor={border}
                 borderRadius="16px"

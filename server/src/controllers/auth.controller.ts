@@ -5,11 +5,11 @@ import QRCode from 'qrcode';
 import { z } from 'zod';
 import { prisma } from '../utils/prisma';
 import {
-  generateTokens,
-  persistRefreshToken,
+  issueSessionTokens,
   verifyAndConsumeRefreshToken,
   revokeRefreshToken,
   revokeAllUserSessions,
+  clearAdminCache,
 } from '../middleware/auth';
 import { AppError } from '../middleware/errorHandler';
 import { generateReferralCode } from '../utils/helpers';
@@ -24,6 +24,8 @@ import {
 } from '../services/email';
 import { createUserWallets } from '../services/wallet/walletDerivation.service';
 import { startVerification, checkVerification } from '../services/whatsapp';
+import { recordSecurityEvent } from '../services/platform/securityEvents';
+import { recordRiskEvent } from '../services/risk/engine';
 import { clearAttempts, getAttempts, incrAttempts } from '../utils/redis';
 
 const PHONE_OTP_MAX_ATTEMPTS = 5;
@@ -215,13 +217,10 @@ export class AuthController {
         console.error('[wallet] createUserWallets failed for', user.id, e);
       });
 
-      const tokens = generateTokens({ id: user.id, email: user.email, role: user.role });
-      await persistRefreshToken({
-        userId: user.id,
-        rawToken: tokens.refreshToken,
-        ipAddress: req.ip,
-        userAgent: req.headers['user-agent']?.toString(),
-      });
+      const { sessionId: _sessionId, ...tokens } = await issueSessionTokens(
+        { id: user.id, email: user.email, role: user.role },
+        { ipAddress: req.ip, userAgent: req.headers['user-agent']?.toString() },
+      );
 
       // Generate 6-digit email verification code via CSPRNG.
       // Math.random() is predictable from a single observed output
@@ -282,6 +281,9 @@ export class AuthController {
         throw new AppError(GENERIC, 401);
       }
 
+      if (user.status === 'CLOSED') {
+        throw new AppError('This account was closed. Contact support if you need your records.', 403, 'ACCOUNT_CLOSED');
+      }
       if (user.status === 'BANNED' || user.status === 'SUSPENDED') {
         throw new AppError('Account is suspended or banned', 403);
       }
@@ -302,6 +304,7 @@ export class AuthController {
       const validPassword = await bcrypt.compare(data.password, user.passwordHash);
       if (!validPassword) {
         await recordFailedLogin(user.id);
+        void recordSecurityEvent({ type: 'FAILED_LOGIN', severity: user.role === 'ADMIN' ? 'HIGH' : 'LOW', userId: user.id, ipAddress: req.ip, path: req.originalUrl });
         throw new AppError(GENERIC, 401);
       }
 
@@ -312,8 +315,12 @@ export class AuthController {
         });
         if (!verified) {
           await recordFailedLogin(user.id);
+          void recordSecurityEvent({ type: 'MFA_FAILURE', severity: user.role === 'ADMIN' ? 'HIGH' : 'MEDIUM', userId: user.id, ipAddress: req.ip, path: req.originalUrl });
           throw new AppError('Invalid 2FA code', 401);
         }
+      }
+      if (user.role === 'ADMIN') {
+        void recordSecurityEvent({ type: 'ADMIN_LOGIN', severity: 'MEDIUM', userId: user.id, ipAddress: req.ip, path: req.originalUrl, details: { userAgent: req.headers['user-agent']?.toString().slice(0, 200) } });
       }
 
       await prisma.user.update({
@@ -326,13 +333,10 @@ export class AuthController {
         },
       });
 
-      const tokens = generateTokens({ id: user.id, email: user.email, role: user.role });
-      await persistRefreshToken({
-        userId: user.id,
-        rawToken: tokens.refreshToken,
-        ipAddress: req.ip,
-        userAgent: req.headers['user-agent']?.toString(),
-      });
+      const { sessionId: _sessionId, ...tokens } = await issueSessionTokens(
+        { id: user.id, email: user.email, role: user.role },
+        { ipAddress: req.ip, userAgent: req.headers['user-agent']?.toString() },
+      );
 
       res.json({
         user: {
@@ -364,23 +368,28 @@ export class AuthController {
 
       const user = await prisma.user.findUnique({ where: { id: stored.userId } });
       if (!user) throw new AppError('User not found', 404);
+      if (user.status === 'CLOSED') {
+        throw new AppError('This account was closed. Contact support if you need your records.', 403, 'ACCOUNT_CLOSED');
+      }
       if (user.status === 'BANNED' || user.status === 'SUSPENDED') {
         throw new AppError('Account is suspended or banned', 403);
       }
 
-      // Issue a new pair, persist it, then revoke the old one and link them.
-      const tokens = generateTokens({ id: user.id, email: user.email, role: user.role });
-      const newRow = await persistRefreshToken({
-        userId: user.id,
-        rawToken: tokens.refreshToken,
-        ipAddress: req.ip,
-        userAgent: req.headers['user-agent']?.toString(),
-        replacedById: undefined,
+      // Issue a new pair, then revoke the presented token conditionally. Two
+      // concurrent refreshes with the same token must not both succeed — the
+      // loser is treated as token reuse and its new session is discarded.
+      const { sessionId, ...tokens } = await issueSessionTokens(
+        { id: user.id, email: user.email, role: user.role },
+        { ipAddress: req.ip, userAgent: req.headers['user-agent']?.toString() },
+      );
+      const rotated = await prisma.refreshToken.updateMany({
+        where: { id: stored.id, revokedAt: null },
+        data: { revokedAt: new Date(), replacedById: sessionId },
       });
-      await prisma.refreshToken.update({
-        where: { id: stored.id },
-        data: { revokedAt: new Date(), replacedById: newRow.id },
-      });
+      if (rotated.count !== 1) {
+        await prisma.refreshToken.update({ where: { id: sessionId }, data: { revokedAt: new Date() } });
+        throw new AppError('Refresh token already used', 401);
+      }
 
       res.json({ ...tokens });
     } catch (error) {
@@ -434,6 +443,11 @@ export class AuthController {
 
   static async enable2FA(req: AuthRequest, res: Response, next: NextFunction) {
     try {
+      // Never replace a secret that is in use: a stolen session could swap in
+      // its own authenticator and then pass every 2FA and step-up check.
+      // Changing authenticator means disabling first (password + current code).
+      const current = await prisma.user.findUnique({ where: { id: req.user!.id }, select: { twoFactorEnabled: true } });
+      if (current?.twoFactorEnabled) throw new AppError('Two-factor authentication is already on. Turn it off first to set up a new authenticator.', 409);
       const secret = speakeasy.generateSecret({
         name: `tazdan:${req.user!.email}`,
         issuer: 'tazdan',
@@ -471,6 +485,7 @@ export class AuthController {
       if (!verified) throw new AppError('Invalid 2FA code', 400);
 
       await prisma.user.update({ where: { id: user.id }, data: { twoFactorEnabled: true } });
+      clearAdminCache(user.id);
       res.json({ message: '2FA enabled successfully' });
     } catch (error) {
       next(error);
@@ -503,6 +518,8 @@ export class AuthController {
         where: { id: user.id },
         data: { twoFactorEnabled: false, twoFactorSecret: null },
       });
+      clearAdminCache(user.id); // staff lose console access at once in production
+      void recordRiskEvent(req.user!.id, 'SECURITY_CHANGE', { change: '2fa_disabled' }, 'HIGH');
       res.json({ message: '2FA disabled successfully' });
     } catch (error) {
       next(error);
@@ -732,6 +749,7 @@ export class AuthController {
 
       // Kills refresh tokens (DB) AND outstanding access tokens (Redis cutoff).
       await revokeAllUserSessions(user.id);
+      void recordRiskEvent(user.id, 'SECURITY_CHANGE', { change: 'password_reset' }, 'MEDIUM');
 
       res.json({ message: 'Password reset successfully. Please log in again.' });
     } catch (error) {
@@ -815,6 +833,8 @@ export class AuthController {
         },
       });
       await revokeAllUserSessions(user.id);
+      clearAdminCache(user.id);
+      void recordRiskEvent(user.id, 'SECURITY_CHANGE', { change: '2fa_recovery' }, 'HIGH');
 
       res.json({ message: '2FA has been removed. Sign in with your email and password.' });
     } catch (error) {

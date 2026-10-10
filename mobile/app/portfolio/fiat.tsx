@@ -1,3 +1,4 @@
+import { FiatFlag } from '@/components/ui/FiatFlag';
 import { StackHeader } from '@/components/ui/ScreenHeader';
 /**
  * Fiat Portfolio Detail Page
@@ -87,7 +88,7 @@ export default function FiatPortfolio() {
     return `${sym}${Number(w.balance).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: meta?.decimals ?? 2 })}`;
   };
 
-  const COLORS = ['#22c55e', '#63a1db', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4'];
+  const COLORS = ['#22c55e', p.accentText, '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4'];
 
   return (
     <View style={{ flex: 1, backgroundColor: p.bg }}>
@@ -247,9 +248,7 @@ export default function FiatPortfolio() {
                       marginBottom: 8,
                     })}
                   >
-                    <Text style={{ fontSize: fiatSymbol(asset.currency, locale).length > 2 ? 18 : 28, width: 40, textAlign: 'center', marginRight: 12, fontWeight: '700', color: p.fg }}>
-                      {fiatSymbol(asset.currency, locale)}
-                    </Text>
+                    <View style={{ marginRight: 12 }}><FiatFlag currency={asset.currency} size={40} /></View>
                     <View style={{ flex: 1 }}>
                       <Text style={{ color: p.fg, fontSize: 15, fontWeight: '700' }}>{meta.name}</Text>
                       <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '500', marginTop: 2 }}>

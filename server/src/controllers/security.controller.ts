@@ -4,8 +4,10 @@ import { AuthRequest } from '../types';
 import { AppError } from '../middleware/errorHandler';
 import { issueStepUp, deviceFingerprint, type StepUpAction } from '../services/security/stepUp.service';
 import { parseUserAgent, geoLocate } from '../utils/deviceInfo';
+import { revokeSessionAccess } from '../middleware/auth';
+import { recordSecurityEvent } from '../services/platform/securityEvents';
 
-const STEP_UP_ACTIONS = new Set(['withdrawal', 'buy', 'sell', 'transfer']);
+const STEP_UP_ACTIONS = new Set(['withdrawal', 'buy', 'sell', 'transfer', 'account_close']);
 
 export class SecurityController {
   // Issue a step-up challenge (emails a 6-digit code, or signals TOTP).
@@ -41,16 +43,16 @@ export class SecurityController {
     }
   }
 
-  // Get active sessions — enriched with parsed device (name/type/OS/browser),
-  // a "City, Country" geo location resolved from the IP, last-active time, and
-  // a `current` flag for the session making this request.
+  // Active sessions are refresh-token chains: each sign-in creates one, each
+  // refresh rotates it. Enriched with parsed device, "City, Country" from the
+  // IP, and a `current` flag for the session making this request.
   static async getSessions(req: AuthRequest, res: Response, next: NextFunction) {
     try {
-      const currentToken = req.headers.authorization?.replace('Bearer ', '') ?? '';
-      const rows = await prisma.session.findMany({
-        where: { userId: req.user!.id, expiresAt: { gt: new Date() } },
+      const currentSid = req.user?.sid ?? null;
+      const rows = await prisma.refreshToken.findMany({
+        where: { userId: req.user!.id, revokedAt: null, expiresAt: { gt: new Date() } },
         orderBy: { createdAt: 'desc' },
-        select: { id: true, token: true, ipAddress: true, userAgent: true, createdAt: true, expiresAt: true },
+        select: { id: true, ipAddress: true, userAgent: true, createdAt: true, expiresAt: true },
       });
 
       const sessions = await Promise.all(
@@ -63,13 +65,13 @@ export class SecurityController {
             userAgent: s.userAgent,
             createdAt: s.createdAt,
             expiresAt: s.expiresAt,
-            lastActiveAt: s.createdAt, // best available "last login" for the session
+            lastActiveAt: s.createdAt, // a session is re-issued on every refresh
             deviceName: device.name,
             deviceType: device.type,
             os: device.os,
             browser: device.browser ?? null,
-            location,                   // "City, Country" | "Local network" | null
-            current: !!currentToken && s.token === currentToken,
+            location,
+            current: !!currentSid && s.id === currentSid,
           };
         }),
       );
@@ -80,26 +82,39 @@ export class SecurityController {
     }
   }
 
-  // Revoke a session
+  // Revoke one session: its refresh token dies now and its access token is
+  // denylisted so it stops working immediately.
   static async revokeSession(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const { id } = req.params;
-      await prisma.session.deleteMany({ where: { id, userId: req.user!.id } });
+      const result = await prisma.refreshToken.updateMany({
+        where: { id, userId: req.user!.id, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+      if (result.count === 0) throw new AppError('Session not found', 404);
+      await revokeSessionAccess(id);
+      void recordSecurityEvent({ type: 'SESSION_REVOKED', userId: req.user!.id, ipAddress: req.ip, details: { sessionId: id, scope: 'one' } });
       res.json({ message: 'Session revoked' });
     } catch (error) {
       next(error);
     }
   }
 
-  // Revoke all other sessions
+  // Revoke every session except the one making this request.
   static async revokeAllSessions(req: AuthRequest, res: Response, next: NextFunction) {
     try {
-      // Keep current session, delete others
-      const currentToken = req.headers.authorization?.replace('Bearer ', '');
-      await prisma.session.deleteMany({
-        where: { userId: req.user!.id, token: { not: currentToken || '' } },
+      const currentSid = req.user?.sid;
+      const others = await prisma.refreshToken.findMany({
+        where: { userId: req.user!.id, revokedAt: null, ...(currentSid ? { id: { not: currentSid } } : {}) },
+        select: { id: true },
       });
-      res.json({ message: 'All other sessions revoked' });
+      await prisma.refreshToken.updateMany({
+        where: { id: { in: others.map((o) => o.id) }, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+      await Promise.all(others.map((o) => revokeSessionAccess(o.id)));
+      void recordSecurityEvent({ type: 'SESSION_REVOKED', userId: req.user!.id, ipAddress: req.ip, details: { count: others.length, scope: 'all_others' } });
+      res.json({ message: 'All other sessions revoked', revoked: others.length });
     } catch (error) {
       next(error);
     }
@@ -177,7 +192,7 @@ export class SecurityController {
       if (!user) throw new AppError('User not found', 404);
 
       const [activeSessions, recentLogins, apiKeyCount] = await Promise.all([
-        prisma.session.count({ where: { userId: req.user!.id, expiresAt: { gt: new Date() } } }),
+        prisma.refreshToken.count({ where: { userId: req.user!.id, revokedAt: null, expiresAt: { gt: new Date() } } }),
         prisma.loginHistory.count({ where: { userId: req.user!.id } }),
         prisma.aPIKey.count({ where: { userId: req.user!.id, isActive: true } }),
       ]);

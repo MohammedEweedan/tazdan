@@ -14,27 +14,23 @@ import {
   RefreshControl, ScrollView, View,
 } from 'react-native';
 import { Text, TextInput } from '@/components/ui/Text';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 
-import { brand, useTheme, useThemedPalette } from '@/store/themeStore';
+import { useTheme, useThemedPalette } from '@/store/themeStore';
 import { useHaptics } from '@/hooks';
 import { businessService } from '@/services/business';
 import type { TeamMember, TeamRole } from '@/types/business';
-import { TopGradient } from '@/components/ui/ScreenShell';
+import { ScreenShell, CTAButton } from '@/components/ui/ScreenShell';
 
 import { BottomSheet } from '@/components/ui/BottomSheet';
-const ACCENT = '#737373';
 
-const ROLE_META: Record<TeamRole, { label: string; desc: string; color: string }> = {
+const roleMetaFor = (accent: string): Record<TeamRole, { label: string; desc: string; color: string }> => ({
   OWNER:     { label: 'Owner',     desc: 'Full access including billing',   color: '#f59e0b' },
-  ADMIN:     { label: 'Admin',     desc: 'Manage team and API keys',        color: '#63a1db' },
-  DEVELOPER: { label: 'Developer', desc: 'API key access, view payouts',    color: ACCENT },
+  ADMIN:     { label: 'Admin',     desc: 'Manage team and API keys',        color: accent },
+  DEVELOPER: { label: 'Developer', desc: 'API key access, view payouts',    color: accent },
   ANALYST:   { label: 'Analyst',   desc: 'View-only — stats and payouts',   color: '#a78bfa' },
-};
+});
 
 const ASSIGNABLE_ROLES: TeamRole[] = ['ADMIN', 'DEVELOPER', 'ANALYST'];
 
@@ -91,7 +87,7 @@ export default function TeamScreen() {
       undefined,
       [
         ...opts.map((role) => ({
-          text: ROLE_META[role].label,
+          text: roleMetaFor(p.accentText)[role].label,
           onPress: async () => {
             try {
               const updated = await businessService.updateMemberRole(member.id, role);
@@ -111,34 +107,34 @@ export default function TeamScreen() {
   const pending = members.filter((m) => m.status === 'PENDING');
 
   return (
-    <View style={{ flex: 1, backgroundColor: p.bg }}>
-      <StatusBar style={mode === 'light' ? 'dark' : 'light'} />
-      <TopGradient />
-      <SafeAreaView style={{ flex: 1 }} edges={['top']}>
-        <StackHeader title="Team" right={<HeaderTextButton label="Invite" icon="person-add-outline" onPress={() => setInviteOpen(true)} />} />
+    <ScreenShell title="Team" right={<HeaderTextButton label="Invite" icon="person-add-outline" onPress={() => setInviteOpen(true)} />}  scroll={false} contentStyle={{ paddingHorizontal: 0 }}>
 
         <ScrollView
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 64 }}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={ACCENT} />}
+          contentContainerStyle={{ paddingHorizontal: 24, paddingBottom: 64 }}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={p.accentText} />}
         >
           {loading ? (
             <View style={{ alignItems: 'center', paddingTop: 80 }}>
-              <ActivityIndicator color={ACCENT} size="large" />
+              <ActivityIndicator color={p.accentText} size="large" />
             </View>
           ) : (
             <>
+              <View style={{ paddingTop: 20, paddingBottom: 28 }}>
+                <Text style={{ color: p.fg, fontSize: 32, fontWeight: '500', letterSpacing: -.8 }}>{active.length} people</Text>
+                <Text style={{ color: p.fgMuted, fontSize: 14, lineHeight: 21, marginTop: 8 }}>Manage access and permissions for your business.</Text>
+              </View>
               {/* Active members */}
-              <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '700', letterSpacing: 0.7, marginTop: 8, marginBottom: 10 }}>
+              <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '600', letterSpacing: 0.7, marginTop: 8, marginBottom: 10 }}>
                 ACTIVE ({active.length})
               </Text>
-              <View style={{ borderRadius: 18, overflow: 'hidden', borderWidth: 1, borderColor: p.border, backgroundColor: p.bgElev }}>
+              <View style={{ borderRadius: 24, overflow: 'hidden', backgroundColor: p.bgElev }}>
                 {active.length > 0 ? active.map((m, i) => (
                   <MemberRow
                     key={m.id}
                     member={m}
                     palette={p}
-                    accent={ACCENT}
+                    accent={p.accentText}
                     isLast={i === active.length - 1}
                     onChangeRole={() => changeRole(m)}
                     onRemove={() => remove(m)}
@@ -153,16 +149,16 @@ export default function TeamScreen() {
               {/* Pending invites */}
               {pending.length > 0 && (
                 <>
-                  <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '700', letterSpacing: 0.7, marginTop: 28, marginBottom: 10 }}>
+                  <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '600', letterSpacing: 0.7, marginTop: 28, marginBottom: 10 }}>
                     PENDING INVITES ({pending.length})
                   </Text>
-                  <View style={{ borderRadius: 18, overflow: 'hidden', borderWidth: 1, borderColor: p.border, backgroundColor: p.bgElev, opacity: 0.75 }}>
+                  <View style={{ borderRadius: 24, overflow: 'hidden', backgroundColor: p.bgElev, opacity: 0.75 }}>
                     {pending.map((m, i) => (
                       <MemberRow
                         key={m.id}
                         member={m}
                         palette={p}
-                        accent={ACCENT}
+                        accent={p.accentText}
                         isLast={i === pending.length - 1}
                         onRemove={() => remove(m)}
                       />
@@ -172,11 +168,11 @@ export default function TeamScreen() {
               )}
 
               {/* Role legend */}
-              <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '700', letterSpacing: 0.7, marginTop: 28, marginBottom: 10 }}>
+              <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '600', letterSpacing: 0.7, marginTop: 28, marginBottom: 10 }}>
                 ROLE PERMISSIONS
               </Text>
-              <View style={{ borderRadius: 18, overflow: 'hidden', borderWidth: 1, borderColor: p.border, backgroundColor: p.bgElev }}>
-                {(Object.entries(ROLE_META) as [TeamRole, typeof ROLE_META[TeamRole]][]).map(([role, meta], i, arr) => (
+              <View style={{ borderRadius: 24, overflow: 'hidden', backgroundColor: p.bgElev }}>
+                {(Object.entries(roleMetaFor(p.accentText)) as [TeamRole, { label: string; desc: string; color: string }][]).map(([role, meta], i, arr) => (
                   <View key={role} style={{
                     flexDirection: 'row', alignItems: 'center', gap: 12,
                     paddingHorizontal: 16, paddingVertical: 12,
@@ -186,7 +182,7 @@ export default function TeamScreen() {
                       paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8,
                       backgroundColor: `${meta.color}18`, minWidth: 76, alignItems: 'center',
                     }}>
-                      <Text style={{ color: meta.color, fontSize: 11, fontWeight: '800' }}>{meta.label}</Text>
+                      <Text style={{ color: meta.color, fontSize: 11, fontWeight: '600' }}>{meta.label}</Text>
                     </View>
                     <Text style={{ color: p.fgMuted, fontSize: 12.5, flex: 1 }}>{meta.desc}</Text>
                   </View>
@@ -195,12 +191,12 @@ export default function TeamScreen() {
             </>
           )}
         </ScrollView>
-      </SafeAreaView>
+
 
       <InviteModal
         visible={inviteOpen}
         palette={p}
-        accent={ACCENT}
+        accent={p.accentText}
         onClose={() => setInviteOpen(false)}
         onInvite={async (payload) => {
           const member = await businessService.inviteMember(payload);
@@ -208,7 +204,7 @@ export default function TeamScreen() {
           setInviteOpen(false);
         }}
       />
-    </View>
+    </ScreenShell>
   );
 }
 
@@ -216,7 +212,7 @@ function MemberRow({ member, palette: p, accent, isLast, onChangeRole, onRemove 
   member: TeamMember; palette: ReturnType<typeof useThemedPalette>; accent: string;
   isLast: boolean; onChangeRole?: () => void; onRemove?: () => void;
 }) {
-  const roleMeta  = ROLE_META[member.role];
+  const roleMeta  = roleMetaFor(p.accentText)[member.role];
   const name      = member.user
     ? `${member.user.firstName} ${member.user.lastName}`.trim()
     : member.email;
@@ -236,7 +232,7 @@ function MemberRow({ member, palette: p, accent, isLast, onChangeRole, onRemove 
         borderWidth: 1, borderColor: `${roleMeta.color}44`,
         alignItems: 'center', justifyContent: 'center',
       }}>
-        <Text style={{ color: roleMeta.color, fontSize: 17, fontWeight: '700' }}>
+        <Text style={{ color: roleMeta.color, fontSize: 17, fontWeight: '600' }}>
           {name.charAt(0).toUpperCase()}
         </Text>
       </View>
@@ -244,10 +240,10 @@ function MemberRow({ member, palette: p, accent, isLast, onChangeRole, onRemove 
       {/* Info */}
       <View style={{ flex: 1, minWidth: 0 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-          <Text style={{ color: p.fg, fontSize: 14, fontWeight: '700' }} numberOfLines={1}>{name}</Text>
+          <Text style={{ color: p.fg, fontSize: 14, fontWeight: '600' }} numberOfLines={1}>{name}</Text>
           {isPending && (
             <View style={{ paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, backgroundColor: p.amberBg }}>
-              <Text style={{ color: p.amberFg, fontSize: 9.5, fontWeight: '700' }}>PENDING</Text>
+              <Text style={{ color: p.amberFg, fontSize: 9.5, fontWeight: '600' }}>PENDING</Text>
             </View>
           )}
         </View>
@@ -267,13 +263,13 @@ function MemberRow({ member, palette: p, accent, isLast, onChangeRole, onRemove 
             opacity: pressed ? 0.75 : 1,
           })}
         >
-          <Text style={{ color: roleMeta.color, fontSize: 11, fontWeight: '800' }}>
+          <Text style={{ color: roleMeta.color, fontSize: 11, fontWeight: '600' }}>
             {roleMeta.label}{!isOwner && onChangeRole ? ' ↓' : ''}
           </Text>
         </Pressable>
         {!isOwner && onRemove && (
           <Pressable onPress={onRemove} hitSlop={8}>
-            <Text style={{ color: p.redFg, fontSize: 10.5, fontWeight: '700' }}>Remove</Text>
+            <Text style={{ color: p.redFg, fontSize: 10.5, fontWeight: '600' }}>Remove</Text>
           </Pressable>
         )}
       </View>
@@ -307,7 +303,7 @@ function InviteModal({ visible, palette: p, accent, onClose, onInvite }: {
   return (
     <BottomSheet visible={visible} onClose={onClose} title={"Invite team member"}>
           {/* Email */}
-          <Text style={{ color: p.fgMuted, fontSize: 11.5, fontWeight: '700', marginBottom: 6 }}>EMAIL</Text>
+          <Text style={{ color: p.fgMuted, fontSize: 11.5, fontWeight: '600', marginBottom: 6 }}>EMAIL</Text>
           <TextInput
             value={email} onChangeText={setEmail}
             placeholder="colleague@company.com"
@@ -322,10 +318,10 @@ function InviteModal({ visible, palette: p, accent, onClose, onInvite }: {
           />
 
           {/* Role */}
-          <Text style={{ color: p.fgMuted, fontSize: 11.5, fontWeight: '700', marginBottom: 10 }}>ROLE</Text>
+          <Text style={{ color: p.fgMuted, fontSize: 11.5, fontWeight: '600', marginBottom: 10 }}>ROLE</Text>
           <View style={{ gap: 6 }}>
             {ASSIGNABLE_ROLES.map((r) => {
-              const meta   = ROLE_META[r];
+              const meta   = roleMetaFor(p.accentText)[r];
               const active = role === r;
               return (
                 <Pressable key={r} onPress={() => { h.selection(); setRole(r); }}
@@ -335,7 +331,7 @@ function InviteModal({ visible, palette: p, accent, onClose, onInvite }: {
                     backgroundColor: active ? `${meta.color}14` : pressed ? p.bgElev : 'transparent',
                     borderWidth: 1, borderColor: active ? `${meta.color}55` : p.border,
                   })}>
-                  <Text style={{ color: meta.color, fontSize: 13.5, fontWeight: '800', minWidth: 72 }}>{meta.label}</Text>
+                  <Text style={{ color: meta.color, fontSize: 13.5, fontWeight: '600', minWidth: 72 }}>{meta.label}</Text>
                   <Text style={{ color: p.fgMuted, fontSize: 12, flex: 1 }}>{meta.desc}</Text>
                   {active && <Ionicons name="checkmark-circle" size={18} color={meta.color} />}
                 </Pressable>
@@ -348,14 +344,11 @@ function InviteModal({ visible, palette: p, accent, onClose, onInvite }: {
               marginTop: 22, borderRadius: 26, overflow: 'hidden',
               opacity: (!email.trim() || loading) ? 0.5 : pressed ? 0.85 : 1,
             })}>
-            <LinearGradient
-              colors={[brand.primaryDark, brand.deep]}
-              start={{ x: 0.1, y: 0 }} end={{ x: 0.9, y: 1 }}
-              style={{ height: 52, alignItems: 'center', justifyContent: 'center' }}>
+            <View style={{ backgroundColor: p.ctaBg, height: 52, alignItems: 'center', justifyContent: 'center' }}>
               {loading
-                ? <ActivityIndicator color="#fff" />
-                : <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>Send invite</Text>}
-            </LinearGradient>
+                ? <ActivityIndicator color={p.ctaFg} />
+                : <Text style={{ color: p.ctaFg, fontSize: 15, fontWeight: '600' }}>Send invite</Text>}
+            </View>
           </Pressable>
         </BottomSheet>
   );

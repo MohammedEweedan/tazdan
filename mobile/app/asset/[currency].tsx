@@ -149,10 +149,11 @@ export default function AssetDetail() {
   const [range, setRange] = useState<Range>('24H');
   const [tab, setTab] = useState<Tab>('activity');
   const [depositOpen, setDepositOpen] = useState(false);
-  // Buy / sell are full pages. Fiat opens them unlocked (the user picks the
-  // crypto side); crypto preselects and locks this asset.
+  // Fiat trades exchange currencies; crypto trades keep their asset locked.
   const openTrade = (kind: 'buy' | 'sell') => {
-    router.push({ pathname: kind === 'buy' ? '/buy' : '/sell', params: FIAT_CODES.has(sym) ? {} : { asset: sym } } as any);
+    router.push(FIAT_CODES.has(sym)
+      ? { pathname: '/exchange', params: kind === 'buy' ? { to: sym, from: sym === 'USD' ? 'LYD' : 'USD' } : { from: sym } }
+      : { pathname: kind === 'buy' ? '/buy' : '/sell', params: { asset: sym } } as any);
   };
   // Deep-link: /asset/DOGE?action=sell goes straight to selling it (used by
   // the dust-convert prompt on Home).

@@ -24,6 +24,7 @@ import { consumeQuote, getQuote, type Quote, type SupportedAsset } from './price
 import { lockUserWallets } from '../wallet/atomicWallet';
 import { enforceKycLimit } from '../../utils/kycLimits';
 import { collectFee } from '../fee/feeCollector.service';
+import { assertPrincipalCapacity, executionMode, markVenueResult } from './principalExposure.service';
 import { postLedger, isLedgerCurrency, type Leg } from '../ledger/ledger.service';
 
 // Local alias for the centralized ledger-currency check.
@@ -302,7 +303,13 @@ export async function executeQuote(opts: {
       ? fiat
       : await usdtToFunding(settlementCurrency, fiat);
 
+  const principal = assetUpper !== 'USDT' && executionMode() === 'PRINCIPAL';
   const order = await prisma.$transaction(async (tx) => {
+    // No reachable venue: the order fills against Tazdan. Refuse it if it
+    // would take Tazdan's open crypto position past its limit.
+    if (principal) {
+      await assertPrincipalCapacity(tx, { asset: assetUpper, side: quote.side, quantity: crypto_, priceUsd: new Decimal(quote.marketPrice) });
+    }
     // Lock the user's crypto row first: the altBalances JSON is read, changed
     // and written back below, which is only safe while no other trade or
     // transfer can touch the same row.
@@ -511,6 +518,7 @@ export async function executeQuote(opts: {
         side: quote.side,
         quantity: roundQty(quote.asset, crypto_),
       });
+      markVenueResult(result.simulated);
       binanceOrderId = result.orderId;
     }
     return prisma.cryptoOrder.update({

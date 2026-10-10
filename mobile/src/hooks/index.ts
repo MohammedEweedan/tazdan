@@ -27,6 +27,7 @@ export { useActivityRealtime } from './useActivityRealtime';
 export { useNotificationRealtime } from './useNotificationRealtime';
 export { useCountries, useBanksByCountry, usePaymentMethods, usePlatformBanks } from './useGeo';
 export { useCoinIcons } from './useCoinIcons';
+export { useLimits, useLimitBlock, limitState, LIMITS_QUERY_KEY, type LimitStatus, type LimitedAction } from './useLimits';
 
 export const useWallets = () =>
   useQuery({

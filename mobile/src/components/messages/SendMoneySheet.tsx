@@ -24,7 +24,6 @@ import { getCurrencyMeta } from '@/constants';
 import type { Currency, Wallet } from '@/types';
 
 import { BottomSheet } from '@/components/ui/BottomSheet';
-const BRAND_BLUE = '#737373'; // mono accent neutral
 
 export interface SendMoneySheetProps {
   visible: boolean;
@@ -261,14 +260,14 @@ export function SendMoneySheet({
               onPress={() => valid && onSubmit(numAmount, selected!.currency, note.trim() || undefined)}
               style={({ pressed }) => ({
                 height: 52, borderRadius: 16, marginTop: 4,
-                backgroundColor: valid ? BRAND_BLUE : p.border,
+                backgroundColor: valid ? p.accent : p.border,
                 alignItems: 'center', justifyContent: 'center',
                 opacity: pressed ? 0.9 : 1,
                 flexDirection: 'row', gap: 8,
               })}
             >
-              <Ionicons name={mode === 'REQUEST' ? 'receipt-outline' : 'paper-plane'} size={15} color="#fff" />
-              <Text style={{ color: '#fff', fontSize: 15, fontWeight: '600' }}>
+              <Ionicons name={mode === 'REQUEST' ? 'receipt-outline' : 'paper-plane'} size={15} color={p.accentFg} />
+              <Text style={{ color: p.accentFg, fontSize: 15, fontWeight: '600' }}>
                 {valid
                   ? t(mode === 'REQUEST' ? 'money.requestCta' : 'money.sendCta', { amount: formatAmount(numAmount), currency: currency ?? '' })
                   : t(mode === 'REQUEST' ? 'money.requestFallback' : 'money.sendFallback')}

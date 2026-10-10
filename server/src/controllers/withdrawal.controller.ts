@@ -9,8 +9,29 @@ import { assertTransitioned, releaseReserve, reserveFunds } from '../services/wa
 import { enforceKycLimit } from '../utils/kycLimits';
 import { emitActivity } from '../utils/realtime';
 import { enforceStepUp } from '../services/security/stepUp.service';
+import { assertMovementAllowed } from '../services/platform/controls.service';
+import { recordTransition } from '../services/platform/lifecycle';
+import { markWithdrawalHistory } from '../services/wallet/withdrawalHistory';
+import { parsePositiveAmount } from '../services/wallet/atomicWallet';
+import { assessWithdrawal } from '../services/risk/withdrawalRisk';
+import { usdRate } from '../utils/kycLimits';
 
 const FIAT_CURRENCIES = new Set(['USD', 'EUR', 'GBP', 'AED', 'SAR', 'EGP', 'LYD']);
+
+/**
+ * The withdrawal fee settings are denominated in USD (fiat) and USDT
+ * (crypto). Convert the configured fee into the withdrawal currency so a
+ * "5" fee means 5 USD on a LYD withdrawal, not 5 LYD — and never 5 BTC.
+ */
+async function feeInCurrency(feeSettingValue: string | undefined, currency: string): Promise<Decimal> {
+  const feeUsd = new Decimal(feeSettingValue || '0');
+  if (!feeUsd.isFinite() || feeUsd.lte(0)) return new Decimal(0);
+  if (currency === 'USD' || currency === 'USDT') return feeUsd;
+  const unitUsd = await usdRate(currency);
+  if (!Number.isFinite(unitUsd) || unitUsd <= 0) throw new AppError(`No price available to compute the ${currency} withdrawal fee`, 503);
+  const decimals = FIAT_CURRENCIES.has(currency) ? (currency === 'LYD' ? 3 : 2) : 8;
+  return feeUsd.div(unitUsd).toDecimalPlaces(decimals, Decimal.ROUND_UP);
+}
 
 const withdrawalSchema = z.object({
   currency: z.string().min(1),
@@ -36,6 +57,8 @@ export class WithdrawalController {
     try {
       const data = withdrawalSchema.parse(req.body);
       const currency = data.currency.toUpperCase();
+      const amountDec = parsePositiveAmount(data.amount);
+      await assertMovementAllowed({ userId: req.user!.id, feature: 'withdrawals', currency });
       const isFiat = FIAT_CURRENCIES.has(currency);
       const isCryptoEnum = ['USDT','BTC','ETH','BNB','SOL','XRP','ADA','DOGE','MATIC','DOT','AVAX'].includes(currency);
 
@@ -65,6 +88,8 @@ export class WithdrawalController {
             }
           } catch { /* fall back to raw amount */ }
         }
+        // Limits first: never send a security code for a withdrawal that cannot go through.
+        await enforceKycLimit(req.user!.id, 'WITHDRAW', data.amount, currency);
         await enforceStepUp({ userId: req.user!.id, action: 'withdrawal', valueUsd, req, code: data.stepUpCode });
       }
 
@@ -112,28 +137,34 @@ export class WithdrawalController {
         where: { userId_currency: { userId: req.user!.id, currency: currency as any } },
       });
       if (!wallet) throw new AppError(`${currency} wallet not found`, 404);
-      const available = parseFloat(wallet.balance.toString()) - parseFloat(wallet.frozen.toString());
-      if (data.amount > available) throw new AppError(`Insufficient balance. Available: ${available} ${currency}`, 400);
+      const available = new Decimal(wallet.balance.toString()).minus(wallet.frozen.toString());
+      if (amountDec.gt(available)) throw new AppError(`Insufficient balance. Available: ${available.toFixed()} ${currency}`, 400, 'INSUFFICIENT_FUNDS');
 
       const feeKey = isFiat ? 'withdrawal_fee_usd' : 'withdrawal_fee_usdt';
       const feeSetting = await prisma.platformSettings.findUnique({ where: { key: feeKey } });
-      const fee = parseFloat(feeSetting?.value || '0');
-      const netAmount = data.amount - fee;
-      if (netAmount <= 0) throw new AppError('Amount too small after fee deduction', 400);
+      const fee = await feeInCurrency(feeSetting?.value, currency);
+      const netAmount = amountDec.minus(fee);
+      if (netAmount.lte(0)) throw new AppError('Amount too small after fee deduction', 400);
 
       const reference = generateReference('WDR');
+
+      // Screening and the risk engine. Every withdrawal here is approved by
+      // staff, so a review outcome continues into the queue with a note for
+      // the approver (and a compliance case); a blocking outcome stops here.
+      const risk = await assessWithdrawal({ userId: req.user!.id, amount: data.amount, currency, walletAddress: data.walletAddress ?? null, req, subjectId: reference });
+      if (risk.blocked) throw new AppError('This withdrawal can’t be processed. Please contact support.', 403, 'COMPLIANCE_HOLD');
 
       // Atomically reserve + create the withdrawal record + log activity.
       // The fee is booked when an admin completes the withdrawal, not here.
       const withdrawal = await prisma.$transaction(async (tx) => {
         // Checked and applied in one statement: concurrent requests can never
         // reserve more than the spendable balance.
-        await reserveFunds(tx, req.user!.id, currency, data.amount);
+        await reserveFunds(tx, req.user!.id, currency, amountDec);
         const w = await tx.withdrawal.create({
           data: {
             userId: req.user!.id,
             currency: currency as any,
-            amount: data.amount,
+            amount: amountDec,
             fee,
             netAmount,
             paymentMethod: isFiat ? 'BANK_TRANSFER' : (data.paymentMethod as any ?? undefined),
@@ -143,6 +174,8 @@ export class WithdrawalController {
             accountNumber: bankAccountDetails.accountNumber ?? data.accountNumber,
             accountName: bankAccountDetails.accountName ?? data.accountName,
             reference,
+            // Shown to the approving staff member in the withdrawal queue.
+            adminNotes: risk.review ? `Risk review (score ${risk.score}): ${risk.explanation}`.slice(0, 1000) : null,
           },
         });
 
@@ -154,18 +187,19 @@ export class WithdrawalController {
               userId: req.user!.id,
               type: 'WITHDRAWAL',
               currency: currency as any,
-              amount: new Decimal(-data.amount),
-              fee: new Decimal(fee),
-              balanceBefore: new Decimal(available),
-              balanceAfter:  new Decimal(available - data.amount),
+              amount: amountDec.neg(),
+              fee,
+              balanceBefore: available,
+              balanceAfter:  available.minus(amountDec),
               reference,
               description: isFiat
                 ? `Withdrawal to ${bankAccountDetails.bankName ?? data.bankName ?? 'bank'}`
                 : `Withdrawal ${data.network} → ${data.walletAddress?.slice(0, 8)}…`,
-              metadata: { withdrawalId: w.id, network: data.network ?? null } as any,
+              metadata: { withdrawalId: w.id, network: data.network ?? null, status: 'PENDING' } as any,
             },
           });
         }
+        await recordTransition(tx, { entityType: 'WITHDRAWAL', entityId: w.id, fromState: null, toState: 'PENDING', actorType: 'USER', actorId: req.user!.id });
 
         return w;
       });
@@ -176,7 +210,7 @@ export class WithdrawalController {
         data: admins.map((admin) => ({
           userId: admin.id,
           title: 'New Withdrawal Request',
-          message: `Withdrawal of ${data.amount} ${currency}${!isFiat ? ` to ${data.walletAddress} (${data.network})` : ` via bank`}. Ref: ${reference}`,
+          message: `Withdrawal of ${amountDec.toFixed()} ${currency}${!isFiat ? ` to ${data.walletAddress} (${data.network})` : ` via bank`}. Ref: ${reference}`,
           type: 'withdrawal',
         })),
       });
@@ -227,6 +261,8 @@ export class WithdrawalController {
         });
         assertTransitioned(moved, 'Only pending withdrawals can be cancelled');
         await releaseReserve(tx, req.user!.id, withdrawal.currency, withdrawal.amount);
+        await markWithdrawalHistory(tx, withdrawal.reference, 'CANCELLED');
+        await recordTransition(tx, { entityType: 'WITHDRAWAL', entityId: withdrawal.id, fromState: 'PENDING', toState: 'CANCELLED', actorType: 'USER', actorId: req.user!.id });
       });
 
       res.json({ message: 'Withdrawal cancelled' });

@@ -20,10 +20,16 @@ const config: Config = {
   },
   setupFiles: ['<rootDir>/src/__tests__/setup.ts'],
   testTimeout: 30000,
-  // Transform ESM-only packages that Jest can't require() directly
-  transformIgnorePatterns: ['node_modules/(?!(ed25519-hd-key)/)'],
-  // Integration tests require a live DB — run separately in CI
-  testPathIgnorePatterns: ['/node_modules/', '/dist/', 'integration\\.'],
+  // ESM-only packages (ed25519-hd-key and its @noble deps) are compiled to
+  // CommonJS by ts-jest so test files that import custody code can load.
+  transform: {
+    '^.+\\.tsx?$': 'ts-jest',
+    '^.+\\.m?js$': ['ts-jest', { tsconfig: { allowJs: true } }],
+  },
+  transformIgnorePatterns: ['node_modules/(?!(ed25519-hd-key|@noble)/)'],
+  // DB-backed suites (integration.*, concurrency, balance mutations) skip
+  // themselves unless CI=true or RUN_DB_TESTS=1, so they live in the default run.
+  testPathIgnorePatterns: ['/node_modules/', '/dist/'],
 };
 
 export default config;

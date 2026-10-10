@@ -31,6 +31,9 @@ import {
   USER_WALLET_COLUMNS, moveAltBalance, moveUserWalletColumn, moveWalletBalance, type UserWalletColumn,
 } from '../services/wallet/userTransfer';
 import { enforceKycLimit } from '../utils/kycLimits';
+import { valueInUsd } from '../utils/kycLimits';
+import { assertMovementAllowed } from '../services/platform/controls.service';
+import { enforceRiskBasedStepUp } from '../services/security/stepUp.service';
 
 const EDIT_WINDOW_MS = 5 * 60_000;
 
@@ -234,7 +237,17 @@ export class MessageController {
         const uwColumn = (USER_WALLET_COLUMNS as Record<string, UserWalletColumn>)[currency];
         const isWalletTable = WALLET_TABLE_CURRENCIES.has(currency);
 
-        await enforceKycLimit(senderId, 'SEND', amountDec, currency.replace(/_(ERC20|TRC20)$/, ''));
+        const baseCurrency = currency.replace(/_(ERC20|TRC20)$/, '');
+        await assertMovementAllowed({ userId: senderId, feature: 'transfers', currency: baseCurrency });
+        await enforceKycLimit(senderId, 'SEND', amountDec, baseCurrency); // before any security code
+        await enforceRiskBasedStepUp({
+          userId: senderId,
+          action: 'transfer',
+          valueUsd: await valueInUsd(amountDec.toString(), baseCurrency),
+          req,
+          code: typeof m.stepUpCode === 'string' ? m.stepUpCode : undefined,
+          biometricVerified: m.biometricVerified === true,
+        });
 
         const result = await prisma.$transaction(async (tx) => {
           const reference = `TRF-${require('uuid').v4().slice(0, 8).toUpperCase()}`;
@@ -340,6 +353,11 @@ export class MessageController {
         m.txRef = transferData.reference;
         m.status = 'COMPLETED';
         data.metadata = m;
+      }
+      // Never persist authentication material inside a chat message.
+      if (data.metadata) {
+        delete (data.metadata as Record<string, unknown>).stepUpCode;
+        delete (data.metadata as Record<string, unknown>).biometricVerified;
       }
 
       const msg = await prisma.message.create({

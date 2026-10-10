@@ -21,7 +21,9 @@ jest.mock('../services/wallet/walletDerivation.service', () => ({
 }));
 // Step-up codes are covered elsewhere; here they would only add noise.
 jest.mock('../services/security/stepUp.service', () => ({
+  ...jest.requireActual('../services/security/stepUp.service'),
   enforceStepUp: jest.fn().mockResolvedValue(undefined),
+  enforceRiskBasedStepUp: jest.fn().mockResolvedValue(undefined),
   issueStepUp: jest.fn(),
   verifyStepUp: jest.fn(),
 }));
@@ -190,10 +192,14 @@ describeDb('money endpoints under concurrent requests', () => {
     ));
     expect(statuses(results).filter((s) => s === 200)).toHaveLength(1);
 
+    // Escrow debits the seller once (into SYSTEM_ESCROW) — it is not also
+    // held as a `frozen` reservation. The old model left available at 40.
+    expect(afterLock.balance.toString()).toBe('70');
+    expect(afterLock.frozen.toString()).toBe('0');
+
     const after = await wallet(seller.id, 'USDT');
-    // One refund: the reservation is released once and the balance is back
-    // to its pre-trade level exactly once.
-    expect(after.frozen.toString()).toBe(afterLock.frozen.minus(30).toString());
+    // One refund: the balance is back to its pre-trade level exactly once.
+    expect(after.frozen.toString()).toBe('0');
     expect(after.balance.toString()).toBe('100');
   });
 

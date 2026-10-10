@@ -42,8 +42,8 @@ export default function AdminP2P() {
   });
 
   const resolveMut = useMutation({
-    mutationFn: ({ id, resolution }: { id: string; resolution: string }) =>
-      adminService.resolveP2PDispute(id, { resolution }),
+    mutationFn: ({ id, resolution, outcome }: { id: string; resolution: string; outcome: 'BUYER' | 'SELLER' }) =>
+      adminService.resolveP2PDispute(id, { resolution, outcome }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin-p2p'] });
       Alert.alert('Dispute resolved');
@@ -110,20 +110,35 @@ export default function AdminP2P() {
                       style={{ color: p.fg, fontSize: 14, minHeight: 60, textAlignVertical: 'top' }}
                     />
                   </View>
-                  <Pressable
-                    onPress={() => resolveMut.mutate({ id: drill.id, resolution: resolution.trim() })}
-                    disabled={!resolution.trim() || resolveMut.isPending}
-                    style={{
-                      height: 48, borderRadius: 12,
-                      backgroundColor: resolution.trim() ? '#22c55e' : p.pillBg,
-                      alignItems: 'center', justifyContent: 'center',
-                      opacity: resolution.trim() ? 1 : 0.6,
-                    }}
-                  >
-                    <Text style={{ color: resolution.trim() ? '#fff' : p.fgFaint, fontWeight: '600' }}>
-                      {resolveMut.isPending ? 'Resolving…' : 'Mark Resolved'}
-                    </Text>
-                  </Pressable>
+                  {/* The decision moves the escrow, so the admin picks who it is decided for. */}
+                  <View style={{ flexDirection: 'row', gap: 10 }}>
+                    {([
+                      { outcome: 'BUYER' as const, label: 'Release to buyer', body: 'The escrowed crypto is released to the buyer and the trade completes.' },
+                      { outcome: 'SELLER' as const, label: 'Refund seller', body: 'The escrowed crypto returns to the seller and the trade is cancelled.' },
+                    ]).map((o, i) => {
+                      const ready = resolution.trim().length >= 5 && !resolveMut.isPending;
+                      return (
+                        <Pressable
+                          key={o.outcome}
+                          disabled={!ready}
+                          onPress={() => Alert.alert(o.label, `${o.body} This cannot be undone.`, [
+                            { text: 'Cancel', style: 'cancel' },
+                            { text: o.label, style: 'destructive', onPress: () => resolveMut.mutate({ id: drill.id, resolution: resolution.trim(), outcome: o.outcome }) },
+                          ])}
+                          style={{
+                            flex: 1, height: 48, borderRadius: 12, alignItems: 'center', justifyContent: 'center',
+                            backgroundColor: i === 0 && ready ? p.accent : 'transparent',
+                            borderWidth: 1, borderColor: ready ? p.accent : p.border, opacity: ready ? 1 : 0.6,
+                          }}
+                        >
+                          <Text style={{ color: i === 0 && ready ? p.accentFg : ready ? p.accent : p.fgFaint, fontWeight: '600', fontSize: 13 }}>
+                            {resolveMut.isPending ? 'Resolving…' : o.label}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                  <Text style={{ color: p.fgFaint, fontSize: 11, marginTop: 8 }}>Notes need at least 5 characters and are recorded in the audit trail.</Text>
                 </View>
               )}
             </ScrollView>

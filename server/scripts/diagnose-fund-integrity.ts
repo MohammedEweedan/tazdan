@@ -1,131 +1,94 @@
 /**
- * Fund-integrity diagnostic — decomposes the audit's "internalHeld vs
- * enteredOutside" discrepancy (e.g. the persistent ~2,444 USDT delta) into
- * attributable sources so it stops being an unexplained number.
+ * Fund-integrity diagnostic — explains a currency's position line by line.
  *
- * The audit (fundIntegrity.service) computes, per currency:
- *   internalHeld   = Σ Wallet.balance
- *   enteredOutside = Σ confirmed Deposits − Σ completed/processing Withdrawals
- *                    + Σ ADMIN_CREDIT/ADMIN_DEBIT transactions
- *   diff           = internalHeld − enteredOutside
+ * Prints, for one currency:
+ *   1. The current audit (fundIntegrity.service): customer wallets, value
+ *      Tazdan holds on the ledger, every boundary flow by journal type and
+ *      class (EVIDENCED / TRADE / UNBACKED), read-model drift, rail exceptions.
+ *   2. A bridge from the OLD audit's number (Σ Wallet − deposits + withdrawals
+ *      − admin credits, the source of the "~2,444 USDT" warning) to the
+ *      ledger, so the historical discrepancy is attributed exactly.
+ *   3. The wallets that differ most from their ledger account.
  *
- * A positive diff = balances exist that no external inflow explains. This
- * script hunts the usual suspects, oldest-first:
- *   1. Seed/simulation users (emails matching seed patterns) holding balance
- *   2. Wallet rows whose balance ≠ Σ of their Transaction history
- *      (balance was set directly, bypassing the transaction trail)
- *   3. Transaction types that mint balance without an external counterpart
- *   4. On-chain settlements credited to UserWallet (different table!) that
- *      the audit's Wallet-table sums never see
- *
- * Read-only. Run: npx ts-node --transpile-only scripts/diagnose-fund-integrity.ts [CURRENCY]
+ * Read-only. Run on the production host:
+ *   docker compose exec api npx ts-node --transpile-only scripts/diagnose-fund-integrity.ts USDT
+ * (or `node dist/scripts/...` if ts-node is not in the image).
  */
 import dotenv from 'dotenv';
 dotenv.config();
 
 import { Decimal } from '@prisma/client/runtime/library';
 import { prisma } from '../src/utils/prisma';
+import { auditFundIntegrity } from '../src/services/ledger/fundIntegrity.service';
 
 const CURRENCY = (process.argv[2] ?? 'USDT').toUpperCase();
 const D = (v: unknown) => new Decimal(String(v ?? 0));
+const f = (v: Decimal | string) => D(v).toFixed(8).padStart(22);
 
 async function main() {
   console.log(`\n══ Fund-integrity diagnosis · ${CURRENCY} ═══════════════════════\n`);
 
-  // ── The audit's own numbers, reproduced ─────────────────────────────
-  const [walletSum, depSum, wdSum, adminSum] = await Promise.all([
+  const report = await auditFundIntegrity({ haltOnBreach: false });
+  const row = report.perCurrency.find((p) => p.currency === CURRENCY);
+  if (!row) { console.log(`No wallets or ledger activity for ${CURRENCY}.`); return; }
+
+  console.log('1) Current audit');
+  console.log(`   customer wallets        ${f(row.customerWallets)}`);
+  console.log(`   held by Tazdan (ledger) ${f(row.tazdanHeld)}   escrow, clearing, revenue, FX, treasury, partners, suspense`);
+  console.log(`   = internal              ${f(row.internalHeld)}`);
+  console.log(`   entered from outside    ${f(row.enteredOutside)}`);
+  console.log(`   read-model drift        ${f(row.diff)}   ${D(row.diff).abs().lt('0.0001') ? 'none' : '⚠ wallets differ from the ledger'}`);
+  console.log('\n   Boundary flows (net inflow; negative = net outflow):');
+  for (const l of row.flows) console.log(`     ${l.class.padEnd(9)} ${l.refType.padEnd(28)} ${f(l.amount)}  (${l.postings} postings)`);
+  console.log(`\n   unbacked, all time      ${f(row.unbacked)}`);
+  console.log(`   unbacked since baseline ${f(row.unbackedSinceBaseline)}   ${row.baseline ? `baseline ${row.baseline.at} by ${row.baseline.by}: "${row.baseline.note}"` : 'no baseline acknowledged yet'}`);
+  console.log(`   trading position        ${f(row.tradingPosition)}   net bought from the venue / Tazdan as principal`);
+  const rail = report.railExceptions.filter((r) => r.currency === CURRENCY);
+  console.log(`\n   Rail exceptions: ${rail.length}`);
+  for (const r of rail.slice(0, 20)) console.log(`     ${r.rail.padEnd(10)} ${r.refType.padEnd(20)} ${String(r.refId).padEnd(38)} posted ${r.posted ?? '—'} recorded ${r.recorded ?? '—'} · ${r.problem}`);
+
+  // 2) Bridge from the old audit.
+  const [allWallets, houseWallets, dep, wd, admin] = await Promise.all([
     prisma.wallet.aggregate({ where: { currency: CURRENCY as any }, _sum: { balance: true } }),
+    prisma.wallet.aggregate({ where: { currency: CURRENCY as any, user: { username: { in: ['platform', 'support'] } } }, _sum: { balance: true } }),
     prisma.deposit.aggregate({ where: { currency: CURRENCY as any, status: 'CONFIRMED' }, _sum: { amount: true } }),
     prisma.withdrawal.aggregate({ where: { currency: CURRENCY as any, status: { in: ['COMPLETED', 'PROCESSING'] } }, _sum: { amount: true } }),
     prisma.transaction.aggregate({ where: { currency: CURRENCY as any, type: { in: ['ADMIN_CREDIT', 'ADMIN_DEBIT'] as any } }, _sum: { amount: true } }),
   ]);
-  const internalHeld = D(walletSum._sum.balance);
-  const entered = D(depSum._sum.amount).minus(D(wdSum._sum.amount)).plus(D(adminSum._sum.amount));
-  const diff = internalHeld.minus(entered);
-  console.log(`internalHeld    ${internalHeld.toFixed(8)}`);
-  console.log(`enteredOutside  ${entered.toFixed(8)}  (deposits ${D(depSum._sum.amount)} − withdrawals ${D(wdSum._sum.amount)} + admin ${D(adminSum._sum.amount)})`);
-  console.log(`DIFF            ${diff.toFixed(8)}  ${diff.abs().lt('0.01') ? '✅ balanced' : '⚠️ unexplained'}\n`);
-  if (diff.abs().lt('0.01')) return;
+  const oldEntered = D(dep._sum.amount).minus(D(wd._sum.amount)).plus(D(admin._sum.amount));
+  const oldDiff = D(allWallets._sum.balance).minus(oldEntered);
+  console.log('\n2) Bridge from the old audit');
+  console.log(`   old audit difference    ${f(oldDiff)}   Σ all wallets − (deposits − withdrawals + admin credits/debits)`);
+  console.log('   is exactly the sum of:');
+  for (const l of row.flows) console.log(`     + ${l.refType.padEnd(26)} ${f(l.amount)}`);
+  console.log(`     − held by Tazdan        ${f(D(row.tazdanHeld).neg())}`);
+  console.log(`     + house wallets         ${f(D(houseWallets._sum.balance))}   platform/support Wallet rows (fees credited as USDT-equivalent)`);
+  console.log(`     − confirmed deposits    ${f(D(dep._sum.amount).neg())}`);
+  console.log(`     + withdrawals           ${f(D(wd._sum.amount))}`);
+  console.log(`     − admin credit/debit    ${f(D(admin._sum.amount).neg())}`);
+  console.log(`     + read-model drift      ${f(row.diff)}`);
+  const check = row.flows.reduce((s, l) => s.plus(D(l.amount)), new Decimal(0))
+    .minus(D(row.tazdanHeld)).plus(D(houseWallets._sum.balance)).minus(oldEntered).plus(D(row.diff));
+  console.log(`   = ${f(check)}   ${check.minus(oldDiff).abs().lt('0.000001') ? '✔ bridge closes' : `✘ bridge off by ${check.minus(oldDiff)}`}`);
 
-  // ── Suspect 1: seed/simulation accounts holding balance ─────────────
-  const seedPatterns = ['%simulat%', '%sim.local%', '%seed%', '%test%', '%demo%', '%example.com'];
-  const seedUsers = await prisma.user.findMany({
-    where: { OR: seedPatterns.map((p) => ({ email: { contains: p.replace(/%/g, '') } })) },
-    select: { id: true, email: true },
-  });
-  if (seedUsers.length) {
-    const seedBal = await prisma.wallet.aggregate({
-      where: { currency: CURRENCY as any, userId: { in: seedUsers.map((u) => u.id) } },
-      _sum: { balance: true },
-    });
-    const total = D(seedBal._sum.balance);
-    console.log(`[1] Seed-pattern accounts: ${seedUsers.length} users hold ${total.toFixed(8)} ${CURRENCY}`);
-    if (total.gt(0)) {
-      console.log(`    → ${total.div(diff).mul(100).toFixed(1)}% of the diff. These balances were`);
-      console.log(`      likely created by simulation scripts without Deposit rows.`);
-      console.log(`      Fix: zero them, or book one ADMIN_CREDIT covering them (audit clears).`);
-    }
-  } else {
-    console.log('[1] No seed-pattern accounts found.');
-  }
+  // 3) Worst read-model mismatches.
+  const worst = await prisma.$queryRaw<Array<{ email: string | null; wallet: string; ledger: string; gap: string }>>`
+    SELECT u."email", w."balance"::text AS wallet, COALESCE(a."balance", 0)::text AS ledger, (w."balance" - COALESCE(a."balance", 0))::text AS gap
+    FROM "Wallet" w JOIN "User" u ON u."id" = w."userId"
+    LEFT JOIN "LedgerAccount" a ON a."type" = 'USER' AND a."userId" = w."userId" AND a."currency" = w."currency"
+    WHERE w."currency"::text = ${CURRENCY} AND COALESCE(u."username", '') NOT IN ('platform', 'support')
+      AND ABS(w."balance" - COALESCE(a."balance", 0)) > 0.00000001
+    ORDER BY ABS(w."balance" - COALESCE(a."balance", 0)) DESC
+    LIMIT 10
+  `;
+  console.log(`\n3) Wallets that differ from their ledger account: ${worst.length ? '' : 'none'}`);
+  for (const w of worst) console.log(`     ${String(w.email).padEnd(40)} wallet ${w.wallet} ledger ${w.ledger} gap ${w.gap}`);
 
-  // ── Suspect 2: wallets whose balance ≠ their transaction trail ──────
-  const wallets = await prisma.wallet.findMany({
-    where: { currency: CURRENCY as any, balance: { gt: 0 } },
-    select: { userId: true, balance: true },
-  });
-  const txSums = await prisma.transaction.groupBy({
-    by: ['userId'],
-    where: { currency: CURRENCY as any },
-    _sum: { amount: true },
-  });
-  const txByUser = new Map(txSums.map((t) => [t.userId, D(t._sum.amount)]));
-  let orphaned = new Decimal(0);
-  const offenders: Array<{ userId: string; balance: Decimal; trail: Decimal }> = [];
-  for (const w of wallets) {
-    const trail = txByUser.get(w.userId) ?? new Decimal(0);
-    const gap = D(w.balance).minus(trail);
-    if (gap.abs().gte('0.01')) {
-      orphaned = orphaned.plus(gap);
-      offenders.push({ userId: w.userId, balance: D(w.balance), trail });
-    }
-  }
-  console.log(`\n[2] Wallets where balance ≠ Σ(transactions): ${offenders.length} wallets, net gap ${orphaned.toFixed(8)} ${CURRENCY}`);
-  for (const o of offenders.slice(0, 10)) {
-    const u = await prisma.user.findUnique({ where: { id: o.userId }, select: { email: true } });
-    console.log(`    ${u?.email ?? o.userId}: balance ${o.balance.toFixed(4)} vs trail ${o.trail.toFixed(4)}`);
-  }
-  if (offenders.length > 10) console.log(`    … and ${offenders.length - 10} more`);
-
-  // ── Suspect 3: balance-minting transaction types w/o external rows ──
-  const byType = await prisma.transaction.groupBy({
-    by: ['type'],
-    where: { currency: CURRENCY as any, amount: { gt: 0 } },
-    _sum: { amount: true },
-    _count: true,
-  });
-  console.log(`\n[3] Positive-amount transactions by type (what credited balances):`);
-  for (const t of byType.sort((a, b) => D(b._sum.amount).comparedTo(D(a._sum.amount)))) {
-    console.log(`    ${String(t.type).padEnd(18)} ${D(t._sum.amount).toFixed(4).padStart(16)}  (${t._count} txs)`);
-  }
-  console.log(`    ↑ DEPOSIT-type should ≈ the Deposit table sum; TRANSFER_IN nets out`);
-  console.log(`      against TRANSFER_OUT; anything else crediting large sums without an`);
-  console.log(`      external counterpart is the leak.`);
-
-  // ── Suspect 4: on-chain (UserWallet) vs audit scope ──────────────────
-  if (CURRENCY === 'USDT') {
-    const uw = await prisma.userWallet.aggregate({ _sum: { usdtErc20Bal: true, usdtTrc20Bal: true } });
-    console.log(`\n[4] On-chain USDT (UserWallet, OUTSIDE the audit's Wallet sums):`);
-    console.log(`    ERC20 ${D(uw._sum.usdtErc20Bal).toFixed(4)} · TRC20 ${D(uw._sum.usdtTrc20Bal).toFixed(4)}`);
-    console.log(`    If internal transfers ever moved value between Wallet and UserWallet`);
-    console.log(`    without a mirroring row, it shows up as an audit diff.`);
-  }
-
-  console.log(`\n── Next step ─────────────────────────────────────────────────`);
-  console.log(`Whichever bucket above ≈ ${diff.toFixed(2)} is your answer. If it's seed/`);
-  console.log(`simulation data (most likely on a platform pre-launch), either zero those`);
-  console.log(`wallets or book the admin-credit reconciliation from the dashboard so the`);
-  console.log(`audit goes green and STAYS green — any future drift is then a real signal.\n`);
+  console.log('\n── What to do ────────────────────────────────────────────────');
+  console.log('• Read-model drift: find the flow that changed a wallet without a journal (section 3), fix it, then correct the wallet with a maker-checked adjustment.');
+  console.log('• Rail exceptions: resolve each in the cockpit reconciliation queue.');
+  console.log('• Unbacked history (opening_balance, sim_seed_credit, admin_onboard_credit, fund_reconciliation, …): confirm it, then acknowledge the baseline with a note');
+  console.log('  (cockpit → Reconciliation → Fund integrity). After that, any new unbacked value is a breach.\n');
 }
 
 main()

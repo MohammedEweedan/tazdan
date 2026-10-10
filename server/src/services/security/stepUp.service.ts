@@ -33,7 +33,12 @@ const MAX_ATTEMPTS = 5;
 // instead of sending another — prevents duplicate "your code" emails.
 const RESEND_COOLDOWN_MS = 90_000;
 
-export type StepUpAction = 'withdrawal' | 'buy' | 'sell' | 'transfer';
+export type StepUpAction = 'withdrawal' | 'buy' | 'sell' | 'transfer' | 'account_close';
+
+/** How each action reads in the security-code email. */
+const ACTION_LABEL: Record<StepUpAction, string> = {
+  withdrawal: 'withdrawal', buy: 'purchase', sell: 'sale', transfer: 'transfer', account_close: 'account closure',
+};
 
 function hashCode(code: string): string {
   return crypto.createHash('sha256').update(code).digest('hex');
@@ -168,7 +173,7 @@ export async function issueStepUp(userId: string, action: StepUpAction): Promise
       to: user.email,
       subject: `Your tazdan security code: ${code}`,
       html: `<p>Hi ${user.firstName || 'there'},</p>
-        <p>Confirm your <b>${action}</b> with this code. It expires in 10 minutes.</p>
+        <p>Confirm your <b>${ACTION_LABEL[action] ?? action}</b> with this code. It expires in 10 minutes.</p>
         <p style="font-size:28px;font-weight:700;letter-spacing:4px">${code}</p>
         <p>If you didn't request this, your account may be at risk — change your password and contact support.</p>`,
       sender: 'auth',
@@ -285,10 +290,32 @@ export async function enforceStepUp(opts: {
       `Security verification required (${why}). ` +
         `${method === 'totp' ? 'Enter your authenticator code.' : 'Enter the code we emailed you.'}`,
       401,
+      'STEP_UP_REQUIRED',
+      { method },
     );
   }
 
   await verifyStepUp(opts.userId, opts.action, opts.code);
   // Passed → trust this device going forward.
   await rememberDevice(opts.userId, fp, opts.req).catch(() => {});
+}
+
+/**
+ * Risk-based variant for everyday payments (transfers, chat payments, claim
+ * links): a routine amount from a recognised device goes through without a
+ * prompt; a high-value amount or an unrecognised device must pass
+ * `enforceStepUp` (local biometric only counts on a known device).
+ */
+export async function enforceRiskBasedStepUp(opts: {
+  userId: string;
+  action: StepUpAction;
+  valueUsd: number;
+  req: { headers: Record<string, any> };
+  code?: string;
+  biometricVerified?: boolean;
+}): Promise<void> {
+  const known = await isKnownDevice(opts.userId, deviceFingerprint(opts.req));
+  const highValue = Number.isFinite(opts.valueUsd) && opts.valueUsd >= STEP_UP_USD;
+  if (known && !highValue) return;
+  await enforceStepUp(opts);
 }

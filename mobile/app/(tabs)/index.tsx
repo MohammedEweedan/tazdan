@@ -16,11 +16,12 @@ import { cryptoWalletAPI } from '@/lib/cryptoApi';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { SegmentedControl } from '@/components/ui/SegmentedControl';
-import { TopGradient, Panel, PanelRow } from '@/components/ui/ScreenShell';
+import { TopGradient, Panel, PanelRow, SectionLabel } from '@/components/ui/ScreenShell';
 import { HeaderIconButton as ChromeIconButton } from '@/components/ui/ScreenHeader';
 import { ShimmerBackdrop, useShimmerInk } from '@/components/home/ShimmerBackdrop';
 import { ActivityIndicator, Animated, Dimensions, Image, KeyboardAvoidingView, Modal, PanResponder, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { BlurView } from 'expo-blur';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Text, TextInput } from '@/components/ui/Text';
 import BalanceSvg, { Path as SvgPath, Defs as SvgDefs, LinearGradient as SvgLinearGradient, Stop as SvgStop, Line as SvgLine, Circle as SvgCircle } from 'react-native-svg';
 import QRCode from 'react-native-qrcode-svg';
@@ -49,6 +50,9 @@ import { WithdrawWidget } from '@/components/exchange/WithdrawWidget';
 import { RecurringBuyWidget } from '@/components/exchange/RecurringBuyWidget';
 import { PressableScale } from '@/components/ui/Motion';
 import { AnnouncementBanner } from '@/components/ui/AnnouncementBanner';
+import { Avatar } from '@/components/ui/Avatar';
+import { contactsService } from '@/services/contacts';
+import { useForexRates, useLiveFiatRates } from '@/hooks/useForexRates';
 import { F } from '@/theme';
 import type { Wallet } from '@/types';
 
@@ -228,6 +232,25 @@ export default function Home() {
   );
   const [dustPromptDismissed, setDustPromptDismissed] = useState(false);
 
+  // Swipeable balances (Revolut-style): the total, then each currency held
+  // (in that currency), then crypto as one page.
+  const cryptoUsd = useMemo(() => cryptoAssets.reduce((sum, w) => {
+    const tk = tickerKey(w.currency);
+    const price = priceMap[tk] ?? (tk === 'USDT' ? 1 : 0);
+    return sum + Number(w.balance) * price;
+  }, 0), [cryptoAssets, priceMap]);
+  type BalancePage = { key: string; kind: 'total' } | { key: string; kind: 'fiat'; wallet: Wallet } | { key: string; kind: 'crypto' };
+  const balancePages = useMemo<BalancePage[]>(() => [
+    { key: 'TOTAL', kind: 'total' },
+    ...fiatAssets.filter((w) => Number(w.balance) > 0)
+      .sort((a, b) => Number(b.fiatValueUsd) - Number(a.fiatValueUsd))
+      .map((w) => ({ key: w.currency, kind: 'fiat' as const, wallet: w })),
+    ...(cryptoAssets.length ? [{ key: 'CRYPTO', kind: 'crypto' as const }] : []),
+  ], [fiatAssets, cryptoAssets]);
+  const [balancePage, setBalancePage] = useState(0);
+  const currentPage = balancePages[Math.min(balancePage, balancePages.length - 1)];
+  const pageWidth = Dimensions.get('window').width;
+
   const totalUsd = useMemo(() => {
     return list.reduce((sum, w) => {
       const key = tickerKey(w.currency);
@@ -256,6 +279,13 @@ export default function Home() {
   // Privacy mode is shared with the Wallet tab and persisted.
   const showBalance = !useUiStore((st) => st.balancesHidden);
   const toggleBalancesHidden = useUiStore((st) => st.toggleBalancesHidden);
+  // Hidden balances can be peeked at by holding the figure; release hides again.
+  const [peek, setPeek] = useState(false);
+  const revealed = showBalance || peek;
+  const locale = useI18n((st) => st.locale);
+  const { data: contacts = [] } = useQuery({ queryKey: ['contacts'], queryFn: contactsService.list, staleTime: 60_000 });
+  const { data: liveFiat } = useLiveFiatRates();
+  const { data: forexRates } = useForexRates();
   const [cryptoOpen, setCryptoOpen] = useState(true);
   const [fiatOpen, setFiatOpen] = useState(true);
 
@@ -273,15 +303,18 @@ export default function Home() {
   // full page (never an in-place modal), so back/swipe and deep links work.
   const ink = useShimmerInk();
   const DOCK: { key: string; icon: keyof typeof Ionicons.glyphMap; label: string; onPress: () => void }[] = [
-    { key: 'topup', icon: 'add',          label: t('action.topup'), onPress: () => router.push('/topup' as any) },
+    { key: 'topup', icon: 'add',          label: t('action.topup'), onPress: () => router.push((currentPage?.kind === 'fiat' ? { pathname: '/topup', params: { currency: currentPage.wallet.currency } } : '/topup') as any) },
     { key: 'send',  icon: 'arrow-up',     label: t('action.send'),  onPress: () => router.push('/send' as any) },
-    { key: 'buy',   icon: 'trending-up',  label: t('action.buy'),   onPress: () => router.push('/buy' as any) },
+    { key: 'buy',   icon: currentPage?.kind === 'fiat' ? 'swap-horizontal' : 'trending-up',
+      label: t(currentPage?.kind === 'fiat' ? 'fx.exchange' : 'action.buy'),
+      onPress: () => router.push((currentPage?.kind === 'fiat' ? { pathname: '/exchange', params: { from: currentPage.wallet.currency } } : '/buy') as any) },
     { key: 'more',  icon: 'grid-outline', label: t('home.more'),    onPress: () => setMoreMenuVisible(true) },
   ];
 
   return (
     <View style={{ flex: 1, backgroundColor: p.bg }}>
-      <StatusBar style={themeMode === 'light' ? 'dark' : 'light'} />
+      {/* Light status bar over the blue compact card. */}
+      <StatusBar style={themeMode !== 'light' ? 'light' : 'dark'} />
       <TopGradient />
         <Animated.ScrollView
           showsVerticalScrollIndicator={false}
@@ -361,39 +394,91 @@ export default function Home() {
                 </Pressable>
               )}
             </Pressable>
+            <ChromeIconButton icon={showBalance ? 'eye-outline' : 'eye-off-outline'} label={t(showBalance ? 'wallet.hideBalances' : 'wallet.showBalances')} onPress={() => { h.selection(); toggleBalancesHidden(); }} />
             <ChromeIconButton icon="scan-outline" label={t('home.scan')} onPress={() => router.push('/scanner')} />
             <ChromeIconButton icon="notifications-outline" label={t('notifications.title')} badge={unreadData ?? 0} onPress={() => router.push('/notifications')} />
           </View>
 
-          {/* Balance */}
-            <Pressable
-              onPress={() => { h.selection(); toggleBalancesHidden(); }}
-              hitSlop={8}
-              accessibilityRole="button"
-              accessibilityLabel={t(showBalance ? 'wallet.hideBalances' : 'wallet.showBalances')}
-              style={{ flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'center', marginTop: 14 }}
+          {/* Balances — swipe between the total, each currency held and crypto.
+              Tap a figure for detail; when hidden, hold it to peek. */}
+            {walletsLoading ? <View style={{ alignItems: 'center', paddingVertical: 10, marginTop: 14 }}><Skeleton width={200} height={48} /></View> : walletsError ? <EmptyState icon="cloud-offline-outline" title={t('wallet.loadError')} actionLabel={t('common.retry')} onAction={() => refetchWallets()} /> : <>
+            <ScrollView
+              horizontal
+              pagingEnabled
+              showsHorizontalScrollIndicator={false}
+              scrollEventThrottle={16}
+              onMomentumScrollEnd={(e) => {
+                const i = Math.round(e.nativeEvent.contentOffset.x / pageWidth);
+                if (i !== balancePage) { h.selection(); setBalancePage(i); }
+              }}
+              style={{ marginTop: 12 }}
             >
-              <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '500' }}>{t('wallet.totalBalance')}</Text>
-              <Ionicons name={showBalance ? 'eye-outline' : 'eye-off-outline'} size={14} color={p.fgMuted} />
-            </Pressable>
-
-            {walletsLoading ? <View style={{ alignItems: 'center', paddingVertical: 10 }}><Skeleton width={200} height={48} /></View> : walletsError ? <EmptyState icon="cloud-offline-outline" title={t('wallet.loadError')} actionLabel={t('common.retry')} onAction={() => refetchWallets()} /> : <>
-            <AnimatedTotal
-              value={totalUsd}
-              palette={p}
-              dc={dc}
-              showBalance={showBalance}
-              onPress={() => { h.selection(); setBalanceChartVisible(true); }}
-            />
-            {/* Today's move — one plain line, hidden when nothing moved. */}
-            {Math.abs(deltaUsd) >= 0.005 && (
-              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, paddingHorizontal: 24, marginTop: 2 }}>
-                <Ionicons name={positive ? 'caret-up' : 'caret-down'} size={10} color={showBalance ? (positive ? p.greenFg : p.redFg) : p.fgFaint} />
-                <Text style={{ color: showBalance ? (positive ? p.greenFg : p.redFg) : p.fgFaint, fontSize: 13, fontWeight: '600', fontVariant: ['tabular-nums'] }}>
-                  {showBalance ? `${positive ? '+' : '−'}${dc.fmt(Math.abs(deltaUsd))} (${Math.abs(deltaPct).toFixed(2)}%)` : '••••'}
-                </Text>
-                <Text style={{ color: p.fgMuted, fontSize: 13 }}>{t('home.today')}</Text>
+              {balancePages.map((pg) => {
+                const peekProps = {
+                  onLongPress: () => { if (!showBalance) { h.selection(); setPeek(true); } },
+                  onPressOut: () => setPeek(false),
+                };
+                const label = pg.kind === 'total' ? t('home.balanceTotal')
+                  : pg.kind === 'crypto' ? t('home.balanceCrypto')
+                  : `${getCurrencyMeta(pg.wallet.currency)?.name ?? pg.wallet.currency} · ${pg.wallet.currency}`;
+                return (
+                  <View key={pg.key} style={{ width: pageWidth, alignItems: 'center' }}>
+                    <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '500' }} numberOfLines={1}>{label}</Text>
+                    {pg.kind === 'fiat' ? (
+                      <BalanceFigure
+                        symbol={fiatSymbol(pg.wallet.currency as any, locale)}
+                        amount={Number(pg.wallet.balance).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: ['LYD', 'TND'].includes(String(pg.wallet.currency)) ? 3 : 2 })}
+                        revealed={revealed}
+                        palette={p}
+                        onPress={() => { h.selection(); router.push(`/asset/${pg.wallet.currency}`); }}
+                        {...peekProps}
+                      />
+                    ) : (
+                      <AnimatedTotal
+                        value={pg.kind === 'total' ? totalUsd : cryptoUsd}
+                        palette={p}
+                        dc={dc}
+                        showBalance={revealed}
+                        onPress={() => { h.selection(); if (pg.kind === 'total') setBalanceChartVisible(true); else router.push('/portfolio/crypto' as any); }}
+                        {...peekProps}
+                      />
+                    )}
+                    {/* One plain line under each figure. */}
+                    {pg.kind === 'fiat' ? (() => {
+                      const lf = liveFiat?.[String(pg.wallet.currency)];
+                      const isDisplay = String(pg.wallet.currency) === dc.currency;
+                      const value = lf ? Number(pg.wallet.balance) * lf.usd : Number(pg.wallet.fiatValueUsd);
+                      const rate = !isDisplay && lf ? fiatRateLabel(String(pg.wallet.currency), lf.usd, dc, locale) : '';
+                      return (
+                        <Text style={{ color: p.fgMuted, fontSize: 13, marginTop: 2, fontVariant: ['tabular-nums'] }}>
+                          {[isDisplay ? null : revealed ? `≈ ${dc.fmt(value)}` : '••••', rate || null].filter(Boolean).join('  ·  ')}
+                        </Text>
+                      );
+                    })() : Math.abs(deltaUsd) >= 0.005 ? (
+                      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, marginTop: 2 }}>
+                        <Ionicons name={positive ? 'caret-up' : 'caret-down'} size={10} color={revealed ? (positive ? p.greenFg : p.redFg) : p.fgFaint} />
+                        <Text style={{ color: revealed ? (positive ? p.greenFg : p.redFg) : p.fgFaint, fontSize: 13, fontWeight: '600', fontVariant: ['tabular-nums'] }}>
+                          {revealed ? `${positive ? '+' : '−'}${dc.fmt(Math.abs(deltaUsd))} (${Math.abs(pg.kind === 'crypto' && cryptoUsd - deltaUsd > 0 ? (deltaUsd / (cryptoUsd - deltaUsd)) * 100 : deltaPct).toFixed(2)}%)` : '••••'}
+                        </Text>
+                        <Text style={{ color: p.fgMuted, fontSize: 13 }}>{pg.kind === 'crypto' ? t('home.assetsCount', { count: cryptoAssets.length }) + ' · ' + t('home.today') : t('home.today')}</Text>
+                      </View>
+                    ) : pg.kind === 'crypto' ? (
+                      <Text style={{ color: p.fgMuted, fontSize: 13, marginTop: 2 }}>{t('home.assetsCount', { count: cryptoAssets.length })}</Text>
+                    ) : null}
+                  </View>
+                );
+              })}
+            </ScrollView>
+            {/* Page dots — the active one is a short pill. */}
+            {balancePages.length > 1 && (
+              <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 5, marginTop: 10 }}>
+                {balancePages.map((pg, i) => (
+                  <View key={pg.key} style={{ height: 5, width: i === balancePage ? 14 : 5, borderRadius: 3, backgroundColor: i === balancePage ? p.fg : p.fgFaint, opacity: i === balancePage ? 0.9 : 0.45 }} />
+                ))}
               </View>
+            )}
+            {!showBalance && (
+              <Text style={{ color: p.fgFaint, fontSize: 11, textAlign: 'center', marginTop: 6 }}>{t('home.holdToPeek')}</Text>
             )}
             </>}
 
@@ -425,6 +510,29 @@ export default function Home() {
               between the pinned hero and the scrolling feed. */}
           <AnnouncementBanner />
 
+          {/* Contacts — people you've sent money to or received from. */}
+          {contacts.length > 0 && (
+            <View style={{ marginTop: 18 }}>
+              <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '600', letterSpacing: 0.6, paddingHorizontal: 24, marginBottom: 10 }}>
+                {t('home.contacts').toUpperCase()}
+              </Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 18, gap: 6 }}>
+                <Pressable onPress={() => { h.light(); router.push('/send' as any); }} style={({ pressed }) => ({ width: 64, alignItems: 'center', gap: 6, opacity: pressed ? 0.6 : 1 })}>
+                  <View style={{ width: 50, height: 50, borderRadius: 25, alignItems: 'center', justifyContent: 'center', backgroundColor: p.bgElev, borderWidth: StyleSheet.hairlineWidth, borderColor: p.border }}>
+                    <Ionicons name="add" size={22} color={p.fg} />
+                  </View>
+                  <Text numberOfLines={1} style={{ color: p.fgMuted, fontSize: 12 }}>{t('action.send')}</Text>
+                </Pressable>
+                {contacts.slice(0, 15).map((c) => (
+                  <Pressable key={c.id} onPress={() => { h.selection(); router.push(`/contact/${c.id}` as any); }} style={({ pressed }) => ({ width: 64, alignItems: 'center', gap: 6, opacity: pressed ? 0.6 : 1 })}>
+                    <Avatar name={c.name} uri={c.avatarUrl ?? undefined} size={50} />
+                    <Text numberOfLines={1} style={{ color: p.fg, fontSize: 12, maxWidth: 62 }}>{c.name.split(' ')[0]}</Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+            </View>
+          )}
+
           <View style={{ paddingHorizontal: 24, marginTop: 18, marginBottom: 4 }}>
             <SegmentedControl<Tab> value={tab} onChange={setTab} options={[
               { key: 'ASSETS', label: t('home.assets') },
@@ -441,9 +549,9 @@ export default function Home() {
               {/* Crypto Assets Section */}
               {cryptoAssets.length > 0 && (
                 <View style={{ marginTop: 16 }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 24, marginBottom: 10 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 24, marginBottom: 4 }}>
                     <Pressable onPress={() => setCryptoOpen((v) => !v)} style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
-                      <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '700', letterSpacing: 1 }}>
+                      <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '600', letterSpacing: 0.6 }}>
                         {t('home.cryptoAssets').toUpperCase()}
                       </Text>
                       <Ionicons name={cryptoOpen ? 'chevron-up' : 'chevron-down'} size={12} color={p.fgFaint} />
@@ -465,12 +573,13 @@ export default function Home() {
                       </Pressable>
                     </View>
                   </View>
-                  {cryptoOpen && cryptoAssets.map((w) => {
+                  {cryptoOpen && cryptoAssets.map((w, i) => {
                     const tk = tickerKey(w.currency);
                     const price = priceMap[tk] ?? (tk === 'USDT' ? 1 : undefined);
                     return (
                       <AssetRow
                         key={w.id}
+                        last={i === cryptoAssets.length - 1}
                         wallet={w}
                         palette={p}
                         sparkline={sparklineMap[tk]}
@@ -490,10 +599,9 @@ export default function Home() {
                     <Pressable
                       onPress={() => { h.selection(); router.push({ pathname: '/sell', params: { asset: dustAssets[0].currency } } as any); }}
                       style={({ pressed }) => ({
-                        marginHorizontal: 16, marginTop: 8, marginBottom: 4,
-                        paddingHorizontal: 16, paddingVertical: 12,
-                        borderRadius: 16, borderWidth: 1,
-                        borderColor: p.accentBorder,
+                        marginHorizontal: 24, marginTop: 10, marginBottom: 4,
+                        paddingHorizontal: 14, paddingVertical: 11,
+                        borderRadius: 14,
                         backgroundColor: pressed ? p.bgElev : p.accentSoft,
                         flexDirection: 'row', alignItems: 'center', gap: 12,
                       })}
@@ -522,9 +630,9 @@ export default function Home() {
                 <View style={{ marginTop: 24 }}>
                   <Pressable
                     onPress={() => setFiatOpen((v) => !v)}
-                    style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 24, marginBottom: 10 }}
+                    style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 24, marginBottom: 4 }}
                   >
-                    <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '700', letterSpacing: 1 }}>
+                    <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '600', letterSpacing: 0.6 }}>
                       {t('home.fiatAssets').toUpperCase()}
                     </Text>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
@@ -534,18 +642,32 @@ export default function Home() {
                       <Ionicons name={fiatOpen ? 'chevron-up' : 'chevron-down'} size={14} color={p.fgFaint} />
                     </View>
                   </Pressable>
-                  {fiatOpen && fiatAssets.map((w) => (
+                  {fiatOpen && fiatAssets.map((w, i) => {
+                    // Live rate (LYD from the parallel market), like crypto rows.
+                    const lf = liveFiat?.[String(w.currency)];
+                    const currency = String(w.currency);
+                    const isDisplay = currency === dc.currency;
+                    const perUsd = forexRates?.[currency];
+                    const unitUsd = currency === 'USD' ? 1 : lf?.usd ?? (perUsd && perUsd > 0 ? 1 / perUsd : undefined);
+                    const displayAvailable = dc.currency === 'USD' || Boolean(forexRates?.[dc.currency]);
+                    const rateLabel = isDisplay ? `${fiatSymbol(currency, locale)}1 = ${fiatSymbol(currency, locale)}1`
+                      : unitUsd && displayAvailable ? fiatRateLabel(currency, unitUsd, dc, locale) : t('wallet.rateUnavailable');
+                    return (
                     <AssetRow
                       key={w.id}
+                      last={i === fiatAssets.length - 1}
                       wallet={w}
                       palette={p}
-                      sparkline={undefined}
-                      changePct={undefined}
-                      liveUsd={undefined}
+                      sparkline={!isDisplay && lf?.points?.length ? lf.points : undefined}
+                      changePct={!isDisplay && lf?.change24hPct != null ? lf.change24hPct : undefined}
+                      liveUsd={unitUsd ? Number(w.balance) * unitUsd : undefined}
+                      rateLabel={rateLabel}
+                      showSparkline={showSparkline}
                       showBalance={showBalance}
                       onPress={() => { h.selection(); router.push(`/asset/${w.currency}`); }}
                     />
-                  ))}
+                    );
+                  })}
                 </View>
               )}
 
@@ -556,7 +678,7 @@ export default function Home() {
                   onPress={() => { h.selection(); router.push('/budgets'); }}
                   style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 24, marginBottom: 10 }}
                 >
-                  <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '700', letterSpacing: 1 }}>
+                  <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '600', letterSpacing: 0.6 }}>
                     {t('home.savings').toUpperCase()}
                   </Text>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
@@ -662,77 +784,111 @@ export default function Home() {
           )}
         </Animated.ScrollView>
 
-      {/* Compact bar — appears once the hero has scrolled off: frosted
-          glass, the balance centred, notifications on the right. */}
+      {/* Compact balance card — takes over once the hero has scrolled off:
+          brand blue, your photo and @handle, a large balance, privacy and
+          notifications. Greyscale in mono. */}
       <Animated.View
         pointerEvents={compact ? 'box-none' : 'none'}
-        style={{ position: 'absolute', top: 0, left: 0, right: 0, opacity: compactOpacity }}
+        style={{
+          position: 'absolute', top: 0, left: 0, right: 0, opacity: compactOpacity,
+          shadowColor: p.bg, shadowOpacity: 0.25, shadowRadius: 18, shadowOffset: { width: 0, height: 8 }, elevation: 8,
+        }}
       >
-        <BlurView
-          intensity={Platform.OS === 'ios' ? 50 : 0}
-          tint={themeMode === 'light' ? 'light' : 'dark'}
-          style={{
-            paddingTop: insets.top + 6, paddingBottom: 10, paddingHorizontal: 24,
-            flexDirection: 'row', alignItems: 'center',
-            backgroundColor: Platform.OS === 'ios' ? 'transparent' : (themeMode === 'light' ? 'rgba(250,250,247,0.94)' : 'rgba(22,24,28,0.94)'),
-            borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: p.border,
-          }}
+        <LinearGradient
+          colors={p.balanceGradient}
+          start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+          style={{ paddingTop: insets.top + 8, paddingBottom: 18, paddingHorizontal: 20, borderBottomLeftRadius: 26, borderBottomRightRadius: 26 }}
         >
-          <View style={{ width: 38 }} />
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+            <Pressable onPress={() => { h.selection(); router.push('/profile'); }} hitSlop={6} style={({ pressed }) => ({ flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 10, opacity: pressed ? 0.75 : 1 })}>
+              <View style={{ width: 34, height: 34, borderRadius: 17, overflow: 'hidden', backgroundColor: 'rgba(255,255,255,0.18)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.28)', alignItems: 'center', justifyContent: 'center' }}>
+                {av.kind === 'image' ? (
+                  <Image source={{ uri: av.uri }} style={{ width: 34, height: 34 }} />
+                ) : av.kind === 'emoji' ? (
+                  <Text style={{ fontSize: 17 }}>{av.char}</Text>
+                ) : (
+                  <Text style={{ color: p.fg, fontWeight: '700', fontSize: 14 }}>{initial}</Text>
+                )}
+              </View>
+              <Text numberOfLines={1} style={{ flexShrink: 1, color: p.fg, fontSize: 16, fontWeight: '700', letterSpacing: -0.3 }}>
+                {handleLabel || user?.firstName || ''}
+              </Text>
+            </Pressable>
+            <ChromeIconButton variant="default" icon={showBalance ? 'eye-outline' : 'eye-off-outline'} label={t(showBalance ? 'wallet.hideBalances' : 'wallet.showBalances')} onPress={toggleBalancesHidden} />
+            <ChromeIconButton variant="default" icon="notifications-outline" label={t('notifications.title')} badge={unreadData ?? 0} onPress={() => router.push('/notifications')} />
+          </View>
           <Pressable
             onPress={() => { h.selection(); setBalanceChartVisible(true); }}
+            onLongPress={() => { if (!showBalance) { h.selection(); setPeek(true); } }}
+            onPressOut={() => setPeek(false)}
+            delayLongPress={220}
             accessibilityRole="button"
             accessibilityLabel={t('wallet.totalBalance')}
-            style={{ flex: 1, alignItems: 'center' }}
+            style={{ marginTop: 14 }}
           >
-            <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '500' }}>{t('wallet.totalBalance')}</Text>
-            <Text style={{ color: p.fg, fontSize: 17, fontWeight: '700', letterSpacing: -0.3, fontVariant: ['tabular-nums'] }}>
-              {showBalance ? dc.fmt(totalUsd) : '••••••'}
-            </Text>
+            <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '500' }}>{t('wallet.totalBalance')}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 10, marginTop: 2 }}>
+              <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} style={{ flexShrink: 1, color: p.fg, fontFamily: F.semibold, fontSize: 32, fontWeight: '700', letterSpacing: -0.6, fontVariant: ['tabular-nums'] }}>
+                {revealed ? dc.fmt(totalUsd) : '••••••'}
+              </Text>
+              {Math.abs(deltaUsd) >= 0.005 && (
+                <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '600', fontVariant: ['tabular-nums'] }}>
+                  {revealed ? `${positive ? '▲' : '▼'} ${Math.abs(deltaPct).toFixed(2)}%` : ''}
+                </Text>
+              )}
+            </View>
           </Pressable>
-          <ChromeIconButton icon="notifications-outline" label={t('notifications.title')} badge={unreadData ?? 0} onPress={() => router.push('/notifications')} />
-        </BlurView>
+        </LinearGradient>
       </Animated.View>
 
 
-      {/* More — the rest of the money moves, then everything else. */}
+      {/* More — the rest of the money moves (round icons, four across, no
+          tiles), then account and tools as a plain list. */}
       <BottomSheet visible={moreMenuVisible} onClose={() => setMoreMenuVisible(false)} title={t('home.more')}>
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
+        <SectionLabel first>{t('home.moveMoney')}</SectionLabel>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', rowGap: 18, marginHorizontal: -4 }}>
           {[
-            { icon: 'trending-down' as const,      label: t('action.sell'),     href: '/sell' },
-            { icon: 'arrow-down' as const,         label: t('action.receive'),  href: '/receive' },
+            { icon: 'swap-horizontal' as const,    label: t('fx.exchange'),       href: '/exchange' },
+            { icon: 'trending-down' as const,      label: t('action.sell'),       href: '/sell' },
+            { icon: 'arrow-down' as const,         label: t('action.receive'),    href: '/receive' },
             { icon: 'arrow-up-circle-outline' as const, label: t('action.withdraw'), href: '/withdraw' },
-            { icon: 'swap-horizontal' as const,    label: t('action.swap'),     href: '/transfer' },
-            { icon: 'repeat' as const,             label: t('recurring.title'), href: '/recurring' },
-            { icon: 'scan-outline' as const,       label: t('home.scan'),       href: '/scanner' },
+            { icon: 'swap-horizontal' as const,    label: t('action.swap'),       href: '/transfer' },
+            { icon: 'globe-outline' as const,      label: t('action.sendAbroad'), href: '/remit' },
+            { icon: 'repeat' as const,             label: t('recurring.title'),   href: '/recurring' },
+            { icon: 'people-outline' as const,     label: 'P2P',                  href: '/p2p' },
+            { icon: 'scan-outline' as const,       label: t('home.scan'),         href: '/scanner' },
           ].map((item) => (
             <Pressable
               key={item.href}
               onPress={() => { h.selection(); setMoreMenuVisible(false); router.push(item.href as any); }}
               accessibilityRole="button"
-              style={({ pressed }) => ({
-                width: '31.5%', alignItems: 'center', gap: 8, paddingVertical: 16, borderRadius: 18,
-                backgroundColor: pressed ? p.bgRaised : p.bg, borderWidth: 1, borderColor: p.border,
-              })}
+              accessibilityLabel={item.label}
+              style={({ pressed }) => ({ width: '25%', alignItems: 'center', gap: 8, opacity: pressed ? 0.6 : 1 })}
             >
-              <Ionicons name={item.icon} size={21} color={p.fg} />
-              <Text numberOfLines={1} style={{ color: p.fg, fontSize: 12.5, fontWeight: '600' }}>{item.label}</Text>
+              <View style={{
+                width: 52, height: 52, borderRadius: 26, alignItems: 'center', justifyContent: 'center',
+                backgroundColor: p.bgElev, borderWidth: StyleSheet.hairlineWidth, borderColor: p.border,
+              }}>
+                <Ionicons name={item.icon} size={21} color={p.fg} />
+              </View>
+              <Text numberOfLines={1} style={{ color: p.fg, fontSize: 12, fontWeight: '500', maxWidth: '92%' }}>{item.label}</Text>
             </Pressable>
           ))}
         </View>
-        <Panel style={{ marginTop: 18 }}>
+        <SectionLabel>{t('home.yourAccount')}</SectionLabel>
+        <Panel>
           {[
             { icon: 'flag-outline' as const,          label: t('home.budgets'),         href: '/budgets' },
             { icon: 'card-outline' as const,          label: t('home.cards'),           href: '/cards' },
             { icon: 'time-outline' as const,          label: t('home.history'),         href: '/history' },
-            { icon: 'document-text-outline' as const, label: 'Statements',              href: '/statements' },
+            { icon: 'document-text-outline' as const, label: t('home.statements'),      href: '/statements' },
             { icon: 'pie-chart-outline' as const,     label: t('home.cryptoPortfolio'), href: '/portfolio/crypto' },
             { icon: 'wallet-outline' as const,        label: t('home.fiatPortfolio'),   href: '/portfolio/fiat' },
-            { icon: 'people-outline' as const,        label: t('home.referral'),        href: '/referral' },
+            { icon: 'gift-outline' as const,          label: t('home.referral'),        href: '/referral' },
             { icon: 'settings-outline' as const,      label: t('settings.title'),       href: '/settings' },
           ].map((item, i, all) => (
             <PanelRow key={item.href} icon={item.icon} label={item.label} last={i === all.length - 1}
-              onPress={() => { setMoreMenuVisible(false); router.push(item.href as any); }} />
+              onPress={() => { h.selection(); setMoreMenuVisible(false); router.push(item.href as any); }} />
           ))}
         </Panel>
       </BottomSheet>
@@ -1042,12 +1198,16 @@ function AnimatedTotal({
   dc,
   showBalance,
   onPress,
+  onLongPress,
+  onPressOut,
 }: {
   value: number;
   palette: Palette;
   dc: ReturnType<typeof useDisplayCurrency>;
   showBalance: boolean;
   onPress?: () => void;
+  onLongPress?: () => void;
+  onPressOut?: () => void;
 }) {
   const t = useT();
   const initializedRef = useRef(false);
@@ -1110,6 +1270,9 @@ function AnimatedTotal({
       {/* Centred under its label. Tap for the balance history chart. */}
       <Pressable
         onPress={onPress}
+        onLongPress={onLongPress}
+        onPressOut={onPressOut}
+        delayLongPress={220}
         hitSlop={12}
         accessibilityRole="button"
         accessibilityLabel={t('home.totalBalance')}
@@ -1165,6 +1328,45 @@ function AnimatedTotal({
         </Text>
       </Pressable>
     </View>
+  );
+}
+
+/** "$1 = 9.37 LD" for currencies worth less than the display currency, "€1 = $1.12" otherwise. */
+function fiatRateLabel(currency: string, usdPerUnit: number, dc: ReturnType<typeof useDisplayCurrency>, locale: string): string {
+  const inDisplay = dc.convert(usdPerUnit);
+  if (!Number.isFinite(inDisplay) || inDisplay <= 0) return '';
+  const own = fiatSymbol(currency as any, locale);
+  if (inDisplay < 1) {
+    const per = 1 / inDisplay;
+    return `${dc.symbol}1 = ${per.toLocaleString('en-US', { maximumFractionDigits: per >= 100 ? 2 : per >= 10 ? 3 : 4 })} ${own}`;
+  }
+  return `${own}1 = ${dc.symbol}${inDisplay.toLocaleString('en-US', { maximumFractionDigits: 4 })}`;
+}
+
+/** A static balance in its own currency, in the same lockup as AnimatedTotal. */
+function BalanceFigure({ symbol, amount, revealed, palette: p, onPress, onLongPress, onPressOut }: {
+  symbol: string; amount: string; revealed: boolean; palette: Palette;
+  onPress?: () => void; onLongPress?: () => void; onPressOut?: () => void;
+}) {
+  const shown = revealed ? amount : '••••••';
+  const [whole, frac] = shown.split('.');
+  const digits = amount.replace(/[^0-9]/g, '').length;
+  const size = digits <= 7 ? 48 : digits <= 9 ? 42 : digits <= 11 ? 34 : 28;
+  const lineHeight = Math.round(size * 1.06);
+  return (
+    <Pressable onPress={onPress} onLongPress={onLongPress} onPressOut={onPressOut} delayLongPress={220} hitSlop={12}
+      style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'center', paddingHorizontal: 24, paddingVertical: 2, maxWidth: '100%' }}>
+      <Text style={{ color: p.fgMuted, fontFamily: F.semibold, fontSize: Math.max(18, Math.round(size * (symbol.length > 2 ? 0.36 : 0.5))), lineHeight, marginTop: Math.max(0.5, size * 0.06), marginRight: 4, fontVariant: ['tabular-nums'] }}>
+        {symbol}
+      </Text>
+      <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.78}
+        style={{ color: p.fg, fontFamily: F.semibold, fontWeight: '600', fontSize: size, lineHeight, letterSpacing: -0.5, fontVariant: ['tabular-nums'], includeFontPadding: false }}>
+        {whole}
+        {frac != null && (
+          <Text style={{ color: p.fgFaint, fontFamily: F.semibold, fontSize: Math.max(18, Math.round(size * 0.6)), lineHeight, fontVariant: ['tabular-nums'] }}>.{frac}</Text>
+        )}
+      </Text>
+    </Pressable>
   );
 }
 
@@ -1494,7 +1696,24 @@ function TxDetailModal({
   );
 }
 
-/* ── Activity list — shows the most recent transactions inline on home ─── */
+/* ── Activity list — the most recent transactions inline on home ───
+ * Grouped by day, one calm row per transaction: the asset icon with a small
+ * direction badge, a short title, time + context underneath, and the amount
+ * (incoming in green, outgoing in the normal ink — red is for failures). */
+const INCOMING = new Set(['DEPOSIT', 'TRANSFER_IN', 'RECEIVE', 'SELL', 'P2P_BUY', 'CASHBACK', 'ADMIN_CREDIT', 'REFERRAL_REWARD']);
+const TRADES = new Set(['BUY', 'SELL', 'SWAP']);
+const PENDING_STATES = new Set(['PENDING', 'WAITING_CONFIRMATION', 'PROCESSING', 'QUEUED', 'SUBMITTED', 'IN_PROGRESS', 'AWAITING_ESCROW', 'ESCROW_FUNDED', 'PAYMENT_SENT',
+  'COMPLIANCE_PENDING', 'MANUAL_REVIEW', 'FUNDING_PENDING', 'FUNDED', 'ROUTING', 'ROUTED', 'SETTLEMENT_PENDING', 'SETTLED', 'PAYOUT_PENDING']);
+const FAILED_STATES = new Set(['FAILED', 'REJECTED', 'CANCELLED', 'DECLINED', 'EXPIRED', 'REFUNDED']);
+
+function dayLabel(d: Date, t: (k: string) => string, locale: string): string {
+  const start = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const diff = Math.round((start(new Date()) - start(d)) / 86400_000);
+  if (diff === 0) return t('home.dayToday');
+  if (diff === 1) return t('home.yesterday');
+  return d.toLocaleDateString(locale === 'ar' ? 'ar-LY' : 'en-GB', { weekday: 'short', day: 'numeric', month: 'short', ...(diff > 300 ? { year: 'numeric' } : {}) });
+}
+
 function ActivityList({
   palette: p, dc, items, onSeeAll,
 }: {
@@ -1504,6 +1723,7 @@ function ActivityList({
   onSeeAll: () => void;
 }) {
   const t = useT();
+  const locale = useI18n((s) => s.locale);
   const [selectedTx, setSelectedTx] = useState<TxItem | null>(null);
 
   if (items.length === 0) {
@@ -1517,124 +1737,138 @@ function ActivityList({
     );
   }
 
+  const shown = items.slice(0, 8);
+  let lastDay = '';
+
   return (
-    <View>
-      {items.slice(0, 8).map((tx) => {
+    <View style={{ marginTop: 6 }}>
+      {shown.map((tx, idx) => {
         const meta = tx.metadata ?? {};
         const amt  = Number(tx.amount);
         const abs  = Math.abs(amt);
         const type = tx.type;
+        const when = new Date(tx.createdAt);
+        const day = dayLabel(when, t, locale);
+        const header = day !== lastDay ? day : null;
+        lastDay = day;
+        const nextDay = idx + 1 < shown.length ? dayLabel(new Date(shown[idx + 1].createdAt), t, locale) : null;
+        const lastInGroup = nextDay !== day;
 
-        const cpName = meta.counterpartyName ?? tx.counterpartyName ?? tx.description;
+        const cpName = meta.counterpartyName ?? tx.counterpartyName ?? null;
         const txAsset = meta.asset ?? tx.currency;
-        const assetMeta = getCurrencyMeta(txAsset);
-        const assetName = assetMeta?.name ?? txAsset;
+        const assetName = getCurrencyMeta(txAsset)?.name ?? txAsset;
 
-        let title = '';
+        let title: string;
         if      (type === 'BUY')          title = `Bought ${assetName}`;
         else if (type === 'SELL')         title = `Sold ${assetName}`;
-        else if (type === 'DEPOSIT')      title = `Deposit · ${assetName}`;
-        else if (type === 'WITHDRAW' || type === 'WITHDRAWAL') title = `Withdrawal · ${assetName}`;
-        else if (type === 'TRANSFER_IN')  title = cpName ? `From ${cpName}` : 'Transfer in';
-        else if (type === 'TRANSFER_OUT') title = cpName ? `To ${cpName}` : 'Transfer out';
-        else if (type === 'SEND')         title = cpName ? `Sent to ${cpName}` : 'Sent';
-        else if (type === 'RECEIVE')      title = cpName ? `From ${cpName}` : 'Received';
-        else if (type === 'SWAP')         title = `Swap · ${assetName}`;
-        else if (type === 'P2P_BUY')      title = `P2P Buy · ${assetName}`;
-        else if (type === 'P2P_SELL')     title = `P2P Sell · ${assetName}`;
-        else if (type === 'CARD_SPEND')   title = `Card Spend`;
-        else if (type === 'CASHBACK')     title = `Cashback`;
+        else if (type === 'DEPOSIT')      title = 'Top-up';
+        else if (type === 'WITHDRAW' || type === 'WITHDRAWAL') title = 'Withdrawal';
+        else if (type === 'TRANSFER_IN' || type === 'RECEIVE') title = cpName ? cpName : 'Received';
+        else if (type === 'TRANSFER_OUT' || type === 'SEND')   title = cpName ? cpName : 'Sent';
+        else if (type === 'SWAP')         title = `Converted to ${assetName}`;
+        else if (type === 'P2P_BUY')      title = `P2P · bought ${assetName}`;
+        else if (type === 'P2P_SELL')     title = `P2P · sold ${assetName}`;
+        else if (type === 'CARD_SPEND')   title = tx.description ?? 'Card payment';
+        else if (type === 'CASHBACK')     title = 'Cashback';
+        else if (type === 'ADMIN_CREDIT') title = 'Credit from Tazdan';
         else title = tx.description ?? (type.charAt(0) + type.slice(1).toLowerCase().replace(/_/g, ' '));
 
-        const dateStr = new Date(tx.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-        let subtitle = dateStr;
+        const time = when.toLocaleTimeString(locale === 'ar' ? 'ar-LY' : 'en-GB', { hour: '2-digit', minute: '2-digit' });
+        const st = String(tx.status ?? '').toUpperCase();
+        const pending = PENDING_STATES.has(st);
+        const failed = FAILED_STATES.has(st);
+        let context: string | null = null;
         if (type === 'BUY' || type === 'SELL') {
-          // Show the actual wallet/currency used to fund (BUY) or receive (SELL).
           const settleCcy = meta.settlementCurrency as string | undefined;
-          const settleAmt = meta.settlementAmount as string | undefined;
-          const verb = type === 'BUY' ? 'paid with' : 'received as';
-          const fundPart = settleCcy
-            ? `${verb} ${settleAmt ? `${settleAmt} ` : ''}${settleCcy}`
-            : null;
-          const pricePart = meta.priceUsd ? `@ ${dc.fmt(meta.priceUsd)}` : null;
-          subtitle = [pricePart, fundPart, dateStr].filter(Boolean).join('  ·  ');
-        } else if ((type === 'TRANSFER_IN' || type === 'TRANSFER_OUT' || type === 'SEND' || type === 'RECEIVE') && (meta.note ?? tx.note ?? tx.description)) {
-          subtitle = (meta.note ?? tx.note ?? tx.description ?? '') + '  ·  ' + dateStr;
-        }
+          context = settleCcy ? `${type === 'BUY' ? 'Paid with' : 'Received in'} ${settleCcy}` : null;
+        } else if (type === 'TRANSFER_IN' || type === 'RECEIVE') context = cpName ? 'Received' : null;
+        else if (type === 'TRANSFER_OUT' || type === 'SEND') context = cpName ? 'Sent' : null;
+        const note = meta.note ?? tx.note;
+
+        const incoming = INCOMING.has(type) || (!TRADES.has(type) && amt > 0);
+        const badgeIcon: keyof typeof Ionicons.glyphMap = TRADES.has(type) ? 'swap-horizontal' : incoming ? 'arrow-down' : 'arrow-up';
 
         const showDual  = (type === 'BUY' || type === 'SELL') && meta.cryptoAmount;
-        // Display the fiat side in the transaction's OWN currency (the
-        // wallet/method actually used), exactly — never the display currency.
+        // The fiat side in the transaction's own currency, never the display currency.
         const settleCcy = (meta.settlementCurrency ?? tx.currency) as any;
         const settleAbs = meta.settlementAmount != null ? Math.abs(Number(meta.settlementAmount)) : abs;
         const fiatStr   = formatMoney(settleAbs, settleCcy, { showSymbol: true });
-        const cryptoStr = meta.cryptoAmount
-          ? formatCryptoDisplay(meta.cryptoAmount, txAsset, 6)
-          : null;
+        const cryptoStr = meta.cryptoAmount ? formatCryptoDisplay(meta.cryptoAmount, txAsset, 6) : null;
+        const primary = showDual && cryptoStr
+          ? `${type === 'BUY' ? '+' : '−'}${cryptoStr}`
+          : `${incoming ? '+' : '−'}${fiatStr}`;
+        const primaryColor = failed ? p.fgFaint : (showDual ? type === 'BUY' : incoming) ? p.greenFg : p.fg;
 
         return (
-          <Pressable
-            key={tx.id}
-            onPress={() => setSelectedTx(tx)}
-            style={({ pressed }) => ({
-              flexDirection: 'row', alignItems: 'center',
-              paddingHorizontal: 20, paddingVertical: 14,
-              borderBottomWidth: 1, borderBottomColor: p.border,
-              backgroundColor: pressed ? p.bgElev : 'transparent',
-            })}
-          >
-            {/* Currency icon */}
-            <View style={{ flexShrink: 0 }}>
-              <CurrencyIcon currency={txAsset} palette={p} size={40} />
-            </View>
-
-            {/* Title + subtitle */}
-            <View style={{ flex: 1, marginLeft: 12, minWidth: 0 }}>
-              <Text style={{ color: p.fg, fontSize: 15, fontWeight: '600' }} numberOfLines={1}>
-                {title}
+          <View key={tx.id}>
+            {header ? (
+              <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '600', letterSpacing: 0.6, paddingHorizontal: 24, marginTop: idx === 0 ? 4 : 18, marginBottom: 2 }}>
+                {header.toUpperCase()}
               </Text>
-              <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '500', marginTop: 2 }} numberOfLines={1}>
-                {subtitle}
-              </Text>
-            </View>
+            ) : null}
+            <Pressable
+              onPress={() => setSelectedTx(tx)}
+              style={({ pressed }) => ({
+                flexDirection: 'row', alignItems: 'center',
+                paddingHorizontal: 24, paddingVertical: 11,
+                backgroundColor: pressed ? p.bgElev : 'transparent',
+              })}
+            >
+              <View style={{ width: 40, height: 40 }}>
+                <CurrencyIcon currency={txAsset} palette={p} size={40} />
+                <View style={{
+                  position: 'absolute', right: -3, bottom: -3, width: 18, height: 18, borderRadius: 9,
+                  backgroundColor: p.bg, alignItems: 'center', justifyContent: 'center',
+                }}>
+                  <View style={{ width: 14, height: 14, borderRadius: 7, backgroundColor: p.bgElev, borderWidth: StyleSheet.hairlineWidth, borderColor: p.border, alignItems: 'center', justifyContent: 'center' }}>
+                    <Ionicons name={badgeIcon} size={9} color={incoming && !TRADES.has(type) ? p.greenFg : p.fgMuted} />
+                  </View>
+                </View>
+              </View>
 
-            {/* Value */}
-            <View style={{ alignItems: 'flex-end', flexShrink: 0, marginLeft: 8 }}>
-              {showDual && cryptoStr ? (
-                <>
-                  <Text style={{ color: type === 'BUY' ? p.greenFg : p.redFg, fontSize: 14, fontWeight: '600', fontVariant: ['tabular-nums'] }}>
-                    {type === 'BUY' ? '+' : '−'}{cryptoStr}
+              <View style={{ flex: 1, marginLeft: 14, minWidth: 0 }}>
+                <Text style={{ color: failed ? p.fgMuted : p.fg, fontSize: 15, fontWeight: '600', letterSpacing: -0.1 }} numberOfLines={1}>
+                  {title}
+                </Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
+                  {pending && !failed ? (
+                    <Text style={{ color: p.amberFg, fontSize: 12, fontWeight: '600' }}>{t('home.pending')}</Text>
+                  ) : null}
+                  <Text style={{ color: p.fgMuted, fontSize: 12, flexShrink: 1 }} numberOfLines={1}>
+                    {[failed ? String(tx.status).charAt(0) + String(tx.status).slice(1).toLowerCase() : null, time, context, note].filter(Boolean).join(' · ')}
                   </Text>
-                  <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '500', marginTop: 2, fontVariant: ['tabular-nums'] }}>
+                </View>
+              </View>
+
+              <View style={{ alignItems: 'flex-end', flexShrink: 0, marginLeft: 10 }}>
+                <Text style={{
+                  color: primaryColor, fontSize: 15, fontWeight: '600', fontVariant: ['tabular-nums'],
+                  textDecorationLine: failed ? 'line-through' : 'none',
+                }}>
+                  {primary}
+                </Text>
+                {showDual && cryptoStr ? (
+                  <Text style={{ color: p.fgMuted, fontSize: 12, marginTop: 2, fontVariant: ['tabular-nums'] }}>
                     {type === 'BUY' ? '−' : '+'}{fiatStr}
                   </Text>
-                </>
-              ) : (
-                <Text style={{
-                  color: amt >= 0 ? p.greenFg : p.redFg,
-                  fontSize: 14, fontWeight: '600', fontVariant: ['tabular-nums'],
-                }}>
-                  {amt >= 0 ? '+' : '−'}{fiatStr}
-                </Text>
-              )}
-            </View>
-          </Pressable>
+                ) : null}
+              </View>
+            </Pressable>
+            {!lastInGroup ? <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: p.border, marginLeft: 24 + 40 + 14, marginRight: 24 }} /> : null}
+          </View>
         );
       })}
 
       <Pressable
         onPress={onSeeAll}
+        accessibilityRole="link"
         style={({ pressed }) => ({
-          marginTop: 18, marginHorizontal: 24,
-          height: 44, borderRadius: 22,
-          alignItems: 'center', justifyContent: 'center',
-          flexDirection: 'row', gap: 6,
-          backgroundColor: pressed ? p.border : p.pillBg,
-          borderWidth: 1, borderColor: p.border,
+          flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4,
+          marginTop: 14, paddingVertical: 10, opacity: pressed ? 0.6 : 1,
         })}
       >
-        <Text style={{ color: p.fg, fontSize: 13, fontWeight: '600' }}>{t('home.seeAllTx')}</Text>
-        <Ionicons name="chevron-forward" size={14} color={p.fg} />
+        <Text style={{ color: p.accentText, fontSize: 14, fontWeight: '600' }}>{t('home.seeAllTx')}</Text>
+        <Ionicons name="chevron-forward" size={14} color={p.accentText} />
       </Pressable>
 
       <TxDetailModal tx={selectedTx} palette={p} dc={dc} onClose={() => setSelectedTx(null)} />
@@ -2100,105 +2334,82 @@ function useDepositAddress(currency: string, enabled: boolean) {
 }
 
 /* ── Asset row ─── */
-function AssetRow({ wallet, palette: p, onPress, liveUsd, unitPrice, sparkline, changePct, showBalance = true, showSparkline = true }: {
+function AssetRow({ wallet, palette: p, onPress, liveUsd, unitPrice, rateLabel, sparkline, changePct, showBalance = true, showSparkline = true, last = false }: {
   wallet: Wallet;
   palette: Palette;
   onPress?: () => void;
   liveUsd?: number;
   unitPrice?: number;
+  /** Fiat rows: the exchange rate against the display currency (e.g. "$1 = 9.37 LD"). */
+  rateLabel?: string;
   sparkline?: number[];
   changePct?: number;
   showBalance?: boolean;
   showSparkline?: boolean;
+  /** Last row of its section: no separator underneath. */
+  last?: boolean;
 }) {
   const dc = useDisplayCurrency();
   const meta = ASSET_META[wallet.currency] ?? { title: wallet.currency, subDecimals: 6 };
   const usd = liveUsd ?? Number(wallet.fiatValueUsd);
   const positive = (changePct ?? 0) >= 0;
-  const sparkColor = positive ? p.greenFg : p.redFg;
   const maxDec = Math.min(meta.subDecimals, 8);
-  const balanceStr = Number(wallet.balance).toLocaleString('en-US', { maximumFractionDigits: maxDec });
-  // Crypto rows show unit market price; fiat rows show holding value
-  const rightStr = unitPrice !== undefined
-    ? unitPrice >= 1
-      ? '$' + unitPrice.toLocaleString('en-US', { maximumFractionDigits: 2 })
-      : '$' + unitPrice.toLocaleString('en-US', { maximumFractionDigits: 6 })
-    : dc.fmt(usd);
-  // Privacy mode hides what you HOLD (amounts, holding values) — never the
-  // market (unit prices, 24h change), which is public information.
-  const maskedBalance = '••••';
-  const rightIsPrice = unitPrice !== undefined;
-  const maskedRight = rightIsPrice ? rightStr : '••••••';
+  const amount = Number(wallet.balance).toLocaleString('en-US', { maximumFractionDigits: maxDec });
+  // Privacy mode hides what you HOLD (amount, value) — never the market
+  // (unit price, 24h change), which is public information.
+  const price = rateLabel ?? (unitPrice !== undefined
+    ? '$' + unitPrice.toLocaleString('en-US', { maximumFractionDigits: unitPrice >= 1 ? 2 : 6 })
+    : null);
+  const ticker = wallet.currency.replace(/_.*/, '');
+  const holding = `${showBalance ? amount : '••••'} ${ticker}`;
+  const isCrypto = getCurrencyMeta(wallet.currency)?.kind === 'crypto';
+  const hasSpark = showSparkline && sparkline && sparkline.length >= 2;
 
   return (
-    <Pressable
-      onPress={onPress}
-      style={({ pressed }) => ({
-        marginHorizontal: 16, marginBottom: 4,
-        paddingHorizontal: 14, paddingVertical: 13,
-        borderRadius: 18,
-        backgroundColor: pressed ? p.bgElev : p.bgElev,
-        borderWidth: 1, borderColor: p.border,
-      })}
-    >
-      {/* Top row: icon, name/balance, value + change pill */}
-      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-        <CurrencyIcon currency={wallet.currency} palette={p} />
+    <View testID={`asset-row-${wallet.currency}`}>
+      <Pressable
+        onPress={onPress}
+        style={({ pressed }) => ({
+          flexDirection: 'row', alignItems: 'center',
+          paddingHorizontal: 24, paddingVertical: 12,
+          backgroundColor: pressed ? p.bgElev : 'transparent',
+        })}
+      >
+        <CurrencyIcon currency={wallet.currency} palette={p} size={40} />
         <View style={{ flex: 1, marginLeft: 12, minWidth: 0 }}>
-          <Text style={{ color: p.fg, fontSize: 15.5, fontWeight: '700', letterSpacing: -0.2 }} numberOfLines={1}>
-            {meta.title}
+          <Text style={{ color: p.fg, fontSize: 15, fontWeight: '600', letterSpacing: -0.1 }} numberOfLines={1}>
+            {isCrypto ? ticker : meta.title}
           </Text>
-          <Text style={{ color: p.fgMuted, fontSize: 12.5, fontWeight: '500', marginTop: 2, fontVariant: ['tabular-nums'] }} numberOfLines={1}>
-            {showBalance ? balanceStr : maskedBalance} {wallet.currency}
+          <Text style={{ color: p.fgMuted, fontSize: 12, marginTop: 2, fontVariant: ['tabular-nums'] }} numberOfLines={1}>
+            {price ?? '—'}
           </Text>
         </View>
-        <View style={{ alignItems: 'flex-end', minWidth: 72 }}>
-          <Text style={{ color: p.fg, fontSize: 15, fontWeight: '700', fontVariant: ['tabular-nums'], letterSpacing: -0.2 }} numberOfLines={1}>
-            {showBalance ? rightStr : maskedRight}
+        {showSparkline && <View testID="asset-chart-column" style={{ width: 54, flexShrink: 0, height: 28, marginHorizontal: 8, justifyContent: 'center', opacity: .85 }}>
+          {hasSpark && <Sparkline data={sparkline!} width={54} height={22} color={positive ? p.greenFg : p.redFg} strokeWidth={1.4} />}
+        </View>}
+        <View testID="asset-value-column" style={{ alignItems: 'flex-end', width: '32%', flexShrink: 0, gap: 2 }}>
+          <Text style={{ color: p.fg, fontSize: 15, fontWeight: '600', fontVariant: ['tabular-nums'], letterSpacing: -.1, textAlign: 'right', width: '100%' }} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={.7}>
+            {showBalance ? dc.fmt(usd) : '••••••'}
           </Text>
-          {changePct !== undefined && (
-            <View style={{
-              flexDirection: 'row', alignItems: 'center', gap: 2, marginTop: 4,
-              paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6,
-              backgroundColor: positive ? p.greenBg : p.redBg,
-            }}>
-              <Ionicons name={positive ? 'caret-up' : 'caret-down'} size={8} color={positive ? p.greenFg : p.redFg} />
-              <Text style={{ color: positive ? p.greenFg : p.redFg, fontSize: 10.5, fontWeight: '700', fontVariant: ['tabular-nums'] }}>
-                {`${Math.abs(changePct).toFixed(2)}%`}
-              </Text>
-            </View>
-          )}
+          <Text style={{ color: p.fgMuted, fontSize: 11.5, fontVariant: ['tabular-nums'], textAlign: 'right', width: '100%' }} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={.7}>
+            {holding}
+          </Text>
+          {changePct !== undefined ? (
+            <Text style={{ color: positive ? p.greenFg : p.redFg, fontSize: 12, fontWeight: '500', marginTop: 2, fontVariant: ['tabular-nums'] }}>
+              {positive ? '▲' : '▼'} {Math.abs(changePct).toFixed(2)}%
+            </Text>
+          ) : null}
         </View>
-      </View>
-
-      {/* Sparkline below the row */}
-      {showSparkline && sparkline && sparkline.length >= 2 && (
-        <View style={{ marginTop: 10, opacity: 0.75 }}>
-          <Sparkline data={sparkline} width={Dimensions.get('window').width - 60} height={34} color={sparkColor} strokeWidth={1.5} />
-        </View>
-      )}
-    </Pressable>
+      </Pressable>
+      {!last ? <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: p.border, marginLeft: 24 + 40 + 14, marginRight: 24 }} /> : null}
+    </View>
   );
 }
 
 
 /* ── Currency icons ── */
-function CurrencyIcon({ currency, palette: p, size = 44 }: { currency: string; palette: Palette; size?: number }) {
-  const locale = useI18n((s) => s.locale);
-  const meta = getCurrencyMeta(currency);
-  const isCrypto = meta?.kind === 'crypto';
-  if (isCrypto) {
-    return <CoinIcon symbol={currency} size={size} />;
-  }
-  // Fiat → locale-aware, font-safe symbol (Arabic variants, LD for LYD, …).
-  const glyph = fiatSymbol(currency, locale);
-  // Multi-letter codes (AED/SAR/LD) need to read smaller than a single $/€.
-  const fontSize = glyph.length > 2 ? size * 0.3 : size * 0.5;
-  return (
-    <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
-      <Text style={{ fontSize, lineHeight: size * 0.64, color: p.fg, fontWeight: '700' }} numberOfLines={1}>{glyph}</Text>
-    </View>
-  );
+function CurrencyIcon({ currency, size = 44 }: { currency: string; palette: Palette; size?: number }) {
+  return <CoinIcon symbol={currency} size={size} />;
 }
 
 interface AssetMeta { title: string; subDecimals: number }

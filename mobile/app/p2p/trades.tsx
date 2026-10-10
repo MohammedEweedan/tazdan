@@ -27,7 +27,6 @@ import { QUERY_KEYS } from '@/constants';
 import type { Palette } from '@/store/themeStore';
 import type { P2PTrade } from '@/services';
 
-const BRAND_BLUE = '#737373'; // mono accent neutral
 type Filter = 'ACTIVE' | 'COMPLETED' | 'ALL';
 
 const ACTIVE_STATUSES = new Set<P2PTrade['status']>([
@@ -379,6 +378,7 @@ function TradeChatModal({ trade, currentUserId, myHandle, palette: p, t, onClose
   const sendMsg = useSendMessage(counterpartyId);
   const escalate = useEscalateP2P();
   const [text, setText] = useState('');
+  const [composerHeight, setComposerHeight] = useState(36);
   const listRef = useRef<FlatList>(null);
   const isActive = ACTIVE_STATUSES.has(trade.status);
   const expiresAt = new Date(trade.createdAt).getTime() + windowMs((trade as any).listing?.timeframeMins);
@@ -510,18 +510,18 @@ function TradeChatModal({ trade, currentUserId, myHandle, palette: p, t, onClose
                     borderRadius: 18,
                     borderBottomRightRadius: isMe && isLastInRun ? 6 : 18,
                     borderBottomLeftRadius: !isMe && isLastInRun ? 6 : 18,
-                    backgroundColor: isMe ? BRAND_BLUE : p.bgElev,
+                    backgroundColor: isMe ? p.accent : p.bgElev,
                     borderWidth: isMe ? 0 : 1, borderColor: p.border,
                     paddingHorizontal: 14, paddingVertical: 10,
                   }}>
-                    <Text style={{ color: isMe ? '#fff' : p.fg, fontSize: 15, fontWeight: '500', lineHeight: 20 }}>
+                    <Text style={{ color: isMe ? p.accentFg : p.fg, fontSize: 15, fontWeight: '500', lineHeight: 20 }}>
                       {m.deletedAt ? <Text style={{ fontStyle: 'italic', opacity: 0.5 }}>Message deleted</Text> : m.content}
                     </Text>
                   </View>
                   {isLastInRun && (
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 3, alignSelf: isMe ? 'flex-end' : 'flex-start', paddingHorizontal: 8 }}>
                       <Text style={{ color: p.fgFaint, fontSize: 10, fontWeight: '600' }}>{time}</Text>
-                      {isMe && <Ionicons name={m.isRead ? 'checkmark-done' : 'checkmark'} size={11} color={m.isRead ? BRAND_BLUE : p.fgFaint} />}
+                      {isMe && <Ionicons name={m.isRead ? 'checkmark-done' : 'checkmark'} size={11} color={m.isRead ? p.accent : p.fgFaint} />}
                     </View>
                   )}
                 </View>
@@ -536,7 +536,7 @@ function TradeChatModal({ trade, currentUserId, myHandle, palette: p, t, onClose
             borderTopWidth: 1, borderTopColor: p.border,
             backgroundColor: p.bg,
           }}>
-            <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 8, borderRadius: 22, backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border, paddingHorizontal: 6, paddingVertical: 6, minHeight: 44 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, borderRadius: 26, backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border, paddingHorizontal: 6, paddingVertical: 6, minHeight: 44 }}>
               {/* Share handle quick-send */}
               <Pressable
                 onPress={shareHandle}
@@ -549,20 +549,21 @@ function TradeChatModal({ trade, currentUserId, myHandle, palette: p, t, onClose
                 value={text}
                 onChangeText={setText}
                 placeholder="Message…"
+                onContentSizeChange={e => setComposerHeight(Math.max(36, Math.min(120, e.nativeEvent.contentSize.height)))}
                 placeholderTextColor={p.fgFaint}
                 multiline
-                style={{ flex: 1, color: p.fg, fontSize: 15, fontWeight: '500', paddingHorizontal: 4, paddingTop: Platform.OS === 'ios' ? 8 : 4, paddingBottom: Platform.OS === 'ios' ? 8 : 4, maxHeight: 120 }}
+                style={{ flex: 1, color: p.fg, fontSize: 15, fontWeight: '500', paddingHorizontal: 4, height: composerHeight, lineHeight: 22, paddingVertical: 7, minHeight: 36, maxHeight: 120 }}
                 onSubmitEditing={handleSend}
                 returnKeyType="send"
               />
               <Pressable
                 onPress={handleSend}
                 disabled={!text.trim() || sendMsg.isPending}
-                style={({ pressed }) => ({ width: 36, height: 36, borderRadius: 18, backgroundColor: text.trim() ? BRAND_BLUE : p.border, alignItems: 'center', justifyContent: 'center', opacity: pressed ? 0.85 : 1 })}
+                style={({ pressed }) => ({ width: 36, height: 36, borderRadius: 18, backgroundColor: text.trim() ? p.accent : p.border, alignItems: 'center', justifyContent: 'center', opacity: pressed ? 0.85 : 1 })}
               >
                 {sendMsg.isPending
-                  ? <ActivityIndicator size="small" color="#fff" />
-                  : <Ionicons name="arrow-up" size={18} color="#fff" />}
+                  ? <ActivityIndicator size="small" color={p.accentFg} />
+                  : <Ionicons name="arrow-up" size={18} color={p.accentFg} />}
               </Pressable>
             </View>
           </View>
@@ -654,7 +655,7 @@ function DisputeModal({ trade, currentUserId, palette: p, t, onClose, onSubmitte
           <TextInput value={reason} onChangeText={setReason} placeholder={t('p2p.disputeReasonPlaceholder')} placeholderTextColor={p.fgFaint} multiline textAlignVertical="top" style={{ minHeight: 140, padding: 14, backgroundColor: p.bgElev, borderRadius: 12, borderWidth: 1, borderColor: p.border, color: p.fg, fontSize: 14, lineHeight: 20 }} />
           <Text style={{ color: invalid ? p.fgFaint : p.greenFg, fontSize: 11, fontWeight: '600', marginTop: 6 }}>{trimmedLen}/1000 (min 10)</Text>
           <Pressable onPress={submit} disabled={invalid || busy} style={({ pressed }) => ({ marginTop: 20, height: 48, borderRadius: 24, backgroundColor: p.redFg, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: invalid ? 0.4 : pressed || busy ? 0.85 : 1 })}>
-            {busy ? <ActivityIndicator color="#fff" /> : <Ionicons name="shield-half-outline" size={16} color="#fff" />}
+            {busy ? <ActivityIndicator color={p.accentFg} /> : <Ionicons name="shield-half-outline" size={16} color={p.accentFg} />}
             <Text style={{ color: '#fff', fontSize: 13, fontWeight: '600', letterSpacing: 0.3 }}>{t('p2p.disputeSubmit').toUpperCase()}</Text>
           </Pressable>
         </ScrollView>

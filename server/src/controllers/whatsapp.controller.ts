@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { prisma } from '../utils/prisma';
 import { AppError } from '../middleware/errorHandler';
 import { AuthRequest } from '../types';
+import { recordSecurityEvent } from '../services/platform/securityEvents';
 import {
   sendWhatsAppText,
   validateTwilioSignature,
@@ -188,12 +189,20 @@ export class WhatsAppController {
   /* POST /api/whatsapp/webhook — Twilio inbound */
   static async receiveMessage(req: AuthRequest, res: Response, next: NextFunction) {
     try {
-      // Validate Twilio signature in production.
+      // Validate the Twilio signature. Without Twilio credentials the
+      // signature cannot be checked, so production refuses the webhook rather
+      // than trusting a spoofable `From` number.
+      if (!isTwilioConfigured() && process.env.NODE_ENV === 'production') {
+        void recordSecurityEvent({ type: 'WEBHOOK_REJECTED', severity: 'MEDIUM', ipAddress: req.ip, path: req.originalUrl, details: { reason: 'twilio_not_configured' } });
+        res.status(503).send('Unavailable');
+        return;
+      }
       if (isTwilioConfigured()) {
         const sig = req.headers['x-twilio-signature'] as string | undefined;
         const url = `${req.protocol}://${req.get('host')}${req.originalUrl}`;
         const valid = validateTwilioSignature({ signature: sig, url, params: req.body });
         if (!valid) {
+          void recordSecurityEvent({ type: 'WEBHOOK_REJECTED', severity: 'HIGH', ipAddress: req.ip, path: req.originalUrl, details: { reason: 'bad_twilio_signature' } });
           res.status(403).send('Forbidden');
           return;
         }

@@ -27,6 +27,7 @@ import { HEADER, HEADER_ROW_HEIGHT, HeaderBackButton, StackHeader } from './Scre
  * Can also be used standalone in custom-layout screens.
  */
 export function TopGradient({ height }: { height?: number }) {
+  const p = useThemedPalette();
   const themeMode = useTheme((s) => s.mode);
   const insets = useSafeAreaInsets();
 
@@ -35,25 +36,7 @@ export function TopGradient({ height }: { height?: number }) {
 
   return (
     <LinearGradient
-      colors={
-        themeMode === 'mono'
-          ? // Flat, subtle grey — no gradient (and no blue) in monochrome mode.
-            ['rgba(26,26,26,0.6)', 'rgba(26,26,26,0.2)', 'rgba(0,0,0,0)']
-          : themeMode === 'dark'
-          ? [
-              // Soft brand-blue mist over the top, fading to nothing. Low
-              // alpha so it reads as a tint on the dark bg, never a fill.
-              'rgba(99, 161, 219, 0.10)',  // #63a1db whisper at top
-              'rgba(99, 161, 219, 0.03)',  // thinning out
-              'rgba(10, 10, 11, 0)',       // fade to transparent
-            ]
-          : [
-              // Light mode — an even fainter blue haze on the paper bg.
-              'rgba(79, 139, 196, 0.07)',  // deepened blue, low alpha
-              'rgba(79, 139, 196, 0.02)',
-              'rgba(250, 250, 247, 0)',    // fade to transparent
-            ]
-      }
+      colors={[`${p.accent}18`, `${p.accent}08`, `${p.accent}00`]}
       locations={[0, 0.45, 1]}
       start={{ x: 0.5, y: 0 }}
       end={{ x: 0.5, y: 1 }}
@@ -93,14 +76,9 @@ export function StickyTopBar({
   children,
   /** Override the blur tint manually (defaults to the active theme). */
   tint,
-  /** Hide the hairline rule under the bar (useful when the page
-   *  itself owns a heading row immediately below the bar and the
-   *  extra divider reads as visual noise). */
-  hairline = true,
 }: {
   children?: ReactNode;
   tint?: 'light' | 'dark';
-  hairline?: boolean;
 }) {
   const themeMode = useTheme((s) => s.mode);
   const p         = useThemedPalette();
@@ -136,21 +114,6 @@ export function StickyTopBar({
       <View style={{ paddingTop: insets.top }}>
         {children}
       </View>
-      {/* Hairline under the bar — separates it from the scrolling
-          body.  Skipped when a caller passes `hairline={false}` (eg.
-          the home tab, where the gradient already fades smoothly
-          into the avatar/handle row beneath). */}
-      {hairline && (
-        <View
-          pointerEvents="none"
-          style={{
-            position: 'absolute',
-            left: 0, right: 0, bottom: 0,
-            height: 1,
-            backgroundColor: p.border,
-          }}
-        />
-      )}
     </View>
   );
 }
@@ -264,7 +227,7 @@ export function ScreenShell({
       {/* The sticky bar floats on top — gradient + blur + header
           composited as a single layer the scroll content slides
           under. */}
-      <StickyTopBar hairline={!closeOnly}>{header}</StickyTopBar>
+      <StickyTopBar>{header}</StickyTopBar>
     </View>
   );
 }
@@ -426,7 +389,7 @@ export function PanelRow({
       })}
     >
       <View style={{
-        width: 36, height: 36, borderRadius: 12,
+        width: 36, height: 36, borderRadius: 18,
         alignItems: 'center', justifyContent: 'center',
         backgroundColor: danger ? p.redBg : p.pillBg,
         marginRight: 12,
@@ -485,7 +448,7 @@ export function ToggleRow({
       opacity: disabled ? 0.6 : 1,
     }}>
       <View style={{
-        width: 36, height: 36, borderRadius: 12,
+        width: 36, height: 36, borderRadius: 18,
         alignItems: 'center', justifyContent: 'center',
         backgroundColor: p.pillBg, marginRight: 12,
       }}>

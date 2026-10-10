@@ -44,10 +44,12 @@
     "axios": "^1.17.0"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.131.0",
     "@aws-sdk/client-kms": "^3.700.0",
     "@prisma/client": "^5.22.0",
     "@sentry/node": "^10.53.1",
     "@solana/web3.js": "^1.98.4",
+    "@tesseract.js-data/eng": "1.0.0",
     "@types/compression": "^1.8.1",
     "axios": "^1.17.0",
     "bcryptjs": "^2.4.3",
@@ -76,6 +78,7 @@
     "sentry": "^0.34.0",
     "socket.io": "^4.7.4",
     "speakeasy": "^2.0.0",
+    "tesseract.js": "7.0.0",
     "tiny-secp256k1": "^2.2.4",
     "tronweb": "^6.3.0",
     "twilio": "^6.0.2",

@@ -1,5 +1,6 @@
 import { useLocalSearchParams } from 'expo-router';
 import { SellWidget } from '@/components/exchange/SellWidget';
+import { FiatExchangeWidget, isFiatExchangeCurrency } from '@/components/exchange/FiatExchangeWidget';
 import { ScreenShell } from '@/components/ui/ScreenShell';
 import { useT } from '@/store/i18nStore';
 
@@ -9,7 +10,7 @@ export default function Sell() {
   const { asset } = useLocalSearchParams<{ asset?: string }>();
   return (
     <ScreenShell closeOnly title={t('action.sell')} scroll={false} contentStyle={{ paddingHorizontal: 0, paddingBottom: 0 }}>
-      <SellWidget defaultAsset={asset} lockAsset={!!asset} />
+      {isFiatExchangeCurrency(asset) ? <FiatExchangeWidget initialFrom={asset} /> : <SellWidget defaultAsset={asset} lockAsset={!!asset} />}
     </ScreenShell>
   );
 }

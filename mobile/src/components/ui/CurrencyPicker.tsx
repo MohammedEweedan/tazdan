@@ -1,3 +1,4 @@
+import { FiatFlag } from './FiatFlag';
 /**
  * CurrencyPicker — one swipeable field that holds every currency the user can
  * pick. Swipe left/right to cycle through holdings, or tap to open a list with
@@ -45,21 +46,7 @@ function CurrencyGlyph({ item, size, palette: p }: { item: CurrencyItem; size: n
       </View>
     );
   }
-  if (kind === 'fiat') {
-    // Currency symbol in theme foreground (black on light, white on dark),
-    // sized to fill the glyph box like a coin logo would.
-    return (
-      <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
-        <Text
-          numberOfLines={1}
-          adjustsFontSizeToFit
-          style={{ color: p.fg, fontSize: size * 0.66, fontWeight: '700', lineHeight: size }}
-        >
-          {item.icon}
-        </Text>
-      </View>
-    );
-  }
+  if (kind === 'fiat') return <FiatFlag currency={item.currency} size={size} />;
   return <CoinIcon symbol={item.currency} size={size} color={item.color} />;
 }
 

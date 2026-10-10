@@ -154,10 +154,10 @@ export default function LinkedAccountsPage() {
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
                       <View style={{
                         width: 48, height: 32, borderRadius: 8,
-                        backgroundColor: card.tier === 'MASTER' ? '#122050' : card.tier === 'PRO' ? '#2B6BC8' : '#5F99D8',
+                        backgroundColor: p.accent,
                         alignItems: 'center', justifyContent: 'center',
                       }}>
-                        <Text style={{ color: '#fff', fontSize: 10, fontWeight: '600' }}>VISA</Text>
+                        <Text style={{ color: p.accentFg, fontSize: 10, fontWeight: '600' }}>VISA</Text>
                       </View>
                       <View>
                         <Text style={{ color: p.fg, fontSize: 16, fontWeight: '700' }}>

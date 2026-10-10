@@ -34,7 +34,6 @@ interface SearchHit {
   kycTier?: string;
 }
 
-const BRAND_BLUE = '#737373'; // mono accent neutral
 
 export default function NewChat() {
   const router = useRouter();
@@ -153,7 +152,7 @@ export default function NewChat() {
                   backgroundColor: '#7c3aed',
                   alignItems: 'center', justifyContent: 'center',
                 }}>
-                  <Text style={{ color: '#fff', fontSize: 16, fontWeight: '600' }}>
+                  <Text style={{ color: p.accentFg, fontSize: 16, fontWeight: '600' }}>
                     {(u.firstName[0] ?? u.username[0] ?? '?').toUpperCase()}
                   </Text>
                 </View>
@@ -199,10 +198,10 @@ function SupportTile({ palette: p, onPress }: { palette: Palette; onPress: () =>
     >
       <View style={{
         width: 44, height: 44, borderRadius: 22,
-        backgroundColor: BRAND_BLUE,
+        backgroundColor: p.accent,
         alignItems: 'center', justifyContent: 'center',
       }}>
-        <Ionicons name="headset" size={20} color="#fff" />
+        <Ionicons name="headset" size={20} color={p.accentFg} />
       </View>
       <View style={{ flex: 1 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
@@ -211,9 +210,9 @@ function SupportTile({ palette: p, onPress }: { palette: Palette; onPress: () =>
           </Text>
           <View style={{
             paddingHorizontal: 5, paddingVertical: 1, borderRadius: 5,
-            backgroundColor: BRAND_BLUE,
+            backgroundColor: p.accent,
           }}>
-            <Text style={{ color: '#fff', fontSize: 9, fontWeight: '600' }}>STAFF</Text>
+            <Text style={{ color: p.accentFg, fontSize: 9, fontWeight: '600' }}>STAFF</Text>
           </View>
         </View>
         <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '500', marginTop: 2 }}>

@@ -7,8 +7,8 @@ import { FiMoon, FiSun } from 'react-icons/fi';
 export default function ColorModeToggle({ size = 26 }: { size?: number }) {
   const { colorMode, toggleColorMode } = useColorMode();
   const dark = colorMode === 'dark';
-  const fg = dark ? '#FFFFFF' : '#0A0A0B';
-  const border = dark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.10)';
+  const fg = dark ? '#F4F5F7' : '#0A0A0B';
+  const border = dark ? 'rgba(255,255,255,0.09)' : 'rgba(10,10,11,0.08)';
   const hoverBg = dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.055)';
   const iconSize = Math.max(14, Math.round(size * 0.46));
 

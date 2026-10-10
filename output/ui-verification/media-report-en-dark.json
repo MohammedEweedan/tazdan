@@ -1,0 +1,66 @@
+[
+  {
+    "variant": "en-dark",
+    "id": "tour-home",
+    "frames": 46,
+    "duration": 7.083333,
+    "bytes": 74111,
+    "actionError": null
+  },
+  {
+    "variant": "en-dark",
+    "id": "flow-send",
+    "frames": 37,
+    "duration": 6.541667,
+    "bytes": 22550,
+    "actionError": null
+  },
+  {
+    "variant": "en-dark",
+    "id": "flow-remit",
+    "frames": 30,
+    "duration": 5.708333,
+    "bytes": 44698,
+    "actionError": null
+  },
+  {
+    "variant": "en-dark",
+    "id": "flow-p2p",
+    "frames": 45,
+    "duration": 6.541667,
+    "bytes": 24426,
+    "actionError": null
+  },
+  {
+    "variant": "en-dark",
+    "id": "flow-budget",
+    "frames": 38,
+    "duration": 5.75,
+    "bytes": 40170,
+    "actionError": null
+  },
+  {
+    "variant": "en-dark",
+    "id": "flow-chat-pay",
+    "frames": 47,
+    "duration": 6.625,
+    "bytes": 28948,
+    "actionError": null
+  },
+  {
+    "variant": "en-dark",
+    "id": "flow-privacy",
+    "frames": 46,
+    "duration": 7.291667,
+    "bytes": 50295,
+    "actionError": null
+  },
+  {
+    "variant": "en-dark",
+    "id": "flow-business",
+    "frames": 38,
+    "duration": 5.708333,
+    "bytes": 42792,
+    "actionError": null
+  }
+]

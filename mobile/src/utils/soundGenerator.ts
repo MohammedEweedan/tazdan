@@ -2,7 +2,7 @@
  * Sound assets for transaction feedback.
  *
  * Uses the real Apple Pay confirmation and decline MP3 files
- * from assets/sounds/. expo-av resolves require() assets natively
+ * from assets/sounds/. expo-audio resolves require() assets natively
  * on iOS/Android without any base64 encoding needed.
  */
 

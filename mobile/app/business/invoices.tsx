@@ -1,3 +1,4 @@
+import { ScreenShell, CTAButton } from '@/components/ui/ScreenShell';
 /**
  * Payouts / Invoices — paginated list of all business payouts.
  *
@@ -14,9 +15,7 @@ import {
   ActivityIndicator, Alert, FlatList, Modal, Pressable, ScrollView, View,
 } from 'react-native';
 import { Text } from '@/components/ui/Text';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { StackHeader } from '@/components/ui/ScreenHeader';
-import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as Clipboard from 'expo-clipboard';
@@ -24,10 +23,9 @@ import * as Clipboard from 'expo-clipboard';
 import { useTheme, useThemedPalette } from '@/store/themeStore';
 import { useHaptics } from '@/hooks';
 import { businessService } from '@/services/business';
-import type { BusinessPayout, PayoutStatus } from '@/types/business';
+import type { BusinessPayout, PayoutBatch, PayoutStatus } from '@/types/business';
 
 import { BottomSheet } from '@/components/ui/BottomSheet';
-const ACCENT = '#737373';
 const PAGE_SIZE = 20;
 
 type StatusFilter = 'ALL' | PayoutStatus;
@@ -46,7 +44,7 @@ function statusColor(status: PayoutStatus, p: ReturnType<typeof useThemedPalette
     case 'COMPLETED':  return p.greenFg;
     case 'FAILED':     return p.redFg;
     case 'CANCELLED':  return p.fgFaint;
-    case 'PROCESSING': return '#63a1db';
+    case 'PROCESSING': return p.accentText;
     default:           return p.amberFg;
   }
 }
@@ -104,10 +102,10 @@ function PayoutItem({
       </View>
 
       <View style={{ alignItems: 'flex-end', flexShrink: 0 }}>
-        <Text style={{ color: p.fg, fontSize: 14, fontWeight: '700', fontVariant: ['tabular-nums'] }}>
+        <Text style={{ color: p.fg, fontSize: 14, fontWeight: '600', fontVariant: ['tabular-nums'] }}>
           {Number(payout.amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
         </Text>
-        <Text style={{ color: col, fontSize: 10, fontWeight: '700', marginTop: 1 }}>
+        <Text style={{ color: col, fontSize: 10, fontWeight: '600', marginTop: 1 }}>
           {payout.status}
         </Text>
       </View>
@@ -213,7 +211,7 @@ function DetailModal({
 
           {/* Cancel action */}
           {payout.status === 'PENDING' && (
-            <View style={{ paddingHorizontal: 20, paddingBottom: 32, paddingTop: 8 }}>
+            <View style={{ paddingHorizontal: 24, paddingBottom: 32, paddingTop: 8 }}>
               <Pressable
                 onPress={handleCancel}
                 disabled={cancelling}
@@ -226,7 +224,7 @@ function DetailModal({
               >
                 {cancelling
                   ? <ActivityIndicator color={p.redFg} size="small" />
-                  : <Text style={{ color: p.redFg, fontSize: 14, fontWeight: '700' }}>Cancel payout</Text>
+                  : <Text style={{ color: p.redFg, fontSize: 14, fontWeight: '600' }}>Cancel payout</Text>
                 }
               </Pressable>
             </View>
@@ -254,6 +252,36 @@ export default function Invoices() {
   const [loading,    setLoading]    = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [selected,   setSelected]   = useState<BusinessPayout | null>(null);
+  // Maker-checker queue: batches another owner/admin created that need a second approver.
+  const [pending,    setPending]    = useState<PayoutBatch[]>([]);
+  const [deciding,   setDeciding]   = useState<string | null>(null);
+  const loadPending = useCallback(async () => {
+    try { setPending(await businessService.listBatches('PENDING_APPROVAL')); } catch { /* not every role can see batches */ }
+  }, []);
+  useEffect(() => { void loadPending(); }, [loadPending]);
+
+  const decide = (b: PayoutBatch, approve: boolean) => {
+    const run = async (reason?: string) => {
+      setDeciding(b.id); h.selection();
+      try {
+        if (approve) await businessService.approveBatch(b.id); else await businessService.rejectBatch(b.id, reason ?? 'Rejected');
+        h.success();
+        await Promise.all([loadPending(), load(1, filter, false)]);
+      } catch (err: any) {
+        h.error();
+        Alert.alert(approve ? 'Approval failed' : 'Rejection failed', err?.response?.data?.error ?? 'Please try again.');
+      } finally { setDeciding(null); }
+    };
+    if (approve) {
+      Alert.alert('Approve batch', `Pay ${b.count} payout${b.count === 1 ? '' : 's'} totalling ${Number(b.totalAmount).toLocaleString('en-US', { maximumFractionDigits: 2 })} ${b.currency}?`, [
+        { text: 'Cancel', style: 'cancel' }, { text: 'Approve', onPress: () => { void run(); } },
+      ]);
+    } else {
+      Alert.alert('Reject batch', 'The reserved funds return to your balance and no one is paid.', [
+        { text: 'Cancel', style: 'cancel' }, { text: 'Reject', style: 'destructive', onPress: () => { void run('Rejected by approver in the app'); } },
+      ]);
+    }
+  };
 
   const load = useCallback(async (p2: number, f: StatusFilter, append = false) => {
     if (p2 === 1 && !append) setLoading(true);
@@ -292,7 +320,7 @@ export default function Invoices() {
       h.success();
     } catch (err: any) {
       h.error();
-      Alert.alert('Failed', err?.response?.data?.message ?? 'Could not cancel payout.');
+      Alert.alert('Failed', err?.response?.data?.error ?? err?.response?.data?.message ?? 'Could not cancel payout.');
     }
   };
 
@@ -301,19 +329,15 @@ export default function Invoices() {
   );
 
   return (
-    <View style={{ flex: 1, backgroundColor: p.bg }}>
-      <StatusBar style={mode === 'dark' ? 'light' : 'dark'} />
-      <SafeAreaView style={{ flex: 1 }} edges={['top']}>
-
-        {/* Header */}
-        <StackHeader
+    <ScreenShell
           title="Payouts"
           subtitle={params.batchId ? `Batch ${params.batchId.slice(0, 8)}…` : undefined}
-        />
+         scroll={false} contentStyle={{ paddingHorizontal: 0 }}>
 
         {/* Status filter chips */}
         <ScrollView
           horizontal
+          style={{ flexGrow: 0, flexShrink: 0 }}
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={{ paddingHorizontal: 20, gap: 8, paddingBottom: 12 }}
         >
@@ -323,14 +347,14 @@ export default function Invoices() {
               onPress={() => { h.selection(); setFilter(key); }}
               style={({ pressed }) => ({
                 paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20,
-                backgroundColor: filter === key ? ACCENT : p.bgElev,
-                borderWidth: 1, borderColor: filter === key ? ACCENT : p.border,
+                backgroundColor: filter === key ? p.ctaBg : p.bgElev,
+                borderWidth: 1, borderColor: filter === key ? p.ctaBg : p.border,
                 opacity: pressed ? 0.75 : 1,
               })}
             >
               <Text style={{
-                color: filter === key ? '#fff' : p.fgMuted,
-                fontSize: 12, fontWeight: '700',
+                color: filter === key ? p.ctaFg : p.fgMuted,
+                fontSize: 12, fontWeight: '600',
               }}>
                 {label}
               </Text>
@@ -341,7 +365,7 @@ export default function Invoices() {
         {/* List */}
         {loading ? (
           <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-            <ActivityIndicator color={ACCENT} size="large" />
+            <ActivityIndicator color={p.accentText} size="large" />
           </View>
         ) : (
           <FlatList
@@ -355,13 +379,37 @@ export default function Invoices() {
               />
             )}
             ItemSeparatorComponent={separator}
+            ListHeaderComponent={pending.length ? (
+              <View style={{ paddingHorizontal: 16, paddingBottom: 12 }}>
+                <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '600', letterSpacing: 0.6, marginBottom: 8 }}>WAITING FOR APPROVAL</Text>
+                {pending.map((b) => (
+                  <View key={b.id} style={{ backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border, borderRadius: 14, padding: 14, marginBottom: 8 }}>
+                    <Text style={{ color: p.fg, fontSize: 15, fontWeight: '600' }}>
+                      {Number(b.totalAmount).toLocaleString('en-US', { maximumFractionDigits: 2 })} {b.currency} · {b.count} payout{b.count === 1 ? '' : 's'}
+                    </Text>
+                    <Text style={{ color: p.fgMuted, fontSize: 12, marginTop: 2 }}>{b.reference}{b.source === 'API' ? ' · via API' : ''}</Text>
+                    {b.approvalReason ? <Text style={{ color: p.fgFaint, fontSize: 12, marginTop: 6 }}>{b.approvalReason}</Text> : null}
+                    <View style={{ flexDirection: 'row', gap: 8, marginTop: 12 }}>
+                      <Pressable disabled={deciding === b.id} onPress={() => decide(b, false)}
+                        style={({ pressed }) => ({ flex: 1, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: p.border, opacity: pressed || deciding === b.id ? 0.6 : 1 })}>
+                        <Text style={{ color: p.fg, fontSize: 13, fontWeight: '600' }}>Reject</Text>
+                      </Pressable>
+                      <Pressable disabled={deciding === b.id} onPress={() => decide(b, true)}
+                        style={({ pressed }) => ({ flex: 1, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: p.ctaBg, opacity: pressed || deciding === b.id ? 0.6 : 1 })}>
+                        <Text style={{ color: p.ctaFg, fontSize: 13, fontWeight: '600' }}>{deciding === b.id ? 'Working…' : 'Approve'}</Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            ) : null}
             contentContainerStyle={{ paddingBottom: 60 }}
             showsVerticalScrollIndicator={false}
             onEndReached={loadMore}
             onEndReachedThreshold={0.4}
             ListFooterComponent={
               loadingMore
-                ? <View style={{ paddingVertical: 20, alignItems: 'center' }}><ActivityIndicator color={ACCENT} /></View>
+                ? <View style={{ paddingVertical: 20, alignItems: 'center' }}><ActivityIndicator color={p.accentText} /></View>
                 : null
             }
             ListEmptyComponent={
@@ -377,7 +425,7 @@ export default function Invoices() {
             }
           />
         )}
-      </SafeAreaView>
+
 
       <DetailModal
         payout={selected}
@@ -385,6 +433,6 @@ export default function Invoices() {
         onCancel={handleCancel}
         palette={p}
       />
-    </View>
+    </ScreenShell>
   );
 }

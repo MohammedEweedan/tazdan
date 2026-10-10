@@ -7,7 +7,7 @@ export default function Recurring() {
   const t = useT();
   const router = useRouter();
   return (
-    <ScreenShell closeOnly title={t('recurring.title')} contentStyle={{ paddingHorizontal: 0 }}>
+    <ScreenShell closeOnly title={t('recurring.title')} scroll={false} contentStyle={{ paddingHorizontal: 0 }}>
       <RecurringBuyWidget onDone={() => router.back()} />
     </ScreenShell>
   );

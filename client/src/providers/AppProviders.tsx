@@ -6,14 +6,17 @@ import { ChakraProvider, ColorModeScript } from '@chakra-ui/react';
 import { TolgeeProvider, useTolgee } from '@tolgee/react';
 import { createTolgee } from '@/i18n/tolgee';
 import theme from '@/theme';
+import PageCache from './PageCache';
 
 function LangInit() {
   const pathname = usePathname();
   const tolgee = useTolgee();
   useEffect(() => {
     const pathLocale = pathname?.split('/')[1];
-    const lang = pathLocale === 'ar' || pathLocale === 'en' ? pathLocale : pathname === '/' ? 'en' : localStorage.getItem('lang') || 'en';
-    tolgee.changeLanguage(lang);
+    let stored: string | null = null;
+    try { stored = localStorage.getItem('lang'); } catch {}
+    const lang = pathLocale === 'ar' || pathLocale === 'en' ? pathLocale : pathname === '/' ? 'en' : stored || 'en';
+    if (tolgee.getLanguage() !== lang) void tolgee.changeLanguage(lang);
     document.documentElement.lang = lang;
     document.documentElement.dir = lang === 'ar' ? 'rtl' : 'ltr';
   }, [pathname, tolgee]);
@@ -27,6 +30,7 @@ export default function AppProviders({ children, initialLanguage = 'en' }: { chi
       <ChakraProvider theme={theme}>
         <ColorModeScript initialColorMode={theme.config.initialColorMode} />
         <LangInit />
+        <PageCache />
         {children}
       </ChakraProvider>
     </TolgeeProvider>

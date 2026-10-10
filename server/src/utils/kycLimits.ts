@@ -1,11 +1,18 @@
 /**
- * KYC tier-based daily/monthly limits.
+ * KYC tier-based per-transaction, daily and monthly limits.
  *
  * All limits are denominated in USD-equivalent so we can normalise across
- * currencies. The aggregator queries the user's `Transaction` history for the
- * relevant period and sums by `type`, then compares against the tier ceiling.
+ * currencies. Periods are calendar periods in LIMITS_TIMEZONE (default
+ * Africa/Tripoli): the daily limit resets at local midnight and the monthly
+ * limit at local midnight on the 1st, so a customer can be told exactly when
+ * they can continue ("from 01/11/2026").
  *
- * Update this table to change risk policy — no code changes elsewhere needed.
+ * `limitStatus` is the single source for both the app (shown before the
+ * customer confirms, so no security code is sent for an order that cannot go
+ * through) and `enforceKycLimit` (the server-side check, whose LIMIT_EXCEEDED
+ * error carries the same details).
+ *
+ * Update the table to change risk policy — no code changes elsewhere needed.
  */
 
 import { Prisma, KYCTier, TransactionType } from '@prisma/client';
@@ -15,8 +22,8 @@ import { AppError } from '../middleware/errorHandler';
 export type LimitedAction = 'SEND' | 'WITHDRAW' | 'ONRAMP_BUY' | 'OFFRAMP_SELL';
 
 interface LimitWindow {
-  daily: number;     // USD per 24h
-  monthly: number;   // USD per 30d
+  daily: number;     // USD per calendar day
+  monthly: number;   // USD per calendar month
   perTx: number;     // USD per single tx
 }
 
@@ -75,7 +82,7 @@ export function toUsd(amount: number | Prisma.Decimal, currency: string): number
 }
 
 /** USD value of one unit of `currency`: live price first, static table last. */
-async function usdRate(currency: string): Promise<number> {
+export async function usdRate(currency: string): Promise<number> {
   const cur = currency.toUpperCase();
   if (cur === 'USD' || cur === 'USDT' || cur === 'USDC') return 1;
   try {
@@ -91,6 +98,11 @@ async function usdRate(currency: string): Promise<number> {
     }
   } catch { /* fall through to the static table */ }
   return STATIC_USD_RATES[cur] ?? 1;
+}
+
+/** USD value of an amount of `currency`, live price first. */
+export async function valueInUsd(amount: number | string | Prisma.Decimal, currency: string): Promise<number> {
+  return Math.abs(Number(amount.toString())) * (await usdRate(currency));
 }
 
 /**
@@ -110,9 +122,39 @@ interface UsageWindow {
 
 interface UsageRow { amount: Prisma.Decimal; currency: string; createdAt: Date }
 
-async function getUsage(userId: string, action: LimitedAction): Promise<UsageWindow> {
-  const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-  const monthAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+// ── Calendar periods in the limits time zone ─────────────────────────
+export const LIMITS_TIMEZONE = () => process.env.LIMITS_TIMEZONE ?? 'Africa/Tripoli';
+
+function zonedParts(d: Date, tz: string) {
+  const parts = new Intl.DateTimeFormat('en-GB', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' })
+    .formatToParts(d).reduce<Record<string, number>>((m, p) => (p.type === 'literal' ? m : { ...m, [p.type]: Number(p.value) }), {});
+  return { y: parts.year, m: parts.month, d: parts.day, h: parts.hour, mi: parts.minute, s: parts.second };
+}
+/** UTC instant of local midnight on y-m-d in the zone. */
+function zonedMidnight(y: number, m: number, d: number, tz: string): Date {
+  const guess = new Date(Date.UTC(y, m - 1, d));
+  const p = zonedParts(guess, tz);
+  const offset = Date.UTC(p.y, p.m - 1, p.d, p.h, p.mi, p.s) - guess.getTime();
+  return new Date(guess.getTime() - offset);
+}
+export function limitPeriods(now = new Date(), tz = LIMITS_TIMEZONE()) {
+  const p = zonedParts(now, tz);
+  const dayStart = zonedMidnight(p.y, p.m, p.d, tz);
+  const next = new Date(Date.UTC(p.y, p.m - 1, p.d + 1));
+  const dayEnd = zonedMidnight(next.getUTCFullYear(), next.getUTCMonth() + 1, next.getUTCDate(), tz);
+  const monthStart = zonedMidnight(p.y, p.m, 1, tz);
+  const nm = new Date(Date.UTC(p.y, p.m, 1));
+  const monthEnd = zonedMidnight(nm.getUTCFullYear(), nm.getUTCMonth() + 1, 1, tz);
+  return { dayStart, dayEnd, monthStart, monthEnd };
+}
+/** dd/mm/yyyy in the limits zone. */
+export function formatLimitDate(d: Date, tz = LIMITS_TIMEZONE()): string {
+  const p = zonedParts(d, tz);
+  return `${String(p.d).padStart(2, '0')}/${String(p.m).padStart(2, '0')}/${p.y}`;
+}
+
+async function getUsage(userId: string, action: LimitedAction, now = new Date()): Promise<UsageWindow> {
+  const { dayStart, monthStart } = limitPeriods(now);
 
   let rows: UsageRow[];
   if (action === 'WITHDRAW') {
@@ -121,11 +163,11 @@ async function getUsage(userId: string, action: LimitedAction): Promise<UsageWin
     // withdrawals never create a Transaction row.
     const [requests, onChain] = await Promise.all([
       prisma.withdrawal.findMany({
-        where: { userId, createdAt: { gte: monthAgo }, status: { notIn: ['CANCELLED', 'REJECTED'] } },
+        where: { userId, createdAt: { gte: monthStart }, status: { notIn: ['CANCELLED', 'REJECTED'] } },
         select: { amount: true, currency: true, createdAt: true },
       }),
       prisma.onChainTransaction.findMany({
-        where: { userId, type: 'WITHDRAWAL', createdAt: { gte: monthAgo }, status: { not: 'FAILED' } },
+        where: { userId, type: 'WITHDRAWAL', createdAt: { gte: monthStart }, status: { not: 'FAILED' } },
         select: { amount: true, asset: true, createdAt: true },
       }),
     ]);
@@ -135,7 +177,7 @@ async function getUsage(userId: string, action: LimitedAction): Promise<UsageWin
     ];
   } else {
     rows = (await prisma.transaction.findMany({
-      where: { userId, type: { in: TX_TYPES_FOR_ACTION[action] }, createdAt: { gte: monthAgo } },
+      where: { userId, type: { in: TX_TYPES_FOR_ACTION[action] }, createdAt: { gte: monthStart } },
       select: { amount: true, currency: true, createdAt: true },
     })).map((r) => ({ amount: r.amount, currency: r.currency as string, createdAt: r.createdAt }));
   }
@@ -147,14 +189,67 @@ async function getUsage(userId: string, action: LimitedAction): Promise<UsageWin
     if (!rates.has(row.currency)) rates.set(row.currency, await usdRate(row.currency));
     const usd = Math.abs(Number(row.amount.toString())) * rates.get(row.currency)!;
     monthlyUsd += usd;
-    if (row.createdAt >= dayAgo) dailyUsd += usd;
+    if (row.createdAt >= dayStart) dailyUsd += usd;
   }
   return { dailyUsd, monthlyUsd };
 }
 
+const TIER_ORDER: KYCTier[] = ['TIER_0', 'TIER_1', 'TIER_2', 'TIER_3'];
+const round2 = (n: number) => Math.floor(n * 100) / 100;
+
+export interface LimitStatus {
+  action: LimitedAction;
+  tier: KYCTier;
+  /** Feature not available at this verification level. */
+  blocked: boolean;
+  perTxUsd: number;
+  daily: { limitUsd: number; usedUsd: number; remainingUsd: number; resetsAt: string; resetsOn: string };
+  monthly: { limitUsd: number; usedUsd: number; remainingUsd: number; resetsAt: string; resetsOn: string };
+  /** Largest single amount allowed right now (USD). */
+  maxNowUsd: number;
+  /** When maxNowUsd is 0 because a period is used up: when it frees (ISO and dd/mm/yyyy). */
+  availableAgainAt: string | null;
+  availableAgainOn: string | null;
+  /** The next verification level and what it allows for this action, if any. */
+  nextTier: { tier: KYCTier; perTxUsd: number; dailyUsd: number; monthlyUsd: number } | null;
+}
+
+/** What the customer can do now for one action, and when that changes. */
+export async function limitStatus(userId: string, action: LimitedAction, now = new Date()): Promise<LimitStatus> {
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { kycTier: true, kycStatus: true } });
+  if (!user) throw new AppError('User not found', 404);
+  const tier = effectiveTier(user);
+  const ceiling = KYC_LIMITS[tier][action];
+  const usage = await getUsage(userId, action, now);
+  const { dayEnd, monthEnd } = limitPeriods(now);
+  const dailyRemaining = Math.max(0, ceiling.daily - usage.dailyUsd);
+  const monthlyRemaining = Math.max(0, ceiling.monthly - usage.monthlyUsd);
+  const blocked = ceiling.perTx === 0;
+  const maxNow = blocked ? 0 : round2(Math.min(ceiling.perTx, dailyRemaining, monthlyRemaining));
+  // Used up: the monthly limit binds until next month, otherwise until tomorrow.
+  let again: Date | null = null;
+  if (!blocked && maxNow < 0.01) again = monthlyRemaining < 0.01 ? monthEnd : dayEnd;
+  const idx = TIER_ORDER.indexOf(tier);
+  const next = TIER_ORDER.slice(idx + 1).find((t) => KYC_LIMITS[t][action].monthly > ceiling.monthly) ?? null;
+  return {
+    action, tier, blocked,
+    perTxUsd: ceiling.perTx,
+    daily: { limitUsd: ceiling.daily, usedUsd: round2(usage.dailyUsd), remainingUsd: round2(dailyRemaining), resetsAt: dayEnd.toISOString(), resetsOn: formatLimitDate(dayEnd) },
+    monthly: { limitUsd: ceiling.monthly, usedUsd: round2(usage.monthlyUsd), remainingUsd: round2(monthlyRemaining), resetsAt: monthEnd.toISOString(), resetsOn: formatLimitDate(monthEnd) },
+    maxNowUsd: maxNow,
+    availableAgainAt: again ? again.toISOString() : null,
+    availableAgainOn: again ? formatLimitDate(again) : null,
+    nextTier: next ? { tier: next, perTxUsd: KYC_LIMITS[next][action].perTx, dailyUsd: KYC_LIMITS[next][action].daily, monthlyUsd: KYC_LIMITS[next][action].monthly } : null,
+  };
+}
+
+const VERB: Record<LimitedAction, string> = { SEND: 'send', WITHDRAW: 'withdraw', ONRAMP_BUY: 'buy', OFFRAMP_SELL: 'sell' };
+const usdText = (n: number) => `${n.toLocaleString('en-US', { maximumFractionDigits: 2 })} USD`;
+
 /**
- * Throw `AppError` if the requested action would breach the user's KYC tier
- * limits. Call this BEFORE the database write that would commit the funds.
+ * Throw `AppError` (LIMIT_EXCEEDED, with the limit status in `details`) if
+ * the requested action would breach the user's KYC tier limits. Call this
+ * BEFORE any step-up challenge and before the write that commits the funds.
  *
  * Limits are a risk control checked just before the write, not inside it,
  * so two simultaneous requests can each pass against the same usage.
@@ -168,64 +263,57 @@ export async function enforceKycLimit(
   amount: number | string | Prisma.Decimal,
   currency: string,
 ): Promise<void> {
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { kycTier: true, kycStatus: true },
-  });
-  if (!user) throw new AppError('User not found', 404);
-
-  const tier = effectiveTier(user);
-  const ceiling = KYC_LIMITS[tier][action];
+  const status = await limitStatus(userId, action);
   const requestedUsd = Math.abs(Number(amount.toString())) * (await usdRate(currency));
+  const verb = VERB[action];
+  const upgrade = status.nextTier ? ' or raise your verification level' : '';
 
-  if (ceiling.perTx === 0) {
-    throw new AppError('Verify your identity to use this feature', 403);
+  if (status.blocked) {
+    throw new AppError(`Verify your identity to ${verb}`, 403, 'LIMIT_EXCEEDED', { ...status, window: 'TIER', requestedUsd });
   }
-  if (requestedUsd > ceiling.perTx) {
+  if (requestedUsd > status.perTxUsd) {
     throw new AppError(
-      `Amount exceeds your per-transaction limit of ${ceiling.perTx} USD. Complete a higher verification level to raise it.`,
-      400,
+      `The most you can ${verb} in one go is ${usdText(status.perTxUsd)}. Use a smaller amount${upgrade}.`,
+      400, 'LIMIT_EXCEEDED', { ...status, window: 'PER_TX', requestedUsd },
     );
   }
-
-  const usage = await getUsage(userId, action);
-  if (usage.dailyUsd + requestedUsd > ceiling.daily) {
+  if (requestedUsd > status.monthly.remainingUsd) {
     throw new AppError(
-      `This would exceed your daily limit (used ${usage.dailyUsd.toFixed(2)} of ${ceiling.daily} USD today)`,
-      400,
+      status.monthly.remainingUsd < 0.01
+        ? `You've reached your monthly limit to ${verb}. You can ${verb} again from ${status.monthly.resetsOn}${upgrade}.`
+        : `You can ${verb} up to ${usdText(status.monthly.remainingUsd)} more this month (resets ${status.monthly.resetsOn})${upgrade}.`,
+      400, 'LIMIT_EXCEEDED', { ...status, window: 'MONTHLY', requestedUsd },
     );
   }
-  if (usage.monthlyUsd + requestedUsd > ceiling.monthly) {
+  if (requestedUsd > status.daily.remainingUsd) {
     throw new AppError(
-      `This would exceed your monthly limit (used ${usage.monthlyUsd.toFixed(2)} of ${ceiling.monthly} USD this month)`,
-      400,
+      status.daily.remainingUsd < 0.01
+        ? `You've reached today's limit to ${verb}. You can ${verb} again from ${status.daily.resetsOn}${upgrade}.`
+        : `You can ${verb} up to ${usdText(status.daily.remainingUsd)} more today (resets ${status.daily.resetsOn})${upgrade}.`,
+      400, 'LIMIT_EXCEEDED', { ...status, window: 'DAILY', requestedUsd },
     );
   }
 }
 
+/** All four actions, for the app and the cockpit. */
+export async function allLimitStatuses(userId: string) {
+  const actions: LimitedAction[] = ['SEND', 'WITHDRAW', 'ONRAMP_BUY', 'OFFRAMP_SELL'];
+  const statuses = await Promise.all(actions.map((a) => limitStatus(userId, a)));
+  return Object.fromEntries(actions.map((a, i) => [a, statuses[i]])) as Record<LimitedAction, LimitStatus>;
+}
+
 /**
- * Read-only helper for the UI: returns remaining headroom for each action.
- * Useful for "you can still send $X today" widgets.
+ * Read-only helper for the cockpit: remaining headroom for each action.
  */
 export async function getKycHeadroom(userId: string) {
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { kycTier: true, kycStatus: true },
-  });
-  if (!user) throw new AppError('User not found', 404);
-
-  const tier = effectiveTier(user);
-  const actions: LimitedAction[] = ['SEND', 'WITHDRAW', 'ONRAMP_BUY', 'OFFRAMP_SELL'];
+  const all = await allLimitStatuses(userId);
   const headroom: Record<string, { tier: KYCTier; daily: { used: number; limit: number; remaining: number }; monthly: { used: number; limit: number; remaining: number }; perTx: number }> = {};
-
-  for (const action of actions) {
-    const ceiling = KYC_LIMITS[tier][action];
-    const usage = await getUsage(userId, action);
+  for (const [action, st] of Object.entries(all)) {
     headroom[action] = {
-      tier,
-      daily:   { used: usage.dailyUsd,   limit: ceiling.daily,   remaining: Math.max(0, ceiling.daily - usage.dailyUsd) },
-      monthly: { used: usage.monthlyUsd, limit: ceiling.monthly, remaining: Math.max(0, ceiling.monthly - usage.monthlyUsd) },
-      perTx:   ceiling.perTx,
+      tier: st.tier,
+      daily: { used: st.daily.usedUsd, limit: st.daily.limitUsd, remaining: st.daily.remainingUsd },
+      monthly: { used: st.monthly.usedUsd, limit: st.monthly.limitUsd, remaining: st.monthly.remainingUsd },
+      perTx: st.perTxUsd,
     };
   }
   return headroom;

@@ -20,7 +20,10 @@ import { detectChain, validateAddress } from '../utils/addressValidation';
 import { logger } from '../utils/logger';
 import { sendWithdrawalConfirmed } from '../services/email';
 import { pushCopy, pushTxEvent } from '../services/push.service';
+import { recordSecurityEvent } from '../services/platform/securityEvents';
 import { enforceKycLimit } from '../utils/kycLimits';
+import { assertMovementAllowed } from '../services/platform/controls.service';
+import { assessWithdrawal } from '../services/risk/withdrawalRisk';
 
 const initiateSchema = z.object({
   asset: z.enum(['ETH', 'BTC', 'SOL', 'USDT']),
@@ -52,6 +55,9 @@ export class CryptoWithdrawalController {
   static async initiate(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const body = initiateSchema.parse(req.body);
+      // Emergency controls apply to on-chain withdrawals too.
+      await assertMovementAllowed({ userId: req.user!.id, feature: 'withdrawals', currency: body.asset });
+      await assertMovementAllowed({ userId: req.user!.id, feature: 'blockchain', currency: body.asset });
 
       // Validate destination address against chain-specific rules BEFORE
       // we touch the ledger. Typos = irrecoverable loss.
@@ -124,6 +130,13 @@ export class CryptoWithdrawalController {
       }
 
       await enforceKycLimit(req.user!.id, 'WITHDRAW', body.amount, body.asset);
+
+      // Screening (customer and destination address) and the risk engine. This
+      // path broadcasts immediately, so anything short of a clean decision is
+      // refused here; the staff-reviewed withdrawal flow remains available.
+      const risk = await assessWithdrawal({ userId: req.user!.id, amount: body.amount, currency: body.asset, walletAddress: body.toAddress, req });
+      if (risk.blocked) throw new AppError('This withdrawal can’t be processed. Please contact support.', 403, 'COMPLIANCE_HOLD');
+      if (risk.review) throw new AppError('This withdrawal can’t be sent instantly. Submit it as a reviewed withdrawal from the Withdraw screen, or contact support.', 403, 'COMPLIANCE_HOLD');
 
       const tx = await initiateWithdrawal({
         userId: req.user!.id,
@@ -206,7 +219,10 @@ export class CryptoWithdrawalController {
     try {
       const secret = process.env.DEPOSIT_WEBHOOK_SECRET;
       if (!secret) throw new AppError('Deposit webhook not configured', 503);
-      if (req.headers['x-webhook-secret'] !== secret) {
+      const provided = Buffer.from(String(req.headers['x-webhook-secret'] ?? ''));
+      const expected = Buffer.from(secret);
+      if (provided.length !== expected.length || !crypto.timingSafeEqual(provided, expected)) {
+        void recordSecurityEvent({ type: 'WEBHOOK_REJECTED', severity: 'HIGH', ipAddress: req.ip, path: req.originalUrl, details: { reason: 'bad_deposit_webhook_secret' } });
         throw new AppError('Invalid webhook secret', 401);
       }
       const body = depositWebhookSchema.parse(req.body);

@@ -56,7 +56,7 @@ export function ReceiveWidget() {
               covered, which keeps the centred logo overlay scannable. */}
           <QRCode value={profileLink} size={184} backgroundColor="#ffffff" color="#000000" ecl="H" />
           {/* Centered tazdan badge — the dark-coloured icon
-              variant (icon-black.png = dark mark for use on white
+              variant (icon-asterisk-black.png = dark mark for use on white
               surfaces). Wrapped in a small white-bordered tile so
               there's a clean quiet-zone between the mark and the
               surrounding QR modules; without that ring the icon
@@ -75,7 +75,7 @@ export function ReceiveWidget() {
             }}
           >
             <Image
-              source={require('../../../assets/icon-black.png')}
+              source={require('../../../assets/icon-asterisk-black.png')}
               style={{ width: 32, height: 32 }}
               resizeMode="contain"
             />

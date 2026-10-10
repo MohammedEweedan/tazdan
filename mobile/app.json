@@ -124,7 +124,8 @@
           "cameraPermission": "tazdan uses the camera to scan payment QR codes and to photograph your ID documents for verification.",
           "microphonePermission": false
         }
-      ]
+      ],
+      "expo-audio"
     ],
     "experiments": {
       "typedRoutes": false

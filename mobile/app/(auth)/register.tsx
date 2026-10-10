@@ -352,7 +352,7 @@ export default function Register() {
                 </Pressable>
                 <Image
                   source={require('../../assets/icon-asterisk.png')}
-                  style={{ width: 32, height: 32 }}
+                  style={{ width: 32, height: 32, tintColor: p.accentText }}
                   resizeMode="contain"
                 />
               </View>

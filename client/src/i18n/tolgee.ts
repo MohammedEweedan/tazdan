@@ -3,6 +3,10 @@ import { Tolgee, DevTools } from '@tolgee/web';
 // en + ar are STATIC on purpose — see the note below.
 import enTranslations from './en.json';
 import arTranslations from './ar.json';
+// Public-site copy lives in per-page namespaces (site/<ns>/<locale>.json) so
+// pages can be edited independently; the aggregator merges them per locale.
+import enSite from './site/_locales/en';
+import arSite from './site/_locales/ar';
 
 /* ─────────────────────────────────────────────────────────────────────────
    Locales are loaded LAZILY, one chunk per language.
@@ -34,27 +38,34 @@ import arTranslations from './ar.json';
 const LANGUAGES = ['en', 'ar', 'fr', 'de', 'es', 'nl', 'ru', 'tr', 'pt', 'cn'] as const;
 export type AppLocale = (typeof LANGUAGES)[number];
 
+/** Base locale file + its site namespaces, as one lazily loaded chunk. */
+const lazy = (base: () => Promise<{ default: Record<string, string> }>, site: () => Promise<{ default: Record<string, string> }>) =>
+  () => Promise.all([base(), site()]).then(([b, s]) => ({ ...b.default, ...s.default }));
+
 const staticData = {
-  en: enTranslations,
-  ar: arTranslations,
-  fr: () => import('./fr.json').then((m) => m.default),
-  de: () => import('./de.json').then((m) => m.default),
-  es: () => import('./es.json').then((m) => m.default),
-  nl: () => import('./nl.json').then((m) => m.default),
-  ru: () => import('./ru.json').then((m) => m.default),
-  tr: () => import('./tr.json').then((m) => m.default),
-  pt: () => import('./pt.json').then((m) => m.default),
-  cn: () => import('./cn.json').then((m) => m.default),
+  en: { ...enTranslations, ...enSite },
+  ar: { ...arTranslations, ...arSite },
+  fr: lazy(() => import('./fr.json'), () => import('./site/_locales/fr')),
+  de: lazy(() => import('./de.json'), () => import('./site/_locales/de')),
+  es: lazy(() => import('./es.json'), () => import('./site/_locales/es')),
+  nl: lazy(() => import('./nl.json'), () => import('./site/_locales/nl')),
+  ru: lazy(() => import('./ru.json'), () => import('./site/_locales/ru')),
+  tr: lazy(() => import('./tr.json'), () => import('./site/_locales/tr')),
+  pt: lazy(() => import('./pt.json'), () => import('./site/_locales/pt')),
+  cn: lazy(() => import('./cn.json'), () => import('./site/_locales/cn')),
 };
 
-export const createTolgee = (language = 'en') => Tolgee()
-  .use(DevTools())
-  .init({
+export const createTolgee = (language = 'en') => {
+  const tolgee = Tolgee();
+  if (process.env.NODE_ENV === 'development') tolgee.use(DevTools());
+  return tolgee.init({
     language,
     staticData,
     defaultLanguage: 'en',
+    fallbackLanguage: 'en',
     availableLanguages: [...LANGUAGES],
   });
+};
 
 export function getDirection(lang: string): 'rtl' | 'ltr' {
   return lang === 'ar' ? 'rtl' : 'ltr';

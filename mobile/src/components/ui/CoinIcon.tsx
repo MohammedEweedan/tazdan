@@ -1,3 +1,4 @@
+import { FiatFlag, hasFiatFlag } from './FiatFlag';
 /**
  * CoinIcon — displays a real coin logo inside a coloured circle.
  *
@@ -87,6 +88,7 @@ export function CoinIcon({ symbol, size = 40, color }: Props) {
   const local = LOCAL_ICONS[sym];
   const mono = useTheme((s) => s.mode === 'mono');
   const p = useThemedPalette();
+  if (hasFiatFlag(symbol)) return <FiatFlag currency={symbol} size={size} />;
   if (local) return <Image source={mono ? MONO_ICONS[sym] : local} style={{ width: size, height: size }} resizeMode="contain" accessibilityLabel={sym} />;
   return <RemoteCoinIcon symbol={sym} size={size} color={mono ? p.fg : color} mono={mono} />;
 }

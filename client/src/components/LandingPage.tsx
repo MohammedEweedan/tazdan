@@ -43,6 +43,7 @@ import { ReceiptOverlay, TrioSibling } from "@/components/ui/AppleFilm";
 import { Band, BentoCard, Reveal as KitReveal, SectionHeading } from "@/components/ui/appleKit";
 import { publicPageTheme } from "@/components/ui/publicPageTheme";
 import { useIsAr } from "@/hooks/useIsAr";
+import SecurityComplianceSection from "@/components/ui/SecurityCompliance";
 
 /* ─────────────────────────────────────────────────────────────────
    RESPONSIVE PHONE SIZING SYSTEM
@@ -4349,6 +4350,7 @@ export default function LandingPage() {
       <SectionBand dark={dark} tone="plain" size="0 760px"><SectionBusiness /></SectionBand>
       <SectionBand dark={dark} tone="plain" size="0 700px"><SectionPartnersB2B /></SectionBand>
       <SectionBand dark={dark} tone="plain" size="0 560px"><SectionInfrastructure /></SectionBand>
+      <SectionBand dark={dark} tone="plain" size="0 900px"><SecurityComplianceSection /></SectionBand>
 
       {/* ── Pattern-break closer — sits right above the footer ── */}
       <Box style={{ contentVisibility: "auto", containIntrinsicSize: "0 800px", scrollSnapAlign: "start", scrollSnapStop: "normal" } as React.CSSProperties}>

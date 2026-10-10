@@ -4,6 +4,7 @@
  * Mirrors `services/onramp` but in reverse — user sells crypto, receives fiat.
  * Real providers: MoonPay, Transak, Sardine, Stripe Treasury, Revolut Business.
  */
+import { assertAdapterUsable } from '../providers/guard';
 
 import { v4 as uuidv4 } from 'uuid';
 import type {
@@ -97,6 +98,13 @@ class MoonPayOffRampProvider implements OffRampProvider {
 }
 
 let cached: OffRampProvider | null = null;
+
+/** The configured off-ramp, refusing MOCK in production. */
+export function getActiveOffRampProvider(): OffRampProvider {
+  const provider = getOffRampProvider();
+  assertAdapterUsable('Off-ramp payouts', provider.name);
+  return provider;
+}
 
 export function getOffRampProvider(): OffRampProvider {
   if (cached) return cached;

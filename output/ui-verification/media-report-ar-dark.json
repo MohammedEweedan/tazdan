@@ -1,0 +1,66 @@
+[
+  {
+    "variant": "ar-dark",
+    "id": "tour-home",
+    "frames": 46,
+    "duration": 7.083333,
+    "bytes": 67166,
+    "actionError": null
+  },
+  {
+    "variant": "ar-dark",
+    "id": "flow-send",
+    "frames": 45,
+    "duration": 6.416667,
+    "bytes": 22283,
+    "actionError": null
+  },
+  {
+    "variant": "ar-dark",
+    "id": "flow-remit",
+    "frames": 39,
+    "duration": 5.75,
+    "bytes": 39591,
+    "actionError": null
+  },
+  {
+    "variant": "ar-dark",
+    "id": "flow-p2p",
+    "frames": 47,
+    "duration": 6.625,
+    "bytes": 23869,
+    "actionError": null
+  },
+  {
+    "variant": "ar-dark",
+    "id": "flow-budget",
+    "frames": 38,
+    "duration": 5.666667,
+    "bytes": 39233,
+    "actionError": null
+  },
+  {
+    "variant": "ar-dark",
+    "id": "flow-chat-pay",
+    "frames": 47,
+    "duration": 6.625,
+    "bytes": 25444,
+    "actionError": null
+  },
+  {
+    "variant": "ar-dark",
+    "id": "flow-privacy",
+    "frames": 46,
+    "duration": 7.25,
+    "bytes": 49401,
+    "actionError": null
+  },
+  {
+    "variant": "ar-dark",
+    "id": "flow-business",
+    "frames": 76,
+    "duration": 9.708333,
+    "bytes": 27835,
+    "actionError": "TimeoutError: locator.click: Timeout 4000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByText('الفريق', { exact: true }).first()\u001b[22m\n"
+  }
+]

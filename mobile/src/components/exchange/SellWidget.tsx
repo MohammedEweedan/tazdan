@@ -24,6 +24,9 @@ import { CurrencyPicker, type CurrencyItem } from '@/components/ui/CurrencyPicke
 import { StatusBanner } from '@/components/ui/StatusBanner';
 import { StepUpModal } from '@/components/ui/StepUpModal';
 import { useWallets, useMarkets, useTransactionSound } from '@/hooks';
+import { useLimitBlock, LIMITS_QUERY_KEY } from '@/hooks/useLimits';
+import { LimitNotice } from '@/components/limits/LimitNotice';
+import { useQueryClient } from '@tanstack/react-query';
 import * as LocalAuthentication from 'expo-local-authentication';
 import { CoinAvatar } from '@/components/ui/CoinAvatar';
 import { cryptoExchangeAPI, type CryptoQuote } from '@/lib/cryptoApi';
@@ -166,6 +169,7 @@ export function SellWidget({ defaultAsset, lockAsset = false }: SellWidgetProps 
   const { data: wallets } = useWallets();
   const { data: tickers } = useMarkets();
   const { playSuccess, playError } = useTransactionSound();
+  const qc = useQueryClient();
   const baseCurrency = (user as any)?.baseCurrency ?? 'USD';
 
   // ── Sellable holdings ─────────────────────────────────────────────
@@ -316,6 +320,7 @@ export function SellWidget({ defaultAsset, lockAsset = false }: SellWidgetProps 
     try {
       await cryptoExchangeAPI.execute({ quoteId: quote.id, confirmedByUser: true, idempotencyKey: idemRef.current, ...(stepUpCode ? { stepUpCode } : {}), ...(biometricVerified ? { biometricVerified: true } : {}) } as any);
       playSuccess('sell');
+      void qc.invalidateQueries({ queryKey: LIMITS_QUERY_KEY });
       setStepUpOpen(false);
       const recvAmt = receiveTo?.isFiat
         ? `${currSym(receiveTo.currency, locale)}${fmt(quote.settlementAmount ?? quote.fiatAmount, 2)}`
@@ -332,6 +337,8 @@ export function SellWidget({ defaultAsset, lockAsset = false }: SellWidgetProps 
         return;
       }
       playError();
+      // A limit refused it: refresh limits so the notice explains when it frees up.
+      if (e?.response?.data?.code === 'LIMIT_EXCEEDED') { void qc.invalidateQueries({ queryKey: LIMITS_QUERY_KEY }); setStepUpOpen(false); setError(null); return; }
       if (stepUpCode) throw e;
       setError(msg || tr('buy.errOrder'));
     } finally { setExec(false); }
@@ -340,9 +347,13 @@ export function SellWidget({ defaultAsset, lockAsset = false }: SellWidgetProps 
   const meta = assetMeta(asset);
   const overspend = parseFloat(cryptoAmt) > balance;
   const timerCritical = seconds > 0 && seconds < 8;
-  const canConfirm = !!quote && !exec && seconds > 0 && !overspend;
+  // Limits are shown before confirming; the quote carries the order's USD value.
+  const limit = useLimitBlock('OFFRAMP_SELL', quote ? Number(quote.fiatAmount) : null);
+  const canConfirm = !!quote && !exec && seconds > 0 && !overspend && !limit.blocked;
 
-  const slideLabel = canConfirm
+  const slideLabel = limit.blocked
+    ? tr('limits.reached')
+    : canConfirm
     ? tr('sell.slideToSell').replace('{asset}', asset)
     : overspend ? tr('sell.insufficient') : tr('sell.enterAmountToSell');
 
@@ -525,6 +536,7 @@ export function SellWidget({ defaultAsset, lockAsset = false }: SellWidgetProps 
       </View>
 
       {/* ── CTA ──────────────────────────────────────────────────── */}
+      <LimitNotice action="OFFRAMP_SELL" amountUsd={quote ? Number(quote.fiatAmount) : null} style={{ marginBottom: 10 }} />
       <SlideToConfirm
         label={slideLabel}
         onConfirm={() => { if (canConfirm && !error && !success) onConfirm(); }}

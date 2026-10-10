@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import { z } from 'zod';
 import { prisma } from '../utils/prisma';
 import { AppError } from '../middleware/errorHandler';
+import { recordRiskEvent } from '../services/risk/engine';
 import { AuthRequest } from '../types';
 
 const updateProfileSchema = z.object({
@@ -34,6 +35,59 @@ export class UserController {
     }
   }
 
+  /**
+   * The customer's limits for each action: what they can do now, when each
+   * period resets, and what the next verification level allows. The app shows
+   * this before the customer confirms, so nobody is sent a security code for
+   * an order their limit would refuse.
+   */
+  static async getLimits(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const { allLimitStatuses, LIMITS_TIMEZONE } = await import('../utils/kycLimits');
+      const user = await prisma.user.findUnique({ where: { id: req.user!.id }, select: { kycStatus: true, kycTier: true } });
+      const actions = await allLimitStatuses(req.user!.id);
+      res.json({ kycStatus: user?.kycStatus, tier: actions.SEND.tier, timezone: LIMITS_TIMEZONE(), actions });
+    } catch (error) { next(error); }
+  }
+
+  /** What stands between the customer and closing their account. */
+  static async getClosure(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const { closureBlockers, RETENTION_YEARS } = await import('../services/account/closure.service');
+      const blockers = await closureBlockers(req.user!.id);
+      res.json({ canClose: blockers.length === 0, blockers, retentionYears: RETENTION_YEARS() });
+    } catch (error) { next(error); }
+  }
+
+  /**
+   * Close (delete) the account. Always needs a server-checked code — never a
+   * device biometric alone — because it cannot be undone from the app.
+   */
+  static async closeAccount(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const body = z.object({
+        confirm: z.literal('CLOSE'),
+        reason: z.string().trim().max(500).optional(),
+        stepUpCode: z.string().regex(/^\d{6}$/).optional(),
+      }).parse(req.body);
+      const { closureBlockers, closeAccount } = await import('../services/account/closure.service');
+      const blockers = await closureBlockers(req.user!.id);
+      if (blockers.length) throw new AppError('Settle these before closing your account', 409, 'CLOSURE_BLOCKED', { blockers });
+
+      const { issueStepUp, verifyStepUp } = await import('../services/security/stepUp.service');
+      if (!body.stepUpCode) {
+        const { method } = await issueStepUp(req.user!.id, 'account_close');
+        throw new AppError(
+          `Security verification required. ${method === 'totp' ? 'Enter your authenticator code.' : 'Enter the code we emailed you.'}`,
+          401, 'STEP_UP_REQUIRED', { method },
+        );
+      }
+      await verifyStepUp(req.user!.id, 'account_close', body.stepUpCode);
+      const result = await closeAccount(req.user!.id, { reason: body.reason, req });
+      res.json({ closed: true, closedAt: result.closedAt, erasureDueAt: result.erasureDueAt });
+    } catch (error) { next(error); }
+  }
+
   static async changePassword(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const data = changePasswordSchema.parse(req.body);
@@ -45,41 +99,56 @@ export class UserController {
 
       const passwordHash = await bcrypt.hash(data.newPassword, 12);
       await prisma.user.update({ where: { id: user.id }, data: { passwordHash } });
+      void recordRiskEvent(user.id, 'SECURITY_CHANGE', { change: 'password_changed' }, 'MEDIUM');
       res.json({ message: 'Password changed successfully' });
     } catch (error) {
       next(error);
     }
   }
 
+  /**
+   * Verification documents. `level` says what they are for:
+   *   IDENTITY        ID + selfie (first verification; Level 1)
+   *   ADDRESS         proof of address (raises to Level 2)
+   *   SOURCE_OF_FUNDS payslip, bank statement or business papers (Level 3)
+   * A customer who is already verified keeps their level and limits while an
+   * upgrade is reviewed — submitting more documents never takes limits away.
+   */
   static async submitKYC(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const files = req.files as Express.Multer.File[];
       if (!files || files.length === 0) throw new AppError('At least one document is required', 400);
 
-      const { documentType } = req.body;
-      const documents = files.map((file) => ({
-        userId: req.user!.id,
-        documentType: documentType || 'identity',
-        documentUrl: `/uploads/${file.filename}`,
-      }));
+      const level = String(req.body.level ?? 'IDENTITY').toUpperCase();
+      if (!['IDENTITY', 'ADDRESS', 'SOURCE_OF_FUNDS'].includes(level)) throw new AppError('Unknown verification level', 400);
+      const documentType = level === 'IDENTITY' ? (req.body.documentType || 'identity') : level.toLowerCase();
+      const user = await prisma.user.findUnique({ where: { id: req.user!.id }, select: { kycStatus: true, kycTier: true } });
+      if (!user) throw new AppError('User not found', 404);
+      const upgrade = user.kycStatus === 'APPROVED';
+      if (!upgrade && level !== 'IDENTITY') throw new AppError('Verify your identity first', 400);
+      if (upgrade && level === 'IDENTITY') throw new AppError('Your identity is already verified', 409);
 
-      await prisma.kYCDocument.createMany({ data: documents });
+      await prisma.kYCDocument.createMany({
+        data: files.map((file) => ({ userId: req.user!.id, documentType, documentUrl: `/uploads/${file.filename}` })),
+      });
 
-      // Uploaded documents always go to review. The MOCK provider auto-approves
-      // so flows are testable locally, but it can never run in production:
-      // there the default is MANUAL (admin review) and validateEnv refuses to
-      // boot with KYC_PROVIDER=MOCK. The NODE_ENV check is a second guard.
+      // The MOCK provider approves at once so flows are testable locally; it
+      // can never run in production (MANUAL review there, and validateEnv
+      // refuses KYC_PROVIDER=MOCK). The NODE_ENV check is a second guard.
       const isProd = process.env.NODE_ENV === 'production';
       const provider = (process.env.KYC_PROVIDER || (isProd ? 'MANUAL' : 'MOCK')).toUpperCase();
+      const targetTier = level === 'SOURCE_OF_FUNDS' ? 'TIER_3' : 'TIER_2';
       if (provider === 'MOCK' && !isProd) {
-        await prisma.user.update({
-          where: { id: req.user!.id },
-          data: { kycStatus: 'APPROVED', kycTier: 'TIER_2' },
-        });
-        res.json({ message: 'KYC approved', kycStatus: 'APPROVED', autoApproved: true });
+        await prisma.user.update({ where: { id: req.user!.id }, data: { kycStatus: 'APPROVED', kycTier: targetTier } });
+        await prisma.kYCDocument.updateMany({ where: { userId: req.user!.id, status: 'PENDING' }, data: { status: 'APPROVED', reviewedAt: new Date() } });
+        res.json({ message: 'Verification approved', kycStatus: 'APPROVED', kycTier: targetTier, autoApproved: true });
         return;
       }
 
+      if (upgrade) {
+        res.json({ message: 'Documents submitted for review', kycStatus: 'APPROVED', kycTier: user.kycTier, upgradePending: true });
+        return;
+      }
       await prisma.user.update({ where: { id: req.user!.id }, data: { kycStatus: 'PENDING' } });
       res.json({ message: 'KYC documents submitted for review', kycStatus: 'PENDING' });
     } catch (error) {
@@ -91,13 +160,22 @@ export class UserController {
     try {
       const user = await prisma.user.findUnique({
         where: { id: req.user!.id },
-        select: { kycStatus: true },
+        select: { kycStatus: true, kycTier: true },
       });
       const documents = await prisma.kYCDocument.findMany({
         where: { userId: req.user!.id },
         orderBy: { createdAt: 'desc' },
+        select: { id: true, documentType: true, status: true, rejectionReason: true, createdAt: true, reviewedAt: true },
       });
-      res.json({ kycStatus: user?.kycStatus, documents });
+      const pending = documents.filter((d) => d.status === 'PENDING');
+      const lastRejected = documents.find((d) => d.status === 'REJECTED');
+      res.json({
+        kycStatus: user?.kycStatus,
+        kycTier: user?.kycTier,
+        pendingUpgrade: user?.kycStatus === 'APPROVED' && pending.length > 0 ? pending[0].documentType : null,
+        rejectionReason: lastRejected?.rejectionReason ?? null,
+        documents,
+      });
     } catch (error) {
       next(error);
     }
