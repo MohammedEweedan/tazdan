@@ -23,6 +23,7 @@ const EPS = new Decimal('0.000001'); // 1e-6 tolerance on aggregate sums
 
 let _haltedMemo: boolean | null = null;
 let _haltedAt = 0;
+let _unpersistedHalt = false;
 const HALT_MEMO_MS = 5_000;
 
 export interface ReconcileResult {
@@ -67,33 +68,55 @@ export async function reconcileLedger(): Promise<ReconcileResult> {
 }
 
 export async function setTradingHalt(halted: boolean, reason?: string): Promise<void> {
-  _haltedMemo = halted;
-  _haltedAt = Date.now();
+  // Stop this process immediately, even if persisting the halt fails. A
+  // clearance must be persisted before it can make this process available.
+  if (halted) { _haltedMemo = true; _haltedAt = Date.now(); _unpersistedHalt = true; }
   await prisma.platformSettings.upsert({
     where: { key: HALT_KEY },
     update: { value: halted ? '1' : '0', description: reason ?? 'ledger trading halt' },
     create: { key: HALT_KEY, value: halted ? '1' : '0', description: reason ?? 'ledger trading halt' },
-  }).catch(() => { /* non-fatal — memo flag still protects this instance */ });
+  });
+  _haltedMemo = halted;
+  _haltedAt = Date.now();
+  _unpersistedHalt = false;
 }
 
 /**
  * The halt is shared through the database. Each process re-reads it every few
  * seconds, so a halt set by the scheduler worker (or lifted from the console
  * by another process or a script) reaches every API process promptly. If the
- * read fails, the last known value stands.
+ * read fails, new money movements stop. An expired "not halted" cache is
+ * not permission to spend while the shared safety state is unavailable.
  */
 export async function isTradingHalted(): Promise<boolean> {
+  if (_unpersistedHalt) return true;
   if (_haltedMemo !== null && Date.now() - _haltedAt < HALT_MEMO_MS) return _haltedMemo;
-  const row = await prisma.platformSettings.findUnique({ where: { key: HALT_KEY } }).catch(() => undefined);
-  if (row !== undefined) { _haltedMemo = row?.value === '1'; _haltedAt = Date.now(); }
-  return _haltedMemo ?? false;
+  try {
+    const row = await prisma.platformSettings.findUnique({ where: { key: HALT_KEY } });
+    _haltedMemo = row?.value === '1';
+    _haltedAt = Date.now();
+    return _haltedMemo;
+  } catch {
+    logger.error('[ledger] shared halt unavailable — new movements blocked');
+    return true;
+  }
 }
 
 let started = false;
+let reconciling = false;
 /** Start periodic reconciliation (one worker only). Default every 5 min. */
 export function startReconciliation(intervalMs = Number(process.env.LEDGER_RECONCILE_MS ?? 5 * 60_000)): void {
   if (started) return;
   started = true;
-  setInterval(() => { void reconcileLedger().catch((e) => logger.error('[ledger] reconcile threw', { err: e })); }, intervalMs).unref?.();
+  setInterval(() => {
+    if (reconciling) return;
+    reconciling = true;
+    void reconcileLedger().catch(async (e) => {
+      logger.error('[ledger] reconcile threw — halting', { err: e });
+      await setTradingHalt(true, 'Reconciliation could not complete').catch(() => {
+        logger.error('[ledger] halt persistence failed; this process remains halted');
+      });
+    }).finally(() => { reconciling = false; });
+  }, intervalMs).unref?.();
   logger.info('[ledger] reconciliation scheduler started');
 }

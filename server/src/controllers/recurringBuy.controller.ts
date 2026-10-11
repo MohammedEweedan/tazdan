@@ -9,6 +9,7 @@ import {
   executeRecurringBuy,
 } from '../services/recurringBuy.service';
 import type { RecurringFrequency } from '@prisma/client';
+import { assertFeatureEnabled } from '../utils/features';
 
 const CRYPTO_ASSETS = [
   'BTC', 'ETH', 'USDT', 'SOL', 'BNB', 'XRP', 'ADA', 'DOGE', 'MATIC', 'DOT', 'AVAX',
@@ -51,6 +52,7 @@ export class RecurringBuyController {
   static async create(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const data = createSchema.parse(req.body);
+      assertFeatureEnabled('cryptoTrading');
 
       if (!CRYPTO_ASSETS.includes(data.asset as any)) {
         // Allow long-tail assets too, but block obvious fiat/junk.

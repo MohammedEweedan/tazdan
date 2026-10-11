@@ -16,6 +16,9 @@ import { AppError } from '../../middleware/errorHandler';
 import { logger } from '../../utils/logger';
 import { writeAudit } from './audit';
 import { recordSecurityEvent } from './securityEvents';
+import { isTradingHalted } from '../ledger/reconcile.service';
+import { assertLaunchMovement } from '../ops/launchReadiness.service';
+import { getRedisClient } from '../../utils/redis';
 
 export const CONTROL_FEATURES = [
   'withdrawals', 'deposits', 'p2p', 'fx', 'remittance', 'blockchain', 'cards', 'transfers', 'business_payouts',
@@ -69,6 +72,13 @@ export interface MovementCheck {
  * suspension and the expiry of an already-issued access token.
  */
 export async function assertMovementAllowed(check: MovementCheck): Promise<void> {
+  assertLaunchMovement(check.feature, check.currency, check.corridor, check.provider);
+  if (process.env.NODE_ENV === 'production' && !getRedisClient()) {
+    throw new AppError('Money movements are temporarily paused while shared coordination recovers.', 503, 'FEATURE_DISABLED');
+  }
+  if (await isTradingHalted()) {
+    throw new AppError('Money movements are temporarily paused for an integrity check.', 503, 'FEATURE_DISABLED');
+  }
   const featureReason = await blockedReason('FEATURE', check.feature);
   if (featureReason) {
     throw new AppError('This service is temporarily paused. Please try again later.', 503, 'FEATURE_DISABLED', {

@@ -26,6 +26,8 @@ import { enforceKycLimit } from '../../utils/kycLimits';
 import { collectFee } from '../fee/feeCollector.service';
 import { assertPrincipalCapacity, executionMode, markVenueResult } from './principalExposure.service';
 import { postLedger, isLedgerCurrency, type Leg } from '../ledger/ledger.service';
+import { assertFeatureEnabled } from '../../utils/features';
+import { assertMovementAllowed } from '../platform/controls.service';
 
 // Local alias for the centralized ledger-currency check.
 const isLedgerCcy = (c: string) => isLedgerCurrency(c);
@@ -239,6 +241,8 @@ export async function executeQuote(opts: {
   fundingCurrency?: string;
 }) {
   const { userId, quoteId, idempotencyKey } = opts;
+  assertFeatureEnabled('cryptoTrading');
+  await assertMovementAllowed({ userId, feature: 'fx', currency: opts.fundingCurrency });
 
   // Treasury safety: refuse to execute while a ledger/fund-integrity breach
   // has halted trading. Better to block orders than compound a discrepancy.
@@ -270,6 +274,8 @@ export async function executeQuote(opts: {
   // quote (validated at quote time). No silent default — defaulting to USDT is
   // exactly what credited/debited the wrong wallet and corrupted balances.
   const settlementCurrency = (quote.settlementCurrency || '').toUpperCase();
+  await assertMovementAllowed({ userId, feature: 'fx', currency: assetUpper });
+  await assertMovementAllowed({ userId, feature: 'fx', currency: settlementCurrency });
   if (!settlementCurrency || !isLedgerCurrency(settlementCurrency)) {
     throw new AppError('Quote is missing a valid settlement currency. Request a new quote.', 400);
   }

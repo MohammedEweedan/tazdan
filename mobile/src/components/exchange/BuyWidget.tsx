@@ -20,6 +20,7 @@ import { StepUpModal } from '@/components/ui/StepUpModal';
 import { SuccessModal, type TxSuccessData } from '@/components/ui/SuccessModal';
 import { ExpressPayButton } from '@/components/ui/ExpressPayButton';
 import { useWallets, useCards, useMarkets, useTransactionSound } from '@/hooks';
+import { useFeatures } from '@/hooks/useFeatures';
 import { useLimitBlock, LIMITS_QUERY_KEY } from '@/hooks/useLimits';
 import { LimitNotice } from '@/components/limits/LimitNotice';
 import { useQueryClient } from '@tanstack/react-query';
@@ -180,6 +181,7 @@ interface BuyWidgetProps {
 export function BuyWidget({ defaultAsset, lockAsset = false }: BuyWidgetProps = {}) {
   const { user, biometricEnabled } = useAuthStore();
   const tr = useT();
+  const features = useFeatures();
   const p = useThemedPalette();
   const locale = useI18n((s) => s.locale);
   const insets = useSafeAreaInsets();
@@ -719,6 +721,7 @@ export function BuyWidget({ defaultAsset, lockAsset = false }: BuyWidgetProps = 
       </View>
 
       {/* ── Status banner (errors only; success shown inside slider) ── */}
+      <StatusBanner kind="info" message={!features.cryptoTrading ? tr('features.cryptoPaused') : null} />
       <StatusBanner kind="error" message={error} onDismiss={() => setError(null)} />
 
       {/* Flexible spacer pushes the keypad + CTA to the bottom of the screen
@@ -756,8 +759,8 @@ export function BuyWidget({ defaultAsset, lockAsset = false }: BuyWidgetProps = 
       <ConfirmAction
         action={tr('confirm.act.buy', { asset })}
         prompt={slideLabel}
-        onConfirm={() => { if (canConfirm && !error && !exec) doExecute(payMethod); }}
-        disabled={!canConfirm || !!error}
+        onConfirm={() => { if (features.cryptoTrading && canConfirm && !error && !exec) doExecute(payMethod); }}
+        disabled={!features.cryptoTrading || !canConfirm || !!error}
         status={exec ? 'loading' : error ? 'error' : 'idle'}
         errorLabel={error || undefined}
         review={review}

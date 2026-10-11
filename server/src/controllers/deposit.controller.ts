@@ -15,6 +15,7 @@ import { Currency } from '@prisma/client';
 import type { RampPaymentMethod, RampProvider } from '@prisma/client';
 import { sendDepositConfirmed } from '../services/email';
 import { pushCopy, pushTxEvent } from '../services/push.service';
+import { assertMovementAllowed } from '../services/platform/controls.service';
 
 const depositSchema = z.object({
   currency: z.enum(['USD', 'EUR', 'GBP', 'AED', 'SAR', 'EGP', 'USDT', 'LYD', 'BTC', 'ETH', 'BNB', 'SOL', 'XRP', 'ADA', 'DOGE', 'MATIC', 'DOT', 'AVAX']),
@@ -38,6 +39,7 @@ export class DepositController {
     try {
       const body = { ...req.body, amount: parseFloat(req.body.amount) };
       const data = depositSchema.parse(body);
+      await assertMovementAllowed({ userId: req.user!.id, feature: 'deposits', currency: data.currency });
 
       // KYC gate: fiat deposits require APPROVED KYC status
       if (FIAT_CURRENCIES.has(data.currency)) {
@@ -278,6 +280,7 @@ export class DepositController {
       }).parse(req.body);
 
       const provider = getActiveOnRampProvider();
+      await assertMovementAllowed({ userId: req.user!.id, feature: 'deposits', currency: body.fiatCurrency });
       const quote = await provider.quote({
         fiatCurrency: body.fiatCurrency.toUpperCase() as Currency,
         fiatAmount: body.fiatAmount,
@@ -302,6 +305,7 @@ export class DepositController {
 
       const provider = getActiveOnRampProvider();
       const reference = generateReference('ONR');
+      await assertMovementAllowed({ userId: req.user!.id, feature: 'deposits', currency: body.fiatCurrency });
 
       // Persist the intent BEFORE calling the provider so we can
       // correlate the webhook even if the response is lost in flight.

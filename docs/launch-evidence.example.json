@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "releaseSha": "0000000000000000000000000000000000000000",
+  "scope": {
+    "market": "REPLACE_WITH_APPROVED_MARKET",
+    "currencies": [
+      "LYD"
+    ],
+    "features": [
+      "transfers"
+    ],
+    "corridors": [],
+    "providers": []
+  },
+  "gates": {
+    "authorization": {
+      "status": "pending",
+      "owner": "Assign a named reviewer"
+    },
+    "providers": {
+      "status": "pending",
+      "owner": "Assign a named reviewer"
+    },
+    "security": {
+      "status": "pending",
+      "owner": "Assign a named reviewer"
+    },
+    "moneyPaths": {
+      "status": "pending",
+      "owner": "Assign a named reviewer"
+    },
+    "deviceQa": {
+      "status": "pending",
+      "owner": "Assign a named reviewer"
+    },
+    "recovery": {
+      "status": "pending",
+      "owner": "Assign a named reviewer"
+    },
+    "operations": {
+      "status": "pending",
+      "owner": "Assign a named reviewer"
+    }
+  }
+}

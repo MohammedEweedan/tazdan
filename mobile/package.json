@@ -4,6 +4,7 @@
   "main": "expo-router/entry",
   "private": true,
   "scripts": {
+    "postinstall": "node scripts/patch-stripe-swift-interop.js && node scripts/patch-metro-image-size.cjs",
     "start": "expo start",
     "ios": "expo run:ios",
     "ios:local-test": "bash scripts/ios-local-test.sh",
@@ -11,7 +12,6 @@
     "web": "expo start --web",
     "lint": "expo lint",
     "typecheck": "tsc --noEmit",
-    "postinstall": "node scripts/patch-stripe-swift-interop.js",
     "i18n:audit": "node scripts/i18n-audit.js",
     "i18n:audit:strict": "node scripts/i18n-audit.js --strict",
     "test:api-config": "node scripts/test-api-endpoint.cjs"
@@ -28,7 +28,7 @@
     "@shopify/flash-list": "2.0.2",
     "@stripe/stripe-react-native": "~0.50.0",
     "@tanstack/react-query": "^5.59.0",
-    "axios": "^1.7.7",
+    "axios": "^1.20.0",
     "babel-preset-expo": "~54.0.12",
     "expo": "~54.0.37",
     "expo-asset": "~12.0.13",
@@ -84,5 +84,10 @@
     "@babel/core": "^7.25.0",
     "@types/react": "~19.1.0",
     "typescript": "~5.9.2"
+  },
+  "overrides": {
+    "postcss": "^8.5.29",
+    "brace-expansion@^5.0.0": "^5.0.12",
+    "image-size": "^2.0.4"
   }
 }

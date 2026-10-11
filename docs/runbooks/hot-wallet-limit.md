@@ -1,3 +1,5 @@
+> Mainnet activation requires the independently operated gateway and reviewed policies in [isolated custody](isolated-custody.md). API limits alone do not constrain an attacker with signing privileges.
+
 # Hot Wallet Limit Runbook
 
 Trigger: operational readiness reports a hot-wallet limit breach.

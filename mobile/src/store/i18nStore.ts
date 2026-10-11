@@ -107,6 +107,8 @@ const dict: Record<Locale, Strings> = {
     'settings.off':               'Off',
     'settings.mono':              'Mono',
     'features.p2pPaused':         'New P2P listings and trades are paused for now. You can still finish or cancel your open trades.',
+    'features.cryptoPaused':      'New crypto orders are temporarily paused. Your balances and history remain available.',
+    'features.remitPaused':       'New international transfers are temporarily paused. You can still track existing transfers.',
     'features.cardsPaused':       'New cards and top-ups are paused for now. You can still view, freeze or cancel your cards.',
     // Wallet tab
     // P2P marketplace
@@ -1921,6 +1923,8 @@ const dict: Record<Locale, Strings> = {
     'settings.off':               'غير مفعّلة',
     'settings.mono':              'أحادي',
     'features.p2pPaused':         'إنشاء عروض وصفقات P2P الجديدة متوقف مؤقتاً. لا يزال بإمكانك إتمام صفقاتك المفتوحة أو إلغاؤها.',
+    'features.cryptoPaused':      'شراء العملات الرقمية متوقف مؤقتاً. يمكنك عرض أرصدتك وسجل معاملاتك.',
+    'features.remitPaused':       'التحويلات الدولية الجديدة متوقفة مؤقتاً. يمكنك متابعة التحويلات الحالية.',
     'features.cardsPaused':       'إصدار البطاقات الجديدة وشحنها متوقف مؤقتاً. لا يزال بإمكانك عرض بطاقاتك أو تجميدها أو إلغاؤها.',
     // Currency names — picked up by <Text>'s English-literal translation.
     'literal.us.dollar.21c03ffa':      'دولار أمريكي',

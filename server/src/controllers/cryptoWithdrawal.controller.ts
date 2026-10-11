@@ -31,6 +31,7 @@ const initiateSchema = z.object({
   amount: z.union([z.string(), z.number()]).transform(String),
   toAddress: z.string().min(10),
   twoFactorCode: z.string().min(6).max(8).optional(),
+  idempotencyKey: z.string().regex(/^[A-Za-z0-9_-]{8,128}$/).optional(),
 });
 
 const estimateSchema = z.object({
@@ -144,12 +145,21 @@ export class CryptoWithdrawalController {
         network: body.network,
         amount: body.amount,
         toAddress: body.toAddress,
+        idempotencyKey: body.idempotencyKey ?? req.get('Idempotency-Key'),
       });
 
       const io = req.app.get('io') as IOServer | undefined;
       io?.to(`user:${req.user!.id}`).emit('withdrawal:submitted', {
         id: tx.id, txHash: tx.txHash, status: tx.status,
       });
+
+      if (tx.status === 'BROADCAST_UNKNOWN') {
+        return res.status(202).json({
+          transaction: tx,
+          code: 'SETTLEMENT_PENDING',
+          message: 'Your withdrawal is being reconciled. Do not submit it again; track this reference in your history.',
+        });
+      }
 
       // Transactional email + push for the on-chain withdrawal. Fire-
       // and-forget; the broadcast has already happened.

@@ -189,8 +189,8 @@ const jsonLd = {
   ],
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
-  const locale = headers().get('x-tazdan-locale') === 'ar' ? 'ar' : 'en';
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const locale = (await headers()).get('x-tazdan-locale') === 'ar' ? 'ar' : 'en';
   return (
     <html
       lang={locale}

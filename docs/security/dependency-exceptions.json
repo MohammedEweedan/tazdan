@@ -1,0 +1,20 @@
+[
+  {
+    "package": "braces",
+    "advisory": "GHSA-vfj7-8cjw-p6xm",
+    "workspaces": ["server", "client", "mobile"],
+    "scope": "build-only",
+    "owner": "Engineering security owner",
+    "expiresAt": "2026-11-10T00:00:00Z",
+    "reason": "No patched release is available. Consumers are repository-controlled test, lint and native build glob patterns. Application endpoints must not accept patterns for these tools. Run builds with restricted credentials; replace or patch the toolchain before expiry."
+  },
+  {
+    "package": "node-forge",
+    "advisory": "GHSA-86w9-cpqp-85rv",
+    "workspaces": ["mobile"],
+    "scope": "build-only",
+    "owner": "Mobile release security owner",
+    "expiresAt": "2026-11-10T00:00:00Z",
+    "reason": "No patched release is available. Expo Node tooling parses the team's controlled build signing certificates; it is not the native application's verifier. Pin reviewed certificate digests, do not process third-party certificates in release jobs, and upgrade or replace the affected verifier before expiry."
+  }
+]

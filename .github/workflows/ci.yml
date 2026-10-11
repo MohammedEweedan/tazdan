@@ -1,4 +1,6 @@
 name: CI
+permissions:
+  contents: read
 
 on:
   push:
@@ -64,7 +66,25 @@ jobs:
         env:
           PGPASSWORD: testpassword
       - run: npx tsc --noEmit
-      - run: npm test -- --passWithNoTests --forceExit
+      - name: Disposable database backup and restore drill
+        run: |
+          psql -h localhost -U tazdan -d postgres -v ON_ERROR_STOP=1 -c 'CREATE DATABASE tazdan_drill_fixture;'
+          export DATABASE_URL=postgresql://tazdan:testpassword@localhost:5432/tazdan_drill_fixture
+          npx prisma migrate deploy
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 <<'SQL'
+          INSERT INTO "LedgerAccount" (id,type,currency,balance,"updatedAt") VALUES ('drill-in','SYSTEM_ONRAMP','USD',-100,NOW()),('drill-out','SYSTEM_OFFRAMP','USD',100,NOW());
+          INSERT INTO "LedgerEntry" (id,"groupId","accountId",currency,amount,"refType") VALUES ('drill-entry-1','drill-group','drill-in','USD',-100,'test_fixture'),('drill-entry-2','drill-group','drill-out','USD',100,'test_fixture');
+          SQL
+          export BACKUP_DIR=/tmp/tazdan-ci-backups BACKUP_REQUIRE_OFFSITE=0
+          sh ../scripts/db-backup.sh
+          readiness_manifests=(/tmp/tazdan-ci-backups/*.manifest.json)
+          export RESTORE_MANIFEST_PATH="${readiness_manifests[0]}"
+          export RESTORE_TARGET_DATABASE_URL=postgresql://tazdan:testpassword@localhost:5432/tazdan_restore_ci
+          export RESTORE_DRILL_CONFIRMED=1
+          node ../scripts/restore-drill.mjs
+        env:
+          PGPASSWORD: testpassword
+      - run: npm test -- --runInBand --forceExit
       - name: Route inventory (fails if a router stops parsing)
         run: npx ts-node --transpile-only scripts/route-inventory.ts --json > /tmp/routes.json && node -e "const j=require('/tmp/routes.json'); if (j.total < 280) { console.error('route count dropped to', j.total); process.exit(1) }"
       # The Docker image ships esbuild output, not tsc output — verify that
@@ -86,6 +106,10 @@ jobs:
           cache-dependency-path: mobile/package-lock.json
       - run: npm ci --legacy-peer-deps
       - run: npx tsc --noEmit
+
+      - run: npm run test:api-config
+      - name: iOS bundle and patched asset parser
+        run: npx expo export --platform ios --output-dir /tmp/tazdan-ios-export
 
   client:
     name: Client — type-check, build
@@ -115,17 +139,15 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-      # Production deps on a money server are a HARD gate — a known-high CVE
-      # in something we ship must block the merge, not decorate it.
-      - name: Audit server prod deps (blocking)
-        run: npm audit --omit=dev --audit-level=high
-        working-directory: server
-      - name: Audit client deps
-        run: npm audit --audit-level=high
-        working-directory: client
-        continue-on-error: true
-      - name: Secret scan (committed credentials)
-        run: |
-          if git grep -nE '(sk_live_[0-9a-zA-Z]{20,}|AKIA[0-9A-Z]{16}|-----BEGIN (RSA|EC|OPENSSH) PRIVATE KEY-----|re_[0-9A-Za-z]{20,})' -- ':!*.md' ':!*.example' ; then
-            echo 'Possible secret committed'; exit 1
-          fi
+      - name: Audit policy tests
+        run: node --test scripts/security/audit-policy.test.mjs
+      - name: Audit server dependencies
+        run: node scripts/security/audit.mjs server
+      - name: Audit website dependencies
+        run: node scripts/security/audit.mjs client
+      - name: Audit mobile dependencies
+        run: node scripts/security/audit.mjs mobile
+      - name: Backup, service-worker and credential policy tests
+        run: node --test scripts/restore-drill.test.mjs scripts/security/secret-scan.test.mjs scripts/security/service-worker.test.mjs
+      - name: Secret scan (includes examples and documentation)
+        run: node scripts/security/secret-scan.mjs

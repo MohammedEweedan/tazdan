@@ -14,7 +14,7 @@ if (process.env.SENTRY_DSN) {
 }
 
 import { validateEnv, isProduction } from './utils/env';
-import { initRedis } from './utils/redis';
+import { initRedis, getRedisClient } from './utils/redis';
 import { logger } from './utils/logger';
 validateEnv();
 
@@ -30,6 +30,10 @@ import { Server } from 'socket.io';
 import jwt from 'jsonwebtoken';
 import path from 'path';
 import cluster from 'cluster';
+import crypto from 'crypto';
+import { attachRequestContext } from './middleware/requestContext';
+import { dependencyReadiness, withDeadline } from './services/ops/health.service';
+import { currentLaunchReadiness, isRealMoneyEnabled } from './services/ops/launchReadiness.service';
 
 import { authRouter } from './routes/auth';
 import { userRouter } from './routes/user';
@@ -72,15 +76,16 @@ import { budgetRouter } from './routes/budget';
 import { assetDiscussionRouter } from './routes/assetDiscussion';
 import { startBudgetScheduler } from './services/budget.service';
 import { startLydSampler } from './services/exchange/lydOrderBook.service';
-import { startReconciliation } from './services/ledger/reconcile.service';
+import { startReconciliation, reconcileLedger, isTradingHalted } from './services/ledger/reconcile.service';
 import { getEmailStatus } from './services/email';
-import { startFundIntegrityAudit } from './services/ledger/fundIntegrity.service';
+import { startFundIntegrityAudit, auditFundIntegrity } from './services/ledger/fundIntegrity.service';
+import { startCustodyReconciliation } from './services/wallet/custodyReconciliation.service';
 import { startOperationalReadinessAlerts } from './services/ops/operationalReadiness.service';
 import { globalLimiter, authLimiter, registerLimiter, withdrawalLimiter, webhookLimiter } from './middleware/rateLimiters';
 import { protectedUploadsRouter } from './middleware/protectedUploads';
 import { ipBanMiddleware } from './middleware/ipBan';
 import { featureFlags } from './utils/features';
-import { metricsMiddleware, startMetricsSampler } from './services/platform/metrics';
+import { metricsMiddleware, startMetricsSampler, prometheusMetrics } from './services/platform/metrics';
 import { cockpitRouter } from './routes/cockpit';
 import { remittanceRouter } from './routes/remittance';
 import { businessRouter } from './routes/business';
@@ -164,6 +169,7 @@ app.set('onlineUsers', onlineUsers);
 app.set('trust proxy', 1);
 
 // Block banned IPs before any processing
+app.use(attachRequestContext);
 app.use(ipBanMiddleware);
 
 // Latency / throughput / error-rate samples for the cockpit (in-process).
@@ -312,38 +318,42 @@ app.use('/api/v1', publicApiRouter);
 
 // Feature switches — public so the apps can hide surfaces that are off.
 app.get('/api/features', (_req, res) => {
-  res.json({ features: featureFlags() });
+  const flags = featureFlags();
+  if (isProduction()) {
+    const report = currentLaunchReadiness();
+    const open = isRealMoneyEnabled() && report.ok;
+    const mapping = { p2p: 'p2p', cards: 'cards', altTrading: 'fx', blockchain: 'blockchain', cryptoTrading: 'fx', remittance: 'remittance' };
+    for (const key of Object.keys(flags) as (keyof typeof flags)[]) flags[key] = flags[key] && open && Boolean(report.evidence?.scope.features.includes(mapping[key] as any));
+  }
+  res.setHeader('Cache-Control', 'no-store');
+  res.json({ features: flags });
+});
+
+app.get('/api/health/live', (_req, res) => res.json({ status: 'alive' }));
+app.get('/api/health/ready', async (_req, res) => {
+  const health = await dependencyReadiness();
+  res.setHeader('Cache-Control', 'no-store');
+  res.status(health.dependenciesReady ? 200 : 503).json({ status: health.dependenciesReady ? 'ready' : 'unavailable', moneyReady: health.moneyReady, checks: health.checks });
+});
+app.get('/api/metrics', async (req, res) => {
+  const expected = process.env.METRICS_TOKEN ?? '';
+  const received = req.get('Authorization')?.replace(/^Bearer /, '') ?? '';
+  if (expected.length < 32 || expected.length !== received.length || !crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(received))) {
+    res.status(401).json({ error: 'Unauthorized' }); return;
+  }
+  const health = await dependencyReadiness();
+  const unknown = await withDeadline(prisma.onChainTransaction.count({ where: { type: 'WITHDRAWAL', status: 'BROADCAST_UNKNOWN' } })).catch(() => null);
+  res.setHeader('Cache-Control', 'no-store');
+  res.type('text/plain; version=0.0.4').send(prometheusMetrics() +
+    `tazdan_dependencies_ready ${Number(health.dependenciesReady)}\ntazdan_money_ready ${Number(health.moneyReady)}\ntazdan_custody_status_query_ok ${Number(unknown !== null)}\n` +
+    (unknown === null ? '' : `tazdan_custody_unknown_operations ${unknown}\n`));
 });
 
 // Health check
 // Public: status + dependency checks only. Config details (email transport,
 // sender addresses, missing env names, pid) go to signed-in admins only.
 app.get('/api/health', optionalAuthenticate, async (req: AuthRequest, res) => {
-  const checks: Record<string, 'ok' | 'error'> = {};
-
-  // DB check
-  try {
-    await prisma.$queryRaw`SELECT 1`;
-    checks.database = 'ok';
-  } catch {
-    checks.database = 'error';
-  }
-
-  // Redis check
-  try {
-    const { getRedisClient } = await import('./utils/redis');
-    const client = getRedisClient();
-    if (client) {
-      await client.ping();
-      checks.redis = 'ok';
-    } else {
-      checks.redis = 'error';
-    }
-  } catch {
-    checks.redis = 'error';
-  }
-
-  const healthy = Object.values(checks).every(v => v === 'ok');
+  const { checks, dependenciesReady: healthy } = await dependencyReadiness();
   const status = healthy ? 200 : 503;
 
   const isAdmin = req.user?.role === 'ADMIN';
@@ -449,6 +459,12 @@ async function start() {
     await seedAdmin().catch((e) => logger.error('[boot] seedAdmin failed', { err: e }));
     await ensureMasterSeed();
     await initRedis();
+    if (isProduction() && !getRedisClient()) throw new Error('Redis must be available before production startup');
+    if (isProduction() && process.env.REAL_MONEY_ENABLED === '1') {
+      const ledger = await reconcileLedger();
+      const funds = await auditFundIntegrity({ haltOnBreach: true });
+      if (!ledger.ok || !funds.ok || await isTradingHalted()) throw new Error('Financial integrity must be verified before real-money startup');
+    }
 
     httpServer.keepAliveTimeout = 65_000;
     httpServer.headersTimeout    = 66_000;
@@ -515,6 +531,7 @@ async function start() {
     if (isSchedulerWorker) {
       startMetricsSampler();
       startFundIntegrityAudit();
+      startCustodyReconciliation();
       startOperationalReadinessAlerts();
       // Official sanctions lists (UN, OFAC SDN, UK): first download soon after
       // boot when missing or stale, then daily.

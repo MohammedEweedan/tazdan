@@ -24,6 +24,8 @@ import { logger } from '../../utils/logger';
 import { AppError } from '../../middleware/errorHandler';
 import { postLedger } from '../ledger/ledger.service';
 import { debitAvailable } from '../wallet/atomicWallet';
+import { assertFeatureEnabled } from '../../utils/features';
+import { assertLaunchMovement } from '../ops/launchReadiness.service';
 import { assertMovementAllowed } from '../platform/controls.service';
 import { writeAudit } from '../platform/audit';
 import { evaluateRisk } from '../risk/engine';
@@ -143,6 +145,8 @@ export async function createTransfer(input: CreateTransferInput) {
   if (quote.consumedAt) throw new AppError('This quote has already been used — request a new one', 409, 'DUPLICATE_REQUEST');
   if (quote.expiresAt.getTime() < Date.now()) throw new AppError('This quote has expired — request a new one', 409);
   const corridor = quote.corridor;
+  assertFeatureEnabled('remittance');
+  assertLaunchMovement('remittance', corridor.destCurrency, corridor.code);
   await assertMovementAllowed({ userId: input.userId, feature: 'remittance', currency: corridor.sourceCurrency, corridor: corridor.code });
   if (corridor.status === 'PAUSED' || corridor.status === 'DISABLED') throw new AppError(`${corridor.name} is paused`, 503, 'FEATURE_DISABLED');
   if (corridor.status === 'SANDBOX_ONLY' && process.env.NODE_ENV === 'production') {

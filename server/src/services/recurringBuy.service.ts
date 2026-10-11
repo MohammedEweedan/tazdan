@@ -49,6 +49,8 @@ export function computeNextRun(from: Date, frequency: RecurringFrequency): Date 
  * throws on failure (caller records lastError + bumps failureCount).
  */
 export async function executeRecurringBuy(id: string) {
+  const { assertFeatureEnabled } = await import('../utils/features');
+  assertFeatureEnabled('cryptoTrading');
   const rb = await prisma.recurringBuy.findUnique({ where: { id } });
   if (!rb) throw new Error('Recurring buy not found');
   if (rb.status !== 'ACTIVE') throw new Error(`Recurring buy is ${rb.status}`);
