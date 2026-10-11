@@ -13,6 +13,15 @@ import { bootstrapPlatform } from '../services/platform/bootstrap';
 import { deviceFingerprint, rememberDevice } from '../services/security/stepUp.service';
 
 jest.mock('../services/wallet/walletDerivation.service', () => ({ createUserWallets: jest.fn().mockResolvedValue(undefined) }));
+// LYD pricing deliberately ignores manual overrides; supply a deterministic
+// Fulus feed while exercising the real quote, transfer and ledger paths.
+jest.mock('../services/exchange/fulus.service', () => ({
+  ...jest.requireActual('../services/exchange/fulus.service'),
+  getFulusLydRate: jest.fn(async (currency: string) => {
+    const rates: Record<string, number> = { GBP: 6.9, USD: 1 / 0.146 };
+    return rates[currency] ?? null;
+  }),
+}));
 
 const RUN_DB = process.env.CI === 'true' || process.env.RUN_DB_TESTS === '1';
 const describeDb = RUN_DB ? describe : describe.skip;
@@ -33,7 +42,7 @@ describeDb('customer remittance API', () => {
 
   beforeAll(async () => {
     await bootstrapPlatform({ workers: false });
-    await pin('GBP', 'LYD', 6.9); await pin('LYD', 'GBP', 1 / 6.9); await pin('LYD', 'USD', 0.146); await pin('GBP', 'USD', 1.27);
+    await pin('GBP', 'USD', 1.27);
     const u = await prisma.user.create({
       data: { email: `${marker}@example.com`, passwordHash: 'x', firstName: 'Salem', lastName: 'Api', country: 'LY', status: 'ACTIVE', kycStatus: 'APPROVED', kycTier: 'TIER_2', emailVerified: true, username: marker, referralCode: `${marker}r` },
     });
