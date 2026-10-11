@@ -65,11 +65,11 @@ export default function FeatureMarquee() {
             <Box key={copy} display="flex" gap="12px" pr="12px" flexShrink={0} dir={isAr ? "rtl" : "ltr"}>
               {FEATURES.map(({ key, icon: Icon }) => (
                 <Box key={key} display="inline-flex" alignItems="center" gap="14px"
-                  bg={theme.accent} color="#071018" h={{ base: "64px", md: "78px" }}
+                  bg={theme.accent} color="#ffffff" h={{ base: "64px", md: "78px" }}
                   px={{ base: "18px", md: "24px" }} borderRadius="999px" whiteSpace="nowrap">
                   <Box as="span" w={{ base: "38px", md: "46px" }} h={{ base: "38px", md: "46px" }}
                     borderRadius="full" bg="#F6F9FC" display="inline-flex" alignItems="center" justifyContent="center">
-                    <Icon size={20} />
+                    <Icon size={20} color="#071018" />
                   </Box>
                   <Box as="span" fontSize={{ base: "22px", md: "32px" }} fontWeight={700} letterSpacing="-0.035em">
                     {t(key)}
