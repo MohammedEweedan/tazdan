@@ -8,6 +8,7 @@ import safety from '../safety/pt.json';
 import company from '../company/pt.json';
 import legal from '../legal/pt.json';
 import account from '../account/pt.json';
+import mock from '../mock/pt.json';
 
-const messages: Record<string, string> = { ...common, ...home, ...features, ...business, ...partners, ...safety, ...company, ...legal, ...account };
+const messages: Record<string, string> = { ...common, ...home, ...features, ...business, ...partners, ...safety, ...company, ...legal, ...account, ...mock };
 export default messages;

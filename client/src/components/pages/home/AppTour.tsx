@@ -20,8 +20,6 @@ import { APP_VIDEOS, videoSrc } from "@/content/appMedia";
 
 /** How long a still (or a screen that hasn't been captured yet) stays up. */
 const STILL_MS = 8000;
-/** A recording shorter than this replays once before the tour moves on. */
-
 
 type Stop = {
   id: string;

@@ -18,17 +18,19 @@ function resolveVariant(variant: LogoVariant, dark: boolean): "color" | "black" 
   return dark ? "white" : "black";
 }
 
+/* Brand navy (#24384F, mobile/src/theme/accent.ts DEFAULT_ACCENT) on light
+   surfaces; the reversed white mark on dark ones, where navy is ~1.5:1. */
 const LOGO_SRC: Record<"color" | "black" | "white", string> = {
   color: "/logo-color.png",
   black: "/logo-color.png",
-  white: "/logo-color.png",
+  white: "/logo-white.png",
 };
 
 /* The icon-only mark is the wallet silhouette. Keep the light and dark
    variants separate so it remains legible on both surfaces. */
 const ICON_SRC: Record<"color" | "black" | "white", string> = {
   color: "/icon-color.png",
-  black: "/icon-asterisk-black.png",
+  black: "/icon-color.png",
   white: "/icon-asterisk-white.png",
 };
 

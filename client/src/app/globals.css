@@ -18,8 +18,9 @@ html[dir='rtl'] {
   --ls-wide: 0em;
 }
 
-html[lang='ar'] *,
-html[dir='rtl'] * {
+/* Code keeps its monospace face (see [data-mono] in the site kit). */
+html[lang='ar'] *:not(code):not(pre):not(kbd):not(samp):not([data-mono]):not([data-mono] *):not(pre *):not(code *),
+html[dir='rtl'] *:not(code):not(pre):not(kbd):not(samp):not([data-mono]):not([data-mono] *):not(pre *):not(code *) {
   font-family: var(--font-outfit), var(--font-cairo), system-ui, sans-serif;
   letter-spacing: 0em !important;
   word-spacing: normal;

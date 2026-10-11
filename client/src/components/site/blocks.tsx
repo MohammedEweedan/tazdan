@@ -244,7 +244,9 @@ export function FAQList({ items }: { items: { q: string; a: string }[] }) {
 
 /** Closing call to action used at the bottom of most pages. Defaults to the
  *  shared waitlist copy (common.cta.*). */
-export function CTABand({ title, lead, note }: { title?: string; lead?: string; note?: string }) {
+export function CTABand({
+  title, lead, note, secondary,
+}: { title?: string; lead?: string; note?: string; secondary?: { label: string; href: string } }) {
   const t = useSiteTheme();
   const { t: tr } = useTranslate();
   const { open } = useWaitlist();
@@ -257,7 +259,9 @@ export function CTABand({ title, lead, note }: { title?: string; lead?: string; 
           <Lead position="relative" align="center" mt="18px" maxW="40ch">{lead ?? tr("common.cta.lead")}</Lead>
           <Box position="relative" mt="30px" display="flex" gap="12px" flexWrap="wrap" justifyContent="center">
             <SiteButton size="lg" onClick={open} arrow>{tr("common.cta.primary")}</SiteButton>
-            <SiteButton size="lg" variant="secondary" href="/features">{tr("common.cta.secondary")}</SiteButton>
+            <SiteButton size="lg" variant="secondary" href={secondary?.href ?? "/features"}>
+              {secondary?.label ?? tr("common.cta.secondary")}
+            </SiteButton>
           </Box>
           <Footnote position="relative" align="center" mt="18px" maxW="56ch">{note ?? tr("common.cta.note")}</Footnote>
         </Box>

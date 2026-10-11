@@ -54,5 +54,9 @@
   "notfound_link_features": "Features",
   "notfound_link_fees": "Fees",
   "notfound_link_help": "Help center",
-  "notfound_link_contact": "Contact"
+  "notfound_link_contact": "Contact",
+  "common.status.notBuilt": "Not built yet",
+  "common.status.signed": "Agreement signed",
+  "common.status.licensed": "Licence granted",
+  "common.status.live": "Live"
 }

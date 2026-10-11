@@ -52,10 +52,10 @@ export function StageRail({ stages, entries, label }: { stages: StageDef[]; entr
               position="absolute"
               top="6px"
               h="1px"
-              sx={{ insetInlineStart: 0, insetInlineEnd: 0 }}
+              style={{ insetInlineStart: 0, insetInlineEnd: 0 }}
               bg={last ? `linear-gradient(to ${sides.end}, ${t.divider}, transparent)` : t.divider}
             />
-            <StatusNode status={lead.status} position="absolute" top="0" sx={{ insetInlineStart: 0 }} />
+            <StatusNode status={lead.status} position="absolute" top="0" style={{ insetInlineStart: 0 }} />
 
             <Box fontSize="13px" fontWeight={600} color={t.accentText} sx={{ fontVariantNumeric: "tabular-nums" }}>
               {String(i + 1).padStart(2, "0")}

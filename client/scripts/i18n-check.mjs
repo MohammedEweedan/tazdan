@@ -65,7 +65,7 @@ for (const f of files) {
   }
 }
 // Keys built dynamically inside the kit.
-for (const s of ["inApp", "pilot", "planned", "inProgress", "discussion", "pipeline"]) used.set(`common.status.${s}`, "components/site/primitives.tsx");
+for (const s of ["inApp", "pilot", "planned", "inProgress", "discussion", "pipeline", "notBuilt", "signed", "licensed", "live"]) used.set(`common.status.${s}`, "components/site/primitives.tsx");
 
 /* ── load locales the way tolgee.ts merges them ── */
 function load(l) {

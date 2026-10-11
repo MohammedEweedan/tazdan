@@ -6,13 +6,10 @@
   "features.hero.secondary": "See every capability",
   "features.hero.note": "Coming to iPhone and Android. Pre-launch: services depend on regulatory approval and partner availability.",
   "features.hero.alt": "The tazdan home screen: total balance, quick actions and recent activity",
-
   "features.index.label": "On this page",
   "features.index.all": "Full list",
-
   "features.switcher.label": "Screens in this section",
   "features.switcher.recording": "Recording",
-
   "features.accounts.nav": "Accounts & wallets",
   "features.accounts.pain": "Dinars in one bank, dollars kept at home, crypto in an app you don’t quite trust.",
   "features.accounts.title": "Every currency. *One place.*",
@@ -51,7 +48,6 @@
   "features.accounts.cap.wallet.body": "Filter by fiat, crypto or cards. Empty wallets fold away, so the list stays about the money you hold.",
   "features.accounts.cap.delete.title": "Close your account yourself",
   "features.accounts.cap.delete.body": "Delete your account in the app. It shows exactly what needs settling first, such as a balance or an open trade.",
-
   "features.move.nav": "Move money",
   "features.move.pain": "To get paid, you hand a stranger your IBAN and phone number — then wait for the bank.",
   "features.move.title": "Pay anyone by *@handle.*",
@@ -92,7 +88,6 @@
   "features.move.cap.withdrawBank.body": "Save your bank accounts and request a payout. Every bank payout is approved by our team.",
   "features.move.cap.withdrawChain.title": "Withdraw on-chain",
   "features.move.cap.withdrawChain.body": "Send BTC, ETH, SOL or USDT to an external address, after sanctions screening and with your two-factor code.",
-
   "features.abroad.nav": "Send abroad",
   "features.abroad.pain": "Sending to family abroad means a middleman, a week of waiting and a rate you only learn afterwards.",
   "features.abroad.title": "Send home what they’re *actually owed.*",
@@ -120,7 +115,6 @@
   "features.abroad.cap.track.body": "Created, paid from your wallet, sent to the payout partner, delivered — each step with its time.",
   "features.abroad.cap.refund.title": "Cancel and get a full refund",
   "features.abroad.cap.refund.body": "If the money hasn’t been paid out yet, cancelling returns it to your wallet in full.",
-
   "features.exchange.nav": "Exchange",
   "features.exchange.pain": "Two dollar rates — and you always seem to get the worse one.",
   "features.exchange.title": "Change money at *the real rate.*",
@@ -145,7 +139,6 @@
   "features.exchange.cap.recurring.body": "Buy automatically — daily, weekly, every two weeks or monthly — from a fiat wallet. Pause or cancel at any time.",
   "features.exchange.cap.recurringCard.title": "Recurring buy by card",
   "features.exchange.cap.recurringCard.body": "Funding a schedule from a card waits on the card partner.",
-
   "features.p2p.nav": "P2P",
   "features.p2p.pain": "Meeting a stranger with a bag of cash — and hoping the dollars arrive afterwards.",
   "features.p2p.title": "Trade person to person, *with escrow.*",
@@ -178,7 +171,6 @@
   "features.p2p.cap.safety.body": "For cash trades, the app reminds you to meet somewhere busy and to confirm only after you’ve counted.",
   "features.p2p.cap.tracker.title": "All your trades in one list",
   "features.p2p.cap.tracker.body": "Active, completed and everything else — with what’s in escrow right now.",
-
   "features.save.nav": "Save",
   "features.save.pain": "Money set aside for something important has a way of disappearing — and there’s no simple tool to keep it put.",
   "features.save.title": "Goals that *fill themselves.*",
@@ -201,7 +193,6 @@
   "features.save.cap.move.body": "Add to a goal at any time and take money out whenever the lock allows.",
   "features.save.cap.card.title": "Spend a goal on your card",
   "features.save.cap.card.body": "Loading a goal onto a card arrives with tazdan cards.",
-
   "features.messages.nav": "Messages",
   "features.messages.pain": "“Send me your account number” — then screenshots of receipts across three different apps.",
   "features.messages.title": "Money, *in the conversation.*",
@@ -228,7 +219,6 @@
   "features.messages.cap.safety.body": "Block someone, report a message, or bring support into a conversation.",
   "features.messages.cap.support.title": "Support in the same inbox",
   "features.messages.cap.support.body": "Message the tazdan team from your chats whenever you need help.",
-
   "features.cards.nav": "Cards",
   "features.cards.pain": "Foreign cards that get declined, and online payments that never go through.",
   "features.cards.title": "A card for *everyday spending.*",
@@ -246,7 +236,6 @@
   "features.cards.cap.topup.body": "Load money onto a card and see your recent spending.",
   "features.cards.cap.wallet.title": "Add to your phone’s wallet",
   "features.cards.cap.wallet.body": "Pay with your phone where it’s supported.",
-
   "features.security.nav": "Security & privacy",
   "features.security.pain": "Your phone number, your name and your bank details — handed to everyone you pay.",
   "features.security.title": "Your details *stay yours.*",
@@ -286,7 +275,6 @@
   "features.security.cap.p2p.body": "Traders see your first name and last initial. Near me shares only a rough distance — never your location.",
   "features.security.cap.screening.title": "Checks on money leaving",
   "features.security.cap.screening.body": "Withdrawals and transfers pass sanctions screening and a risk check before they go.",
-
   "features.extras.nav": "Extras",
   "features.extras.pain": "A bank statement means a trip to the branch — if they have paper that day.",
   "features.extras.title": "The details, *done properly.*",
@@ -297,12 +285,14 @@
   "features.extras.tab.linked": "Linked",
   "features.extras.tab.handle": "Profile link",
   "features.extras.tab.settings": "Settings",
+  "features.extras.tab.referrals": "Referrals",
   "features.extras.alt.statements": "Generating a PDF statement for a chosen period",
   "features.extras.alt.history": "The full activity history with references and statuses",
   "features.extras.alt.notifications": "The notifications inbox grouped by day",
   "features.extras.alt.linked": "Linked bank accounts with a default for withdrawals",
   "features.extras.alt.handle": "A public profile opened from a tazdan profile link",
   "features.extras.alt.settings": "Settings for theme, language, notifications and security",
+  "features.extras.alt.referrals": "Your referral code, ready to share",
   "features.extras.cap.history.title": "Full activity history",
   "features.extras.cap.history.body": "Every transaction with its time, reference or hash, and status — plus your pending claim links.",
   "features.extras.cap.statements.title": "Downloadable statements",
@@ -325,7 +315,6 @@
   "features.extras.cap.tour.body": "Replay the in-app tour from your profile whenever you like.",
   "features.extras.cap.feel.title": "Haptics and sounds",
   "features.extras.cap.feel.body": "Gentle feedback when money moves, so you know it landed.",
-
   "features.business.nav": "Business",
   "features.business.pain": "Paying staff and suppliers one bank transfer at a time — or in cash envelopes.",
   "features.business.title": "Running a business? *There’s tazdan Business.*",
@@ -351,7 +340,6 @@
   "features.business.cap.api.body": "Balances, rates, payouts and webhooks, with idempotency keys so a retry never pays twice.",
   "features.business.cap.webhooks.title": "Signed webhooks",
   "features.business.cap.webhooks.body": "Every event is signed, retried on failure and delivered only over HTTPS.",
-
   "features.all.eyebrow": "The full list",
   "features.all.title": "Every capability, *in one list.*",
   "features.all.lead": "This is the whole app as it stands in the current build. Each line says plainly where it is: in the app, in pilot, or planned.",
@@ -365,6 +353,5 @@
   "features.all.legend.planned": "Designed, and waiting on a partner before it switches on.",
   "features.all.jump": "Go to section",
   "features.all.note": "Availability depends on your country and verification level. Pilot and planned capabilities are not live services.",
-
   "features.cta.secondary": "How we keep it safe"
 }

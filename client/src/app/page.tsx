@@ -16,9 +16,13 @@ import HomeHero from "@/components/pages/home/HomeHero";
 function HomeContent() {
   const { t } = useTranslate();
   const theme = useSiteTheme();
-  const pains = [1, 2, 3, 4].map((i) => ({
-    pain: t(`home.pain.${i}.before`), fix: t(`home.pain.${i}.after`),
-  }));
+  // Literal keys so the i18n checker can find them.
+  const pains = [
+    { pain: t("home.pain.1.before"), fix: t("home.pain.1.after") },
+    { pain: t("home.pain.2.before"), fix: t("home.pain.2.after") },
+    { pain: t("home.pain.3.before"), fix: t("home.pain.3.after") },
+    { pain: t("home.pain.4.before"), fix: t("home.pain.4.after") },
+  ];
   return <>
     <HomeHero />
     <HomeStory />

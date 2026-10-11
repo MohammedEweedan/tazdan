@@ -1,15 +1,13 @@
 import type { Metadata } from 'next';
 
+const title = 'Personal — everything tazdan does';
+const description =
+  'Every capability of the tazdan app, with its honest status: wallets for dinars, dollars and USDT, payments by @handle and claim links, P2P with escrow, send abroad, savings goals, payments in chat, and security and privacy built in.';
+
 export const metadata: Metadata = {
-  title: 'Features',
-  description:
-    'Explore all tazdan features: P2P crypto marketplace, instant money transfers, virtual Visa card, social wallet, and bank-grade security — all in one app.',
-  openGraph: {
-    title: 'tazdan Features — Wallets, Transfers, Remittance & Business',
-    description:
-      'P2P marketplace, social wallet, instant transfers, Visa card, and bank-grade security built for MENA.',
-    url: 'https://tazdan.com/features',
-  },
+  title,
+  description,
+  openGraph: { title: `tazdan — ${title}`, description, url: 'https://tazdan.com/features' },
   alternates: { canonical: 'https://tazdan.com/features' },
 };
 

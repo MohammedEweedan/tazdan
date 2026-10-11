@@ -16,9 +16,9 @@
       "policy": "appVersion"
     },
     "splash": {
-      "image": "./assets/icon-color.png",
+      "image": "./assets/splash-mark.png",
       "resizeMode": "contain",
-      "backgroundColor": "#0A0A0B"
+      "backgroundColor": "#24384F"
     },
     "ios": {
       "icon": "./assets/icon-ios.png",
@@ -44,7 +44,7 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#0A0A0B"
+        "backgroundColor": "#24384F"
       },
       "package": "com.tazdan.app",
       "permissions": [

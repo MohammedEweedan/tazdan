@@ -46,7 +46,7 @@ const theme = extendTheme({
         bg: props.colorMode === 'dark' ? '#16181C' : '#F6F7FA',
         color: props.colorMode === 'dark' ? 'white' : 'gray.800',
       },
-      "html[lang='ar'] *, html[dir='rtl'] *": {
+      "html[lang='ar'] *:not(code):not(pre):not(kbd):not(samp):not([data-mono]):not([data-mono] *):not(pre *):not(code *), html[dir='rtl'] *:not(code):not(pre):not(kbd):not(samp):not([data-mono]):not([data-mono] *):not(pre *):not(code *)": {
         fontFamily: `var(--font-cairo), system-ui, sans-serif !important`,
         letterSpacing: `0em !important`,
       },

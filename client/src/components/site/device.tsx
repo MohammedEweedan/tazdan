@@ -20,7 +20,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Box, type BoxProps } from "@chakra-ui/react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { APP_SCREENS, APP_VIDEOS, screenSrc, videoSrc, type AppMediaVariant } from "@/content/appMedia";
+import { APP_GIFS, APP_SCREENS, APP_VIDEOS, gifSrc, screenSrc, videoSrc, type AppMediaVariant } from "@/content/appMedia";
 import { EASE, useSiteLocale, useSiteTheme } from "./tokens";
 
 /** Best available capture variant for this visitor. */
@@ -106,14 +106,20 @@ function Placeholder({ label }: { label?: string }) {
 
 const fill = { position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", objectPosition: "top center" } as const;
 
-/** A captured still. `alt` should be a translated description. */
-export function AppScreen({ id, alt, priority }: { id: string; alt: string; priority?: boolean }) {
+/** A captured screen. Plays its animated GIF loop when one exists (the
+ *  owner wants page screens animated), the still otherwise — and always the
+ *  still under prefers-reduced-motion, since a GIF can't be paused.
+ *  `alt` should be a translated description. */
+export function AppScreen({ id, alt, priority, still }: { id: string; alt: string; priority?: boolean; still?: boolean }) {
   const variant = useMediaVariant(APP_SCREENS[id]?.variants);
-  if (!variant) return <Placeholder label={alt} />;
+  const gifVariant = useMediaVariant(APP_GIFS[id]);
+  const reduced = useReducedMotion();
+  if (!variant && !gifVariant) return <Placeholder label={alt} />;
+  const animated = !still && !reduced && gifVariant && (!variant || gifVariant === variant);
   return (
     // eslint-disable-next-line @next/next/no-img-element
     <img
-      src={screenSrc(id, variant)}
+      src={animated ? gifSrc(id, gifVariant) : screenSrc(id, (variant ?? gifVariant)!)}
       alt={alt}
       loading={priority ? "eager" : "lazy"}
       decoding="async"

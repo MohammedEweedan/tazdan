@@ -193,7 +193,8 @@ export function Footnote({ children, align = "start", ...rest }: { align?: "star
 /** Mono text for figures, codes, API snippets. */
 export function Mono({ children, ...rest }: BoxProps) {
   return (
-    <Box as="span" fontFamily={MONO} fontSize="0.92em" letterSpacing="0" {...rest}>
+    // data-mono opts out of the Arabic font override in theme/globals.css.
+    <Box as="span" data-mono="" fontFamily={MONO} fontSize="0.92em" letterSpacing="0" {...rest}>
       {children}
     </Box>
   );
@@ -273,8 +274,12 @@ export function SiteButton({
  *  planned    — designed / off in production until a partner is contracted
  *  inProgress — work under way (e.g. a licence application)
  *  discussion — conversations open, nothing signed
- *  pipeline   — a prospective partner, no agreement */
-export type Status = "inApp" | "pilot" | "planned" | "inProgress" | "discussion" | "pipeline";
+ *  pipeline   — a prospective partner, no agreement
+ *  notBuilt   — said plainly: not in the product (yet)
+ *  signed / licensed / live — for partners & licensing once they're real */
+export type Status =
+  | "inApp" | "pilot" | "planned" | "inProgress" | "discussion" | "pipeline"
+  | "notBuilt" | "signed" | "licensed" | "live";
 
 export function StatusChip({ status, ...rest }: { status: Status } & BoxProps) {
   const t = useSiteTheme();
@@ -287,6 +292,10 @@ export function StatusChip({ status, ...rest }: { status: Status } & BoxProps) {
     inProgress: { dot: t.amber, bg: t.amberSoft },
     discussion: { dot: t.amber, bg: "transparent" },
     pipeline: { dot: t.fgFaint, bg: "transparent" },
+    notBuilt: { dot: "transparent", bg: "transparent" },
+    signed: { dot: t.green, bg: t.greenSoft },
+    licensed: { dot: t.green, bg: t.greenSoft },
+    live: { dot: t.green, bg: t.greenSoft },
   }[status];
   return (
     <Box
@@ -300,6 +309,7 @@ export function StatusChip({ status, ...rest }: { status: Status } & BoxProps) {
       bg={tone.bg}
       border="1px solid"
       borderColor={tone.bg === "transparent" ? t.border : "transparent"}
+      borderStyle={status === "notBuilt" ? "dashed" : "solid"}
       fontSize="12px"
       fontWeight={500}
       letterSpacing={isAr ? 0 : "0.01em"}
@@ -308,7 +318,15 @@ export function StatusChip({ status, ...rest }: { status: Status } & BoxProps) {
       flexShrink={0}
       {...rest}
     >
-      <Box as="span" w="6px" h="6px" borderRadius="999px" bg={tone.dot} aria-hidden />
+      <Box
+        as="span"
+        w="6px"
+        h="6px"
+        borderRadius="999px"
+        bg={tone.dot}
+        border={status === "notBuilt" ? `1px solid ${t.fgFaint}` : undefined}
+        aria-hidden
+      />
       {tr(`common.status.${status}`)}
     </Box>
   );

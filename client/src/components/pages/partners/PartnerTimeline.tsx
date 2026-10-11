@@ -11,7 +11,9 @@ import { Body, Headline, Reveal, SectionLabel, useSiteTheme } from "@/components
 import { PartnerStatusChip, StatusNode } from "./PartnerStatus";
 import type { PartnerEntry, StageDef } from "./types";
 
-/* Node centred on the first line of the wordmark. */
+/* Node centred on the first line of the wordmark. Logical insets go in
+   `style`, not `sx`: Chakra rewrites sx insetInlineStart to a physical
+   `left` (theme direction is LTR), which breaks RTL. */
 const NODE = 14;
 const NODE_TOP = { base: "8px", md: "13px" };
 const RAIL_BOTTOM = { base: "-8px", md: "-13px" };
@@ -35,10 +37,10 @@ function Entry({ e, last, labels }: { e: PartnerEntry; last: boolean; labels: { 
           bottom={RAIL_BOTTOM}
           w="1px"
           bg={t.divider}
-          sx={{ insetInlineStart: `${NODE / 2 - 0.5}px` }}
+          style={{ insetInlineStart: `${NODE / 2 - 0.5}px` }}
         />
       )}
-      <StatusNode status={e.status} size={NODE} position="absolute" top={NODE_TOP} sx={{ insetInlineStart: 0 }} />
+      <StatusNode status={e.status} size={NODE} position="absolute" top={NODE_TOP} style={{ insetInlineStart: 0 }} />
 
       <Reveal y={14}>
         <Box display="flex" alignItems="center" justifyContent="space-between" flexWrap="wrap" gap="10px 16px">

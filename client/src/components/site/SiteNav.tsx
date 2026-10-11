@@ -58,7 +58,8 @@ export default function SiteNav() {
         href="#main"
         position="absolute"
         top="-100px"
-        sx={{ insetInlineStart: "16px" }}
+        // Inline style, not sx: Chakra turns sx insets into physical left/right.
+        style={{ insetInlineStart: "16px" }}
         zIndex={300}
         bg={t.fg}
         color={t.bg}

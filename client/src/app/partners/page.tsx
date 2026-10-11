@@ -113,7 +113,7 @@ function PartnersContent() {
       title: t("partners.unlock.banks.title"),
       body: t("partners.unlock.banks.body"),
       status: "inApp",
-      media: { screen: "topup", alt: t("partners.unlock.banks.alt") },
+      media: { screen: "withdraw", alt: t("partners.unlock.banks.alt") },
       extra: <SiteButton variant="link" href="#partner-banks" arrow>{t("partners.unlock.banks.link")}</SiteButton>,
     },
     {
@@ -127,23 +127,13 @@ function PartnersContent() {
       extra: <SiteButton variant="link" href="/contact" arrow>{t("partners.unlock.remit.link")}</SiteButton>,
     },
     {
-      id: "unlock-cards",
-      eyebrow: t("partners.unlock.cards.eyebrow"),
-      pain: t("partners.unlock.cards.pain"),
-      title: t("partners.unlock.cards.title"),
-      body: t("partners.unlock.cards.body"),
-      status: "planned",
-      media: { screen: "cards", alt: t("partners.unlock.cards.alt") },
-      extra: <SiteButton variant="link" href="#partner-visa" arrow>{t("partners.unlock.cards.link")}</SiteButton>,
-    },
-    {
       id: "unlock-dollars",
       eyebrow: t("partners.unlock.dollars.eyebrow"),
       pain: t("partners.unlock.dollars.pain"),
       title: t("partners.unlock.dollars.title"),
       body: t("partners.unlock.dollars.body"),
       status: "inApp",
-      media: { video: "flow-buy", screen: "buy", alt: t("partners.unlock.dollars.alt") },
+      media: { screen: "sell", alt: t("partners.unlock.dollars.alt") },
       extra: <SiteButton variant="link" href="#partner-banxa" arrow>{t("partners.unlock.dollars.link")}</SiteButton>,
     },
   ];
@@ -197,6 +187,7 @@ function PartnersContent() {
             eyebrow={t("partners.pains.eyebrow")}
             title={t("partners.pains.title")}
             lead={t("partners.pains.lead")}
+            mb="clamp(40px, 5vw, 64px)"
           />
           <PainColumns pain={t("partners.pains.colPain")} fix={t("partners.pains.colFix")} />
           <PainList items={pains} />
