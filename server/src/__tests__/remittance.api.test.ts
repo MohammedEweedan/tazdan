@@ -117,9 +117,13 @@ describeDb('customer remittance API', () => {
   it('cancels a transfer before payout and refunds it in full', async () => {
     const ben = (await call('get', '/beneficiaries')).body.beneficiaries[0];
     const before = await prisma.wallet.findUniqueOrThrow({ where: { userId_currency: { userId, currency: 'LYD' } } });
-    const quote = await call('post', '/quotes').send({ corridorCode: 'LY-GB', sendAmount: 120, beneficiaryId: ben.id });
+    // A whole-pound payout avoids the sandbox's .13 failure / .31 return
+    // amounts, so this specifically exercises cancellation of a pending payout.
+    const quote = await call('post', '/quotes').send({ corridorCode: 'LY-GB', receiveAmount: 20, beneficiaryId: ben.id });
     const sent = await call('post', '/transfers').send({ quoteId: quote.body.quote.id, beneficiaryId: ben.id, purpose: 'GIFT', idempotencyKey: `${marker}-k3` });
     expect(sent.status).toBe(201);
+    const pending = await prisma.remittanceTransfer.findUniqueOrThrow({ where: { id: sent.body.transfer.id } });
+    expect(pending.state).toBe('PAYOUT_PENDING');
     const cancelled = await call('post', `/transfers/${sent.body.transfer.id}/cancel`);
     expect(cancelled.status).toBe(200);
     // Still with the payout partner (sandbox SLA not elapsed): cancelled there, then refunded in full.
