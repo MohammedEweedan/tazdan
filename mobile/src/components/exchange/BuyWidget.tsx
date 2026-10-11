@@ -557,6 +557,7 @@ export function BuyWidget({ defaultAsset, lockAsset = false }: BuyWidgetProps = 
   const payWithLabel = !payMethod ? '' : payMethod.type === 'card' ? `${payMethod.brand} •••• ${payMethod.last4}`
     : payMethod.type === 'fiat' ? payMethod.currency : payMethod.asset;
   const review = quote ? {
+    confirmationKey: JSON.stringify({ quoteId: quote.id, payMethod, network, fundingCurrency }),
     amount: `${fmt(quote.cryptoAmount, 8)} ${asset}`,
     rows: [
       { label: tr('confirm.youPay'), value: `${fmt(quote.totalUserPays, 2)} ${fundingCurrency}` },

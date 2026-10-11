@@ -389,6 +389,7 @@ export function SellWidget({ defaultAsset, lockAsset = false }: SellWidgetProps 
 
   // Summary for the review sheet — only once a live quote exists.
   const review = quote && receiveTo ? {
+    confirmationKey: JSON.stringify({ quoteId: quote.id, receiveTo, network }),
     amount: `${fmt(quote.cryptoAmount, 8)} ${asset}`,
     rows: [
       { label: tr('confirm.youReceive'), value: `${fmt(quote.settlementAmount ?? quote.fiatAmount, receiveTo.isFiat ? 2 : 6)} ${receiveTo.currency}` },

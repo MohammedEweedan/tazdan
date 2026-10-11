@@ -60,6 +60,8 @@ export interface ReviewSummary {
   /** One line under the amount, e.g. "to Omar Ben Ali". */
   caption?: string;
   rows: ReviewRow[];
+  /** Stable executable terms (e.g. quote id + payment method), excluding countdown text. */
+  confirmationKey?: string;
   /** Small print under the rows (e.g. "The rate includes the spread."). */
   footnote?: string;
 }
@@ -436,13 +438,13 @@ function ReviewControl({ action, prompt, onConfirm, disabled, status = 'idle', s
     setOpen(false);
     // Let the sheet finish closing so the existing step-up modal / Face ID
     // prompt never has to present over a dismissing sheet.
-    const reviewed = JSON.stringify({ action, amount: review?.amount, rows: review?.rows });
+    const reviewed = JSON.stringify({ action, amount: review?.amount, terms: review?.confirmationKey ?? review?.rows });
     pending.current = setTimeout(() => {
       pending.current = null;
       const current = latest.current;
       // Closing the sheet must not queue duplicate payments or execute a stale
       // callback after the amount, quote or eligibility changes.
-      if (current.ready && reviewed === JSON.stringify({ action: current.action, amount: current.review?.amount, rows: current.review?.rows })) {
+      if (current.ready && reviewed === JSON.stringify({ action: current.action, amount: current.review?.amount, terms: current.review?.confirmationKey ?? current.review?.rows })) {
         current.onConfirm();
       }
     }, 320);
