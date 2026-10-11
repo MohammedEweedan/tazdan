@@ -1,0 +1,1941 @@
+You are acting as a combined Principal Fintech Architect, CTO, Product Strategist, Payments/Remittance Specialist, Technical Due-Diligence Analyst, Financial Analyst, Compliance Architect, Investment-Banking Analyst, and Premium Editorial Designer.
+
+Your task is to perform a COMPLETE forensic review of the entire Tazdan codebase and public website, then create the definitive Tazdan reference document.
+
+This document should be treated as:
+
+THE TAZDAN BIBLE
+
+It must explain, document, analyse, visualize, and commercially present EVERYTHING that Tazdan currently is, everything its technology currently supports, how the ecosystem works, how money moves, how the company could operate, how the architecture is structured, how it makes money, how it scales, what remains incomplete, and what Tazdan could become.
+
+Do not create a shallow pitch deck.
+
+Do not create a PowerPoint.
+
+Create a professionally typeset, print-ready PDF report/book with diagrams, tables, architecture graphics, financial models, workflows, screenshots where useful, and detailed technical appendices.
+
+==================================================
+1. SOURCES YOU MUST READ
+==================================================
+
+FIRST, recursively inspect the ENTIRE codebase.
+
+Do not only inspect README files or top-level folders.
+
+Read and analyse:
+
+- mobile application
+- web application
+- server/backend
+- database schema
+- Prisma models
+- migrations
+- APIs
+- route definitions
+- controllers
+- services
+- repositories
+- middleware
+- authentication
+- permissions
+- admin systems
+- business portal
+- transaction logic
+- financial ledger
+- wallet logic
+- FX logic
+- rate engines
+- remittance systems
+- P2P systems
+- crypto systems
+- blockchain integrations
+- custody logic
+- KYC/AML functionality
+- sanctions/risk functionality
+- card systems
+- deposits
+- withdrawals
+- recurring payments
+- notifications
+- messaging
+- reconciliation
+- audit logs
+- monitoring
+- configuration
+- environment examples
+- Docker / infrastructure
+- tests
+- stress tests
+- scripts
+- queues
+- Redis
+- Socket.IO
+- webhooks
+- worker processes
+- scheduled jobs
+- security controls
+- error handling
+- unfinished TODOs
+- mock integrations
+- partial implementations
+- deprecated code
+- internal documentation
+- package manifests
+- dependencies
+- deployment configuration
+
+Follow imports and references wherever necessary.
+
+Do not assume functionality exists merely because a UI screen exists.
+
+Determine whether each important capability is:
+
+1. Production implemented
+2. Implemented but requires hardening
+3. Partially implemented
+4. Frontend-only / simulated
+5. Mock provider integration
+6. Planned / inferred
+7. Missing
+
+For every major technical claim, cite the relevant repository path, module, schema, route, service, or implementation.
+
+THEN inspect:
+
+https://tazdan.com
+
+Read the entire website, including every relevant public page and public-facing claim.
+
+Analyse:
+
+- positioning
+- brand language
+- visual identity
+- product positioning
+- customer promises
+- feature claims
+- target users
+- business messaging
+- terminology
+- screenshots
+- product descriptions
+- conversion language
+- trust signals
+- international positioning
+
+Compare the public website against what actually exists in the codebase.
+
+Create a section titled:
+
+"Public Product Claims vs Technical Reality"
+
+Classify claims as:
+
+- Fully supported
+- Substantially supported
+- Partially supported
+- Planned
+- Requires partner integration
+- Requires regulatory approval
+- Not evidenced in the current codebase
+
+DO NOT INVENT FEATURES.
+
+If something cannot be verified, explicitly say:
+
+"Not verified in the reviewed implementation."
+
+==================================================
+2. FINAL DELIVERABLES
+==================================================
+
+Produce TWO COMPLETE PDF BOOKS:
+
+1. Tazdan Bible — English Edition
+2. Tazdan Bible — Libyan Arabic Edition
+
+Do NOT create a shortened Arabic translation.
+
+The Arabic version must contain the SAME INFORMATION, depth, diagrams, financial analysis, technical content, appendices, and caveats as the English version.
+
+Also produce the editable source used to generate the PDFs if your environment supports it.
+
+Use A4 print format.
+
+If "AQA format" appears anywhere in my instructions and there is no explicit AQA publishing specification in the repository, interpret it as A4 professional print-document formatting.
+
+Recommended length:
+
+80–150+ pages if necessary.
+
+There is NO arbitrary page limit.
+
+Completeness is more important than brevity.
+
+==================================================
+3. LANGUAGE REQUIREMENTS
+==================================================
+
+ENGLISH EDITION:
+
+Use professional institutional English suitable for:
+
+- investors
+- banks
+- regulators
+- fintech executives
+- auditors
+- technical due diligence
+- strategic partners
+
+LIBYAN ARABIC EDITION:
+
+Write primarily in professional, natural Libyan Arabic that a Libyan executive, investor, banker, or Central Bank stakeholder can comfortably understand.
+
+Do not write childish slang.
+
+Do not write overly academic Classical Arabic.
+
+Use clear Libyan business Arabic while retaining technical precision.
+
+For important financial and technical terminology, always give Arabic AND the standard English term.
+
+Examples:
+
+اعرف عميلك (KYC — Know Your Customer)
+
+اعرف نشاطك التجاري
+(KYB — Know Your Business)
+
+مكافحة غسل الأموال
+(AML — Anti-Money Laundering)
+
+عرض السعر
+(Quote)
+
+تمويل العملية
+(Funding)
+
+مسار التنفيذ
+(Route)
+
+محرك اختيار المسار
+(Routing Engine)
+
+دفتر القيود المالية
+(Ledger)
+
+دفتر القيد المزدوج
+(Double-Entry Ledger)
+
+التسوية
+(Settlement)
+
+الصرف للمستفيد
+(Payout)
+
+المطابقة المالية
+(Reconciliation)
+
+السيولة المسبقة
+(Prefunding)
+
+إدارة السيولة
+(Treasury Management)
+
+فرق سعر الصرف
+(FX Spread)
+
+واجهة برمجة التطبيقات
+(API)
+
+مزود خدمات الأصول الافتراضية
+(VASP)
+
+قاعدة نقل بيانات التحويل
+(Travel Rule)
+
+مصدر الأموال
+(Source of Funds / SOF)
+
+الشخص السياسي المعرّض للمخاطر
+(PEP)
+
+Do NOT randomly mix Arabic and English in broken sentences.
+
+Introduce the Arabic meaning first, then the established English term where useful.
+
+==================================================
+4. DESIGN DIRECTION
+==================================================
+
+The document must visually feel like a premium financial-technology institution.
+
+Think:
+
+- Stripe
+- Revolut
+- Wise
+- Apple financial product documentation
+- modern investment-bank research
+- premium venture-capital investment memorandum
+- institutional fintech annual report
+
+NOT:
+
+- school presentation
+- Canva template
+- generic startup pitch deck
+- excessive rounded pills
+- emoji graphics
+- childish illustrations
+- random gradients
+- giant logos on every page
+- excessive use of cards
+
+Use Tazdan's existing visual identity from tazdan.com as inspiration.
+
+Preserve the Tazdan light-blue identity but refine it into a more institutional visual system.
+
+Design principles:
+
+- strong whitespace
+- clear editorial grids
+- disciplined typography
+- strong information hierarchy
+- high-quality diagrams
+- elegant tables
+- subtle use of blue
+- black/white/grey as primary foundation
+- restrained borders
+- consistent spacing system
+- clean page numbers
+- professional headers/footers
+- excellent Arabic RTL typography
+- no text overflow
+- no low-contrast text
+- no white-on-light-grey text
+- no cramped cards
+- no misaligned elements
+
+Use the Tazdan logo only where appropriate:
+
+- cover
+- major chapter openings
+- closing page
+
+Do NOT stamp the logo on every page.
+
+==================================================
+5. REQUIRED FRONT MATTER
+==================================================
+
+The document must begin with:
+
+COVER PAGE
+
+Title:
+
+TAZDAN
+
+Subtitle:
+
+Financial Infrastructure for Libya and Beyond
+
+English edition:
+
+The Tazdan Bible
+Technology, Product, Payments, Remittance, Financial Infrastructure and Growth Strategy
+
+Arabic edition:
+
+دليل تزدان الشامل
+البنية التقنية، المدفوعات، الحوالات، البنية المالية واستراتيجية النمو
+
+Include:
+
+- Tazdan branding
+- publication date
+- version
+- "Confidential / Investor & Strategic Review"
+
+Then include:
+
+1. Inside cover
+2. Document purpose
+3. Important notices / disclaimer
+4. Executive summary
+5. "Tazdan in one page"
+6. Key facts
+7. Table of contents
+8. List of figures
+9. List of tables
+10. Glossary / terminology guide
+11. How to read this document
+
+The Table of Contents must contain real page numbers.
+
+==================================================
+6. EXECUTIVE SUMMARY
+==================================================
+
+Create a concise 3–5 page executive summary explaining:
+
+- what Tazdan is
+- the problem
+- why Libya presents an opportunity
+- what currently exists
+- the technology moat
+- the remittance opportunity
+- domestic payments opportunity
+- business payments opportunity
+- crypto/stablecoin role
+- compliance architecture
+- revenue model
+- strategic advantages
+- current limitations
+- regulatory dependencies
+- investment thesis
+- five-year strategic opportunity
+- ten-year potential
+
+Include a one-page ecosystem diagram.
+
+Someone should understand the entire company from these pages alone.
+
+==================================================
+7. THE STORY OF TAZDAN
+==================================================
+
+Explain the product in simple terms first.
+
+Example framing:
+
+"Tazdan is the financial operating system connecting Libyan consumers and businesses to domestic payments, foreign currencies, remittance networks and international financial infrastructure."
+
+Then progressively increase technical depth.
+
+Explain the ecosystem through:
+
+Consumer → Tazdan → Local Financial Rail → Tazdan Core → International Rail → Recipient
+
+Show both:
+
+what the customer sees
+
+AND
+
+what Tazdan manages in the background.
+
+==================================================
+8. PRODUCT ECOSYSTEM
+==================================================
+
+Create a complete product map covering every real capability found in the code.
+
+Potential categories include, but are not limited to:
+
+CONSUMER
+
+- accounts
+- profiles
+- wallets
+- balances
+- supported currencies
+- internal transfers
+- username transfers
+- phone transfers
+- email transfers
+- QR transfers
+- claim links
+- deposits
+- withdrawals
+- fiat
+- crypto
+- exchange
+- FX quotes
+- FX execution
+- P2P
+- escrow
+- budgets
+- pots
+- recurring buys
+- transaction history
+- cards
+- messaging
+- notifications
+- referrals
+- security
+- trusted devices
+- 2FA
+- whitelisting
+
+BUSINESS
+
+- onboarding
+- KYB
+- business accounts
+- team management
+- roles
+- permissions
+- bulk payments
+- payroll
+- supplier payments
+- invoices
+- payouts
+- API keys
+- webhooks
+- reporting
+- treasury
+- reconciliation
+
+ADMIN / OPERATIONS
+
+- KYC review
+- AML review
+- deposits
+- withdrawals
+- P2P disputes
+- FX management
+- cards
+- on/off-ramp management
+- support
+- fee management
+- risk
+- audit
+- reconciliation
+- emergency controls
+- operational dashboards
+
+Clearly identify the maturity of every major area.
+
+==================================================
+9. TECHNICAL ARCHITECTURE
+==================================================
+
+Create a full system architecture chapter.
+
+Document:
+
+- mobile architecture
+- web architecture
+- server architecture
+- databases
+- caching
+- queues
+- events
+- WebSocket architecture
+- API gateway patterns
+- authentication
+- authorization
+- services
+- repositories
+- domain logic
+- provider integrations
+- infrastructure
+- deployment
+- monitoring
+- logging
+- backups
+- failover
+- secrets
+- security
+- environments
+
+Generate proper architecture diagrams.
+
+At minimum include:
+
+System Context Diagram
+
+Container Diagram
+
+Service Architecture Diagram
+
+Database Architecture
+
+API Architecture
+
+Event Architecture
+
+Financial Transaction Architecture
+
+Authentication Architecture
+
+Security Architecture
+
+Infrastructure / Deployment Architecture
+
+Third-Party Integration Architecture
+
+Do not create diagrams from imagination.
+
+Base them on the code.
+
+==================================================
+10. DATABASE ANALYSIS
+==================================================
+
+Read the complete database schema.
+
+Document:
+
+- every important model
+- relationships
+- domains
+- key enums
+- financial entities
+- transaction entities
+- KYC entities
+- wallet entities
+- remittance entities
+- P2P entities
+- card entities
+- blockchain entities
+- business entities
+- audit entities
+
+Create entity relationship diagrams.
+
+Do NOT attempt to put all models in one unreadable diagram.
+
+Split diagrams by bounded context.
+
+Examples:
+
+Identity & Security
+
+Wallets & Ledger
+
+Payments & Transfers
+
+FX & Rates
+
+Remittance
+
+P2P
+
+Cards
+
+Crypto & Custody
+
+Business
+
+Compliance
+
+Admin & Audit
+
+==================================================
+11. API INVENTORY
+==================================================
+
+Automatically enumerate the actual endpoints.
+
+Group them by domain.
+
+For each domain show:
+
+- endpoint count
+- authentication requirements
+- major capabilities
+- important request/response flow
+- status of implementation
+
+Append a complete API inventory in the appendix.
+
+==================================================
+12. THE FINANCIAL LEDGER
+==================================================
+
+Create a major dedicated chapter explaining the accounting system.
+
+Explain:
+
+- double-entry accounting
+- debit / credit
+- account structure
+- wallet balances
+- available balance
+- pending balance
+- holds
+- settlements
+- adjustments
+- fees
+- FX
+- deposits
+- withdrawals
+- transfers
+- remittance
+- P2P
+- cards
+- crypto
+- refunds
+- disputes
+
+Show real transaction examples.
+
+Example:
+
+Ahmed sends 1,000 LYD to Mohammed.
+
+Show:
+
+customer-facing transaction
+
+then
+
+actual ledger movements.
+
+Then show:
+
+international remittance
+
+GBP payout
+
+FX
+
+settlement
+
+fees
+
+reconciliation
+
+Use realistic numbers.
+
+==================================================
+13. INTERNATIONAL REMITTANCE ARCHITECTURE
+==================================================
+
+This is one of the MOST IMPORTANT sections.
+
+Explain in full detail how Tazdan can support:
+
+Libya → World
+
+World → Libya
+
+Possible corridors:
+
+Libya ↔ United Kingdom
+Libya ↔ Egypt
+Libya ↔ Turkey
+Libya ↔ Italy / EU
+Libya ↔ UAE
+Libya ↔ Tunisia
+
+Explain:
+
+Sender
+
+Recipient
+
+Quote
+
+Funding
+
+KYC
+
+KYB
+
+AML
+
+Sanctions Screening
+
+PEP Screening
+
+Source of Funds
+
+Purpose of Payment
+
+Transaction Monitoring
+
+Risk Decision
+
+Routing
+
+Settlement
+
+Payout
+
+Reconciliation
+
+Refund
+
+Failure handling
+
+Dispute handling
+
+Audit
+
+Show complete sequence diagrams.
+
+Use real-world customer examples.
+
+Example:
+
+Mohammed lives in Tripoli and wants to send £1,000 to his daughter studying in Manchester.
+
+Walk through literally every step.
+
+Then show a reverse example:
+
+A Libyan professional in London sends £500 to his mother in Tripoli.
+
+==================================================
+14. INTERNATIONAL CORPORATE STRUCTURE
+==================================================
+
+Explain a technically and operationally viable structure.
+
+Potential architecture:
+
+Tazdan Holding
+
+Tazdan Libya
+
+Tazdan International
+
+Licensed local banks / PSPs / exchange houses
+
+International EMI / remittance partners
+
+Banks
+
+Payout providers
+
+VASP / digital asset partners
+
+Custodians
+
+Show:
+
+legal responsibility
+
+customer ownership
+
+fund ownership
+
+technology ownership
+
+KYC responsibilities
+
+payment execution responsibilities
+
+treasury responsibilities
+
+compliance responsibilities
+
+settlement responsibilities
+
+Do NOT present legal conclusions as fact.
+
+Clearly separate:
+
+Proposed structure
+
+from
+
+Confirmed law / regulation.
+
+==================================================
+15. USDT AND DIGITAL-ASSET SETTLEMENT
+==================================================
+
+Explain USDT properly.
+
+Do NOT market it as sanctions circumvention.
+
+Describe it as a possible institutional settlement rail where legally permitted.
+
+Explain:
+
+LYD funding
+
+ledger obligation
+
+USDT treasury
+
+VASP conversion
+
+wallet controls
+
+custody
+
+whitelisting
+
+Travel Rule
+
+blockchain screening
+
+counterparty screening
+
+settlement
+
+fiat conversion
+
+payout
+
+reconciliation
+
+Explain when USDT makes economic sense and when traditional fiat is better.
+
+Compare:
+
+Prefunded Fiat Route
+
+Bank / SWIFT Route
+
+USDT Settlement Route
+
+For each show:
+
+speed
+
+cost
+
+risk
+
+liquidity requirements
+
+regulatory complexity
+
+operational complexity
+
+==================================================
+16. ROUTING ENGINE
+==================================================
+
+Explain how Tazdan can choose the optimal route.
+
+Inputs:
+
+amount
+
+currency
+
+corridor
+
+liquidity
+
+fees
+
+FX rate
+
+partner availability
+
+risk
+
+compliance rules
+
+limits
+
+estimated delivery time
+
+settlement cost
+
+bank cut-off times
+
+VASP availability
+
+Generate example route decisions.
+
+==================================================
+17. TREASURY AND LIQUIDITY
+==================================================
+
+Create a detailed Treasury Management chapter.
+
+Explain:
+
+- LYD liquidity
+- GBP liquidity
+- EUR liquidity
+- USD liquidity
+- USDT liquidity
+- prefunding
+- net settlement
+- corridor liquidity
+- partner exposure
+- liquidity thresholds
+- automated alerts
+- rebalancing
+- working capital
+- reconciliation
+- treasury risk
+
+Use diagrams.
+
+==================================================
+18. SAFEGUARDING OF FUNDS
+==================================================
+
+Explain the distinction between:
+
+CUSTOMER FUNDS
+
+SETTLEMENT / TREASURY FUNDS
+
+CORPORATE FUNDS
+
+Show accounts and ledger treatment.
+
+Explain why these should remain separated.
+
+==================================================
+19. COMPLIANCE
+==================================================
+
+Create a serious compliance chapter.
+
+Include:
+
+KYC
+
+KYB
+
+AML
+
+CFT
+
+PEP
+
+Sanctions
+
+Source of Funds
+
+Source of Wealth when relevant
+
+Transaction Monitoring
+
+Travel Rule
+
+Wallet Screening
+
+Device Risk
+
+Velocity Rules
+
+Behavioural Monitoring
+
+Fraud
+
+Case Management
+
+Manual Review
+
+SAR / STR process conceptually
+
+Record Retention
+
+Audit Logs
+
+Regulatory Reporting
+
+Show the compliance decision engine.
+
+==================================================
+20. SECURITY
+==================================================
+
+Analyse the codebase security.
+
+Cover:
+
+authentication
+
+session security
+
+2FA
+
+trusted devices
+
+rate limits
+
+API security
+
+authorization
+
+role management
+
+database access
+
+encryption
+
+secrets
+
+seed phrase / private key protection
+
+custody
+
+withdrawal whitelisting
+
+signing
+
+wallet security
+
+admin security
+
+audit logging
+
+network security
+
+backup
+
+disaster recovery
+
+monitoring
+
+incident response
+
+Identify:
+
+strengths
+
+weaknesses
+
+risks
+
+recommended improvements
+
+==================================================
+21. BLOCKCHAIN / CUSTODY
+==================================================
+
+Where evidenced in code, document:
+
+BTC
+
+Ethereum
+
+Solana
+
+TRON
+
+HD wallet generation
+
+seed encryption
+
+address derivation
+
+deposit monitoring
+
+withdrawals
+
+transaction broadcasting
+
+confirmations
+
+custody architecture
+
+key management
+
+==================================================
+22. PERFORMANCE AND SCALABILITY
+==================================================
+
+Read stress-test scripts and performance systems.
+
+Document:
+
+current tests
+
+what they actually prove
+
+what they do NOT prove
+
+concurrency assumptions
+
+latency
+
+database bottlenecks
+
+Redis
+
+connection pools
+
+ledger contention
+
+race conditions
+
+idempotency
+
+horizontal scaling
+
+queues
+
+event processing
+
+WebSocket scaling
+
+Do not exaggerate synthetic stress tests.
+
+==================================================
+23. BUSINESS MODEL
+==================================================
+
+Document every realistic Tazdan revenue stream.
+
+Examples:
+
+FX spread
+
+domestic transfer fees
+
+international remittance
+
+crypto conversion
+
+P2P fees
+
+withdrawal fees
+
+deposit fees
+
+claim-link fees
+
+recurring-buy fees
+
+card interchange / card fees
+
+business subscriptions
+
+bulk payout fees
+
+merchant fees
+
+API fees
+
+white-label licensing
+
+priority settlement
+
+business treasury
+
+B2B SaaS
+
+Show a revenue architecture diagram.
+
+==================================================
+24. UNIT ECONOMICS
+==================================================
+
+Create realistic unit economics.
+
+For representative transactions show:
+
+gross transaction value
+
+FX revenue
+
+fixed fees
+
+partner costs
+
+bank costs
+
+payout costs
+
+compliance costs
+
+blockchain costs where applicable
+
+fraud allowance
+
+support cost
+
+gross margin
+
+contribution margin
+
+Do not use unrealistic 90% margins unless demonstrably justified.
+
+==================================================
+25. FINANCIAL PROJECTIONS
+==================================================
+
+Create:
+
+Year 1
+Year 3
+Year 5
+Year 10
+
+Include three scenarios:
+
+Conservative
+Base Case
+Upside
+
+For each estimate:
+
+registered users
+
+monthly active users
+
+business accounts
+
+annual transaction volume
+
+domestic payment volume
+
+international remittance volume
+
+average transaction value
+
+revenue
+
+gross profit
+
+operating expenses
+
+EBITDA
+
+net income
+
+employees
+
+technology spend
+
+compliance spend
+
+marketing spend
+
+partner costs
+
+liquidity requirements
+
+capital requirements
+
+Do not present projections as guaranteed.
+
+Clearly show every assumption.
+
+Build charts for:
+
+Revenue
+
+Gross profit
+
+EBITDA
+
+Users
+
+Transaction volume
+
+International remittance volume
+
+==================================================
+26. MARKET OPPORTUNITY
+==================================================
+
+Build:
+
+TAM
+SAM
+SOM
+
+For:
+
+Libyan payments
+
+remittance
+
+business payments
+
+currency conversion
+
+diaspora corridors
+
+fintech infrastructure
+
+Use credible sources.
+
+Separate verified public data from internal assumptions.
+
+==================================================
+27. COMPETITIVE POSITIONING
+==================================================
+
+Compare conceptually against:
+
+banks
+
+exchange houses
+
+traditional remittance companies
+
+Wise
+
+Revolut
+
+Western Union
+
+MoneyGram
+
+regional wallets
+
+crypto P2P
+
+informal transfer channels
+
+Do NOT claim Tazdan is better without explaining why.
+
+Compare:
+
+UX
+
+speed
+
+cost
+
+currencies
+
+compliance
+
+local relevance
+
+international reach
+
+business features
+
+crypto capability
+
+API infrastructure
+
+==================================================
+28. TECHNOLOGY VALUE
+==================================================
+
+Perform a technical asset assessment.
+
+Explain what an acquirer or investor would actually be acquiring:
+
+code
+
+database architecture
+
+ledger
+
+payment infrastructure
+
+remittance workflows
+
+FX engine
+
+custody
+
+blockchain infrastructure
+
+mobile application
+
+business platform
+
+admin infrastructure
+
+compliance operations
+
+API architecture
+
+deployment tooling
+
+IP
+
+documentation
+
+engineering effort
+
+replacement cost
+
+Do NOT simply multiply developer salaries.
+
+Evaluate:
+
+complexity
+
+maturity
+
+reusability
+
+technical debt
+
+integration cost
+
+regulatory readiness
+
+commercial readiness
+
+==================================================
+29. BUILD VS BUY / REPLACEMENT COST
+==================================================
+
+Estimate how much it would cost a serious company to rebuild Tazdan's current verified capabilities.
+
+Break down:
+
+product design
+
+mobile
+
+web
+
+backend
+
+database
+
+ledger
+
+payments
+
+blockchain
+
+security
+
+admin
+
+business portal
+
+DevOps
+
+QA
+
+compliance engineering
+
+integrations
+
+project management
+
+Include:
+
+Low estimate
+Realistic estimate
+High-quality institutional rebuild estimate
+
+==================================================
+30. CURRENT GAPS
+==================================================
+
+Create a brutally factual section:
+
+"What's Missing Before Tazdan Is a Real Financial Institution"
+
+Include:
+
+unfinished integrations
+
+mock services
+
+licensing dependencies
+
+partner dependencies
+
+card issuer dependency
+
+banking dependency
+
+off-ramp dependency
+
+compliance gaps
+
+security gaps
+
+operations gaps
+
+support requirements
+
+treasury requirements
+
+regulatory requirements
+
+testing requirements
+
+Do not hide weaknesses.
+
+==================================================
+31. ROADMAP
+==================================================
+
+Create:
+
+90-day roadmap
+
+6-month roadmap
+
+12-month roadmap
+
+24-month roadmap
+
+5-year strategic roadmap
+
+Prioritize:
+
+regulatory architecture
+
+partner contracts
+
+ledger hardening
+
+security
+
+compliance
+
+first remittance corridor
+
+sandbox
+
+pilot
+
+public launch
+
+business products
+
+cards
+
+international expansion
+
+==================================================
+32. INVESTMENT REQUIREMENT
+==================================================
+
+Estimate how much capital is realistically required for:
+
+Lean Pilot
+
+Regulated Libya Launch
+
+Multi-Corridor Remittance Launch
+
+Regional Expansion
+
+For each show:
+
+engineering
+
+compliance
+
+legal
+
+licensing
+
+team
+
+infrastructure
+
+partners
+
+liquidity
+
+marketing
+
+operations
+
+contingency
+
+==================================================
+33. INVESTMENT THESIS
+==================================================
+
+Create an investor-grade section explaining:
+
+Why now
+
+Why Libya
+
+Why Tazdan
+
+Technology moat
+
+Regulatory moat
+
+Distribution moat
+
+Network effects
+
+Data moat
+
+Revenue potential
+
+Risks
+
+Potential strategic acquirers
+
+Potential exit paths
+
+Potential failure modes
+
+==================================================
+34. RISKS
+==================================================
+
+Create a full risk register.
+
+Categories:
+
+Regulatory
+Banking
+Sanctions
+AML
+Fraud
+Liquidity
+Counterparty
+Custody
+Cybersecurity
+Technology
+Operational
+FX
+Political
+Partner
+Reputational
+Execution
+Market
+Capital
+
+For every risk show:
+
+Likelihood
+
+Impact
+
+Mitigation
+
+Residual Risk
+
+==================================================
+35. APPENDICES
+==================================================
+
+Include comprehensive appendices.
+
+At minimum:
+
+A. Complete technical stack
+B. Repository structure
+C. Database model inventory
+D. Endpoint inventory
+E. Enum inventory
+F. Important transaction states
+G. Ledger account categories
+H. Security controls
+I. Regulatory terminology
+J. Provider integration inventory
+K. Environment architecture
+L. Test inventory
+M. Stress-test summary
+N. Product route inventory
+O. Business feature inventory
+P. Admin feature inventory
+Q. Known technical debt
+R. Known integration gaps
+S. Assumptions used in projections
+T. Financial model tables
+U. Glossary
+V. Acronyms
+W. References
+X. Index
+
+==================================================
+36. GRAPHICS
+==================================================
+
+Generate real explanatory graphics.
+
+Required graphics include:
+
+Tazdan ecosystem map
+
+Local payment flow
+
+International remittance flow
+
+Inbound remittance flow
+
+Outbound remittance flow
+
+Legal entity architecture
+
+System architecture
+
+Service architecture
+
+Database domain map
+
+Ledger diagram
+
+Transaction state machine
+
+Route engine
+
+Treasury model
+
+Liquidity pools
+
+Funds safeguarding model
+
+KYC workflow
+
+Compliance decision engine
+
+USDT settlement architecture
+
+Fiat settlement architecture
+
+Reconciliation process
+
+Security model
+
+Blockchain custody architecture
+
+Revenue model
+
+Unit economics waterfall
+
+Financial projection charts
+
+Roadmap
+
+Risk matrix
+
+Do not create decorative diagrams with no informational value.
+
+==================================================
+37. SOURCE DISCIPLINE
+==================================================
+
+Every factual statement must be traceable to one of:
+
+1. Codebase evidence
+2. tazdan.com
+3. Verified public source
+4. Explicitly labelled assumption
+
+Create visual labels when useful:
+
+VERIFIED IN CODE
+
+PUBLIC WEBSITE CLAIM
+
+PARTNER DEPENDENT
+
+REGULATORY DEPENDENT
+
+PROPOSED ARCHITECTURE
+
+FINANCIAL ASSUMPTION
+
+Do not blur these categories.
+
+==================================================
+38. VERY IMPORTANT WRITING RULE
+==================================================
+
+This is NOT marketing copy.
+
+Write it like an institutional reference document.
+
+Avoid:
+
+"revolutionary"
+"game-changing"
+"world-class"
+"disruptive"
+"unprecedented"
+
+unless there is objective justification.
+
+Be impressive through evidence, architecture, depth and execution.
+
+==================================================
+39. INVESTOR READABILITY
+==================================================
+
+Assume some readers understand finance but not software.
+
+Every highly technical chapter should start with:
+
+"Why this matters"
+
+Then:
+
+"How it works"
+
+Then:
+
+"Technical implementation"
+
+Then:
+
+"Commercial implication"
+
+Then:
+
+"Risks / dependencies"
+
+This allows a non-technical investor to understand the value without dumbing down the engineering.
+
+==================================================
+40. FINAL QUALITY CONTROL
+==================================================
+
+Before generating the final files:
+
+Audit every page.
+
+Check:
+
+- no text overflow
+- no clipped Arabic
+- correct RTL
+- good English typography
+- consistent margins
+- consistent spacing
+- consistent font sizes
+- aligned tables
+- aligned diagrams
+- accurate page numbers
+- complete Table of Contents
+- no broken charts
+- no low-contrast text
+- no overlapping cards
+- no empty sections
+- no placeholder text
+- no fake citations
+- no unsupported claims
+- no inconsistent financial numbers
+- no inconsistent transaction flows
+
+Then perform a SECOND CONTENT AUDIT.
+
+Ask yourself:
+
+"If an investor, bank, regulator, acquirer, CTO and CFO all read this document, would they understand exactly what Tazdan is, how it works, what's built, what's missing, how it makes money, what it costs, how it could scale, and what the risks are?"
+
+If the answer is no, continue working until the answer is yes.
+
+==================================================
+41. FINAL FILE NAMES
+==================================================
+
+Generate:
+
+Tazdan_Bible_English.pdf
+
+Tazdan_Bible_Libyan_Arabic.pdf
+
+Optional if practical:
+
+Tazdan_Bible_Combined_Bilingual.pdf
+
+Also provide:
+
+Tazdan_Financial_Model.xlsx
+
+if you create detailed projections.
+
+Do not stop after analysing.
+
+Actually generate the final finished PDFs.
+
+Do not ask me to manually assemble anything.
+
+Do not give me a summary instead of the files.
+
+Read the repository and tazdan.com first, build your evidence base, then produce the complete documents.

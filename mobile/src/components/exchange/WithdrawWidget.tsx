@@ -20,6 +20,7 @@ import { useWallets, useTransactionSound } from '@/hooks';
 import { bankAccountService, withdrawalService } from '@/services';
 import type { BankAccount } from '@/types';
 
+import { BottomSheet } from '@/components/ui/BottomSheet';
 const FIAT_SET = new Set(['USD', 'EUR', 'GBP', 'AED', 'SAR', 'EGP', 'LYD']);
 const CRYPTO_ENUM = new Set(['USDT', 'BTC', 'ETH', 'BNB', 'SOL', 'XRP', 'ADA', 'DOGE', 'MATIC', 'DOT', 'AVAX']);
 
@@ -107,10 +108,7 @@ function BankAccountForm({
   );
 
   return (
-    <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 20 }}>
-      <Text style={{ color: p.fg, fontSize: 18, fontWeight: '600', marginBottom: 20 }}>
-        {initial?.id ? 'Edit Bank Account' : 'Add Bank Account'}
-      </Text>
+    <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 4, paddingBottom: 24 }}>
 
       {/* Country first — drives bank list */}
       <View style={{ marginBottom: 14 }}>
@@ -503,12 +501,7 @@ export function WithdrawWidget() {
         </Pressable>
 
         {/* Add bank modal */}
-        <Modal visible={showAddBank} animationType="slide" transparent onRequestClose={() => setShowAddBank(false)}>
-          <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' }}>
-            <View style={{ backgroundColor: p.bg, borderTopLeftRadius: 28, borderTopRightRadius: 28, maxHeight: '92%' }}>
-              <View style={{ alignItems: 'center', paddingTop: 10 }}>
-                <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: p.border, marginBottom: 4 }} />
-              </View>
+        <BottomSheet visible={showAddBank} onClose={() => setShowAddBank(false)} title="Add Bank Account" scroll={false} contentStyle={{ paddingHorizontal: 0 }}>
               <BankAccountForm
                 onSave={async (data) => {
                   await bankAccountService.add(data);
@@ -518,17 +511,10 @@ export function WithdrawWidget() {
                 onCancel={() => setShowAddBank(false)}
                 palette={p}
               />
-            </View>
-          </View>
-        </Modal>
+            </BottomSheet>
 
         {/* Edit bank modal */}
-        <Modal visible={!!editingBank} animationType="slide" transparent onRequestClose={() => setEditingBank(null)}>
-          <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' }}>
-            <View style={{ backgroundColor: p.bg, borderTopLeftRadius: 28, borderTopRightRadius: 28, maxHeight: '92%' }}>
-              <View style={{ alignItems: 'center', paddingTop: 10 }}>
-                <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: p.border, marginBottom: 4 }} />
-              </View>
+        <BottomSheet visible={!!editingBank} onClose={() => setEditingBank(null)} title="Edit Bank Account" scroll={false} contentStyle={{ paddingHorizontal: 0 }}>
               {editingBank && (
                 <BankAccountForm
                   initial={editingBank}
@@ -541,9 +527,7 @@ export function WithdrawWidget() {
                   palette={p}
                 />
               )}
-            </View>
-          </View>
-        </Modal>
+            </BottomSheet>
       </View>
     );
   }

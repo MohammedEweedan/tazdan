@@ -19,7 +19,7 @@ import { securityService } from '@/services';
 
 interface Props {
   visible: boolean;
-  action: 'withdrawal' | 'buy' | 'sell' | 'transfer';
+  action: 'withdrawal' | 'buy' | 'sell' | 'transfer' | 'account_close';
   /** Called with the 6-digit code. Throw to surface an error (e.g. bad code). */
   onSubmit: (code: string) => Promise<void>;
   onCancel: () => void;

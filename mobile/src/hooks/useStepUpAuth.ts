@@ -40,8 +40,9 @@ export interface GuardOpts {
 }
 
 export function useStepUpAuth() {
-  const guard = useCallback(async ({ usdValue, reason, alwaysRequire }: GuardOpts) => {
-    if (!alwaysRequire && usdValue < STEP_UP_USD) return; // below threshold
+  /** Resolves true when the user just passed a local biometric check, false when none was needed. */
+  const guard = useCallback(async ({ usdValue, reason, alwaysRequire }: GuardOpts): Promise<boolean> => {
+    if (!alwaysRequire && usdValue < STEP_UP_USD) return false; // below threshold
 
     const [hardware, enrolled] = await Promise.all([
       LocalAuthentication.hasHardwareAsync(),
@@ -74,6 +75,7 @@ export function useStepUpAuth() {
           : 'Verification failed',
       );
     }
+    return true;
   }, []);
 
   return { guard, threshold: STEP_UP_USD };

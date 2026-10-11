@@ -38,12 +38,27 @@ export async function revokeAllUserSessions(userId: string): Promise<void> {
   }
 }
 
-async function isRevokedByCutoff(userId: string, iatSeconds?: number): Promise<boolean> {
+const sessionKey = (sid: string) => `sec:sid-revoked:${sid}`;
+
+/** Kill one session's outstanding access tokens immediately (its refresh token is revoked in the DB). */
+export async function revokeSessionAccess(sid: string): Promise<void> {
+  const client = getRedisClient();
+  if (!client) return;
+  await client
+    .set(sessionKey(sid), '1', { EX: ACCESS_TOKEN_TTL_SECONDS + 60 })
+    .catch((err) => logger.warn('[auth] failed to mark session revoked', { sid, err }));
+}
+
+async function isRevokedByCutoff(userId: string, iatSeconds?: number, sid?: string): Promise<boolean> {
   if (!iatSeconds) return false;
   const client = getRedisClient();
   if (!client) return false;
   try {
-    const raw = await client.get(cutoffKey(userId));
+    const [raw, sidRevoked] = await Promise.all([
+      client.get(cutoffKey(userId)),
+      sid ? client.get(sessionKey(sid)) : Promise.resolve(null),
+    ]);
+    if (sidRevoked) return true;
     if (!raw) return false;
     return iatSeconds * 1000 < Number(raw);
   } catch {
@@ -71,21 +86,42 @@ export function authenticate(req: AuthRequest, res: Response, next: NextFunction
     return next(new AppError('Authentication required', 401));
   }
 
-  let decoded: { id: string; email: string; role: string; iat?: number };
+  let decoded: { id: string; email: string; role: string; iat?: number; sid?: string };
   try {
     decoded = jwt.verify(token, jwtSecret(), { algorithms: ['HS256'] }) as typeof decoded;
   } catch {
     return next(new AppError('Invalid or expired token', 401));
   }
 
-  // Instant-revocation check (ban / password reset / 2FA recovery).
-  isRevokedByCutoff(decoded.id, decoded.iat)
+  // Instant-revocation check (ban / password reset / 2FA recovery / revoked device).
+  isRevokedByCutoff(decoded.id, decoded.iat, decoded.sid)
     .then((revoked) => {
       if (revoked) return next(new AppError('Session revoked. Please log in again.', 401));
       req.user = decoded;
       next();
     })
     .catch(() => { req.user = decoded; next(); });
+}
+
+/**
+ * For public endpoints that show more to signed-in users. A valid token sets
+ * `req.user`; a missing, invalid or revoked one leaves the request anonymous
+ * instead of failing it.
+ */
+export function optionalAuthenticate(req: AuthRequest, _res: Response, next: NextFunction) {
+  const authHeader = req.headers.authorization;
+  const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
+  if (!token) return next();
+
+  let decoded: { id: string; email: string; role: string; iat?: number; sid?: string };
+  try {
+    decoded = jwt.verify(token, jwtSecret(), { algorithms: ['HS256'] }) as typeof decoded;
+  } catch {
+    return next();
+  }
+  isRevokedByCutoff(decoded.id, decoded.iat, decoded.sid)
+    .then((revoked) => { if (!revoked) req.user = decoded; next(); })
+    .catch(() => next());
 }
 
 // ── Admin gate ───────────────────────────────────────────────────────
@@ -95,8 +131,13 @@ export function authenticate(req: AuthRequest, res: Response, next: NextFunction
 // add a query per request), require 2FA on the account in production, and
 // optionally pin admin access to an IP allowlist (ADMIN_IP_ALLOWLIST,
 // comma-separated exact IPs — e.g. an office/VPN egress).
-const adminCache = new Map<string, { at: number; ok: boolean; reason?: string }>();
+const adminCache = new Map<string, { at: number; ok: boolean; reason?: string; requires?: string }>();
 const ADMIN_CACHE_MS = 60 * 1000;
+
+/** Forget a cached admin decision (after 2FA is turned on or off). */
+export function clearAdminCache(userId: string): void {
+  adminCache.delete(userId);
+}
 
 function adminIpAllowed(ip: string | undefined): boolean {
   const raw = process.env.ADMIN_IP_ALLOWLIST?.trim();
@@ -116,7 +157,7 @@ export function requireAdmin(req: AuthRequest, _res: Response, next: NextFunctio
 
   const cached = adminCache.get(req.user.id);
   if (cached && Date.now() - cached.at < ADMIN_CACHE_MS) {
-    return cached.ok ? next() : next(new AppError(cached.reason ?? 'Admin access required', 403));
+    return cached.ok ? next() : next(new AppError(cached.reason ?? 'Admin access required', 403, 'AUTHORIZATION', cached.requires ? { requires: cached.requires } : undefined));
   }
 
   prisma.user
@@ -127,6 +168,7 @@ export function requireAdmin(req: AuthRequest, _res: Response, next: NextFunctio
     .then((u) => {
       let ok = true;
       let reason: string | undefined;
+      let requires: string | undefined;
       if (!u || u.role !== 'ADMIN' || u.status !== 'ACTIVE') {
         ok = false; reason = 'Admin access required';
       } else if (
@@ -134,10 +176,11 @@ export function requireAdmin(req: AuthRequest, _res: Response, next: NextFunctio
         process.env.ADMIN_REQUIRE_2FA !== '0' &&
         !u.twoFactorEnabled
       ) {
-        ok = false; reason = 'Enable 2FA on your account to access the admin console';
+        // `requires` lets the cockpit offer 2FA setup instead of a dead end.
+        ok = false; reason = 'Enable 2FA on your account to access the admin console'; requires = 'TWO_FACTOR';
       }
-      adminCache.set(req.user!.id, { at: Date.now(), ok, reason });
-      return ok ? next() : next(new AppError(reason!, 403));
+      adminCache.set(req.user!.id, { at: Date.now(), ok, reason, requires });
+      return ok ? next() : next(new AppError(reason!, 403, 'AUTHORIZATION', requires ? { requires } : undefined));
     })
     .catch(() => next(new AppError('Internal error', 500)));
 }
@@ -213,6 +256,30 @@ export async function persistRefreshToken(args: {
   });
 }
 
+/**
+ * Issue a token pair for a new or rotated session. The refresh token is
+ * stored hashed; the access token carries the session id (`sid`) so the
+ * session list can mark "this device" and a single session can be revoked.
+ */
+export async function issueSessionTokens(
+  user: { id: string; email: string; role: string },
+  meta: { ipAddress?: string; userAgent?: string },
+) {
+  const { refreshToken } = generateTokens(user);
+  const row = await persistRefreshToken({
+    userId: user.id,
+    rawToken: refreshToken,
+    ipAddress: meta.ipAddress,
+    userAgent: meta.userAgent,
+  });
+  const accessToken = jwt.sign(
+    { id: user.id, email: user.email, role: user.role, sid: row.id },
+    jwtSecret(),
+    { expiresIn: ACCESS_TOKEN_TTL, algorithm: 'HS256' },
+  );
+  return { accessToken, refreshToken, sessionId: row.id };
+}
+
 export async function revokeRefreshToken(rawToken: string) {
   const tokenHash = hashRefreshToken(rawToken);
   return prisma.refreshToken.updateMany({
@@ -249,12 +316,18 @@ export async function verifyAndConsumeRefreshToken(rawToken: string) {
     throw new AppError('Refresh token user mismatch', 401);
   }
   if (stored.revokedAt) {
-    // Reuse of a revoked token → revoke the entire chain for this user.
-    await prisma.refreshToken.updateMany({
-      where: { userId: stored.userId, revokedAt: null },
-      data: { revokedAt: new Date() },
-    });
-    throw new AppError('Refresh token already used. All sessions revoked.', 401);
+    if (stored.replacedById) {
+      // A ROTATED-OUT token came back: someone else holds a copy of this
+      // session. Revoke the entire chain for this user.
+      await prisma.refreshToken.updateMany({
+        where: { userId: stored.userId, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+      throw new AppError('Refresh token already used. All sessions revoked.', 401);
+    }
+    // Explicitly signed out (logout / "sign out other devices"): refuse it,
+    // but do not punish the user's remaining sessions.
+    throw new AppError('Session has been signed out', 401);
   }
   if (stored.expiresAt < new Date()) {
     throw new AppError('Refresh token expired', 401);

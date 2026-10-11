@@ -1,24 +1,13 @@
-import { Tabs } from 'expo-router';
+import { Tabs, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { Platform, Pressable, Text, View, ActionSheetIOS, Alert, Image } from 'react-native';
+import { View, StyleSheet } from 'react-native';
+import { Text } from '@/components/ui/Text';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useThemedPalette } from '@/store/themeStore';
+import { HomeFab, QuickSelectOverlay, useQuickSelect } from '@/components/nav/QuickSelect';
 import { useAuthStore } from '@/store/authStore';
 import { useT } from '@/store/i18nStore';
 import { useMessageRealtime } from '@/hooks';
-
-function BrandMark({ size, mono }: { size: number; mono: boolean }) {
-  const src = mono
-    ? require('../../assets/icon-white.png')
-    : require('../../assets/icon-color.png');
-
-  return (
-    <Image
-      source={src}
-      style={{ width: size, height: size }}
-      resizeMode="contain"
-    />
-  );
-}
 
 const ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   wallet: 'wallet',
@@ -27,49 +16,46 @@ const ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   messages: 'chatbubble-ellipses',
 };
 
-const FAB_SIZE = 69;
-
 export default function TabsLayout() {
   const p = useThemedPalette();
   const t = useT();
+  const router = useRouter();
   const userId = useAuthStore((s) => s.user?.id);
-  // FAB is a CONSTANT white disc carrying the brand asterisk, which rotates
-  // slowly. In dark/light it's the true-blue mark (icon-color); in mono it's
-  // the black mark (icon-white) on the same white disc — pure monochrome.
-  const isMono    = p.accentText === p.fg; // mono collapses accent → fg
-  const fabFill   = '#FFFFFF';             // white disc, constant across themes
-  const haloColor = isMono ? '#000000' : p.accent;   // soft blue halo (grey in mono)
 
   useMessageRealtime(userId);
 
-  const barHeight = Platform.OS === 'ios' ? 80 : 72;
+  // Short bar: the home indicator already sits in the inset, so only part of
+  // it is added as padding.
+  const insets = useSafeAreaInsets();
+  const bottomPad = insets.bottom > 0 ? Math.max(insets.bottom - 16, 10) : 10;
+  const barHeight = 56 + bottomPad;
 
-  const handleQuickActions = () => {
-    const actions = [t('home.sendMoney'), t('cards.orderCard'), t('nav.wallet'), t('common.cancel')];
-
-    if (Platform.OS === 'ios') {
-      ActionSheetIOS.showActionSheetWithOptions(
-        { options: actions, cancelButtonIndex: 3 },
-        () => {}
-      );
-    } else {
-      Alert.alert(t('home.more'), `• ${t('home.sendMoney')}\n• ${t('cards.orderCard')}\n• ${t('nav.wallet')}`);
-    }
-  };
+  // Hold the home button (or slide up from it) for these.
+  const qs = useQuickSelect([
+    { key: 'send',    label: t('quick.send'),    icon: 'arrow-up',   onSelect: () => router.push('/send') },
+    { key: 'receive', label: t('quick.receive'), icon: 'arrow-down', onSelect: () => router.push('/receive') },
+    { key: 'topup',   label: t('quick.topUp'),   icon: 'add',        onSelect: () => router.push('/topup') },
+  ]);
 
   return (
+    <View style={{ flex: 1 }}>
     <Tabs
+      // Switching tabs while the quick select is open closes it.
+      screenListeners={{ tabPress: () => { if (qs.mode !== 'closed') qs.close(); } }}
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: p.accentText,
         tabBarInactiveTintColor: p.fgFaint,
         tabBarShowLabel: false,
+        tabBarIconStyle: { width: '100%', height: 46 },
         tabBarStyle: {
           height: barHeight,
-          paddingTop: 8,
-          backgroundColor: p.bg,
+          paddingTop: 6,
+          paddingBottom: bottomPad,
+          backgroundColor: p.bgElev,
           borderTopColor: p.border,
-          borderTopWidth: 1,
+          borderTopWidth: StyleSheet.hairlineWidth,
+          elevation: 0,
           overflow: 'visible',
         },
       }}
@@ -100,42 +86,13 @@ export default function TabsLayout() {
           title: t('nav.home'),
           tabBarIcon: () => null,
           tabBarButton: (props) => (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={t('nav.home')}
-              delayLongPress={3000}
-              onLongPress={handleQuickActions}
-              onPress={props.onPress as any}
-              style={{
-                flex: 1,
-                alignItems: 'center',
-                justifyContent: 'center',
-                marginTop: -10,
-              }}
-            >
-              {/* Constant white disc with a slowly-rotating brand mark. The
-                  "halo" is a soft shadow glow (blue in dark/light, grey in
-                  mono) — no gradient, no concentric rings. */}
-              <View
-                style={{
-                  width: FAB_SIZE,
-                  height: FAB_SIZE,
-                  borderRadius: FAB_SIZE / 2,
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  backgroundColor: fabFill,
-                  borderWidth: 3,
-                  borderColor: p.bg,
-                  shadowColor: haloColor,
-                  shadowOpacity: 0.35,
-                  shadowRadius: 14,
-                  shadowOffset: { width: 0, height: 0 },
-                  elevation: 10,
-                }}
-              >
-                <BrandMark size={FAB_SIZE - 22} mono={isMono} />
-              </View>
-            </Pressable>
+            <HomeFab
+              qs={qs}
+              onPress={() => props.onPress?.(undefined as any)}
+              label={t('nav.home')}
+              hint={t('quick.hint')}
+              selected={props.accessibilityState?.selected}
+            />
           ),
         }}
       />
@@ -160,6 +117,8 @@ export default function TabsLayout() {
         }}
       />
     </Tabs>
+    <QuickSelectOverlay qs={qs} barHeight={barHeight} />
+    </View>
   );
 }
 
@@ -174,19 +133,20 @@ function BarIcon({
   color: string;
   label: string;
 }) {
-  const iconName = focused
-    ? name
-    : (`${name}-outline` as keyof typeof Ionicons.glyphMap);
+  const p = useThemedPalette();
+  const outline = `${name}-outline` as keyof typeof Ionicons.glyphMap;
+  const iconName = !focused && outline in Ionicons.glyphMap ? outline : name;
 
   return (
-    <View style={{ alignItems: 'center', justifyContent: 'center', gap: 3, width: '100%' }}>
-      <Ionicons name={iconName} size={22} color={color} />
+    <View style={{ alignItems: 'center', justifyContent: 'center', gap: 4, width: '100%' }}>
+      <Ionicons name={iconName} size={21} color={color} />
       <Text
         numberOfLines={1}
         adjustsFontSizeToFit
         style={{
-          fontSize: 10,
-          fontWeight: focused ? '600' : '400',
+          fontSize: 10.5,
+          fontWeight: focused ? '600' : '500',
+          letterSpacing: 0.1,
           color,
           textAlign: 'center',
           width: '100%',
@@ -194,6 +154,11 @@ function BarIcon({
       >
         {label}
       </Text>
+      {/* Active marker — a small accent dot, the one bit of colour in the bar. */}
+      <View style={{
+        width: 4, height: 4, borderRadius: 2, marginTop: -1,
+        backgroundColor: focused ? p.accent : 'transparent',
+      }} />
     </View>
   );
 }

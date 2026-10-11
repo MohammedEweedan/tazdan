@@ -20,6 +20,9 @@ import { StepUpModal } from '@/components/ui/StepUpModal';
 import { SuccessModal, type TxSuccessData } from '@/components/ui/SuccessModal';
 import { ExpressPayButton } from '@/components/ui/ExpressPayButton';
 import { useWallets, useCards, useMarkets, useTransactionSound } from '@/hooks';
+import { useLimitBlock, LIMITS_QUERY_KEY } from '@/hooks/useLimits';
+import { LimitNotice } from '@/components/limits/LimitNotice';
+import { useQueryClient } from '@tanstack/react-query';
 import * as LocalAuthentication from 'expo-local-authentication';
 import { CoinAvatar } from '@/components/ui/CoinAvatar';
 import { CurrencyPicker, type CurrencyItem } from '@/components/ui/CurrencyPicker';
@@ -27,6 +30,7 @@ import { cryptoExchangeAPI, type CryptoQuote, type AssetSearchResult } from '@/l
 import { isStepUpChallengeError, stepUpErrorMessage } from '@/lib/stepUpErrors';
 import { STRIPE, fiatSymbol as fiatGlyph, getCurrencyMeta } from '@/constants';
 
+import { BottomSheet } from '@/components/ui/BottomSheet';
 // ── Static metadata for well-known coins ─────────────────────────────────────
 // Everything else gets a generated colour from its ticker symbol.
 const KNOWN: Record<string, { label: string; color: string; icon: string }> = {
@@ -193,6 +197,7 @@ export function BuyWidget({ defaultAsset, lockAsset = false }: BuyWidgetProps = 
   const { data: cards } = useCards();
   const { data: tickers } = useMarkets();
   const { playSuccess, playError } = useTransactionSound();
+  const qc = useQueryClient();
   const baseCurrency = (user as any)?.baseCurrency ?? 'USD';
 
   // ── Asset picker state ────────────────────────────────────────────
@@ -448,6 +453,7 @@ export function BuyWidget({ defaultAsset, lockAsset = false }: BuyWidgetProps = 
         ...(biometricVerified ? { biometricVerified: true } : {}),
       } as any) as any;
       playSuccess('buy');
+      void qc.invalidateQueries({ queryKey: LIMITS_QUERY_KEY });
       // First/second completed buy is the moment a user decides this app is
       // real — the prompt lib self-throttles and never throws.
       import('@/lib/reviewPrompt').then(({ maybeAskForReview }) => maybeAskForReview());
@@ -474,6 +480,8 @@ export function BuyWidget({ defaultAsset, lockAsset = false }: BuyWidgetProps = 
         return;
       }
       playError();
+      // A limit refused it: refresh limits so the notice explains when it frees up.
+      if (e?.response?.data?.code === 'LIMIT_EXCEEDED') { void qc.invalidateQueries({ queryKey: LIMITS_QUERY_KEY }); setStepUpOpen(false); setError(null); return; }
       if (stepUpCode) throw e;
       setError(msg || tr('buy.errOrder'));
     } finally { setExec(false); }
@@ -485,7 +493,9 @@ export function BuyWidget({ defaultAsset, lockAsset = false }: BuyWidgetProps = 
   const livePrice  = tickerBase === 'USDT' ? 1 : (tickers?.find((t) => t.base === tickerBase)?.price ?? searchResults.find((r) => r.symbol === tickerBase)?.price ?? 0);
   const change24h  = searchResults.find((r) => r.symbol === tickerBase)?.change24h;
   const timerCritical = seconds > 0 && seconds < 8;
-  const canConfirm    = !!quote && !!payMethod && !exec && seconds > 0;
+  // Limits are shown before confirming; the quote carries the order's USD value.
+  const limit = useLimitBlock('ONRAMP_BUY', quote ? Number(quote.fiatAmount) : null);
+  const canConfirm    = !!quote && !!payMethod && !exec && seconds > 0 && !limit.blocked;
 
   // Instant price estimate: shown while no quote exists but amount + livePrice are known
   const fiatNum       = parseFloat(fiat) || 0;
@@ -493,6 +503,8 @@ export function BuyWidget({ defaultAsset, lockAsset = false }: BuyWidgetProps = 
 
   const slideLabel = !payMethod
     ? 'Select a payment method'
+    : limit.blocked
+    ? tr('limits.reached')
     : canConfirm
     ? tr('buy.slideToBuy').replace('{asset}', asset)
     : tr('buy.enterAmount');
@@ -724,6 +736,7 @@ export function BuyWidget({ defaultAsset, lockAsset = false }: BuyWidgetProps = 
       )}
 
       {/* ── CTA — pinned at the bottom ── */}
+      <LimitNotice action="ONRAMP_BUY" amountUsd={quote ? Number(quote.fiatAmount) : null} style={{ marginBottom: 10 }} />
       <SlideToConfirm
         label={slideLabel}
         onConfirm={() => { if (canConfirm && !error && !exec) doExecute(payMethod); }}
@@ -751,15 +764,7 @@ export function BuyWidget({ defaultAsset, lockAsset = false }: BuyWidgetProps = 
       {/* ══════════════════════════════════════════════════════════════
           NETWORK PICKER
       ══════════════════════════════════════════════════════════════ */}
-      <Modal visible={networkSheetOpen} transparent animationType="slide" onRequestClose={() => setNetworkSheetOpen(false)}>
-        <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' }} onPress={() => setNetworkSheetOpen(false)}>
-          <Pressable style={{ backgroundColor: p.bg, borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingTop: 10, paddingBottom: 48 }} onPress={(e) => e.stopPropagation()}>
-            <View style={{ alignItems: 'center', marginBottom: 16 }}>
-              <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: p.border }} />
-            </View>
-            <Text style={{ color: p.fg, fontSize: 18, fontWeight: '600', paddingHorizontal: 20, marginBottom: 6 }}>
-              Select network
-            </Text>
+      <BottomSheet visible={networkSheetOpen} onClose={() => setNetworkSheetOpen(false)} title={"Select network"} contentStyle={{ paddingHorizontal: 0 }}>
             <Text style={{ color: p.fgMuted, fontSize: 13, paddingHorizontal: 20, marginBottom: 16 }}>
               Choose which network to receive {serverAsset(asset)} on.
             </Text>
@@ -791,9 +796,7 @@ export function BuyWidget({ defaultAsset, lockAsset = false }: BuyWidgetProps = 
                 </Pressable>
               );
             })}
-          </Pressable>
-        </Pressable>
-      </Modal>
+          </BottomSheet>
 
       {/* ══════════════════════════════════════════════════════════════
           ASSET PICKER — full Binance search
@@ -980,13 +983,7 @@ export function BuyWidget({ defaultAsset, lockAsset = false }: BuyWidgetProps = 
       {/* ══════════════════════════════════════════════════════════════
           PAY METHOD PICKER
       ══════════════════════════════════════════════════════════════ */}
-      <Modal visible={paySheetOpen} transparent animationType="slide" onRequestClose={() => setPaySheetOpen(false)}>
-        <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' }} onPress={() => setPaySheetOpen(false)}>
-          <Pressable style={{ backgroundColor: p.bg, borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingTop: 10, paddingBottom: 48 }} onPress={(e) => e.stopPropagation()}>
-            <View style={{ alignItems: 'center', marginBottom: 12 }}>
-              <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: p.border }} />
-            </View>
-            <Text style={{ color: p.fg, fontSize: 20, fontWeight: '500', paddingHorizontal: 20, marginBottom: 16 }}>{tr('buy.payWith')}</Text>
+      <BottomSheet visible={paySheetOpen} onClose={() => setPaySheetOpen(false)} title={tr('buy.payWith')} scroll={false} contentStyle={{ paddingHorizontal: 0 }}>
             {showExpressPay && (
               <View style={{ paddingHorizontal: 20, marginBottom: 16 }}>
                 <View style={{ backgroundColor: p.bgElev, borderRadius: 18, borderWidth: 1, borderColor: p.border, padding: 14 }}>
@@ -1057,9 +1054,7 @@ export function BuyWidget({ defaultAsset, lockAsset = false }: BuyWidgetProps = 
                 );
               })}
             </ScrollView>
-          </Pressable>
-        </Pressable>
-      </Modal>
+          </BottomSheet>
 
       <SuccessModal
         data={successModal}

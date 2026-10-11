@@ -13,9 +13,15 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { cryptoWalletAPI } from '@/lib/cryptoApi';
-import { TopGradient } from '@/components/ui/ScreenShell';
+import { Skeleton } from '@/components/ui/Skeleton';
+import { EmptyState } from '@/components/ui/EmptyState';
+import { SegmentedControl } from '@/components/ui/SegmentedControl';
+import { TopGradient, Panel, PanelRow, SectionLabel } from '@/components/ui/ScreenShell';
+import { HeaderIconButton as ChromeIconButton } from '@/components/ui/ScreenHeader';
+import { ShimmerBackdrop, useShimmerInk } from '@/components/home/ShimmerBackdrop';
 import { ActivityIndicator, Animated, Dimensions, Image, KeyboardAvoidingView, Modal, PanResponder, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { BlurView } from 'expo-blur';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Text, TextInput } from '@/components/ui/Text';
 import BalanceSvg, { Path as SvgPath, Defs as SvgDefs, LinearGradient as SvgLinearGradient, Stop as SvgStop, Line as SvgLine, Circle as SvgCircle } from 'react-native-svg';
 import QRCode from 'react-native-qrcode-svg';
@@ -26,6 +32,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 
 import { useAuthStore } from '@/store/authStore';
+import { useUiStore } from '@/store/uiStore';
 import { realHandle, avatarMode } from '@/utils/displayUser';
 import { useWallets, useHaptics, useTransactions, useActivities, useActivityRealtime, useNotificationRealtime, useUnreadCount, useMarkets, useDisplayCurrency, useBudgets } from '@/hooks';
 import { useMarkets as useCoinGeckoMarkets, ID_TO_SYM } from '@/hooks/useMarkets';
@@ -43,9 +50,13 @@ import { WithdrawWidget } from '@/components/exchange/WithdrawWidget';
 import { RecurringBuyWidget } from '@/components/exchange/RecurringBuyWidget';
 import { PressableScale } from '@/components/ui/Motion';
 import { AnnouncementBanner } from '@/components/ui/AnnouncementBanner';
+import { Avatar } from '@/components/ui/Avatar';
+import { contactsService } from '@/services/contacts';
+import { useForexRates, useLiveFiatRates } from '@/hooks/useForexRates';
 import { F } from '@/theme';
 import type { Wallet } from '@/types';
 
+import { BottomSheet } from '@/components/ui/BottomSheet';
 type Tab = 'ASSETS' | 'ACTIVITY';
 
 /** Height of both header capsules (@handle + the action track). They must
@@ -59,7 +70,7 @@ export default function Home() {
   const t = useT();
   const insets = useSafeAreaInsets();
   const user = useAuthStore((s) => s.user);
-  const { data: wallets, refetch: refetchWallets } = useWallets();
+  const { data: wallets, refetch: refetchWallets, isPending: walletsLoading, isError: walletsError } = useWallets();
   const { data: budgets = [] } = useBudgets();
   // `useTransactions` still feeds screens that need the raw Transaction
   // ledger. The home Activity tab uses the unified `useActivities` feed
@@ -95,13 +106,7 @@ export default function Home() {
   const dc = useDisplayCurrency();
   const themeMode = useTheme((s) => s.mode);
   const [tab, setTab] = useState<Tab>('ASSETS');
-  const [buyModalVisible, setBuyModalVisible] = useState(false);
-  const [sellModalVisible, setSellModalVisible] = useState(false);
-  const [sendModalVisible, setSendModalVisible] = useState(false);
-  const [receiveModalVisible, setReceiveModalVisible] = useState(false);
-  const [recurringModalVisible, setRecurringModalVisible] = useState(false);
   const [swapModalVisible, setSwapModalVisible] = useState(false);
-  const [withdrawModalVisible, setWithdrawModalVisible] = useState(false);
   const [moreMenuVisible, setMoreMenuVisible] = useState(false);
   const [balanceChartVisible, setBalanceChartVisible] = useState(false);
 
@@ -130,16 +135,14 @@ export default function Home() {
   // Two interpolations: blur ramps from 0→1, gradient ramps from a
   // visible 0.55 baseline → 1.  Keeping them separate means the
   // gradient never disappears, even at scrollY=0.
-  const blurOpacity = scrollY.interpolate({
-    inputRange: [0, 30, 110],
-    outputRange: [0.92, 0.96, 1],
-    extrapolate: 'clamp',
-  });
-  const gradientOpacity = scrollY.interpolate({
-    inputRange: [0, 110],
-    outputRange: [1, 1],
-    extrapolate: 'clamp',
-  });
+  // Once the hero (balance + actions) has scrolled away, a compact bar with
+  // the balance fades in at the top.
+  // The bar takes over exactly when the actions have scrolled under it.
+  const [heroH, setHeroH] = useState(0);
+  const COMPACT_AT = Math.max(120, heroH - (insets.top + 58));
+  const compactRef = useRef(false);
+  const [compact, setCompact] = useState(false);
+  const compactOpacity = scrollY.interpolate({ inputRange: [COMPACT_AT - 24, COMPACT_AT], outputRange: [0, 1], extrapolate: 'clamp' });
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -229,6 +232,25 @@ export default function Home() {
   );
   const [dustPromptDismissed, setDustPromptDismissed] = useState(false);
 
+  // Swipeable balances (Revolut-style): the total, then each currency held
+  // (in that currency), then crypto as one page.
+  const cryptoUsd = useMemo(() => cryptoAssets.reduce((sum, w) => {
+    const tk = tickerKey(w.currency);
+    const price = priceMap[tk] ?? (tk === 'USDT' ? 1 : 0);
+    return sum + Number(w.balance) * price;
+  }, 0), [cryptoAssets, priceMap]);
+  type BalancePage = { key: string; kind: 'total' } | { key: string; kind: 'fiat'; wallet: Wallet } | { key: string; kind: 'crypto' };
+  const balancePages = useMemo<BalancePage[]>(() => [
+    { key: 'TOTAL', kind: 'total' },
+    ...fiatAssets.filter((w) => Number(w.balance) > 0)
+      .sort((a, b) => Number(b.fiatValueUsd) - Number(a.fiatValueUsd))
+      .map((w) => ({ key: w.currency, kind: 'fiat' as const, wallet: w })),
+    ...(cryptoAssets.length ? [{ key: 'CRYPTO', kind: 'crypto' as const }] : []),
+  ], [fiatAssets, cryptoAssets]);
+  const [balancePage, setBalancePage] = useState(0);
+  const currentPage = balancePages[Math.min(balancePage, balancePages.length - 1)];
+  const pageWidth = Dimensions.get('window').width;
+
   const totalUsd = useMemo(() => {
     return list.reduce((sum, w) => {
       const key = tickerKey(w.currency);
@@ -238,24 +260,32 @@ export default function Home() {
     }, 0);
   }, [list, priceMap]);
 
-  // Aggregate 24h change weighted by USD exposure.
-  const deltaPct = useMemo(() => {
+  // 24h change of the WHOLE balance. Only priced assets move; cash held in
+  // fiat doesn't, so it dilutes the percentage rather than scaling the move.
+  // Each asset's USD move is value × pct / (100 + pct) — its change since the
+  // price 24h ago, measured from today's value.
+  const deltaUsd = useMemo(() => {
     if (totalUsd <= 0 || !tickers || tickers.length === 0) return 0;
-    let weightedChange = 0;
-    let totalCryptoExposure = 0;
+    let moved = 0;
     list.forEach((w) => {
       const m = tickers.find((t) => t.base === tickerKey(w.currency));
-      if (!m || m.changePct24h === undefined || m.changePct24h === 0) return;
-      const exposure = Number(w.balance) * m.price;
-      weightedChange += exposure * m.changePct24h;
-      totalCryptoExposure += exposure;
+      if (!m || !m.changePct24h || m.changePct24h <= -100) return;
+      moved += (Number(w.balance) * m.price * m.changePct24h) / (100 + m.changePct24h);
     });
-    if (totalCryptoExposure <= 0) return 0;
-    return weightedChange / totalCryptoExposure;
+    return moved;
   }, [list, tickers, totalUsd]);
-  const deltaUsd = (totalUsd * deltaPct) / 100;
+  const deltaPct = totalUsd - deltaUsd > 0 ? (deltaUsd / (totalUsd - deltaUsd)) * 100 : 0;
   const positive = deltaPct >= 0;
-  const [showBalance, setShowBalance] = useState(true);
+  // Privacy mode is shared with the Wallet tab and persisted.
+  const showBalance = !useUiStore((st) => st.balancesHidden);
+  const toggleBalancesHidden = useUiStore((st) => st.toggleBalancesHidden);
+  // Hidden balances can be peeked at by holding the figure; release hides again.
+  const [peek, setPeek] = useState(false);
+  const revealed = showBalance || peek;
+  const locale = useI18n((st) => st.locale);
+  const { data: contacts = [] } = useQuery({ queryKey: ['contacts'], queryFn: contactsService.list, staleTime: 60_000 });
+  const { data: liveFiat } = useLiveFiatRates();
+  const { data: forexRates } = useForexRates();
   const [cryptoOpen, setCryptoOpen] = useState(true);
   const [fiatOpen, setFiatOpen] = useState(true);
 
@@ -269,26 +299,38 @@ export default function Home() {
 
   // Primary actions sit directly under the balance — Buy, Sell, Send, Top up,
   // then the More (···) overflow. Everything else lives in the More modal.
-  const ACTIONS: ActionDef[] = [
-    { key: 'buy',   icon: 'trending-up-outline',   label: t('action.buy'),   tone: 'white', onPress: () => setBuyModalVisible(true) },
-    { key: 'sell',  icon: 'trending-down-outline', label: t('action.sell'),  tone: 'grey',  onPress: () => setSellModalVisible(true) },
-    { key: 'send',  icon: 'paper-plane-outline',   label: t('action.send'),  tone: 'grey',  onPress: () => setSendModalVisible(true) },
-    { key: 'topup', icon: 'download-outline',      label: t('action.topup'), tone: 'black', onPress: () => router.push('/topup' as any) },
+  // The dock: the three moves people make most, plus More. Each opens a
+  // full page (never an in-place modal), so back/swipe and deep links work.
+  const ink = useShimmerInk();
+  const DOCK: { key: string; icon: keyof typeof Ionicons.glyphMap; label: string; onPress: () => void }[] = [
+    { key: 'topup', icon: 'add',          label: t('action.topup'), onPress: () => router.push((currentPage?.kind === 'fiat' ? { pathname: '/topup', params: { currency: currentPage.wallet.currency } } : '/topup') as any) },
+    { key: 'send',  icon: 'arrow-up',     label: t('action.send'),  onPress: () => router.push('/send' as any) },
+    { key: 'buy',   icon: currentPage?.kind === 'fiat' ? 'swap-horizontal' : 'trending-up',
+      label: t(currentPage?.kind === 'fiat' ? 'fx.exchange' : 'action.buy'),
+      onPress: () => router.push((currentPage?.kind === 'fiat' ? { pathname: '/exchange', params: { from: currentPage.wallet.currency } } : '/buy') as any) },
+    { key: 'more',  icon: 'grid-outline', label: t('home.more'),    onPress: () => setMoreMenuVisible(true) },
   ];
 
   return (
     <View style={{ flex: 1, backgroundColor: p.bg }}>
-      <StatusBar style={themeMode === 'light' ? 'dark' : 'light'} />
+      {/* Light status bar over the blue compact card. */}
+      <StatusBar style={themeMode !== 'light' ? 'light' : 'dark'} />
       <TopGradient />
         <Animated.ScrollView
           showsVerticalScrollIndicator={false}
-          style={{ backgroundColor: 'transparent', borderRadius: 10, borderWidth: 1, borderColor: p.border }}
+          style={{ backgroundColor: 'transparent' }}
           contentContainerStyle={{ paddingBottom: 140 }}
-          stickyHeaderIndices={[0]}
           scrollEventThrottle={16}
           onScroll={Animated.event(
             [{ nativeEvent: { contentOffset: { y: scrollY } } }],
-            { useNativeDriver: true },
+            {
+              useNativeDriver: true,
+              // Only flips at the threshold, so this re-renders twice per pass, not per frame.
+              listener: (e: any) => {
+                const past = e.nativeEvent.contentOffset.y > COMPACT_AT;
+                if (past !== compactRef.current) { compactRef.current = past; setCompact(past); }
+              },
+            },
           )}
           refreshControl={
             <RefreshControl
@@ -300,283 +342,202 @@ export default function Home() {
             />
           }
         >
-          {/* Index 0 — sticky TOP block.  Contains header + balance
-              + 24h delta + primary actions + Assets/Activity tabs so
-              the entire top of the screen pins as a single unit
-              while feed rows scroll underneath it.  Glass-morphism
-              (BlurView + soft gradient) fades in only after the
-              user starts scrolling; at rest the block reads naked
-              on the page bg.  No hairline — the glass does the
-              separation. The block carries its own `paddingTop:
-              insets.top` so the avatar / icon row never tucks under
-              the Dynamic Island while the block is pinned. */}
-          <View style={{ borderBottomLeftRadius: 32, borderBottomRightRadius: 32, overflow: 'hidden' }}>
-          {/* Gradient layer — covers the full block including safe-area. */}
-          <Animated.View
-            pointerEvents="none"
-            style={{
-              position: 'absolute',
-              top: 0, left: 0, right: 0, bottom: 0,
-              opacity: gradientOpacity,
-            }}
-          >
-            <BreathingGradient mode={themeMode} />
-          </Animated.View>
+          {/* Hero — header, balance and actions on the shimmer. It scrolls
+              away with the feed; the compact bar (after the ScrollView)
+              takes over at the top once it's gone. */}
+          <View onLayout={(e) => setHeroH(e.nativeEvent.layout.height)}>
+          {/* Full-bleed shimmer behind the whole top section; it dissolves
+              into the page at the bottom. */}
+          <ShimmerBackdrop pageColor={p.bg} />
 
-          {/* Blur layer — only fades in once scrolling so the at-rest
-              state stays "open" (gradient-only) and the scrolled
-              state reads as proper frosted glass. */}
-          <Animated.View
-            pointerEvents="none"
-            style={{
-              position: 'absolute',
-              top: 0, left: 0, right: 0, bottom: 0,
-              opacity: blurOpacity,
-            }}
-          >
-            <BlurView
-              intensity={Platform.OS === 'ios' ? 48 : 0}
-              tint={themeMode === 'light' ? 'light' : 'dark'}
-              style={{
-                position: 'absolute',
-                top: 0, left: 0, right: 0, bottom: 0,
-                backgroundColor: Platform.OS === 'ios'
-                  ? 'transparent'
-                  : (themeMode === 'dark'
-                      ? 'rgba(22,24,28,0.80)'
-                      : 'rgba(250,250,247,0.82)'),
-              }}
-            />
-          </Animated.View>
-
-          {/* Show/hide balance — pinned to the upper-right corner of the
-              card, level with the balance (clear of the header icon
-              cluster). Sits above the gradient/blur so it stays tappable. */}
-          <Pressable
-            onPress={() => { h.selection(); setShowBalance((v) => !v); }}
-            hitSlop={12}
-            accessibilityRole="button"
-            accessibilityLabel={showBalance ? 'Hide balance' : 'Show balance'}
-            style={{
-              position: 'absolute',
-              top: insets.top + 70, right: 20,
-              zIndex: 5,
-              width: 30, height: 30, borderRadius: 15,
-              alignItems: 'center', justifyContent: 'center',
-            }}
-          >
-            <Ionicons
-              name={showBalance ? 'eye-outline' : 'eye-off-outline'}
-              size={18}
-              color={p.fgFaint}
-            />
-          </Pressable>
-
-          {/* Header — two hairline-bordered capsules (identity on the left,
-              a segmented action track on the right) sitting on the glass.
-              Both carry a BRIGHTER top border than their sides
-              (`divider` over `border`) so light appears to catch the top
-              edge — the detail that makes the row read as a machined
-              control rather than a flat grey chip. Keep the two capsules
-              the same height (HEADER_PILL_H) or the row stops aligning. */}
+          {/* Header — who you are on the left (tap for your QR, hold for
+              profile), scan + notifications on the right. */}
           <View style={{
-            flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-            paddingHorizontal: 20, paddingTop: insets.top + 10, paddingBottom: 8,
-            gap: 10,
+            flexDirection: 'row', alignItems: 'center', gap: 10,
+            paddingHorizontal: 24, paddingTop: insets.top + 4, paddingBottom: 0,
           }}>
-            <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, minWidth: 0 }}>
-              {/* Tapping the avatar + @handle opens the receive / QR-code
-                  sheet (the QR trigger). Long-press still jumps to the
-                  full profile. */}
-              <Pressable
-                onPress={() => { h.selection(); setReceiveModalVisible(true); }}
-                onLongPress={() => { h.selection(); router.push('/profile'); }}
-                hitSlop={6}
-                accessibilityRole="button"
-                accessibilityLabel={t('action.receive')}
-                style={({ pressed }) => ({
-                  flexDirection: 'row', alignItems: 'center', gap: 9,
-                  flexShrink: 1, minWidth: 0,
-                  height: HEADER_PILL_H,
-                  paddingLeft: 3, paddingRight: 13,
-                  borderRadius: HEADER_PILL_H / 2,
-                  backgroundColor: p.pillBg,
-                  borderWidth: 1,
-                  borderColor: p.border,
-                  borderTopColor: p.divider,
-                  opacity: pressed ? 0.72 : 1,
-                })}
-              >
-                <View style={{
-                  width: 32, height: 32, borderRadius: 16,
-                  backgroundColor: p.bgElev,
-                  alignItems: 'center', justifyContent: 'center',
-                  borderWidth: 1,
-                  borderColor: p.border,
-                  flexShrink: 0,
-                  overflow: 'hidden',
-                }}>
-                  {av.kind === 'image' ? (
-                    <Image source={{ uri: av.uri }} style={{ width: 32, height: 32 }} />
-                  ) : av.kind === 'emoji' ? (
-                    <Text style={{ fontSize: 18 }}>{av.char}</Text>
-                  ) : (
-                    <Text style={{ color: p.fg, fontWeight: '700', fontSize: 15 }}>{initial}</Text>
-                  )}
-                </View>
-                <View style={{ flexShrink: 1, minWidth: 0 }}>
-                  <Text
-                    style={{
-                      color: p.fg,
-                      fontSize: (handleLabel.length <= 8 ? 16 : handleLabel.length <= 14 ? 14.5 : handleLabel.length <= 20 ? 13 : 11),
-                      fontWeight: '600',
-                      letterSpacing: -0.3,
-                    }}
-                    numberOfLines={1}
-                    ellipsizeMode="tail"
-                    adjustsFontSizeToFit
-                    minimumFontScale={0.7}
-                  >
-                    {handleLabel}
-                  </Text>
-                </View>
-              </Pressable>
-              {(user?.role === 'ADMIN') && (
+            <Pressable
+              onPress={() => { h.selection(); router.push('/receive'); }}
+              onLongPress={() => { h.selection(); router.push('/profile'); }}
+              hitSlop={6}
+              accessibilityRole="button"
+              accessibilityLabel={t('action.receive')}
+              style={({ pressed }) => ({ flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 10, opacity: pressed ? 0.7 : 1 })}
+            >
+              <View style={{
+                width: 38, height: 38, borderRadius: 19, overflow: 'hidden',
+                backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border,
+                alignItems: 'center', justifyContent: 'center',
+              }}>
+                {av.kind === 'image' ? (
+                  <Image source={{ uri: av.uri }} style={{ width: 38, height: 38 }} />
+                ) : av.kind === 'emoji' ? (
+                  <Text style={{ fontSize: 19 }}>{av.char}</Text>
+                ) : (
+                  <Text style={{ color: p.fg, fontWeight: '700', fontSize: 15 }}>{initial}</Text>
+                )}
+              </View>
+              <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75} style={{ flexShrink: 1, color: p.fg, fontSize: 21, fontWeight: '700', letterSpacing: -0.5 }}>
+                {handleLabel || user?.firstName || ''}
+              </Text>
+              {user?.role === 'ADMIN' && (
                 <Pressable
                   onPress={() => { h.selection(); router.push('/admin' as any); }}
                   hitSlop={6}
                   style={({ pressed }) => ({
-                    flexDirection: 'row', alignItems: 'center', gap: 4,
-                    paddingHorizontal: 8, paddingVertical: 4,
-                    borderRadius: 7,
-                    backgroundColor: p.accentSoft,
-                    borderWidth: 1, borderColor: p.accentBorder,
+                    paddingHorizontal: 7, paddingVertical: 3, borderRadius: 7,
+                    backgroundColor: p.accentSoft, borderWidth: 1, borderColor: p.accentBorder,
                     opacity: pressed ? 0.7 : 1,
-                    flexShrink: 0,
                   })}
                 >
-                  <Ionicons name="shield-checkmark" size={11} color={p.accentText} />
-                  <Text style={{ color: p.accentText, fontSize: 10, fontWeight: '600', letterSpacing: 0.6 }}>
-                    ADMIN
-                  </Text>
+                  <Text style={{ color: p.accentText, fontSize: 10, fontWeight: '600', letterSpacing: 0.6 }}>ADMIN</Text>
                 </Pressable>
               )}
+            </Pressable>
+            <ChromeIconButton icon={showBalance ? 'eye-outline' : 'eye-off-outline'} label={t(showBalance ? 'wallet.hideBalances' : 'wallet.showBalances')} onPress={() => { h.selection(); toggleBalancesHidden(); }} />
+            <ChromeIconButton icon="scan-outline" label={t('home.scan')} onPress={() => router.push('/scanner')} />
+            <ChromeIconButton icon="notifications-outline" label={t('notifications.title')} badge={unreadData ?? 0} onPress={() => router.push('/notifications')} />
+          </View>
+
+          {/* Balances — swipe between the total, each currency held and crypto.
+              Tap a figure for detail; when hidden, hold it to peek. */}
+            {walletsLoading ? <View style={{ alignItems: 'center', paddingVertical: 10, marginTop: 14 }}><Skeleton width={200} height={48} /></View> : walletsError ? <EmptyState icon="cloud-offline-outline" title={t('wallet.loadError')} actionLabel={t('common.retry')} onAction={() => refetchWallets()} /> : <>
+            <ScrollView
+              horizontal
+              pagingEnabled
+              showsHorizontalScrollIndicator={false}
+              scrollEventThrottle={16}
+              onMomentumScrollEnd={(e) => {
+                const i = Math.round(e.nativeEvent.contentOffset.x / pageWidth);
+                if (i !== balancePage) { h.selection(); setBalancePage(i); }
+              }}
+              style={{ marginTop: 12 }}
+            >
+              {balancePages.map((pg) => {
+                const peekProps = {
+                  onLongPress: () => { if (!showBalance) { h.selection(); setPeek(true); } },
+                  onPressOut: () => setPeek(false),
+                };
+                const label = pg.kind === 'total' ? t('home.balanceTotal')
+                  : pg.kind === 'crypto' ? t('home.balanceCrypto')
+                  : `${getCurrencyMeta(pg.wallet.currency)?.name ?? pg.wallet.currency} · ${pg.wallet.currency}`;
+                return (
+                  <View key={pg.key} style={{ width: pageWidth, alignItems: 'center' }}>
+                    <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '500' }} numberOfLines={1}>{label}</Text>
+                    {pg.kind === 'fiat' ? (
+                      <BalanceFigure
+                        symbol={fiatSymbol(pg.wallet.currency as any, locale)}
+                        amount={Number(pg.wallet.balance).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: ['LYD', 'TND'].includes(String(pg.wallet.currency)) ? 3 : 2 })}
+                        revealed={revealed}
+                        palette={p}
+                        onPress={() => { h.selection(); router.push(`/asset/${pg.wallet.currency}`); }}
+                        {...peekProps}
+                      />
+                    ) : (
+                      <AnimatedTotal
+                        value={pg.kind === 'total' ? totalUsd : cryptoUsd}
+                        palette={p}
+                        dc={dc}
+                        showBalance={revealed}
+                        onPress={() => { h.selection(); if (pg.kind === 'total') setBalanceChartVisible(true); else router.push('/portfolio/crypto' as any); }}
+                        {...peekProps}
+                      />
+                    )}
+                    {/* One plain line under each figure. */}
+                    {pg.kind === 'fiat' ? (() => {
+                      const lf = liveFiat?.[String(pg.wallet.currency)];
+                      const isDisplay = String(pg.wallet.currency) === dc.currency;
+                      const value = lf ? Number(pg.wallet.balance) * lf.usd : Number(pg.wallet.fiatValueUsd);
+                      const rate = !isDisplay && lf ? fiatRateLabel(String(pg.wallet.currency), lf.usd, dc, locale) : '';
+                      return (
+                        <Text style={{ color: p.fgMuted, fontSize: 13, marginTop: 2, fontVariant: ['tabular-nums'] }}>
+                          {[isDisplay ? null : revealed ? `≈ ${dc.fmt(value)}` : '••••', rate || null].filter(Boolean).join('  ·  ')}
+                        </Text>
+                      );
+                    })() : Math.abs(deltaUsd) >= 0.005 ? (
+                      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, marginTop: 2 }}>
+                        <Ionicons name={positive ? 'caret-up' : 'caret-down'} size={10} color={revealed ? (positive ? p.greenFg : p.redFg) : p.fgFaint} />
+                        <Text style={{ color: revealed ? (positive ? p.greenFg : p.redFg) : p.fgFaint, fontSize: 13, fontWeight: '600', fontVariant: ['tabular-nums'] }}>
+                          {revealed ? `${positive ? '+' : '−'}${dc.fmt(Math.abs(deltaUsd))} (${Math.abs(pg.kind === 'crypto' && cryptoUsd - deltaUsd > 0 ? (deltaUsd / (cryptoUsd - deltaUsd)) * 100 : deltaPct).toFixed(2)}%)` : '••••'}
+                        </Text>
+                        <Text style={{ color: p.fgMuted, fontSize: 13 }}>{pg.kind === 'crypto' ? t('home.assetsCount', { count: cryptoAssets.length }) + ' · ' + t('home.today') : t('home.today')}</Text>
+                      </View>
+                    ) : pg.kind === 'crypto' ? (
+                      <Text style={{ color: p.fgMuted, fontSize: 13, marginTop: 2 }}>{t('home.assetsCount', { count: cryptoAssets.length })}</Text>
+                    ) : null}
+                  </View>
+                );
+              })}
+            </ScrollView>
+            {/* Page dots — the active one is a short pill. */}
+            {balancePages.length > 1 && (
+              <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 5, marginTop: 10 }}>
+                {balancePages.map((pg, i) => (
+                  <View key={pg.key} style={{ height: 5, width: i === balancePage ? 14 : 5, borderRadius: 3, backgroundColor: i === balancePage ? p.fg : p.fgFaint, opacity: i === balancePage ? 0.9 : 0.45 }} />
+                ))}
+              </View>
+            )}
+            {!showBalance && (
+              <Text style={{ color: p.fgFaint, fontSize: 11, textAlign: 'center', marginTop: 6 }}>{t('home.holdToPeek')}</Text>
+            )}
+            </>}
+
+            {/* Actions — compact glass circles on the gradient; only Top up is filled. */}
+            <View style={{ flexDirection: 'row', marginTop: 20, marginHorizontal: 12, paddingBottom: 22 }}>
+              {DOCK.map((a, i) => (
+                <Pressable
+                  key={a.key}
+                  onPress={() => { h.light(); a.onPress(); }}
+                  accessibilityRole="button"
+                  accessibilityLabel={a.label}
+                  style={({ pressed }) => ({ flex: 1, alignItems: 'center', gap: 6, opacity: pressed ? 0.7 : 1 })}
+                >
+                  <View style={{
+                    width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center',
+                    backgroundColor: i === 0 ? p.ctaBg : ink.glass,
+                    borderWidth: i === 0 ? 0 : 1, borderColor: ink.glassBorder,
+                  }}>
+                    <Ionicons name={a.icon} size={18} color={i === 0 ? p.ctaFg : p.fg} />
+                  </View>
+                  <Text numberOfLines={1} style={{ color: p.fg, fontSize: 11.5, fontWeight: '600' }}>{a.label}</Text>
+                </Pressable>
+              ))}
             </View>
-            {/* Icon cluster — one segmented track holding all three
-                actions so they read as a single intentional control
-                rather than three heavy floating circles. Hairline
-                separators between the segments do the dividing; the
-                brighter top border matches the @handle capsule. */}
-            <View style={{
-              flexDirection: 'row', alignItems: 'center', flexShrink: 0,
-              height: HEADER_PILL_H,
-              backgroundColor: p.pillBg,
-              borderRadius: HEADER_PILL_H / 2,
-              borderWidth: 1,
-              borderColor: p.border,
-              borderTopColor: p.divider,
-              paddingHorizontal: 2,
-            }}>
-              <HeaderIconButton
-                icon="repeat-outline"
-                onPress={() => { h.selection(); setRecurringModalVisible(true); }}
-                palette={p}
-                a11y={t('recurring.title')}
-              />
-              <HeaderSegmentDivider palette={p} />
-              <HeaderIconButton
-                icon="notifications-outline"
-                onPress={() => { h.selection(); router.push('/notifications'); }}
-                palette={p}
-                a11y="Notifications"
-                badge={unreadData ?? 0}
-              />
-              <HeaderSegmentDivider palette={p} />
-              <HeaderIconButton
-                icon="scan-outline"
-                onPress={() => { h.selection(); router.push('/scanner'); }}
-                palette={p}
-                a11y="Scan QR"
-              />
-            </View>
           </View>
-
-          <AnimatedTotal
-            value={totalUsd}
-            palette={p}
-            dc={dc}
-            showBalance={showBalance}
-            onPress={() => { h.selection(); setBalanceChartVisible(true); }}
-          />
-
-          {/* 24h delta — compact, directly under balance */}
-          <View style={{
-            flexDirection: 'row', alignItems: 'center', gap: 5,
-            justifyContent: 'center',
-            paddingHorizontal: 24, marginTop: 1,
-          }}>
-            <Text style={{
-              color: p.fgMuted,
-              fontSize: 10, fontWeight: '500', fontVariant: ['tabular-nums'],
-            }}>
-              {showBalance
-                ? `${positive ? '+' : '-'}${dc.fmt(Math.abs(deltaUsd))}`
-                : `${dc.symbol}****`}
-            </Text>
-            <View style={{
-              flexDirection: 'row', alignItems: 'center', gap: 2,
-              paddingHorizontal: 5, paddingVertical: 1, borderRadius: 5,
-              backgroundColor: showBalance
-                ? (positive ? 'rgba(34,197,94,0.12)' : 'rgba(239,68,68,0.12)')
-                : p.pillBg,
-              borderWidth: 1,
-              borderColor: showBalance
-                ? (positive ? 'rgba(34,197,94,0.25)' : 'rgba(239,68,68,0.25)')
-                : p.border,
-            }}>
-              {showBalance && (
-                <Ionicons name={positive ? 'caret-up' : 'caret-down'} size={7} color={positive ? p.greenFg : p.redFg} />
-              )}
-              <Text style={{
-                color: showBalance ? (positive ? p.greenFg : p.redFg) : p.fgFaint,
-                fontSize: 9, fontWeight: '600',
-              }}>
-                {showBalance ? `${Math.abs(deltaPct).toFixed(2)}%` : '**.**%'}
-              </Text>
-            </View>
-          </View>
-
-          {/* ── PRIMARY ACTIONS ── */}
-          <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 6, paddingHorizontal: 16, marginTop: 18 }}>
-            {ACTIONS.map((a) => (
-              <ActionButton key={a.key} label={a.label} icon={a.icon} to={a.to} tone={a.tone} onPress={a.onPress} palette={p} />
-            ))}
-            <MoreActionButton palette={p} label={t('home.more')} onPress={() => { h.selection(); setMoreMenuVisible(true); }} />
-          </View>
-
-          {/* Spacer between the action pills and the Assets/Activity
-              switcher so the pinned hero block has breathing room. */}
-          <View style={{ height: 16 }} />
-          </View>
-          {/* /sticky top block */}
+          {/* /hero */}
 
           {/* Announcement Banner — out of the sticky region; lives
               between the pinned hero and the scrolling feed. */}
           <AnnouncementBanner />
 
-          {/* Assets / Activity — segmented control. No longer pinned; it
-              sits above the asset/activity rows and scrolls with them. */}
-          <View style={{ paddingHorizontal: 24, alignItems: 'center', marginTop: 18, marginBottom: 4 }}>
-            <View style={{
-              flexDirection: 'row',
-              backgroundColor: p.pillBg,
-              borderRadius: 12,
-              padding: 3,
-              alignSelf: 'center',
-            }}>
-              <TabBtn label={t('home.assets')}   active={tab === 'ASSETS'}   palette={p} onPress={() => { h.selection(); setTab('ASSETS'); }} />
-              <TabBtn label={t('home.activity')} active={tab === 'ACTIVITY'} palette={p} onPress={() => { h.selection(); setTab('ACTIVITY'); }} />
+          {/* Contacts — people you've sent money to or received from. */}
+          {contacts.length > 0 && (
+            <View style={{ marginTop: 18 }}>
+              <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '600', letterSpacing: 0.6, paddingHorizontal: 24, marginBottom: 10 }}>
+                {t('home.contacts').toUpperCase()}
+              </Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 18, gap: 6 }}>
+                <Pressable onPress={() => { h.light(); router.push('/send' as any); }} style={({ pressed }) => ({ width: 64, alignItems: 'center', gap: 6, opacity: pressed ? 0.6 : 1 })}>
+                  <View style={{ width: 50, height: 50, borderRadius: 25, alignItems: 'center', justifyContent: 'center', backgroundColor: p.bgElev, borderWidth: StyleSheet.hairlineWidth, borderColor: p.border }}>
+                    <Ionicons name="add" size={22} color={p.fg} />
+                  </View>
+                  <Text numberOfLines={1} style={{ color: p.fgMuted, fontSize: 12 }}>{t('action.send')}</Text>
+                </Pressable>
+                {contacts.slice(0, 15).map((c) => (
+                  <Pressable key={c.id} onPress={() => { h.selection(); router.push(`/contact/${c.id}` as any); }} style={({ pressed }) => ({ width: 64, alignItems: 'center', gap: 6, opacity: pressed ? 0.6 : 1 })}>
+                    <Avatar name={c.name} uri={c.avatarUrl ?? undefined} size={50} />
+                    <Text numberOfLines={1} style={{ color: p.fg, fontSize: 12, maxWidth: 62 }}>{c.name.split(' ')[0]}</Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
             </View>
+          )}
+
+          <View style={{ paddingHorizontal: 24, marginTop: 18, marginBottom: 4 }}>
+            <SegmentedControl<Tab> value={tab} onChange={setTab} options={[
+              { key: 'ASSETS', label: t('home.assets') },
+              { key: 'ACTIVITY', label: t('home.activity') },
+            ]} />
           </View>
 
           {/* Rows */}
@@ -588,9 +549,9 @@ export default function Home() {
               {/* Crypto Assets Section */}
               {cryptoAssets.length > 0 && (
                 <View style={{ marginTop: 16 }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 24, marginBottom: 10 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 24, marginBottom: 4 }}>
                     <Pressable onPress={() => setCryptoOpen((v) => !v)} style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
-                      <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '700', letterSpacing: 1 }}>
+                      <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '600', letterSpacing: 0.6 }}>
                         {t('home.cryptoAssets').toUpperCase()}
                       </Text>
                       <Ionicons name={cryptoOpen ? 'chevron-up' : 'chevron-down'} size={12} color={p.fgFaint} />
@@ -601,7 +562,7 @@ export default function Home() {
                           const tk = tickerKey(w.currency);
                           const price = priceMap[tk] ?? (tk === 'USDT' ? 1 : 0);
                           return s + Number(w.balance) * price;
-                        }, 0)) : '****'}
+                        }, 0)) : '••••••'}
                       </Text>
                       <Pressable
                         onPress={() => { h.selection(); setShowSparkline((v) => !v); }}
@@ -612,12 +573,13 @@ export default function Home() {
                       </Pressable>
                     </View>
                   </View>
-                  {cryptoOpen && cryptoAssets.map((w) => {
+                  {cryptoOpen && cryptoAssets.map((w, i) => {
                     const tk = tickerKey(w.currency);
                     const price = priceMap[tk] ?? (tk === 'USDT' ? 1 : undefined);
                     return (
                       <AssetRow
                         key={w.id}
+                        last={i === cryptoAssets.length - 1}
                         wallet={w}
                         palette={p}
                         sparkline={sparklineMap[tk]}
@@ -635,12 +597,11 @@ export default function Home() {
                       actually convert the dust. Only the X dismisses it. */}
                   {cryptoOpen && dustAssets.length > 0 && !dustPromptDismissed && (
                     <Pressable
-                      onPress={() => { h.selection(); router.push(`/asset/${dustAssets[0].currency}?action=sell`); }}
+                      onPress={() => { h.selection(); router.push({ pathname: '/sell', params: { asset: dustAssets[0].currency } } as any); }}
                       style={({ pressed }) => ({
-                        marginHorizontal: 16, marginTop: 8, marginBottom: 4,
-                        paddingHorizontal: 16, paddingVertical: 12,
-                        borderRadius: 16, borderWidth: 1,
-                        borderColor: p.accentBorder,
+                        marginHorizontal: 24, marginTop: 10, marginBottom: 4,
+                        paddingHorizontal: 14, paddingVertical: 11,
+                        borderRadius: 14,
                         backgroundColor: pressed ? p.bgElev : p.accentSoft,
                         flexDirection: 'row', alignItems: 'center', gap: 12,
                       })}
@@ -669,30 +630,44 @@ export default function Home() {
                 <View style={{ marginTop: 24 }}>
                   <Pressable
                     onPress={() => setFiatOpen((v) => !v)}
-                    style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 24, marginBottom: 10 }}
+                    style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 24, marginBottom: 4 }}
                   >
-                    <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '700', letterSpacing: 1 }}>
+                    <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '600', letterSpacing: 0.6 }}>
                       {t('home.fiatAssets').toUpperCase()}
                     </Text>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                       <Text style={{ color: p.fgFaint, fontSize: 12, fontWeight: '600', fontVariant: ['tabular-nums'] }}>
-                        {showBalance ? dc.fmt(fiatAssets.reduce((s, w) => s + Number(w.fiatValueUsd), 0)) : '****'}
+                        {showBalance ? dc.fmt(fiatAssets.reduce((s, w) => s + Number(w.fiatValueUsd), 0)) : '••••••'}
                       </Text>
                       <Ionicons name={fiatOpen ? 'chevron-up' : 'chevron-down'} size={14} color={p.fgFaint} />
                     </View>
                   </Pressable>
-                  {fiatOpen && fiatAssets.map((w) => (
+                  {fiatOpen && fiatAssets.map((w, i) => {
+                    // Live rate (LYD from the parallel market), like crypto rows.
+                    const lf = liveFiat?.[String(w.currency)];
+                    const currency = String(w.currency);
+                    const isDisplay = currency === dc.currency;
+                    const perUsd = forexRates?.[currency];
+                    const unitUsd = currency === 'USD' ? 1 : lf?.usd ?? (perUsd && perUsd > 0 ? 1 / perUsd : undefined);
+                    const displayAvailable = dc.currency === 'USD' || Boolean(forexRates?.[dc.currency]);
+                    const rateLabel = isDisplay ? `${fiatSymbol(currency, locale)}1 = ${fiatSymbol(currency, locale)}1`
+                      : unitUsd && displayAvailable ? fiatRateLabel(currency, unitUsd, dc, locale) : t('wallet.rateUnavailable');
+                    return (
                     <AssetRow
                       key={w.id}
+                      last={i === fiatAssets.length - 1}
                       wallet={w}
                       palette={p}
-                      sparkline={undefined}
-                      changePct={undefined}
-                      liveUsd={undefined}
+                      sparkline={!isDisplay && lf?.points?.length ? lf.points : undefined}
+                      changePct={!isDisplay && lf?.change24hPct != null ? lf.change24hPct : undefined}
+                      liveUsd={unitUsd ? Number(w.balance) * unitUsd : undefined}
+                      rateLabel={rateLabel}
+                      showSparkline={showSparkline}
                       showBalance={showBalance}
                       onPress={() => { h.selection(); router.push(`/asset/${w.currency}`); }}
                     />
-                  ))}
+                    );
+                  })}
                 </View>
               )}
 
@@ -703,7 +678,7 @@ export default function Home() {
                   onPress={() => { h.selection(); router.push('/budgets'); }}
                   style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 24, marginBottom: 10 }}
                 >
-                  <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '700', letterSpacing: 1 }}>
+                  <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '600', letterSpacing: 0.6 }}>
                     {t('home.savings').toUpperCase()}
                   </Text>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
@@ -745,7 +720,7 @@ export default function Home() {
                         </View>
                       </View>
                       <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '600', fontVariant: ['tabular-nums'] }}>
-                        {showBalance ? `${bsym}${bsaved.toLocaleString('en-US', { maximumFractionDigits: 0 })}` : '****'}
+                        {showBalance ? `${bsym}${bsaved.toLocaleString('en-US', { maximumFractionDigits: 0 })}` : '••••'}
                       </Text>
                     </Pressable>
                   );
@@ -782,7 +757,7 @@ export default function Home() {
               </Text>
               <View style={{ flexDirection: 'row', gap: 10, marginTop: 18 }}>
                 <Pressable
-                  onPress={() => { h.medium(); setBuyModalVisible(true); }}
+                  onPress={() => { h.medium(); router.push('/buy' as any); }}
                   style={({ pressed }) => ({
                     paddingHorizontal: 20, paddingVertical: 12, borderRadius: 22,
                     backgroundColor: p.ctaBg, opacity: pressed ? 0.85 : 1,
@@ -809,210 +784,114 @@ export default function Home() {
           )}
         </Animated.ScrollView>
 
-
-      {/* Buy Widget Modal */}
-      <Modal visible={buyModalVisible} animationType="slide" presentationStyle="fullScreen" onRequestClose={() => setBuyModalVisible(false)}>
-        <View style={{ flex: 1, backgroundColor: p.bg, paddingTop: insets.top }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 10 }}>
-            <Text style={{ color: p.fg, fontSize: 20, fontWeight: '700', letterSpacing: -0.4 }}>{t('action.buy')}</Text>
-            <Pressable onPress={() => setBuyModalVisible(false)} hitSlop={8} style={{ width: 34, height: 34, borderRadius: 17, backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border, alignItems: 'center', justifyContent: 'center' }}>
-              <Ionicons name="close" size={18} color={p.fg} />
-            </Pressable>
-          </View>
-          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-            <View style={{ flex: 1, paddingBottom: insets.bottom + 16 }}>
-              <BuyWidget />
-            </View>
-          </KeyboardAvoidingView>
-        </View>
-      </Modal>
-
-      {/* Sell Widget Modal */}
-      <Modal visible={sellModalVisible} animationType="slide" presentationStyle="fullScreen" onRequestClose={() => setSellModalVisible(false)}>
-        <View style={{ flex: 1, backgroundColor: p.bg, paddingTop: insets.top }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 10 }}>
-            <Text style={{ color: p.fg, fontSize: 20, fontWeight: '700', letterSpacing: -0.4 }}>{t('action.sell')}</Text>
-            <Pressable onPress={() => setSellModalVisible(false)} hitSlop={8} style={{ width: 34, height: 34, borderRadius: 17, backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border, alignItems: 'center', justifyContent: 'center' }}>
-              <Ionicons name="close" size={18} color={p.fg} />
-            </Pressable>
-          </View>
-          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-            <View style={{ flex: 1, paddingBottom: insets.bottom + 16 }}>
-              <SellWidget />
-            </View>
-          </KeyboardAvoidingView>
-        </View>
-      </Modal>
-
-      {/* Send Widget Modal */}
-      <Modal visible={sendModalVisible} animationType="slide" presentationStyle="fullScreen" onRequestClose={() => setSendModalVisible(false)}>
-        <View style={{ flex: 1, backgroundColor: p.bg, paddingTop: insets.top }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 10 }}>
-            <Text style={{ color: p.fg, fontSize: 20, fontWeight: '700', letterSpacing: -0.4 }}>{t('home.sendMoney')}</Text>
-            <Pressable onPress={() => setSendModalVisible(false)} hitSlop={8} style={{ width: 34, height: 34, borderRadius: 17, backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border, alignItems: 'center', justifyContent: 'center' }}>
-              <Ionicons name="close" size={18} color={p.fg} />
-            </Pressable>
-          </View>
-          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-            <View style={{ flex: 1, paddingBottom: insets.bottom + 16 }}>
-              <SendWidget />
-            </View>
-          </KeyboardAvoidingView>
-        </View>
-      </Modal>
-
-      {/* Withdraw Widget Modal */}
-      <Modal visible={withdrawModalVisible} transparent animationType="slide" onRequestClose={() => setWithdrawModalVisible(false)}>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-          <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' }} onPress={() => setWithdrawModalVisible(false)}>
-            <Pressable style={{ backgroundColor: p.bg, borderTopLeftRadius: 28, borderTopRightRadius: 28, maxHeight: '85%' }} onPress={(e) => e.stopPropagation()}>
-              <View style={{ alignItems: 'center', paddingTop: 10, paddingBottom: 2 }}>
-                <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: p.border }} />
-              </View>
-              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 24, paddingTop: 8, paddingBottom: 4 }}>
-                <Text style={{ color: p.fg, fontSize: 20, fontWeight: '600', letterSpacing: -0.4 }}>{t('action.withdraw')}</Text>
-                <Pressable onPress={() => setWithdrawModalVisible(false)} hitSlop={8} style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border, alignItems: 'center', justifyContent: 'center' }}>
-                  <Ionicons name="close" size={16} color={p.fg} />
-                </Pressable>
-              </View>
-              <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: insets.bottom + 8 }}>
-                <WithdrawWidget />
-              </ScrollView>
-            </Pressable>
-          </Pressable>
-        </KeyboardAvoidingView>
-      </Modal>
-
-      {/* Receive Widget Modal */}
-      <Modal visible={receiveModalVisible} transparent animationType="slide" onRequestClose={() => setReceiveModalVisible(false)}>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-          <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' }} onPress={() => setReceiveModalVisible(false)}>
-            <Pressable style={{ backgroundColor: p.bg, borderTopLeftRadius: 28, borderTopRightRadius: 28, maxHeight: '85%' }} onPress={(e) => e.stopPropagation()}>
-              <View style={{ alignItems: 'center', paddingTop: 10, paddingBottom: 2 }}>
-                <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: p.border }} />
-              </View>
-              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 24, paddingTop: 8, paddingBottom: 4 }}>
-                <Text style={{ color: p.fg, fontSize: 20, fontWeight: '600', letterSpacing: -0.4 }}>{t('action.receive')}</Text>
-                <Pressable onPress={() => setReceiveModalVisible(false)} hitSlop={8} style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border, alignItems: 'center', justifyContent: 'center' }}>
-                  <Ionicons name="close" size={16} color={p.fg} />
-                </Pressable>
-              </View>
-              <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: insets.bottom + 8 }}>
-                <ReceiveWidget />
-              </ScrollView>
-            </Pressable>
-          </Pressable>
-        </KeyboardAvoidingView>
-      </Modal>
-
-      {/* Recurring Buy Widget Modal */}
-      <Modal visible={recurringModalVisible} transparent animationType="slide" onRequestClose={() => setRecurringModalVisible(false)}>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-          <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' }} onPress={() => setRecurringModalVisible(false)}>
-            <Pressable style={{ backgroundColor: p.bg, borderTopLeftRadius: 28, borderTopRightRadius: 28, maxHeight: '90%' }} onPress={(e) => e.stopPropagation()}>
-              <View style={{ alignItems: 'center', paddingTop: 10, paddingBottom: 2 }}>
-                <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: p.border }} />
-              </View>
-              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 24, paddingTop: 8, paddingBottom: 4 }}>
-                <Text style={{ color: p.fg, fontSize: 20, fontWeight: '600', letterSpacing: -0.4 }}>{t('recurring.title')}</Text>
-                <Pressable onPress={() => setRecurringModalVisible(false)} hitSlop={8} style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border, alignItems: 'center', justifyContent: 'center' }}>
-                  <Ionicons name="close" size={16} color={p.fg} />
-                </Pressable>
-              </View>
-              <RecurringBuyWidget onDone={() => setRecurringModalVisible(false)} />
-            </Pressable>
-          </Pressable>
-        </KeyboardAvoidingView>
-      </Modal>
-
-      {/* More Menu Modal */}
-      <Modal
-        visible={moreMenuVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setMoreMenuVisible(false)}
+      {/* Compact balance card — takes over once the hero has scrolled off:
+          brand blue, your photo and @handle, a large balance, privacy and
+          notifications. Greyscale in mono. */}
+      <Animated.View
+        pointerEvents={compact ? 'box-none' : 'none'}
+        style={{
+          position: 'absolute', top: 0, left: 0, right: 0, opacity: compactOpacity,
+          shadowColor: p.bg, shadowOpacity: 0.25, shadowRadius: 18, shadowOffset: { width: 0, height: 8 }, elevation: 8,
+        }}
       >
-        <Pressable
-          style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', padding: 20 }}
-          onPress={() => setMoreMenuVisible(false)}
+        <LinearGradient
+          colors={p.balanceGradient}
+          start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+          style={{ paddingTop: insets.top + 8, paddingBottom: 18, paddingHorizontal: 20, borderBottomLeftRadius: 26, borderBottomRightRadius: 26 }}
         >
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+            <Pressable onPress={() => { h.selection(); router.push('/profile'); }} hitSlop={6} style={({ pressed }) => ({ flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 10, opacity: pressed ? 0.75 : 1 })}>
+              <View style={{ width: 34, height: 34, borderRadius: 17, overflow: 'hidden', backgroundColor: 'rgba(255,255,255,0.18)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.28)', alignItems: 'center', justifyContent: 'center' }}>
+                {av.kind === 'image' ? (
+                  <Image source={{ uri: av.uri }} style={{ width: 34, height: 34 }} />
+                ) : av.kind === 'emoji' ? (
+                  <Text style={{ fontSize: 17 }}>{av.char}</Text>
+                ) : (
+                  <Text style={{ color: p.fg, fontWeight: '700', fontSize: 14 }}>{initial}</Text>
+                )}
+              </View>
+              <Text numberOfLines={1} style={{ flexShrink: 1, color: p.fg, fontSize: 16, fontWeight: '700', letterSpacing: -0.3 }}>
+                {handleLabel || user?.firstName || ''}
+              </Text>
+            </Pressable>
+            <ChromeIconButton variant="default" icon={showBalance ? 'eye-outline' : 'eye-off-outline'} label={t(showBalance ? 'wallet.hideBalances' : 'wallet.showBalances')} onPress={toggleBalancesHidden} />
+            <ChromeIconButton variant="default" icon="notifications-outline" label={t('notifications.title')} badge={unreadData ?? 0} onPress={() => router.push('/notifications')} />
+          </View>
           <Pressable
-            style={{ backgroundColor: p.bg, borderRadius: 24, paddingTop: 20, paddingBottom: 8, width: '100%', maxWidth: 360 }}
-            onPress={(e) => e.stopPropagation()}
+            onPress={() => { h.selection(); setBalanceChartVisible(true); }}
+            onLongPress={() => { if (!showBalance) { h.selection(); setPeek(true); } }}
+            onPressOut={() => setPeek(false)}
+            delayLongPress={220}
+            accessibilityRole="button"
+            accessibilityLabel={t('wallet.totalBalance')}
+            style={{ marginTop: 14 }}
           >
-
-            {/* Primary actions — matches web three-dot */}
-            <View style={{ flexDirection: 'row', paddingHorizontal: 16, paddingVertical: 16, gap: 10, borderBottomWidth: 1, borderBottomColor: p.border }}>
-              {[
-                { icon: 'arrow-up-circle-outline' as const, label: t('action.withdraw'), onPress: () => { setMoreMenuVisible(false); setWithdrawModalVisible(true); } },
-                { icon: 'swap-horizontal-outline' as const, label: t('action.swap'),     onPress: () => { setMoreMenuVisible(false); router.push('/transfer'); } },
-                { icon: 'qr-code-outline' as const,       label: t('action.receive'),  onPress: () => { setMoreMenuVisible(false); setReceiveModalVisible(true); } },
-              ].map((item) => (
-                <Pressable
-                  key={item.label}
-                  onPress={item.onPress}
-                  style={({ pressed }) => ({
-                    flex: 1, alignItems: 'center', gap: 8,
-                    paddingVertical: 14, borderRadius: 16,
-                    backgroundColor: pressed ? p.bgElev : p.pillBg,
-                    borderWidth: 1, borderColor: p.border,
-                  })}
-                >
-                  <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: p.bgElev, alignItems: 'center', justifyContent: 'center' }}>
-                    <Ionicons name={item.icon} size={20} color={p.fg} />
-                  </View>
-                  <Text style={{ color: p.fg, fontSize: 12, fontWeight: '600' }}>{item.label}</Text>
-                </Pressable>
-              ))}
-            </View>
-
-            {/* Secondary options */}
-            <View style={{ paddingVertical: 8 }}>
-              {[
-                { icon: 'flag-outline' as const,         label: t('home.budgets'),         onPress: () => { setMoreMenuVisible(false); router.push('/budgets'); } },
-                { icon: 'card-outline' as const,         label: t('home.cards'),           onPress: () => { setMoreMenuVisible(false); router.push('/cards'); } },
-                { icon: 'time-outline' as const,         label: t('home.history'),         onPress: () => { setMoreMenuVisible(false); router.push('/history'); } },
-                { icon: 'document-text-outline' as const, label: 'Statements',              onPress: () => { setMoreMenuVisible(false); router.push('/statements'); } },
-                { icon: 'pie-chart-outline' as const,    label: t('home.cryptoPortfolio'), onPress: () => { setMoreMenuVisible(false); router.push('/portfolio/crypto'); } },
-                { icon: 'wallet-outline' as const,       label: t('home.fiatPortfolio'),   onPress: () => { setMoreMenuVisible(false); router.push('/portfolio/fiat'); } },
-                { icon: 'people-outline' as const,       label: t('home.referral'),        onPress: () => { setMoreMenuVisible(false); router.push('/referral'); } },
-                { icon: 'settings-outline' as const,     label: t('settings.title'),       onPress: () => { setMoreMenuVisible(false); router.push('/settings'); } },
-              ].map((item) => (
-                <Pressable
-                  key={item.label}
-                  onPress={item.onPress}
-                  style={({ pressed }) => ({
-                    flexDirection: 'row', alignItems: 'center', gap: 14,
-                    paddingVertical: 14, paddingHorizontal: 20,
-                    backgroundColor: pressed ? p.bgElev : 'transparent',
-                  })}
-                >
-                  <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: p.pillBg, borderWidth: 1, borderColor: p.border, alignItems: 'center', justifyContent: 'center' }}>
-                    <Ionicons name={item.icon} size={18} color={p.fg} />
-                  </View>
-                  <Text style={{ color: p.fg, fontSize: 15, fontWeight: '600', flex: 1 }}>{item.label}</Text>
-                  <Ionicons name="chevron-forward" size={16} color={p.fgMuted} />
-                </Pressable>
-              ))}
-            </View>
-
-            {/* Close pill */}
-            <View style={{ paddingHorizontal: 20, paddingBottom: 16 }}>
-              <Pressable
-                onPress={() => setMoreMenuVisible(false)}
-                style={({ pressed }) => ({
-                  height: 46, borderRadius: 23,
-                  backgroundColor: pressed ? p.bgElev : p.pillBg,
-                  borderWidth: 1, borderColor: p.border,
-                  alignItems: 'center', justifyContent: 'center',
-                })}
-              >
-                <Text style={{ color: p.fg, fontSize: 15, fontWeight: '600' }}>{t('common.close')}</Text>
-              </Pressable>
+            <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '500' }}>{t('wallet.totalBalance')}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 10, marginTop: 2 }}>
+              <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} style={{ flexShrink: 1, color: p.fg, fontFamily: F.semibold, fontSize: 32, fontWeight: '700', letterSpacing: -0.6, fontVariant: ['tabular-nums'] }}>
+                {revealed ? dc.fmt(totalUsd) : '••••••'}
+              </Text>
+              {Math.abs(deltaUsd) >= 0.005 && (
+                <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '600', fontVariant: ['tabular-nums'] }}>
+                  {revealed ? `${positive ? '▲' : '▼'} ${Math.abs(deltaPct).toFixed(2)}%` : ''}
+                </Text>
+              )}
             </View>
           </Pressable>
-        </Pressable>
-      </Modal>
+        </LinearGradient>
+      </Animated.View>
+
+
+      {/* More — the rest of the money moves (round icons, four across, no
+          tiles), then account and tools as a plain list. */}
+      <BottomSheet visible={moreMenuVisible} onClose={() => setMoreMenuVisible(false)} title={t('home.more')}>
+        <SectionLabel first>{t('home.moveMoney')}</SectionLabel>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', rowGap: 18, marginHorizontal: -4 }}>
+          {[
+            { icon: 'swap-horizontal' as const,    label: t('fx.exchange'),       href: '/exchange' },
+            { icon: 'trending-down' as const,      label: t('action.sell'),       href: '/sell' },
+            { icon: 'arrow-down' as const,         label: t('action.receive'),    href: '/receive' },
+            { icon: 'arrow-up-circle-outline' as const, label: t('action.withdraw'), href: '/withdraw' },
+            { icon: 'swap-horizontal' as const,    label: t('action.swap'),       href: '/transfer' },
+            { icon: 'globe-outline' as const,      label: t('action.sendAbroad'), href: '/remit' },
+            { icon: 'repeat' as const,             label: t('recurring.title'),   href: '/recurring' },
+            { icon: 'people-outline' as const,     label: 'P2P',                  href: '/p2p' },
+            { icon: 'scan-outline' as const,       label: t('home.scan'),         href: '/scanner' },
+          ].map((item) => (
+            <Pressable
+              key={item.href}
+              onPress={() => { h.selection(); setMoreMenuVisible(false); router.push(item.href as any); }}
+              accessibilityRole="button"
+              accessibilityLabel={item.label}
+              style={({ pressed }) => ({ width: '25%', alignItems: 'center', gap: 8, opacity: pressed ? 0.6 : 1 })}
+            >
+              <View style={{
+                width: 52, height: 52, borderRadius: 26, alignItems: 'center', justifyContent: 'center',
+                backgroundColor: p.bgElev, borderWidth: StyleSheet.hairlineWidth, borderColor: p.border,
+              }}>
+                <Ionicons name={item.icon} size={21} color={p.fg} />
+              </View>
+              <Text numberOfLines={1} style={{ color: p.fg, fontSize: 12, fontWeight: '500', maxWidth: '92%' }}>{item.label}</Text>
+            </Pressable>
+          ))}
+        </View>
+        <SectionLabel>{t('home.yourAccount')}</SectionLabel>
+        <Panel>
+          {[
+            { icon: 'flag-outline' as const,          label: t('home.budgets'),         href: '/budgets' },
+            { icon: 'card-outline' as const,          label: t('home.cards'),           href: '/cards' },
+            { icon: 'time-outline' as const,          label: t('home.history'),         href: '/history' },
+            { icon: 'document-text-outline' as const, label: t('home.statements'),      href: '/statements' },
+            { icon: 'pie-chart-outline' as const,     label: t('home.cryptoPortfolio'), href: '/portfolio/crypto' },
+            { icon: 'wallet-outline' as const,        label: t('home.fiatPortfolio'),   href: '/portfolio/fiat' },
+            { icon: 'gift-outline' as const,          label: t('home.referral'),        href: '/referral' },
+            { icon: 'settings-outline' as const,      label: t('settings.title'),       href: '/settings' },
+          ].map((item, i, all) => (
+            <PanelRow key={item.href} icon={item.icon} label={item.label} last={i === all.length - 1}
+              onPress={() => { h.selection(); setMoreMenuVisible(false); router.push(item.href as any); }} />
+          ))}
+        </Panel>
+      </BottomSheet>
 
       <BalanceHistoryModal
         visible={balanceChartVisible}
@@ -1172,26 +1051,7 @@ function BalanceHistoryModal({
   if (!visible) return null;
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <View style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.5)' }}>
-        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
-        <View style={{
-          backgroundColor: p.bg,
-          borderTopLeftRadius: 28, borderTopRightRadius: 28,
-          paddingBottom: insets.bottom + 24,
-        }}>
-          {/* Drag handle */}
-          <View style={{ alignItems: 'center', paddingTop: 12, paddingBottom: 4 }}>
-            <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: p.border }} />
-          </View>
-
-          {/* Title row */}
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 24, paddingVertical: 12 }}>
-            <Pressable onPress={onClose} hitSlop={8}>
-              <Ionicons name="close" size={22} color={p.fgMuted} />
-            </Pressable>
-          </View>
-
+    <BottomSheet visible={visible} onClose={onClose} contentStyle={{ paddingHorizontal: 0 }}>
           {/* Active balance */}
           <View style={{ paddingHorizontal: 24, marginBottom: 16 }}>
             <Text style={{
@@ -1319,9 +1179,7 @@ function BalanceHistoryModal({
               </Pressable>
             ))}
           </View>
-        </View>
-      </View>
-    </Modal>
+        </BottomSheet>
   );
 }
 
@@ -1334,90 +1192,22 @@ function BalanceHistoryModal({
  * re-rendered everything ~25×/s. Memoised so parent re-renders don't reset it.
  * Flat charcoal (no motion) in mono theme.
  */
-/**
- * Static brand-glow backdrop behind the balance hero.
- *
- * Was an animated "breathing" radial driven by a 20fps requestAnimationFrame
- * loop — it caused jank (every frame re-rendered the SVG) and never quite
- * read right. Replaced with a STATIC two-layer glow: no rAF, no state, zero
- * re-renders. A soft off-axis brand-blue core sits over a deeper page-bg
- * fill, giving the hero depth and a calm blue aura without any runtime cost.
- *
- * `mono` stays a flat charcoal (no colour, by design).
- */
-const BreathingGradient = memo(function BreathingGradient({ mode }: { mode: 'dark' | 'light' | 'mono' }) {
-  // Two LinearGradient layers cross-fade via native-driver opacity animation.
-  // No SVG radial re-renders, no JS-thread rAF, no setInterval state. The
-  // Animated.loop drives opacity on the native thread at true 60fps.
-  const shimmer = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(shimmer, { toValue: 1, duration: 7000, useNativeDriver: true }),
-        Animated.timing(shimmer, { toValue: 0, duration: 7000, useNativeDriver: true }),
-      ])
-    ).start();
-    return () => shimmer.stopAnimation();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  if (mode === 'mono') {
-    return <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#161617' }} />;
-  }
-
-  const isDark = mode === 'dark';
-
-  // Base: deep charcoal-navy → dark teal, top-to-bottom
-  // Shimmer layer: diagonal accent glow that cross-fades in/out
-  const { LinearGradient } = require('expo-linear-gradient');
-
-  return (
-    <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}>
-      {/* Base layer — always visible */}
-      <LinearGradient
-        colors={isDark
-          ? ['#0b1220', '#0f1c2e', '#111f35']
-          : ['#e8f2fb', '#daeaf8', '#cce1f5']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
-      />
-      {/* Shimmer layer — cross-fades over base */}
-      <Animated.View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, opacity: shimmer }}>
-        <LinearGradient
-          colors={isDark
-            ? ['#1b355b', '#64b6f9', '#3b79b0', '#0f1c2e']
-            : ['#daeaf8', '#b8d9f4', '#9dc8ef', '#cce1f5']}
-          start={{ x: 0.1, y: 0 }}
-          end={{ x: 0.9, y: 1 }}
-          style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
-        />
-      </Animated.View>
-      {/* Persistent top-edge accent glow */}
-      <LinearGradient
-        colors={isDark
-          ? ['#63a1db18', '#63a1db08', 'transparent']
-          : ['#63a1db22', '#63a1db0a', 'transparent']}
-        start={{ x: 0.3, y: 0 }}
-        end={{ x: 0.7, y: 0.6 }}
-        style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
-      />
-    </View>
-  );
-});
-
 function AnimatedTotal({
   value,
   palette: p,
   dc,
   showBalance,
   onPress,
+  onLongPress,
+  onPressOut,
 }: {
   value: number;
   palette: Palette;
   dc: ReturnType<typeof useDisplayCurrency>;
   showBalance: boolean;
   onPress?: () => void;
+  onLongPress?: () => void;
+  onPressOut?: () => void;
 }) {
   const t = useT();
   const initializedRef = useRef(false);
@@ -1463,11 +1253,11 @@ function AnimatedTotal({
 
   const converted = dc.convert(displayed);
   const totalStr = converted.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: dc.isCrypto ? 6 : 2 });
-  const visibleTotal = showBalance ? totalStr : totalStr.replace(/[0-9]/g, '*');
+  const visibleTotal = showBalance ? totalStr : '••••••';
   const digitCount = totalStr.replace(/[^0-9]/g, '').length;
-  const amountSize = digitCount <= 7 ? 66 : digitCount <= 9 ? 58 : digitCount <= 11 ? 40 : 32;
-  const symbolSize = Math.max(30, Math.round(amountSize * 0.30));
-  const fractionSize = Math.max(24, Math.round(amountSize * 0.54));
+  const amountSize = digitCount <= 7 ? 48 : digitCount <= 9 ? 42 : digitCount <= 11 ? 34 : 28;
+  const symbolSize = Math.max(22, Math.round(amountSize * 0.5));
+  const fractionSize = Math.max(18, Math.round(amountSize * 0.6));
   const lineHeight = Math.round(amountSize * 1.06);
 
   // One clean numeric lockup: all parts use Outfit with tabular numerals,
@@ -1476,11 +1266,13 @@ function AnimatedTotal({
   const [whole, frac] = visibleTotal.split('.');
 
   return (
-    <View style={{ alignItems: 'center', paddingHorizontal: 24, paddingTop: 8, paddingBottom: 2 }}>
-      {/* Balance centers cleanly — the show/hide eye now lives pinned in
-          the sticky block's top-right corner, not beside the number. */}
+    <View style={{ alignItems: 'center', paddingHorizontal: 24, paddingTop: 2, paddingBottom: 2 }}>
+      {/* Centred under its label. Tap for the balance history chart. */}
       <Pressable
         onPress={onPress}
+        onLongPress={onLongPress}
+        onPressOut={onPressOut}
+        delayLongPress={220}
         hitSlop={12}
         accessibilityRole="button"
         accessibilityLabel={t('home.totalBalance')}
@@ -1489,7 +1281,6 @@ function AnimatedTotal({
           alignItems: 'flex-start',
           justifyContent: 'center',
           maxWidth: '100%',
-          paddingHorizontal: 6,
         }}
       >
         <Text style={{
@@ -1523,7 +1314,7 @@ function AnimatedTotal({
           {whole}
           {frac != null && (
             <Text style={{
-              color: p.fgMuted,
+              color: p.fgFaint,
               fontFamily: F.semibold,
               fontSize: fractionSize,
               lineHeight,
@@ -1540,188 +1331,45 @@ function AnimatedTotal({
   );
 }
 
-/* ── Action buttons — pill row (Revolut / Robinhood style) ────────── */
-type ActionTone = 'white' | 'grey' | 'black';
-interface ActionDef { key: string; icon: keyof typeof Ionicons.glyphMap; label: string; tone?: ActionTone; to?: string; onPress?: () => void }
-
-/**
- * Visual recipe for an action pill. Clean flat solids (gradients read muddy at
- * this size) with three clear weights:
- *   • Buy    → solid brand blue, white ink — the hero, only one that's coloured
- *   • Sell   → elevated surface + hairline, full-contrast fg ink (neutral)
- *   • Top up → fg inverse (white-on-charcoal / black-on-paper), max contrast
- * `mono` collapses all three to the original white / grey / black.
- */
-type ActionLook = {
-  bg: string;                    // flat fill
-  fg: string;                    // ink (label + icon)
-  border?: string;               // optional hairline
-  glow?: string;                 // shadow colour (only Buy glows)
-};
-
-function actionLook(tone: ActionTone, p: Palette, mono: boolean): ActionLook {
-  if (mono) {
-    const m = {
-      white: { bg: '#FFFFFF', fg: '#111111' },
-      grey:  { bg: p.bgElev,  fg: p.fg, border: p.divider },
-      black: { bg: '#111111', fg: '#FFFFFF' },
-    } as const;
-    return m[tone];
+/** "$1 = 9.37 LD" for currencies worth less than the display currency, "€1 = $1.12" otherwise. */
+function fiatRateLabel(currency: string, usdPerUnit: number, dc: ReturnType<typeof useDisplayCurrency>, locale: string): string {
+  const inDisplay = dc.convert(usdPerUnit);
+  if (!Number.isFinite(inDisplay) || inDisplay <= 0) return '';
+  const own = fiatSymbol(currency as any, locale);
+  if (inDisplay < 1) {
+    const per = 1 / inDisplay;
+    return `${dc.symbol}1 = ${per.toLocaleString('en-US', { maximumFractionDigits: per >= 100 ? 2 : per >= 10 ? 3 : 4 })} ${own}`;
   }
-  switch (tone) {
-    case 'white': // Buy — solid brand blue, white ink, blue glow.
-      return { bg: p.accent, fg: '#FFFFFF', glow: p.accent };
-    case 'grey':  // Sell — raised surface so it reads clearly above the gradient card.
-      return { bg: p.bgRaised, fg: p.fg, border: p.divider };
-    case 'black': // Top up — soft brand-blue tint (deposit = additive, blue family).
-      return { bg: p.accentSoft, fg: p.accentText, border: p.accentBorder };
-  }
+  return `${own}1 = ${dc.symbol}${inDisplay.toLocaleString('en-US', { maximumFractionDigits: 4 })}`;
 }
 
-/**
- * Action pill — icon + label, three distinct high-contrast looks. The Buy
- * hero gets a brand-blue gradient; Sell and Top up are crisp solids.
- */
-function ActionButton({
-  label, icon, onPress, to, tone = 'white', palette: p,
-}: {
-  label: string;
-  icon?: keyof typeof Ionicons.glyphMap;
-  onPress?: () => void;
-  to?: string;
-  tone?: ActionTone;
-  palette: Palette;
+/** A static balance in its own currency, in the same lockup as AnimatedTotal. */
+function BalanceFigure({ symbol, amount, revealed, palette: p, onPress, onLongPress, onPressOut }: {
+  symbol: string; amount: string; revealed: boolean; palette: Palette;
+  onPress?: () => void; onLongPress?: () => void; onPressOut?: () => void;
 }) {
-  const router = useRouter();
-  const mono = isMonochrome(useTheme((s) => s.mode));
-  const look = actionLook(tone, p, mono);
-
-  const handlePress = () => {
-    if (onPress) onPress();
-    else if (to) router.push(to as any);
-  };
-
-  const glowing = !!look.glow;
-  // Vertical layout: circular icon chip + label underneath. The label lives on
-  // its own line so any locale (nl/ru/de/fr/es/ar) fits — it just shrinks and
-  // truncates within the column instead of pushing the row off the sides.
+  const shown = revealed ? amount : '••••••';
+  const [whole, frac] = shown.split('.');
+  const digits = amount.replace(/[^0-9]/g, '').length;
+  const size = digits <= 7 ? 48 : digits <= 9 ? 42 : digits <= 11 ? 34 : 28;
+  const lineHeight = Math.round(size * 1.06);
   return (
-    <PressableScale onPress={handlePress} style={{ flex: 1, minWidth: 0, alignItems: 'center' }}>
-      <View style={{
-        width: 52, height: 52, borderRadius: 26,
-        alignItems: 'center', justifyContent: 'center',
-        backgroundColor: look.bg,
-        borderWidth: look.border ? 1 : 0,
-        borderColor: look.border,
-        shadowColor: look.glow ?? '#000000',
-        shadowOffset: { width: 0, height: glowing ? 5 : 2 },
-        shadowOpacity: glowing ? 0.28 : 0.08,
-        shadowRadius: glowing ? 12 : 4,
-        elevation: glowing ? 5 : 1,
-      }}>
-        {icon && <Ionicons name={icon} size={22} color={look.fg} />}
-      </View>
-      <Text
-        numberOfLines={1}
-        adjustsFontSizeToFit
-        minimumFontScale={0.7}
-        style={{ color: p.fgMuted, fontSize: 11.5, fontWeight: '600', letterSpacing: -0.1, marginTop: 6, maxWidth: '100%' }}
-      >
-        {label}
+    <Pressable onPress={onPress} onLongPress={onLongPress} onPressOut={onPressOut} delayLongPress={220} hitSlop={12}
+      style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'center', paddingHorizontal: 24, paddingVertical: 2, maxWidth: '100%' }}>
+      <Text style={{ color: p.fgMuted, fontFamily: F.semibold, fontSize: Math.max(18, Math.round(size * (symbol.length > 2 ? 0.36 : 0.5))), lineHeight, marginTop: Math.max(0.5, size * 0.06), marginRight: 4, fontVariant: ['tabular-nums'] }}>
+        {symbol}
       </Text>
-    </PressableScale>
-  );
-}
-
-function MoreActionButton({ palette: p, onPress, label }: { palette: Palette; onPress: () => void; label: string }) {
-  // Matches the vertical action columns — neutral chip + label so it lines up
-  // with Buy/Sell/Send/Top up regardless of locale.
-  return (
-    <PressableScale onPress={onPress} style={{ flex: 1, minWidth: 0, alignItems: 'center' }}>
-      <View style={{
-        width: 52, height: 52, borderRadius: 26,
-        backgroundColor: p.bgRaised,
-        borderWidth: 1, borderColor: p.divider,
-        alignItems: 'center', justifyContent: 'center',
-      }}>
-        <Ionicons name="ellipsis-horizontal" size={20} color={p.fg} />
-      </View>
-      <Text
-        numberOfLines={1}
-        adjustsFontSizeToFit
-        minimumFontScale={0.7}
-        style={{ color: p.fgMuted, fontSize: 11.5, fontWeight: '600', letterSpacing: -0.1, marginTop: 6, maxWidth: '100%' }}
-      >
-        {label}
+      <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.78}
+        style={{ color: p.fg, fontFamily: F.semibold, fontWeight: '600', fontSize: size, lineHeight, letterSpacing: -0.5, fontVariant: ['tabular-nums'], includeFontPadding: false }}>
+        {whole}
+        {frac != null && (
+          <Text style={{ color: p.fgFaint, fontFamily: F.semibold, fontSize: Math.max(18, Math.round(size * 0.6)), lineHeight, fontVariant: ['tabular-nums'] }}>.{frac}</Text>
+        )}
       </Text>
-    </PressableScale>
-  );
-}
-
-/**
- * Hairline separator between segments of the header action track. Short
- * of the track's full height so it reads as a divider, not a seam.
- */
-function HeaderSegmentDivider({ palette: p }: { palette: Palette }) {
-  return (
-    <View style={{ width: StyleSheet.hairlineWidth, height: 16, backgroundColor: p.border }} />
-  );
-}
-
-/**
- * Small circular icon used in the home header. Optional badge dot.
- */
-function HeaderIconButton({
-  icon, onPress, palette: p, a11y, badge,
-}: {
-  icon: keyof typeof Ionicons.glyphMap;
-  onPress: () => void;
-  palette: Palette;
-  a11y: string;
-  badge?: number;
-}) {
-  // Lives inside the header's segmented pill track, so it carries no
-  // background/border of its own — just a tappable icon with a soft
-  // pressed-state highlight. Width is wider than tall so the three
-  // segments divide the track evenly.
-  return (
-    <Pressable
-      onPress={onPress}
-      hitSlop={8}
-      accessibilityRole="button"
-      accessibilityLabel={a11y}
-      style={({ pressed }) => ({
-        width: 36, height: 32, borderRadius: 15,
-        backgroundColor: pressed ? p.border : 'transparent',
-        alignItems: 'center', justifyContent: 'center',
-      })}
-    >
-      <Ionicons name={icon} size={17} color={p.fg} />
-      {badge !== undefined && badge > 0 && (
-        <View
-          style={{
-            position: 'absolute',
-            top: -1, right: 1,
-            minWidth: 15, height: 15, borderRadius: 7.5,
-            backgroundColor: p.redFg,
-            borderWidth: 2, borderColor: p.bg,
-            alignItems: 'center', justifyContent: 'center',
-            paddingHorizontal: 3,
-          }}
-        >
-          <Text style={{ color: '#fff', fontSize: 9, fontWeight: '600' }}>
-            {badge > 9 ? '9+' : badge}
-          </Text>
-        </View>
-      )}
     </Pressable>
   );
 }
 
-/**
- * One segment of the Assets / Activity switcher. Active segment is a
- * filled ctaBg pill; inactive is transparent muted text.
- */
 function TabBtn({ label, active, palette: p, onPress }: {
   label: string; active: boolean; palette: Palette; onPress: () => void;
 }) {
@@ -1858,13 +1506,13 @@ function TxDetailModal({
   const isIncoming = type === 'BUY' || type === 'RECEIVE' || type === 'TRANSFER_IN'
     || type === 'DEPOSIT' || type === 'CASHBACK' || type === 'P2P_BUY' || isCredit;
   const accent   = isIncoming ? p.greenFg : p.redFg;
-  const accentBg = isIncoming ? p.greenBg : 'rgba(239,68,68,0.15)';
+  const accentBg = isIncoming ? p.greenBg : p.redBg;
 
   const statusColors: Record<string, { bg: string; fg: string }> = {
     COMPLETED:  { bg: p.greenBg,               fg: p.greenFg  },
     PENDING:    { bg: 'rgba(245,158,11,0.15)',  fg: '#f59e0b'  },
     PROCESSING: { bg: 'rgba(99,102,241,0.15)',  fg: '#818cf8'  },
-    FAILED:     { bg: 'rgba(239,68,68,0.15)',   fg: p.redFg    },
+    FAILED:     { bg: p.redBg,   fg: p.redFg    },
     CANCELLED:  { bg: p.pillBg,                fg: p.fgMuted  },
   };
   const sc = statusColors[status] ?? statusColors.COMPLETED;
@@ -1878,35 +1526,7 @@ function TxDetailModal({
   }
 
   return (
-    <Modal visible transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable
-        style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' }}
-        onPress={onClose}
-      >
-        <Pressable
-          style={{ backgroundColor: p.bg, borderTopLeftRadius: 32, borderTopRightRadius: 32, maxHeight: '92%' }}
-          onPress={(e) => e.stopPropagation()}
-        >
-          {/* Handle */}
-          <View style={{ alignItems: 'center', paddingTop: 12, paddingBottom: 4 }}>
-            <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: p.border }} />
-          </View>
-
-          {/* Close */}
-          <View style={{ flexDirection: 'row', justifyContent: 'flex-end', paddingHorizontal: 20, paddingBottom: 4 }}>
-            <Pressable
-              onPress={onClose} hitSlop={8}
-              style={({ pressed }) => ({
-                width: 32, height: 32, borderRadius: 16,
-                backgroundColor: pressed ? p.border : p.bgElev,
-                borderWidth: 1, borderColor: p.border,
-                alignItems: 'center', justifyContent: 'center',
-              })}
-            >
-              <Ionicons name="close" size={15} color={p.fg} />
-            </Pressable>
-          </View>
-
+    <BottomSheet visible={true} onClose={onClose} scroll={false} contentStyle={{ paddingHorizontal: 0 }}>
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: insets.bottom + 32 }}>
 
             {/* ── Hero ── */}
@@ -2072,13 +1692,28 @@ function TxDetailModal({
             </View>
 
           </ScrollView>
-        </Pressable>
-      </Pressable>
-    </Modal>
+        </BottomSheet>
   );
 }
 
-/* ── Activity list — shows the most recent transactions inline on home ─── */
+/* ── Activity list — the most recent transactions inline on home ───
+ * Grouped by day, one calm row per transaction: the asset icon with a small
+ * direction badge, a short title, time + context underneath, and the amount
+ * (incoming in green, outgoing in the normal ink — red is for failures). */
+const INCOMING = new Set(['DEPOSIT', 'TRANSFER_IN', 'RECEIVE', 'SELL', 'P2P_BUY', 'CASHBACK', 'ADMIN_CREDIT', 'REFERRAL_REWARD']);
+const TRADES = new Set(['BUY', 'SELL', 'SWAP']);
+const PENDING_STATES = new Set(['PENDING', 'WAITING_CONFIRMATION', 'PROCESSING', 'QUEUED', 'SUBMITTED', 'IN_PROGRESS', 'AWAITING_ESCROW', 'ESCROW_FUNDED', 'PAYMENT_SENT',
+  'COMPLIANCE_PENDING', 'MANUAL_REVIEW', 'FUNDING_PENDING', 'FUNDED', 'ROUTING', 'ROUTED', 'SETTLEMENT_PENDING', 'SETTLED', 'PAYOUT_PENDING']);
+const FAILED_STATES = new Set(['FAILED', 'REJECTED', 'CANCELLED', 'DECLINED', 'EXPIRED', 'REFUNDED']);
+
+function dayLabel(d: Date, t: (k: string) => string, locale: string): string {
+  const start = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const diff = Math.round((start(new Date()) - start(d)) / 86400_000);
+  if (diff === 0) return t('home.dayToday');
+  if (diff === 1) return t('home.yesterday');
+  return d.toLocaleDateString(locale === 'ar' ? 'ar-LY' : 'en-GB', { weekday: 'short', day: 'numeric', month: 'short', ...(diff > 300 ? { year: 'numeric' } : {}) });
+}
+
 function ActivityList({
   palette: p, dc, items, onSeeAll,
 }: {
@@ -2088,6 +1723,7 @@ function ActivityList({
   onSeeAll: () => void;
 }) {
   const t = useT();
+  const locale = useI18n((s) => s.locale);
   const [selectedTx, setSelectedTx] = useState<TxItem | null>(null);
 
   if (items.length === 0) {
@@ -2101,124 +1737,138 @@ function ActivityList({
     );
   }
 
+  const shown = items.slice(0, 8);
+  let lastDay = '';
+
   return (
-    <View>
-      {items.slice(0, 8).map((tx) => {
+    <View style={{ marginTop: 6 }}>
+      {shown.map((tx, idx) => {
         const meta = tx.metadata ?? {};
         const amt  = Number(tx.amount);
         const abs  = Math.abs(amt);
         const type = tx.type;
+        const when = new Date(tx.createdAt);
+        const day = dayLabel(when, t, locale);
+        const header = day !== lastDay ? day : null;
+        lastDay = day;
+        const nextDay = idx + 1 < shown.length ? dayLabel(new Date(shown[idx + 1].createdAt), t, locale) : null;
+        const lastInGroup = nextDay !== day;
 
-        const cpName = meta.counterpartyName ?? tx.counterpartyName ?? tx.description;
+        const cpName = meta.counterpartyName ?? tx.counterpartyName ?? null;
         const txAsset = meta.asset ?? tx.currency;
-        const assetMeta = getCurrencyMeta(txAsset);
-        const assetName = assetMeta?.name ?? txAsset;
+        const assetName = getCurrencyMeta(txAsset)?.name ?? txAsset;
 
-        let title = '';
+        let title: string;
         if      (type === 'BUY')          title = `Bought ${assetName}`;
         else if (type === 'SELL')         title = `Sold ${assetName}`;
-        else if (type === 'DEPOSIT')      title = `Deposit · ${assetName}`;
-        else if (type === 'WITHDRAW' || type === 'WITHDRAWAL') title = `Withdrawal · ${assetName}`;
-        else if (type === 'TRANSFER_IN')  title = cpName ? `From ${cpName}` : 'Transfer in';
-        else if (type === 'TRANSFER_OUT') title = cpName ? `To ${cpName}` : 'Transfer out';
-        else if (type === 'SEND')         title = cpName ? `Sent to ${cpName}` : 'Sent';
-        else if (type === 'RECEIVE')      title = cpName ? `From ${cpName}` : 'Received';
-        else if (type === 'SWAP')         title = `Swap · ${assetName}`;
-        else if (type === 'P2P_BUY')      title = `P2P Buy · ${assetName}`;
-        else if (type === 'P2P_SELL')     title = `P2P Sell · ${assetName}`;
-        else if (type === 'CARD_SPEND')   title = `Card Spend`;
-        else if (type === 'CASHBACK')     title = `Cashback`;
+        else if (type === 'DEPOSIT')      title = 'Top-up';
+        else if (type === 'WITHDRAW' || type === 'WITHDRAWAL') title = 'Withdrawal';
+        else if (type === 'TRANSFER_IN' || type === 'RECEIVE') title = cpName ? cpName : 'Received';
+        else if (type === 'TRANSFER_OUT' || type === 'SEND')   title = cpName ? cpName : 'Sent';
+        else if (type === 'SWAP')         title = `Converted to ${assetName}`;
+        else if (type === 'P2P_BUY')      title = `P2P · bought ${assetName}`;
+        else if (type === 'P2P_SELL')     title = `P2P · sold ${assetName}`;
+        else if (type === 'CARD_SPEND')   title = tx.description ?? 'Card payment';
+        else if (type === 'CASHBACK')     title = 'Cashback';
+        else if (type === 'ADMIN_CREDIT') title = 'Credit from Tazdan';
         else title = tx.description ?? (type.charAt(0) + type.slice(1).toLowerCase().replace(/_/g, ' '));
 
-        const dateStr = new Date(tx.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-        let subtitle = dateStr;
+        const time = when.toLocaleTimeString(locale === 'ar' ? 'ar-LY' : 'en-GB', { hour: '2-digit', minute: '2-digit' });
+        const st = String(tx.status ?? '').toUpperCase();
+        const pending = PENDING_STATES.has(st);
+        const failed = FAILED_STATES.has(st);
+        let context: string | null = null;
         if (type === 'BUY' || type === 'SELL') {
-          // Show the actual wallet/currency used to fund (BUY) or receive (SELL).
           const settleCcy = meta.settlementCurrency as string | undefined;
-          const settleAmt = meta.settlementAmount as string | undefined;
-          const verb = type === 'BUY' ? 'paid with' : 'received as';
-          const fundPart = settleCcy
-            ? `${verb} ${settleAmt ? `${settleAmt} ` : ''}${settleCcy}`
-            : null;
-          const pricePart = meta.priceUsd ? `@ ${dc.fmt(meta.priceUsd)}` : null;
-          subtitle = [pricePart, fundPart, dateStr].filter(Boolean).join('  ·  ');
-        } else if ((type === 'TRANSFER_IN' || type === 'TRANSFER_OUT' || type === 'SEND' || type === 'RECEIVE') && (meta.note ?? tx.note ?? tx.description)) {
-          subtitle = (meta.note ?? tx.note ?? tx.description ?? '') + '  ·  ' + dateStr;
-        }
+          context = settleCcy ? `${type === 'BUY' ? 'Paid with' : 'Received in'} ${settleCcy}` : null;
+        } else if (type === 'TRANSFER_IN' || type === 'RECEIVE') context = cpName ? 'Received' : null;
+        else if (type === 'TRANSFER_OUT' || type === 'SEND') context = cpName ? 'Sent' : null;
+        const note = meta.note ?? tx.note;
+
+        const incoming = INCOMING.has(type) || (!TRADES.has(type) && amt > 0);
+        const badgeIcon: keyof typeof Ionicons.glyphMap = TRADES.has(type) ? 'swap-horizontal' : incoming ? 'arrow-down' : 'arrow-up';
 
         const showDual  = (type === 'BUY' || type === 'SELL') && meta.cryptoAmount;
-        // Display the fiat side in the transaction's OWN currency (the
-        // wallet/method actually used), exactly — never the display currency.
+        // The fiat side in the transaction's own currency, never the display currency.
         const settleCcy = (meta.settlementCurrency ?? tx.currency) as any;
         const settleAbs = meta.settlementAmount != null ? Math.abs(Number(meta.settlementAmount)) : abs;
         const fiatStr   = formatMoney(settleAbs, settleCcy, { showSymbol: true });
-        const cryptoStr = meta.cryptoAmount
-          ? formatCryptoDisplay(meta.cryptoAmount, txAsset, 6)
-          : null;
+        const cryptoStr = meta.cryptoAmount ? formatCryptoDisplay(meta.cryptoAmount, txAsset, 6) : null;
+        const primary = showDual && cryptoStr
+          ? `${type === 'BUY' ? '+' : '−'}${cryptoStr}`
+          : `${incoming ? '+' : '−'}${fiatStr}`;
+        const primaryColor = failed ? p.fgFaint : (showDual ? type === 'BUY' : incoming) ? p.greenFg : p.fg;
 
         return (
-          <Pressable
-            key={tx.id}
-            onPress={() => setSelectedTx(tx)}
-            style={({ pressed }) => ({
-              flexDirection: 'row', alignItems: 'center',
-              paddingHorizontal: 20, paddingVertical: 14,
-              borderBottomWidth: 1, borderBottomColor: p.border,
-              backgroundColor: pressed ? p.bgElev : 'transparent',
-            })}
-          >
-            {/* Currency icon */}
-            <View style={{ flexShrink: 0 }}>
-              <CurrencyIcon currency={txAsset} palette={p} size={40} />
-            </View>
-
-            {/* Title + subtitle */}
-            <View style={{ flex: 1, marginLeft: 12, minWidth: 0 }}>
-              <Text style={{ color: p.fg, fontSize: 15, fontWeight: '600' }} numberOfLines={1}>
-                {title}
+          <View key={tx.id}>
+            {header ? (
+              <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '600', letterSpacing: 0.6, paddingHorizontal: 24, marginTop: idx === 0 ? 4 : 18, marginBottom: 2 }}>
+                {header.toUpperCase()}
               </Text>
-              <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '500', marginTop: 2 }} numberOfLines={1}>
-                {subtitle}
-              </Text>
-            </View>
+            ) : null}
+            <Pressable
+              onPress={() => setSelectedTx(tx)}
+              style={({ pressed }) => ({
+                flexDirection: 'row', alignItems: 'center',
+                paddingHorizontal: 24, paddingVertical: 11,
+                backgroundColor: pressed ? p.bgElev : 'transparent',
+              })}
+            >
+              <View style={{ width: 40, height: 40 }}>
+                <CurrencyIcon currency={txAsset} palette={p} size={40} />
+                <View style={{
+                  position: 'absolute', right: -3, bottom: -3, width: 18, height: 18, borderRadius: 9,
+                  backgroundColor: p.bg, alignItems: 'center', justifyContent: 'center',
+                }}>
+                  <View style={{ width: 14, height: 14, borderRadius: 7, backgroundColor: p.bgElev, borderWidth: StyleSheet.hairlineWidth, borderColor: p.border, alignItems: 'center', justifyContent: 'center' }}>
+                    <Ionicons name={badgeIcon} size={9} color={incoming && !TRADES.has(type) ? p.greenFg : p.fgMuted} />
+                  </View>
+                </View>
+              </View>
 
-            {/* Value */}
-            <View style={{ alignItems: 'flex-end', flexShrink: 0, marginLeft: 8 }}>
-              {showDual && cryptoStr ? (
-                <>
-                  <Text style={{ color: type === 'BUY' ? p.greenFg : p.redFg, fontSize: 14, fontWeight: '600', fontVariant: ['tabular-nums'] }}>
-                    {type === 'BUY' ? '+' : '−'}{cryptoStr}
+              <View style={{ flex: 1, marginLeft: 14, minWidth: 0 }}>
+                <Text style={{ color: failed ? p.fgMuted : p.fg, fontSize: 15, fontWeight: '600', letterSpacing: -0.1 }} numberOfLines={1}>
+                  {title}
+                </Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
+                  {pending && !failed ? (
+                    <Text style={{ color: p.amberFg, fontSize: 12, fontWeight: '600' }}>{t('home.pending')}</Text>
+                  ) : null}
+                  <Text style={{ color: p.fgMuted, fontSize: 12, flexShrink: 1 }} numberOfLines={1}>
+                    {[failed ? String(tx.status).charAt(0) + String(tx.status).slice(1).toLowerCase() : null, time, context, note].filter(Boolean).join(' · ')}
                   </Text>
-                  <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '500', marginTop: 2, fontVariant: ['tabular-nums'] }}>
+                </View>
+              </View>
+
+              <View style={{ alignItems: 'flex-end', flexShrink: 0, marginLeft: 10 }}>
+                <Text style={{
+                  color: primaryColor, fontSize: 15, fontWeight: '600', fontVariant: ['tabular-nums'],
+                  textDecorationLine: failed ? 'line-through' : 'none',
+                }}>
+                  {primary}
+                </Text>
+                {showDual && cryptoStr ? (
+                  <Text style={{ color: p.fgMuted, fontSize: 12, marginTop: 2, fontVariant: ['tabular-nums'] }}>
                     {type === 'BUY' ? '−' : '+'}{fiatStr}
                   </Text>
-                </>
-              ) : (
-                <Text style={{
-                  color: amt >= 0 ? p.greenFg : p.redFg,
-                  fontSize: 14, fontWeight: '600', fontVariant: ['tabular-nums'],
-                }}>
-                  {amt >= 0 ? '+' : '−'}{fiatStr}
-                </Text>
-              )}
-            </View>
-          </Pressable>
+                ) : null}
+              </View>
+            </Pressable>
+            {!lastInGroup ? <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: p.border, marginLeft: 24 + 40 + 14, marginRight: 24 }} /> : null}
+          </View>
         );
       })}
 
       <Pressable
         onPress={onSeeAll}
+        accessibilityRole="link"
         style={({ pressed }) => ({
-          marginTop: 18, marginHorizontal: 24,
-          height: 44, borderRadius: 22,
-          alignItems: 'center', justifyContent: 'center',
-          flexDirection: 'row', gap: 6,
-          backgroundColor: pressed ? p.border : p.pillBg,
-          borderWidth: 1, borderColor: p.border,
+          flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4,
+          marginTop: 14, paddingVertical: 10, opacity: pressed ? 0.6 : 1,
         })}
       >
-        <Text style={{ color: p.fg, fontSize: 13, fontWeight: '600' }}>{t('home.seeAllTx')}</Text>
-        <Ionicons name="chevron-forward" size={14} color={p.fg} />
+        <Text style={{ color: p.accentText, fontSize: 14, fontWeight: '600' }}>{t('home.seeAllTx')}</Text>
+        <Ionicons name="chevron-forward" size={14} color={p.accentText} />
       </Pressable>
 
       <TxDetailModal tx={selectedTx} palette={p} dc={dc} onClose={() => setSelectedTx(null)} />
@@ -2554,7 +2204,7 @@ function QrModal({
               backgroundColor="#ffffff"
               color="#000000"
               ecl="H"
-              logo={require('../../assets/icon-color.png')}
+              logo={require('../../assets/icon-asterisk.png')}
               logoSize={42}
               logoBackgroundColor="#ffffff"
               logoMargin={4}
@@ -2684,104 +2334,82 @@ function useDepositAddress(currency: string, enabled: boolean) {
 }
 
 /* ── Asset row ─── */
-function AssetRow({ wallet, palette: p, onPress, liveUsd, unitPrice, sparkline, changePct, showBalance = true, showSparkline = true }: {
+function AssetRow({ wallet, palette: p, onPress, liveUsd, unitPrice, rateLabel, sparkline, changePct, showBalance = true, showSparkline = true, last = false }: {
   wallet: Wallet;
   palette: Palette;
   onPress?: () => void;
   liveUsd?: number;
   unitPrice?: number;
+  /** Fiat rows: the exchange rate against the display currency (e.g. "$1 = 9.37 LD"). */
+  rateLabel?: string;
   sparkline?: number[];
   changePct?: number;
   showBalance?: boolean;
   showSparkline?: boolean;
+  /** Last row of its section: no separator underneath. */
+  last?: boolean;
 }) {
   const dc = useDisplayCurrency();
   const meta = ASSET_META[wallet.currency] ?? { title: wallet.currency, subDecimals: 6 };
   const usd = liveUsd ?? Number(wallet.fiatValueUsd);
   const positive = (changePct ?? 0) >= 0;
-  const sparkColor = positive ? p.greenFg : p.redFg;
   const maxDec = Math.min(meta.subDecimals, 8);
-  const balanceStr = Number(wallet.balance).toLocaleString('en-US', { maximumFractionDigits: maxDec });
-  // Crypto rows show unit market price; fiat rows show holding value
-  const rightStr = unitPrice !== undefined
-    ? unitPrice >= 1
-      ? '$' + unitPrice.toLocaleString('en-US', { maximumFractionDigits: 2 })
-      : '$' + unitPrice.toLocaleString('en-US', { maximumFractionDigits: 6 })
-    : dc.fmt(usd);
-  const maskedBalance = balanceStr.replace(/[0-9]/g, '*');
-  const maskedRight = rightStr.replace(/[0-9]/g, '*');
+  const amount = Number(wallet.balance).toLocaleString('en-US', { maximumFractionDigits: maxDec });
+  // Privacy mode hides what you HOLD (amount, value) — never the market
+  // (unit price, 24h change), which is public information.
+  const price = rateLabel ?? (unitPrice !== undefined
+    ? '$' + unitPrice.toLocaleString('en-US', { maximumFractionDigits: unitPrice >= 1 ? 2 : 6 })
+    : null);
+  const ticker = wallet.currency.replace(/_.*/, '');
+  const holding = `${showBalance ? amount : '••••'} ${ticker}`;
+  const isCrypto = getCurrencyMeta(wallet.currency)?.kind === 'crypto';
+  const hasSpark = showSparkline && sparkline && sparkline.length >= 2;
 
   return (
-    <Pressable
-      onPress={onPress}
-      style={({ pressed }) => ({
-        marginHorizontal: 16, marginBottom: 4,
-        paddingHorizontal: 14, paddingVertical: 13,
-        borderRadius: 18,
-        backgroundColor: pressed ? p.bgElev : p.bgElev,
-        borderWidth: 1, borderColor: p.border,
-      })}
-    >
-      {/* Top row: icon, name/balance, value + change pill */}
-      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-        <CurrencyIcon currency={wallet.currency} palette={p} />
+    <View testID={`asset-row-${wallet.currency}`}>
+      <Pressable
+        onPress={onPress}
+        style={({ pressed }) => ({
+          flexDirection: 'row', alignItems: 'center',
+          paddingHorizontal: 24, paddingVertical: 12,
+          backgroundColor: pressed ? p.bgElev : 'transparent',
+        })}
+      >
+        <CurrencyIcon currency={wallet.currency} palette={p} size={40} />
         <View style={{ flex: 1, marginLeft: 12, minWidth: 0 }}>
-          <Text style={{ color: p.fg, fontSize: 15.5, fontWeight: '700', letterSpacing: -0.2 }} numberOfLines={1}>
-            {meta.title}
+          <Text style={{ color: p.fg, fontSize: 15, fontWeight: '600', letterSpacing: -0.1 }} numberOfLines={1}>
+            {isCrypto ? ticker : meta.title}
           </Text>
-          <Text style={{ color: p.fgMuted, fontSize: 12.5, fontWeight: '500', marginTop: 2, fontVariant: ['tabular-nums'] }} numberOfLines={1}>
-            {showBalance ? balanceStr : maskedBalance} {wallet.currency}
+          <Text style={{ color: p.fgMuted, fontSize: 12, marginTop: 2, fontVariant: ['tabular-nums'] }} numberOfLines={1}>
+            {price ?? '—'}
           </Text>
         </View>
-        <View style={{ alignItems: 'flex-end', minWidth: 72 }}>
-          <Text style={{ color: p.fg, fontSize: 15, fontWeight: '700', fontVariant: ['tabular-nums'], letterSpacing: -0.2 }} numberOfLines={1}>
-            {showBalance ? rightStr : maskedRight}
+        {showSparkline && <View testID="asset-chart-column" style={{ width: 54, flexShrink: 0, height: 28, marginHorizontal: 8, justifyContent: 'center', opacity: .85 }}>
+          {hasSpark && <Sparkline data={sparkline!} width={54} height={22} color={positive ? p.greenFg : p.redFg} strokeWidth={1.4} />}
+        </View>}
+        <View testID="asset-value-column" style={{ alignItems: 'flex-end', width: '32%', flexShrink: 0, gap: 2 }}>
+          <Text style={{ color: p.fg, fontSize: 15, fontWeight: '600', fontVariant: ['tabular-nums'], letterSpacing: -.1, textAlign: 'right', width: '100%' }} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={.7}>
+            {showBalance ? dc.fmt(usd) : '••••••'}
           </Text>
-          {changePct !== undefined && (
-            <View style={{
-              flexDirection: 'row', alignItems: 'center', gap: 2, marginTop: 4,
-              paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6,
-              backgroundColor: !showBalance ? p.pillBg : positive ? p.greenBg : p.redBg,
-            }}>
-              {showBalance && (
-                <Ionicons name={positive ? 'caret-up' : 'caret-down'} size={8} color={positive ? p.greenFg : p.redFg} />
-              )}
-              <Text style={{ color: showBalance ? (positive ? p.greenFg : p.redFg) : p.fgFaint, fontSize: 10.5, fontWeight: '700', fontVariant: ['tabular-nums'] }}>
-                {showBalance ? `${Math.abs(changePct).toFixed(2)}%` : '**.**%'}
-              </Text>
-            </View>
-          )}
+          <Text style={{ color: p.fgMuted, fontSize: 11.5, fontVariant: ['tabular-nums'], textAlign: 'right', width: '100%' }} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={.7}>
+            {holding}
+          </Text>
+          {changePct !== undefined ? (
+            <Text style={{ color: positive ? p.greenFg : p.redFg, fontSize: 12, fontWeight: '500', marginTop: 2, fontVariant: ['tabular-nums'] }}>
+              {positive ? '▲' : '▼'} {Math.abs(changePct).toFixed(2)}%
+            </Text>
+          ) : null}
         </View>
-      </View>
-
-      {/* Sparkline below the row */}
-      {showSparkline && sparkline && sparkline.length >= 2 && (
-        <View style={{ marginTop: 10, opacity: 0.75 }}>
-          <Sparkline data={sparkline} width={Dimensions.get('window').width - 60} height={34} color={sparkColor} strokeWidth={1.5} />
-        </View>
-      )}
-    </Pressable>
+      </Pressable>
+      {!last ? <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: p.border, marginLeft: 24 + 40 + 14, marginRight: 24 }} /> : null}
+    </View>
   );
 }
 
 
 /* ── Currency icons ── */
-function CurrencyIcon({ currency, palette: p, size = 44 }: { currency: string; palette: Palette; size?: number }) {
-  const locale = useI18n((s) => s.locale);
-  const meta = getCurrencyMeta(currency);
-  const isCrypto = meta?.kind === 'crypto';
-  if (isCrypto) {
-    return <CoinIcon symbol={currency} size={size} />;
-  }
-  // Fiat → locale-aware, font-safe symbol (Arabic variants, LD for LYD, …).
-  const glyph = fiatSymbol(currency, locale);
-  // Multi-letter codes (AED/SAR/LD) need to read smaller than a single $/€.
-  const fontSize = glyph.length > 2 ? size * 0.3 : size * 0.5;
-  return (
-    <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
-      <Text style={{ fontSize, lineHeight: size * 0.64, color: p.fg, fontWeight: '700' }} numberOfLines={1}>{glyph}</Text>
-    </View>
-  );
+function CurrencyIcon({ currency, size = 44 }: { currency: string; palette: Palette; size?: number }) {
+  return <CoinIcon symbol={currency} size={size} />;
 }
 
 interface AssetMeta { title: string; subDecimals: number }

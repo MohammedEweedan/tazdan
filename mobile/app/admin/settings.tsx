@@ -1,3 +1,4 @@
+import { StackHeader } from '@/components/ui/ScreenHeader';
 /**
  * Admin Settings — every PlatformSetting key/value. Inline editable.
  */
@@ -78,12 +79,7 @@ export default function AdminSettings() {
       <TopGradient />
       <StatusBar style={themeMode === 'light' ? 'dark' : 'light'} />
       <SafeAreaView style={{ flex: 1 }} edges={['top']}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingTop: 8, paddingBottom: 8 }}>
-          <Pressable onPress={() => router.back()} hitSlop={8}>
-            <Ionicons name="chevron-back" size={26} color={p.fg} />
-          </Pressable>
-          <Text style={{ flex: 1, color: p.fg, fontSize: 18, fontWeight: '600' }}>Platform Settings</Text>
-          <Pressable
+        <StackHeader title="Platform Settings" right={<><Pressable
             onPress={() => saveMut.mutate()}
             disabled={saveMut.isPending}
             style={{ paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10, backgroundColor: p.fg }}
@@ -91,8 +87,7 @@ export default function AdminSettings() {
             <Text style={{ color: p.bg, fontSize: 12, fontWeight: '700' }}>
               {saveMut.isPending ? 'Saving…' : 'Save All'}
             </Text>
-          </Pressable>
-        </View>
+          </Pressable></>} />
 
         {q.isLoading ? (
           <LoadingPulse fullscreen icon="settings-outline" label="Loading settings…" />

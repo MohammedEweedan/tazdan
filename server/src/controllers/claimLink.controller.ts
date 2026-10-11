@@ -32,6 +32,15 @@ import {
 import { pushCopy, pushTxEvent } from '../services/push.service';
 import { Currency, ClaimLinkStatus } from '@prisma/client';
 import { isLedgerCurrency, postLedger } from '../services/ledger/ledger.service';
+import { assertTransitioned, releaseReserve, reserveFunds, settleReserve } from '../services/wallet/atomicWallet';
+import { enforceKycLimit, valueInUsd } from '../utils/kycLimits';
+import { assertMovementAllowed } from '../services/platform/controls.service';
+import { enforceRiskBasedStepUp } from '../services/security/stepUp.service';
+import { incrAttempts, getAttempts } from '../utils/redis';
+
+// Wrong-PIN attempts allowed per link before it locks for the window.
+const MAX_PIN_ATTEMPTS = 5;
+const PIN_LOCK_SECONDS = 24 * 60 * 60;
 
 const SUPPORTED_ASSETS = [
   'USDT', 'USD', 'LYD', 'BTC', 'ETH', 'BNB', 'SOL', 'XRP',
@@ -50,6 +59,8 @@ const createSchema = z.object({
   note:            z.string().max(200).optional(),
   expiresInDays:   z.number().int().min(1).max(MAX_EXPIRY_DAYS).optional(),
   pin:             z.string().min(4).max(8).regex(/^\d+$/).optional(),
+  stepUpCode:      z.string().regex(/^\d{6}$/).optional(),
+  biometricVerified: z.boolean().optional(),
 }).refine(
   (d) => d.recipientEmail || d.recipientPhone || d.recipientHandle,
   { message: 'recipientEmail, recipientPhone, or recipientHandle is required' },
@@ -110,12 +121,16 @@ export class ClaimLinkController {
       });
       if (!senderWallet) throw new AppError(`${asset} wallet not found`, 404);
 
-      const balance = parseFloat(senderWallet.balance.toString());
-      const frozen  = parseFloat(senderWallet.frozen.toString());
-      const available = balance - frozen;
-      if (body.amount > available) {
-        throw new AppError(`Insufficient ${asset}. Available: ${available.toFixed(8)}`, 400);
-      }
+      await assertMovementAllowed({ userId: senderId, feature: 'transfers', currency: asset });
+      await enforceKycLimit(senderId, 'SEND', body.amount, asset); // before any security code
+      await enforceRiskBasedStepUp({
+        userId: senderId,
+        action: 'transfer',
+        valueUsd: await valueInUsd(body.amount, asset),
+        req,
+        code: body.stepUpCode,
+        biometricVerified: body.biometricVerified === true,
+      });
 
       const expiresInDays = body.expiresInDays ?? DEFAULT_EXPIRY_DAYS;
       const expiresAt = new Date(Date.now() + expiresInDays * 24 * 60 * 60 * 1000);
@@ -129,13 +144,10 @@ export class ClaimLinkController {
       // recipient's tap feel intentional. Same behaviour either way.
 
       const link = await prisma.$transaction(async (tx) => {
-        // Reserve the funds: increment frozen, balance stays put so the
-        // refund path is a trivial decrement. The user's spendable
-        // balance shrinks by `amount`.
-        await tx.wallet.update({
-          where: { id: senderWallet.id },
-          data: { frozen: { increment: new Decimal(body.amount) } },
-        });
+        // Reserve the funds: frozen grows, balance stays put, so the
+        // refund path is a plain release. Checked and applied in one
+        // statement so concurrent sends can't reserve more than is spendable.
+        await reserveFunds(tx, senderId, currency, body.amount);
         return tx.claimLink.create({
           data: {
             senderId,
@@ -289,24 +301,36 @@ export class ClaimLinkController {
       }
 
       if (link.pinHash) {
+        // A 4-digit PIN has 10,000 values; cap guesses per link so an
+        // unbound link cannot be brute-forced.
+        const attemptsKey = `claimlink:pin:${link.id}`;
+        if ((await getAttempts(attemptsKey)) >= MAX_PIN_ATTEMPTS) {
+          throw new AppError('Too many incorrect PIN attempts. Ask the sender to send a new link.', 429, 'RATE_LIMITED');
+        }
         if (!body.pin) throw new AppError('PIN required', 401);
-        const expected = hashPin(body.pin, link.claimToken.slice(0, 16));
-        if (expected !== link.pinHash) throw new AppError('Incorrect PIN', 401);
+        const expected = Buffer.from(hashPin(body.pin, link.claimToken.slice(0, 16)), 'hex');
+        const stored = Buffer.from(link.pinHash, 'hex');
+        if (expected.length !== stored.length || !crypto.timingSafeEqual(expected, stored)) {
+          await incrAttempts(attemptsKey, PIN_LOCK_SECONDS);
+          throw new AppError('Incorrect PIN', 401);
+        }
       }
 
       const result = await prisma.$transaction(async (tx) => {
-        // Release sender's frozen amount + decrement balance.
+        // Claim the link before moving money: a concurrent claim, cancel or
+        // expiry finds it no longer PENDING and moves nothing.
+        const moved = await tx.claimLink.updateMany({
+          where: { id: link.id, status: 'PENDING' },
+          data: { status: 'CLAIMED', claimedAt: new Date(), claimedById: claimerId },
+        });
+        assertTransitioned(moved, 'This claim link has already been used');
+
+        // Spend the sender's reservation (balance and frozen together).
         const senderWallet = await tx.wallet.findUnique({
           where: { userId_currency: { userId: link.senderId, currency: link.asset } },
         });
         if (!senderWallet) throw new AppError('Sender wallet missing', 500);
-        await tx.wallet.update({
-          where: { id: senderWallet.id },
-          data: {
-            balance: { decrement: link.amount },
-            frozen:  { decrement: link.amount },
-          },
-        });
+        await settleReserve(tx, link.senderId, link.asset, link.amount);
 
         // Credit recipient (upsert their wallet if they didn't have one).
         const recipientWalletExisting = await tx.wallet.findUnique({
@@ -366,15 +390,7 @@ export class ClaimLinkController {
           ],
         });
 
-        const updated = await tx.claimLink.update({
-          where: { id: link.id },
-          data: {
-            status:     'CLAIMED',
-            claimedAt:  new Date(),
-            claimedById: claimerId,
-          },
-        });
-        return updated;
+        return tx.claimLink.findUniqueOrThrow({ where: { id: link.id } });
       });
 
       // Fire-and-forget — notify the sender that their gift was claimed.
@@ -447,18 +463,16 @@ export class ClaimLinkController {
       if (link.status !== 'PENDING') throw new AppError(`Cannot cancel — already ${link.status.toLowerCase()}`, 400);
 
       await prisma.$transaction(async (tx) => {
-        await tx.wallet.update({
-          where: { userId_currency: { userId: link.senderId, currency: link.asset } },
-          data: { frozen: { decrement: link.amount } },
-        });
-        await tx.claimLink.update({
-          where: { id: link.id },
+        const moved = await tx.claimLink.updateMany({
+          where: { id: link.id, senderId: req.user!.id, status: 'PENDING' },
           data: {
             status:       'CANCELLED',
             refundedAt:   new Date(),
             cancelReason: req.body?.reason ?? null,
           },
         });
+        assertTransitioned(moved, 'This claim link has already been used or cancelled');
+        await releaseReserve(tx, link.senderId, link.asset, link.amount);
       });
 
       res.json({ ok: true });
@@ -497,26 +511,12 @@ export class ClaimLinkController {
   ───────────────────────────────────────────────────────────── */
   static async sweepExpired(_req: Request, res: Response, next: NextFunction) {
     try {
-      const expiredIds = await prisma.claimLink.findMany({
-        where: { status: 'PENDING', expiresAt: { lt: new Date() } },
-        select: { id: true },
-        take: 200,
-      });
-      let refunded = 0;
-      for (const { id } of expiredIds) {
-        try {
-          await ClaimLinkController._refundExpired(id);
-          refunded++;
-        } catch (err) {
-          logger.warn('[claimLink.sweep] refund failed', { id, err });
-        }
-      }
-      res.json({ refunded });
+      res.json({ refunded: await sweepExpiredClaimLinks() });
     } catch (e) { next(e); }
   }
 
   /* ───────────────────────── internal ───────────────────────── */
-  private static async _refundExpired(linkId: string): Promise<void> {
+  static async _refundExpired(linkId: string): Promise<void> {
     await prisma.$transaction(async (tx) => {
       const link = await tx.claimLink.findUnique({
         where: { id: linkId },
@@ -524,14 +524,35 @@ export class ClaimLinkController {
       });
       if (!link) return;
       if (link.status !== 'PENDING') return;
-      await tx.wallet.update({
-        where: { userId_currency: { userId: link.senderId, currency: link.asset } },
-        data: { frozen: { decrement: link.amount } },
-      });
-      await tx.claimLink.update({
-        where: { id: linkId },
+      const moved = await tx.claimLink.updateMany({
+        where: { id: linkId, status: 'PENDING', expiresAt: { lt: new Date() } },
         data: { status: 'EXPIRED', refundedAt: new Date() },
       });
+      if (moved.count !== 1) return; // claimed, cancelled or expired concurrently
+      await releaseReserve(tx, link.senderId, link.asset, link.amount);
     });
   }
+}
+
+/**
+ * Refund expired PENDING links back to their senders. Runs on a schedule
+ * (index.ts) and from the admin sweep endpoint; safe to run concurrently
+ * because each refund transitions the link conditionally.
+ */
+export async function sweepExpiredClaimLinks(limit = 200): Promise<number> {
+  const expired = await prisma.claimLink.findMany({
+    where: { status: 'PENDING', expiresAt: { lt: new Date() } },
+    select: { id: true },
+    take: limit,
+  });
+  let refunded = 0;
+  for (const { id } of expired) {
+    try {
+      await ClaimLinkController._refundExpired(id);
+      refunded++;
+    } catch (err) {
+      logger.warn('[claimLink.sweep] refund failed', { id, err });
+    }
+  }
+  return refunded;
 }

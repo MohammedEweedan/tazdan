@@ -11,4 +11,10 @@ cryptoWalletRouter.get(
   authenticate,
   CryptoWalletController.getDepositAddress,
 );
-cryptoWalletRouter.post('/export', authenticate, CryptoWalletController.exportWallet);
+// Self-custody key export is disabled. Exporting a deposit-address key while
+// the platform keeps crediting that address (and keeps the custodial ledger
+// and USDT balances) leaves the same funds spendable twice. It stays off
+// until custody moves to an omnibus wallet and export becomes a withdrawal.
+cryptoWalletRouter.post('/export', authenticate, (_req, res) => {
+  res.status(410).json({ error: 'Wallet key export is not available.' });
+});

@@ -1,8 +1,11 @@
 /**
  * Transfer — convert between two of your wallets. Theme-aware.
+ * Priced by the server's executable rates (GET /wallets/swap/quote); the
+ * conversion itself re-prices and refuses to fill below the amount shown.
  */
 
-import { useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert, Pressable, View } from 'react-native';
 import { Text, TextInput } from '@/components/ui/Text';
 import { useRouter } from 'expo-router';
@@ -10,7 +13,10 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { ScreenShell, CTAButton, Panel } from '@/components/ui/ScreenShell';
 import { useThemedPalette } from '@/store/themeStore';
-import { useHaptics, useWallets } from '@/hooks';
+import { useHaptics, useWallets, extractErrorMessage } from '@/hooks';
+import { api } from '@/lib/api';
+import { swapService } from '@/services';
+import { QUERY_KEYS } from '@/constants';
 import type { Currency } from '@/types';
 
 const PICKABLE: Currency[] = ['USDT', 'BTC', 'ETH', 'USD', 'EUR', 'AED'];
@@ -25,18 +31,45 @@ export default function Transfer() {
   const [to, setTo] = useState<Currency>('BTC');
   const [amount, setAmount] = useState('');
 
+  const qc = useQueryClient();
   const fromWallet = wallets?.find((w) => w.currency === from);
-  const balance = fromWallet ? Number(fromWallet.balance) : 0;
+  const balance = fromWallet ? Number(fromWallet.balance) - Number(fromWallet.frozen ?? 0) : 0;
   const v = Number(amount || 0);
   const overspend = v > balance;
-  // dummy rate for demo
-  const rate = useMemo(() => from === to ? 1 : (Math.random() * 0.0001 + 0.00002), [from, to]);
-  const youGet = v * rate;
+
+  // Live, indicative quote — debounced so typing doesn't hammer the API.
+  const [debounced, setDebounced] = useState(0);
+  useEffect(() => { const t = setTimeout(() => setDebounced(v), 350); return () => clearTimeout(t); }, [v]);
+  const quoteQ = useQuery({
+    queryKey: ['swap-quote', from, to, debounced],
+    queryFn: async () => (await api.get('/wallets/swap/quote', { params: { from, to, amount: debounced } })).data.quote as { credited: string; rate: string },
+    enabled: debounced > 0 && from !== to,
+    refetchInterval: 15_000,
+    retry: false,
+  });
+  const quote = quoteQ.data && debounced === v ? quoteQ.data : null;
+  const rate = quote ? Number(quote.rate) : null;
+  const youGet = quote ? Number(quote.credited) : null;
+
+  const convert = useMutation({
+    // Allow 0.5% movement between the quote shown and execution; beyond that the server refuses.
+    mutationFn: () => swapService.swap({ from, to, amount: v, minCredited: (youGet! * 0.995).toFixed(8) }),
+    onSuccess: (r) => {
+      h.success();
+      qc.invalidateQueries({ queryKey: QUERY_KEYS.wallets });
+      Alert.alert('Converted', `${v} ${from} → ${Number(r.credited).toLocaleString('en-US', { maximumFractionDigits: 8 })} ${to}`, [{ text: 'OK', onPress: () => router.back() }]);
+    },
+    onError: (e: any) => {
+      h.error();
+      if (e?.response?.status === 409) void quoteQ.refetch();
+      Alert.alert('Conversion failed', extractErrorMessage(e, 'Please try again.'));
+    },
+  });
 
   const swap = () => { h.medium(); setFrom(to); setTo(from); setAmount(''); };
 
   return (
-    <ScreenShell title="Convert">
+    <ScreenShell closeOnly title="Convert">
       {/* From */}
       <CurrencySelector
         title="FROM"
@@ -102,14 +135,14 @@ export default function Transfer() {
           <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
             <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '500' }}>Rate</Text>
             <Text style={{ color: p.fg, fontSize: 13, fontWeight: '600' }}>
-              1 {from} ≈ {rate.toLocaleString('en-US', { maximumFractionDigits: 8 })} {to}
+              {rate !== null ? `1 ${from} ≈ ${rate.toLocaleString('en-US', { maximumFractionDigits: 8 })} ${to}` : quoteQ.isError ? 'Unavailable' : v > 0 ? '…' : '—'}
             </Text>
           </View>
           <View style={{ height: 1, backgroundColor: p.border, marginVertical: 4 }} />
           <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
             <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '500' }}>You receive</Text>
             <Text style={{ color: p.fg, fontSize: 14, fontWeight: '600' }}>
-              {youGet.toLocaleString('en-US', { maximumFractionDigits: 8 })} {to}
+              {youGet !== null ? `${youGet.toLocaleString('en-US', { maximumFractionDigits: 8 })} ${to}` : '—'}
             </Text>
           </View>
         </View>
@@ -120,15 +153,8 @@ export default function Transfer() {
         <CTAButton
           label="Convert"
           icon="swap-horizontal"
-          disabled={v <= 0 || overspend || from === to}
-          onPress={() => {
-            h.success();
-            Alert.alert(
-              'Converted',
-              `${v} ${from} → ${youGet.toLocaleString('en-US', { maximumFractionDigits: 8 })} ${to}`,
-              [{ text: 'OK', onPress: () => router.back() }],
-            );
-          }}
+          disabled={v <= 0 || overspend || from === to || youGet === null || convert.isPending}
+          onPress={() => convert.mutate()}
         />
       </View>
     </ScreenShell>

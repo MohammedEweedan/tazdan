@@ -15,3 +15,10 @@ android/
 
 expo-env.d.ts
 # @end expo-cli
+# Store / signing credentials — never commit
+google-play-key.json
+*.p8
+*.p12
+*.jks
+*.keystore
+*.mobileprovision

@@ -8,8 +8,13 @@ import { AppError } from '../middleware/errorHandler';
 import { AuthRequest } from '../types';
 import { SPREAD_SETTING_KEY, invalidateSpreadCache, getMarketPrice, getConfiguredSpread } from '../services/exchange/priceEngine.service';
 import { postLedger, isLedgerCurrency } from '../services/ledger/ledger.service';
+import { assertTransitioned, releaseReserve, settleReserve } from '../services/wallet/atomicWallet';
+import { collectFee } from '../services/fee/feeCollector.service';
 import { generateReferralCode } from '../utils/helpers';
 import { createUserWallets } from '../services/wallet/walletDerivation.service';
+import { writeAudit } from '../services/platform/audit';
+import { recordTransition } from '../services/platform/lifecycle';
+import { markWithdrawalHistory } from '../services/wallet/withdrawalHistory';
 
 const rateSchema = z.object({
   buyPrice: z.number().positive(),
@@ -37,6 +42,44 @@ async function uniqueAdminUsername(seed: string): Promise<string> {
     candidate = `${base.slice(0, Math.max(3, 30 - suffix.length))}${suffix}`;
   }
   return `${base.slice(0, 20)}${crypto.randomInt(10000, 99999)}`;
+}
+
+type CreditOutcome =
+  | { pendingApproval: false; reference: string; ledgerGroupId: string }
+  | { pendingApproval: true; approvalId: string };
+
+/**
+ * A staff credit to a customer: a controlled adjustment (USER ⟷ ADJUSTMENT).
+ * Up to MANUAL_ADJUSTMENT_SINGLE_USD it posts now; above that it becomes a
+ * maker-checker request a second staff member must approve.
+ */
+async function creditOrRequestApproval(req: AuthRequest, input: { userId: string; currency: string; amount: string; reason: string }): Promise<CreditOutcome> {
+  const { postAdjustment, validateAdjustment, SINGLE_CONTROL_LIMIT_USD } = await import('../services/ledger/adjustments.service');
+  validateAdjustment({ userId: input.userId, currency: input.currency, amount: input.amount, direction: 'CREDIT' });
+  const { valueInUsd } = await import('../utils/kycLimits');
+  const usd = await valueInUsd(input.amount, input.currency);
+  if (usd > SINGLE_CONTROL_LIMIT_USD()) {
+    const { requestApproval } = await import('../services/platform/approvals.service');
+    const { loadStaffContext } = await import('../services/platform/rbac');
+    const staff = await loadStaffContext(req.user!.id);
+    if (!staff) throw new AppError('Staff access required', 403);
+    const approval = await requestApproval({
+      type: 'LEDGER_ADJUSTMENT',
+      payload: { userId: input.userId, currency: input.currency, amount: input.amount, direction: 'CREDIT' },
+      reason: input.reason.length >= 10 ? input.reason : `Manual credit: ${input.reason}`,
+      requestedById: req.user!.id,
+      subjectType: 'USER',
+      subjectId: input.userId,
+      permissions: staff.permissions,
+      req,
+    });
+    return { pendingApproval: true, approvalId: approval.id };
+  }
+  const result = await postAdjustment({
+    userId: input.userId, currency: input.currency, amount: input.amount, direction: 'CREDIT', reason: input.reason,
+    requestedById: req.user!.id, approvedById: req.user!.id,
+  });
+  return { pendingApproval: false, reference: result.reference, ledgerGroupId: result.ledgerGroupId };
 }
 
 export class AdminController {
@@ -296,10 +339,12 @@ export class AdminController {
 
       const baseU  = base.toUpperCase()  as any;
       const quoteU = quote.toUpperCase() as any;
+      const reason = typeof req.body?.reason === 'string' && req.body.reason.trim() ? req.body.reason.trim() : 'Manual rate set from admin console';
+      const previous = await prisma.exchangeRate.findUnique({ where: { baseCurrency_quoteCurrency: { baseCurrency: baseU, quoteCurrency: quoteU } } });
       const rate = await prisma.exchangeRate.upsert({
         where:  { baseCurrency_quoteCurrency: { baseCurrency: baseU, quoteCurrency: quoteU } },
-        update: { buyPrice: data.buyPrice, sellPrice: data.sellPrice, setBy: req.user!.id, isActive: true },
-        create: { baseCurrency: baseU, quoteCurrency: quoteU, buyPrice: data.buyPrice, sellPrice: data.sellPrice, setBy: req.user!.id, isActive: true },
+        update: { buyPrice: data.buyPrice, sellPrice: data.sellPrice, setBy: req.user!.id, isActive: true, overrideReason: reason, overrideExpiresAt: null },
+        create: { baseCurrency: baseU, quoteCurrency: quoteU, buyPrice: data.buyPrice, sellPrice: data.sellPrice, setBy: req.user!.id, isActive: true, overrideReason: reason },
       });
 
       const { invalidateRate } = await import('../services/exchange/fxRateProvider.service');
@@ -311,8 +356,10 @@ export class AdminController {
       const io = req.app.get('io');
       if (io) io.to('prices').emit('price:update', { baseCurrency: rate.baseCurrency, quoteCurrency: rate.quoteCurrency, buyPrice: rate.buyPrice, sellPrice: rate.sellPrice });
 
-      await prisma.auditLog.create({
-        data: { userId: req.user!.id, action: 'UPDATE_RATE', entity: 'ExchangeRate', entityId: rate.id, newValues: { buyPrice: data.buyPrice, sellPrice: data.sellPrice } },
+      await writeAudit(prisma, {
+        actorId: req.user!.id, action: 'UPDATE_RATE', entity: 'ExchangeRate', entityId: rate.id,
+        before: previous ? { buyPrice: previous.buyPrice, sellPrice: previous.sellPrice, isActive: previous.isActive } : null,
+        after: { pair: `${baseU}/${quoteU}`, buyPrice: data.buyPrice, sellPrice: data.sellPrice }, reason, req,
       });
       res.json({ rate });
     } catch (error) { next(error); }
@@ -411,12 +458,13 @@ export class AdminController {
       }
 
       await prisma.$transaction(async (tx: any) => {
-        const fresh = await tx.deposit.findUnique({ where: { id: deposit.id } });
-        if (!fresh || !['WAITING_CONFIRMATION', 'PENDING'].includes(fresh.status)) {
-          throw new AppError('Deposit already processed', 409);
-        }
-
-        await tx.deposit.update({ where: { id: deposit.id }, data: { status: 'CONFIRMED', confirmedAt: new Date(), confirmedBy: req.user!.id, adminNotes: req.body.notes } });
+        // Conditional transition — a concurrent confirm/reject finds the
+        // deposit already processed and nothing is credited twice.
+        const moved = await tx.deposit.updateMany({
+          where: { id: deposit.id, status: { in: ['WAITING_CONFIRMATION', 'PENDING'] } },
+          data: { status: 'CONFIRMED', confirmedAt: new Date(), confirmedBy: req.user!.id, adminNotes: req.body.notes },
+        });
+        assertTransitioned(moved, 'Deposit already processed');
         const wallet = await tx.wallet.findUnique({ where: { userId_currency: { userId: deposit.userId, currency: deposit.currency } } });
         const balanceBefore = parseFloat(wallet?.balance.toString() || '0');
         const amount = new Decimal(deposit.amount.toString());
@@ -440,6 +488,8 @@ export class AdminController {
 
         await tx.transaction.create({ data: { userId: deposit.userId, type: 'DEPOSIT', currency: deposit.currency, amount: deposit.amount, balanceBefore, balanceAfter: new Decimal(balanceBefore).add(amount), reference: deposit.reference, description: `Deposit confirmed via ${deposit.paymentMethod}` } });
         await tx.notification.create({ data: { userId: deposit.userId, title: 'Deposit Confirmed', message: `Your deposit of ${amount.toString()} ${deposit.currency} has been confirmed.`, type: 'deposit' } });
+        await recordTransition(tx, { entityType: 'DEPOSIT', entityId: deposit.id, fromState: deposit.status, toState: 'CONFIRMED', actorType: 'STAFF', actorId: req.user!.id, reason: req.body?.notes ?? null });
+        await writeAudit(tx, { actorId: req.user!.id, action: 'CONFIRM_DEPOSIT', entity: 'Deposit', entityId: deposit.id, before: { status: deposit.status }, after: { status: 'CONFIRMED', amount: deposit.amount, currency: deposit.currency }, reason: req.body?.notes ?? null, req });
       });
       res.json({ message: 'Deposit confirmed and funds credited' });
     } catch (error) { next(error); }
@@ -453,7 +503,15 @@ export class AdminController {
         throw new AppError('Deposit is not awaiting confirmation', 400);
       }
 
-      await prisma.deposit.update({ where: { id: deposit.id }, data: { status: 'REJECTED', adminNotes: req.body.reason || 'Rejected by admin', confirmedBy: req.user!.id } });
+      await prisma.$transaction(async (tx) => {
+        const moved = await tx.deposit.updateMany({
+          where: { id: deposit.id, status: { in: ['WAITING_CONFIRMATION', 'PENDING'] } },
+          data: { status: 'REJECTED', adminNotes: req.body.reason || 'Rejected by admin', confirmedBy: req.user!.id },
+        });
+        assertTransitioned(moved, 'Deposit already processed');
+        await recordTransition(tx, { entityType: 'DEPOSIT', entityId: deposit.id, fromState: deposit.status, toState: 'REJECTED', actorType: 'STAFF', actorId: req.user!.id, reason: req.body.reason || null });
+        await writeAudit(tx, { actorId: req.user!.id, action: 'REJECT_DEPOSIT', entity: 'Deposit', entityId: deposit.id, before: { status: deposit.status }, after: { status: 'REJECTED' }, reason: req.body.reason || null, req });
+      });
       await prisma.notification.create({ data: { userId: deposit.userId, title: 'Deposit Rejected', message: `Your deposit of ${deposit.amount} ${deposit.currency} has been rejected. Reason: ${req.body.reason || 'N/A'}`, type: 'deposit' } });
       res.json({ message: 'Deposit rejected' });
     } catch (error) { next(error); }
@@ -512,9 +570,7 @@ export class AdminController {
           where: { withdrawalId: withdrawal.id, decision: 'APPROVE' },
         });
         if (approvals < requiredApprovals) {
-          await prisma.auditLog.create({
-            data: { action: 'WITHDRAWAL_APPROVAL', entity: 'withdrawal', entityId: withdrawal.id, userId: req.user!.id },
-          }).catch(() => {});
+          await writeAudit(prisma, { actorId: req.user!.id, action: 'WITHDRAWAL_APPROVAL', entity: 'Withdrawal', entityId: withdrawal.id, after: { approvals, required: requiredApprovals }, reason: req.body?.notes ?? null, req });
           return res.json({
             message: `Approval recorded (${approvals}/${requiredApprovals}). Awaiting ${requiredApprovals - approvals} more admin approval(s) before release.`,
             pending: true, approvals, required: requiredApprovals,
@@ -524,13 +580,26 @@ export class AdminController {
       }
 
       await prisma.$transaction(async (tx: any) => {
-        await tx.withdrawal.update({ where: { id: withdrawal.id }, data: { status: 'COMPLETED', processedAt: new Date(), processedBy: req.user!.id, adminNotes: req.body.notes } });
+        // Claim the transition first: a second concurrent approval (another
+        // admin, a double-click) finds it no longer PENDING and pays nothing.
+        const moved = await tx.withdrawal.updateMany({
+          where: { id: withdrawal.id, status: 'PENDING' },
+          data: { status: 'COMPLETED', processedAt: new Date(), processedBy: req.user!.id, adminNotes: req.body.notes },
+        });
+        assertTransitioned(moved, 'Withdrawal already processed');
         const wallet = await tx.wallet.findUnique({ where: { userId_currency: { userId: withdrawal.userId, currency: withdrawal.currency } } });
         const balanceBefore = parseFloat(wallet?.balance.toString() || '0');
         const amount = parseFloat(withdrawal.amount.toString());
 
-        await tx.wallet.update({ where: { userId_currency: { userId: withdrawal.userId, currency: withdrawal.currency } }, data: { balance: { decrement: withdrawal.amount }, frozen: { decrement: withdrawal.amount } } });
-        await tx.transaction.create({ data: { userId: withdrawal.userId, type: 'WITHDRAWAL', currency: withdrawal.currency, amount: new Decimal(-amount), fee: withdrawal.fee, balanceBefore, balanceAfter: balanceBefore - amount, reference: withdrawal.reference, description: `Withdrawal processed` } });
+        // Spend the reservation made at request time. Refuses (409) if the
+        // reserved funds don't cover it rather than pushing the wallet negative.
+        await settleReserve(tx, withdrawal.userId, withdrawal.currency, withdrawal.amount);
+        // One history row per withdrawal: mark the request-time row completed.
+        // Withdrawals created before that row existed get one now.
+        const updatedRows = await markWithdrawalHistory(tx, withdrawal.reference, 'COMPLETED');
+        if (updatedRows === 0) {
+          await tx.transaction.create({ data: { userId: withdrawal.userId, type: 'WITHDRAWAL', currency: withdrawal.currency, amount: new Decimal(-amount), fee: withdrawal.fee, balanceBefore, balanceAfter: balanceBefore - amount, reference: withdrawal.reference, description: `Withdrawal processed`, metadata: { withdrawalId: withdrawal.id, status: 'COMPLETED' } } });
+        }
 
         // Ledger mirror: user balance leaves — net goes off-platform, fee to platform.
         if (isLedgerCurrency(withdrawal.currency)) {
@@ -544,6 +613,22 @@ export class AdminController {
               ...(feeD.gt(0) ? [{ type: 'PLATFORM' as const, currency: withdrawal.currency as any, amount: feeD }] : []),
             ],
           }, { allowNegativeUser: true });
+        }
+
+        // The fee is revenue only once the withdrawal actually completes —
+        // booking it at request time kept it even when the user cancelled or
+        // the request was rejected.
+        if (new Decimal(withdrawal.fee.toString()).gt(0)) {
+          await collectFee({
+            tx,
+            source: 'withdrawal',
+            sourceId: withdrawal.id,
+            payerId: withdrawal.userId,
+            amount: new Decimal(withdrawal.fee.toString()),
+            currency: withdrawal.currency,
+            description: `Withdrawal fee · ${withdrawal.currency}`,
+            metadata: { network: withdrawal.network ?? null },
+          });
         }
 
         // If USDT withdrawal, queue on-chain send
@@ -561,6 +646,8 @@ export class AdminController {
         }
 
         await tx.notification.create({ data: { userId: withdrawal.userId, title: 'Withdrawal Completed', message: `Your withdrawal of ${withdrawal.netAmount} ${withdrawal.currency} has been completed.${withdrawal.currency === 'USDT' ? ` USDT sent to ${withdrawal.walletAddress}` : ''}`, type: 'withdrawal' } });
+        await recordTransition(tx, { entityType: 'WITHDRAWAL', entityId: withdrawal.id, fromState: 'PENDING', toState: 'COMPLETED', actorType: 'STAFF', actorId: req.user!.id, reason: req.body?.notes ?? null });
+        await writeAudit(tx, { actorId: req.user!.id, action: 'PROCESS_WITHDRAWAL', entity: 'Withdrawal', entityId: withdrawal.id, before: { status: 'PENDING' }, after: { status: 'COMPLETED', amount: withdrawal.amount, currency: withdrawal.currency }, reason: req.body?.notes ?? null, req });
       });
       res.json({ message: 'Withdrawal processed' });
     } catch (error) { next(error); }
@@ -576,9 +663,16 @@ export class AdminController {
       // releases the `frozen` reservation — no real balance ever moved (the
       // settlement, which does move money, is the only ledgered withdrawal step).
       await prisma.$transaction(async (tx) => {
-        await tx.wallet.update({ where: { userId_currency: { userId: withdrawal.userId, currency: withdrawal.currency } }, data: { frozen: { decrement: withdrawal.amount } } });
-        await tx.withdrawal.update({ where: { id: withdrawal.id }, data: { status: 'REJECTED', adminNotes: req.body.reason || 'Rejected by admin', processedBy: req.user!.id } });
+        const moved = await tx.withdrawal.updateMany({
+          where: { id: withdrawal.id, status: 'PENDING' },
+          data: { status: 'REJECTED', adminNotes: req.body.reason || 'Rejected by admin', processedBy: req.user!.id },
+        });
+        assertTransitioned(moved, 'Withdrawal already processed');
+        await releaseReserve(tx, withdrawal.userId, withdrawal.currency, withdrawal.amount);
+        await markWithdrawalHistory(tx, withdrawal.reference, 'REJECTED');
         await tx.notification.create({ data: { userId: withdrawal.userId, title: 'Withdrawal Rejected', message: `Your withdrawal has been rejected. Reason: ${req.body.reason || 'N/A'}`, type: 'withdrawal' } });
+        await recordTransition(tx, { entityType: 'WITHDRAWAL', entityId: withdrawal.id, fromState: 'PENDING', toState: 'REJECTED', actorType: 'STAFF', actorId: req.user!.id, reason: req.body.reason || null });
+        await writeAudit(tx, { actorId: req.user!.id, action: 'REJECT_WITHDRAWAL', entity: 'Withdrawal', entityId: withdrawal.id, before: { status: 'PENDING' }, after: { status: 'REJECTED' }, reason: req.body.reason || null, req });
       });
       res.json({ message: 'Withdrawal rejected and funds unfrozen' });
     } catch (error) { next(error); }
@@ -591,11 +685,16 @@ export class AdminController {
       const limit = parseInt(req.query.limit as string) || 20;
       const status = req.query.status as string | undefined;
       const where: any = { kycStatus: { not: 'NOT_SUBMITTED' } };
-      if (status) where.kycStatus = status.toUpperCase();
+      // PENDING also covers verified customers asking for a higher level
+      // (they stay APPROVED while their new documents are reviewed).
+      if (status?.toUpperCase() === 'PENDING') {
+        where.kycStatus = undefined;
+        where.OR = [{ kycStatus: 'PENDING' }, { kycStatus: 'APPROVED', kycDocuments: { some: { status: 'PENDING' } } }];
+      } else if (status) where.kycStatus = status.toUpperCase();
 
       const [users, total] = await Promise.all([
         prisma.user.findMany({
-          where, select: { id: true, email: true, firstName: true, lastName: true, phone: true, kycStatus: true, createdAt: true, kycDocuments: true },
+          where, select: { id: true, email: true, firstName: true, lastName: true, phone: true, kycStatus: true, kycTier: true, createdAt: true, kycDocuments: true },
           orderBy: { createdAt: 'desc' }, skip: (page - 1) * limit, take: limit,
         }),
         prisma.user.count({ where }),
@@ -606,7 +705,16 @@ export class AdminController {
 
   static async approveKYC(req: AuthRequest, res: Response, next: NextFunction) {
     try {
-      await prisma.user.update({ where: { id: req.params.userId }, data: { kycStatus: 'APPROVED' } });
+      // The tier drives every transaction limit, so approval must set it.
+      // Identity documents alone justify TIER_1; the reviewer passes TIER_2
+      // (address verified) or TIER_3 (source of funds reviewed) explicitly.
+      const { tier } = z.object({
+        tier: z.enum(['TIER_1', 'TIER_2', 'TIER_3']).default('TIER_1'),
+      }).parse(req.body ?? {});
+      const before = await prisma.user.findUnique({ where: { id: req.params.userId }, select: { kycStatus: true, kycTier: true } });
+      if (!before) throw new AppError('User not found', 404);
+      await prisma.user.update({ where: { id: req.params.userId }, data: { kycStatus: 'APPROVED', kycTier: tier } });
+      await writeAudit(prisma, { actorId: req.user!.id, action: 'KYC_APPROVE', entity: 'User', entityId: req.params.userId, before, after: { kycStatus: 'APPROVED', kycTier: tier }, reason: req.body?.note ?? null, req });
       await prisma.kYCDocument.updateMany({ where: { userId: req.params.userId, status: 'PENDING' }, data: { status: 'APPROVED', reviewedBy: req.user!.id, reviewedAt: new Date() } });
       await prisma.notification.create({ data: { userId: req.params.userId, title: 'KYC Approved', message: 'Your identity verification has been approved. You can now trade.', type: 'kyc' } });
       res.json({ message: 'KYC approved' });
@@ -615,7 +723,19 @@ export class AdminController {
 
   static async rejectKYC(req: AuthRequest, res: Response, next: NextFunction) {
     try {
-      await prisma.user.update({ where: { id: req.params.userId }, data: { kycStatus: 'REJECTED' } });
+      const before = await prisma.user.findUnique({ where: { id: req.params.userId }, select: { kycStatus: true, kycTier: true } });
+      if (!before) throw new AppError('User not found', 404);
+      // Declining a verified customer's request for a higher level leaves the
+      // level they already have; only the new documents are rejected.
+      if (before.kycStatus === 'APPROVED') {
+        await prisma.kYCDocument.updateMany({ where: { userId: req.params.userId, status: 'PENDING' }, data: { status: 'REJECTED', rejectionReason: req.body.reason, reviewedBy: req.user!.id, reviewedAt: new Date() } });
+        await writeAudit(prisma, { actorId: req.user!.id, action: 'KYC_UPGRADE_REJECT', entity: 'User', entityId: req.params.userId, before, after: before, reason: req.body?.reason ?? null, req });
+        await prisma.notification.create({ data: { userId: req.params.userId, title: 'Limit increase declined', message: `We couldn't raise your verification level. Reason: ${req.body.reason || 'N/A'}. Your current limits are unchanged.`, type: 'kyc' } });
+        res.json({ message: 'Upgrade request rejected; current level kept' });
+        return;
+      }
+      await prisma.user.update({ where: { id: req.params.userId }, data: { kycStatus: 'REJECTED', kycTier: 'TIER_0' } });
+      await writeAudit(prisma, { actorId: req.user!.id, action: 'KYC_REJECT', entity: 'User', entityId: req.params.userId, before, after: { kycStatus: 'REJECTED', kycTier: 'TIER_0' }, reason: req.body?.reason ?? null, req });
       await prisma.kYCDocument.updateMany({ where: { userId: req.params.userId, status: 'PENDING' }, data: { status: 'REJECTED', rejectionReason: req.body.reason, reviewedBy: req.user!.id, reviewedAt: new Date() } });
       await prisma.notification.create({ data: { userId: req.params.userId, title: 'KYC Rejected', message: `Your identity verification was rejected. Reason: ${req.body.reason || 'N/A'}`, type: 'kyc' } });
       res.json({ message: 'KYC rejected' });
@@ -646,6 +766,12 @@ export class AdminController {
         })).max(12).optional(),
       });
       const data = schema.parse(req.body);
+      // Opening balances are controlled adjustments (validated before the
+      // account exists so a bad currency doesn't leave a half-created user).
+      if (data.initialBalances?.length) {
+        const { validateAdjustment } = await import('../services/ledger/adjustments.service');
+        for (const b of data.initialBalances) validateAdjustment({ userId: 'new-user', currency: b.currency.toUpperCase(), amount: b.amount, direction: 'CREDIT' });
+      }
       const email = data.email.trim().toLowerCase();
       const phoneDigits = data.phone?.replace(/\D/g, '') ?? '';
       const normalisedPhone = data.phoneCountryCode && phoneDigits ? `+${data.phoneCountryCode}${phoneDigits}` : null;
@@ -665,7 +791,6 @@ export class AdminController {
       const generatedPassword = data.password ? null : adminTempPassword();
       const passwordHash = await bcrypt.hash(data.password || generatedPassword!, 12);
       const referralCode = generateReferralCode();
-      const referenceBase = `ADMIN-ONBOARD-${Date.now()}`;
 
       const user = await prisma.$transaction(async (tx: any) => {
         const created = await tx.user.create({
@@ -696,43 +821,6 @@ export class AdminController {
           data: INITIAL_CURRENCIES.map((currency) => ({ userId: created.id, currency })),
           skipDuplicates: true,
         });
-
-        for (const [idx, row] of (data.initialBalances ?? []).entries()) {
-          const cur = row.currency.toUpperCase() as any;
-          const dec = new Decimal(row.amount);
-          const wallet = await tx.wallet.upsert({
-            where: { userId_currency: { userId: created.id, currency: cur } },
-            create: { userId: created.id, currency: cur, balance: dec },
-            update: { balance: { increment: dec } },
-          });
-          const ref = `${referenceBase}-${idx + 1}`;
-          const memo = `[admin-onboard] ${data.note || data.relationship || 'Opening balance'}`;
-          if (isLedgerCurrency(String(cur))) {
-            await postLedger(tx, {
-              refType: 'admin_onboard_credit',
-              refId: ref,
-              memo,
-              legs: [
-                { type: 'SYSTEM_ONRAMP', currency: cur, amount: dec.neg() },
-                { type: 'USER', userId: created.id, currency: cur, amount: dec },
-              ],
-            });
-          }
-          await tx.transaction.create({
-            data: {
-              userId: created.id,
-              type: 'ADMIN_CREDIT',
-              currency: cur,
-              amount: dec,
-              fee: new Decimal(0),
-              balanceBefore: new Decimal(wallet.balance).minus(dec),
-              balanceAfter: wallet.balance,
-              reference: ref,
-              description: memo,
-              metadata: { createdByAdmin: req.user!.id, relationship: data.relationship || null } as any,
-            },
-          });
-        }
 
         await tx.auditLog.create({
           data: {
@@ -769,12 +857,22 @@ export class AdminController {
         console.error('[wallet] createUserWallets failed for admin-created user', user.id, e);
       });
 
+      // Same control as a manual credit: posted against ADJUSTMENT up to the
+      // single-control limit, otherwise queued for a second approver. (Opening
+      // balances used to be booked as outside money by one person, CL-48.)
+      const openingBalances: Array<{ currency: string; amount: number } & CreditOutcome> = [];
+      for (const b of data.initialBalances ?? []) {
+        const reason = `Opening balance at onboarding: ${data.note || data.relationship || 'no note'}`.slice(0, 500);
+        const outcome = await creditOrRequestApproval(req, { userId: user.id, currency: b.currency.toUpperCase(), amount: String(b.amount), reason });
+        openingBalances.push({ currency: b.currency.toUpperCase(), amount: b.amount, ...outcome });
+      }
+      const queued = openingBalances.filter((b) => b.pendingApproval).length;
+
       res.status(201).json({
         user,
+        openingBalances,
         temporaryPassword: generatedPassword,
-        message: generatedPassword
-          ? 'User created. Temporary password returned once.'
-          : 'User created.',
+        message: `${generatedPassword ? 'User created. Temporary password returned once.' : 'User created.'}${queued ? ` ${queued} opening balance${queued > 1 ? 's' : ''} above the single-control limit await a second approver.` : ''}`,
       });
     } catch (error) { next(error); }
   }
@@ -833,7 +931,13 @@ export class AdminController {
     try {
       const { status } = req.body;
       if (!['ACTIVE', 'SUSPENDED', 'BANNED'].includes(status)) throw new AppError('Invalid status', 400);
+      const before = await prisma.user.findUnique({ where: { id: req.params.id }, select: { status: true, role: true } });
+      if (!before) throw new AppError('User not found', 404);
+      if (before.role === 'ADMIN' && status !== 'ACTIVE' && req.params.id === req.user!.id) {
+        throw new AppError('You cannot suspend your own staff account', 400);
+      }
       await prisma.user.update({ where: { id: req.params.id }, data: { status } });
+      await writeAudit(prisma, { actorId: req.user!.id, action: 'UPDATE_USER_STATUS', entity: 'User', entityId: req.params.id, before: { status: before.status }, after: { status }, reason: req.body?.reason ?? null, req });
       // A ban/suspension must take effect NOW, not when the access token
       // expires — kill refresh tokens and live access tokens together.
       if (status !== 'ACTIVE') {
@@ -893,10 +997,12 @@ export class AdminController {
             throw new AppError('card_physical_order_fee must be a number of at least 20 (USD)', 400);
           }
         }
+        const previous = await prisma.platformSettings.findUnique({ where: { key } });
         await prisma.platformSettings.upsert({
           where: { key }, update: { value: String(value), updatedBy: req.user!.id },
           create: { key, value: String(value), updatedBy: req.user!.id },
         });
+        await writeAudit(prisma, { actorId: req.user!.id, action: 'UPDATE_SETTING', entity: 'PlatformSettings', entityId: key, before: previous ? { value: previous.value } : null, after: { value: String(value) }, reason: req.body?.reason ?? null, req });
       }
       if (Object.prototype.hasOwnProperty.call(settings, SPREAD_SETTING_KEY)) {
         invalidateSpreadCache();
@@ -932,22 +1038,25 @@ export class AdminController {
     } catch (error) { next(error); }
   }
 
-  // Admin acknowledges a fund-integrity breach as a legitimate credit
-  // reconciliation. Posts the balancing admin-credit double-entry so the books
-  // balance and future audits pass. Refuses negative diffs (a leak — must be
-  // investigated, never papered over). Audit-logged inside reconcileBreach.
+  // Acknowledge a currency's historical unbacked value after investigation.
+  // Moves no money (the old version booked an admin credit to make the
+  // warning go away); records who looked and what they found, so any later
+  // unbacked value stands out. Audit-logged inside acknowledgeBaseline.
   static async reconcileFundIntegrity(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const schema = z.object({
         currency: z.string().min(1).max(10),
-        note: z.string().max(500).optional(),
+        note: z.string().min(10, 'Write what was found (at least 10 characters)').max(500),
       });
       const { currency, note } = schema.parse(req.body);
-      const { reconcileBreach } = await import('../services/ledger/fundIntegrity.service');
-      const result = await reconcileBreach({ currency, adminId: req.user!.id, note });
+      const { acknowledgeBaseline } = await import('../services/ledger/fundIntegrity.service');
+      const result = await acknowledgeBaseline({ currency, staffId: req.user!.id, note, req });
       res.json({
-        message: `Reconciled ${result.reconciledAmount} ${result.currency} as an admin credit.`,
+        message: `Acknowledged ${result.acknowledgedAmount} ${result.currency} of historical unbacked value. No money moved.`,
         ...result,
+        // Fields the older admin app reads.
+        reconciledAmount: result.acknowledgedAmount,
+        diffAfter: result.unbackedSinceBaseline,
       });
     } catch (error) { next(error); }
   }
@@ -1308,10 +1417,14 @@ export class AdminController {
   static async assignEscalation(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const { id } = req.params;
-      const updated = await (prisma as any).supportEscalation.update({
-        where: { id },
+      // Conditional: only an OPEN/ASSIGNED escalation can be (re)assigned.
+      const moved = await prisma.supportEscalation.updateMany({
+        where: { id, status: { in: ['OPEN', 'ASSIGNED'] } },
         data: { status: 'ASSIGNED', assignedAgentId: req.user!.id },
       });
+      if (moved.count !== 1) throw new AppError('Escalation is already closed or does not exist', 409);
+      const updated = await prisma.supportEscalation.findUnique({ where: { id } });
+      await writeAudit(prisma, { actorId: req.user!.id, action: 'ESCALATION_ASSIGNED', entity: 'SupportEscalation', entityId: id, after: { assignedAgentId: req.user!.id }, req });
       res.json({ escalation: updated });
     } catch (error) { next(error); }
   }
@@ -1321,10 +1434,14 @@ export class AdminController {
     try {
       const { id } = req.params;
       const note = typeof req.body?.resolutionNote === 'string' ? req.body.resolutionNote : null;
-      const updated = await (prisma as any).supportEscalation.update({
-        where: { id },
+      // Conditional: a second resolve must not post the system notice twice.
+      const moved = await prisma.supportEscalation.updateMany({
+        where: { id, status: { in: ['OPEN', 'ASSIGNED'] } },
         data: { status: 'RESOLVED', resolutionNote: note, resolvedAt: new Date(), assignedAgentId: req.user!.id },
       });
+      if (moved.count !== 1) throw new AppError('Escalation is already resolved or does not exist', 409);
+      const updated = await prisma.supportEscalation.findUniqueOrThrow({ where: { id } });
+      await writeAudit(prisma, { actorId: req.user!.id, action: 'ESCALATION_RESOLVED', entity: 'SupportEscalation', entityId: id, after: { status: 'RESOLVED' }, reason: note ?? undefined, req });
 
       // Drop a SYSTEM notice into both participants' threads
       const support = await prisma.user.findFirst({ where: { username: 'support' }, select: { id: true } });
@@ -1430,48 +1547,41 @@ export class AdminController {
     } catch (error) { next(error); }
   }
 
-  /** Freeze a user — server-side this maps to SUSPENDED status. */
+  /**
+   * Freeze a user: status SUSPENDED, every session revoked, and a USER-scope
+   * control so no money path accepts their activity even before outstanding
+   * access tokens expire.
+   *
+   * Wallet `frozen` amounts are NOT touched. They hold specific reservations
+   * (pending withdrawals, budget locks, claim links, P2P escrow); overwriting
+   * them used to destroy those reservations on unfreeze.
+   */
   static async freezeUser(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const { id } = req.params;
-      const reason = (req.body?.reason as string | undefined)?.trim();
-      const user = await prisma.user.findUnique({ where: { id }, select: { id: true, email: true, role: true } });
+      const reason = (req.body?.reason as string | undefined)?.trim() || 'Frozen pending review';
+      const user = await prisma.user.findUnique({ where: { id }, select: { id: true, email: true, role: true, status: true } });
       if (!user) throw new AppError('User not found', 404);
       if (user.role === 'ADMIN') {
         throw new AppError('Cannot freeze admin accounts', 403);
       }
 
       await prisma.user.update({ where: { id }, data: { status: 'SUSPENDED' } });
-      {
-        const { revokeAllUserSessions } = await import('../middleware/auth');
-        await revokeAllUserSessions(id);
-      }
+      const { revokeAllUserSessions } = await import('../middleware/auth');
+      await revokeAllUserSessions(id);
+      const { setControl } = await import('../services/platform/controls.service');
+      await setControl({ scope: 'USER', key: id, blocked: true, reason: `Account frozen: ${reason}`, actorId: req.user!.id, req });
 
-      // Freeze every wallet's full balance so they can't withdraw or trade
-      const wallets = await prisma.wallet.findMany({ where: { userId: id } });
-      for (const w of wallets) {
-        await prisma.wallet.update({
-          where: { id: w.id },
-          data:  { frozen: w.balance },
-        });
-      }
-
-      await prisma.auditLog.create({
-        data: {
-          userId: req.user!.id,
-          action: 'FREEZE_USER',
-          entity: 'User',
-          entityId: id,
-          newValues: { status: 'SUSPENDED', reason: reason ?? null },
-        },
+      await writeAudit(prisma, {
+        actorId: req.user!.id, action: 'FREEZE_USER', entity: 'User', entityId: id,
+        before: { status: user.status }, after: { status: 'SUSPENDED' }, reason, req,
       });
 
-      // Notify the affected user
       await prisma.notification.create({
         data: {
           userId: id,
           title:   'Account Frozen',
-          message: reason ? `Your account has been frozen by support: ${reason}` : 'Your account has been frozen pending review. Contact support.',
+          message: req.body?.reason ? `Your account has been frozen by support: ${reason}` : 'Your account has been frozen pending review. Contact support.',
           type:    'security',
         },
       });
@@ -1480,21 +1590,21 @@ export class AdminController {
     } catch (error) { next(error); }
   }
 
-  /** Unfreeze: restore ACTIVE status and zero out frozen balances. */
+  /** Unfreeze: restore ACTIVE status and lift the account-level control. */
   static async unfreezeUser(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const { id } = req.params;
-      const user = await prisma.user.findUnique({ where: { id }, select: { id: true } });
+      const reason = (req.body?.reason as string | undefined)?.trim() || 'Unfrozen via admin console';
+      const user = await prisma.user.findUnique({ where: { id }, select: { id: true, status: true } });
       if (!user) throw new AppError('User not found', 404);
 
       await prisma.user.update({ where: { id }, data: { status: 'ACTIVE' } });
-      const wallets = await prisma.wallet.findMany({ where: { userId: id } });
-      for (const w of wallets) {
-        await prisma.wallet.update({ where: { id: w.id }, data: { frozen: 0 } });
-      }
+      const { setControl } = await import('../services/platform/controls.service');
+      await setControl({ scope: 'USER', key: id, blocked: false, reason, actorId: req.user!.id, req });
 
-      await prisma.auditLog.create({
-        data: { userId: req.user!.id, action: 'UNFREEZE_USER', entity: 'User', entityId: id, newValues: { status: 'ACTIVE' } },
+      await writeAudit(prisma, {
+        actorId: req.user!.id, action: 'UNFREEZE_USER', entity: 'User', entityId: id,
+        before: { status: user.status }, after: { status: 'ACTIVE' }, reason, req,
       });
 
       await prisma.notification.create({
@@ -1511,30 +1621,57 @@ export class AdminController {
   }
 
   /**
-   * Freeze an individual order/withdrawal/deposit — sets its status
-   * to FROZEN-equivalent (CANCELLED + audit note for traceability).
+   * Stop an in-flight order, withdrawal or deposit. Only objects still
+   * awaiting processing can be stopped; completed money movements are never
+   * rewritten (corrections are separate reversing entries). Stopping a
+   * pending withdrawal releases its reservation in the same transaction.
    */
   static async freezeTransaction(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const { kind, id } = req.params;
-      const reason = (req.body?.reason as string | undefined)?.trim() ?? 'Frozen by admin';
+      const reason = (req.body?.reason as string | undefined)?.trim() || 'Frozen by admin';
+      const actorId = req.user!.id;
 
       switch (kind) {
         case 'order': {
-          const updated = await prisma.order.update({ where: { id }, data: { status: 'CANCELLED' } });
-          await prisma.auditLog.create({ data: { userId: req.user!.id, action: 'FREEZE_ORDER',      entity: 'Order',      entityId: id, newValues: { reason } } });
+          const updated = await prisma.$transaction(async (tx) => {
+            const moved = await tx.order.updateMany({ where: { id, status: 'PENDING' }, data: { status: 'CANCELLED' } });
+            assertTransitioned(moved, 'Only pending orders can be stopped');
+            await recordTransition(tx, { entityType: 'ORDER', entityId: id, fromState: 'PENDING', toState: 'CANCELLED', actorType: 'STAFF', actorId, reason });
+            await writeAudit(tx, { actorId, action: 'FREEZE_ORDER', entity: 'Order', entityId: id, before: { status: 'PENDING' }, after: { status: 'CANCELLED' }, reason, req });
+            return tx.order.findUniqueOrThrow({ where: { id } });
+          });
           res.json({ transaction: updated });
           return;
         }
         case 'withdrawal': {
-          const updated = await prisma.withdrawal.update({ where: { id }, data: { status: 'CANCELLED', adminNotes: reason } });
-          await prisma.auditLog.create({ data: { userId: req.user!.id, action: 'FREEZE_WITHDRAWAL', entity: 'Withdrawal', entityId: id, newValues: { reason } } });
+          const updated = await prisma.$transaction(async (tx) => {
+            const w = await tx.withdrawal.findUnique({ where: { id } });
+            if (!w) throw new AppError('Withdrawal not found', 404);
+            const moved = await tx.withdrawal.updateMany({ where: { id, status: 'PENDING' }, data: { status: 'CANCELLED', adminNotes: reason, processedBy: actorId } });
+            assertTransitioned(moved, 'Only pending withdrawals can be stopped');
+            await releaseReserve(tx, w.userId, w.currency, w.amount);
+            await markWithdrawalHistory(tx, w.reference, 'CANCELLED');
+            await recordTransition(tx, { entityType: 'WITHDRAWAL', entityId: id, fromState: 'PENDING', toState: 'CANCELLED', actorType: 'STAFF', actorId, reason });
+            await writeAudit(tx, { actorId, action: 'FREEZE_WITHDRAWAL', entity: 'Withdrawal', entityId: id, before: { status: 'PENDING' }, after: { status: 'CANCELLED', reservationReleased: w.amount }, reason, req });
+            return tx.withdrawal.findUniqueOrThrow({ where: { id } });
+          });
           res.json({ transaction: updated });
           return;
         }
         case 'deposit': {
-          const updated = await prisma.deposit.update({ where: { id }, data: { status: 'REJECTED', adminNotes: reason } });
-          await prisma.auditLog.create({ data: { userId: req.user!.id, action: 'FREEZE_DEPOSIT',     entity: 'Deposit',    entityId: id, newValues: { reason } } });
+          const updated = await prisma.$transaction(async (tx) => {
+            const d = await tx.deposit.findUnique({ where: { id }, select: { status: true } });
+            if (!d) throw new AppError('Deposit not found', 404);
+            const moved = await tx.deposit.updateMany({
+              where: { id, status: { in: ['WAITING_CONFIRMATION', 'PENDING'] } },
+              data: { status: 'REJECTED', adminNotes: reason, confirmedBy: actorId },
+            });
+            assertTransitioned(moved, 'Only deposits awaiting confirmation can be stopped');
+            await recordTransition(tx, { entityType: 'DEPOSIT', entityId: id, fromState: d.status, toState: 'REJECTED', actorType: 'STAFF', actorId, reason });
+            await writeAudit(tx, { actorId, action: 'FREEZE_DEPOSIT', entity: 'Deposit', entityId: id, before: { status: d.status }, after: { status: 'REJECTED' }, reason, req });
+            return tx.deposit.findUniqueOrThrow({ where: { id } });
+          });
           res.json({ transaction: updated });
           return;
         }
@@ -1694,79 +1831,33 @@ export class AdminController {
   }
 
   /**
-   * Production-safe manual balance credit.
-   * Credits a wallet and records a Transaction + notification.
-   * Works in all environments (unlike seedBalance).
+   * Manual balance credit — a controlled ledger adjustment (USER ⟷ ADJUSTMENT).
+   * Up to MANUAL_ADJUSTMENT_SINGLE_USD it posts immediately; above that it
+   * becomes a maker-checker request that a second staff member must approve.
    */
   static async manualCredit(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const schema = z.object({
         userId:   z.string().uuid(),
         currency: z.string().min(1).max(10).toUpperCase(),
-        amount:   z.number().positive(),
+        amount:   z.union([z.number().positive(), z.string().min(1)]),
         note:     z.string().max(500).optional(),
       });
       const { userId, currency, amount, note } = schema.parse(req.body);
+      const reason = note?.trim() || 'Manual adjustment';
 
-      const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true } });
-      if (!user) throw new AppError('User not found', 404);
-
-      const dec = new Decimal(amount);
-      const cur = currency as any;
-      const reference = `ADMIN-${Date.now()}`;
-      const description = `[admin-credit] ${note ?? 'Manual adjustment'}`;
-
-      await prisma.$transaction(async (tx: any) => {
-        const wallet = await tx.wallet.upsert({
-          where:  { userId_currency: { userId, currency: cur } },
-          create: { userId, currency: cur, balance: dec },
-          update: { balance: { increment: dec } },
+      const outcome = await creditOrRequestApproval(req, { userId, currency, amount: String(amount), reason });
+      if (outcome.pendingApproval) {
+        const { SINGLE_CONTROL_LIMIT_USD } = await import('../services/ledger/adjustments.service');
+        res.status(202).json({
+          ok: true,
+          pendingApproval: true,
+          approvalId: outcome.approvalId,
+          message: `Credits above ${SINGLE_CONTROL_LIMIT_USD()} USD need a second approver. Request ${outcome.approvalId} is waiting in the cockpit approvals queue.`,
         });
-        // Ledger mirror: admin credit is external money entering the system.
-        if (isLedgerCurrency(currency)) {
-          await postLedger(tx, {
-            refType: 'admin_credit', refId: reference, memo: description,
-            legs: [
-              { type: 'SYSTEM_ONRAMP', currency: cur, amount: dec.neg() },
-              { type: 'USER', userId, currency: cur, amount: dec },
-            ],
-          });
-        }
-        const balanceBefore = Number(wallet.balance) - amount;
-        await tx.transaction.create({
-          data: {
-            userId,
-            type:          'DEPOSIT',
-            currency:      cur,
-            amount:        dec,
-            fee:           new Decimal(0),
-            balanceBefore,
-            balanceAfter:  Number(wallet.balance),
-            description,
-            reference,
-          },
-        });
-        await tx.notification.create({
-          data: {
-            userId,
-            title:   `Funds credited: ${amount} ${currency}`,
-            message: description,
-            type:    'deposit',
-          },
-        });
-      });
-
-      await prisma.auditLog.create({
-        data: {
-          userId:    req.user!.id,
-          action:    'MANUAL_CREDIT',
-          entity:    'Wallet',
-          entityId:  userId,
-          newValues: { currency, amount, note: note ?? null, reference },
-        },
-      });
-
-      res.json({ ok: true, userId, currency, amount, reference });
+        return;
+      }
+      res.json({ ok: true, userId, currency, amount, reference: outcome.reference, ledgerGroupId: outcome.ledgerGroupId });
     } catch (error) { next(error); }
   }
 

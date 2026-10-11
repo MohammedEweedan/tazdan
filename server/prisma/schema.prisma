@@ -35,6 +35,9 @@ enum UserStatus {
   ACTIVE
   SUSPENDED
   BANNED
+  /// Closed at the customer's request (in-app account deletion). Sign-in is
+  /// refused; personal data is anonymised once erasureDueAt passes.
+  CLOSED
 }
 
 enum KYCStatus {
@@ -147,7 +150,7 @@ enum RecurringFrequency {
 
 enum RecurringSourceType {
   WALLET // debit the user's fiat wallet balance
-  CARD   // charge a saved card / payment method
+  CARD // charge a saved card / payment method
 }
 
 enum RecurringBuyStatus {
@@ -157,30 +160,30 @@ enum RecurringBuyStatus {
 }
 
 model RecurringBuy {
-  id            String              @id @default(uuid())
-  userId        String
+  id           String              @id @default(uuid())
+  userId       String
   // What to buy
-  asset         String // ticker, e.g. "BTC" — matches exchange engine asset
-  network       String // default network for the asset, e.g. "BTC", "ERC20"
+  asset        String // ticker, e.g. "BTC" — matches exchange engine asset
+  network      String // default network for the asset, e.g. "BTC", "ERC20"
   // How much, in the user's preferred fiat currency
-  fiatCurrency  Currency
-  fiatAmount    Decimal             @db.Decimal(20, 8)
+  fiatCurrency Currency
+  fiatAmount   Decimal             @db.Decimal(20, 8)
   // Cadence
-  frequency     RecurringFrequency
+  frequency    RecurringFrequency
   // Funding
-  sourceType    RecurringSourceType
-  sourceId      String? // wallet currency or card id, depending on sourceType
+  sourceType   RecurringSourceType
+  sourceId     String? // wallet currency or card id, depending on sourceType
   // Lifecycle
-  status        RecurringBuyStatus  @default(ACTIVE)
-  nextRunAt     DateTime // when the scheduler should next execute this
-  lastRunAt     DateTime?
-  lastError     String? // last execution failure reason, if any
-  runCount      Int                 @default(0)
-  failureCount  Int                 @default(0)
-  createdAt     DateTime            @default(now())
-  updatedAt     DateTime            @updatedAt
+  status       RecurringBuyStatus  @default(ACTIVE)
+  nextRunAt    DateTime // when the scheduler should next execute this
+  lastRunAt    DateTime?
+  lastError    String? // last execution failure reason, if any
+  runCount     Int                 @default(0)
+  failureCount Int                 @default(0)
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
 
-  user          User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([status, nextRunAt])
@@ -191,17 +194,17 @@ model RecurringBuy {
 /// and/or behind a step-up (2FA/email) code. Funds are held as frozen on the
 /// user's spendable wallet so net-spendable = balance - frozen stays correct.
 model BudgetWallet {
-  id                 String              @id @default(uuid())
-  userId             String
-  name               String
-  emoji              String?
-  currency           Currency
-  balance            Decimal             @default(0) @db.Decimal(20, 8)
-  targetAmount       Decimal?            @db.Decimal(20, 8)
-  targetDate         DateTime?
+  id           String    @id @default(uuid())
+  userId       String
+  name         String
+  emoji        String?
+  currency     Currency
+  balance      Decimal   @default(0) @db.Decimal(20, 8)
+  targetAmount Decimal?  @db.Decimal(20, 8)
+  targetDate   DateTime?
 
-  lockType           BudgetLockType      @default(NONE)
-  unlockDate         DateTime?
+  lockType   BudgetLockType @default(NONE)
+  unlockDate DateTime?
 
   autoEnabled        Boolean             @default(false)
   autoAmount         Decimal?            @db.Decimal(20, 8)
@@ -211,12 +214,12 @@ model BudgetWallet {
   lastRunAt          DateTime?
   lastError          String?
 
-  status             BudgetWalletStatus  @default(ACTIVE)
-  createdAt          DateTime            @default(now())
-  updatedAt          DateTime            @updatedAt
+  status    BudgetWalletStatus @default(ACTIVE)
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
 
-  user               User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
-  contributions      BudgetContribution[]
+  user          User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  contributions BudgetContribution[]
 
   @@index([userId])
   @@index([status, autoEnabled, nextRunAt])
@@ -225,8 +228,8 @@ model BudgetWallet {
 model BudgetContribution {
   id        String       @id @default(uuid())
   budgetId  String
-  amount    Decimal      @db.Decimal(20, 8)  // negative for withdrawals/releases
-  kind      String                            // MANUAL | AUTO | WITHDRAWAL
+  amount    Decimal      @db.Decimal(20, 8) // negative for withdrawals/releases
+  kind      String // MANUAL | AUTO | WITHDRAWAL
   createdAt DateTime     @default(now())
   budget    BudgetWallet @relation(fields: [budgetId], references: [id], onDelete: Cascade)
 
@@ -269,7 +272,7 @@ enum CardTxType {
 }
 
 enum CardOrderStatus {
-  NONE      // virtual only — no physical card requested
+  NONE // virtual only — no physical card requested
   REQUESTED // user paid the fee, awaiting print
   PRINTING
   SHIPPED
@@ -284,6 +287,9 @@ model User {
   firstName                    String
   lastName                     String
   role                         UserRole                     @default(USER)
+  /// Least-privilege cockpit roles. An ADMIN with no staff roles is treated as
+  /// SUPER_ADMIN for backward compatibility with the mobile admin console.
+  staffRoles                   StaffRole[]                  @default([])
   accountType                  AccountType                  @default(PERSONAL)
   status                       UserStatus                   @default(PENDING)
   kycStatus                    KYCStatus                    @default(NOT_SUBMITTED)
@@ -360,6 +366,12 @@ model User {
   baseCurrency                 Currency                     @default(USD)
   profilePublic                Boolean                      @default(false)
   acceptedCurrencies           String[]                     @default(["USDT", "USD", "BTC", "ETH"])
+  /// Account closure (customer-requested deletion). Financial records are kept
+  /// for the record-keeping period; personal data is anonymised at erasureDueAt.
+  closedAt                     DateTime?
+  closureReason                String?
+  erasureDueAt                 DateTime?
+  anonymisedAt                 DateTime?
   // P2P relations
   p2pListings                  P2PListing[]
   p2pTradesAsBuyer             P2PTrade[]                   @relation("P2PBuyer")
@@ -406,6 +418,12 @@ model User {
   budgetWallets                BudgetWallet[]
   // 1:1 — only present when accountType = BUSINESS
   businessProfile              BusinessProfile?
+  // Remittance
+  remittanceBeneficiaries      RemittanceBeneficiary[]
+  remittanceQuotes             RemittanceQuote[]
+  remittanceTransfers          RemittanceTransfer[]
+  // Business team seats held by this user
+  businessMemberships          BusinessTeamMember[]
 
   @@index([email])
   @@index([referralCode])
@@ -413,6 +431,7 @@ model User {
   @@index([country])
   @@index([kycTier])
   @@index([accountType])
+  @@index([status, erasureDueAt])
 }
 
 enum AssetDiscussionTag {
@@ -439,9 +458,9 @@ model AssetDiscussionPost {
   createdAt   DateTime           @default(now())
   updatedAt   DateTime           @updatedAt
 
-  user        User               @relation(fields: [userId], references: [id], onDelete: Cascade)
-  parent      AssetDiscussionPost?  @relation("AssetDiscussionReplies", fields: [parentId], references: [id], onDelete: Cascade)
-  replies     AssetDiscussionPost[] @relation("AssetDiscussionReplies")
+  user    User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parent  AssetDiscussionPost?  @relation("AssetDiscussionReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies AssetDiscussionPost[] @relation("AssetDiscussionReplies")
 
   @@index([symbol, createdAt])
   @@index([symbol, parentId, createdAt])
@@ -458,34 +477,44 @@ model AssetDiscussionPost {
 /// selection). PersonalProfile data lives directly on User; only
 /// the business-specific bits need this side-table.
 model BusinessProfile {
-  id              String    @id @default(uuid())
-  userId          String    @unique
-  companyName     String
-  legalName       String?
-  registrationNo  String? // company registration / commercial licence
-  taxId           String? // VAT, EIN, or local equivalent
+  id                   String                    @id @default(uuid())
+  userId               String                    @unique
+  companyName          String
+  legalName            String?
+  registrationNo       String? // company registration / commercial licence
+  taxId                String? // VAT, EIN, or local equivalent
   /// ISO 3166-1 alpha-2 of company registration country.
-  country         String
+  country              String
   /// Free-text industry tag (e.g. "fintech", "ecommerce", "remittances"). Drives fee tier.
-  industry        String?
+  industry             String?
   /// Bucketed headcount: "1-10", "11-50", "51-200", "201-1000", "1000+"
-  employeeCount   String?
-  website         String?
+  employeeCount        String?
+  website              String?
   /// Operations contact — defaults to User.email but split so finance
   /// & ops can have different inboxes.
-  billingEmail    String?
-  supportEmail    String?
+  billingEmail         String?
+  supportEmail         String?
   /// Free-text use case so sales can route demo requests.
-  useCase         String?
+  useCase              String?
   /// Estimated monthly USD volume — informs onboarding tier.
-  monthlyVolumeUsd Decimal? @db.Decimal(20, 2)
-  kybStatus       KYBStatus @default(NOT_SUBMITTED)
-  kybNotes        String?
-  kybReviewedAt   DateTime?
-  kybReviewedBy   String?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  monthlyVolumeUsd     Decimal?                  @db.Decimal(20, 2)
+  kybStatus            KYBStatus                 @default(NOT_SUBMITTED)
+  kybNotes             String?
+  kybReviewedAt        DateTime?
+  kybReviewedBy        String?
+  tradingName          String?
+  logoUrl              String?
+  /// Maker-checker policy: payout batches at or above this USD value need a
+  /// second OWNER/ADMIN to approve before money moves. Null = platform default.
+  approvalThresholdUsd Decimal?                  @db.Decimal(20, 2)
+  createdAt            DateTime                  @default(now())
+  updatedAt            DateTime                  @updatedAt
+  user                 User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  team                 BusinessTeamMember[]
+  payouts              BusinessPayout[]
+  payoutBatches        BusinessPayoutBatch[]
+  webhooks             BusinessWebhookEndpoint[]
+  apiKeys              APIKey[]
 
   @@index([country])
   @@index([kybStatus])
@@ -545,26 +574,26 @@ model Deposit {
 }
 
 model Withdrawal {
-  id            String           @id @default(uuid())
+  id            String               @id @default(uuid())
   userId        String
   currency      Currency
-  amount        Decimal          @db.Decimal(20, 8)
-  fee           Decimal          @default(0) @db.Decimal(20, 8)
-  netAmount     Decimal          @db.Decimal(20, 8)
+  amount        Decimal              @db.Decimal(20, 8)
+  fee           Decimal              @default(0) @db.Decimal(20, 8)
+  netAmount     Decimal              @db.Decimal(20, 8)
   paymentMethod PaymentMethod?
   walletAddress String?
   network       String?
   bankName      String?
   accountNumber String?
   accountName   String?
-  status        WithdrawalStatus @default(PENDING)
-  reference     String           @unique
+  status        WithdrawalStatus     @default(PENDING)
+  reference     String               @unique
   adminNotes    String?
   processedAt   DateTime?
   processedBy   String?
-  createdAt     DateTime         @default(now())
-  updatedAt     DateTime         @updatedAt
-  user          User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+  user          User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
   onChainTxs    OnChainTx[]
   approvals     WithdrawalApproval[]
 
@@ -577,14 +606,14 @@ model Withdrawal {
 /// so a single leaked admin session can't drain the treasury. One row per
 /// (withdrawal, admin); a unique constraint prevents an admin double-voting.
 model WithdrawalApproval {
-  id           String     @id @default(cuid())
+  id           String   @id @default(cuid())
   withdrawalId String
   adminId      String
-  decision     String     // 'APPROVE' | 'REJECT'
+  decision     String // 'APPROVE' | 'REJECT'
   note         String?
-  createdAt    DateTime   @default(now())
+  createdAt    DateTime @default(now())
 
-  withdrawal   Withdrawal @relation(fields: [withdrawalId], references: [id], onDelete: Cascade)
+  withdrawal Withdrawal @relation(fields: [withdrawalId], references: [id], onDelete: Cascade)
 
   @@unique([withdrawalId, adminId])
   @@index([withdrawalId])
@@ -673,15 +702,18 @@ model BankAccount {
 }
 
 model ExchangeRate {
-  id            String   @id @default(uuid())
-  baseCurrency  Currency @default(USDT)
-  quoteCurrency Currency
-  buyPrice      Decimal  @db.Decimal(20, 8)
-  sellPrice     Decimal  @db.Decimal(20, 8)
-  isActive      Boolean  @default(true)
-  setBy         String?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id                String    @id @default(uuid())
+  baseCurrency      Currency  @default(USDT)
+  quoteCurrency     Currency
+  buyPrice          Decimal   @db.Decimal(20, 8)
+  sellPrice         Decimal   @db.Decimal(20, 8)
+  isActive          Boolean   @default(true)
+  setBy             String?
+  /// Why a treasury operator overrode the live rate, and when it lapses.
+  overrideReason    String?
+  overrideExpiresAt DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
   @@unique([baseCurrency, quoteCurrency])
   @@index([baseCurrency, quoteCurrency])
@@ -693,7 +725,7 @@ model ExchangeRate {
 /// order-book demand skew applied at the time.
 model FxRateTick {
   id        String   @id @default(uuid())
-  pair      String   // e.g. "USD/LYD"
+  pair      String // e.g. "USD/LYD"
   price     Decimal  @db.Decimal(20, 8)
   volumeUsd Decimal  @default(0) @db.Decimal(20, 2)
   skewPct   Decimal  @default(0) @db.Decimal(10, 6)
@@ -729,13 +761,18 @@ model PlatformSettings {
 // ─────────────────────────────────────────────────────────────────────
 
 enum LedgerAccountType {
-  USER          // a user's spendable balance in one currency
-  PLATFORM      // platform treasury / fee revenue
+  USER // a user's spendable balance in one currency
+  PLATFORM // platform treasury / fee revenue
   SYSTEM_ONRAMP // external fiat/card rail (deposits enter from here)
-  SYSTEM_OFFRAMP// external fiat rail (withdrawals exit to here)
-  SYSTEM_CHAIN  // on-chain crypto custody (crypto in/out)
-  SYSTEM_FX     // FX conversion counterparty (cross-currency legs settle here)
+  SYSTEM_OFFRAMP // external fiat rail (withdrawals exit to here)
+  SYSTEM_CHAIN // on-chain crypto custody (crypto in/out)
+  SYSTEM_FX // FX conversion counterparty (cross-currency legs settle here)
   SYSTEM_ESCROW // P2P / claim-link funds held in escrow
+  REMITTANCE_CLEARING // customer funds collected for a remittance, not yet paid out (customer money in transit)
+  PARTNER_SETTLEMENT // amounts owed to / by payout and remittance partners (settlement funds)
+  TREASURY // prefunded liquidity held at partners / banks (treasury funds)
+  SUSPENSE // unidentified or unmatched value awaiting investigation
+  ADJUSTMENT // controlled operator corrections (always maker-checked and audited)
 }
 
 model LedgerAccount {
@@ -750,8 +787,8 @@ model LedgerAccount {
   createdAt DateTime          @default(now())
   updatedAt DateTime          @updatedAt
 
-  user      User?             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  entries   LedgerEntry[]
+  user    User?         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  entries LedgerEntry[]
 
   /// One account per (type, user, currency). System accounts are unique per
   /// (type, currency) since userId is null.
@@ -761,21 +798,21 @@ model LedgerAccount {
 }
 
 model LedgerEntry {
-  id          String        @id @default(cuid())
+  id        String   @id @default(cuid())
   /// Groups the balanced legs of a single logical transaction.
-  groupId     String
-  accountId   String
-  currency    Currency
+  groupId   String
+  accountId String
+  currency  Currency
   /// Signed: positive = credit into the account, negative = debit out.
-  amount      Decimal       @db.Decimal(38, 18)
+  amount    Decimal  @db.Decimal(38, 18)
   /// What produced this group: 'buy','sell','deposit','withdrawal',
   /// 'transfer','fee','p2p','claim','fx','onchain','adjustment', …
-  refType     String
-  refId       String?
-  memo        String?
-  createdAt   DateTime      @default(now())
+  refType   String
+  refId     String?
+  memo      String?
+  createdAt DateTime @default(now())
 
-  account     LedgerAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  account LedgerAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
 
   @@index([groupId])
   @@index([accountId, createdAt])
@@ -783,33 +820,34 @@ model LedgerEntry {
 }
 
 model AssetLedgerAccount {
-  id        String             @id
+  id        String   @id
   type      String
   userId    String?
   asset     String
-  balance   Decimal            @default(0) @db.Decimal(38, 18)
-  createdAt DateTime           @default(now())
-  updatedAt DateTime           @updatedAt
+  balance   Decimal  @default(0) @db.Decimal(38, 18)
+  createdAt DateTime @default(now())
+  /// The DB default matters: assetLedger.service inserts accounts with raw SQL.
+  updatedAt DateTime @default(now()) @updatedAt
 
-  user      User?              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  entries   AssetLedgerEntry[]
+  user    User?              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  entries AssetLedgerEntry[]
 
   @@index([userId])
   @@index([type, asset])
 }
 
 model AssetLedgerEntry {
-  id        String             @id
+  id        String   @id
   groupId   String
   accountId String
   asset     String
-  amount    Decimal            @db.Decimal(38, 18)
+  amount    Decimal  @db.Decimal(38, 18)
   refType   String
   refId     String?
   memo      String?
-  createdAt DateTime           @default(now())
+  createdAt DateTime @default(now())
 
-  account   AssetLedgerAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  account AssetLedgerAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
 
   @@index([groupId])
   @@index([accountId, createdAt])
@@ -960,51 +998,51 @@ model Transfer {
 // invite, every claim is a real-money "wow" moment.
 
 enum ClaimLinkStatus {
-  PENDING     // funds reserved, recipient hasn't claimed yet
-  CLAIMED     // recipient signed in and credited
-  EXPIRED     // expired before claim; sender auto-refunded
-  CANCELLED   // sender cancelled; sender auto-refunded
+  PENDING // funds reserved, recipient hasn't claimed yet
+  CLAIMED // recipient signed in and credited
+  EXPIRED // expired before claim; sender auto-refunded
+  CANCELLED // sender cancelled; sender auto-refunded
 }
 
 model ClaimLink {
-  id                String           @id @default(cuid())
+  id String @id @default(cuid())
 
-  senderId          String
-  sender            User             @relation("ClaimLinkSender", fields: [senderId], references: [id], onDelete: Cascade)
+  senderId String
+  sender   User   @relation("ClaimLinkSender", fields: [senderId], references: [id], onDelete: Cascade)
 
   // One of these identifies the recipient before they claim. After claim,
   // claimedById links to the actual User who claimed.
-  recipientEmail    String?
-  recipientPhone    String?          // E.164 ("+44…")
-  recipientHandle   String?          // pre-existing @handle (recipient has account)
+  recipientEmail  String?
+  recipientPhone  String? // E.164 ("+44…")
+  recipientHandle String? // pre-existing @handle (recipient has account)
 
-  asset             Currency         @default(USDT)
-  amount            Decimal          @db.Decimal(20, 8)
-  fee               Decimal          @default(0) @db.Decimal(20, 8)
-  note              String?
+  asset  Currency @default(USDT)
+  amount Decimal  @db.Decimal(20, 8)
+  fee    Decimal  @default(0) @db.Decimal(20, 8)
+  note   String?
 
   // Random URL token — safe to embed in plain links.
-  claimToken        String           @unique
+  claimToken String  @unique
   // SHA256 of an optional sender-defined PIN. When set, recipient must
   // enter the same PIN to claim — protects against forwarded SMS leaks.
-  pinHash           String?
+  pinHash    String?
 
-  status            ClaimLinkStatus  @default(PENDING)
-  reservedAt        DateTime         @default(now())
-  expiresAt         DateTime         // default = +7 days, sender-overridable up to 30
-  notifiedAt        DateTime?        // when we delivered email/SMS to recipient
+  status     ClaimLinkStatus @default(PENDING)
+  reservedAt DateTime        @default(now())
+  expiresAt  DateTime // default = +7 days, sender-overridable up to 30
+  notifiedAt DateTime? // when we delivered email/SMS to recipient
 
   // Claim outcome
-  claimedAt         DateTime?
-  claimedById       String?
-  claimedBy         User?            @relation("ClaimLinkClaimer", fields: [claimedById], references: [id])
+  claimedAt   DateTime?
+  claimedById String?
+  claimedBy   User?     @relation("ClaimLinkClaimer", fields: [claimedById], references: [id])
 
   // Refund outcome (set when status = EXPIRED or CANCELLED)
-  refundedAt        DateTime?
-  cancelReason      String?
+  refundedAt   DateTime?
+  cancelReason String?
 
-  createdAt         DateTime         @default(now())
-  updatedAt         DateTime         @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([senderId])
   @@index([claimedById])
@@ -1042,31 +1080,37 @@ enum P2PDisputeStatus {
 }
 
 model P2PListing {
-  id             String           @id @default(uuid())
-  userId         String
-  currency       Currency         @default(USDT)
-  baseAsset      String? // free-text ticker for any altcoin (e.g. PEPE, SHIB); overrides currency when set
-  fiatCurrency   Currency         @default(USD)
-  fiatAsset      String? // free-text fiat ticker when fiatCurrency overflows the enum
-  side           OrderSide // BUY or SELL
-  price          Decimal          @db.Decimal(20, 8) // price per unit in fiat
-  amount         Decimal          @db.Decimal(20, 8) // total crypto amount
-  minLimit       Decimal          @db.Decimal(20, 8) // min trade amount
-  maxLimit       Decimal          @db.Decimal(20, 8) // max trade amount
-  filled         Decimal          @default(0) @db.Decimal(20, 8)
-  paymentMethods String[]         @default(["BANK_TRANSFER"])
-  country        String? // ISO 3166-1 alpha-2 — restrict to traders in this jurisdiction
-  city           String? // city shown only when cash payment is offered
-  timeframeMins  Int              @default(30) // buyer payment window in minutes
-  terms          String? // seller's terms
-  autoReply      String? // auto message to buyer
-  anonymous      Boolean          @default(false) // mask user identity on public marketplace
-  status         P2PListingStatus @default(ACTIVE)
-  expiresAt      DateTime?
-  createdAt      DateTime         @default(now())
-  updatedAt      DateTime         @updatedAt
-  user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  trades         P2PTrade[]
+  id              String           @id @default(uuid())
+  userId          String
+  currency        Currency         @default(USDT)
+  baseAsset       String? // free-text ticker for any altcoin (e.g. PEPE, SHIB); overrides currency when set
+  fiatCurrency    Currency         @default(USD)
+  fiatAsset       String? // free-text fiat ticker when fiatCurrency overflows the enum
+  side            OrderSide // BUY or SELL
+  price           Decimal          @db.Decimal(20, 8) // price per unit in fiat
+  amount          Decimal          @db.Decimal(20, 8) // total crypto amount
+  minLimit        Decimal          @db.Decimal(20, 8) // min trade amount
+  maxLimit        Decimal          @db.Decimal(20, 8) // max trade amount
+  filled          Decimal          @default(0) @db.Decimal(20, 8)
+  paymentMethods  String[]         @default(["BANK_TRANSFER"])
+  country         String? // ISO 3166-1 alpha-2 — restrict to traders in this jurisdiction
+  city            String? // city shown only when cash payment is offered
+  // "Near me" discovery (opt-in per listing). Coordinates are stored rounded
+  // to 2 decimals (~1 km) and are NEVER returned to clients — only a rounded
+  // distance from the viewer is.
+  locationEnabled Boolean          @default(false)
+  geoLat          Float?
+  geoLng          Float?
+  timeframeMins   Int              @default(30) // buyer payment window in minutes
+  terms           String? // seller's terms
+  autoReply       String? // auto message to buyer
+  anonymous       Boolean          @default(false) // mask user identity on public marketplace
+  status          P2PListingStatus @default(ACTIVE)
+  expiresAt       DateTime?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  trades          P2PTrade[]
 
   @@index([userId])
   @@index([currency, fiatCurrency, side, status])
@@ -1074,6 +1118,7 @@ model P2PListing {
   @@index([country])
   @@index([status])
   @@index([createdAt])
+  @@index([locationEnabled, status])
 }
 
 model P2PTrade {
@@ -1495,21 +1540,29 @@ model ReferralReward {
 
 // ── API Keys ─────────────────────────────────────────────────────────
 model APIKey {
-  id          String    @id @default(uuid())
+  id          String           @id @default(uuid())
   userId      String
   name        String
-  keyHash     String    @unique
+  keyHash     String           @unique
   prefix      String // first 8 chars for display "awk_xxxx..."
-  permissions String[]  @default(["read"])
-  isActive    Boolean   @default(true)
+  permissions String[]         @default(["read"])
+  isActive    Boolean          @default(true)
   lastUsedAt  DateTime?
   expiresAt   DateTime?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  revokedAt   DateTime?
+  /// Set for keys that act on behalf of a business account (/api/v1/*).
+  businessId  String?
+  last4       String?
+  usageCount  Int              @default(0)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  business    BusinessProfile? @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  usage       ApiKeyUsage[]
 
   @@index([userId])
   @@index([keyHash])
+  @@index([businessId])
 }
 
 // ── Login History ────────────────────────────────────────────────────
@@ -1518,21 +1571,21 @@ model APIKey {
 /// threshold). The user proves possession via a 6-digit code delivered by
 /// email, OR their TOTP authenticator. Single-use, short-lived, rate-limited.
 model StepUpChallenge {
-  id          String   @id @default(cuid())
-  userId      String
+  id         String    @id @default(cuid())
+  userId     String
   /// What this challenge authorizes — bound so a code for one action can't be
   /// replayed for another: e.g. "withdrawal", "buy", "sell", "transfer".
-  action      String
+  action     String
   /// SHA-256 of the 6-digit code (never store the code in the clear).
-  codeHash    String
+  codeHash   String
   /// 'email' | 'totp' — how the user will satisfy it.
-  method      String
-  attempts    Int      @default(0)
-  consumedAt  DateTime?
-  expiresAt   DateTime
-  createdAt   DateTime @default(now())
+  method     String
+  attempts   Int       @default(0)
+  consumedAt DateTime?
+  expiresAt  DateTime
+  createdAt  DateTime  @default(now())
 
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, action])
   @@index([expiresAt])
@@ -1545,15 +1598,15 @@ model KnownDevice {
   id          String   @id @default(cuid())
   userId      String
   fingerprint String
-  label       String?  // human-readable ("iPhone 15 · Safari")
-  deviceType  String?  // "mobile" | "tablet" | "desktop" | "unknown"
-  os          String?  // parsed OS, e.g. "iOS 17.4"
-  ipAddress   String?  // last-seen IP
-  location    String?  // "City, Country" resolved from the IP
+  label       String? // human-readable ("iPhone 15 · Safari")
+  deviceType  String? // "mobile" | "tablet" | "desktop" | "unknown"
+  os          String? // parsed OS, e.g. "iOS 17.4"
+  ipAddress   String? // last-seen IP
+  location    String? // "City, Country" resolved from the IP
   lastSeenAt  DateTime @default(now())
   createdAt   DateTime @default(now())
 
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, fingerprint])
   @@index([userId])
@@ -1594,37 +1647,40 @@ model WhatsAppMessage {
 
 // ── Virtual Visa cards ───────────────────────────────────────────────
 model Card {
-  id              String            @id @default(uuid())
-  userId          String
-  tier            CardTier          @default(STARTER)
-  status          CardStatus        @default(PENDING)
+  id                String            @id @default(uuid())
+  userId            String
+  tier              CardTier          @default(STARTER)
+  status            CardStatus        @default(PENDING)
+  /// Issuer-side identifiers. The PAN never touches Tazdan systems.
+  issuerName        String?
+  externalCardId    String?           @unique
   // Card details (last4 shown to user, full pan encrypted externally)
-  nickname        String? // user-given label
-  last4           String // "1144"
-  expiryMonth     Int // 1-12
-  expiryYear      Int // 4-digit
-  cardHolder      String // "RAYAN ZAHI"
-  currency        Currency          @default(USDT)
+  nickname          String? // user-given label
+  last4             String // "1144"
+  expiryMonth       Int // 1-12
+  expiryYear        Int // 4-digit
+  cardHolder        String // "RAYAN ZAHI"
+  currency          Currency          @default(USDT)
   // Balances / spend
-  spentTotal      Decimal           @default(0) @db.Decimal(20, 8)
-  spentMonth      Decimal           @default(0) @db.Decimal(20, 8)
-  dailyLimit      Decimal           @default(5000) @db.Decimal(20, 8)
-  monthlyLimit    Decimal           @default(50000) @db.Decimal(20, 8)
-  cashbackRate    Decimal           @default(0.01) @db.Decimal(6, 4) // 1% default
-  cashbackBalance Decimal           @default(0) @db.Decimal(20, 8)
+  spentTotal        Decimal           @default(0) @db.Decimal(20, 8)
+  spentMonth        Decimal           @default(0) @db.Decimal(20, 8)
+  dailyLimit        Decimal           @default(5000) @db.Decimal(20, 8)
+  monthlyLimit      Decimal           @default(50000) @db.Decimal(20, 8)
+  cashbackRate      Decimal           @default(0.01) @db.Decimal(6, 4) // 1% default
+  cashbackBalance   Decimal           @default(0) @db.Decimal(20, 8)
   // Controls
-  frozen          Boolean           @default(false)
-  contactlessOn   Boolean           @default(true)
-  onlineOn        Boolean           @default(true)
-  atmOn           Boolean           @default(true)
-  issuedAt        DateTime?
-  activatedAt     DateTime?
-  cancelledAt     DateTime?
+  frozen            Boolean           @default(false)
+  contactlessOn     Boolean           @default(true)
+  onlineOn          Boolean           @default(true)
+  atmOn             Boolean           @default(true)
+  issuedAt          DateTime?
+  activatedAt       DateTime?
+  cancelledAt       DateTime?
   // Physical card order — a virtual card can request a physical print for a
   // platform fee (admin-configured, min $20). Shipping captured at order time.
-  physicalStatus    CardOrderStatus @default(NONE)
+  physicalStatus    CardOrderStatus   @default(NONE)
   physicalOrderedAt DateTime?
-  physicalFee       Decimal?        @db.Decimal(20, 8)
+  physicalFee       Decimal?          @db.Decimal(20, 8)
   shippingName      String?
   shippingLine1     String?
   shippingLine2     String?
@@ -1632,10 +1688,10 @@ model Card {
   shippingPostcode  String?
   shippingCountry   String?
   shippingPhone     String?
-  createdAt       DateTime          @default(now())
-  updatedAt       DateTime          @updatedAt
-  user            User              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  transactions    CardTransaction[]
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  user              User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions      CardTransaction[]
 
   @@index([userId])
   @@index([status])
@@ -1986,11 +2042,868 @@ model PlatformBankAccount {
 model WaitlistEntry {
   id        String   @id @default(uuid())
   email     String   @unique
-  source    String?  // where they signed up, e.g. "landing", "business"
-  locale    String?  // page language at signup (en/ar/…)
+  source    String? // where they signed up, e.g. "landing", "business"
+  locale    String? // page language at signup (en/ar/…)
   notified  Boolean  @default(false) // set true once the launch email is sent
   createdAt DateTime @default(now())
 
   @@index([notified])
   @@index([createdAt])
+}
+
+// ═════════════════════════════════════════════════════════════════════
+// OPERATING PLATFORM (2026-10) — staff roles, controls, lifecycle log,
+// providers, remittance, treasury, risk & compliance, reconciliation,
+// business payouts, observability and AI audit.
+// ═════════════════════════════════════════════════════════════════════
+
+/// Cockpit staff roles. Permissions per role live in code
+/// (server/src/services/rbac/permissions.ts) so they are reviewed like code.
+enum StaffRole {
+  SUPER_ADMIN
+  EXECUTIVE
+  OPERATIONS
+  FINANCE
+  TREASURY
+  COMPLIANCE
+  AML_ANALYST
+  FRAUD_ANALYST
+  SUPPORT
+  SECURITY
+  TECH_OPS
+  AUDITOR
+}
+
+// ── Emergency controls / kill switches ───────────────────────────────
+enum ControlScope {
+  FEATURE // key = withdrawals | deposits | p2p | fx | remittance | blockchain | cards | transfers
+  CORRIDOR // key = corridor code, e.g. LY-GB
+  PROVIDER // key = provider code
+  USER // key = userId (all money movement) or `${userId}:${feature}`
+  WALLET // key = `${userId}:${currency}`
+}
+
+/// Current state of one switch. `blocked = true` stops new activity in its
+/// scope. Every change is recorded in ControlSwitchEvent (append-only).
+model ControlSwitch {
+  id        String       @id @default(cuid())
+  scope     ControlScope
+  key       String
+  blocked   Boolean      @default(true)
+  reason    String
+  setById   String
+  expiresAt DateTime?
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  @@unique([scope, key])
+  @@index([blocked])
+}
+
+model ControlSwitchEvent {
+  id              String       @id @default(cuid())
+  scope           ControlScope
+  key             String
+  previousBlocked Boolean?
+  newBlocked      Boolean
+  reason          String
+  actorId         String
+  ipAddress       String?
+  createdAt       DateTime     @default(now())
+
+  @@index([scope, key, createdAt])
+  @@index([createdAt])
+}
+
+// ── Unified lifecycle log ────────────────────────────────────────────
+/// Append-only record of every state change of a financial object
+/// (remittance, withdrawal, deposit, business payout, P2P trade, case…).
+model StateTransition {
+  id               String   @id @default(cuid())
+  entityType       String
+  entityId         String
+  fromState        String?
+  toState          String
+  actorType        String // USER | STAFF | SYSTEM | PROVIDER
+  actorId          String?
+  reason           String?
+  provider         String?
+  providerResponse Json?
+  riskDecisionId   String?
+  ledgerGroupIds   String[] @default([])
+  correlationId    String?
+  createdAt        DateTime @default(now())
+
+  @@index([entityType, entityId, createdAt])
+  @@index([correlationId])
+  @@index([createdAt])
+}
+
+/// Security-relevant events for the security operations view.
+model SecurityEvent {
+  id        String   @id @default(cuid())
+  type      String // FAILED_LOGIN | MFA_FAILURE | RATE_LIMITED | ADMIN_LOGIN | PERMISSION_CHANGE | WEBHOOK_REJECTED | STEP_UP_FAILED | NEW_DEVICE | SESSION_REVOKED | ACCESS_DENIED
+  severity  String   @default("LOW") // LOW | MEDIUM | HIGH | CRITICAL
+  userId    String?
+  ipAddress String?
+  path      String?
+  details   Json?
+  createdAt DateTime @default(now())
+
+  @@index([type, createdAt])
+  @@index([userId])
+  @@index([createdAt])
+}
+
+// ── Providers ────────────────────────────────────────────────────────
+enum ProviderCategory {
+  BANK
+  PSP
+  PAYOUT
+  REMITTANCE
+  KYC
+  SANCTIONS
+  AML
+  CARD_ISSUER
+  VASP
+  CUSTODY
+  BLOCKCHAIN
+  FX
+  NOTIFICATION
+  ONRAMP
+  OFFRAMP
+}
+
+enum ProviderMode {
+  PRODUCTION
+  SANDBOX
+  MOCK
+}
+
+enum ProviderStatus {
+  ENABLED
+  DISABLED
+  MAINTENANCE
+  NOT_ACTIVATED
+}
+
+model Provider {
+  id            String           @id @default(cuid())
+  code          String           @unique
+  name          String
+  category      ProviderCategory
+  mode          ProviderMode
+  status        ProviderStatus   @default(NOT_ACTIVATED)
+  countries     String[]         @default([])
+  currencies    String[]         @default([])
+  /// Non-secret configuration only (fees, SLA, cut-offs). Secrets stay in env.
+  config        Json?
+  lastHealthAt  DateTime?
+  lastHealthOk  Boolean?
+  lastLatencyMs Int?
+  notes         String?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  @@index([category])
+  @@index([status])
+}
+
+/// One row per outbound provider call (redacted), for health, latency,
+/// error-rate and investigation views.
+model ProviderCall {
+  id            String   @id @default(cuid())
+  providerCode  String
+  operation     String // health | quote | execute | status | cancel | refund | reconcile
+  entityType    String?
+  entityId      String?
+  correlationId String?
+  success       Boolean
+  latencyMs     Int
+  errorCode     String?
+  request       Json?
+  response      Json?
+  createdAt     DateTime @default(now())
+
+  @@index([providerCode, createdAt])
+  @@index([entityType, entityId])
+}
+
+// ── Remittance ───────────────────────────────────────────────────────
+enum CorridorStatus {
+  LIVE // a production provider is connected and enabled
+  SANDBOX_ONLY // internally complete; executes only against sandbox rails
+  PAUSED
+  DISABLED
+}
+
+enum RemittanceDirection {
+  OUTBOUND
+  INBOUND
+}
+
+model RemittanceCorridor {
+  id                      String               @id @default(cuid())
+  code                    String               @unique // e.g. LY-GB
+  name                    String
+  sourceCountry           String
+  destCountry             String
+  sourceCurrency          Currency
+  destCurrency            Currency
+  direction               RemittanceDirection
+  status                  CorridorStatus       @default(SANDBOX_ONLY)
+  minAmount               Decimal              @db.Decimal(20, 8) // in destination currency
+  maxAmount               Decimal              @db.Decimal(20, 8)
+  dailyLimitPerCustomer   Decimal?             @db.Decimal(20, 8)
+  monthlyLimitPerCustomer Decimal?             @db.Decimal(20, 8)
+  feeFixed                Decimal              @default(0) @db.Decimal(20, 8) // source currency
+  feePercent              Decimal              @default(0) @db.Decimal(8, 6) // fraction of send amount
+  spreadPercent           Decimal              @default(0) @db.Decimal(8, 6) // FX margin over base rate
+  quoteTtlSeconds         Int                  @default(300)
+  /// Treasury guard-rails on the customer rate (destination per 1 source).
+  rateFloor               Decimal?             @db.Decimal(20, 8)
+  rateCeiling             Decimal?             @db.Decimal(20, 8)
+  /// Spread discount per KYC tier / business, e.g. {"TIER_3":0.3,"BUSINESS":0.4} (fraction of spread waived).
+  tierSpreadDiscounts     Json?
+  sourceOfFundsThreshold  Decimal?             @db.Decimal(20, 8) // destination currency
+  allowedPurposes         String[]             @default([])
+  payoutMethods           String[]             @default([])
+  createdAt               DateTime             @default(now())
+  updatedAt               DateTime             @updatedAt
+  quotes                  RemittanceQuote[]
+  transfers               RemittanceTransfer[]
+}
+
+model RemittanceBeneficiary {
+  id              String               @id @default(cuid())
+  userId          String
+  fullName        String
+  relationship    String?
+  country         String
+  currency        Currency
+  payoutMethod    String // BANK_ACCOUNT | MOBILE_WALLET | CASH_PICKUP | TAZDAN_WALLET
+  /// For TAZDAN_WALLET payouts: the recipient's Tazdan account.
+  tazdanUserId    String?
+  bankName        String?
+  accountNumber   String?
+  iban            String?
+  sortCode        String?
+  swift           String?
+  mobileWallet    String?
+  city            String?
+  addressLine     String?
+  screeningStatus String               @default("PENDING") // PENDING | CLEAR | POTENTIAL_MATCH | BLOCKED
+  screenedAt      DateTime?
+  status          String               @default("ACTIVE") // ACTIVE | ARCHIVED
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+  user            User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transfers       RemittanceTransfer[]
+
+  @@index([userId])
+  @@index([screeningStatus])
+}
+
+/// Immutable price record. Pricing columns are protected by a database
+/// trigger; only `consumedAt` may change, once.
+model RemittanceQuote {
+  id             String              @id @default(cuid())
+  userId         String
+  corridorId     String
+  sourceCurrency Currency
+  destCurrency   Currency
+  sendAmount     Decimal             @db.Decimal(20, 8) // principal debited, source currency
+  feeAmount      Decimal             @db.Decimal(20, 8) // source currency
+  totalDebit     Decimal             @db.Decimal(20, 8) // sendAmount + feeAmount
+  baseRate       Decimal             @db.Decimal(20, 8) // dest per 1 source, before margin
+  customerRate   Decimal             @db.Decimal(20, 8) // dest per 1 source, after margin
+  spreadPercent  Decimal             @db.Decimal(8, 6)
+  receiveAmount  Decimal             @db.Decimal(20, 8) // destination currency
+  rateSource     String
+  providerCode   String?
+  routeScore     Decimal?            @db.Decimal(10, 4)
+  deliveryMins   Int?
+  expiresAt      DateTime
+  consumedAt     DateTime?
+  createdAt      DateTime            @default(now())
+  user           User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  corridor       RemittanceCorridor  @relation(fields: [corridorId], references: [id])
+  transfer       RemittanceTransfer?
+
+  @@index([userId, createdAt])
+  @@index([corridorId, createdAt])
+}
+
+enum RemittanceState {
+  CREATED
+  QUOTED
+  COMPLIANCE_PENDING
+  APPROVED
+  FUNDING_PENDING
+  FUNDED
+  ROUTING
+  ROUTED
+  SETTLEMENT_PENDING
+  SETTLED
+  PAYOUT_PENDING
+  PAID
+  RECONCILIATION_PENDING
+  RECONCILED
+  COMPLETED
+  EXPIRED
+  REJECTED
+  CANCELLED
+  FAILED
+  MANUAL_REVIEW
+  REFUND_PENDING
+  REFUNDED
+  DISPUTED
+}
+
+model RemittanceTransfer {
+  id             String                @id @default(cuid())
+  reference      String                @unique
+  userId         String
+  corridorId     String
+  quoteId        String                @unique
+  beneficiaryId  String
+  sourceCurrency Currency
+  destCurrency   Currency
+  sendAmount     Decimal               @db.Decimal(20, 8)
+  feeAmount      Decimal               @db.Decimal(20, 8)
+  totalDebit     Decimal               @db.Decimal(20, 8)
+  baseRate       Decimal               @db.Decimal(20, 8)
+  customerRate   Decimal               @db.Decimal(20, 8)
+  receiveAmount  Decimal               @db.Decimal(20, 8)
+  purpose        String
+  sourceOfFunds  String?
+  state          RemittanceState       @default(CREATED)
+  riskScore      Int?
+  riskOutcome    String?
+  providerCode   String?
+  providerRef    String?
+  idempotencyKey String?               @unique
+  correlationId  String
+  failureReason  String?
+  fundedAt       DateTime?
+  routedAt       DateTime?
+  settledAt      DateTime?
+  paidAt         DateTime?
+  completedAt    DateTime?
+  cancelledAt    DateTime?
+  refundedAt     DateTime?
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+  user           User                  @relation(fields: [userId], references: [id])
+  corridor       RemittanceCorridor    @relation(fields: [corridorId], references: [id])
+  quote          RemittanceQuote       @relation(fields: [quoteId], references: [id])
+  beneficiary    RemittanceBeneficiary @relation(fields: [beneficiaryId], references: [id])
+  routes         RemittanceRoute[]
+  payouts        RemittancePayout[]
+  refunds        RemittanceRefund[]
+
+  @@index([userId, createdAt])
+  @@index([state])
+  @@index([corridorId, createdAt])
+  @@index([providerCode])
+  @@index([providerRef])
+}
+
+/// A scored candidate route. One per provider evaluated; `selected` marks
+/// the one used, `fallbackRank` orders the fallbacks.
+model RemittanceRoute {
+  id                    String              @id @default(cuid())
+  transferId            String?
+  quoteId               String?
+  providerCode          String
+  score                 Decimal             @db.Decimal(10, 4)
+  rank                  Int
+  selected              Boolean             @default(false)
+  eligible              Boolean             @default(true)
+  reason                String
+  estimatedCost         Decimal             @db.Decimal(20, 8) // source currency
+  estimatedDeliveryMins Int
+  requiredLiquidity     Decimal             @db.Decimal(20, 8)
+  liquidityCurrency     Currency
+  factors               Json
+  createdAt             DateTime            @default(now())
+  transfer              RemittanceTransfer? @relation(fields: [transferId], references: [id])
+
+  @@index([transferId])
+  @@index([quoteId])
+}
+
+model RemittancePayout {
+  id            String             @id @default(cuid())
+  transferId    String
+  providerCode  String
+  providerRef   String?
+  amount        Decimal            @db.Decimal(20, 8)
+  currency      Currency
+  status        String             @default("PENDING") // PENDING | SUBMITTED | PAID | FAILED | RETURNED
+  attempt       Int                @default(1)
+  failureReason String?
+  submittedAt   DateTime?
+  paidAt        DateTime?
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+  transfer      RemittanceTransfer @relation(fields: [transferId], references: [id])
+
+  @@unique([transferId, attempt])
+  @@index([providerCode, status])
+  @@index([providerRef])
+}
+
+/// Net settlement obligation with a partner for one currency and window.
+model RemittanceSettlement {
+  id           String    @id @default(cuid())
+  reference    String    @unique
+  providerCode String
+  currency     Currency
+  amount       Decimal   @db.Decimal(20, 8)
+  direction    String // PAYABLE (Tazdan owes partner) | RECEIVABLE
+  status       String    @default("OPEN") // OPEN | INSTRUCTED | SETTLED | CANCELLED
+  transferIds  String[]  @default([])
+  dueAt        DateTime
+  instructedAt DateTime?
+  settledAt    DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([providerCode, status])
+  @@index([dueAt])
+}
+
+model RemittanceRefund {
+  id            String             @id @default(cuid())
+  transferId    String
+  amount        Decimal            @db.Decimal(20, 8)
+  currency      Currency
+  reason        String
+  status        String             @default("PENDING") // PENDING | COMPLETED
+  ledgerGroupId String?
+  requestedById String?
+  createdAt     DateTime           @default(now())
+  completedAt   DateTime?
+  transfer      RemittanceTransfer @relation(fields: [transferId], references: [id])
+
+  @@index([transferId])
+}
+
+// ── Treasury ─────────────────────────────────────────────────────────
+model TreasuryPool {
+  id            String             @id @default(cuid())
+  code          String             @unique
+  name          String
+  currency      Currency
+  entity        String // legal entity holding the funds
+  location      String // BANK | PROVIDER | WALLET
+  providerCode  String?
+  corridorCodes String[]           @default([])
+  fundClass     String             @default("SETTLEMENT") // CUSTOMER | SETTLEMENT | CORPORATE
+  target        Decimal            @db.Decimal(20, 8)
+  minimum       Decimal            @db.Decimal(20, 8)
+  maxExposure   Decimal            @db.Decimal(20, 8)
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+  movements     TreasuryMovement[]
+}
+
+/// Append-only. Pool balance = Σ PREFUND/STATEMENT_ADJUST − WITHDRAW − CONSUME;
+/// reserved = Σ RESERVE − RELEASE − CONSUME (per transfer).
+model TreasuryMovement {
+  id         String       @id @default(cuid())
+  poolId     String
+  type       String // PREFUND | WITHDRAW | RESERVE | RELEASE | CONSUME | STATEMENT_ADJUST
+  amount     Decimal      @db.Decimal(20, 8)
+  reference  String?
+  transferId String?
+  actorId    String?
+  note       String?
+  createdAt  DateTime     @default(now())
+  pool       TreasuryPool @relation(fields: [poolId], references: [id])
+
+  @@index([poolId, createdAt])
+  @@index([transferId])
+}
+
+// ── Risk, fraud and compliance ───────────────────────────────────────
+model RiskRule {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  name        String
+  category    String // AML | FRAUD | SANCTIONS | LIMITS | GEOGRAPHY
+  description String
+  enabled     Boolean  @default(true)
+  severity    String   @default("MEDIUM")
+  action      String // APPROVE | REVIEW | REJECT | FREEZE | REQUEST_INFORMATION | CHALLENGE | DELAY | BLOCK
+  score       Int      @default(20)
+  params      Json
+  version     Int      @default(1)
+  updatedById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+/// One evaluation of the risk engine against an action.
+model RiskDecision {
+  id             String   @id @default(cuid())
+  subjectType    String // REMITTANCE | WITHDRAWAL | TRANSFER | BENEFICIARY | LOGIN | BUSINESS_PAYOUT
+  subjectId      String
+  userId         String?
+  outcome        String
+  score          Int
+  triggeredRules String[] @default([])
+  signals        Json
+  explanation    String
+  engineVersion  String
+  decidedBy      String   @default("SYSTEM")
+  createdAt      DateTime @default(now())
+
+  @@index([subjectType, subjectId])
+  @@index([userId, createdAt])
+  @@index([outcome, createdAt])
+}
+
+/// Behavioural / fraud signal emitted by the engine or by event hooks.
+model RiskEvent {
+  id          String   @id @default(cuid())
+  userId      String?
+  type        String
+  severity    String   @default("LOW")
+  score       Int      @default(0)
+  subjectType String?
+  subjectId   String?
+  data        Json?
+  createdAt   DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([type, createdAt])
+}
+
+model ComplianceCase {
+  id                String     @id @default(cuid())
+  reference         String     @unique
+  type              String // KYC | KYB | AML | SANCTIONS | PEP | FRAUD | SOURCE_OF_FUNDS | SOURCE_OF_WEALTH | TRAVEL_RULE | OTHER
+  status            String     @default("OPEN") // OPEN | ASSIGNED | INVESTIGATING | AWAITING_INFORMATION | ESCALATED | CLOSED
+  priority          String     @default("MEDIUM") // LOW | MEDIUM | HIGH | CRITICAL
+  title             String
+  summary           String?
+  subjectUserId     String?
+  subjectBusinessId String?
+  subjectType       String?
+  subjectId         String?
+  riskDecisionId    String?
+  assignedToId      String?
+  openedById        String?
+  resolution        String?
+  slaDueAt          DateTime?
+  closedAt          DateTime?
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+  notes             CaseNote[]
+
+  @@index([status, priority])
+  @@index([type, status])
+  @@index([subjectUserId])
+  @@index([assignedToId])
+}
+
+model CaseNote {
+  id          String         @id @default(cuid())
+  caseId      String
+  authorId    String?
+  authorType  String         @default("STAFF") // STAFF | SYSTEM | AI
+  kind        String         @default("NOTE") // NOTE | EVIDENCE | STATUS_CHANGE | ESCALATION | AI_SUMMARY | REQUEST_INFORMATION
+  body        String
+  attachments Json?
+  createdAt   DateTime       @default(now())
+  case        ComplianceCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+
+  @@index([caseId, createdAt])
+}
+
+/// Sanctions / PEP / internal watchlist entries. Loaded from an official list
+/// export or entered by compliance — never invented by the platform.
+model WatchlistEntry {
+  id             String   @id @default(cuid())
+  listName       String // e.g. UN | OFAC-SDN | EU | UK-HMT | PEP | INTERNAL
+  entityType     String // PERSON | ORGANISATION | WALLET | BANK | COUNTRY
+  name           String?
+  normalizedName String?
+  aliases        String[] @default([])
+  country        String?
+  dateOfBirth    String?
+  walletAddress  String?
+  identifier     String?
+  source         String
+  active         Boolean  @default(true)
+  addedById      String?
+  createdAt      DateTime @default(now())
+  /// Changes when a refresh updates the entry; a false-positive review older than this no longer suppresses it.
+  updatedAt      DateTime @default(now()) @updatedAt
+
+  @@index([listName])
+  @@index([normalizedName])
+  @@index([walletAddress])
+  @@index([entityType, country])
+}
+
+model ScreeningResult {
+  id           String    @id @default(cuid())
+  subjectType  String // USER | BENEFICIARY | WALLET_ADDRESS | BUSINESS
+  subjectId    String
+  userId       String?
+  status       String // CLEAR | POTENTIAL_MATCH | CONFIRMED_MATCH | FALSE_POSITIVE
+  matches      Json
+  listsChecked String[]  @default([])
+  screenedAt   DateTime  @default(now())
+  reviewedById String?
+  reviewedAt   DateTime?
+
+  @@index([subjectType, subjectId])
+  @@index([status])
+}
+
+// ── Reconciliation ───────────────────────────────────────────────────
+model ReconciliationRun {
+  id           String               @id @default(cuid())
+  source       String // PROVIDER_STATEMENT | LEDGER_INTEGRITY | WALLET_READ_MODEL | REMITTANCE_PAYOUTS
+  providerCode String?
+  periodStart  DateTime?
+  periodEnd    DateTime?
+  status       String               @default("RUNNING") // RUNNING | COMPLETED | FAILED
+  totals       Json?
+  startedById  String?
+  createdAt    DateTime             @default(now())
+  completedAt  DateTime?
+  items        ReconciliationItem[]
+
+  @@index([source, createdAt])
+}
+
+model ReconciliationItem {
+  id             String            @id @default(cuid())
+  runId          String
+  status         String // MATCHED | PARTIAL | MISSING_INTERNAL | MISSING_EXTERNAL | AMOUNT_MISMATCH | CURRENCY_MISMATCH | DUPLICATE | LATE_SETTLEMENT | FEE_MISMATCH | STATUS_MISMATCH
+  internalType   String?
+  internalId     String?
+  externalRef    String?
+  internalAmount Decimal?          @db.Decimal(38, 18)
+  externalAmount Decimal?          @db.Decimal(38, 18)
+  currency       String?
+  details        Json?
+  resolution     String            @default("OPEN") // OPEN | RESOLVED | WRITTEN_OFF | ESCALATED | NOT_REQUIRED
+  resolvedById   String?
+  resolutionNote String?
+  resolvedAt     DateTime?
+  createdAt      DateTime          @default(now())
+  run            ReconciliationRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@index([runId, status])
+  @@index([status, resolution])
+  @@index([internalType, internalId])
+}
+
+// ── Business payouts, team and webhooks ──────────────────────────────
+model BusinessTeamMember {
+  id          String          @id @default(cuid())
+  businessId  String
+  userId      String?
+  email       String
+  role        String // OWNER | ADMIN | ANALYST | DEVELOPER
+  status      String          @default("PENDING") // ACTIVE | PENDING | SUSPENDED
+  invitedById String?
+  invitedAt   DateTime        @default(now())
+  joinedAt    DateTime?
+  business    BusinessProfile @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  user        User?           @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@unique([businessId, email])
+  @@index([userId])
+}
+
+model BusinessPayoutBatch {
+  id               String           @id @default(cuid())
+  businessId       String
+  reference        String           @unique
+  currency         Currency
+  totalAmount      Decimal          @db.Decimal(20, 8)
+  totalFee         Decimal          @db.Decimal(20, 8)
+  count            Int
+  status           String           @default("PENDING_APPROVAL") // PENDING_APPROVAL | COMPLIANCE_REVIEW | EXECUTING | EXECUTED | PARTIAL | FAILED | REJECTED | CANCELLED
+  note             String?
+  /// APP (dashboard / mobile) or API (an API key).
+  source           String           @default("APP")
+  /// Client-supplied Idempotency-Key; a retry returns the original batch.
+  idempotencyKey   String?
+  apiKeyId         String?
+  /// Why a second approver is needed (or null when it is not).
+  approvalReason   String?
+  complianceCaseId String?
+  createdById      String
+  approvedById     String?
+  approvedAt       DateTime?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  business         BusinessProfile  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  payouts          BusinessPayout[]
+
+  @@unique([businessId, idempotencyKey])
+  @@index([businessId, createdAt])
+  @@index([status])
+}
+
+model BusinessPayout {
+  id              String               @id @default(cuid())
+  businessId      String
+  batchId         String?
+  reference       String               @unique
+  recipientUserId String?
+  recipientHandle String?
+  recipientEmail  String?
+  amount          Decimal              @db.Decimal(20, 8)
+  currency        Currency
+  feeAmount       Decimal              @default(0) @db.Decimal(20, 8)
+  netAmount       Decimal              @db.Decimal(20, 8)
+  status          String               @default("PENDING") // PENDING | PROCESSING | COMPLETED | FAILED | CANCELLED
+  note            String?
+  failureReason   String?
+  ledgerGroupId   String?
+  /// Risk engine result for this payout (APPROVE | REVIEW | REJECT …).
+  riskOutcome     String?
+  riskDecisionId  String?
+  createdById     String
+  completedAt     DateTime?
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+  business        BusinessProfile      @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  batch           BusinessPayoutBatch? @relation(fields: [batchId], references: [id])
+
+  @@index([businessId, createdAt])
+  @@index([batchId])
+  @@index([status])
+}
+
+model BusinessWebhookEndpoint {
+  id         String                    @id @default(cuid())
+  businessId String
+  url        String
+  events     String[]
+  /// HMAC signing secret. Needed in clear to sign deliveries; returned to the
+  /// client only once, at creation.
+  secret     String
+  status     String                    @default("ACTIVE") // ACTIVE | DISABLED
+  createdAt  DateTime                  @default(now())
+  updatedAt  DateTime                  @updatedAt
+  business   BusinessProfile           @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  deliveries BusinessWebhookDelivery[]
+
+  @@index([businessId])
+}
+
+model BusinessWebhookDelivery {
+  id             String                  @id @default(cuid())
+  endpointId     String
+  event          String
+  payload        Json
+  status         String                  @default("PENDING") // PENDING | DELIVERED | FAILED | DEAD
+  attempts       Int                     @default(0)
+  nextAttemptAt  DateTime                @default(now())
+  lastError      String?
+  responseStatus Int?
+  deliveredAt    DateTime?
+  createdAt      DateTime                @default(now())
+  endpoint       BusinessWebhookEndpoint @relation(fields: [endpointId], references: [id], onDelete: Cascade)
+
+  @@index([status, nextAttemptAt])
+  @@index([endpointId, createdAt])
+}
+
+model ApiKeyUsage {
+  id    String @id @default(cuid())
+  keyId String
+  day   String // YYYY-MM-DD (UTC)
+  count Int    @default(0)
+  key   APIKey @relation(fields: [keyId], references: [id], onDelete: Cascade)
+
+  @@unique([keyId, day])
+}
+
+// ── Observability and AI audit ───────────────────────────────────────
+/// Periodic snapshot of in-process metrics so the cockpit can show history.
+model SystemMetricSample {
+  id        String   @id @default(cuid())
+  kind      String // API | QUEUE | PROVIDER | DB
+  data      Json
+  createdAt DateTime @default(now())
+
+  @@index([kind, createdAt])
+}
+
+/// Every AI-assisted output and action: what was asked, which data it
+/// read, what it recommended, and who approved what happened next.
+model AiInteraction {
+  id                String    @id @default(cuid())
+  kind              String // ASSISTANT_QUERY | CASE_SUMMARY | SUPPORT_SUMMARY | SUPPORT_REPLY | RISK_EXPLANATION | INCIDENT_ANALYSIS | TREASURY_ANALYSIS | TRANSLATION
+  level             String // OBSERVE | ASSIST | AUTOMATE
+  operatorId        String?
+  model             String
+  input             Json
+  references        Json?
+  output            Json
+  confidence        Decimal?  @db.Decimal(5, 4)
+  recommendedAction String?
+  approvalStatus    String    @default("NOT_REQUIRED") // NOT_REQUIRED | PENDING | APPROVED | REJECTED
+  approvedById      String?
+  approvedAt        DateTime?
+  outcome           String?
+  createdAt         DateTime  @default(now())
+
+  @@index([kind, createdAt])
+  @@index([operatorId, createdAt])
+  @@index([approvalStatus])
+}
+
+/// Maker-checker. A sensitive action is requested by one staff member and
+/// executed only after a different authorised staff member approves it.
+model ApprovalRequest {
+  id            String    @id @default(cuid())
+  type          String // LEDGER_ADJUSTMENT | REMITTANCE_REFUND | FX_OVERRIDE | LIMIT_CHANGE | CUSTOMER_UNFREEZE
+  status        String    @default("PENDING") // PENDING | APPROVED | REJECTED | EXECUTED | FAILED | EXPIRED | CANCELLED
+  payload       Json
+  reason        String
+  subjectType   String?
+  subjectId     String?
+  requestedById String
+  decidedById   String?
+  decisionNote  String?
+  decidedAt     DateTime?
+  executedAt    DateTime?
+  result        Json?
+  expiresAt     DateTime
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([status, type])
+  @@index([requestedById])
+  @@index([subjectType, subjectId])
+}
+
+/// A hedge Tazdan placed outside the platform against the crypto position it
+/// carries when customer orders fill as principal (venue unreachable). BUY
+/// reduces the short position customers' net buying creates. Append-only.
+model PrincipalHedge {
+  id          String   @id @default(cuid())
+  asset       String
+  side        String // BUY | SELL
+  quantity    Decimal  @db.Decimal(36, 18)
+  priceUsd    Decimal  @db.Decimal(20, 8)
+  venue       String
+  reference   String?
+  note        String?
+  createdById String
+  createdAt   DateTime @default(now())
+
+  @@index([asset, createdAt])
 }

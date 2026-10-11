@@ -7,17 +7,18 @@
  *  - SafeAreaView edges
  */
 
+import { ui } from '@/theme';
+import { useT } from '@/store/i18nStore';
 import { ReactNode } from 'react';
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, View, type StyleProp, type ViewStyle } from 'react-native';
+import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, RefreshControl, ScrollView, Switch, View, type StyleProp, type ViewStyle } from 'react-native';
 import { Text } from './Text';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { useTheme, useThemedPalette } from '@/store/themeStore';
-import { useHaptics } from '@/hooks';
+import { HEADER, HEADER_ROW_HEIGHT, HeaderBackButton, StackHeader } from './ScreenHeader';
 
 /**
  * Shared top-of-screen accent gradient — matches the one on the home tab.
@@ -26,6 +27,7 @@ import { useHaptics } from '@/hooks';
  * Can also be used standalone in custom-layout screens.
  */
 export function TopGradient({ height }: { height?: number }) {
+  const p = useThemedPalette();
   const themeMode = useTheme((s) => s.mode);
   const insets = useSafeAreaInsets();
 
@@ -34,25 +36,7 @@ export function TopGradient({ height }: { height?: number }) {
 
   return (
     <LinearGradient
-      colors={
-        themeMode === 'mono'
-          ? // Flat, subtle grey — no gradient (and no blue) in monochrome mode.
-            ['rgba(26,26,26,0.6)', 'rgba(26,26,26,0.2)', 'rgba(0,0,0,0)']
-          : themeMode === 'dark'
-          ? [
-              // Soft brand-blue mist over the top, fading to nothing. Low
-              // alpha so it reads as a tint on the dark bg, never a fill.
-              'rgba(99, 161, 219, 0.22)',  // #63a1db whisper at top
-              'rgba(99, 161, 219, 0.07)',  // thinning out
-              'rgba(10, 10, 11, 0)',       // fade to transparent
-            ]
-          : [
-              // Light mode — an even fainter blue haze on the paper bg.
-              'rgba(79, 139, 196, 0.16)',  // deepened blue, low alpha
-              'rgba(79, 139, 196, 0.05)',
-              'rgba(250, 250, 247, 0)',    // fade to transparent
-            ]
-      }
+      colors={[`${p.accent}18`, `${p.accent}08`, `${p.accent}00`]}
       locations={[0, 0.45, 1]}
       start={{ x: 0.5, y: 0 }}
       end={{ x: 0.5, y: 1 }}
@@ -92,14 +76,9 @@ export function StickyTopBar({
   children,
   /** Override the blur tint manually (defaults to the active theme). */
   tint,
-  /** Hide the hairline rule under the bar (useful when the page
-   *  itself owns a heading row immediately below the bar and the
-   *  extra divider reads as visual noise). */
-  hairline = true,
 }: {
   children?: ReactNode;
   tint?: 'light' | 'dark';
-  hairline?: boolean;
 }) {
   const themeMode = useTheme((s) => s.mode);
   const p         = useThemedPalette();
@@ -127,9 +106,7 @@ export function StickyTopBar({
           top: 0, left: 0, right: 0, bottom: 0,
           backgroundColor: Platform.OS === 'ios'
             ? 'transparent'
-            : (themeMode === 'dark'
-                ? 'rgba(22,24,28,0.74)'
-                : 'rgba(250,250,247,0.78)'),
+            : p.bg,
         }}
       />
       <TopGradient />
@@ -137,21 +114,6 @@ export function StickyTopBar({
       <View style={{ paddingTop: insets.top }}>
         {children}
       </View>
-      {/* Hairline under the bar — separates it from the scrolling
-          body.  Skipped when a caller passes `hairline={false}` (eg.
-          the home tab, where the gradient already fades smoothly
-          into the avatar/handle row beneath). */}
-      {hairline && (
-        <View
-          pointerEvents="none"
-          style={{
-            position: 'absolute',
-            left: 0, right: 0, bottom: 0,
-            height: 1,
-            backgroundColor: p.border,
-          }}
-        />
-      )}
     </View>
   );
 }
@@ -161,6 +123,8 @@ interface Props {
   subtitle?: string;
   /** Show the back button (default true). */
   back?: boolean;
+  onBack?: () => void;
+  backIcon?: 'chevron-back' | 'close';
   /** Right-side accessory (e.g. a button). */
   right?: ReactNode;
   /** Wrap content in a vertical ScrollView (default true). */
@@ -170,75 +134,72 @@ interface Props {
    *  existing screens are unaffected. */
   keyboard?: boolean;
   contentStyle?: StyleProp<ViewStyle>;
+  /** Money-flow pages (buy, sell, send, top up, receive…): no title, no back
+   *  arrow, no rule under the bar — just a ✕ in the top-right corner. */
+  closeOnly?: boolean;
+  /** Pull-to-refresh (scroll mode only). */
+  onRefresh?: () => void;
+  refreshing?: boolean;
   children: ReactNode;
 }
 
 export function ScreenShell({
-  title, subtitle, back = true, right, scroll = true, keyboard = false, contentStyle, children,
+  title, subtitle, back = true, onBack, backIcon, right, scroll = true, keyboard = false, contentStyle,
+  closeOnly = false, onRefresh, refreshing = false, children,
 }: Props) {
-  const router    = useRouter();
-  const h         = useHaptics();
   const p         = useThemedPalette();
   const themeMode = useTheme((s) => s.mode);
   const insets    = useSafeAreaInsets();
 
-  // Approximate height of the sticky bar: safe-area top + the
-  // header's 18 (top) + ~46 (back button + padding) + 10 (bottom).
-  // Padding the body by this amount keeps the first row from being
-  // hidden under the bar on first paint.
-  const stickyH = insets.top + 18 + 38 + 10;
+  // Height of the sticky bar. The body starts below it so the first row
+  // isn't hidden under the bar on first paint.
+  const stickyH = insets.top + HEADER_ROW_HEIGHT;
+
+  // With pull-to-refresh on iOS the offset is a content inset rather than
+  // padding, so the spinner appears below the frosted bar instead of behind it.
+  const insetForRefresh = scroll && !!onRefresh && Platform.OS === 'ios';
 
   // In keyboard mode pad the bottom generously so the last field/CTA clears
   // the on-screen keyboard even before the KeyboardAvoidingView lifts.
   const bottomPad = keyboard ? insets.bottom + 120 : 64;
   const bodyPadStyle = scroll
-    ? { paddingTop: stickyH, paddingHorizontal: 24, paddingBottom: bottomPad }
-    : { paddingTop: stickyH, paddingHorizontal: 24, flex: 1 };
+    ? { paddingTop: insetForRefresh ? 0 : stickyH, paddingHorizontal: HEADER.gutter, paddingBottom: bottomPad }
+    : { paddingTop: stickyH, paddingHorizontal: HEADER.gutter, flex: 1 };
   const bodyProps = scroll
     ? {
         showsVerticalScrollIndicator: false,
         style: { flex: 1 },
         contentContainerStyle: [bodyPadStyle, contentStyle],
         ...(keyboard ? { keyboardShouldPersistTaps: 'handled' as const, keyboardDismissMode: 'interactive' as const } : {}),
+        ...(insetForRefresh ? {
+          contentInset: { top: stickyH },
+          contentOffset: { x: 0, y: -stickyH },
+          scrollIndicatorInsets: { top: stickyH },
+          automaticallyAdjustContentInsets: false,
+        } : {}),
+        ...(onRefresh ? {
+          refreshControl: (
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor={p.fgMuted}
+              colors={[p.accent]}
+              progressViewOffset={stickyH}
+            />
+          ),
+        } : {}),
       }
     : { style: [bodyPadStyle, contentStyle] };
 
-  const header = (
+  const header = closeOnly ? (
     <View style={{
-      flexDirection: 'row', alignItems: 'center',
-      paddingHorizontal: 24, paddingTop: 18, paddingBottom: 10,
-      gap: 12,
+      flexDirection: 'row', justifyContent: 'flex-end',
+      paddingHorizontal: HEADER.gutter, paddingTop: HEADER.padTop, paddingBottom: HEADER.padBottom,
     }}>
-      {back ? (
-        <Pressable
-          onPress={() => { h.selection(); router.back(); }}
-          hitSlop={10}
-          style={{
-            width: 38, height: 38, borderRadius: 19,
-            alignItems: 'center', justifyContent: 'center',
-            backgroundColor: p.pillBg,
-            borderWidth: 1, borderColor: p.border,
-          }}
-        >
-          <Ionicons name="chevron-back" size={20} color={p.fg} />
-        </Pressable>
-      ) : <View style={{ width: 38 }} />}
-
-      <View style={{ flex: 1 }}>
-        {title && (
-          <Text style={{ color: p.fg, fontSize: 17, fontWeight: '500', letterSpacing: -0.3 }} numberOfLines={1}>
-            {title}
-          </Text>
-        )}
-        {subtitle && (
-          <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '500', marginTop: 1 }} numberOfLines={1}>
-            {subtitle}
-          </Text>
-        )}
-      </View>
-
-      {right ?? <View style={{ width: 38 }} />}
+      <HeaderBackButton icon="close" onPress={onBack} />
     </View>
+  ) : (
+    <StackHeader title={title} subtitle={subtitle} back={back} onBack={onBack} backIcon={backIcon} right={right} />
   );
 
   return (
@@ -301,6 +262,7 @@ export function CTAButton({
   const p = useThemedPalette();
   const themeMode = useTheme((s) => s.mode);
 
+  const t = useT();
   const effective: CTAState = state ?? (loading ? 'loading' : 'idle');
 
   let bg = p.ctaBg;
@@ -309,14 +271,14 @@ export function CTAButton({
   let displayIcon = icon;
 
   if (effective === 'success') {
-    bg = '#10b981';
-    fg = '#ffffff';
-    displayLabel = successLabel ?? 'Done';
+    bg = p.greenBg;
+    fg = p.greenFg;
+    displayLabel = successLabel ?? t('common.done');
     displayIcon = 'checkmark-circle';
   } else if (effective === 'error') {
-    bg = '#ef4444';
-    fg = '#ffffff';
-    displayLabel = errorLabel ?? 'Try again';
+    bg = p.redBg;
+    fg = p.redFg;
+    displayLabel = errorLabel ?? t('common.retry');
     displayIcon = 'close-circle';
   }
 
@@ -324,6 +286,9 @@ export function CTAButton({
     <Pressable
       onPress={onPress}
       disabled={disabled || effective === 'loading' || effective === 'success'}
+      accessibilityRole="button"
+      accessibilityLabel={displayLabel}
+      accessibilityState={{ disabled: !!disabled || effective === 'loading' || effective === 'success', busy: effective === 'loading' }}
       style={({ pressed }) => ({
         alignSelf: 'stretch',
         width: '100%',
@@ -340,7 +305,7 @@ export function CTAButton({
         elevation: 3,
       })}
     >
-      {displayIcon && <Ionicons name={displayIcon} size={18} color={fg} />}
+      {effective === 'loading' ? <ActivityIndicator color={fg} /> : displayIcon && <Ionicons name={displayIcon} size={18} color={fg} />}
       <Text style={{ color: fg, fontSize: 16, fontWeight: '500', letterSpacing: -0.1 }}>
         {displayLabel}
       </Text>
@@ -366,8 +331,8 @@ export function SecondaryButton({
         height: 56,
         borderRadius: 28,
         backgroundColor: pressed ? p.bgElev : 'transparent',
-        borderWidth: 1.5,
-        borderColor: p.fg,
+        borderWidth: 1,
+        borderColor: p.border,
         alignItems: 'center', justifyContent: 'center',
         flexDirection: 'row', gap: 8,
       })}
@@ -384,7 +349,7 @@ export function Panel({ children, style }: { children: ReactNode; style?: StyleP
   return (
     <View style={[{
       backgroundColor: p.bgElev,
-      borderRadius: 18,
+      borderRadius: ui.cardRadius,
       borderWidth: 1, borderColor: p.border,
       overflow: 'hidden',
     }, style]}>
@@ -395,10 +360,14 @@ export function Panel({ children, style }: { children: ReactNode; style?: StyleP
 
 /** Single tappable row inside a Panel. */
 export function PanelRow({
-  icon, label, onPress, danger, last, right,
+  icon, label, description, value, onPress, danger, last, right,
 }: {
   icon: keyof typeof Ionicons.glyphMap;
   label: string;
+  /** Secondary line under the label. */
+  description?: string;
+  /** Current value shown on the right, before the chevron (e.g. "On"). */
+  value?: string;
   onPress: () => void;
   danger?: boolean;
   last?: boolean;
@@ -409,24 +378,99 @@ export function PanelRow({
   return (
     <Pressable
       onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={value ? `${label}, ${value}` : label}
       style={({ pressed }) => ({
         flexDirection: 'row', alignItems: 'center',
-        paddingHorizontal: 14, paddingVertical: 14,
+        paddingHorizontal: 18, paddingVertical: 16,
         backgroundColor: pressed ? p.border : 'transparent',
         borderBottomWidth: last ? 0 : 1,
         borderBottomColor: p.border,
       })}
     >
       <View style={{
-        width: 32, height: 32, borderRadius: 10,
+        width: 36, height: 36, borderRadius: 18,
         alignItems: 'center', justifyContent: 'center',
-        backgroundColor: danger ? 'rgba(239,68,68,0.14)' : p.pillBg,
+        backgroundColor: danger ? p.redBg : p.pillBg,
         marginRight: 12,
       }}>
         <Ionicons name={icon} size={16} color={fg} />
       </View>
-      <Text style={{ color: fg, fontSize: 15, fontWeight: '500', flex: 1 }}>{label}</Text>
+      <View style={{ flex: 1 }}>
+        <Text style={{ color: fg, fontSize: 15, fontWeight: '500' }}>{label}</Text>
+        {!!description && (
+          <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '400', marginTop: 2 }}>{description}</Text>
+        )}
+      </View>
+      {!!value && (
+        <Text style={{ color: p.fgMuted, fontSize: 14, fontWeight: '500', marginLeft: 8, marginRight: 6 }}>{value}</Text>
+      )}
       {right ?? (!danger && <Ionicons name="chevron-forward" size={16} color={p.fgFaint} />)}
     </Pressable>
+  );
+}
+
+/** Uppercase caption above a Panel. `first` tightens the gap under the header. */
+export function SectionLabel({ children, first }: { children: string; first?: boolean }) {
+  const p = useThemedPalette();
+  return (
+    <Text
+      accessibilityRole="header"
+      style={{
+        color: p.fgMuted, fontSize: 12, fontWeight: '600', letterSpacing: 0.6,
+        textTransform: 'uppercase',
+        marginTop: first ? 12 : 28, marginBottom: 8, marginLeft: 4,
+      }}
+    >
+      {children}
+    </Text>
+  );
+}
+
+/** Row with a switch inside a Panel — same layout and colours everywhere. */
+export function ToggleRow({
+  icon, label, description, value, onValueChange, disabled, last,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  description?: string;
+  value: boolean;
+  onValueChange: (next: boolean) => void;
+  disabled?: boolean;
+  last?: boolean;
+}) {
+  const p = useThemedPalette();
+  return (
+    <View style={{
+      flexDirection: 'row', alignItems: 'center',
+      paddingHorizontal: 18, paddingVertical: 16,
+      borderBottomWidth: last ? 0 : 1, borderBottomColor: p.border,
+      opacity: disabled ? 0.6 : 1,
+    }}>
+      <View style={{
+        width: 36, height: 36, borderRadius: 18,
+        alignItems: 'center', justifyContent: 'center',
+        backgroundColor: p.pillBg, marginRight: 12,
+      }}>
+        <Ionicons name={icon} size={16} color={p.fg} />
+      </View>
+      <View style={{ flex: 1, marginRight: 10 }}>
+        <Text style={{ color: p.fg, fontSize: 15, fontWeight: '500' }}>{label}</Text>
+        {!!description && (
+          <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '400', marginTop: 2 }}>{description}</Text>
+        )}
+      </View>
+      <Switch
+        value={value}
+        onValueChange={onValueChange}
+        disabled={disabled}
+        accessibilityLabel={label}
+        trackColor={{ false: p.border, true: p.accent }}
+        thumbColor="#FFFFFF"
+        ios_backgroundColor={p.border}
+        // react-native-web colours the "on" thumb separately (default teal).
+        {...({ activeThumbColor: '#FFFFFF' } as object)}
+      />
+    </View>
   );
 }

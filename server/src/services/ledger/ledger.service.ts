@@ -20,6 +20,7 @@
  * USD→LYD or NGN→USDT all settle with the same primitive. This is the spine
  * for global crypto + remittances, not a Libya-specific hack.
  */
+import { randomUUID } from 'crypto';
 import { Prisma, type Currency, type LedgerAccountType } from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/library';
 import { prisma } from '../../utils/prisma';
@@ -30,11 +31,35 @@ export type Tx = Prisma.TransactionClient;
  *  UserWallet.altBalances are skipped by mirrors until they get enum support. */
 export const LEDGER_CURRENCIES = new Set<string>([
   'USDT', 'BTC', 'ETH', 'BNB', 'SOL', 'XRP', 'ADA', 'DOGE', 'MATIC', 'DOT', 'AVAX',
-  'USD', 'EUR', 'GBP', 'AED', 'SAR', 'EGP', 'LYD',
+  'USD', 'EUR', 'GBP', 'AED', 'SAR', 'EGP', 'LYD', 'TRY', 'TND',
 ]);
 export function isLedgerCurrency(c: string): boolean {
   return LEDGER_CURRENCIES.has(c.toUpperCase());
 }
+
+/**
+ * Safeguarding classification of every account type. Customer money,
+ * settlement/treasury money and corporate money are reported separately and
+ * routine logic never nets one class against another.
+ *   CUSTOMER   — owed to customers (their balances, escrow, money in transit)
+ *   SETTLEMENT — rails, partners, treasury prefunding, suspense, adjustments
+ *   CORPORATE  — Tazdan's own revenue
+ */
+export type FundClass = 'CUSTOMER' | 'SETTLEMENT' | 'CORPORATE';
+export const FUND_CLASS: Record<LedgerAccountType, FundClass> = {
+  USER: 'CUSTOMER',
+  SYSTEM_ESCROW: 'CUSTOMER',
+  REMITTANCE_CLEARING: 'CUSTOMER',
+  SYSTEM_ONRAMP: 'SETTLEMENT',
+  SYSTEM_OFFRAMP: 'SETTLEMENT',
+  SYSTEM_CHAIN: 'SETTLEMENT',
+  SYSTEM_FX: 'SETTLEMENT',
+  PARTNER_SETTLEMENT: 'SETTLEMENT',
+  TREASURY: 'SETTLEMENT',
+  SUSPENSE: 'SETTLEMENT',
+  ADJUSTMENT: 'SETTLEMENT',
+  PLATFORM: 'CORPORATE',
+};
 
 /** One side of a movement. `amount` is signed: +credit into account, -debit. */
 export interface Leg {
@@ -112,7 +137,7 @@ export async function postLedger(
   }
 
   // 2) Resolve/aggregate accounts (collapse duplicate legs to one entry each).
-  const groupId = `lg_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+  const groupId = `lg_${Date.now().toString(36)}_${randomUUID().replace(/-/g, '').slice(0, 16)}`;
   const agg = new Map<string, { leg: Leg; amount: Decimal }>();
   for (const leg of input.legs) {
     const k = keyFor(leg);

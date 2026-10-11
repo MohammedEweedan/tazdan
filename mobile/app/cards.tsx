@@ -16,6 +16,9 @@ import Svg, { Circle, Path, Rect } from 'react-native-svg';
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { HeaderIconButton, StackHeader } from '@/components/ui/ScreenHeader';
+import { StatusBanner } from '@/components/ui/StatusBanner';
+import { useFeatures } from '@/hooks/useFeatures';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
 
@@ -28,6 +31,7 @@ import { QUERY_KEYS } from '@/constants';
 import { LoadingPulse } from '@/components/ui/LoadingPulse';
 import type { CardEntity } from '@/types';
 
+import { BottomSheet } from '@/components/ui/BottomSheet';
 const { width: SCREEN_W } = Dimensions.get('window');
 const CARD_W  = SCREEN_W - 48;
 const CARD_H  = Math.round(CARD_W * 0.628); // ISO 7810 credit card ratio
@@ -240,7 +244,7 @@ function VisaCard({
               Replaces the contactless glyph in the top-right per
               design spec; contactless moves next to the chip below. */}
           <Image
-            source={require('../assets/icon-white.png')}
+            source={require('../assets/icon-asterisk-white.png')}
             style={{ width: Math.round(width * 0.085), height: Math.round(width * 0.085), opacity: 0.95 }}
             resizeMode="contain"
           />
@@ -514,28 +518,7 @@ function SimulatePurchaseModal({
   };
 
   return (
-    <Modal visible={!!card} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable onPress={onClose} style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)' }}>
-        <Pressable
-          onPress={(e) => e.stopPropagation()}
-          style={{
-            marginTop: 'auto',
-            backgroundColor: p.bg,
-            borderTopLeftRadius: 24, borderTopRightRadius: 24,
-            padding: 24, paddingBottom: 36, gap: 14,
-          }}
-        >
-          <View style={{ alignItems: 'center', marginBottom: 4 }}>
-            <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: p.border }} />
-          </View>
-          <Text style={{ color: p.fg, fontSize: 20, fontWeight: '600', letterSpacing: -0.4 }}>
-            {t('cards.simulatePurchase')}
-          </Text>
-          {card && (
-            <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '500', marginTop: -8 }}>
-              •••• {card.last4}
-            </Text>
-          )}
+    <BottomSheet visible={!!card} onClose={onClose} title={t('cards.simulatePurchase')} subtitle={card ? `•••• ${card.last4}` : undefined}>
 
           {/* Merchant */}
           <View style={{
@@ -604,9 +587,7 @@ function SimulatePurchaseModal({
               {loading ? 'Processing…' : t('cards.simulatePurchase')}
             </Text>
           </Pressable>
-        </Pressable>
-      </Pressable>
-    </Modal>
+        </BottomSheet>
   );
 }
 
@@ -656,29 +637,7 @@ function TopUpModal({
   };
 
   return (
-    <Modal visible={!!card} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable onPress={onClose} style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)' }}>
-        <Pressable
-          onPress={(e) => e.stopPropagation()}
-          style={{
-            marginTop: 'auto',
-            backgroundColor: p.bg,
-            borderTopLeftRadius: 24, borderTopRightRadius: 24,
-            padding: 24, paddingBottom: 36, gap: 16,
-          }}
-        >
-          <View style={{ alignItems: 'center', marginBottom: 4 }}>
-            <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: p.border }} />
-          </View>
-
-          <Text style={{ color: p.fg, fontSize: 20, fontWeight: '600', letterSpacing: -0.4 }}>
-            Top Up Card
-          </Text>
-          {card && (
-            <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '500', marginTop: -10 }}>
-              •••• {card.last4} — {card.tier}
-            </Text>
-          )}
+    <BottomSheet visible={!!card} onClose={onClose} title={"Top Up Card"} subtitle={card ? `•••• ${card.last4} — ${card.tier}` : undefined}>
 
           {/* Currency selector */}
           {fundable.length > 1 && (
@@ -771,9 +730,7 @@ function TopUpModal({
               {loading ? 'Processing…' : `Top Up ${amt > 0 ? amt.toLocaleString() : ''}`}
             </Text>
           </Pressable>
-        </Pressable>
-      </Pressable>
-    </Modal>
+        </BottomSheet>
   );
 }
 
@@ -836,23 +793,7 @@ function OrderPhysicalModal({
   );
 
   return (
-    <Modal visible={!!card} transparent animationType="slide" onRequestClose={onClose}>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
-        <Pressable onPress={onClose} style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)' }}>
-          <Pressable
-            onPress={(e) => e.stopPropagation()}
-            style={{ marginTop: 'auto', backgroundColor: p.bg, borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: '88%' }}
-          >
-            <ScrollView contentContainerStyle={{ padding: 24, paddingBottom: 40, gap: 12 }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-              <View style={{ alignItems: 'center', marginBottom: 4 }}>
-                <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: p.border }} />
-              </View>
-              <Text style={{ color: p.fg, fontSize: 20, fontWeight: '700', letterSpacing: -0.4 }}>{t('cards.orderPhysical')}</Text>
-              {card && (
-                <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '500', marginTop: -6 }}>
-                  •••• {card.last4} — {card.tier}
-                </Text>
-              )}
+    <BottomSheet visible={!!card} onClose={onClose} title={t('cards.orderPhysical')} subtitle={card ? `•••• ${card.last4} — ${card.tier}` : undefined}>
 
               {field(t('cards.shipName'), name, setName)}
               {field(t('cards.shipLine1'), line1, setLine1)}
@@ -885,11 +826,7 @@ function OrderPhysicalModal({
                   {loading ? t('cards.ordering') : `${t('cards.placeOrder')} · $${fee.toFixed(0)}`}
                 </Text>
               </Pressable>
-            </ScrollView>
-          </Pressable>
-        </Pressable>
-      </KeyboardAvoidingView>
-    </Modal>
+            </BottomSheet>
   );
 }
 
@@ -1036,18 +973,7 @@ function IssueCardModal({
   const miniW = SCREEN_W - 120;
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={handleClose}>
-      <Pressable
-        style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' }}
-        onPress={step === 'SUCCESS' ? handleClose : undefined}
-      >
-        <Pressable onPress={e => e.stopPropagation()} style={{ backgroundColor: p.bg, borderTopLeftRadius: 32, borderTopRightRadius: 32, overflow: 'hidden' }}>
-
-          {/* Drag pill */}
-          <View style={{ alignItems: 'center', paddingTop: 12, paddingBottom: 4 }}>
-            <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: p.border }} />
-          </View>
-
+    <BottomSheet visible={visible} onClose={handleClose} contentStyle={{ paddingHorizontal: 0 }}>
           {/* ── STEP 1: Pick tier ── */}
           {step === 'PICK' && (
             <View style={{ paddingHorizontal: 24, paddingBottom: 40 }}>
@@ -1255,9 +1181,7 @@ function IssueCardModal({
               </Pressable>
             </View>
           )}
-        </Pressable>
-      </Pressable>
-    </Modal>
+        </BottomSheet>
   );
 }
 
@@ -1271,6 +1195,7 @@ export default function Cards() {
   const theme  = useTheme(s => s.mode);
   const router = useRouter();
   const qc     = useQueryClient();
+  const features = useFeatures();
 
   const { data: fetched, isLoading } = useCards();
   const { data: wallets = [] }       = useWallets();
@@ -1297,7 +1222,8 @@ export default function Cards() {
   const activeCard = allCards[activeIdx] ?? null;
 
   const { data: realTxs = [], isLoading: txsLoading } = useCardTransactions(activeCard?.id ?? null);
-  const txs = realTxs.length > 0 ? realTxs : (activeCard ? mockTxsForCard(activeCard.id) : []);
+  // Real transactions only — a money app must never show made-up activity.
+  const txs = realTxs;
 
   const toggleFreeze = async (c: CardEntity) => {
     const isFrozen = c.status === 'FROZEN';
@@ -1322,18 +1248,17 @@ export default function Cards() {
       <SafeAreaView style={{ flex: 1 }} edges={['top']}>
 
         {/* Header */}
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 24, paddingTop: 12, paddingBottom: 8 }}>
-          <Pressable onPress={() => router.back()} hitSlop={8}>
-            <Ionicons name="chevron-back" size={24} color={p.fg} />
-          </Pressable>
-          <Text style={{ color: p.fg, fontSize: 18, fontWeight: '600', letterSpacing: -0.4 }}>{t('cards.title')}</Text>
-          <Pressable
-            onPress={() => { h.medium(); setIssueOpen(true); }}
-            style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: p.pillBg, borderWidth: 1, borderColor: p.border, alignItems: 'center', justifyContent: 'center' }}
-          >
-            <Ionicons name="add" size={20} color={p.fg} />
-          </Pressable>
-        </View>
+        <StackHeader
+          title={t('cards.title')}
+          right={features.cards
+            ? <HeaderIconButton icon="add" label={t('cards.orderCard')} onPress={() => setIssueOpen(true)} />
+            : undefined}
+        />
+        {!features.cards && (
+          <View style={{ marginHorizontal: 24, marginTop: 4 }}>
+            <StatusBanner kind="info" message={t('features.cardsPaused')} />
+          </View>
+        )}
 
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 120 }}>
 
@@ -1366,7 +1291,7 @@ export default function Cards() {
               <Text style={{ color: p.fgMuted, fontSize: 14, textAlign: 'center', marginTop: 8, lineHeight: 20 }}>
                 {t('cards.emptySubtitle')}
               </Text>
-              <Pressable
+              {features.cards && <Pressable
                 onPress={() => { h.medium(); setIssueOpen(true); }}
                 style={({ pressed }) => ({
                   marginTop: 28, paddingHorizontal: 32, height: 52, borderRadius: 26,
@@ -1377,7 +1302,7 @@ export default function Cards() {
               >
                 <Ionicons name="add-circle-outline" size={20} color="#fff" />
                 <Text style={{ color: '#fff', fontSize: 16, fontWeight: '600' }}>{t('cards.orderCard')}</Text>
-              </Pressable>
+              </Pressable>}
             </View>
           ) : (
             <>
@@ -1433,17 +1358,17 @@ export default function Cards() {
                           flexDirection: 'row', alignItems: 'center', gap: 5,
                           paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8,
                           backgroundColor: activeCard.status === 'ACTIVE' ? 'rgba(34,197,94,0.12)' :
-                            activeCard.status === 'FROZEN' ? 'rgba(99,161,219,0.12)' : 'rgba(239,68,68,0.12)',
+                            activeCard.status === 'FROZEN' ? p.accentSoft : 'rgba(239,68,68,0.12)',
                         }}>
                           <View style={{
                             width: 6, height: 6, borderRadius: 3,
                             backgroundColor: activeCard.status === 'ACTIVE' ? '#22c55e' :
-                              activeCard.status === 'FROZEN' ? '#63a1db' : '#ef4444',
+                              activeCard.status === 'FROZEN' ? p.accentText : '#ef4444',
                           }} />
                           <Text style={{
                             fontSize: 11, fontWeight: '600',
                             color: activeCard.status === 'ACTIVE' ? '#22c55e' :
-                              activeCard.status === 'FROZEN' ? '#63a1db' : '#ef4444',
+                              activeCard.status === 'FROZEN' ? p.accentText : '#ef4444',
                           }}>
                             {activeCard.status}
                           </Text>
@@ -1465,17 +1390,17 @@ export default function Cards() {
                       disabled={busyId === activeCard.id}
                       style={({ pressed }) => ({
                         flex: 1, height: 56, borderRadius: 16,
-                        backgroundColor: activeCard.status === 'FROZEN' ? 'rgba(99,161,219,0.12)' : p.pillBg,
+                        backgroundColor: activeCard.status === 'FROZEN' ? p.accentSoft : p.pillBg,
                         borderWidth: 1,
-                        borderColor: activeCard.status === 'FROZEN' ? 'rgba(99,161,219,0.3)' : p.border,
+                        borderColor: activeCard.status === 'FROZEN' ? p.accentBorder : p.border,
                         alignItems: 'center', justifyContent: 'center', gap: 4,
                         opacity: pressed || busyId === activeCard.id ? 0.7 : 1,
                       })}
                     >
                       {busyId === activeCard.id
                         ? <ActivityIndicator size="small" color={p.fg} />
-                        : <Ionicons name={activeCard.status === 'FROZEN' ? 'sunny-outline' : 'snow-outline'} size={20} color={activeCard.status === 'FROZEN' ? '#63a1db' : p.fg} />}
-                      <Text style={{ color: activeCard.status === 'FROZEN' ? '#63a1db' : p.fg, fontSize: 10, fontWeight: '700' }}>
+                        : <Ionicons name={activeCard.status === 'FROZEN' ? 'sunny-outline' : 'snow-outline'} size={20} color={activeCard.status === 'FROZEN' ? p.accentText : p.fg} />}
+                      <Text style={{ color: activeCard.status === 'FROZEN' ? p.accentText : p.fg, fontSize: 10, fontWeight: '700' }}>
                         {activeCard.status === 'FROZEN' ? t('cards.unfreeze') : t('cards.freeze')}
                       </Text>
                     </Pressable>
@@ -1523,20 +1448,23 @@ export default function Cards() {
                       <Text style={{ color: p.fg, fontSize: 10, fontWeight: '700' }}>{t('cards.topup')}</Text>
                     </Pressable>
 
-                    {/* Simulate Purchase */}
-                    <Pressable
-                      onPress={() => { h.selection(); setSimulateCard(activeCard); }}
-                      disabled={activeCard.status !== 'ACTIVE'}
-                      style={({ pressed }) => ({
-                        flex: 1, height: 56, borderRadius: 16,
-                        backgroundColor: p.pillBg, borderWidth: 1, borderColor: p.border,
-                        alignItems: 'center', justifyContent: 'center', gap: 4,
-                        opacity: pressed || activeCard.status !== 'ACTIVE' ? 0.5 : 1,
-                      })}
-                    >
-                      <Ionicons name="storefront-outline" size={20} color={p.fg} />
-                      <Text style={{ color: p.fg, fontSize: 10, fontWeight: '700' }}>Simulate</Text>
-                    </Pressable>
+                    {/* Simulate Purchase — development builds only; the server
+                        rejects simulated card spend in production. */}
+                    {__DEV__ && (
+                      <Pressable
+                        onPress={() => { h.selection(); setSimulateCard(activeCard); }}
+                        disabled={activeCard.status !== 'ACTIVE'}
+                        style={({ pressed }) => ({
+                          flex: 1, height: 56, borderRadius: 16,
+                          backgroundColor: p.pillBg, borderWidth: 1, borderColor: p.border,
+                          alignItems: 'center', justifyContent: 'center', gap: 4,
+                          opacity: pressed || activeCard.status !== 'ACTIVE' ? 0.5 : 1,
+                        })}
+                      >
+                        <Ionicons name="storefront-outline" size={20} color={p.fg} />
+                        <Text style={{ color: p.fg, fontSize: 10, fontWeight: '700' }}>Simulate</Text>
+                      </Pressable>
+                    )}
                   </View>
 
                   {/* Add to wallet */}
@@ -1609,7 +1537,7 @@ export default function Cards() {
               )}
 
               {/* New card CTA */}
-              <Pressable
+              {features.cards && <Pressable
                 onPress={() => { h.medium(); setIssueOpen(true); }}
                 style={({ pressed }) => ({
                   marginHorizontal: 24, marginTop: 20, height: 52, borderRadius: 26,
@@ -1620,7 +1548,7 @@ export default function Cards() {
               >
                 <Ionicons name="add-circle-outline" size={18} color={p.fg} />
                 <Text style={{ color: p.fg, fontSize: 14, fontWeight: '700' }}>{t('cards.issueAnother')}</Text>
-              </Pressable>
+              </Pressable>}
             </>
           )}
         </ScrollView>

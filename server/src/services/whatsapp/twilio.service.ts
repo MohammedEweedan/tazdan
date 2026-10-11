@@ -214,7 +214,11 @@ export async function startVerification(opts: {
     return { ok: result.ok, status: result.ok ? 'pending' : 'failed', reason: result.reason, mode: 'direct' };
   }
 
-  // Path 3 — Dev/sim: no Twilio creds at all.
+  // Path 3 — Dev/sim: no Twilio creds at all. Never in production: the
+  // simulated code is fixed, so it would verify any phone number.
+  if (process.env.NODE_ENV === 'production') {
+    return { ok: false, status: 'failed', reason: 'Phone verification is unavailable right now', mode: 'unconfigured' };
+  }
   console.log('[twilio:verify] simulated OTP for', to, 'channel:', opts.channel);
   if (opts.userId) {
     // Store a simulated code so checkVerification works end-to-end in dev.
@@ -258,7 +262,8 @@ export async function checkVerification(opts: {
     return checkOtpDirect({ userId: opts.userId, code: opts.code });
   }
 
-  // Path 3 — Simulated: accept any 6-digit code.
+  // Path 3 — Simulated: accept any 6-digit code. Development only.
+  if (process.env.NODE_ENV === 'production') return { valid: false, reason: 'unconfigured' };
   const ok = /^\d{6}$/.test(opts.code);
   return { valid: ok, reason: ok ? 'simulated' : 'simulated-rejected' };
 }

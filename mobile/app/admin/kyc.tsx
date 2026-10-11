@@ -17,6 +17,7 @@ import { adminService } from '@/services';
 import { LoadingPulse } from '@/components/ui/LoadingPulse';
 import { AdminScreen, AdminTabs } from '@/components/admin/AdminScreen';
 
+import { BottomSheet } from '@/components/ui/BottomSheet';
 type KycStatus = 'ALL' | 'PENDING' | 'APPROVED' | 'REJECTED';
 
 const STATUS_FILTERS: KycStatus[] = ['ALL', 'PENDING', 'APPROVED', 'REJECTED'];
@@ -136,13 +137,7 @@ export default function AdminKYC() {
       ))()}
 
       {/* Reject / Revoke sheet */}
-      <Modal visible={!!rejectTarget} transparent animationType="slide" onRequestClose={() => setRejectTarget(null)}>
-        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' }}>
-          <View style={{ backgroundColor: p.bg, borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 20, paddingBottom: 36 }}>
-            <View style={{ alignSelf: 'center', width: 36, height: 4, borderRadius: 2, backgroundColor: p.border, marginBottom: 14 }} />
-            <Text style={{ color: p.fg, fontSize: 18, fontWeight: '600', marginBottom: 6 }}>
-              {rejectTarget?.mode === 'revoke' ? 'Revoke KYC Approval' : 'Reject KYC'}
-            </Text>
+      <BottomSheet visible={!!rejectTarget} onClose={() => setRejectTarget(null)} title={rejectTarget?.mode === 'revoke' ? 'Revoke KYC Approval' : 'Reject KYC'}>
             <Text style={{ color: p.fgMuted, fontSize: 13, marginBottom: 14 }}>
               {rejectTarget?.mode === 'revoke'
                 ? `This will move ${rejectTarget?.user?.email} back to REJECTED.`
@@ -177,18 +172,10 @@ export default function AdminKYC() {
                 </Text>
               </Pressable>
             </View>
-          </View>
-        </View>
-      </Modal>
+          </BottomSheet>
 
       {/* Document viewer */}
-      <Modal visible={!!docsTarget} transparent animationType="slide" onRequestClose={() => setDocsTarget(null)}>
-        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' }}>
-          <View style={{ backgroundColor: p.bg, borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 20, paddingBottom: 36, maxHeight: '75%' }}>
-            <View style={{ alignSelf: 'center', width: 36, height: 4, borderRadius: 2, backgroundColor: p.border, marginBottom: 14 }} />
-            <Text style={{ color: p.fg, fontSize: 18, fontWeight: '600', marginBottom: 14 }}>
-              Documents — {docsTarget?.firstName} {docsTarget?.lastName}
-            </Text>
+      <BottomSheet visible={!!docsTarget} onClose={() => setDocsTarget(null)} title={`Documents — ${docsTarget?.firstName} ${docsTarget?.lastName}`} scroll={false}>
             <ScrollView showsVerticalScrollIndicator={false}>
               {(!docsTarget?.kycDocuments || docsTarget.kycDocuments.length === 0) ? (
                 <Text style={{ color: p.fgMuted, textAlign: 'center', paddingVertical: 20 }}>No documents uploaded</Text>
@@ -220,17 +207,10 @@ export default function AdminKYC() {
             >
               <Text style={{ color: p.fg, fontWeight: '600' }}>Close</Text>
             </Pressable>
-          </View>
-        </View>
-      </Modal>
+          </BottomSheet>
 
       {/* Manual override sheet */}
-      <Modal visible={!!overrideTarget} transparent animationType="slide" onRequestClose={() => setOverrideTarget(null)}>
-        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' }}>
-          <View style={{ backgroundColor: p.bg, borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 20, paddingBottom: 36 }}>
-            <View style={{ alignSelf: 'center', width: 36, height: 4, borderRadius: 2, backgroundColor: p.border, marginBottom: 14 }} />
-            <Text style={{ color: p.fg, fontSize: 18, fontWeight: '600', marginBottom: 14 }}>Manual KYC Override</Text>
-
+      <BottomSheet visible={!!overrideTarget} onClose={() => setOverrideTarget(null)} title={"Manual KYC Override"}>
             <Text style={{ color: p.fgFaint, fontSize: 10, fontWeight: '600', letterSpacing: 0.6, marginBottom: 8 }}>ACTION</Text>
             <View style={{ flexDirection: 'row', gap: 10, marginBottom: 16 }}>
               {(['APPROVED', 'REJECTED'] as const).map((a) => {
@@ -294,9 +274,7 @@ export default function AdminKYC() {
                 </Text>
               </Pressable>
             </View>
-          </View>
-        </View>
-      </Modal>
+          </BottomSheet>
     </AdminScreen>
   );
 }

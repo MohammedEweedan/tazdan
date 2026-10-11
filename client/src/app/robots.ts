@@ -8,9 +8,9 @@ export default function robots(): MetadataRoute.Robots {
       {
         userAgent: '*',
         allow: '/',
-        // The web app is marketing-only now (landing + register + content
-        // pages). Only the API namespace stays out of search results.
-        disallow: ['/api'],
+        // Public pages are indexable. The API namespace and the staff-only
+        // Control Cockpit (/admin) stay out of search results.
+        disallow: ['/api', '/admin'],
       },
     ],
     sitemap: `${SITE_URL}/sitemap.xml`,

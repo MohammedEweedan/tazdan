@@ -8,8 +8,8 @@ const config: ThemeConfig = {
 const theme = extendTheme({
   config,
   fonts: {
-    heading: `'DM Sans', system-ui, sans-serif`,
-    body: `'DM Sans', system-ui, sans-serif`,
+    heading: `var(--font-outfit), var(--font-cairo), system-ui, sans-serif`,
+    body: `var(--font-outfit), var(--font-cairo), system-ui, sans-serif`,
     mono: `'JetBrains Mono', monospace`,
   },
   colors: {
@@ -19,7 +19,7 @@ const theme = extendTheme({
       200: '#5f74ff',
       300: '#286df7',
       400: '#286df7',
-      500: '#63a1db', // periwinkle — main brand color
+      500: '#24384F', // periwinkle — main brand color
       600: '#194ed4',
       700: '#135ba3',
       800: '#0d2475',
@@ -31,7 +31,7 @@ const theme = extendTheme({
       200: '#b9a5ff',
       300: '#286df7',
       400: '#286df7',
-      500: '#63a1db', // periwinkle
+      500: '#24384F', // periwinkle
       600: '#4419d4',
       700: '#3413a3',
       800: '#250d75',
@@ -43,10 +43,10 @@ const theme = extendTheme({
       body: {
         // Soft charcoal in dark mode (matches the mobile app), not Chakra's
         // default near-black gray.900 — easier on the eyes.
-        bg: props.colorMode === 'dark' ? '#16181C' : 'gray.50',
+        bg: props.colorMode === 'dark' ? '#16181C' : '#F6F7FA',
         color: props.colorMode === 'dark' ? 'white' : 'gray.800',
       },
-      "html[lang='ar'] *, html[dir='rtl'] *": {
+      "html[lang='ar'] *:not(code):not(pre):not(kbd):not(samp):not([data-mono]):not([data-mono] *):not(pre *):not(code *), html[dir='rtl'] *:not(code):not(pre):not(kbd):not(samp):not([data-mono]):not([data-mono] *):not(pre *):not(code *)": {
         fontFamily: `var(--font-cairo), system-ui, sans-serif !important`,
         letterSpacing: `0em !important`,
       },

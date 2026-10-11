@@ -1,13 +1,6 @@
-/**
- * tazdan design tokens — monochrome v1.
- *
- * The visual language is pure grayscale + status (red/green/amber) only.
- * No brand blue, no colored glow shadows, no rainbow card colorways. The
- * mono palette uses an accent that is the inverse of the surface: white in
- * dark mode, black in light mode, so CTAs always have maximum contrast.
- *
- * Mirrors the NativeWind config in `tailwind.config.js`. Use this file from
- * any non-NW context (e.g. LinearGradient `colors`, ShadowOffset).
+import { DEFAULT_ACCENT } from './accent';
+/** Shared tazdan tokens: quiet surfaces, blue accents, generous spacing and neutral primary actions.
+ * Runtime colours live in themeStore; use these static tokens for geometry and typography.
  */
 
 export const colors = {
@@ -27,9 +20,9 @@ export const colors = {
     accentFg:   '#0A0A0B',  // text/icon on accent
 
     // Light mode mirror
-    bgL:        '#FAFAF7',
-    bgElevL:    '#F1F0EB',
-    bgRaisedL:  '#FFFFFF',
+    bgL:        '#F6F7FA',
+    bgElevL:    '#FFFFFF',
+    bgRaisedL:  '#EEF1F6',
     lineL:      'rgba(0,0,0,0.08)',
     lineStrongL:'rgba(0,0,0,0.14)',
     fgL:        '#0A0A0B',
@@ -45,12 +38,12 @@ export const colors = {
      the active tab. Not on primary CTAs. The `text` variants are
      contrast-tuned per surface so small blue text stays legible. */
   accent: {
-    base:      '#63A1DB',          // dark-surface chip fill
-    baseLight: '#4F8BC4',          // light-surface chip fill (deepened)
-    text:      '#7DB4E4',          // blue text/icon on dark page bg (AA)
-    textLight: '#3E78AE',          // blue text/icon on light page bg (AA)
-    soft:      'rgba(99,161,219,0.14)',
-    border:    'rgba(99,161,219,0.40)',
+    base:      DEFAULT_ACCENT,          // dark-surface chip fill
+    baseLight: DEFAULT_ACCENT,          // light-surface chip fill (deepened)
+    text:      '#9BA8B7',          // blue text/icon on dark page bg (AA)
+    textLight: DEFAULT_ACCENT,          // blue text/icon on light page bg (AA)
+    soft:      'rgba(36,56,79,0.14)',
+    border:    'rgba(36,56,79,0.40)',
   },
 
   /* ── Status (kept — confirmed by user) ──────────────────────────── */
@@ -123,7 +116,7 @@ export const gradients = {
   glass:        ['rgba(255,255,255,0.08)', 'rgba(255,255,255,0.03)'],
   // Soft brand-blue glow — a barely-there wash for hero / logo backdrops.
   // Top-stop is deliberately low-alpha so it reads as mist, never a fill.
-  accentGlow:   ['rgba(99,161,219,0.16)', 'rgba(99,161,219,0)'],
+  accentGlow:   ['rgba(36,56,79,0.16)', 'rgba(36,56,79,0)'],
   // Status fills (kept colored — these are accessibility signals)
   success:      ['#1F8F58', '#2BB36F'],
   danger:       ['#B7373B', '#E5484D'],
@@ -159,7 +152,7 @@ export const spacing = {
 /**
  * Font families:
  *   English / LTR → Outfit (geometric humanist, MENA-leaning proportions)
- *   Arabic  / RTL → IBM Plex Sans Arabic (same density + x-height as Outfit,
+ *   Arabic  / RTL → Cairo (same density + x-height as Outfit,
  *                   tabular numerals that align perfectly when language switches)
  *
  * Each token is a weight-specific font name matching the key passed to
@@ -185,15 +178,15 @@ export const F = {
 } as const;
 
 export const FAR = {
-  // IBM Plex Sans Arabic weight map — same slots as F for easy swapping
-  thin:      'IBMPlexSansArabic_300Light',
-  regular:   'IBMPlexSansArabic_400Regular',
-  medium:    'IBMPlexSansArabic_500Medium',
-  semibold:  'IBMPlexSansArabic_600SemiBold',
-  bold:      'IBMPlexSansArabic_700Bold',
-  // IBM Plex tops at 700 — map heavier slots to bold
-  extrabold: 'IBMPlexSansArabic_700Bold',
-  black:     'IBMPlexSansArabic_700Bold',
+  // Cairo weight map — same slots as F for easy swapping
+  thin:      'Cairo_300Light',
+  regular:   'Cairo_400Regular',
+  medium:    'Cairo_500Medium',
+  semibold:  'Cairo_600SemiBold',
+  bold:      'Cairo_700Bold',
+  // Cairo tops at 700 — map heavier slots to bold
+  extrabold: 'Cairo_700Bold',
+  black:     'Cairo_700Bold',
 } as const;
 
 export const typography = {
@@ -210,7 +203,7 @@ export const typography = {
 /**
  * Locale-aware font hook. Returns the correct family map (F or FAR)
  * based on the currently active language — call this instead of
- * importing F/FAR directly so Arabic users automatically get IBM Plex.
+ * importing F/FAR directly so Arabic users automatically get Cairo.
  *
  *   const fonts = useFonts();
  *   <Text style={{ fontFamily: fonts.bold, fontSize: 16 }}>…</Text>
@@ -273,3 +266,15 @@ export const motion = {
 
 export type ColorToken = keyof typeof colors;
 export type GradientToken = keyof typeof gradients;
+
+/** Shared geometry for navigation, forms, cards and sheets. */
+export const ui = {
+  gutter: 24,
+  control: 44,
+  button: 56,
+  input: 64,
+  cardRadius: 24,
+  fieldRadius: 18,
+  sheetRadius: 32,
+  pillRadius: 999,
+} as const;

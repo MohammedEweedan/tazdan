@@ -1,3 +1,4 @@
+import { StackHeader, HeaderIconButton } from '@/components/ui/ScreenHeader';
 /**
  * Asset detail screen — works for every tradeable token, not just the
  * hardcoded CoinGecko list. Falls back to Binance REST for price + chart
@@ -16,6 +17,7 @@ import Svg, { Defs, LinearGradient as SvgLinearGradient, Path, Stop, Line as Svg
 import { LinearGradient } from 'expo-linear-gradient';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as Clipboard from 'expo-clipboard';
+import QRCode from 'react-native-qrcode-svg';
 import { CoinIcon } from '@/components/ui/CoinIcon';
 import { BuyWidget } from '@/components/exchange/BuyWidget';
 import { SellWidget } from '@/components/exchange/SellWidget';
@@ -44,6 +46,7 @@ import {
   type FiatRange,
 } from '@/hooks/useFiatRateHistory';
 
+import { BottomSheet } from '@/components/ui/BottomSheet';
 type Range = '1H' | '24H' | '7D' | '30D' | '1Y' | 'ALL';
 type Tab = 'activity' | 'news' | 'discussion';
 type ChartType = 'line' | 'candle';
@@ -145,11 +148,18 @@ export default function AssetDetail() {
   const { data: wallets } = useWallets();
   const [range, setRange] = useState<Range>('24H');
   const [tab, setTab] = useState<Tab>('activity');
-  const [buyOpen, setBuyOpen] = useState(false);
   const [depositOpen, setDepositOpen] = useState(false);
-  // Deep-link: /asset/DOGE?action=sell opens straight into the sell sheet
-  // (used by the dust-convert prompt on the home screen).
-  const [sellOpen, setSellOpen] = useState(action === 'sell');
+  // Fiat trades exchange currencies; crypto trades keep their asset locked.
+  const openTrade = (kind: 'buy' | 'sell') => {
+    router.push(FIAT_CODES.has(sym)
+      ? { pathname: '/exchange', params: kind === 'buy' ? { to: sym, from: sym === 'USD' ? 'LYD' : 'USD' } : { from: sym } }
+      : { pathname: kind === 'buy' ? '/buy' : '/sell', params: { asset: sym } } as any);
+  };
+  // Deep-link: /asset/DOGE?action=sell goes straight to selling it (used by
+  // the dust-convert prompt on Home).
+  useEffect(() => {
+    if (action === 'sell') openTrade('sell');
+  }, [action]); // eslint-disable-line react-hooks/exhaustive-deps
   const [hoverPrice, setHoverPrice] = useState<number | null>(null);
 
   const isFiat = FIAT_CODES.has(sym);
@@ -305,41 +315,6 @@ export default function AssetDetail() {
   const visiblePrice = hoverPrice !== null ? hoverPrice : price;
   const changeUsd = Math.abs((visiblePrice || 0) * (change / 100));
 
-  // ── Modals ──
-  const buyModal = (
-    <Modal visible={buyOpen} transparent animationType="slide" onRequestClose={() => setBuyOpen(false)}>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-        <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' }} onPress={() => setBuyOpen(false)}>
-          <Pressable style={{ backgroundColor: p.bg, borderTopLeftRadius: 28, borderTopRightRadius: 28, height: '92%' }} onPress={(e) => e.stopPropagation()}>
-            <View style={{ alignItems: 'center', paddingTop: 10, paddingBottom: 2 }}>
-              <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: p.border }} />
-            </View>
-            <View style={{ flex: 1, paddingBottom: Math.max(insets.bottom, 12) }}>
-              <BuyWidget defaultAsset={sym} lockAsset={!isFiat} />
-            </View>
-          </Pressable>
-        </Pressable>
-      </KeyboardAvoidingView>
-    </Modal>
-  );
-
-  const sellModal = (
-    <Modal visible={sellOpen} transparent animationType="slide" onRequestClose={() => setSellOpen(false)}>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-        <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' }} onPress={() => setSellOpen(false)}>
-          <Pressable style={{ backgroundColor: p.bg, borderTopLeftRadius: 28, borderTopRightRadius: 28, height: '92%' }} onPress={(e) => e.stopPropagation()}>
-            <View style={{ alignItems: 'center', paddingTop: 10, paddingBottom: 2 }}>
-              <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: p.border }} />
-            </View>
-            <View style={{ flex: 1, paddingBottom: Math.max(insets.bottom, 12) }}>
-              <SellWidget defaultAsset={sym} lockAsset={!isFiat} />
-            </View>
-          </Pressable>
-        </Pressable>
-      </KeyboardAvoidingView>
-    </Modal>
-  );
-
   // ── Sticky action bar ──
   const actionBar = (
     <View style={{
@@ -351,7 +326,7 @@ export default function AssetDetail() {
       borderTopWidth: 1, borderTopColor: p.border,
     }}>
       <Pressable
-        onPress={() => { h.medium(); setSellOpen(true); }}
+        onPress={() => { h.medium(); openTrade('sell'); }}
         disabled={!wallet || balance <= 0}
         style={({ pressed }) => ({
           flex: 1, height: 52, borderRadius: 26,
@@ -366,7 +341,7 @@ export default function AssetDetail() {
         <Text style={{ color: p.fg, fontSize: 15, fontWeight: '600' }}>Sell</Text>
       </Pressable>
       <Pressable
-        onPress={() => { h.medium(); setBuyOpen(true); }}
+        onPress={() => { h.medium(); openTrade('buy'); }}
         style={({ pressed }) => ({
           flex: 1, height: 52, borderRadius: 26,
           backgroundColor: pressed ? p.fgMuted : p.ctaBg,
@@ -384,45 +359,15 @@ export default function AssetDetail() {
     return (
       <View style={{ flex: 1, backgroundColor: p.bg }}>
         <StatusBar style={themeMode === 'light' ? 'dark' : 'light'} />
-        {/* Fiat header */}
-        <View style={{
-          paddingTop: insets.top + 10,
-          paddingHorizontal: 20,
-          paddingBottom: 16,
-          flexDirection: 'row',
-          alignItems: 'center',
-          gap: 12,
-          borderBottomWidth: 1,
-          borderBottomColor: p.border,
-        }}>
-          <Pressable
-            onPress={() => router.back()}
-            hitSlop={10}
-            style={({ pressed }) => ({
-              width: 38, height: 38, borderRadius: 19,
-              backgroundColor: pressed ? p.bgElev : p.pillBg,
-              borderWidth: 1, borderColor: p.border,
-              alignItems: 'center', justifyContent: 'center',
-            })}
-          >
-            <Ionicons name="chevron-back" size={20} color={p.fg} />
-          </Pressable>
-          <Text style={{ fontSize: 54, lineHeight: 60 }}>
-            {CURRENCY_META[sym as Currency]?.flagOrIcon ?? sym.slice(0, 2)}
-          </Text>
-          <View style={{ flex: 1 }}>
-            <Text style={{ color: p.fg, fontSize: 18, fontWeight: '700', letterSpacing: -0.3 }} numberOfLines={1}>
-              {CURRENCY_META[sym as Currency]?.name ?? sym}
-            </Text>
-            <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '500', marginTop: 1 }}>{sym} · Fiat</Text>
-          </View>
+        <View style={{ paddingTop: insets.top }}>
+          <StackHeader title={CURRENCY_META[sym as Currency]?.name ?? sym} subtitle={`${sym} · Fiat`} />
         </View>
         <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
           <FiatAssetView sym={sym as Currency} wallet={wallet} p={p} h={h} />
         </ScrollView>
         {actionBar}
-        {buyModal}
-        {sellModal}
+        
+        
       </View>
     );
   }
@@ -440,42 +385,11 @@ export default function AssetDetail() {
         overflow: 'hidden',
       }}>
         <TopGradient height={insets.top + 88} />
-        <View style={{ height: 44, justifyContent: 'center' }}>
-          <Pressable
-            onPress={() => router.back()}
-            hitSlop={10}
-            style={({ pressed }) => ({
-              position: 'absolute',
-              left: -6,
-              width: 38, height: 38, borderRadius: 19,
-              backgroundColor: pressed ? p.bgElev : 'transparent',
-              alignItems: 'center', justifyContent: 'center',
-            })}
-          >
-            <Ionicons name="chevron-back" size={26} color={p.fg} />
-          </Pressable>
-          <Text
-            style={{ color: p.fg, fontSize: 17, fontWeight: '800', textAlign: 'center' }}
-            numberOfLines={1}
-          >
-            {displayName}
-          </Text>
-          <View style={{ position: 'absolute', right: -2, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <Pressable
-              onPress={() => { h.selection(); setDepositOpen(true); }}
-              disabled={!wallet}
-              hitSlop={10}
-              style={({ pressed }) => ({
-                width: 38, height: 38, borderRadius: 19,
-                backgroundColor: pressed ? p.bgElev : 'transparent',
-                alignItems: 'center', justifyContent: 'center',
-                opacity: wallet ? 1 : 0.36,
-              })}
-            >
-              <Ionicons name="qr-code-outline" size={22} color={p.fgMuted} />
-            </Pressable>
+        <View style={{ marginHorizontal: -20 }}>
+          <StackHeader title={displayName} right={<>
+            <HeaderIconButton icon="qr-code-outline" label="Receive" disabled={!wallet} onPress={() => setDepositOpen(true)} />
             <ChartModeToggle chartType={chartType} setChartType={setChartType} p={p} h={h} />
-          </View>
+          </>} />
         </View>
         <View style={{ alignItems: 'center', paddingTop: 12, paddingBottom: 8 }}>
           <Text style={{
@@ -562,8 +476,8 @@ export default function AssetDetail() {
       </ScrollView>
 
       {actionBar}
-      {buyModal}
-      {sellModal}
+      
+      
       <DepositAddressModal
         visible={depositOpen}
         onClose={() => setDepositOpen(false)}
@@ -1518,10 +1432,6 @@ function DepositAddressModal({ visible, onClose, sym, wallet, p, h }: {
       .finally(() => setLoading(false));
   }, [sym, wallet, network, visible]);
 
-  const qrUrl = addr
-    ? `https://api.qrserver.com/v1/create-qr-code/?size=300x300&margin=8&data=${encodeURIComponent(addr)}&bgcolor=ffffff&color=000000`
-    : null;
-
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <Pressable
@@ -1578,13 +1488,14 @@ function DepositAddressModal({ visible, onClose, sym, wallet, p, h }: {
             </View>
           ) : addr ? (
             <>
-              {qrUrl && (
-                <View style={{ alignItems: 'center', marginBottom: 16 }}>
-                  <View style={{ padding: 10, backgroundColor: '#fff', borderRadius: 18 }}>
-                    <Image source={{ uri: qrUrl }} style={{ width: 188, height: 188, borderRadius: 6 }} resizeMode="contain" />
-                  </View>
+              {/* Drawn on-device. The address must never go to a third-party
+                  image service: the user would scan whatever image came back,
+                  so a compromised service could swap in another address. */}
+              <View style={{ alignItems: 'center', marginBottom: 16 }}>
+                <View style={{ padding: 10, backgroundColor: '#fff', borderRadius: 18 }}>
+                  <QRCode value={addr} size={188} backgroundColor="#ffffff" color="#000000" ecl="M" />
                 </View>
-              )}
+              </View>
               <Pressable
                 onPress={() => {
                   Clipboard.setStringAsync(addr);

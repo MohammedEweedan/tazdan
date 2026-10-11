@@ -1,10 +1,8 @@
+import { useThemedPalette } from '@/store/themeStore';
 import { Stack } from 'expo-router';
-import { useTheme } from '@/store/themeStore';
-import { palettes } from '@/store/themeStore';
 
 export default function BusinessLayout() {
-  const mode = useTheme((s) => s.mode);
-  const p = palettes[mode];
+  const p = useThemedPalette();
   return (
     <Stack
       screenOptions={{

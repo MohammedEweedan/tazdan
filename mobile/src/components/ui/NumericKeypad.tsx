@@ -55,6 +55,8 @@ export const NumericKeypad = memo(function NumericKeypad({
       {KEYS.map((k) => (
         <Pressable
           key={k}
+          accessibilityRole="button"
+          accessibilityLabel={k === 'back' ? 'Backspace' : k}
           onPress={() => press(k)}
           android_ripple={{ color: p.pillBg, borderless: true }}
           style={({ pressed }) => ({

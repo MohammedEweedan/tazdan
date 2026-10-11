@@ -103,6 +103,10 @@ export interface BusinessProfile {
   website:       string | null;
   logoUrl:       string | null;
   createdAt:     string;
+  /** Caller's role in this business. */
+  role?:         'OWNER' | 'ADMIN' | 'ANALYST' | 'DEVELOPER';
+  /** Reviewer's note when KYB was rejected. */
+  kybNotes?:     string | null;
 }
 
 export interface WebhookEndpoint {
@@ -112,4 +116,21 @@ export interface WebhookEndpoint {
   status:    'ACTIVE' | 'DISABLED';
   secret:    string;            // shown once at creation
   createdAt: string;
+}
+
+export interface PayoutBatch {
+  id:             string;
+  reference:      string;
+  currency:       string;
+  totalAmount:    string;
+  totalFee:       string;
+  count:          number;
+  status:         'PENDING_APPROVAL' | 'COMPLIANCE_REVIEW' | 'EXECUTING' | 'EXECUTED' | 'PARTIAL' | 'FAILED' | 'REJECTED' | 'CANCELLED';
+  note:           string | null;
+  source:         'APP' | 'API';
+  approvalReason: string | null;
+  createdById:    string;
+  approvedById:   string | null;
+  approvedAt:     string | null;
+  createdAt:      string;
 }

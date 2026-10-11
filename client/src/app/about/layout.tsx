@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "About tazdan — Building the Financial Layer for MENA",
+  title: "About tazdan — An Arabic-first financial platform",
   description:
     "Learn how tazdan is redefining money movement across Libya, Egypt, UAE and 120+ countries. Our mission, story, values and the team behind the platform.",
   keywords: [
@@ -15,7 +15,7 @@ export const metadata: Metadata = {
     "crypto platform MENA",
   ],
   openGraph: {
-    title: "About tazdan — Building the Financial Layer for MENA",
+    title: "About tazdan — An Arabic-first financial platform",
     description:
       "Transparent reserves, regulated infrastructure, and a P2P marketplace built for the Middle East and North Africa.",
     url: "https://tazdan.com/about",

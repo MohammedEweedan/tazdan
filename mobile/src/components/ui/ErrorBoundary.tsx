@@ -75,7 +75,7 @@ const styles = StyleSheet.create({
   title: { color: '#FFFFFF', fontSize: 20, fontWeight: '700', marginBottom: 10 },
   body: { color: '#9BA1A8', fontSize: 14, lineHeight: 21, textAlign: 'center', marginBottom: 28 },
   button: {
-    backgroundColor: '#63a1db',
+    backgroundColor: '#F4F5F7',
     paddingVertical: 14,
     paddingHorizontal: 36,
     borderRadius: 14,

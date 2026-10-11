@@ -16,9 +16,9 @@
       "policy": "appVersion"
     },
     "splash": {
-      "image": "./assets/icon-color.png",
+      "image": "./assets/splash-mark.png",
       "resizeMode": "contain",
-      "backgroundColor": "#0A0A0B"
+      "backgroundColor": "#24384F"
     },
     "ios": {
       "icon": "./assets/icon-ios.png",
@@ -29,7 +29,11 @@
       ],
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
-        "NSFaceIDUsageDescription": "tazdan uses Face ID to unlock your account and authorise sensitive actions."
+        "NSFaceIDUsageDescription": "tazdan uses Face ID to unlock your account and authorise sensitive actions.",
+        "NSLocalNetworkUsageDescription": "tazdan connects to the development server on your Mac for local testing.",
+        "NSAppTransportSecurity": {
+          "NSAllowsLocalNetworking": true
+        }
       },
       "entitlements": {
         "com.apple.developer.in-app-payments": [
@@ -40,12 +44,13 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#0A0A0B"
+        "backgroundColor": "#24384F"
       },
       "package": "com.tazdan.app",
       "permissions": [
         "android.permission.USE_BIOMETRIC",
-        "android.permission.USE_FINGERPRINT"
+        "android.permission.USE_FINGERPRINT",
+        "android.permission.ACCESS_COARSE_LOCATION"
       ],
       "intentFilters": [
         {
@@ -63,6 +68,11 @@
             "DEFAULT"
           ]
         }
+      ],
+      "blockedPermissions": [
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_BACKGROUND_LOCATION",
+        "android.permission.RECORD_AUDIO"
       ]
     },
     "web": {
@@ -89,7 +99,33 @@
           "enableGooglePay": true
         }
       ],
-      "@sentry/react-native"
+      "@sentry/react-native",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "tazdan uses your approximate location to show P2P traders near you. Your exact location is never shared with other users.",
+          "locationAlwaysAndWhenInUsePermission": false,
+          "locationAlwaysPermission": false
+        }
+      ],
+      "expo-asset",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "tazdan uses the camera to scan payment QR codes and to photograph your ID documents for verification.",
+          "microphonePermission": false,
+          "recordAudioAndroid": false
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "tazdan uses your photos so you can upload ID documents for verification, send images in chat and set a profile picture.",
+          "cameraPermission": "tazdan uses the camera to scan payment QR codes and to photograph your ID documents for verification.",
+          "microphonePermission": false
+        }
+      ],
+      "expo-audio"
     ],
     "experiments": {
       "typedRoutes": false

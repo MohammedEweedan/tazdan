@@ -33,10 +33,10 @@ export default function LanguageSwitcher() {
   const triggerRef          = useRef<HTMLButtonElement>(null);
 
   // Monochrome tokens mirroring screenTokens() in app/page.tsx
-  const bg          = dark ? "#000000" : "#ffffff";
-  const border      = dark ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.10)";
-  const borderSoft  = dark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)";
-  const fg          = dark ? "#ffffff" : "#000000";
+  const bg          = dark ? "#1E2127" : "#ffffff";
+  const border      = dark ? "rgba(255,255,255,0.09)" : "rgba(10,10,11,0.08)";
+  const borderSoft  = dark ? "rgba(255,255,255,0.06)" : "rgba(10,10,11,0.06)";
+  const fg          = dark ? "#F4F5F7" : "#0A0A0B";
   const fgFaint     = dark ? "rgba(255,255,255,0.30)" : "rgba(0,0,0,0.30)";
   const hoverBg     = dark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)";
   const activeBg    = dark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)";
@@ -55,7 +55,9 @@ export default function LanguageSwitcher() {
 
   const switchLanguage = (lang: string) => {
     tolgee.changeLanguage(lang);
-    localStorage.setItem("lang", lang);
+    try { localStorage.setItem("lang", lang); } catch {}
+    // Lets the middleware server-render the next page in this language.
+    document.cookie = `tazdan_lang=${lang}; path=/; max-age=31536000; samesite=lax`;
     document.documentElement.lang = lang;
     document.documentElement.dir = lang === "ar" ? "rtl" : "ltr";
     setOpen(false);

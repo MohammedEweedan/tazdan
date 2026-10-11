@@ -18,6 +18,8 @@ const cases = [
   ['IPv6', {...dev, metroHost:'[::1]:8081'}, 'http://[::1]:5001/api'],
   ['port override', {...dev, port:'5050'}, 'http://localhost:5050/api'],
   ['dev override', {...dev, developmentBase:'http://192.168.1.5:5001/api/'}, 'http://192.168.1.5:5001/api'],
+  ['local test release', {...prod, localTestBuild:true, localTestBase:'http://192.168.1.148:5001'}, 'http://192.168.1.148:5001/api'],
+  ['local test ignored without flag', {...prod, localTestBase:'http://192.168.1.148:5001'}, 'https://api.promrkts.com'],
   ['production default ignores Metro/dev', {...prod, metroHost:'localhost:8081', developmentBase:'http://localhost:5001'}, 'https://api.promrkts.com'],
   ['production proxy', {...prod, productionBase:'https://api.promrkts.com/api/'}, 'https://api.promrkts.com'],
   ['custom production', {...prod, productionBase:'https://api.example.com'}, 'https://api.example.com/api'],
@@ -28,4 +30,6 @@ for(const base of ['http://api.example.com', 'https://localhost:5001', 'https://
  assert.throws(()=>resolve({...prod, productionBase:base}), undefined, base);
 }
 assert.throws(()=>resolve({...dev, port:'banana'}));
-console.log(`API routing: ${cases.length} connection scenarios and 8 invalid-config checks passed.`);
+assert.throws(()=>resolve({...prod, localTestBuild:true}));
+assert.throws(()=>resolve({...prod, localTestBuild:true, localTestBase:'https://api.promrkts.com'}));
+console.log(`API routing: ${cases.length} connection scenarios and 10 invalid-config checks passed.`);

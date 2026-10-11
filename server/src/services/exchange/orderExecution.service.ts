@@ -6,9 +6,12 @@
  * stored as { "BNB": "1.2345678", "XRP": "500.000000", ... }.
  *
  * Safety:
- *   - Pessimistic concurrency: all balance mutations inside prisma.$transaction.
+ *   - Pessimistic concurrency: the user's UserWallet row is locked (FOR UPDATE)
+ *     before balances are read, and debits of enum currencies are gated by the
+ *     ledger's conditional update.
  *   - Idempotency: unique constraint on CryptoOrder.idempotencyKey.
- *   - Quote validity: quotes are single-use, rejected after 30s.
+ *   - Quote validity: quotes are single-use (atomic consume), bound to the
+ *     requesting user, and expire after 90s.
  */
 import axios from 'axios';
 import crypto from 'crypto';
@@ -17,8 +20,11 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '../../utils/prisma';
 import { AppError } from '../../middleware/errorHandler';
 import { createUserWallets } from '../wallet/walletDerivation.service';
-import { consumeQuote, type Quote, type SupportedAsset } from './priceEngine.service';
+import { consumeQuote, getQuote, type Quote, type SupportedAsset } from './priceEngine.service';
+import { lockUserWallets } from '../wallet/atomicWallet';
+import { enforceKycLimit } from '../../utils/kycLimits';
 import { collectFee } from '../fee/feeCollector.service';
+import { assertPrincipalCapacity, executionMode, markVenueResult } from './principalExposure.service';
 import { postLedger, isLedgerCurrency, type Leg } from '../ledger/ledger.service';
 
 // Local alias for the centralized ledger-currency check.
@@ -246,7 +252,14 @@ export async function executeQuote(opts: {
     if (prior) return prior;
   }
 
-  const quote = await consumeQuote(quoteId);
+  // Check tier limits before taking the quote, so a limit refusal doesn't
+  // burn it. `fiatAmount` is USD-denominated.
+  const pending = await getQuote(quoteId);
+  if (pending && (!pending.userId || pending.userId === userId)) {
+    await enforceKycLimit(userId, pending.side === 'BUY' ? 'ONRAMP_BUY' : 'OFFRAMP_SELL', pending.fiatAmount, 'USD');
+  }
+
+  const quote = await consumeQuote(quoteId, userId);
   if (!quote) throw new AppError('Quote expired or not found. Request a new quote.', 400);
 
   const fiat    = new Decimal(quote.fiatAmount);
@@ -290,7 +303,17 @@ export async function executeQuote(opts: {
       ? fiat
       : await usdtToFunding(settlementCurrency, fiat);
 
+  const principal = assetUpper !== 'USDT' && executionMode() === 'PRINCIPAL';
   const order = await prisma.$transaction(async (tx) => {
+    // No reachable venue: the order fills against Tazdan. Refuse it if it
+    // would take Tazdan's open crypto position past its limit.
+    if (principal) {
+      await assertPrincipalCapacity(tx, { asset: assetUpper, side: quote.side, quantity: crypto_, priceUsd: new Decimal(quote.marketPrice) });
+    }
+    // Lock the user's crypto row first: the altBalances JSON is read, changed
+    // and written back below, which is only safe while no other trade or
+    // transfer can touch the same row.
+    await lockUserWallets(tx, [userId]);
     const uw = await tx.userWallet.findUnique({ where: { userId } });
     if (!uw) throw new AppError('User wallet not provisioned', 400);
 
@@ -495,6 +518,7 @@ export async function executeQuote(opts: {
         side: quote.side,
         quantity: roundQty(quote.asset, crypto_),
       });
+      markVenueResult(result.simulated);
       binanceOrderId = result.orderId;
     }
     return prisma.cryptoOrder.update({
@@ -504,6 +528,7 @@ export async function executeQuote(opts: {
   } catch (err: any) {
     console.error('[binance] order failed — refunding', order.id, err?.response?.data ?? err?.message);
     await prisma.$transaction(async (tx) => {
+      await lockUserWallets(tx, [userId]);
       const uw   = await tx.userWallet.findUnique({ where: { userId } });
       const usdt = await tx.wallet.findUnique({ where: { userId_currency: { userId, currency: 'USDT' } } });
       if (!uw || !usdt) return;

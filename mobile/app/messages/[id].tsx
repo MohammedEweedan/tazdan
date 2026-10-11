@@ -27,7 +27,11 @@ import { useChatPrefs } from '@/store/chatPrefsStore';
 import {
   useThread, useSendMessage, useEditMessage, useDeleteMessage,
   useBlockUser, useReportMessage, useEscalateP2P, useHaptics,
+  useStepUpAuth, StepUpDeniedError,
 } from '@/hooks';
+import { useUsdValue } from '@/hooks/useForexRates';
+import { StepUpModal } from '@/components/ui/StepUpModal';
+import { isStepUpChallengeError } from '@/lib/stepUpErrors';
 import { getSocket } from '@/lib/socket';
 import { profileService, messageService } from '@/services';
 import { QUERY_KEYS } from '@/constants';
@@ -36,7 +40,7 @@ import { REPORT_REASONS, type ApiMessage, type Conversation } from '@/types/mess
 import { TopGradient } from '@/components/ui/ScreenShell';
 import { useTransactionSound } from '@/hooks/useTransactionSound';
 
-const BRAND_BLUE = '#63a1db'; // soft brand blue — my bubbles, send button, accents
+import { BottomSheet } from '@/components/ui/BottomSheet';
 
 export default function MessageThread() {
   const { id: partnerIdParam, openPay } = useLocalSearchParams<{ id: string; openPay?: string }>();
@@ -93,6 +97,10 @@ const { data: messages = [], isLoading } = useThread(partnerId);  const sendMut 
   const blockMut  = useBlockUser();
   const reportMut = useReportMessage();
   const escalateMut = useEscalateP2P();
+  const stepUp = useStepUpAuth();
+  const toUsd = useUsdValue();
+  // A payment waiting for the server's 6-digit step-up code.
+  const [payStepUp, setPayStepUp] = useState<{ amount: number; currency: string; note?: string } | null>(null);
 
   // Mark inbound as read whenever we open the thread or a new ws push lands.
   useEffect(() => {
@@ -139,6 +147,7 @@ const { data: messages = [], isLoading } = useThread(partnerId);  const sendMut 
 
   // ── Compose state ───────────────────────────────────────────────
   const [draft, setDraft]   = useState('');
+  const [composerHeight, setComposerHeight] = useState(36);
   const [editing, setEditing] = useState<ApiMessage | null>(null);
   const [paymentSheet, setPaymentSheet] = useState(false);
   const [requestSheet, setRequestSheet] = useState(false);
@@ -216,35 +225,57 @@ const { data: messages = [], isLoading } = useThread(partnerId);  const sendMut 
     setDraft('');
   };
 
-  const sendPayment = (amount: number, currency: string, note?: string) => {
-    sendMut.mutate(
-      {
-        receiverId: partnerId,
-        content: note || `${amount} ${currency}`,
-        type: 'PAYMENT',
-        metadata: { amount, currency, note, status: 'COMPLETED' },
-      },
-      {
-        onSuccess: () => {
-          h.success();
-          txSound.playSuccess('transfer');
-          setPaymentSheet(false);
+  const sendPayment = async (amount: number, currency: string, note?: string, stepUpCode?: string): Promise<void> => {
+    // High-value payments confirm with Face ID / Touch ID first; the server
+    // may still ask for a 6-digit code (new device), handled by the modal.
+    let biometricVerified = false;
+    if (!stepUpCode) {
+      try {
+        biometricVerified = await stepUp.guard({ usdValue: toUsd(amount, currency) ?? Number.POSITIVE_INFINITY, reason: `Send ${amount} ${currency}` });
+      } catch (e: any) {
+        if (e instanceof StepUpDeniedError) { h.error(); Alert.alert(t('chat.paymentFailed'), e.message); return; }
+        throw e;
+      }
+    }
+    return new Promise<void>((resolve, reject) => {
+      sendMut.mutate(
+        {
+          receiverId: partnerId,
+          content: note || `${amount} ${currency}`,
+          type: 'PAYMENT',
+          metadata: {
+            amount, currency, note, status: 'COMPLETED',
+            ...(biometricVerified ? { biometricVerified: true } : {}),
+            ...(stepUpCode ? { stepUpCode } : {}),
+          },
         },
-        onError: (e: any) => {
-          // Surface the server's actual reason for the rejection — a
-          // silent failure (the old behaviour) made the user think
-          // "non-USDT crypto doesn't work in chat" when in fact the
-          // back-end was returning, e.g., "Insufficient ETH balance"
-          // and nobody ever saw it.
-          h.error();
-          const msg = e?.response?.data?.error
-            ?? e?.response?.data?.message
-            ?? e?.message
-            ?? t('chat.paymentFailedBody');
-          Alert.alert(t('chat.paymentFailed'), msg);
+        {
+          onSuccess: () => {
+            h.success();
+            txSound.playSuccess('transfer');
+            setPaymentSheet(false);
+            setPayStepUp(null);
+            resolve();
+          },
+          onError: (e: any) => {
+            if (isStepUpChallengeError(e) && !stepUpCode) { setPayStepUp({ amount, currency, note }); resolve(); return; }
+            if (stepUpCode) { reject(e); return; } // the modal shows the wrong-code error
+            // Surface the server's actual reason for the rejection — a
+            // silent failure (the old behaviour) made the user think
+            // "non-USDT crypto doesn't work in chat" when in fact the
+            // back-end was returning, e.g., "Insufficient ETH balance"
+            // and nobody ever saw it.
+            h.error();
+            const msg = e?.response?.data?.error
+              ?? e?.response?.data?.message
+              ?? e?.message
+              ?? t('chat.paymentFailedBody');
+            Alert.alert(t('chat.paymentFailed'), msg);
+            resolve();
+          },
         },
-      },
-    );
+      );
+    });
   };
 
   const sendRequest = (amount: number, currency: string, note?: string) => {
@@ -428,7 +459,6 @@ const { data: messages = [], isLoading } = useThread(partnerId);  const sendMut 
         <View style={{
           flexDirection: 'row', alignItems: 'center',
           paddingHorizontal: 16, paddingTop: 6, paddingBottom: 10, gap: 10,
-          borderBottomWidth: 1, borderBottomColor: p.border,
         }}>
           <Pressable
             onPress={() => { h.selection(); router.back(); }}
@@ -445,17 +475,17 @@ const { data: messages = [], isLoading } = useThread(partnerId);  const sendMut 
             onPress={() => { h.selection(); setProfileSheet(true); }}
             style={{
             width: 32, height: 32, borderRadius: 16,
-            backgroundColor: isSupport ? BRAND_BLUE : (partner?.avatarUrl ? p.bgElev : '#5b86b0'),
+            backgroundColor: isSupport ? p.accent : (partner?.avatarUrl ? p.bgElev : p.accent),
             alignItems: 'center', justifyContent: 'center',
             borderWidth: !isSupport && partner?.avatarUrl ? 1 : 0,
             borderColor: p.border,
           }}>
             {isSupport ? (
-              <Ionicons name="headset" size={16} color="#fff" />
+              <Ionicons name="headset" size={16} color={p.accentFg} />
             ) : partner?.avatarUrl ? (
               <Text style={{ fontSize: 18 }}>{partner.avatarUrl}</Text>
             ) : (
-              <Text style={{ color: '#fff', fontSize: 14, fontWeight: '600' }}>
+              <Text style={{ color: p.accentFg, fontSize: 14, fontWeight: '600' }}>
                 {(partner?.firstName?.[0] ?? partner?.username?.[0] ?? '?').toUpperCase()}
               </Text>
             )}
@@ -468,13 +498,13 @@ const { data: messages = [], isLoading } = useThread(partnerId);  const sendMut 
               {isSupport && (
                 <View style={{
                   paddingHorizontal: 5, paddingVertical: 1.5, borderRadius: 5,
-                  backgroundColor: BRAND_BLUE,
+                  backgroundColor: p.accent,
                 }}>
-                  <Text style={{ color: '#fff', fontSize: 9, fontWeight: '600' }}>STAFF</Text>
+                  <Text style={{ color: p.accentFg, fontSize: 9, fontWeight: '600' }}>STAFF</Text>
                 </View>
               )}
               {partner?.kycStatus === 'APPROVED' && !isSupport && (
-                <Ionicons name="checkmark-circle" size={12} color={BRAND_BLUE} />
+                <Ionicons name="checkmark-circle" size={12} color={p.accent} />
               )}
             </View>
             <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '600', marginTop: 1 }}>
@@ -633,7 +663,6 @@ const { data: messages = [], isLoading } = useThread(partnerId);  const sendMut 
           <View style={{
             paddingHorizontal: 12, paddingTop: 10,
             paddingBottom: Platform.OS === 'ios' ? 14 : 12,
-            borderTopWidth: 1, borderTopColor: p.border,
             backgroundColor: p.bg,
           }}>
             {/* Admin "reply as support" toggle */}
@@ -679,10 +708,10 @@ const { data: messages = [], isLoading } = useThread(partnerId);  const sendMut 
               </View>
             )}
             <View style={{
-              flexDirection: 'row', alignItems: 'flex-end', gap: 8,
-              borderRadius: 22,
+              flexDirection: 'row', alignItems: 'center', gap: 4,
+              borderRadius: 26,
               backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border,
-              paddingHorizontal: 6, paddingVertical: 6, minHeight: 44,
+              paddingHorizontal: 8, paddingVertical: 8, minHeight: 52,
             }}>
               <Pressable
                 onPress={() => { h.light(); setPaymentSheet(true); }}
@@ -742,10 +771,11 @@ const { data: messages = [], isLoading } = useThread(partnerId);  const sendMut 
                 placeholder={t('chat.messagePlaceholder')}
                 placeholderTextColor={p.fgFaint}
                 multiline
+                onContentSizeChange={(event) => setComposerHeight(Math.max(36, Math.min(120, event.nativeEvent.contentSize.height)))}
                 style={{
-                  flex: 1, color: p.fg, fontSize: 15, fontWeight: '500',
-                  paddingHorizontal: 4, paddingTop: Platform.OS === 'ios' ? 8 : 4,
-                  paddingBottom: Platform.OS === 'ios' ? 8 : 4, maxHeight: 120,
+                  flex: 1, color: p.fg, fontSize: 15, fontWeight: '400',
+                  paddingHorizontal: 6, paddingVertical: 7, height: composerHeight, minHeight: 36, maxHeight: 120,
+                  lineHeight: 22, textAlignVertical: 'center', includeFontPadding: false,
                 }}
               />
               <Pressable
@@ -753,13 +783,13 @@ const { data: messages = [], isLoading } = useThread(partnerId);  const sendMut 
                 disabled={!draft.trim() || sendMut.isPending || editMut.isPending}
                 style={({ pressed }) => ({
                   width: 36, height: 36, borderRadius: 18,
-                  backgroundColor: draft.trim() ? BRAND_BLUE : p.border,
+                  backgroundColor: draft.trim() ? p.ctaBg : p.pillBg,
                   alignItems: 'center', justifyContent: 'center',
                   opacity: pressed ? 0.85 : 1,
                 })}
                 accessibilityLabel={t('action.send')}
               >
-                <Ionicons name={editing ? 'checkmark' : 'arrow-up'} size={18} color="#fff" />
+                <Ionicons name={editing ? 'checkmark' : 'arrow-up'} size={18} color={draft.trim() ? p.ctaFg : p.fgFaint} />
               </Pressable>
             </View>
 
@@ -800,7 +830,14 @@ const { data: messages = [], isLoading } = useThread(partnerId);  const sendMut 
         mode="SEND"
         recipientLabel={partner ? (partner.username ? `@${partner.username}` : `${partner.firstName ?? ''} ${partner.lastName ?? ''}`.trim()) : undefined}
         onClose={() => setPaymentSheet(false)}
-        onSubmit={sendPayment}
+        onSubmit={(amount: number, currency: string, note?: string) => { void sendPayment(amount, currency, note); }}
+      />
+      <StepUpModal
+        visible={Boolean(payStepUp)}
+        action="transfer"
+        subtitle={payStepUp ? `${payStepUp.amount} ${payStepUp.currency}` : undefined}
+        onSubmit={(code) => sendPayment(payStepUp!.amount, payStepUp!.currency, payStepUp!.note, code)}
+        onCancel={() => setPayStepUp(null)}
       />
       <SendMoneySheet
         visible={requestSheet}
@@ -962,7 +999,7 @@ function Bubble({
         }}>
           <Text style={{ fontSize: 58, lineHeight: 70 }}>{emoji}</Text>
           {!!label && (
-            <Text style={{ color: isMe ? '#fff' : p.fg, fontSize: 14, fontWeight: '800', marginTop: 8, textAlign: 'center' }}>
+            <Text style={{ color: isMe ? p.accentFg : p.fg, fontSize: 14, fontWeight: '800', marginTop: 8, textAlign: 'center' }}>
               {label}
             </Text>
           )}
@@ -992,14 +1029,14 @@ function Bubble({
         borderRadius: 18,
         borderBottomRightRadius: isMe && isLastInRun ? 6 : 18,
         borderBottomLeftRadius:  !isMe && isLastInRun ? 6 : 18,
-        backgroundColor: isMe ? BRAND_BLUE : p.bgElev,
+        backgroundColor: isMe ? p.accent : p.bgElev,
         borderWidth: isMe ? 0 : 1,
         borderColor: p.border,
         paddingHorizontal: 14, paddingVertical: 10,
       }}>
         <Text style={{
           color: deleted ? (isMe ? '#ffffffaa' : p.fgFaint)
-                         : (isMe ? '#fff' : p.fg),
+                         : (isMe ? p.accentFg : p.fg),
           fontSize: 15, fontWeight: '500', lineHeight: 20,
           fontStyle: deleted ? 'italic' : 'normal',
         }}>
@@ -1084,14 +1121,7 @@ function ProfileSheet({
   };
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable onPress={onClose} style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }}>
-        <Pressable
-          onPress={(e) => e.stopPropagation()}
-          style={{ backgroundColor: p.bg, borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 20, paddingBottom: 34 }}
-        >
-          <View style={{ alignItems: 'center', marginBottom: 18 }}>
-            <View style={{ width: 42, height: 4, borderRadius: 2, backgroundColor: p.border, marginBottom: 18 }} />
+    <BottomSheet visible={visible} onClose={onClose} contentStyle={{ paddingHorizontal: 0 }}>
             <View style={{
               width: 86, height: 86, borderRadius: 43,
               backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border,
@@ -1108,62 +1138,7 @@ function ProfileSheet({
             {partner?.username && (
               <Text style={{ color: p.fgFaint, fontSize: 12, fontWeight: '600', marginTop: 3 }}>{presence}</Text>
             )}
-          </View>
-
-          {!!partner?.bio && (
-            <View style={{ backgroundColor: p.bgElev, borderRadius: 18, borderWidth: 1, borderColor: p.border, padding: 14, marginBottom: 12 }}>
-              <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '800', letterSpacing: 0.8, marginBottom: 5 }}>{t('chat.profileBio')}</Text>
-              <Text style={{ color: p.fg, fontSize: 14, fontWeight: '600', lineHeight: 20 }}>{partner.bio}</Text>
-            </View>
-          )}
-
-          <View style={{ backgroundColor: p.bgElev, borderRadius: 18, borderWidth: 1, borderColor: p.border, overflow: 'hidden', marginBottom: 12 }}>
-            <ProfileInfoRow
-              icon="at-outline"
-              label={t('chat.handle')}
-              value={partner?.username ? `@${partner.username}` : t('chat.noHandle')}
-              palette={p}
-            />
-            <ProfileInfoRow
-              icon="globe-outline"
-              label={t('chat.publicProfile')}
-              value={partner?.profilePublic ? t('chat.publicProfileOn') : t('chat.publicProfileOff')}
-              palette={p}
-              borderTop
-            />
-            <ProfileInfoRow
-              icon="calendar-outline"
-              label={t('chat.signupDate')}
-              value={joinedDate ?? '-'}
-              palette={p}
-              borderTop
-            />
-          </View>
-
-          <View style={{ backgroundColor: p.bgElev, borderRadius: 18, borderWidth: 1, borderColor: p.border, overflow: 'hidden' }}>
-            <PrivacyRow
-              icon="checkmark-done-outline"
-              title={t('chat.readReceipts')}
-              subtitle={t('chat.readReceiptsDescMutual')}
-              value={privacy.readReceiptsOn}
-              disabled={busy !== null}
-              palette={p}
-              onValueChange={(v) => toggle('read', v)}
-            />
-            <PrivacyRow
-              icon="time-outline"
-              title={t('chat.lastSeenTitle')}
-              subtitle={t('chat.lastSeenDesc')}
-              value={privacy.lastSeenOn}
-              disabled={busy !== null}
-              palette={p}
-              borderTop
-              onValueChange={(v) => toggle('seen', v)}
-            />
-          </View>
-        </Pressable>
-      </Pressable>
-    </Modal>
+          </BottomSheet>
   );
 }
 
@@ -1239,23 +1214,7 @@ function ReportSheet({
   useEffect(() => { if (!visible) { setReason(null); setDetails(''); } }, [visible]);
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable onPress={onClose} style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)' }}>
-        <Pressable
-          onPress={(e) => e.stopPropagation()}
-          style={{
-            marginTop: 'auto',
-            backgroundColor: p.bg,
-            borderTopLeftRadius: 22, borderTopRightRadius: 22,
-            padding: 20, paddingBottom: 32, gap: 12,
-          }}
-        >
-          <View style={{ alignItems: 'center', marginBottom: 4 }}>
-            <View style={{ width: 42, height: 4, borderRadius: 2, backgroundColor: p.border }} />
-          </View>
-          <Text style={{ color: p.fg, fontSize: 18, fontWeight: '600', letterSpacing: -0.3 }}>
-            {t('chat.reportTitle')}
-          </Text>
+    <BottomSheet visible={visible} onClose={onClose} title={t('chat.reportTitle')}>
           <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '500' }}>
             {t('chat.reportBody')}
           </Text>
@@ -1269,14 +1228,14 @@ function ReportSheet({
                   flexDirection: 'row', alignItems: 'center',
                   paddingHorizontal: 14, paddingVertical: 12,
                   borderRadius: 12,
-                  borderWidth: 1, borderColor: reason === r.key ? BRAND_BLUE : p.border,
+                  borderWidth: 1, borderColor: reason === r.key ? p.accent : p.border,
                   backgroundColor: reason === r.key ? 'rgba(0,87,184,0.08)' : p.bgElev,
                 }}
               >
                 <Text style={{ flex: 1, color: p.fg, fontSize: 13, fontWeight: '600' }}>
                   {t(`report.${r.key}`)}
                 </Text>
-                {reason === r.key && <Ionicons name="checkmark-circle" size={16} color={BRAND_BLUE} />}
+                {reason === r.key && <Ionicons name="checkmark-circle" size={16} color={p.accent} />}
               </Pressable>
             ))}
           </View>
@@ -1300,18 +1259,16 @@ function ReportSheet({
             onPress={() => reason && onSubmit(reason, details.trim() || undefined)}
             style={({ pressed }) => ({
               height: 50, borderRadius: 16, marginTop: 4,
-              backgroundColor: reason ? BRAND_BLUE : p.border,
+              backgroundColor: reason ? p.accent : p.border,
               alignItems: 'center', justifyContent: 'center',
               opacity: pressed ? 0.9 : 1,
             })}
           >
-            <Text style={{ color: '#fff', fontSize: 15, fontWeight: '600' }}>
+            <Text style={{ color: p.accentFg, fontSize: 15, fontWeight: '600' }}>
               {t('chat.submitReport')}
             </Text>
           </Pressable>
-        </Pressable>
-      </Pressable>
-    </Modal>
+        </BottomSheet>
   );
 }
 

@@ -8,6 +8,9 @@ import { AuthRequest } from '../types';
 import { logger } from '../utils/logger';
 import { sendSwapConfirmed } from '../services/email';
 import { pushCopy, pushTxEvent } from '../services/push.service';
+import { assertMovementAllowed } from '../services/platform/controls.service';
+import { parsePositiveAmount } from '../services/wallet/atomicWallet';
+import { quoteConversion } from '../services/exchange/conversion.service';
 import { isLedgerCurrency, postLedger } from '../services/ledger/ledger.service';
 
 interface WalletRecord {
@@ -26,6 +29,13 @@ interface RateRecord {
   isActive: boolean;
 }
 
+// Currencies a wallet swap may convert between (all Wallet-table enum values).
+const SWAP_CURRENCIES = new Set([
+  'USD', 'USDT', 'EUR', 'GBP', 'AED', 'SAR', 'EGP', 'LYD', 'TRY', 'TND',
+  'BTC', 'ETH', 'SOL', 'BNB', 'XRP', 'ADA', 'DOGE', 'MATIC', 'DOT', 'AVAX',
+]);
+
+// Display-only USD values for the wallet list (not used to execute anything).
 // Hardcoded FX rates for fiat currencies (no Binance pair available).
 const FIAT_RATES: Record<string, number> = {
   USD: 1, USDT: 1,
@@ -151,32 +161,51 @@ export class WalletController {
    * `ExchangeRate` table for every pair. This is the endpoint the mobile
    * Buy / Sell screens hit so the user sees holdings change immediately.
    */
+  /**
+   * GET /api/wallets/swap/quote?from&to&amount — indicative conversion priced
+   * exactly like the swap itself (executable prices, spread included). Moves
+   * nothing; the swap re-prices at execution and honours `minCredited`.
+   */
+  static async swapQuote(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const q = z.object({ from: z.string().toUpperCase(), to: z.string().toUpperCase(), amount: z.coerce.number().positive() }).parse(req.query);
+      if (q.from === q.to) throw new AppError('From and to currencies must differ', 400);
+      if (!SWAP_CURRENCIES.has(q.from) || !SWAP_CURRENCIES.has(q.to)) throw new AppError(`Unsupported currency pair ${q.from}->${q.to}`, 400);
+      const quote = await quoteConversion(q.from, q.to, parsePositiveAmount(q.amount));
+      res.json({ quote: { from: q.from, to: q.to, amount: q.amount, credited: quote.credited.toString(), rate: quote.rate.toString(), sources: [quote.fromLeg.source, quote.toLeg.source], at: new Date().toISOString() } });
+    } catch (error) { next(error); }
+  }
+
   static async swap(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const schema = z.object({
         from:   z.string().toUpperCase(),
         to:     z.string().toUpperCase(),
         amount: z.number().positive(),
+        /** Refuse to fill below this credit (the amount the customer was shown, less tolerance). */
+        minCredited: z.union([z.number(), z.string()]).optional(),
       });
-      const { from, to, amount } = schema.parse(req.body);
+      const { from, to, amount, minCredited } = schema.parse(req.body);
       if (from === to) throw new AppError('From and to currencies must differ', 400);
-
-      const prices = await getLivePrices();
-      const fromPx = prices[from];
-      const toPx   = prices[to];
-      if (!fromPx || !toPx) {
+      if (!SWAP_CURRENCIES.has(from) || !SWAP_CURRENCIES.has(to)) {
         throw new AppError(`Unsupported currency pair ${from}->${to}`, 400);
       }
-      // Pricing in Decimal so we don't lose precision on large
-      // amounts.  The old code did `usdValue = amount * fromPx`
-      // (number × number) — a 1e16 USDT swap collapsed the mantissa
-      // and produced free extra `credited` units.
-      const amountD   = new Decimal(amount);
-      const fromPxD   = new Decimal(fromPx);
-      const toPxD     = new Decimal(toPx);
-      const usdValueD = amountD.mul(fromPxD);
-      const creditedD = usdValueD.div(toPxD);
+      await assertMovementAllowed({ userId: req.user!.id, feature: 'fx', currency: from });
+      const { isTradingHalted } = await import('../services/ledger/reconcile.service');
+      if (await isTradingHalted()) {
+        throw new AppError('Conversions are paused while the ledger is being reconciled. Please try again later.', 503, 'FEATURE_DISABLED');
+      }
+
+      // Executable prices from the FX and market engines (spread included).
+      // The old hardcoded rate table priced LYD near the official peg and
+      // crypto at fixed values whenever Binance was unreachable.
+      const amountD = parsePositiveAmount(amount);
+      const quote = await quoteConversion(from, to, amountD);
+      const creditedD = quote.credited;
       const credited  = creditedD.toNumber(); // for the response only
+      if (minCredited !== undefined && creditedD.lt(new Decimal(String(minCredited)))) {
+        throw new AppError('The price moved since your quote. Check the new amount and try again.', 409, 'TRANSACTION_CONFLICT');
+      }
 
       const result = await prisma.$transaction(async (tx) => {
         // Make sure both wallets exist for this user (auto-create the
@@ -229,15 +258,7 @@ export class WalletController {
             ],
           }, { allowNegativeUser: true });
         }
-        const fromBalance = fromBalanceD.toNumber();
-        const toBalance   = toBalanceD.toNumber();
 
-        // Generate a faux on-chain hash so the receipt has something to
-        // display in the activity feed. In a real system this would be set
-        // by the chain RPC after broadcast.
-        const fakeHash = '0x' + [...Array(64)]
-          .map(() => Math.floor(Math.random() * 16).toString(16))
-          .join('');
 
         // Two transaction rows — one debit, one credit (paired by reference).
         await tx.transaction.createMany({
@@ -246,28 +267,28 @@ export class WalletController {
               userId: req.user!.id,
               type: 'SELL',
               currency: from as any,
-              amount: new Decimal(-amount),
-              balanceBefore: new Decimal(fromBalance),
-              balanceAfter:  new Decimal(fromBalance - amount),
+              amount: amountD.neg(),
+              balanceBefore: fromBalanceD,
+              balanceAfter:  fromBalanceD.minus(amountD),
               description: `Swapped ${amount} ${from} → ${credited.toFixed(8)} ${to}`,
               reference,
-              metadata: { hash: fakeHash, kind: 'swap', counterparty: to },
+              metadata: { kind: 'swap', counterparty: to, rate: quote.rate.toString(), priceSources: [quote.fromLeg.source, quote.toLeg.source] },
             },
             {
               userId: req.user!.id,
               type: 'BUY',
               currency: to as any,
-              amount: new Decimal(credited),
-              balanceBefore: new Decimal(toBalance),
-              balanceAfter:  new Decimal(toBalance + credited),
+              amount: creditedD,
+              balanceBefore: toBalanceD,
+              balanceAfter:  toBalanceD.plus(creditedD),
               description: `Swapped ${amount} ${from} → ${credited.toFixed(8)} ${to}`,
               reference,
-              metadata: { hash: fakeHash, kind: 'swap', counterparty: from },
+              metadata: { kind: 'swap', counterparty: from, rate: quote.rate.toString(), priceSources: [quote.fromLeg.source, quote.toLeg.source] },
             },
           ],
         });
 
-        return { from, to, amount, credited, rate: fromPx / toPx, reference };
+        return { from, to, amount, credited, rate: quote.rate.toNumber(), reference };
       }, {
         // SERIALIZABLE so two concurrent swaps on the same `from`
         // wallet can't both pass the balance check off a stale read.

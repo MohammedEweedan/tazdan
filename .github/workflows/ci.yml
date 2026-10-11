@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [master, main, develop]
+    branches: [master, main, develop, 'hardening/**']
   pull_request:
     branches: [master, main]
 
@@ -55,8 +55,18 @@ jobs:
       - run: npm ci
       - run: npx prisma generate
       - run: npx prisma migrate deploy
+      # Migrations must reproduce schema.prisma exactly — no hand drift.
+      - name: Migration drift check
+        run: |
+          psql -h localhost -U tazdan -d tazdan_test -c 'CREATE DATABASE tazdan_shadow;'
+          npx prisma migrate diff --from-migrations prisma/migrations --to-schema-datamodel prisma/schema.prisma \
+            --shadow-database-url "postgresql://tazdan:testpassword@localhost:5432/tazdan_shadow" --exit-code
+        env:
+          PGPASSWORD: testpassword
       - run: npx tsc --noEmit
       - run: npm test -- --passWithNoTests --forceExit
+      - name: Route inventory (fails if a router stops parsing)
+        run: npx ts-node --transpile-only scripts/route-inventory.ts --json > /tmp/routes.json && node -e "const j=require('/tmp/routes.json'); if (j.total < 280) { console.error('route count dropped to', j.total); process.exit(1) }"
       # The Docker image ships esbuild output, not tsc output — verify that
       # path produces loadable JS so a broken fast-build can't reach prod.
       - run: npm run build:fast && node --check dist/index.js
@@ -114,3 +124,8 @@ jobs:
         run: npm audit --audit-level=high
         working-directory: client
         continue-on-error: true
+      - name: Secret scan (committed credentials)
+        run: |
+          if git grep -nE '(sk_live_[0-9a-zA-Z]{20,}|AKIA[0-9A-Z]{16}|-----BEGIN (RSA|EC|OPENSSH) PRIVATE KEY-----|re_[0-9A-Za-z]{20,})' -- ':!*.md' ':!*.example' ; then
+            echo 'Possible secret committed'; exit 1
+          fi

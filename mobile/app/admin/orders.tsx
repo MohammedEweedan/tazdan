@@ -1,3 +1,4 @@
+import { StackHeader } from '@/components/ui/ScreenHeader';
 /**
  * Admin Orders — every BUY/SELL order placed on the platform.
  */
@@ -16,6 +17,7 @@ import { LoadingPulse } from '@/components/ui/LoadingPulse';
 import { formatRelativeTime } from '@/utils/format';
 import { TopGradient } from '@/components/ui/ScreenShell';
 
+import { BottomSheet } from '@/components/ui/BottomSheet';
 type Filter = 'ALL' | 'BUY' | 'SELL' | 'PENDING' | 'COMPLETED';
 
 export default function AdminOrders() {
@@ -47,13 +49,7 @@ export default function AdminOrders() {
       <TopGradient />
       <StatusBar style={themeMode === 'light' ? 'dark' : 'light'} />
       <SafeAreaView style={{ flex: 1 }} edges={['top']}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingTop: 8, paddingBottom: 8 }}>
-          <Pressable onPress={() => router.back()} hitSlop={8}>
-            <Ionicons name="chevron-back" size={26} color={p.fg} />
-          </Pressable>
-          <Text style={{ flex: 1, color: p.fg, fontSize: 18, fontWeight: '600' }}>Orders</Text>
-          <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '700' }}>{q.data?.total ?? 0}</Text>
-        </View>
+        <StackHeader title="Orders" right={<><Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '700' }}>{q.data?.total ?? 0}</Text></>} />
 
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, gap: 8, marginBottom: 10, paddingVertical: 2 }}>
           {(['ALL', 'BUY', 'SELL', 'PENDING', 'COMPLETED'] as Filter[]).map((f) => {
@@ -98,16 +94,11 @@ export default function AdminOrders() {
         )}
       </SafeAreaView>
 
-      <Modal visible={!!drill} transparent animationType="slide" onRequestClose={() => setDrill(null)}>
-        <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)' }} onPress={() => setDrill(null)}>
-          <View style={{ position: 'absolute', bottom: 0, left: 0, right: 0, maxHeight: '75%', backgroundColor: p.bgElev, borderTopLeftRadius: 20, borderTopRightRadius: 20 }} onStartShouldSetResponder={() => true}>
-            <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: p.border, alignSelf: 'center', marginTop: 10, marginBottom: 12 }} />
-            <ScrollView contentContainerStyle={{ padding: 20 }}>
+      <BottomSheet visible={!!drill} onClose={() => setDrill(null)} title="Details" scroll={false} contentStyle={{ paddingHorizontal: 0 }}>
+            <ScrollView contentContainerStyle={{ paddingHorizontal: 24, paddingBottom: 24 }}>
               <Text style={{ color: p.fg, fontFamily: 'monospace', fontSize: 11, lineHeight: 17 }}>{JSON.stringify(drill, null, 2)}</Text>
             </ScrollView>
-          </View>
-        </Pressable>
-      </Modal>
+          </BottomSheet>
     </View>
   );
 }

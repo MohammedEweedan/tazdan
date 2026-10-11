@@ -1,3 +1,4 @@
+import { StackHeader } from '@/components/ui/ScreenHeader';
 import { useState } from 'react';
 import { Alert, Modal, Pressable, RefreshControl, ScrollView, View } from 'react-native';
 import { Text } from '@/components/ui/Text';
@@ -13,6 +14,7 @@ import { LoadingPulse } from '@/components/ui/LoadingPulse';
 import { formatRelativeTime } from '@/utils/format';
 import { TopGradient } from '@/components/ui/ScreenShell';
 
+import { BottomSheet } from '@/components/ui/BottomSheet';
 export default function AdminOnchain() {
   const p = useThemedPalette();
   const themeMode = useTheme((s) => s.mode);
@@ -46,11 +48,7 @@ export default function AdminOnchain() {
       <TopGradient />
       <StatusBar style={themeMode === 'light' ? 'dark' : 'light'} />
       <SafeAreaView style={{ flex: 1 }} edges={['top']}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingTop: 8, paddingBottom: 6 }}>
-          <Pressable onPress={() => router.back()} hitSlop={8}><Ionicons name="chevron-back" size={26} color={p.fg} /></Pressable>
-          <Text style={{ flex: 1, color: p.fg, fontSize: 18, fontWeight: '600' }}>On-Chain Txns</Text>
-          <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '700' }}>{q.data?.total ?? 0}</Text>
-        </View>
+        <StackHeader title="On-Chain Txns" right={<><Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '700' }}>{q.data?.total ?? 0}</Text></>} />
 
         {q.isLoading ? <LoadingPulse fullscreen icon="git-branch-outline" label="Loading on-chain…" /> : (
           <ScrollView refreshControl={<RefreshControl refreshing={q.isFetching} onRefresh={() => q.refetch()} tintColor={p.fg} />} contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 40 }}>
@@ -67,11 +65,8 @@ export default function AdminOnchain() {
           </ScrollView>
         )}
       </SafeAreaView>
-      <Modal visible={!!drill} transparent animationType="slide" onRequestClose={() => setDrill(null)}>
-        <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)' }} onPress={() => setDrill(null)}>
-          <View style={{ position: 'absolute', bottom: 0, left: 0, right: 0, maxHeight: '70%', backgroundColor: p.bgElev, borderTopLeftRadius: 20, borderTopRightRadius: 20 }} onStartShouldSetResponder={() => true}>
-            <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: p.border, alignSelf: 'center', marginTop: 10, marginBottom: 12 }} />
-            <ScrollView contentContainerStyle={{ padding: 20 }}>
+      <BottomSheet visible={!!drill} onClose={() => setDrill(null)} title="Details" scroll={false} contentStyle={{ paddingHorizontal: 0 }}>
+            <ScrollView contentContainerStyle={{ paddingHorizontal: 24, paddingBottom: 24 }}>
               <Text style={{ color: p.fg, fontFamily: 'monospace', fontSize: 11, lineHeight: 17 }}>{JSON.stringify(drill, null, 2)}</Text>
               {drill?.status && drill.status !== 'SENT' && drill.status !== 'CONFIRMED' && (
                 <Pressable
@@ -85,9 +80,7 @@ export default function AdminOnchain() {
                 </Pressable>
               )}
             </ScrollView>
-          </View>
-        </Pressable>
-      </Modal>
+          </BottomSheet>
     </View>
   );
 }

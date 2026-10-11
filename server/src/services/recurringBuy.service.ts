@@ -70,6 +70,7 @@ export async function executeRecurringBuy(id: string) {
     side: 'BUY',
     fiatAmount: (rb.fiatAmount as unknown as Decimal).toString(),
     settlementCurrency: fundingCurrency,
+    userId: rb.userId,
   });
 
   // Idempotency: one execution per (schedule, scheduled slot). Using the

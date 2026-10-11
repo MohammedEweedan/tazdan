@@ -95,8 +95,13 @@ export interface P2POffer {
   trader: {
     handle: string;
     name: string;
+    /** @deprecated completion rate on a 5-point scale — use completionRate. */
     rating: number;
     orders: number;
+    /** Trades this trader has completed, as buyer or seller. */
+    completedTrades?: number;
+    /** % of finished trades that completed; null before any finished. */
+    completionRate?: number | null;
     verified: boolean;
     avatarUrl?: string;
     anonymous: boolean;
@@ -111,6 +116,10 @@ export interface P2POffer {
   country?: string;
   city?: string;
   timeframeMins?: number;
+  /** The listing shares an approximate location. */
+  hasLocation?: boolean;
+  /** Rounded distance from the viewer, when both sides have a location. */
+  distanceKm?: number;
 }
 
 export interface CardEntity {

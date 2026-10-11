@@ -119,7 +119,7 @@ function assetUri(mod: number): string {
   }
 }
 
-const brandIconUri = assetUri(require('../../assets/icon-white.png'));
+const brandIconUri = assetUri(require('../../assets/icon-asterisk-white.png'));
 const outfitRegularUri = assetUri(require('@expo-google-fonts/outfit/400Regular/Outfit_400Regular.ttf'));
 const outfitBoldUri = assetUri(require('@expo-google-fonts/outfit/700Bold/Outfit_700Bold.ttf'));
 const cairoRegularUri = assetUri(require('@expo-google-fonts/cairo/400Regular/Cairo_400Regular.ttf'));

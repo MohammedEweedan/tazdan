@@ -6,6 +6,8 @@ export interface ApiEnvironment {
   metroHost?: string | null;
   webHostname?: string;
   developmentBase?: string;
+  localTestBuild?: boolean;
+  localTestBase?: string;
   productionBase?: string;
   legacyBase?: string;
   port?: string;
@@ -35,7 +37,13 @@ export function normalizeApiBase(base: string, development: boolean): string {
   return `${url.origin}${path.endsWith('/api') ? path : `${path}/api`}`;
 }
 export function resolveApiBase(env: ApiEnvironment): string {
-  // A local override is never read by a release build.
+  if (env.localTestBuild) {
+    if (!env.localTestBase) throw new Error('Local iOS test builds require EXPO_PUBLIC_LOCAL_TEST_API_BASE.');
+    const testUrl = new URL(env.localTestBase);
+    if (!localHost(testUrl.hostname)) throw new Error('Local iOS test builds require a LAN API host.');
+    return normalizeApiBase(env.localTestBase, true);
+  }
+  // Standard release builds ignore development overrides.
   const override = env.development
     ? env.developmentBase || env.legacyBase
     : env.productionBase || env.legacyBase || PRODUCTION_API;

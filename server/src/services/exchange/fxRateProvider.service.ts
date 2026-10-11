@@ -18,6 +18,13 @@
 import Decimal from 'decimal.js';
 import { Currency } from '@prisma/client';
 import { prisma } from '../../utils/prisma';
+import { FULUS_CURRENCIES, getFulusLydRate } from './fulus.service';
+
+/** Cash LYD pairs are priced from Fulus in either direction. */
+export function isFulusPair(base: string, quote: string): boolean {
+  const other = base === 'LYD' ? quote : quote === 'LYD' ? base : '';
+  return (FULUS_CURRENCIES as readonly string[]).includes(other);
+}
 
 /** ExchangeRate rows use the Currency enum — symbols outside it (a Fulus
  *  currency added before its enum value ships) must skip the DB override/
@@ -37,7 +44,10 @@ const CACHE_TTL_MS = Number(process.env.FX_CACHE_TTL_MS ?? 60_000);
 // window we treat the data as poisoned and refuse to use it. Update
 // these as the macro picture shifts.
 const SANITY_BOUNDS: Record<string, [number, number]> = {
-  'USD/LYD': [3.5, 9.5],   // CBL official ~4.5, parallel ~7.0 as of 2026
+  // Wide enough for the parallel market's drift (Fulus reported 9.81 in
+  // Sept 2026, above the old 9.5 ceiling, so the real rate was being thrown
+  // away); still narrow enough to reject a decimal-shifted or inverted value.
+  'USD/LYD': [4, 15],
 };
 
 // Approximate mid-market rates expressed as USD per 1 unit of the base
@@ -48,9 +58,10 @@ const SANITY_BOUNDS: Record<string, [number, number]> = {
 const FALLBACK_USD_PER_UNIT: Record<string, number> = {
   USD: 1,     EUR: 1.08,  GBP: 1.27,
   AED: 0.272, SAR: 0.266, EGP: 0.019,
-  // LYD reflects the parallel-market level (~7.2 LYD/USD), not the official
-  // CBL peg, since that's the rate we transact at. Last-resort only.
-  LYD: 0.139, CAD: 0.73,  AUD: 0.66,
+  // LYD reflects the parallel-market level (~9.8 LYD/USD in Sept 2026), not
+  // the official CBL peg, since that's the rate we transact at. Last-resort
+  // only — keep it near the live feed so a feed outage doesn't misprice.
+  LYD: 0.102, CAD: 0.73,  AUD: 0.66,
   CHF: 1.12,  JPY: 0.0067, CNY: 0.14,
 };
 
@@ -64,9 +75,23 @@ function fallbackRate(base: string, quote: string): number | null {
 
 interface Provider {
   name: string;
+  /**
+   * Which market this source prices.
+   *
+   *   'parallel' — the rate people actually transact at.
+   *   'official' — a central-bank / IMF peg.
+   *
+   * For LYD these differ by ~30%, and quoting one when you meant the other is
+   * not a rounding error: it is a materially wrong price on every conversion.
+   * See the guard in fetchProviderMid().
+   */
+  basis: 'parallel' | 'official';
   supports(base: string, quote: string): boolean;
   fetch(base: string, quote: string): Promise<{ mid: number } | null>;
 }
+
+/** Quotes where only a PARALLEL-market source is acceptable. */
+const PARALLEL_ONLY_QUOTES = new Set(['LYD']);
 
 async function fetchJsonTimeout(url: string, ms = 4000): Promise<any | null> {
   try {
@@ -86,6 +111,7 @@ async function fetchJsonTimeout(url: string, ms = 4000): Promise<any | null> {
 // those and the next provider handles them.
 const frankfurter: Provider = {
   name: 'frankfurter',
+  basis: 'official',
   supports: () => true,
   async fetch(base, quote) {
     const json = await fetchJsonTimeout(`https://api.frankfurter.dev/v1/latest?base=${base}&symbols=${quote}`);
@@ -99,6 +125,7 @@ const frankfurter: Provider = {
 // rate vs the base, so we read the quote out of the map.
 const openErApi: Provider = {
   name: 'open.er-api',
+  basis: 'official',
   supports: () => true,
   async fetch(base, quote) {
     const json = await fetchJsonTimeout(`https://open.er-api.com/v6/latest/${base}`);
@@ -120,7 +147,7 @@ const LYD_SCRAPE_URL = process.env.LYD_PARALLEL_URL || 'https://en.blackmarketli
 const LYD_SCRAPE_CODES = ['USD', 'EUR', 'GBP', 'AED', 'SAR', 'CAD', 'CHF', 'TND', 'KWD', 'TRY'];
 // LYD-per-1-unit sanity window per currency — rejects a poisoned/garbled scrape.
 const LYD_SCRAPE_BOUNDS: Record<string, [number, number]> = {
-  USD: [4, 12], EUR: [4, 14], GBP: [5, 16], AED: [1, 4], SAR: [1, 4],
+  USD: [4, 15], EUR: [4, 17], GBP: [5, 20], AED: [1, 4.5], SAR: [1, 4.5],
   CAD: [3, 9], CHF: [5, 16], TND: [1, 5], KWD: [15, 40], TRY: [0.05, 1],
 };
 
@@ -168,6 +195,7 @@ export async function getScrapedLydRates(): Promise<Record<string, number>> {
 // Provider: any FIAT/LYD pair (USD/LYD, EUR/LYD, …) sourced from the scrape.
 const lydParallel: Provider = {
   name: 'lyd-parallel-scrape',
+  basis: 'parallel',
   supports: (base, quote) => quote === 'LYD' && LYD_SCRAPE_CODES.includes(base.toUpperCase()),
   async fetch(base) {
     const rates = await scrapeLydRates();
@@ -182,6 +210,7 @@ const lydParallel: Provider = {
 // to the scraper) when no Fulus token is configured.
 const fulusLyd: Provider = {
   name: 'fulus',
+  basis: 'parallel',
   supports: (base, quote) => quote === 'LYD',
   async fetch(base) {
     const { getFulusLydRate } = await import('./fulus.service');
@@ -192,6 +221,7 @@ const fulusLyd: Provider = {
 
 const openExchangeRates: Provider = {
   name: 'openexchangerates',
+  basis: 'official',
   supports: () => Boolean(process.env.OPENEXCHANGERATES_APP_ID),
   async fetch(base, quote) {
     const appId = process.env.OPENEXCHANGERATES_APP_ID!;
@@ -268,8 +298,26 @@ async function applySpread(base: string, quote: string, mid: number): Promise<{ 
  * Sanity bounds (when defined for the pair) reject poisoned API values.
  */
 async function fetchProviderMid(base: string, quote: string): Promise<ProviderMid | null> {
+  if (isFulusPair(base, quote)) {
+    const currency = quote === 'LYD' ? base : quote;
+    const rate = await getFulusLydRate(currency);
+    if (rate == null) return null;
+    return { mid: quote === 'LYD' ? rate : 1 / rate, source: 'fulus', derived: base === 'LYD' };
+  }
+  const needsParallel = PARALLEL_ONLY_QUOTES.has(quote.toUpperCase()) || PARALLEL_ONLY_QUOTES.has(base.toUpperCase());
   for (const provider of RATE_PROVIDERS) {
     if (!provider.supports(base, quote)) continue;
+    // An official peg must NEVER silently stand in for a parallel rate. When
+    // the Fulus feed is down or FULUS_API_TOKEN is unset, the chain used to
+    // fall through to a central-bank source and quote USD/LYD ~6.4 while the
+    // real market was ~9.27 — a ~31% error, served silently, on the exact
+    // number this product exists to get right. Refusing to quote is the
+    // correct failure: a missing rate is visible, a wrong one is not.
+    if (needsParallel && provider.basis !== 'parallel') {
+      // eslint-disable-next-line no-console
+      console.warn(`[fx] ${provider.name} is an OFFICIAL-peg source; refusing to quote ${base}/${quote} from it`);
+      continue;
+    }
     const result = await provider.fetch(base, quote);
     if (!result) continue;
     if (!withinSanity(base, quote, result.mid)) {
@@ -280,6 +328,38 @@ async function fetchProviderMid(base: string, quote: string): Promise<ProviderMi
     return { mid: result.mid, source: provider.name };
   }
   return null;
+}
+
+/**
+ * Jump guard for parallel-market (LYD) rates. Two feeds price the dinar and
+ * they can disagree badly (in testing: 6.42 vs 9.37 when the primary feed was
+ * rate-limited and a fallback took over), so a quote must not silently jump.
+ * A move larger than FX_MAX_JUMP_PCT (default 8%) from the last accepted rate
+ * is held: quotes keep the previous rate for up to 15 minutes and an error is
+ * logged; after that, quoting stops (503) until treasury confirms a rate
+ * through an approved FX override, or FX_JUMP_WINDOW_MS (default 2 h) passes.
+ */
+const acceptedRates = new Map<string, { mid: number; at: number }>();
+export function resetRateJumpGuard(): void { acceptedRates.clear(); }
+export function noteAcceptedRate(key: string, mid: number, at = Date.now()): void {
+  if (Number.isFinite(mid) && mid > 0) acceptedRates.set(key, { mid, at });
+}
+export function guardRateJump(key: string, mid: number, source: string, now = Date.now()): { mid: number; held: boolean } {
+  if (!Number.isFinite(mid) || mid <= 0) throw Object.assign(new Error('Invalid FX rate'), { statusCode: 503 });
+  if (source === 'fulus') {
+    acceptedRates.set(key, { mid, at: now });
+    return { mid, held: false };
+  }
+  const maxJump = Number(process.env.FX_MAX_JUMP_PCT ?? '0.08');
+  const window = Number(process.env.FX_JUMP_WINDOW_MS ?? 2 * 3600_000);
+  const prev = acceptedRates.get(key);
+  if (!prev || now - prev.at > window) { acceptedRates.set(key, { mid, at: now }); return { mid, held: false }; }
+  const jump = Math.abs(mid / prev.mid - 1);
+  if (jump <= maxJump) { acceptedRates.set(key, { mid, at: now }); return { mid, held: false }; }
+  // eslint-disable-next-line no-console
+  console.error(`[fx] ${key} moved ${(jump * 100).toFixed(1)}% (${prev.mid} → ${mid}, source ${source}); holding the previous rate`);
+  if (now - prev.at <= 15 * 60_000) return { mid: prev.mid, held: true };
+  throw Object.assign(new Error(`The ${key} rate moved ${(jump * 100).toFixed(1)}%. Quotes are paused until treasury confirms the rate.`), { statusCode: 503 });
 }
 
 /**
@@ -309,7 +389,14 @@ export async function getRate(base: string, quote: string): Promise<RatePair> {
         where: { baseCurrency_quoteCurrency: { baseCurrency: base as any, quoteCurrency: quote as any } },
       }).catch(() => null)
     : null;
-  if (override && override.isActive && override.setBy && (now - override.updatedAt.getTime() < MAX_OVERRIDE_AGE_MS)) {
+  // An approved treasury override carries its own expiry; a legacy manual
+  // rate falls back to the age window.
+  const overrideLive = override && override.isActive && override.setBy && (
+    override.overrideExpiresAt ? override.overrideExpiresAt.getTime() > now : now - override.updatedAt.getTime() < MAX_OVERRIDE_AGE_MS
+  );
+  if (override && overrideLive && !isFulusPair(base, quote)) {
+    // A confirmed override is the new reference for the jump guard.
+    noteAcceptedRate(k, (Number(override.buyPrice) + Number(override.sellPrice)) / 2, now);
     const pair: RatePair = {
       buyPrice:  override.buyPrice.toString(),
       sellPrice: override.sellPrice.toString(),
@@ -335,18 +422,28 @@ export async function getRate(base: string, quote: string): Promise<RatePair> {
     // when platform demand is low. Applied to both USD/LYD and the derived
     // LYD/USD (where the skew makes LYD/USD slightly *cheaper*, consistently).
     let skewSource = '';
-    if (base === 'USD' && quote === 'LYD') {
+    if (base === 'USD' && quote === 'LYD' && providerRate.source !== 'fulus') {
       const { applyLydDemandSkew, currentLydSkewPct, noteLydPrice } = await import('./lydOrderBook.service');
       mid = (applyLydDemandSkew(mid)).toNumber();
       noteLydPrice(mid); // feed the history sampler the live effective price
       if (currentLydSkewPct() > 0) skewSource = '+skew';
-    } else if (base === 'LYD' && quote === 'USD') {
+    } else if (base === 'LYD' && quote === 'USD' && providerRate.source !== 'fulus') {
       const { currentLydSkewPct } = await import('./lydOrderBook.service');
       const skew = currentLydSkewPct();
       if (skew > 0) { mid = mid / (1 + skew); skewSource = '+skew'; }
     }
+    if (base === 'USD' && quote === 'LYD' && providerRate.source === 'fulus') {
+      const { noteLydPrice } = await import('./lydOrderBook.service');
+      noteLydPrice(mid);
+    }
+    // Parallel-market pairs: never let a feed switch move the quote silently.
+    let heldSource = '';
+    if (PARALLEL_ONLY_QUOTES.has(quote.toUpperCase()) || PARALLEL_ONLY_QUOTES.has(base.toUpperCase())) {
+      const g = guardRateJump(k, mid, providerRate.source, now);
+      if (g.held) { mid = g.mid; heldSource = '+held'; }
+    }
     const { buy, sell } = await applySpread(base, quote, mid);
-    const baseSource = `${providerRate.derived ? 'derived' : 'live'}:${providerRate.source}`;
+    const baseSource = `${providerRate.derived ? 'derived' : 'live'}:${providerRate.source}${heldSource}`;
     const pair: RatePair = { buyPrice: buy, sellPrice: sell, source: baseSource + skewSource, fetchedAt: new Date() };
     memoryCache.set(k, { value: pair, expires: now + CACHE_TTL_MS });
 
@@ -361,6 +458,11 @@ export async function getRate(base: string, quote: string): Promise<RatePair> {
     }
 
     return pair;
+  }
+
+  // A missing Fulus rate stays unavailable, never substituted by another source.
+  if (isFulusPair(base, quote)) {
+    throw Object.assign(new Error(`Fulus rate unavailable for ${base}/${quote}`), { statusCode: 503 });
   }
 
   // 3. Stale override (even if outside the freshness window) beats nothing.
@@ -407,11 +509,11 @@ export async function getLiveProviderRate(base: string, quote: string): Promise<
   // Mirror getRate's USD/LYD demand-skew so the "live" figure matches what a
   // user would actually transact at.
   let skewSource = '';
-  if (base === 'USD' && quote === 'LYD') {
+  if (base === 'USD' && quote === 'LYD' && providerRate.source !== 'fulus') {
     const { applyLydDemandSkew, currentLydSkewPct } = await import('./lydOrderBook.service');
     mid = applyLydDemandSkew(mid).toNumber();
     if (currentLydSkewPct() > 0) skewSource = '+skew';
-  } else if (base === 'LYD' && quote === 'USD') {
+  } else if (base === 'LYD' && quote === 'USD' && providerRate.source !== 'fulus') {
     const { currentLydSkewPct } = await import('./lydOrderBook.service');
     const skew = currentLydSkewPct();
     if (skew > 0) { mid = mid / (1 + skew); skewSource = '+skew'; }

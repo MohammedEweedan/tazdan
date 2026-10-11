@@ -192,7 +192,7 @@ export const exchangeService = {
 export const securityService = {
   /** Request a 6-digit confirmation code for a high-value/new-device action.
    *  Returns the delivery method so the modal can prompt correctly. */
-  async startStepUp(action: 'withdrawal' | 'buy' | 'sell' | 'transfer'): Promise<{ method: 'email' | 'totp' }> {
+  async startStepUp(action: 'withdrawal' | 'buy' | 'sell' | 'transfer' | 'account_close'): Promise<{ method: 'email' | 'totp' }> {
     const { data } = await api.post('/security/step-up/start', { action });
     return data;
   },
@@ -420,8 +420,11 @@ export interface P2PListing {
 }
 
 export const p2pService = {
-  offers: (filter: 'BUY' | 'SELL' | 'ALL' = 'ALL') => withFallback<P2POffer[]>(
-    async () => (await api.get('/p2p/offers', { params: { side: filter } })).data.offers,
+  /** `near` sorts listings that share a location by distance (signed-in only). */
+  offers: (filter: 'BUY' | 'SELL' | 'ALL' = 'ALL', near?: { lat: number; lng: number } | null) => withFallback<P2POffer[]>(
+    async () => (await api.get('/p2p/offers', {
+      params: { side: filter, ...(near ? { near: `${near.lat},${near.lng}` } : {}) },
+    })).data.offers,
   ),
   myListings: (): Promise<P2PListing[]> =>
     withFallback<P2PListing[]>(
@@ -446,6 +449,8 @@ export const p2pService = {
     anonymous?: boolean;
     city?: string;
     timeframeMins?: number;
+    /** Approximate (rounded) position — opts the listing in to "near me". */
+    location?: { lat: number; lng: number };
   }): Promise<P2PListing> => {
     const { data } = await api.post('/p2p/listings', payload);
     return data.listing;
@@ -464,8 +469,16 @@ export const p2pService = {
 };
 
 // ───────── Wallet swap ─────────
+export interface WalletSwapQuote {
+  from: string; to: string; amount: number; credited: string; rate: string;
+  sources: string[]; at: string;
+}
 export const swapService = {
-  swap: async (payload: { from: string; to: string; amount: number }) => {
+  quote: async (payload: { from: string; to: string; amount: number }): Promise<WalletSwapQuote> => {
+    const { data } = await api.get('/wallets/swap/quote', { params: payload });
+    return data.quote;
+  },
+  swap: async (payload: { from: string; to: string; amount: number; minCredited?: string }) => {
     const { data } = await api.post('/wallets/swap', payload);
     return data.swap as { from: string; to: string; amount: number; credited: number; rate: number };
   },
@@ -487,6 +500,21 @@ export interface PublicProfile {
   completionRate: number;
   createdAt: string;
 }
+export interface ClosureBlocker { code: string; message: string; params?: Record<string, string | number> }
+
+/** In-app account deletion (closure). */
+export const accountService = {
+  closure: async (): Promise<{ canClose: boolean; blockers: ClosureBlocker[]; retentionYears: number }> => {
+    const { data } = await api.get('/users/me/closure');
+    return data;
+  },
+  /** Throws STEP_UP_REQUIRED (401) first; call again with the code. */
+  close: async (payload: { reason?: string; stepUpCode?: string }): Promise<{ closed: true; closedAt: string; erasureDueAt: string }> => {
+    const { data } = await api.post('/users/me/close', { confirm: 'CLOSE', ...payload });
+    return data;
+  },
+};
+
 export const profileService = {
   byHandle: async (handle: string): Promise<PublicProfile> => {
     const { data } = await api.get(`/profile/${handle}`);
@@ -567,6 +595,10 @@ export const messageService = {
     currency: string;
     amount: number;
     note?: string;
+    /** 6-digit code after the server asked for step-up (STEP_UP_REQUIRED). */
+    stepUpCode?: string;
+    /** Set only right after a successful local Face ID / Touch ID check. */
+    biometricVerified?: boolean;
   }) => {
     const { data } = await api.post('/transactions/transfer', payload);
     return data;
@@ -890,7 +922,7 @@ export interface AdminFundIntegrity {
   funds: {
     checkedAt: number;
     ok: boolean;
-    perCurrency: Array<{ currency: string; internalHeld: string; enteredOutside: string; diff: string; ok: boolean }>;
+    perCurrency: Array<{ currency: string; internalHeld: string; enteredOutside: string; diff: string; ok: boolean; unbacked?: string; unbackedSinceBaseline?: string; railExceptions?: number }>;
   };
   ledger: {
     ok: boolean;
@@ -979,7 +1011,7 @@ export const adminService = {
     initialBalances?: Array<{ currency: string; amount: number }>;
   }) => {
     const { data } = await api.post('/admin/users', payload);
-    return data as { user: any; temporaryPassword?: string; message: string };
+    return data as { user: any; temporaryPassword?: string; message: string; openingBalances?: Array<{ currency: string; amount: number; pendingApproval: boolean; approvalId?: string; reference?: string }> };
   },
   updateUserStatus: async (id: string, status: 'ACTIVE' | 'SUSPENDED' | 'BANNED') => {
     const { data } = await api.put(`/admin/users/${id}/status`, { status });
@@ -1153,7 +1185,7 @@ export const adminService = {
       async () => (await api.get('/admin/p2p/disputes', { params })).data,
       { items: [], total: 0, page: 1, totalPages: 1 },
     ),
-  resolveP2PDispute: async (id: string, payload: { resolution: string; status?: 'RESOLVED' | 'CLOSED' | 'ESCALATED' }) => {
+  resolveP2PDispute: async (id: string, payload: { resolution: string; outcome: 'BUYER' | 'SELLER'; status?: 'RESOLVED' | 'CLOSED' | 'ESCALATED' }) => {
     const { data } = await api.put(`/admin/p2p/disputes/${id}/resolve`, payload);
     return data;
   },

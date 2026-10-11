@@ -38,6 +38,37 @@ Existing native debug configuration permits local HTTP; release API resolution
 requires public HTTPS. Backend development CORS permits local origins and
 native clients. Existing production origin restrictions remain in force.
 
+## Standalone iPhone test build
+
+Start the backend in `server/` with `npm run dev`, then connect the iPhone and
+Mac to the same Wi-Fi. Unlock the phone, enable Developer Mode, and run from
+`mobile/`:
+
+```sh
+npm run ios:local-test -- YOUR_DEVICE_ID
+```
+
+Find the device ID with `xcrun devicectl list devices`. The command builds a
+signed Release app with JavaScript included, installs it, and launches it. It
+does not need Expo Go or a running Metro server. The app talks to the Mac API
+at `http://MAC_LAN_IP:5001/api`; that server talks to the configured database.
+Allow Local Network access when iOS asks.
+Hosted updates are disabled in this test app so it keeps the bundled Mac API
+address.
+The Mac must stay awake and reachable while using the app. If its LAN IP
+changes, rebuild the app. Use `LOCAL_TEST_MAC_IP` or `LOCAL_TEST_INTERFACE`
+when the active network is not `en0`.
+
+The local test app uses bundle ID `com.tazdan.localtest` and a personal-team
+signing profile. Its native Apple Pay, push notification, and Associated Domains
+entitlements are omitted because personal teams cannot sign them. Production
+builds retain their original identifier and entitlements. The local test API
+override applies only when `EXPO_PUBLIC_LOCAL_TEST_BUILD=1` is set during the
+build; other Release builds continue to require the production HTTPS API.
+On first install, trust the developer profile in iPhone Settings → General →
+VPN & Device Management. Personal-team profiles expire after seven days; run
+the build command again to renew and reinstall.
+
 ## Deployed builds
 
 `eas.json` preview and production profiles use

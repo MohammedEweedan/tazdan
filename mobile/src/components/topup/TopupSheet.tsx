@@ -9,14 +9,18 @@
  * `/topup` route for deep-linking.
  *
  * Three steps stay in-flow: METHOD → AMOUNT → CONFIRM. Step state is
- * internal; the parent only controls open/close.
+ * internal; the parent only controls open/close. A bank or agent top-up then
+ * shows where to pay and the reference to quote; the page stays open until
+ * the customer is done with it.
  */
 
-import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, ScrollView, View, useWindowDimensions } from 'react-native';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, Alert, Animated, Pressable, ScrollView, View, useWindowDimensions } from 'react-native';
 import { Text, TextInput } from '@/components/ui/Text';
 import { Ionicons } from '@expo/vector-icons';
 import * as WebBrowser from 'expo-web-browser';
+import * as Clipboard from 'expo-clipboard';
+import { useRouter } from 'expo-router';
 
 import { CTAButton, type CTAState } from '@/components/ui/ScreenShell';
 import { BottomSheet, SheetSection } from '@/components/ui/BottomSheet';
@@ -28,10 +32,11 @@ import { CurrencyPicker, type CurrencyItem } from '@/components/ui/CurrencyPicke
 import { NumericKeypad } from '@/components/ui/NumericKeypad';
 import { SlideToConfirm } from '@/components/ui/SlideToConfirm';
 import { useThemedPalette, type Palette } from '@/store/themeStore';
-import { useHaptics, useStepUpAuth, StepUpDeniedError } from '@/hooks';
+import { useHaptics, useStepUpAuth, StepUpDeniedError, usePlatformBanks, useTransactionSound } from '@/hooks';
 import { useAuthStore } from '@/store/authStore';
-import { useForexRates } from '@/hooks/useForexRates';
+import { useUsdValue } from '@/hooks/useForexRates';
 import { depositService } from '@/services';
+import type { PlatformBank } from '@/services/geoService';
 import { formatMoney } from '@/utils/format';
 import { fiatSymbol as fiatGlyph, getCurrencyMeta } from '@/constants';
 import {
@@ -52,8 +57,6 @@ export interface TopupSheetProps {
 export function TopupSheet({ visible, onClose, initialCurrency }: TopupSheetProps) {
   const p = useThemedPalette();
   const country = useAuthStore((s) => s.user?.country ?? null);
-  const { height } = useWindowDimensions();
-
   return (
     <BottomSheet
       visible={visible}
@@ -61,8 +64,7 @@ export function TopupSheet({ visible, onClose, initialCurrency }: TopupSheetProp
       title="Top up balance"
       subtitle={country ? `Available methods for your country (${country})` : undefined}
       scroll={false}
-      maxHeightPct={94}
-      contentStyle={{ paddingHorizontal: 0, height: Math.round(height * 0.74) }}
+      contentStyle={{ paddingHorizontal: 0, paddingBottom: 0 }}
     >
       <TopupBody
         palette={p}
@@ -86,9 +88,11 @@ export function TopupBody({
 }) {
   const h = useHaptics();
   const stepUp = useStepUpAuth();
+  const router = useRouter();
+  const [instructions, setInstructions] = useState<{ reference: string; amount: number; currency: string; bank: PlatformBank | null; agent: boolean } | null>(null);
   const user = useAuthStore((s) => s.user);
   const country = user?.country ?? null;
-  const { data: fxRates } = useForexRates();
+  const toUsd = useUsdValue();
 
   const methods = useMemo(() => methodsForCountry(country), [country]);
   const fiats   = useMemo(() => fiatsForCountry(country), [country]);
@@ -114,11 +118,14 @@ export function TopupBody({
   }, [method, methods, currency, fiats]);
 
   const numeric = Number(amount || 0);
+  // Bank transfers need a Tazdan account in this currency to pay into.
+  const banksQ = usePlatformBanks(method?.id === 'BANK_TRANSFER' ? currency : undefined);
+  const payTo = method?.id === 'BANK_TRANSFER' ? (banksQ.data ?? []).find((b) => b.currency === currency && b.isActive) ?? null : null;
+  const bankUnavailable = method?.id === 'BANK_TRANSFER' && !banksQ.isLoading && !payTo;
   const usdEquivalent = useMemo(() => {
     if (!Number.isFinite(numeric)) return 0;
-    const rate = fxRates?.[currency];
-    return rate ? numeric * rate : numeric;
-  }, [numeric, currency, fxRates]);
+    return toUsd(numeric, currency) ?? numeric;
+  }, [numeric, currency, toUsd]);
 
   const feeRows = useMemo(() => {
     if (!method || numeric <= 0) return null;
@@ -168,7 +175,7 @@ export function TopupBody({
   };
 
   const submit = async () => {
-    if (!method || numeric <= 0) return;
+    if (!method || (numeric <= 0 && method.id !== 'P2P')) return;
     if (method.minUsd && usdEquivalent < method.minUsd) {
       Alert.alert('Below minimum', `${method.name} requires at least $${method.minUsd} equivalent.`);
       return;
@@ -217,21 +224,26 @@ export function TopupBody({
       }
 
       if (method.id === 'P2P') {
-        setCtaState('success');
-        setSuccessLabel('Done ✓');
-        setTimeout(onComplete, 1000);
+        // Buying from another customer happens in the P2P market.
+        onComplete();
+        router.push('/p2p' as never);
         return;
       }
 
-      await depositService.createBankDeposit({
+      if (bankUnavailable) {
+        setCtaState('error');
+        setErrorLabel(`Bank top-up in ${currency} isn't available yet`);
+        return;
+      }
+      const { deposit } = await depositService.createBankDeposit({
         currency,
         amount: numeric,
         notes: method.id === 'LYD_AGENT' ? 'Cash via tazdan agent' : undefined,
       });
       h.success();
-      setCtaState('success');
-      setSuccessLabel('Deposit submitted ✓');
-      setTimeout(onComplete, 2000);
+      // Show where to pay and the reference to quote; nothing is credited
+      // until the money arrives and staff confirm it.
+      setInstructions({ reference: deposit.reference, amount: numeric, currency, bank: payTo, agent: method.id === 'LYD_AGENT' });
     } catch (e: any) {
       h.error();
       if (e instanceof StepUpDeniedError) {
@@ -275,9 +287,17 @@ export function TopupBody({
   );
   const slideLabel = !selectedMethod
     ? 'Choose a method'
+    : bankUnavailable
+    ? `Not available in ${currency} yet`
+    : selectedMethod.id === 'P2P'
+    ? 'Slide to open the P2P market'
     : numeric > 0
     ? `Slide to top up ${formatMoney(numeric, currency, { showSymbol: true })}`
     : 'Enter amount';
+
+  if (instructions) {
+    return <TransferInstructions {...instructions} palette={p} onDone={onComplete} />;
+  }
 
   return (
     <ScrollView
@@ -339,7 +359,16 @@ export function TopupBody({
           <AmountDisplay value={amount} symbol={symbol} palette={p} maxSize={amountMaxSize} />
         </View>
 
+        {bankUnavailable ? (
+          <View style={{ flexDirection: 'row', gap: 10, backgroundColor: p.amberBg, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 12, marginBottom: compact ? 8 : 12 }}>
+            <Ionicons name="information-circle-outline" size={18} color={p.amberFg} />
+            <Text style={{ color: p.fg, fontSize: 13, lineHeight: 18, flex: 1 }}>
+              Bank transfer top-ups in {currency} aren't set up yet. Choose another currency or method.
+            </Text>
+          </View>
+        ) : null}
         <View style={{
+          display: bankUnavailable ? 'none' : 'flex',
           backgroundColor: p.bgElev,
           borderRadius: 14,
           borderWidth: 1,
@@ -384,8 +413,8 @@ export function TopupBody({
 
       <SlideToConfirm
         label={slideLabel}
-        onConfirm={() => { if (selectedMethod && numeric > 0 && !busy) submit(); }}
-        enabled={!!selectedMethod && numeric > 0 && !busy}
+        onConfirm={() => { if (selectedMethod && (numeric > 0 || selectedMethod.id === 'P2P') && !busy && !bankUnavailable) submit(); }}
+        enabled={!!selectedMethod && (numeric > 0 || selectedMethod.id === 'P2P') && !busy && !bankUnavailable}
         status={busy ? 'loading' : ctaState}
         successLabel={successLabel ?? undefined}
         errorLabel={errorLabel ?? undefined}
@@ -402,6 +431,83 @@ export function TopupBody({
 }
 
 /* ── Step sub-components ─────────────────────────────────────────── */
+
+/** Where to pay and the reference to quote, shown once a bank or agent top-up is created. */
+function TransferInstructions({ reference, amount, currency, bank, agent, palette: p, onDone }: {
+  reference: string; amount: number; currency: string; bank: PlatformBank | null; agent: boolean; palette: Palette; onDone: () => void;
+}) {
+  const h = useHaptics();
+  const { playSuccess } = useTransactionSound();
+  const [copied, setCopied] = useState<string | null>(null);
+  // Success feedback once: sound + haptic, and the check mark springs in.
+  const pop = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    playSuccess('deposit');
+    Animated.spring(pop, { toValue: 1, tension: 70, friction: 7, useNativeDriver: true }).start();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const copy = async (label: string, value: string) => {
+    await Clipboard.setStringAsync(value);
+    h.selection();
+    setCopied(label);
+    setTimeout(() => setCopied((c) => (c === label ? null : c)), 1500);
+  };
+  const rows: Array<[string, string | null | undefined]> = bank ? [
+    ['Bank', bank.bankName],
+    ['Account name', bank.accountName],
+    ['IBAN', bank.iban],
+    ['Account number', bank.accountNumber],
+    ['SWIFT / BIC', bank.swift],
+    ['Sort code', bank.sortCode],
+    ['Routing number', bank.routingNumber],
+    ['Branch', bank.branch],
+  ] : [];
+  const amountText = formatMoney(amount, currency as Currency, { showSymbol: true });
+
+  const Row = ({ label, value, strong }: { label: string; value: string; strong?: boolean }) => (
+    <Pressable onPress={() => copy(label, value)} style={({ pressed }) => ({
+      flexDirection: 'row', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 14,
+      borderTopWidth: 1, borderTopColor: p.border, opacity: pressed ? 0.7 : 1,
+    })}>
+      <View style={{ flex: 1 }}>
+        <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '600' }}>{label}</Text>
+        <Text selectable style={{ color: p.fg, fontSize: strong ? 17 : 14, fontWeight: strong ? '700' : '600', marginTop: 2, fontVariant: ['tabular-nums'] }}>{value}</Text>
+      </View>
+      <Ionicons name={copied === label ? 'checkmark' : 'copy-outline'} size={16} color={copied === label ? p.greenFg : p.fgMuted} />
+    </Pressable>
+  );
+
+  return (
+    <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 28 }} showsVerticalScrollIndicator={false}>
+      <FadeIn>
+        <Animated.View style={{
+          width: 56, height: 56, borderRadius: 28, backgroundColor: p.greenBg, alignItems: 'center', justifyContent: 'center', marginBottom: 14,
+          opacity: pop, transform: [{ scale: pop.interpolate({ inputRange: [0, 1], outputRange: [0.5, 1] }) }],
+        }}>
+          <Ionicons name="checkmark" size={30} color={p.greenFg} />
+        </Animated.View>
+        <Text style={{ color: p.fg, fontSize: 22, fontWeight: '700', marginBottom: 6 }}>
+          {agent ? `Pay ${amountText} to an agent` : `Send ${amountText} to Tazdan`}
+        </Text>
+        <Text style={{ color: p.fgMuted, fontSize: 13, lineHeight: 19, marginBottom: 16 }}>
+          {agent
+            ? 'Show this reference to a Tazdan agent and pay in cash. Your wallet is credited once the agent confirms.'
+            : 'Make a transfer from a bank account in your name. Include the reference so we can match it. Your wallet is credited once the money arrives, usually within one business day.'}
+        </Text>
+        <View style={{ backgroundColor: p.bgElev, borderRadius: 14, borderWidth: 1, borderColor: p.border, overflow: 'hidden' }}>
+          <View style={{ marginTop: -1 }}>
+            <Row label="Reference" value={reference} strong />
+            <Row label="Amount" value={amountText} />
+            {rows.filter(([, v]) => !!v).map(([label, value]) => <Row key={label} label={label} value={value!} />)}
+          </View>
+        </View>
+        {bank?.memo ? <Text style={{ color: p.fgMuted, fontSize: 12, lineHeight: 18, marginTop: 12 }}>{bank.memo}</Text> : null}
+        <Text style={{ color: p.fgFaint, fontSize: 11, marginTop: 12 }}>Tap a line to copy it. You can find this deposit later in your activity.</Text>
+        <View style={{ height: 20 }} />
+        <CTAButton label="Done" onPress={onDone} />
+      </FadeIn>
+    </ScrollView>
+  );
+}
 
 function Stepper({ step, palette: p }: { step: Step; palette: Palette }) {
   const idx = step === 'METHOD' ? 0 : step === 'AMOUNT' ? 1 : 2;

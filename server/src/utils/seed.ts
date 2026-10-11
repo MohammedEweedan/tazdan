@@ -1,17 +1,43 @@
 import bcrypt from 'bcryptjs';
+import { randomBytes } from 'crypto';
 import { v4 as uuidv4 } from 'uuid';
 import { prisma } from './prisma';
 import { logger } from './logger';
 
+/**
+ * Bootstrap staff account. There is no default password: production needs
+ * ADMIN_EMAIL and a strong ADMIN_PASSWORD (12+ characters) or no account is
+ * created. Outside production a missing password is replaced by a random one
+ * printed once to the local console. The account is only ever CREATED here —
+ * an existing account's password is never changed by a restart.
+ */
+function bootstrapAdminCredentials(): { email: string; password: string } | null {
+  const isProd = process.env.NODE_ENV === 'production';
+  const email = process.env.ADMIN_EMAIL?.trim();
+  let password = process.env.ADMIN_PASSWORD ?? '';
+  const weak = password.length < 12 || /^(\d+|password|admin|changeme)/i.test(password);
+  if (isProd) {
+    if (!email || weak) {
+      logger.error('[seed] bootstrap admin NOT created: set ADMIN_EMAIL and a strong ADMIN_PASSWORD (12+ chars) to create one');
+      return null;
+    }
+    return { email, password };
+  }
+  if (!password) {
+    password = randomBytes(12).toString('base64url');
+    // eslint-disable-next-line no-console
+    console.warn(`\n[seed] Development bootstrap admin password (shown once): ${password}\n`);
+  }
+  return { email: email || 'admin@localhost.test', password };
+}
+
 export async function seedAdmin() {
-  const adminEmail = process.env.ADMIN_EMAIL || 'moeawidan99@gmail.com';
-  const adminPassword = process.env.ADMIN_PASSWORD || '11223344';
+  const creds = bootstrapAdminCredentials();
+  const existingAdmin = creds ? await prisma.user.findUnique({ where: { email: creds.email } }) : null;
 
-  const existingAdmin = await prisma.user.findUnique({
-    where: { email: adminEmail },
-  });
-
-  if (!existingAdmin) {
+  if (creds && !existingAdmin) {
+    const adminEmail = creds.email;
+    const adminPassword = creds.password;
     const passwordHash = await bcrypt.hash(adminPassword, 12);
     const referralCode = `ADM${uuidv4().slice(0, 8).toUpperCase()}`;
 
@@ -132,28 +158,11 @@ export async function seedAdmin() {
     logger.info('Platform treasury user seeded');
   }
 
-  // Platform deposit-rail bank accounts — admin-managed at runtime via
-  // /api/admin/platform-banks, but seeded with sensible defaults so the
-  // mobile deposit flow has something to display the moment the schema
-  // exists. Idempotent: an existing row with the same currency is left
-  // alone so admin edits aren't clobbered.
-  const platformBanks = [
-    { currency: 'USD', country: 'US', bankName: 'JPMorgan Chase Bank',          accountName: 'tazdan Inc.',     accountNumber: '000123456789',                  swift: 'CHASUS33', routingNumber: '021000021' },
-    { currency: 'EUR', country: 'DE', bankName: 'Deutsche Bank AG',             accountName: 'tazdan GmbH',     iban: 'DE89370400440532013000',                 swift: 'DEUTDEFF' },
-    { currency: 'GBP', country: 'GB', bankName: 'Barclays Bank plc',            accountName: 'tazdan Ltd',      iban: 'GB82WEST12345698765432',                 swift: 'BARCGB22', sortCode: '20-00-00', accountNumber: '98765432' },
-    { currency: 'AED', country: 'AE', bankName: 'Emirates NBD',                 accountName: 'tazdan DMCC',     iban: 'AE070331234567890123456',                swift: 'EBILAEAD' },
-    { currency: 'SAR', country: 'SA', bankName: 'Saudi National Bank',          accountName: 'tazdan Arabia',   iban: 'SA0380000000608010167519',               swift: 'NCBASARI' },
-    { currency: 'EGP', country: 'EG', bankName: 'National Bank of Egypt',       accountName: 'tazdan Egypt',    iban: 'EG380002000000000012345678901',          swift: 'NBEGEGCX' },
-    { currency: 'LYD', country: 'LY', bankName: 'Bank of Commerce & Development', accountName: 'tazdan Libya', accountNumber: '001-123456-001',                swift: 'BCDLLYLT' },
-  ];
-  for (const b of platformBanks) {
-    const existing = await (prisma as any).platformBankAccount.findFirst({
-      where: { currency: b.currency, bankName: b.bankName },
-    });
-    if (!existing) {
-      await (prisma as any).platformBankAccount.create({ data: { ...b, isActive: true } });
-    }
-  }
+  // Platform deposit bank accounts are NOT seeded. Customers are told to
+  // wire real money to whatever appears here, so every account must be
+  // entered by an administrator (/api/admin/platform-banks) from the bank's
+  // own documentation. Earlier builds seeded illustrative accounts; the
+  // 20261007100000_disable_placeholder_platform_banks migration deactivates them.
 
   // Seed market listings (idempotent — safe to run on every boot)
   const listings = [

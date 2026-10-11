@@ -1,52 +1,24 @@
 /**
- * Fulus API integration — real-time Libyan parallel-market rates.
- *
- * Fulus (https://fulus.ly/api/v1) is a paid, authenticated feed of the LYD
- * parallel-market rate for USD/EUR/GBP/TRY/EGP/TND/SAR/AED plus 13 bank
- * certificate rates. It replaces the fragile blackmarketlive.org HTML scrape
- * as the PRIMARY source for any FIAT/LYD pair, while the scraper stays in
- * fxRateProvider as a no-key fallback.
- *
- * Two feed paths, by design (FULUS_FEED = webhook + poll fallback):
- *  1. Webhook (instant, ~0 API calls): Fulus POSTs `rate.created` to
- *     /api/exchange/webhook/fulus whenever a new rate is published. The
- *     handler verifies the X-Webhook-Signature HMAC and calls
- *     `noteFulusRate()` here, refreshing the in-memory cache immediately.
- *  2. Poll fallback (self-healing): when the cache is empty/stale for a pair,
- *     the provider calls GET /rates/current once and caches it. This covers a
- *     dropped webhook or a cold start without burning the 10k/day quota on a
- *     tight polling loop.
- *
- * Rate direction: Fulus `rate` is LYD per 1 unit of the currency (e.g.
- * USD 6.85 = 6.85 LYD per 1 USD), matching our `<CODE>/LYD` mid convention.
- *
- * HTTP note: Fulus's responses are slightly non-compliant (a header terminated
- * with LF instead of CRLF), which Node's strict undici `fetch` parser REJECTS
- * with "Missing expected CR after header value" — so a plain fetch silently
- * fails and the rate never updates. We therefore call Fulus via axios with
- * `insecureHTTPParser: true`, which tolerates the malformed header (curl does
- * too, which is why manual curl tests passed while the app saw nothing).
- *
- * Env:
- *   FULUS_API_TOKEN          Bearer token from the Fulus dashboard (required to enable).
- *   FULUS_WEBHOOK_SECRET     Secret for X-Webhook-Signature HMAC-SHA256 verification.
- *   FULUS_BASE_URL           Override base URL (default https://fulus.ly/api/v1).
- *   FULUS_CACHE_TTL_MS       Fresh-cache window per pair, ms (default 600000 = 10 min).
+ * Authoritative Fulus cash rates, in LYD per currency unit.
+ * Webhooks and the authenticated API take priority. If the API is unavailable
+ * (including exhausted quota), USD/EUR fall back to Fulus's public rate cards.
+ * All values stay unadjusted; no official or third-party rate is substituted.
+ * axios tolerates Fulus's LF-terminated response headers.
  */
 import crypto from 'crypto';
 import axios from 'axios';
+import { getPublicFulusRates } from './fulusPublic.service';
 
 /**
  * GET a Fulus endpoint, tolerating its LF-terminated headers. Returns the
  * parsed JSON body or null on any failure (timeout, non-2xx, network). Never
- * throws — callers fall back to cache/scraper.
+ * throws — callers fall back to the public Fulus cards or cache.
  */
 // ── 429 circuit breaker ──────────────────────────────────────────────
 // The Fulus plan has a hard daily request budget. Once we see a 429,
 // hammering only digs the hole deeper and floods the logs (hundreds of
 // identical warnings). Open the breaker for a cooldown: every fulusGet
-// during it short-circuits to null and the callers' existing cache/
-// scraper fallbacks take over silently.
+// during it short-circuits to null and the callers' existing public-page/cache fallbacks take over silently.
 const FULUS_429_COOLDOWN_MS = Number(process.env.FULUS_429_COOLDOWN_MS ?? 10 * 60_000);
 let breakerOpenUntil = 0;
 
@@ -69,9 +41,14 @@ async function fulusGet<T = any>(path: string, timeoutMs = 5000): Promise<T | nu
     return res.data;
   } catch (err: any) {
     if (err?.response?.status === 429) {
+      // Several requests can be in flight when the quota runs out; log once,
+      // when the breaker actually opens, not once per rejected request.
+      const wasOpen = fulusBreakerOpen();
       breakerOpenUntil = Date.now() + FULUS_429_COOLDOWN_MS;
-      // eslint-disable-next-line no-console
-      console.warn(`[fulus] 429 — pausing ALL Fulus calls for ${Math.round(FULUS_429_COOLDOWN_MS / 60_000)}min (cache/scraper take over)`);
+      if (!wasOpen) {
+        // eslint-disable-next-line no-console
+        console.warn(`[fulus] 429 — pausing authenticated API calls for ${Math.round(FULUS_429_COOLDOWN_MS / 60_000)}min (public Fulus cards remain available)`);
+      }
     }
     return null;
   }
@@ -88,7 +65,7 @@ const CACHE_TTL_MS = Number(process.env.FULUS_CACHE_TTL_MS ?? 600_000);
 export const FULUS_CURRENCIES = ['USD', 'EUR', 'GBP', 'TRY', 'EGP', 'TND', 'SAR', 'AED'] as const;
 export type FulusCurrency = (typeof FULUS_CURRENCIES)[number];
 
-interface CachedRate { rate: number; at: number; source: 'webhook' | 'poll' }
+interface CachedRate { rate: number; at: number; checkedAt: number; source: 'webhook' | 'poll' | 'public' }
 
 // `${CURRENCY}` (cash, vs LYD) → latest known rate. Populated by either the
 // webhook or the poll fallback; both go through `noteFulusRate`.
@@ -99,17 +76,10 @@ export function fulusEnabled(): boolean {
   return Boolean(process.env.FULUS_API_TOKEN);
 }
 
-/** Sanity window per currency (LYD per 1 unit) — rejects a poisoned value. */
-const BOUNDS: Record<string, [number, number]> = {
-  USD: [4, 12], EUR: [4, 14], GBP: [5, 16],
-  TRY: [0.05, 1], EGP: [0.05, 1], TND: [1, 5],
-  SAR: [1, 4], AED: [1, 4],
-};
-
-function sane(currency: string, rate: number): boolean {
-  if (!Number.isFinite(rate) || rate <= 0) return false;
-  const b = BOUNDS[currency];
-  return !b || (rate >= b[0] && rate <= b[1]);
+/** Fulus is the authoritative reference: accept every finite positive rate.
+ * Range and movement limits must not replace a genuine provider update. */
+function sane(_currency: string, rate: number): boolean {
+  return Number.isFinite(rate) && rate > 0;
 }
 
 /**
@@ -122,56 +92,64 @@ export function noteFulusRate(currency: string, rate: number, source: 'webhook' 
   if (!FULUS_CURRENCIES.includes(code as FulusCurrency)) return false;
   if (!sane(code, rate)) {
     // eslint-disable-next-line no-console
-    console.warn(`[fulus] ${code}=${rate} outside sanity bounds — ignoring`);
+    console.warn(`[fulus] ${code}=${rate} is not a finite positive rate — ignoring`);
     return false;
   }
-  cache.set(code, { rate, at: Date.now(), source });
+  cache.set(code, { rate, at: Date.now(), checkedAt: Date.now(), source });
   return true;
 }
 
 /** Latest cached map (LYD-per-unit) for admin visibility / cross-check. */
-export function fulusCachedRates(): Record<string, { rate: number; ageMs: number; source: string }> {
-  const out: Record<string, { rate: number; ageMs: number; source: string }> = {};
+export function fulusCachedRates(): Record<string, { rate: number; ageMs: number; checkedAgeMs: number; source: string }> {
+  const out: Record<string, { rate: number; ageMs: number; checkedAgeMs: number; source: string }> = {};
   const now = Date.now();
-  for (const [code, v] of cache) out[code] = { rate: v.rate, ageMs: now - v.at, source: v.source };
+  for (const [code, v] of cache) out[code] = { rate: v.rate, ageMs: now - v.at, checkedAgeMs: now - v.checkedAt, source: v.source };
   return out;
 }
 
 /**
  * Poll GET /rates/current for one cash currency vs LYD. Returns the rate
  * (LYD per 1 unit) or null. Caches a sane result. 4s timeout so a slow
- * upstream can't stall a quote — the caller falls through to the scraper.
+ * upstream can't indefinitely stall a quote.
  */
 async function pollCurrent(currency: string): Promise<number | null> {
-  const json = await fulusGet<{ data?: { rate?: number } }>(
+  const json = await fulusGet<{ data?: { rate?: number | string } }>(
     `/rates/current?currency=${encodeURIComponent(currency)}&rate_type=cash`,
     4000,
   );
-  const v = json?.data?.rate;
-  if (typeof v === 'number' && noteFulusRate(currency, v, 'poll')) return v;
+  const raw = json?.data?.rate;
+  const v = typeof raw === 'number' ? raw : typeof raw === 'string' && raw.trim() ? Number(raw) : NaN;
+  if (Number.isFinite(v) && noteFulusRate(currency, v, 'poll')) return v;
   return null;
 }
 
-/**
- * Resolve a cash rate (LYD per 1 unit of `currency`) for the FX provider.
- * Prefers a fresh cached value (webhook-fed); on cache-miss/stale, polls once.
- * Returns null when Fulus isn't configured or doesn't carry the currency, so
- * fxRateProvider falls through to the scraper.
- */
+/** Resolve an unchanged Fulus cash reference, with a shared request per pair. */
+const resolving = new Map<string, Promise<number | null>>();
 export async function getFulusLydRate(currency: string): Promise<number | null> {
   const code = currency.toUpperCase();
-  if (!fulusEnabled() || !FULUS_CURRENCIES.includes(code as FulusCurrency)) return null;
-
+  if (!FULUS_CURRENCIES.includes(code as FulusCurrency)) return null;
   const hit = cache.get(code);
-  if (hit && Date.now() - hit.at < CACHE_TTL_MS) return hit.rate;
-
-  const polled = await pollCurrent(code);
-  if (polled != null) return polled;
-
-  // Stale cache beats nothing — a webhook-fed value just past its TTL is far
-  // closer to market than the scraper. The scraper is the next fallback only
-  // if we have nothing at all.
-  return hit?.rate ?? null;
+  const ttl = hit?.source === 'public' ? 60_000 : CACHE_TTL_MS;
+  if (hit && Date.now() - hit.checkedAt < ttl) return hit.rate;
+  const pending = resolving.get(code);
+  if (pending) return pending;
+  const request = (async () => {
+    const polled = await pollCurrent(code);
+    if (polled != null) return polled;
+    if (code === 'USD' || code === 'EUR') {
+      for (const item of await getPublicFulusRates()) {
+        const current = cache.get(item.currency);
+        // An incoming webhook must not be replaced by an older public card.
+        if (current && current.source !== 'public' && current.at > item.publishedAt) continue;
+        cache.set(item.currency, {
+          rate: item.rate, at: item.publishedAt, checkedAt: item.checkedAt, source: 'public',
+        });
+      }
+    }
+    return cache.get(code)?.rate ?? null;
+  })();
+  resolving.set(code, request);
+  try { return await request; } finally { resolving.delete(code); }
 }
 
 /**
@@ -206,13 +184,13 @@ export async function backfillHistory(currency: string, days = 7): Promise<numbe
     const day = new Date(Date.now() - d * 86_400_000);
     const date = day.toISOString().slice(0, 10); // YYYY-MM-DD
     try {
-      const json = await fulusGet<{ data?: Array<{ rate?: number; timestamp?: string }> }>(
+      const json = await fulusGet<{ data?: Array<{ rate?: number | string; timestamp?: string }> }>(
         `/rates/history?date=${date}&currency=${encodeURIComponent(code)}&rate_type=cash`,
         5000,
       );
       const points = Array.isArray(json?.data) ? json!.data! : [];
       for (const pt of points) {
-        const rate = typeof pt.rate === 'number' ? pt.rate : NaN;
+        const rate = typeof pt.rate === 'number' ? pt.rate : typeof pt.rate === 'string' && pt.rate.trim() ? Number(pt.rate) : NaN;
         if (!sane(code, rate) || !pt.timestamp) continue;
         const createdAt = new Date(pt.timestamp);
         if (Number.isNaN(createdAt.getTime())) continue;

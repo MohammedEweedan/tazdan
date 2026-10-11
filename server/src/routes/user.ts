@@ -18,3 +18,8 @@ userRouter.post('/linked-wallets', authenticate, UserController.linkUSDTWallet);
 userRouter.get('/linked-wallets', authenticate, UserController.getLinkedWallets);
 userRouter.delete('/linked-wallets/:id', authenticate, UserController.deleteLinkedWallet);
 userRouter.get('/statement', authenticate, UserController.generateStatement);
+// Account deletion (closure) — App Store 5.1.1(v) / Google Play account deletion.
+userRouter.get('/me/limits', authenticate, UserController.getLimits);
+userRouter.get('/me/closure', authenticate, UserController.getClosure);
+// No IP limiter: customers share mobile IPs; the step-up code caps attempts per challenge.
+userRouter.post('/me/close', authenticate, UserController.closeAccount);

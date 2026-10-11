@@ -2,6 +2,7 @@ import { Router, raw } from 'express';
 import { authenticate, requireAdmin } from '../middleware/auth';
 import { upload } from '../middleware/upload';
 import { DepositController } from '../controllers/deposit.controller';
+import { requirePermission } from '../services/platform/rbac';
 
 export const depositRouter = Router();
 
@@ -27,4 +28,4 @@ depositRouter.put('/:id/cancel', authenticate, DepositController.cancel);
 // their own pending deposit — that's a money printer (no funds need to
 // have actually been wired). Ops/admin verifies the wire landed in our
 // bank account, *then* hits this endpoint to release the credit.
-depositRouter.put('/:id/confirm', authenticate, requireAdmin, DepositController.confirm);
+depositRouter.put('/:id/confirm', authenticate, requireAdmin, requirePermission('deposits.confirm'), DepositController.confirm);

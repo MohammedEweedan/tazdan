@@ -25,11 +25,14 @@ import { useT } from '@/store/i18nStore';
 import { useConversations, useHaptics } from '@/hooks';
 import { useChatPrefs } from '@/store/chatPrefsStore';
 import type { Conversation } from '@/types/messages';
+import { SegmentedControl } from '@/components/ui/SegmentedControl';
+import { EmptyState } from '@/components/ui/EmptyState';
+import { SkeletonRow } from '@/components/ui/Skeleton';
 import { TopGradient } from '@/components/ui/ScreenShell';
+import { HeaderIconButton, TabHeader } from '@/components/ui/ScreenHeader';
 
 type Filter = 'ALL' | 'UNREAD' | 'PAYMENTS' | 'SUPPORT';
 
-const BRAND_BLUE = '#63a1db'; // soft brand blue (accent for badges, support, avatars)
 
 export default function Messages() {
   const router = useRouter();
@@ -38,7 +41,7 @@ export default function Messages() {
   const themeMode = useTheme((s) => s.mode);
   const t = useT();
 
-  const { data, isLoading, refetch } = useConversations();
+  const { data, isLoading, isError, refetch } = useConversations();
   const [filter, setFilter] = useState<Filter>('ALL');
   const [query, setQuery]   = useState('');
   const [refreshing, setRefreshing] = useState(false);
@@ -134,43 +137,16 @@ export default function Messages() {
       <StatusBar style={themeMode === 'light' ? 'dark' : 'light'} />
       <SafeAreaView style={{ flex: 1 }} edges={['top']}>
         {/* Header */}
-        <View style={{
-          flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-          paddingHorizontal: 24, paddingTop: 18, paddingBottom: 8,
-        }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <Text style={{ color: p.fg, fontSize: 22, fontWeight: '600', letterSpacing: -0.4 }}>
-              {t('messages.title')}
-            </Text>
-            {totalUnread > 0 && (
-              <View style={{
-                paddingHorizontal: 7, paddingVertical: 2, borderRadius: 8,
-                backgroundColor: BRAND_BLUE, minWidth: 22, alignItems: 'center',
-              }}>
-                <Text style={{ color: '#fff', fontSize: 11, fontWeight: '600' }}>
-                  {totalUnread}
-                </Text>
-              </View>
-            )}
-          </View>
-          <Pressable
-            hitSlop={6}
-            onPress={() => { h.light(); router.push('/messages/new'); }}
-            accessibilityLabel="New conversation"
-            style={{
-              width: 34, height: 34, borderRadius: 17,
-              backgroundColor: p.pillBg, borderWidth: 1, borderColor: p.border,
-              alignItems: 'center', justifyContent: 'center',
-            }}
-          >
-            <Ionicons name="create-outline" size={17} color={p.fg} />
-          </Pressable>
-        </View>
+        <TabHeader
+          title={t('messages.title')}
+          count={totalUnread}
+          right={<HeaderIconButton icon="create-outline" label="New conversation" onPress={() => router.push('/messages/new')} />}
+        />
 
         {/* Search */}
         <View style={{
           marginHorizontal: 24, marginTop: 8,
-          height: 44, borderRadius: 14,
+          height: 52, borderRadius: 18,
           backgroundColor: p.bgElev,
           borderWidth: 1, borderColor: p.border,
           flexDirection: 'row', alignItems: 'center',
@@ -193,70 +169,13 @@ export default function Messages() {
           )}
         </View>
 
-        {/* Filter tabs */}
-        <View
-          style={{
-            paddingHorizontal: 24,
-            paddingTop: 8,
-            paddingBottom: 2,
-          }}
-        >
-          <View
-            style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              gap: 18,
-            }}
-          >
-            {(() => {
-              const filterLabel: Record<Filter, string> = {
-                ALL: t('messages.filter.all'),
-                UNREAD: t('messages.filter.unread'),
-                PAYMENTS: t('messages.filter.payments'),
-                SUPPORT: t('messages.filter.support'),
-              };
-              return (['ALL', 'UNREAD', 'PAYMENTS', 'SUPPORT'] as Filter[]).map((f) => {
-              const active = filter === f;
-
-              return (
-                <Pressable
-                  key={f}
-                  onPress={() => {
-                    h.selection();
-                    setFilter(f);
-                  }}
-                  hitSlop={6}
-                  style={({ pressed }) => ({
-                    opacity: pressed ? 0.75 : 1,
-                    paddingVertical: 2,
-                  })}
-                >
-                  <Text
-                    style={{
-                      fontSize: 13,
-                      fontWeight: active ? '800' : '600',
-                      letterSpacing: 0.2,
-                      color: active ? p.accentText : p.fgMuted,
-                    }}
-                  >
-                    {filterLabel[f]}
-                  </Text>
-
-                  {active && (
-                    <View
-                      style={{
-                        marginTop: 6,
-                        height: 2,
-                        borderRadius: 2,
-                        backgroundColor: p.accentText,
-                      }}
-                    />
-                  )}
-                </Pressable>
-              );
-            });
-            })()}
-          </View>
+        <View style={{ marginHorizontal: 24, marginTop: 16, marginBottom: 8 }}>
+          <SegmentedControl<Filter> value={filter} onChange={setFilter} options={[
+            { key: 'ALL', label: t('messages.filter.all') },
+            { key: 'UNREAD', label: t('messages.filter.unread') },
+            { key: 'PAYMENTS', label: t('messages.filter.payments') },
+            { key: 'SUPPORT', label: t('messages.filter.support') },
+          ]} />
         </View>
 
         {/* Conversation list */}
@@ -274,29 +193,13 @@ export default function Messages() {
           }
         >
           {isLoading ? (
-            <Text style={{ color: p.fgMuted, textAlign: 'center', marginTop: 48, fontSize: 13 }}>
-              {t('messages.loading')}
-            </Text>
+            <View style={{ paddingHorizontal: 24 }}>{[0, 1, 2].map((n) => <SkeletonRow key={n} />)}</View>
+          ) : isError ? (
+            <EmptyState icon="cloud-offline-outline" title={t('common.error')} actionLabel={t('common.retry')} onAction={onRefresh} />
           ) : conversations.length === 0 ? (
-            <View style={{ alignItems: 'center', paddingVertical: 64, paddingHorizontal: 32 }}>
-              <Ionicons name="chatbubbles-outline" size={36} color={p.fgFaint} />
-              <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '600', marginTop: 12 }}>
-                {query.trim() || filter !== 'ALL' ? t('messages.noMatch') : t('messages.empty')}
-              </Text>
-              {!query.trim() && filter === 'ALL' && (
-                <Pressable
-                  onPress={() => { h.light(); router.push('/messages/new'); }}
-                  style={{
-                    marginTop: 16, paddingHorizontal: 16, paddingVertical: 10,
-                    borderRadius: 22, backgroundColor: BRAND_BLUE,
-                  }}
-                >
-                  <Text style={{ color: '#fff', fontSize: 13, fontWeight: '700' }}>
-                    {t('messages.startChat')}
-                  </Text>
-                </Pressable>
-              )}
-            </View>
+            <EmptyState icon="chatbubbles-outline" title={query.trim() || filter !== 'ALL' ? t('messages.noMatch') : t('messages.empty')}
+              actionLabel={!query.trim() && filter === 'ALL' ? t('messages.startChat') : undefined}
+              onAction={() => router.push('/messages/new')} />
           ) : (
             <>
               {/* Contacts strip — visible only when at least one
@@ -326,12 +229,12 @@ export default function Messages() {
                       >
                         <View style={{
                           width: 52, height: 52, borderRadius: 26,
-                          backgroundColor: '#5b86b0',
+                          backgroundColor: p.accent,
                           alignItems: 'center', justifyContent: 'center',
                         }}>
                           {c.avatarUrl
                             ? <Text style={{ fontSize: 24 }}>{c.avatarUrl}</Text>
-                            : <Text style={{ color: '#fff', fontSize: 18, fontWeight: '700' }}>
+                            : <Text style={{ color: p.accentFg, fontSize: 18, fontWeight: '700' }}>
                                 {(c.name?.[0] ?? c.handle?.[0] ?? '?').toUpperCase()}
                               </Text>
                           }
@@ -401,17 +304,17 @@ function Row({
     >
       <View style={{
         width: 46, height: 46, borderRadius: 23,
-        backgroundColor: isSupport ? BRAND_BLUE : (c.partner.avatarUrl ? p.bgElev : '#5b86b0'),
+        backgroundColor: isSupport ? p.accent : (c.partner.avatarUrl ? p.bgElev : p.accent),
         alignItems: 'center', justifyContent: 'center',
         borderWidth: !isSupport && c.partner.avatarUrl ? 1 : 0,
         borderColor: p.border,
       }}>
         {isSupport ? (
-          <Ionicons name="headset" size={20} color="#fff" />
+          <Ionicons name="headset" size={20} color={p.accentFg} />
         ) : c.partner.avatarUrl ? (
           <Text style={{ fontSize: 22 }}>{c.partner.avatarUrl}</Text>
         ) : (
-          <Text style={{ color: '#fff', fontSize: 17, fontWeight: '600' }}>
+          <Text style={{ color: p.accentFg, fontSize: 17, fontWeight: '600' }}>
             {(fullName[0] ?? '?').toUpperCase()}
           </Text>
         )}
@@ -434,13 +337,13 @@ function Row({
           {isSupport && (
             <View style={{
               paddingHorizontal: 6, paddingVertical: 1.5, borderRadius: 5,
-              backgroundColor: BRAND_BLUE,
+              backgroundColor: p.accent,
             }}>
-              <Text style={{ color: '#fff', fontSize: 9, fontWeight: '600', letterSpacing: 0.5 }}>STAFF</Text>
+              <Text style={{ color: p.accentFg, fontSize: 9, fontWeight: '600', letterSpacing: 0.5 }}>STAFF</Text>
             </View>
           )}
           {c.partner.kycStatus === 'APPROVED' && !isSupport && (
-            <Ionicons name="checkmark-circle" size={13} color={BRAND_BLUE} />
+            <Ionicons name="checkmark-circle" size={13} color={p.accent} />
           )}
           <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '600' }}>
             {relTime(c.lastMessage.createdAt, t)}
@@ -461,10 +364,10 @@ function Row({
           {c.unread > 0 && (
             <View style={{
               minWidth: 18, height: 18, paddingHorizontal: 5, borderRadius: 9,
-              backgroundColor: BRAND_BLUE,
+              backgroundColor: p.accent,
               alignItems: 'center', justifyContent: 'center',
             }}>
-              <Text style={{ color: '#fff', fontSize: 10, fontWeight: '600' }}>
+              <Text style={{ color: p.accentFg, fontSize: 10, fontWeight: '600' }}>
                 {c.unread}
               </Text>
             </View>

@@ -30,26 +30,6 @@ const SYMBOLS: Record<string, string> = {
   EGP: 'E£', LYD: 'LD', USDT: '₮', BTC: '₿', ETH: 'Ξ', SOL: '◎', BNB: 'BNB',
 };
 
-// Platform receiving bank details per fiat currency
-const PLATFORM_BANKS: Record<string, {
-  bankName: string;
-  accountHolder: string;
-  accountNumber?: string;
-  iban?: string;
-  swift: string;
-  sortCode?: string;
-  routingNumber?: string;
-  extra?: string;
-}> = {
-  USD: { bankName: 'JPMorgan Chase Bank', accountHolder: 'tazdan Inc.', accountNumber: '000123456789', swift: 'CHASUS33', routingNumber: '021000021' },
-  EUR: { bankName: 'Deutsche Bank AG', accountHolder: 'tazdan GmbH', iban: 'DE89370400440532013000', swift: 'DEUTDEFF' },
-  GBP: { bankName: 'Barclays Bank plc', accountHolder: 'tazdan Ltd', iban: 'GB82WEST12345698765432', swift: 'BARCGB22', sortCode: '20-00-00', accountNumber: '98765432' },
-  AED: { bankName: 'Emirates NBD', accountHolder: 'tazdan DMCC', iban: 'AE070331234567890123456', swift: 'EBILAEAD' },
-  SAR: { bankName: 'Saudi National Bank', accountHolder: 'tazdan Arabia', iban: 'SA0380000000608010167519', swift: 'NCBASARI' },
-  EGP: { bankName: 'National Bank of Egypt', accountHolder: 'tazdan Egypt', iban: 'EG380002000000000012345678901', swift: 'NBEGEGCX' },
-  LYD: { bankName: 'Bank of Commerce & Development', accountHolder: 'tazdan Libya', accountNumber: '001-123456-001', swift: 'BCDLLYLT' },
-};
-
 type Step = 'currency' | 'amount' | 'bank';
 
 function CopyRow({ label, value, p }: { label: string; value: string; p: any }) {
@@ -96,11 +76,10 @@ export function DepositWidget() {
   const sym = SYMBOLS[currency] ?? currency;
   const v = Number(amount || 0);
 
-  // Platform beneficiary banks are now admin-managed and fetched live
-  // from /api/platform-banks. We fall back to the hardcoded constant
-  // only when the API has no row for the selected currency yet, so the
-  // UI never goes blank during the rollout.
-  const { data: platformBanks } = usePlatformBanks(currency);
+  // Platform beneficiary banks are admin-managed and fetched live from
+  // /api/platform-banks. There is deliberately no hardcoded fallback: a
+  // customer must never be shown an account Tazdan does not hold.
+  const { data: platformBanks, isLoading: banksLoading } = usePlatformBanks(currency);
   const apiBank = (platformBanks ?? []).find((b) => b.currency === currency && b.isActive);
   const bank = apiBank
     ? {
@@ -113,9 +92,9 @@ export function DepositWidget() {
         routingNumber:  apiBank.routingNumber ?? undefined,
         extra:          apiBank.memo ?? undefined,
       }
-    : PLATFORM_BANKS[currency];
+    : null;
   const kycApproved = user?.kycStatus === 'APPROVED';
-  const valid = v > 0 && senderName.trim().length >= 2 && reference.trim().length >= 3;
+  const valid = Boolean(bank) && v > 0 && senderName.trim().length >= 2 && reference.trim().length >= 3;
 
   const depositMutation = useMutation({
     mutationFn: () => depositService.createBankDeposit({
@@ -341,6 +320,13 @@ export function DepositWidget() {
           <Ionicons name="arrow-down-circle" size={22} color={p.greenFg} />
         </View>
       </View>
+
+      {!bank && !banksLoading && (
+        <View style={{ backgroundColor: p.bgElev, borderRadius: 14, padding: 16, borderWidth: 1, borderColor: p.border, marginBottom: 20 }}>
+          <Text style={{ color: p.fg, fontSize: 14, fontWeight: '600', marginBottom: 4 }}>Bank deposits in {currency} aren't available yet</Text>
+          <Text style={{ color: p.fgMuted, fontSize: 12, lineHeight: 18 }}>There is no Tazdan bank account for this currency right now. Please choose another currency or another way to add money.</Text>
+        </View>
+      )}
 
       {/* Platform bank details */}
       {bank && (

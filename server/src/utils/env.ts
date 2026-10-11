@@ -67,6 +67,12 @@ export function validateEnv() {
       fail('JWT_SECRET and JWT_REFRESH_SECRET must differ in production.');
     }
 
+    // MOCK KYC approves any uploaded file, which would let unverified users
+    // unlock withdrawals. Unset means MANUAL (admin review) in production.
+    if ((process.env.KYC_PROVIDER ?? '').toUpperCase() === 'MOCK') {
+      fail('KYC_PROVIDER=MOCK auto-approves identity checks and is not allowed in production. Use MANUAL or a real provider.');
+    }
+
     const dbUrl = parseDbUrl(process.env.DATABASE_URL ?? '');
     if (!dbUrl) fail('DATABASE_URL must be a valid PostgreSQL connection URL.');
     const isLocalDb = ['localhost', '127.0.0.1', '::1'].includes(dbUrl.hostname);

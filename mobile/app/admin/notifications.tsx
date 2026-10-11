@@ -1,3 +1,4 @@
+import { StackHeader } from '@/components/ui/ScreenHeader';
 /**
  * Admin Notifications — two tabs:
  *   History  : paginated broadcast log with detail bottom sheet
@@ -26,6 +27,7 @@ import { TopGradient } from '@/components/ui/ScreenShell';
 import { formatRelativeTime } from '@/utils/format';
 import { APP } from '@/constants';
 
+import { BottomSheet } from '@/components/ui/BottomSheet';
 /**
  * Server's media endpoint sits at `${apiBaseUrl_without_/api}/media/<file>`.
  * If a stored URL came back relative (e.g. "/media/abc.jpg") or with a
@@ -162,13 +164,7 @@ export default function AdminNotifications() {
       <StatusBar style={themeMode === 'light' ? 'dark' : 'light'} />
       <SafeAreaView style={{ flex: 1 }} edges={['top']}>
         {/* Header */}
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingTop: 8, paddingBottom: 8 }}>
-          <Pressable onPress={() => router.back()} hitSlop={8}>
-            <Ionicons name="chevron-back" size={26} color={p.fg} />
-          </Pressable>
-          <Text style={{ flex: 1, color: p.fg, fontSize: 18, fontWeight: '600', letterSpacing: -0.3 }}>Notifications</Text>
-          <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '700' }}>{q.data?.total ?? 0}</Text>
-        </View>
+        <StackHeader title="Notifications" right={<><Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '700' }}>{q.data?.total ?? 0}</Text></>} />
 
         {/* Tab pills */}
         <View style={{ flexDirection: 'row', gap: 8, paddingHorizontal: 16, marginBottom: 10 }}>
@@ -414,10 +410,7 @@ export default function AdminNotifications() {
       </SafeAreaView>
 
       {/* Detail bottom sheet */}
-      <Modal visible={!!detailItem} transparent animationType="slide" onRequestClose={() => setDetailItem(null)}>
-        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' }}>
-          <View style={{ backgroundColor: p.bg, borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 20, paddingBottom: 40, maxHeight: '80%' }}>
-            <View style={{ alignSelf: 'center', width: 36, height: 4, borderRadius: 2, backgroundColor: p.border, marginBottom: 16 }} />
+      <BottomSheet visible={!!detailItem} onClose={() => setDetailItem(null)} scroll={false}>
             <ScrollView showsVerticalScrollIndicator={false}>
               {detailItem && (
                 <>
@@ -469,9 +462,7 @@ export default function AdminNotifications() {
             >
               <Text style={{ color: p.fg, fontWeight: '600' }}>Close</Text>
             </Pressable>
-          </View>
-        </View>
-      </Modal>
+          </BottomSheet>
     </View>
   );
 }

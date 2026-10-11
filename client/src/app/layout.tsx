@@ -29,6 +29,7 @@ const dmSans = localFont({
   ],
   display: 'swap',
   variable: '--font-dm-sans',
+  preload: false,
 });
 
 const inter = localFont({
@@ -40,6 +41,7 @@ const inter = localFont({
   ],
   display: 'swap',
   variable: '--font-inter',
+  preload: false,
 });
 
 const outfit = localFont({
@@ -52,6 +54,7 @@ const outfit = localFont({
   ],
   display: 'swap',
   variable: '--font-outfit',
+  preload: false,
 });
 
 // Cairo includes Arabic glyphs and stays as the fallback for Arabic characters
@@ -71,6 +74,7 @@ const cairo = localFont({
   ],
   display: 'swap',
   variable: '--font-cairo',
+  preload: false,
 });
 
 const SITE_URL = 'https://tazdan.com';
@@ -78,9 +82,9 @@ const SITE_URL = 'https://tazdan.com';
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   description:
-    'Meet tazdan: a Libyan wallet, crypto and international remittance app in the making. Clear costs in LYD. Join the waitlist.',
-  title: 'tazdan — Libya. Crypto. Connected.',
-  keywords: ['Libyan payments', 'LYD wallet', 'Libya payment app', 'tazdan', 'تزدان'],
+    'One account for local money, international payments, remittance, savings and digital assets. Built for Libya, designed for MENA. Join the waitlist.',
+  title: 'tazdan — Money, connected.',
+  keywords: ['Libya fintech', 'LYD wallet', 'MENA payments', 'remittance Libya', 'multicurrency wallet', 'tazdan', 'تزدان'],
   manifest: '/manifest.json',
   applicationName: 'tazdan',
   authors: [{ name: 'tazdan' }],
@@ -92,15 +96,15 @@ export const metadata: Metadata = {
     locale: 'en_US',
     url: SITE_URL,
     siteName: 'tazdan',
-    title: 'tazdan — Libya. Crypto. Connected.',
+    title: 'tazdan — Money, connected.',
     description:
-      'Everyday payments in LYD. Built around life in Libya, with an international outlook. Join the waitlist.',
-    images: [{ url: '/og-image.png', width: 1200, height: 630, alt: 'tazdan — Payments for Libya' }],
+      'Hold, send, exchange, save and spend — from one Arabic-first financial platform. Built for Libya, designed for MENA.',
+    images: [{ url: '/og-image.png', width: 1200, height: 630, alt: 'tazdan — Money, connected.' }],
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'tazdan — Crypto and remittances for Libya',
-    description: 'A new home for your everyday money in Libya. Explore proposed LYD plans.',
+    title: 'tazdan — Money, connected. Built for Libya.',
+    description: 'One account for local money, international payments, remittance, savings and digital assets. Built for Libya, designed for MENA.',
     images: ['/og-image.png'],
     creator: '@tazdan',
   },
@@ -122,11 +126,10 @@ export const metadata: Metadata = {
       ar: `${SITE_URL}/ar`,
     },
   },
-  // The asterisk from the wordmark. `favicon.ico` carries 16→256 so browsers
-  // pick their own size; the SVG wins where it is supported.
+  // The wallet mark. `favicon.ico` carries 16→256 so browsers pick their own
+  // size; the SVG wins where it is supported.
   icons: {
     icon: [
-      { url: '/favicon.ico', sizes: 'any' },
       { url: '/icon-asterisk.svg', type: 'image/svg+xml' },
     ],
     apple: '/apple-touch-icon.png',
@@ -139,8 +142,8 @@ export const viewport: Viewport = {
   // Don't lock zoom — accessibility (WCAG 2.5.5) requires user-pinch-zoom.
   maximumScale: 5,
   themeColor: [
-    { media: '(prefers-color-scheme: dark)',  color: '#0A0A0B' },
-    { media: '(prefers-color-scheme: light)', color: '#FAFAF7' },
+    { media: '(prefers-color-scheme: dark)',  color: '#16181C' },
+    { media: '(prefers-color-scheme: light)', color: '#F6F7FA' },
   ],
 };
 
@@ -157,7 +160,7 @@ const jsonLd = {
       '@id': `${SITE_URL}#org`,
       name: 'tazdan',
       url: SITE_URL,
-      logo: `${SITE_URL}/icon-black.png`,
+      logo: `${SITE_URL}/icon-asterisk-black.png`,
       sameAs: [
         'https://twitter.com/tazdan',
         'https://www.linkedin.com/company/tazdan',
@@ -177,11 +180,11 @@ const jsonLd = {
     },
     {
       '@type': 'FinancialProduct',
-      name: 'tazdan payments concept',
+      name: 'tazdan financial platform',
       description:
-        'Proposed Libyan dinar wallet, supported crypto services and international remittances. Availability depends on providers and regulatory approval.',
+        'Arabic-first financial platform connecting local money, international payments, remittance, savings and digital assets. Pre-launch; availability depends on regulatory approval and contracted partners.',
       provider: { '@id': `${SITE_URL}#org` },
-      areaServed: ['Libya'],
+      areaServed: ['Libya', 'MENA'],
     },
   ],
 };
@@ -200,11 +203,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             pay the full handshake cost. */}
         <link rel="preconnect" href="https://api.tazdan.com" />
         <link rel="dns-prefetch" href="https://api.tazdan.com" />
-
-        {/* Only preload the actual LCP image. Stacking 5+ image preloads
-            (the old layout) burns the high-priority queue on assets
-            that aren't on the critical path and HURTS Lighthouse. */}
-        <link rel="preload" href="/icon-black.png" as="image" type="image/png" fetchPriority="high" />
 
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />

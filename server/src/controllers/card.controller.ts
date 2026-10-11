@@ -7,8 +7,12 @@ import { AppError } from '../middleware/errorHandler';
 import { AuthRequest } from '../types';
 import { collectFee } from '../services/fee/feeCollector.service';
 import { postLedger, isLedgerCurrency } from '../services/ledger/ledger.service';
+import { assertTransitioned, debitAvailable, lockBudget, settleReserve } from '../services/wallet/atomicWallet';
+import { enforceKycLimit } from '../utils/kycLimits';
 import { emitActivity } from '../utils/realtime';
 import { isDateLocked, requiresStepUp } from '../services/budget.service';
+import { getActiveCardIssuer, getCardIssuer } from '../services/cardIssuer';
+import { assertMovementAllowed } from '../services/platform/controls.service';
 import { issueStepUp, verifyStepUp } from '../services/security/stepUp.service';
 
 /** Physical card order fee (USD). Admin-configurable via PlatformSettings,
@@ -58,7 +62,6 @@ const transactionSchema = z.object({
 
 /* ── Helpers ─────────────────────────────────────────────── */
 
-const genLast4 = () => crypto.randomInt(1000, 9999).toString();
 const genRef = () => `card_${crypto.randomBytes(8).toString('hex')}`;
 
 export class CardController {
@@ -103,15 +106,26 @@ export class CardController {
 
       const cfg = TIER_CONFIG[data.tier];
       const now = new Date();
+      // Issuance goes through the issuer adapter. Production refuses MOCK.
+      const issuer = getActiveCardIssuer();
+      const issued = await issuer.issueVirtualCard({
+        userId: user.id,
+        tier: data.tier as any,
+        currency: data.currency as any,
+        cardHolder: `${user.firstName} ${user.lastName}`.toUpperCase(),
+        nickname: data.nickname,
+      });
       const card = await prisma.card.create({
         data: {
           userId: user.id,
           tier: data.tier,
           status: 'ACTIVE',
           nickname: data.nickname,
-          last4: genLast4(),
-          expiryMonth: ((now.getMonth() + 1 + 48 - 1) % 12) + 1,
-          expiryYear: now.getFullYear() + 4,
+          issuerName: issuer.name,
+          externalCardId: issued.externalCardId,
+          last4: issued.last4,
+          expiryMonth: issued.expiryMonth,
+          expiryYear: issued.expiryYear,
           cardHolder: `${user.firstName} ${user.lastName}`.toUpperCase(),
           currency: data.currency as any,
           dailyLimit: cfg.dailyLimit,
@@ -158,6 +172,8 @@ export class CardController {
       });
       if (!card) throw new AppError('Card not found', 404);
       if (card.status === 'CANCELLED') throw new AppError('Card is cancelled', 400);
+      // The issuer is the authority for authorisations — mirror the change there.
+      if (card.externalCardId) await getCardIssuer().freezeCard({ externalCardId: card.externalCardId });
 
       const updated = await prisma.card.update({
         where: { id: card.id },
@@ -177,6 +193,8 @@ export class CardController {
       });
       if (!card) throw new AppError('Card not found', 404);
       if (card.status === 'CANCELLED') throw new AppError('Card is cancelled', 400);
+      // The issuer is the authority for authorisations — mirror the change there.
+      if (card.externalCardId) await getCardIssuer().unfreezeCard({ externalCardId: card.externalCardId });
 
       const updated = await prisma.card.update({
         where: { id: card.id },
@@ -195,6 +213,7 @@ export class CardController {
         where: { id: req.params.id, userId: req.user!.id },
       });
       if (!card) throw new AppError('Card not found', 404);
+      if (card.externalCardId) await getCardIssuer().cancelCard({ externalCardId: card.externalCardId });
 
       const updated = await prisma.card.update({
         where: { id: card.id },
@@ -353,18 +372,18 @@ export class CardController {
       const card = await prisma.card.findFirst({ where: { id: req.params.id, userId } });
       if (!card)                              throw new AppError('Card not found', 404);
       if (card.status === 'CANCELLED')        throw new AppError('Card is cancelled', 400);
+      // Real money only funds a card held at a real issuer.
+      getActiveCardIssuer();
+      await assertMovementAllowed({ userId, feature: 'cards', currency });
 
       const wallet = await prisma.wallet.findFirst({ where: { userId, currency: currency as any } });
       if (!wallet) throw new AppError(`No ${currency} wallet`, 400);
 
-      const available = Number(wallet.balance) - Number(wallet.frozen ?? 0);
-      if (available < amount) throw new AppError('Insufficient balance', 400);
+      await enforceKycLimit(userId, 'SEND', amount, currency);
 
       const tx = await prisma.$transaction(async (prismaTx) => {
-        await prismaTx.wallet.update({
-          where: { id: wallet.id },
-          data:  { balance: { decrement: amount } },
-        });
+        // Checked against spendable balance in the same statement.
+        await debitAvailable(prismaTx, userId, currency, amount);
         // Double-entry: funds leave the user's wallet onto the card spend rail
         // (SYSTEM_OFFRAMP is the off-platform counterparty).
         if (isLedgerCurrency(currency)) {
@@ -428,6 +447,8 @@ export class CardController {
       if (!card)                       throw new AppError('Card not found', 404);
       if (card.status === 'CANCELLED') throw new AppError('Card is cancelled', 400);
       if (card.physicalStatus !== 'NONE') throw new AppError('A physical card is already on the way', 400);
+      getActiveCardIssuer();
+      await assertMovementAllowed({ userId, feature: 'cards' });
 
       const fee = await getPhysicalCardFee();
 
@@ -441,7 +462,14 @@ export class CardController {
       if (!funding) throw new AppError(`Insufficient balance — the physical card costs $${fee.toFixed(2)}`, 400);
 
       const updated = await prisma.$transaction(async (tx) => {
-        await tx.wallet.update({ where: { id: funding!.id }, data: { balance: { decrement: fee } } });
+        // Claim the order before charging: a second concurrent order finds
+        // the card no longer NONE and is not charged again.
+        const claimed = await tx.card.updateMany({
+          where: { id: card.id, userId, physicalStatus: 'NONE' },
+          data: { physicalStatus: 'REQUESTED', physicalOrderedAt: new Date() },
+        });
+        assertTransitioned(claimed, 'A physical card is already on the way');
+        await debitAvailable(tx, userId, funding!.currency, fee);
         // Double-entry: physical-card fee leaves the user to the platform.
         if (isLedgerCurrency(funding!.currency)) {
           await postLedger(tx, {
@@ -511,6 +539,8 @@ export class CardController {
       const card = await prisma.card.findFirst({ where: { id: req.params.id, userId } });
       if (!card)                       throw new AppError('Card not found', 404);
       if (card.status === 'CANCELLED') throw new AppError('Card is cancelled', 400);
+      getActiveCardIssuer();
+      await assertMovementAllowed({ userId, feature: 'cards' });
 
       const budget = await prisma.budgetWallet.findFirst({ where: { id: budgetId, userId } });
       if (!budget) throw new AppError('Budget not found', 404);
@@ -531,13 +561,18 @@ export class CardController {
         await verifyStepUp(userId, 'withdrawal', stepUpCode);
       }
 
+      await enforceKycLimit(userId, 'SEND', amount, budget.currency);
+
       const amt = new Decimal(amount);
       const result = await prisma.$transaction(async (tx) => {
+        // Re-read the budget under its row lock: the balance checked above
+        // may have changed, and two loads must not both spend it.
+        await lockBudget(tx, budget.id);
+        const locked = await tx.budgetWallet.findUniqueOrThrow({ where: { id: budget.id } });
+        if (new Decimal(locked.balance.toString()).lt(amt)) throw new AppError('Amount exceeds budget balance', 400);
+
         // Release the budget hold AND move the money off the wallet onto the card.
-        await tx.wallet.update({
-          where: { userId_currency: { userId, currency: budget.currency } },
-          data: { frozen: { decrement: amt }, balance: { decrement: amt } },
-        });
+        await settleReserve(tx, userId, budget.currency, amt);
         // Double-entry: budget funds leave the user's wallet onto the card rail.
         if (isLedgerCurrency(budget.currency)) {
           await postLedger(tx, {

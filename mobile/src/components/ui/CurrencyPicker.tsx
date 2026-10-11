@@ -1,3 +1,4 @@
+import { FiatFlag } from './FiatFlag';
 /**
  * CurrencyPicker — one swipeable field that holds every currency the user can
  * pick. Swipe left/right to cycle through holdings, or tap to open a list with
@@ -14,6 +15,7 @@ import { CoinIcon } from '@/components/ui/CoinIcon';
 import { useHaptics } from '@/hooks';
 import type { Palette } from '@/store/themeStore';
 
+import { BottomSheet } from '@/components/ui/BottomSheet';
 export interface CurrencyItem {
   id?: string;        // stable selection id; defaults to currency
   currency: string;
@@ -44,21 +46,7 @@ function CurrencyGlyph({ item, size, palette: p }: { item: CurrencyItem; size: n
       </View>
     );
   }
-  if (kind === 'fiat') {
-    // Currency symbol in theme foreground (black on light, white on dark),
-    // sized to fill the glyph box like a coin logo would.
-    return (
-      <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
-        <Text
-          numberOfLines={1}
-          adjustsFontSizeToFit
-          style={{ color: p.fg, fontSize: size * 0.66, fontWeight: '700', lineHeight: size }}
-        >
-          {item.icon}
-        </Text>
-      </View>
-    );
-  }
+  if (kind === 'fiat') return <FiatFlag currency={item.currency} size={size} />;
   return <CoinIcon symbol={item.currency} size={size} color={item.color} />;
 }
 
@@ -139,12 +127,7 @@ export const CurrencyPicker = memo(function CurrencyPicker({
       </View>
 
       {/* Full list with balances */}
-      <Modal visible={listOpen} transparent animationType="slide" onRequestClose={() => setListOpen(false)}>
-        <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' }} onPress={() => setListOpen(false)}>
-          <Pressable style={{ backgroundColor: p.bg, borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingTop: 10, paddingBottom: 40, maxHeight: '72%' }} onPress={(e) => e.stopPropagation()}>
-            <View style={{ alignItems: 'center', marginBottom: 14 }}>
-              <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: p.border }} />
-            </View>
+      <BottomSheet visible={listOpen} onClose={() => setListOpen(false)} scroll={false} contentStyle={{ paddingHorizontal: 0 }}>
             <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 8 }}>
               {items.map((it) => {
                 const key = itemId(it);
@@ -176,9 +159,7 @@ export const CurrencyPicker = memo(function CurrencyPicker({
                 );
               })}
             </ScrollView>
-          </Pressable>
-        </Pressable>
-      </Modal>
+          </BottomSheet>
     </>
   );
 });

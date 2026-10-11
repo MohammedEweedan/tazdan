@@ -1,3 +1,4 @@
+import { StackHeader } from '@/components/ui/ScreenHeader';
 /**
  * Admin AML — open / reviewing / escalated flags with resolution action.
  */
@@ -16,6 +17,7 @@ import { LoadingPulse } from '@/components/ui/LoadingPulse';
 import { formatRelativeTime } from '@/utils/format';
 import { TopGradient } from '@/components/ui/ScreenShell';
 
+import { BottomSheet } from '@/components/ui/BottomSheet';
 type Filter = 'ALL' | 'OPEN' | 'REVIEWING' | 'RESOLVED' | 'ESCALATED';
 
 export default function AdminAML() {
@@ -57,18 +59,13 @@ export default function AdminAML() {
       <TopGradient />
       <StatusBar style={themeMode === 'light' ? 'dark' : 'light'} />
       <SafeAreaView style={{ flex: 1 }} edges={['top']}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingTop: 8, paddingBottom: 8 }}>
-          <Pressable onPress={() => router.back()} hitSlop={8}>
-            <Ionicons name="chevron-back" size={26} color={p.fg} />
-          </Pressable>
-          <Text style={{ flex: 1, color: p.fg, fontSize: 18, fontWeight: '600' }}>AML Flags</Text>
-        </View>
+        <StackHeader title="AML Flags" />
 
         {/* Summary chips */}
         <View style={{ flexDirection: 'row', gap: 8, paddingHorizontal: 16, marginBottom: 10, flexWrap: 'wrap' }}>
           {[
             ['Open', summary.open ?? 0, '#f59e0b'],
-            ['Reviewing', summary.reviewing ?? 0, '#63a1db'],
+            ['Reviewing', summary.reviewing ?? 0, p.accentText],
             ['Escalated', summary.escalated ?? 0, '#a855f7'],
             ['Critical', summary.critical ?? 0, '#ef4444'],
           ].map(([label, val, col]) => (
@@ -128,12 +125,7 @@ export default function AdminAML() {
         )}
       </SafeAreaView>
 
-      <Modal visible={!!resolving} transparent animationType="slide" onRequestClose={() => setResolving(null)}>
-        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' }}>
-          <View style={{ backgroundColor: p.bg, borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 20, paddingBottom: 36 }}>
-            <View style={{ alignSelf: 'center', width: 36, height: 4, borderRadius: 2, backgroundColor: p.border, marginBottom: 14 }} />
-            <Text style={{ color: p.fg, fontSize: 18, fontWeight: '700', marginBottom: 16 }}>Resolve flag</Text>
-
+      <BottomSheet visible={!!resolving} onClose={() => setResolving(null)} title={"Resolve flag"}>
             <Text style={{ color: p.fgFaint, fontSize: 10, fontWeight: '600', letterSpacing: 0.6, marginBottom: 8 }}>NEW STATUS</Text>
             <View style={{ flexDirection: 'row', gap: 8, marginBottom: 14 }}>
               {(['RESOLVED', 'ESCALATED', 'REVIEWING'] as const).map((s) => {
@@ -173,9 +165,7 @@ export default function AdminAML() {
                 </Text>
               </Pressable>
             </View>
-          </View>
-        </View>
-      </Modal>
+          </BottomSheet>
     </View>
   );
 }

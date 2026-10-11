@@ -6,10 +6,10 @@
  */
 
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, ScrollView, Switch, View } from 'react-native';
+import { ActivityIndicator, View } from 'react-native';
 import { Text } from '@/components/ui/Text';
 import { Ionicons } from '@expo/vector-icons';
-import { ScreenShell } from '@/components/ui/ScreenShell';
+import { ScreenShell, Panel, SectionLabel, ToggleRow } from '@/components/ui/ScreenShell';
 import { useThemedPalette } from '@/store/themeStore';
 import { useT } from '@/store/i18nStore';
 import { api } from '@/lib/api';
@@ -66,81 +66,41 @@ export default function NotifSettings() {
     <ScreenShell title={t('notifPrefs.title') || 'Notifications'}>
       {loading ? (
         <View style={{ paddingTop: 80, alignItems: 'center' }}>
-          <ActivityIndicator color={p.fg} />
+          <ActivityIndicator color={p.fgMuted} />
         </View>
       ) : (
-        <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 32 }}>
-          <Text style={{ color: p.fgMuted, fontSize: 13, marginTop: 8, marginBottom: 16, lineHeight: 18 }}>
+        <>
+          <Text style={{ color: p.fgMuted, fontSize: 13, lineHeight: 19, marginTop: 12, marginLeft: 4 }}>
             {t('notifPrefs.intro') || 'Choose which transactional confirmations you receive by email and push.'}
           </Text>
 
           {(['email', 'push'] as ChannelKey[]).map((channel) => (
-            <View
-              key={channel}
-              style={{
-                backgroundColor: p.bgElev,
-                borderRadius: 18,
-                borderWidth: 1,
-                borderColor: p.border,
-                marginBottom: 16,
-                overflow: 'hidden',
-              }}
-            >
-              <View style={{ paddingHorizontal: 18, paddingTop: 16, paddingBottom: 10, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                <Ionicons name={channel === 'email' ? 'mail' : 'notifications'} size={16} color={p.fg} />
-                <Text style={{ color: p.fg, fontSize: 14, fontWeight: '700', letterSpacing: 0.4, textTransform: 'uppercase' }}>
-                  {channel === 'email'
-                    ? (t('notifPrefs.channel.email') || 'Email')
-                    : (t('notifPrefs.channel.push')  || 'Push')}
-                </Text>
-              </View>
-
-              {CATEGORIES.map((cat, i) => (
-                <View
-                  key={cat.key}
-                  style={{
-                    paddingHorizontal: 18,
-                    paddingVertical: 14,
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    borderTopWidth: i === 0 ? 0 : 1,
-                    borderTopColor: p.border,
-                  }}
-                >
-                  <View
-                    style={{
-                      width: 32, height: 32, borderRadius: 10,
-                      backgroundColor: p.pillBg,
-                      alignItems: 'center', justifyContent: 'center',
-                      marginRight: 12,
-                    }}
-                  >
-                    <Ionicons name={cat.icon} size={16} color={p.fg} />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ color: p.fg, fontSize: 14, fontWeight: '600' }}>
-                      {t(cat.titleKey) || cat.key}
-                    </Text>
-                    <Text style={{ color: p.fgMuted, fontSize: 12, marginTop: 2 }}>
-                      {t(cat.descKey) || ''}
-                    </Text>
-                  </View>
-                  <Switch
+            <View key={channel}>
+              <SectionLabel>
+                {channel === 'email'
+                  ? (t('notifPrefs.channel.email') || 'Email')
+                  : (t('notifPrefs.channel.push') || 'Push')}
+              </SectionLabel>
+              <Panel>
+                {CATEGORIES.map((cat, i) => (
+                  <ToggleRow
+                    key={cat.key}
+                    icon={cat.icon}
+                    label={t(cat.titleKey) || cat.key}
+                    description={t(cat.descKey) || undefined}
                     value={prefs[channel][cat.key]}
                     onValueChange={(v) => toggle(channel, cat.key, v)}
-                    trackColor={{ false: p.border, true: p.fg }}
-                    thumbColor={p.bg}
-                    ios_backgroundColor={p.border}
+                    last={i === CATEGORIES.length - 1}
                   />
-                </View>
-              ))}
+                ))}
+              </Panel>
             </View>
           ))}
 
-          <Text style={{ color: p.fgFaint, fontSize: 11, lineHeight: 16, textAlign: 'center', marginTop: 16 }}>
+          <Text style={{ color: p.fgFaint, fontSize: 12, lineHeight: 17, textAlign: 'center', marginTop: 20, paddingHorizontal: 8 }}>
             {t('notifPrefs.footer') || 'You will always receive security-critical messages (logins, password resets, KYC outcomes) regardless of these settings.'}
           </Text>
-        </ScrollView>
+        </>
       )}
     </ScreenShell>
   );

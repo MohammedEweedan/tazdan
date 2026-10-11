@@ -1,3 +1,4 @@
+import { StackHeader, HeaderTextButton } from '@/components/ui/ScreenHeader';
 /**
  * API Key management screen.
  *
@@ -12,20 +13,17 @@ import {
   RefreshControl, ScrollView, View,
 } from 'react-native';
 import { Text, TextInput } from '@/components/ui/Text';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
 import * as Clipboard from 'expo-clipboard';
 import { useRouter } from 'expo-router';
 
-import { brand, useTheme, useThemedPalette } from '@/store/themeStore';
+import { useTheme, useThemedPalette } from '@/store/themeStore';
 import { useHaptics } from '@/hooks';
 import { businessService } from '@/services/business';
 import type { BusinessApiKey, ApiKeyPermission, ApiKeyCreateResponse } from '@/types/business';
-import { TopGradient } from '@/components/ui/ScreenShell';
+import { ScreenShell, CTAButton } from '@/components/ui/ScreenShell';
 
-const ACCENT = '#737373';
+import { BottomSheet } from '@/components/ui/BottomSheet';
 
 const PERM_META: Record<ApiKeyPermission, { label: string; desc: string; icon: any }> = {
   PAYOUTS:   { label: 'Payouts',    desc: 'Create and query payouts',       icon: 'send-outline' },
@@ -84,59 +82,35 @@ export default function ApiKeysScreen() {
   const revokedKeys = keys.filter((k) => k.status !== 'ACTIVE');
 
   return (
-    <View style={{ flex: 1, backgroundColor: p.bg }}>
-      <StatusBar style={mode === 'dark' ? 'light' : 'dark'} />
-      <TopGradient />
-      <SafeAreaView style={{ flex: 1 }} edges={['top']}>
-        {/* Header */}
-        <View style={{
-          flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-          paddingHorizontal: 20, paddingTop: 16, paddingBottom: 12,
-        }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-            <Pressable onPress={() => router.back()} hitSlop={8}
-              style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: p.bgElev,
-                borderWidth: 1, borderColor: p.border, alignItems: 'center', justifyContent: 'center' }}>
-              <Ionicons name="chevron-back" size={20} color={p.fg} />
-            </Pressable>
-            <Text style={{ color: p.fg, fontSize: 18, fontWeight: '800', letterSpacing: -0.4 }}>API Keys</Text>
-          </View>
-          <Pressable
-            onPress={() => { h.selection(); setCreateOpen(true); }}
-            style={({ pressed }) => ({
-              flexDirection: 'row', alignItems: 'center', gap: 6,
-              paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20,
-              backgroundColor: pressed ? `${ACCENT}CC` : ACCENT,
-            })}
-          >
-            <Ionicons name="add" size={16} color="#fff" />
-            <Text style={{ color: '#fff', fontSize: 13, fontWeight: '700' }}>New key</Text>
-          </Pressable>
-        </View>
+    <ScreenShell title="API Keys" right={<HeaderTextButton label="New key" icon="add" onPress={() => setCreateOpen(true)} />}  scroll={false} contentStyle={{ paddingHorizontal: 0 }}>
 
         <ScrollView
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 64 }}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={ACCENT} />}
+          contentContainerStyle={{ paddingHorizontal: 24, paddingBottom: 64 }}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={p.accentText} />}
         >
           {loading ? (
             <View style={{ alignItems: 'center', paddingTop: 80 }}>
-              <ActivityIndicator color={ACCENT} size="large" />
+              <ActivityIndicator color={p.accentText} size="large" />
             </View>
           ) : (
             <>
+              <View style={{ paddingTop: 20, paddingBottom: 28 }}>
+                <Text style={{ color: p.fg, fontSize: 32, fontWeight: '500', letterSpacing: -.8 }}>{activeKeys.length} active keys</Text>
+                <Text style={{ color: p.fgMuted, fontSize: 14, lineHeight: 21, marginTop: 8 }}>Connect your tools with only the access they need.</Text>
+              </View>
               {/* Active keys */}
-              <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '700', letterSpacing: 0.7, marginTop: 8, marginBottom: 10 }}>
+              <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '600', letterSpacing: 0.7, marginTop: 8, marginBottom: 10 }}>
                 ACTIVE KEYS ({activeKeys.length})
               </Text>
               {activeKeys.length > 0 ? (
-                <View style={{ borderRadius: 18, overflow: 'hidden', borderWidth: 1, borderColor: p.border, backgroundColor: p.bgElev }}>
+                <View style={{ borderRadius: 24, overflow: 'hidden', backgroundColor: p.bgElev }}>
                   {activeKeys.map((key, i) => (
                     <KeyRow
                       key={key.id}
                       apiKey={key}
                       palette={p}
-                      accent={ACCENT}
+                      accent={p.accentText}
                       isLast={i === activeKeys.length - 1}
                       onRevoke={() => revoke(key)}
                       onCopy={() => {
@@ -148,7 +122,7 @@ export default function ApiKeysScreen() {
                 </View>
               ) : (
                 <View style={{
-                  padding: 28, borderRadius: 18, borderWidth: 1, borderColor: p.border,
+                  padding: 28, borderRadius: 24, borderWidth: 1, borderColor: p.border,
                   backgroundColor: p.bgElev, alignItems: 'center',
                 }}>
                   <Ionicons name="key-outline" size={32} color={p.fgFaint} />
@@ -162,16 +136,16 @@ export default function ApiKeysScreen() {
               {/* Revoked keys */}
               {revokedKeys.length > 0 && (
                 <>
-                  <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '700', letterSpacing: 0.7, marginTop: 28, marginBottom: 10 }}>
+                  <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '600', letterSpacing: 0.7, marginTop: 28, marginBottom: 10 }}>
                     REVOKED KEYS
                   </Text>
-                  <View style={{ borderRadius: 18, overflow: 'hidden', borderWidth: 1, borderColor: p.border, backgroundColor: p.bgElev, opacity: 0.6 }}>
+                  <View style={{ borderRadius: 24, overflow: 'hidden', backgroundColor: p.bgElev, opacity: 0.6 }}>
                     {revokedKeys.map((key, i) => (
                       <KeyRow
                         key={key.id}
                         apiKey={key}
                         palette={p}
-                        accent={ACCENT}
+                        accent={p.accentText}
                         isLast={i === revokedKeys.length - 1}
                       />
                     ))}
@@ -182,26 +156,26 @@ export default function ApiKeysScreen() {
               {/* Docs note */}
               <View style={{
                 marginTop: 24, padding: 14, borderRadius: 14,
-                backgroundColor: `${ACCENT}0A`, borderWidth: 1, borderColor: `${ACCENT}33`,
+                backgroundColor: `${p.accent}0A`, borderWidth: 1, borderColor: `${p.accent}33`,
                 flexDirection: 'row', gap: 10, alignItems: 'flex-start',
               }}>
-                <Ionicons name="information-circle-outline" size={16} color={ACCENT} style={{ marginTop: 1 }} />
+                <Ionicons name="information-circle-outline" size={16} color={p.accentText} style={{ marginTop: 1 }} />
                 <Text style={{ color: p.fgMuted, fontSize: 12, lineHeight: 17, flex: 1 }}>
                   Keys are shown once at creation. Use them in the{' '}
-                  <Text style={{ color: ACCENT, fontWeight: '700' }}>Authorization: Bearer</Text>
+                  <Text style={{ color: p.accentText, fontWeight: '600' }}>Authorization: Bearer</Text>
                   {' '}header. See docs.tazdan.com for the full API reference.
                 </Text>
               </View>
             </>
           )}
         </ScrollView>
-      </SafeAreaView>
+
 
       {/* Create key modal */}
       <CreateKeyModal
         visible={createOpen}
         palette={p}
-        accent={ACCENT}
+        accent={p.accentText}
         onClose={() => setCreateOpen(false)}
         onCreate={async (payload) => {
           const created = await businessService.createApiKey(payload);
@@ -216,11 +190,11 @@ export default function ApiKeysScreen() {
         <NewKeyRevealModal
           apiKey={createdKey}
           palette={p}
-          accent={ACCENT}
+          accent={p.accentText}
           onDone={() => setCreatedKey(null)}
         />
       )}
-    </View>
+    </ScreenShell>
   );
 }
 
@@ -248,7 +222,7 @@ function KeyRow({ apiKey, palette: p, accent, isLast, onRevoke, onCopy }: {
             <Ionicons name="key" size={14} color={isActive ? accent : p.fgFaint} />
           </View>
           <View style={{ flex: 1, minWidth: 0 }}>
-            <Text style={{ color: p.fg, fontSize: 14, fontWeight: '700' }} numberOfLines={1}>
+            <Text style={{ color: p.fg, fontSize: 14, fontWeight: '600' }} numberOfLines={1}>
               {apiKey.name}
             </Text>
             <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '600', marginTop: 1, fontVariant: ['tabular-nums'] }}>
@@ -274,7 +248,7 @@ function KeyRow({ apiKey, palette: p, accent, isLast, onRevoke, onCopy }: {
                 backgroundColor: pressed ? 'rgba(248,113,113,0.15)' : 'rgba(248,113,113,0.08)',
                 borderWidth: 1, borderColor: 'rgba(248,113,113,0.3)',
               })}>
-              <Text style={{ color: '#f87171', fontSize: 11, fontWeight: '700' }}>Revoke</Text>
+              <Text style={{ color: '#f87171', fontSize: 11, fontWeight: '600' }}>Revoke</Text>
             </Pressable>
           )}
           {!isActive && (
@@ -282,7 +256,7 @@ function KeyRow({ apiKey, palette: p, accent, isLast, onRevoke, onCopy }: {
               paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8,
               backgroundColor: p.bgRaised,
             }}>
-              <Text style={{ color: p.fgFaint, fontSize: 10, fontWeight: '700' }}>REVOKED</Text>
+              <Text style={{ color: p.fgFaint, fontSize: 10, fontWeight: '600' }}>REVOKED</Text>
             </View>
           )}
         </View>
@@ -295,7 +269,7 @@ function KeyRow({ apiKey, palette: p, accent, isLast, onRevoke, onCopy }: {
             paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8,
             backgroundColor: `${accent}14`, borderWidth: 1, borderColor: `${accent}30`,
           }}>
-            <Text style={{ color: accent, fontSize: 10, fontWeight: '700' }}>
+            <Text style={{ color: accent, fontSize: 10, fontWeight: '600' }}>
               {PERM_META[perm]?.label ?? perm}
             </Text>
           </View>
@@ -358,18 +332,9 @@ function CreateKeyModal({ visible, palette: p, accent, onClose, onCreate }: {
   };
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'flex-end' }} onPress={onClose}>
-        <Pressable onPress={(e) => e.stopPropagation()}
-          style={{ backgroundColor: p.bg, borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingTop: 12, paddingBottom: 36, paddingHorizontal: 22 }}>
-          <View style={{ alignItems: 'center', marginBottom: 16 }}>
-            <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: p.border }} />
-          </View>
-
-          <Text style={{ color: p.fg, fontSize: 19, fontWeight: '800', marginBottom: 20 }}>New API key</Text>
-
+    <BottomSheet visible={visible} onClose={onClose} title={"New API key"}>
           {/* Name */}
-          <Text style={{ color: p.fgMuted, fontSize: 11.5, fontWeight: '700', marginBottom: 6 }}>KEY NAME</Text>
+          <Text style={{ color: p.fgMuted, fontSize: 11.5, fontWeight: '600', marginBottom: 6 }}>KEY NAME</Text>
           <TextInput
             value={name}
             onChangeText={setName}
@@ -384,7 +349,7 @@ function CreateKeyModal({ visible, palette: p, accent, onClose, onCreate }: {
           />
 
           {/* Permissions */}
-          <Text style={{ color: p.fgMuted, fontSize: 11.5, fontWeight: '700', marginBottom: 10 }}>PERMISSIONS</Text>
+          <Text style={{ color: p.fgMuted, fontSize: 11.5, fontWeight: '600', marginBottom: 10 }}>PERMISSIONS</Text>
           {ALL_PERMS.map((perm) => {
             const meta    = PERM_META[perm];
             const active  = perms.has(perm);
@@ -404,7 +369,7 @@ function CreateKeyModal({ visible, palette: p, accent, onClose, onCreate }: {
                   <Ionicons name={meta.icon} size={16} color={active ? accent : p.fgMuted} />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={{ color: p.fg, fontSize: 13.5, fontWeight: '700' }}>{meta.label}</Text>
+                  <Text style={{ color: p.fg, fontSize: 13.5, fontWeight: '600' }}>{meta.label}</Text>
                   <Text style={{ color: p.fgMuted, fontSize: 11, marginTop: 1 }}>{meta.desc}</Text>
                 </View>
                 <Ionicons name={active ? 'checkmark-circle' : 'ellipse-outline'} size={20} color={active ? accent : p.fgFaint} />
@@ -413,7 +378,7 @@ function CreateKeyModal({ visible, palette: p, accent, onClose, onCreate }: {
           })}
 
           {/* Expiry */}
-          <Text style={{ color: p.fgMuted, fontSize: 11.5, fontWeight: '700', marginTop: 18, marginBottom: 10 }}>EXPIRY</Text>
+          <Text style={{ color: p.fgMuted, fontSize: 11.5, fontWeight: '600', marginTop: 18, marginBottom: 10 }}>EXPIRY</Text>
           <View style={{ flexDirection: 'row', gap: 8 }}>
             {EXPIRY_OPTIONS.map((opt) => {
               const active = expiry === opt.value;
@@ -426,7 +391,7 @@ function CreateKeyModal({ visible, palette: p, accent, onClose, onCreate }: {
                     alignItems: 'center', justifyContent: 'center',
                     opacity: pressed ? 0.75 : 1,
                   })}>
-                  <Text style={{ color: active ? accent : p.fgMuted, fontSize: 11.5, fontWeight: '700' }}>{opt.label}</Text>
+                  <Text style={{ color: active ? accent : p.fgMuted, fontSize: 11.5, fontWeight: '600' }}>{opt.label}</Text>
                 </Pressable>
               );
             })}
@@ -440,18 +405,13 @@ function CreateKeyModal({ visible, palette: p, accent, onClose, onCreate }: {
               marginTop: 22, borderRadius: 26, overflow: 'hidden',
               opacity: (!name.trim() || perms.size === 0 || loading) ? 0.5 : pressed ? 0.85 : 1,
             })}>
-            <LinearGradient
-              colors={[brand.primaryDark, brand.deep]}
-              start={{ x: 0.1, y: 0 }} end={{ x: 0.9, y: 1 }}
-              style={{ height: 52, alignItems: 'center', justifyContent: 'center' }}>
+            <View style={{ backgroundColor: p.ctaBg, height: 52, alignItems: 'center', justifyContent: 'center' }}>
               {loading
-                ? <ActivityIndicator color="#fff" />
-                : <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>Create key</Text>}
-            </LinearGradient>
+                ? <ActivityIndicator color={p.ctaFg} />
+                : <Text style={{ color: p.ctaFg, fontSize: 15, fontWeight: '600' }}>Create key</Text>}
+            </View>
           </Pressable>
-        </Pressable>
-      </Pressable>
-    </Modal>
+        </BottomSheet>
   );
 }
 
@@ -486,7 +446,7 @@ function NewKeyRevealModal({ apiKey, palette: p, accent, onDone }: {
             <Ionicons name="key" size={26} color={accent} />
           </View>
 
-          <Text style={{ color: p.fg, fontSize: 20, fontWeight: '800', textAlign: 'center', marginBottom: 6 }}>
+          <Text style={{ color: p.fg, fontSize: 20, fontWeight: '600', textAlign: 'center', marginBottom: 6 }}>
             Save your API key
           </Text>
           <Text style={{ color: p.fgMuted, fontSize: 13, textAlign: 'center', lineHeight: 18, marginBottom: 20 }}>
@@ -501,10 +461,10 @@ function NewKeyRevealModal({ apiKey, palette: p, accent, onDone }: {
               borderColor: copied ? `${accent}66` : p.border,
               opacity: pressed ? 0.75 : 1,
             })}>
-            <Text style={{ color: p.fgFaint, fontSize: 10, fontWeight: '700', letterSpacing: 0.6, marginBottom: 6 }}>
+            <Text style={{ color: p.fgFaint, fontSize: 10, fontWeight: '600', letterSpacing: 0.6, marginBottom: 6 }}>
               YOUR API KEY — TAP TO COPY
             </Text>
-            <Text style={{ color: p.fg, fontSize: 13, fontWeight: '700', fontFamily: 'monospace', letterSpacing: 0.3 }}
+            <Text style={{ color: p.fg, fontSize: 13, fontWeight: '600', fontFamily: 'monospace', letterSpacing: 0.3 }}
               selectable numberOfLines={2}>
               {apiKey.rawKey}
             </Text>
@@ -516,15 +476,12 @@ function NewKeyRevealModal({ apiKey, palette: p, accent, onDone }: {
               marginTop: 12, height: 48, borderRadius: 24, overflow: 'hidden',
               opacity: pressed ? 0.85 : 1,
             })}>
-            <LinearGradient
-              colors={copied ? [p.greenFg, '#16a34a'] : [brand.primaryDark, brand.deep]}
-              start={{ x: 0.1, y: 0 }} end={{ x: 0.9, y: 1 }}
-              style={{ flex: 1, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8 }}>
-              <Ionicons name={copied ? 'checkmark' : 'copy-outline'} size={16} color="#fff" />
-              <Text style={{ color: '#fff', fontSize: 14, fontWeight: '700' }}>
+            <View style={{ flex: 1, backgroundColor: copied ? p.greenBg : p.ctaBg, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8 }}>
+              <Ionicons name={copied ? 'checkmark' : 'copy-outline'} size={16} color={p.ctaFg} />
+              <Text style={{ color: p.ctaFg, fontSize: 14, fontWeight: '600' }}>
                 {copied ? 'Copied!' : 'Copy to clipboard'}
               </Text>
-            </LinearGradient>
+            </View>
           </Pressable>
 
           <Pressable onPress={onDone} disabled={!copied}
@@ -534,7 +491,7 @@ function NewKeyRevealModal({ apiKey, palette: p, accent, onDone }: {
               borderWidth: 1, borderColor: p.border,
               opacity: copied ? (pressed ? 0.7 : 1) : 0.35,
             })}>
-            <Text style={{ color: p.fgMuted, fontSize: 14, fontWeight: '700' }}>Done</Text>
+            <Text style={{ color: p.fgMuted, fontSize: 14, fontWeight: '600' }}>Done</Text>
           </Pressable>
         </View>
       </View>

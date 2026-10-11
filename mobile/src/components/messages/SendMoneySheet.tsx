@@ -23,7 +23,7 @@ import { useWallets } from '@/hooks';
 import { getCurrencyMeta } from '@/constants';
 import type { Currency, Wallet } from '@/types';
 
-const BRAND_BLUE = '#737373'; // mono accent neutral
+import { BottomSheet } from '@/components/ui/BottomSheet';
 
 export interface SendMoneySheetProps {
   visible: boolean;
@@ -105,39 +105,12 @@ export function SendMoneySheet({
   const valid = !!selected && numAmount > 0 && (mode === 'REQUEST' || (selected.balance > 0 && !overflow));
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable onPress={onClose} style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)' }}>
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          // The Modal does NOT inherit the parent's safe-area; nudge the
-          // content up so the Send button clears the keyboard reliably.
-          style={{ flex: 1, justifyContent: 'flex-end' }}
-        >
-          <Pressable
-            onPress={(e) => e.stopPropagation()}
-            style={{
-              backgroundColor: p.bg,
-              borderTopLeftRadius: 22, borderTopRightRadius: 22,
-              padding: 20, paddingBottom: 32, gap: 14,
-              maxHeight: '92%',
-            }}
-          >
-            {/* Drag handle */}
-            <View style={{ alignItems: 'center', marginBottom: 4 }}>
-              <View style={{ width: 42, height: 4, borderRadius: 2, backgroundColor: p.border }} />
-            </View>
-
-            {/* Title + recipient */}
-            <View>
-              <Text style={{ color: p.fg, fontSize: 18, fontWeight: '600', letterSpacing: -0.3 }}>
-                {mode === 'REQUEST' ? t('money.requestTitle') : t('money.sendTitle')}
-              </Text>
-              {!!recipientLabel && (
-                <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '600', marginTop: 2 }}>
-                  {mode === 'REQUEST' ? t('money.from') : t('money.to')} {recipientLabel}
-                </Text>
-              )}
-            </View>
+    <BottomSheet
+      visible={visible}
+      onClose={onClose}
+      title={mode === 'REQUEST' ? t('money.requestTitle') : t('money.sendTitle')}
+      subtitle={recipientLabel ? `${mode === 'REQUEST' ? t('money.from') : t('money.to')} ${recipientLabel}` : undefined}
+    >
 
             {displayWallets.length === 0 ? (
               <View style={{
@@ -287,23 +260,20 @@ export function SendMoneySheet({
               onPress={() => valid && onSubmit(numAmount, selected!.currency, note.trim() || undefined)}
               style={({ pressed }) => ({
                 height: 52, borderRadius: 16, marginTop: 4,
-                backgroundColor: valid ? BRAND_BLUE : p.border,
+                backgroundColor: valid ? p.accent : p.border,
                 alignItems: 'center', justifyContent: 'center',
                 opacity: pressed ? 0.9 : 1,
                 flexDirection: 'row', gap: 8,
               })}
             >
-              <Ionicons name={mode === 'REQUEST' ? 'receipt-outline' : 'paper-plane'} size={15} color="#fff" />
-              <Text style={{ color: '#fff', fontSize: 15, fontWeight: '600' }}>
+              <Ionicons name={mode === 'REQUEST' ? 'receipt-outline' : 'paper-plane'} size={15} color={p.accentFg} />
+              <Text style={{ color: p.accentFg, fontSize: 15, fontWeight: '600' }}>
                 {valid
                   ? t(mode === 'REQUEST' ? 'money.requestCta' : 'money.sendCta', { amount: formatAmount(numAmount), currency: currency ?? '' })
                   : t(mode === 'REQUEST' ? 'money.requestFallback' : 'money.sendFallback')}
               </Text>
             </Pressable>
-          </Pressable>
-        </KeyboardAvoidingView>
-      </Pressable>
-    </Modal>
+          </BottomSheet>
   );
 }
 

@@ -1,3 +1,4 @@
+import { StackHeader } from '@/components/ui/ScreenHeader';
 /**
  * Admin Database Browser — paginated reads of every core table.
  * Each tab shows raw rows with key columns surfaced + JSON drill-down on tap.
@@ -20,6 +21,7 @@ import { LoadingPulse } from '@/components/ui/LoadingPulse';
 import { formatRelativeTime } from '@/utils/format';
 import { TopGradient } from '@/components/ui/ScreenShell';
 
+import { BottomSheet } from '@/components/ui/BottomSheet';
 type Tab =
   | 'TRANSACTIONS' | 'P2P_TRADES' | 'P2P_LISTINGS' | 'P2P_DISPUTES'
   | 'WALLETS' | 'CARDS' | 'CARD_TXS' | 'BANKS'
@@ -156,13 +158,7 @@ export default function AdminData() {
       <SafeAreaView style={{ flex: 1 }} edges={['top']}>
 
         {/* Header */}
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingTop: 8, paddingBottom: 6 }}>
-          <Pressable onPress={() => router.back()} hitSlop={8}>
-            <Ionicons name="chevron-back" size={26} color={p.fg} />
-          </Pressable>
-          <Text style={{ flex: 1, color: p.fg, fontSize: 18, fontWeight: '600', letterSpacing: -0.3 }}>Database</Text>
-          <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '700' }}>{q.data?.total ?? 0}</Text>
-        </View>
+        <StackHeader title="Database" right={<><Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '700' }}>{q.data?.total ?? 0}</Text></>} />
 
         {/* Tab strip */}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, gap: 8, paddingBottom: 8 }}>
@@ -277,21 +273,13 @@ export default function AdminData() {
       </SafeAreaView>
 
       {/* JSON drill-down modal */}
-      <Modal visible={!!drill} transparent animationType="slide" onRequestClose={() => setDrill(null)}>
-        <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)' }} onPress={() => setDrill(null)}>
-          <View
-            style={{ position: 'absolute', bottom: 0, left: 0, right: 0, maxHeight: '80%', backgroundColor: p.bgElev, borderTopLeftRadius: 20, borderTopRightRadius: 20 }}
-            onStartShouldSetResponder={() => true}
-          >
-            <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: p.border, alignSelf: 'center', marginTop: 10, marginBottom: 12 }} />
-            <ScrollView contentContainerStyle={{ padding: 20 }}>
+      <BottomSheet visible={!!drill} onClose={() => setDrill(null)} title="Details" scroll={false} contentStyle={{ paddingHorizontal: 0 }}>
+            <ScrollView contentContainerStyle={{ paddingHorizontal: 24, paddingBottom: 24 }}>
               <Text style={{ color: p.fg, fontFamily: 'monospace', fontSize: 11, lineHeight: 17 }}>
                 {JSON.stringify(drill, null, 2)}
               </Text>
             </ScrollView>
-          </View>
-        </Pressable>
-      </Modal>
+          </BottomSheet>
     </View>
   );
 }

@@ -1,3 +1,4 @@
+import { ScreenShell, CTAButton } from '@/components/ui/ScreenShell';
 /**
  * Payouts / Invoices — paginated list of all business payouts.
  *
@@ -14,8 +15,7 @@ import {
   ActivityIndicator, Alert, FlatList, Modal, Pressable, ScrollView, View,
 } from 'react-native';
 import { Text } from '@/components/ui/Text';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { StatusBar } from 'expo-status-bar';
+import { StackHeader } from '@/components/ui/ScreenHeader';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as Clipboard from 'expo-clipboard';
@@ -23,9 +23,9 @@ import * as Clipboard from 'expo-clipboard';
 import { useTheme, useThemedPalette } from '@/store/themeStore';
 import { useHaptics } from '@/hooks';
 import { businessService } from '@/services/business';
-import type { BusinessPayout, PayoutStatus } from '@/types/business';
+import type { BusinessPayout, PayoutBatch, PayoutStatus } from '@/types/business';
 
-const ACCENT = '#737373';
+import { BottomSheet } from '@/components/ui/BottomSheet';
 const PAGE_SIZE = 20;
 
 type StatusFilter = 'ALL' | PayoutStatus;
@@ -44,7 +44,7 @@ function statusColor(status: PayoutStatus, p: ReturnType<typeof useThemedPalette
     case 'COMPLETED':  return p.greenFg;
     case 'FAILED':     return p.redFg;
     case 'CANCELLED':  return p.fgFaint;
-    case 'PROCESSING': return '#63a1db';
+    case 'PROCESSING': return p.accentText;
     default:           return p.amberFg;
   }
 }
@@ -102,10 +102,10 @@ function PayoutItem({
       </View>
 
       <View style={{ alignItems: 'flex-end', flexShrink: 0 }}>
-        <Text style={{ color: p.fg, fontSize: 14, fontWeight: '700', fontVariant: ['tabular-nums'] }}>
+        <Text style={{ color: p.fg, fontSize: 14, fontWeight: '600', fontVariant: ['tabular-nums'] }}>
           {Number(payout.amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
         </Text>
-        <Text style={{ color: col, fontSize: 10, fontWeight: '700', marginTop: 1 }}>
+        <Text style={{ color: col, fontSize: 10, fontWeight: '600', marginTop: 1 }}>
           {payout.status}
         </Text>
       </View>
@@ -171,44 +171,9 @@ function DetailModal({
   ];
 
   return (
-    <Modal visible={!!payout} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable
-        style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' }}
-        onPress={onClose}
-      >
-        <Pressable
-          style={{ backgroundColor: p.bg, borderTopLeftRadius: 24, borderTopRightRadius: 24 }}
-          onPress={(e) => e.stopPropagation()}
-        >
-          {/* Handle */}
-          <View style={{ alignItems: 'center', paddingTop: 12, paddingBottom: 4 }}>
-            <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: p.border }} />
-          </View>
-
+    <BottomSheet visible={!!payout} onClose={onClose} title={"Payout detail"} scroll={false} contentStyle={{ paddingHorizontal: 0 }}>
           {/* Title */}
-          <View style={{
-            flexDirection: 'row', alignItems: 'center', gap: 12,
-            paddingHorizontal: 20, paddingVertical: 14,
-            borderBottomWidth: 1, borderBottomColor: p.border,
-          }}>
-            <View style={{
-              width: 44, height: 44, borderRadius: 22,
-              backgroundColor: p.bgElev, alignItems: 'center', justifyContent: 'center',
-            }}>
-              <Ionicons name={statusIcon(payout.status)} size={22} color={col} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={{ color: p.fg, fontSize: 16, fontWeight: '800', letterSpacing: -0.3 }}>
-                Payout detail
-              </Text>
-              <Text style={{ color: col, fontSize: 11.5, fontWeight: '700', marginTop: 1 }}>
-                {payout.status}
-              </Text>
-            </View>
-            <Pressable onPress={onClose} hitSlop={8}>
-              <Ionicons name="close" size={20} color={p.fgMuted} />
-            </Pressable>
-          </View>
+          
 
           <ScrollView style={{ maxHeight: 420 }} contentContainerStyle={{ padding: 20 }}>
             {rows.map(({ label, value, copyKey }, i) => (
@@ -246,7 +211,7 @@ function DetailModal({
 
           {/* Cancel action */}
           {payout.status === 'PENDING' && (
-            <View style={{ paddingHorizontal: 20, paddingBottom: 32, paddingTop: 8 }}>
+            <View style={{ paddingHorizontal: 24, paddingBottom: 32, paddingTop: 8 }}>
               <Pressable
                 onPress={handleCancel}
                 disabled={cancelling}
@@ -259,7 +224,7 @@ function DetailModal({
               >
                 {cancelling
                   ? <ActivityIndicator color={p.redFg} size="small" />
-                  : <Text style={{ color: p.redFg, fontSize: 14, fontWeight: '700' }}>Cancel payout</Text>
+                  : <Text style={{ color: p.redFg, fontSize: 14, fontWeight: '600' }}>Cancel payout</Text>
                 }
               </Pressable>
             </View>
@@ -268,9 +233,7 @@ function DetailModal({
           {payout.status !== 'PENDING' && (
             <View style={{ height: 32 }} />
           )}
-        </Pressable>
-      </Pressable>
-    </Modal>
+        </BottomSheet>
   );
 }
 
@@ -289,6 +252,36 @@ export default function Invoices() {
   const [loading,    setLoading]    = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [selected,   setSelected]   = useState<BusinessPayout | null>(null);
+  // Maker-checker queue: batches another owner/admin created that need a second approver.
+  const [pending,    setPending]    = useState<PayoutBatch[]>([]);
+  const [deciding,   setDeciding]   = useState<string | null>(null);
+  const loadPending = useCallback(async () => {
+    try { setPending(await businessService.listBatches('PENDING_APPROVAL')); } catch { /* not every role can see batches */ }
+  }, []);
+  useEffect(() => { void loadPending(); }, [loadPending]);
+
+  const decide = (b: PayoutBatch, approve: boolean) => {
+    const run = async (reason?: string) => {
+      setDeciding(b.id); h.selection();
+      try {
+        if (approve) await businessService.approveBatch(b.id); else await businessService.rejectBatch(b.id, reason ?? 'Rejected');
+        h.success();
+        await Promise.all([loadPending(), load(1, filter, false)]);
+      } catch (err: any) {
+        h.error();
+        Alert.alert(approve ? 'Approval failed' : 'Rejection failed', err?.response?.data?.error ?? 'Please try again.');
+      } finally { setDeciding(null); }
+    };
+    if (approve) {
+      Alert.alert('Approve batch', `Pay ${b.count} payout${b.count === 1 ? '' : 's'} totalling ${Number(b.totalAmount).toLocaleString('en-US', { maximumFractionDigits: 2 })} ${b.currency}?`, [
+        { text: 'Cancel', style: 'cancel' }, { text: 'Approve', onPress: () => { void run(); } },
+      ]);
+    } else {
+      Alert.alert('Reject batch', 'The reserved funds return to your balance and no one is paid.', [
+        { text: 'Cancel', style: 'cancel' }, { text: 'Reject', style: 'destructive', onPress: () => { void run('Rejected by approver in the app'); } },
+      ]);
+    }
+  };
 
   const load = useCallback(async (p2: number, f: StatusFilter, append = false) => {
     if (p2 === 1 && !append) setLoading(true);
@@ -327,7 +320,7 @@ export default function Invoices() {
       h.success();
     } catch (err: any) {
       h.error();
-      Alert.alert('Failed', err?.response?.data?.message ?? 'Could not cancel payout.');
+      Alert.alert('Failed', err?.response?.data?.error ?? err?.response?.data?.message ?? 'Could not cancel payout.');
     }
   };
 
@@ -336,40 +329,15 @@ export default function Invoices() {
   );
 
   return (
-    <View style={{ flex: 1, backgroundColor: p.bg }}>
-      <StatusBar style={mode === 'dark' ? 'light' : 'dark'} />
-      <SafeAreaView style={{ flex: 1 }} edges={['top']}>
-
-        {/* Header */}
-        <View style={{
-          flexDirection: 'row', alignItems: 'center', gap: 12,
-          paddingHorizontal: 20, paddingTop: 16, paddingBottom: 12,
-        }}>
-          <Pressable
-            onPress={() => router.back()}
-            hitSlop={8}
-            style={{
-              width: 36, height: 36, borderRadius: 18, backgroundColor: p.bgElev,
-              borderWidth: 1, borderColor: p.border, alignItems: 'center', justifyContent: 'center',
-            }}
-          >
-            <Ionicons name="chevron-back" size={20} color={p.fg} />
-          </Pressable>
-          <View style={{ flex: 1 }}>
-            <Text style={{ color: p.fg, fontSize: 18, fontWeight: '800', letterSpacing: -0.5 }}>
-              Payouts
-            </Text>
-            {params.batchId && (
-              <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '500' }} numberOfLines={1}>
-                Batch {params.batchId.slice(0, 8)}…
-              </Text>
-            )}
-          </View>
-        </View>
+    <ScreenShell
+          title="Payouts"
+          subtitle={params.batchId ? `Batch ${params.batchId.slice(0, 8)}…` : undefined}
+         scroll={false} contentStyle={{ paddingHorizontal: 0 }}>
 
         {/* Status filter chips */}
         <ScrollView
           horizontal
+          style={{ flexGrow: 0, flexShrink: 0 }}
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={{ paddingHorizontal: 20, gap: 8, paddingBottom: 12 }}
         >
@@ -379,14 +347,14 @@ export default function Invoices() {
               onPress={() => { h.selection(); setFilter(key); }}
               style={({ pressed }) => ({
                 paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20,
-                backgroundColor: filter === key ? ACCENT : p.bgElev,
-                borderWidth: 1, borderColor: filter === key ? ACCENT : p.border,
+                backgroundColor: filter === key ? p.ctaBg : p.bgElev,
+                borderWidth: 1, borderColor: filter === key ? p.ctaBg : p.border,
                 opacity: pressed ? 0.75 : 1,
               })}
             >
               <Text style={{
-                color: filter === key ? '#fff' : p.fgMuted,
-                fontSize: 12, fontWeight: '700',
+                color: filter === key ? p.ctaFg : p.fgMuted,
+                fontSize: 12, fontWeight: '600',
               }}>
                 {label}
               </Text>
@@ -397,7 +365,7 @@ export default function Invoices() {
         {/* List */}
         {loading ? (
           <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-            <ActivityIndicator color={ACCENT} size="large" />
+            <ActivityIndicator color={p.accentText} size="large" />
           </View>
         ) : (
           <FlatList
@@ -411,13 +379,37 @@ export default function Invoices() {
               />
             )}
             ItemSeparatorComponent={separator}
+            ListHeaderComponent={pending.length ? (
+              <View style={{ paddingHorizontal: 16, paddingBottom: 12 }}>
+                <Text style={{ color: p.fgFaint, fontSize: 11, fontWeight: '600', letterSpacing: 0.6, marginBottom: 8 }}>WAITING FOR APPROVAL</Text>
+                {pending.map((b) => (
+                  <View key={b.id} style={{ backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border, borderRadius: 14, padding: 14, marginBottom: 8 }}>
+                    <Text style={{ color: p.fg, fontSize: 15, fontWeight: '600' }}>
+                      {Number(b.totalAmount).toLocaleString('en-US', { maximumFractionDigits: 2 })} {b.currency} · {b.count} payout{b.count === 1 ? '' : 's'}
+                    </Text>
+                    <Text style={{ color: p.fgMuted, fontSize: 12, marginTop: 2 }}>{b.reference}{b.source === 'API' ? ' · via API' : ''}</Text>
+                    {b.approvalReason ? <Text style={{ color: p.fgFaint, fontSize: 12, marginTop: 6 }}>{b.approvalReason}</Text> : null}
+                    <View style={{ flexDirection: 'row', gap: 8, marginTop: 12 }}>
+                      <Pressable disabled={deciding === b.id} onPress={() => decide(b, false)}
+                        style={({ pressed }) => ({ flex: 1, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: p.border, opacity: pressed || deciding === b.id ? 0.6 : 1 })}>
+                        <Text style={{ color: p.fg, fontSize: 13, fontWeight: '600' }}>Reject</Text>
+                      </Pressable>
+                      <Pressable disabled={deciding === b.id} onPress={() => decide(b, true)}
+                        style={({ pressed }) => ({ flex: 1, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: p.ctaBg, opacity: pressed || deciding === b.id ? 0.6 : 1 })}>
+                        <Text style={{ color: p.ctaFg, fontSize: 13, fontWeight: '600' }}>{deciding === b.id ? 'Working…' : 'Approve'}</Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            ) : null}
             contentContainerStyle={{ paddingBottom: 60 }}
             showsVerticalScrollIndicator={false}
             onEndReached={loadMore}
             onEndReachedThreshold={0.4}
             ListFooterComponent={
               loadingMore
-                ? <View style={{ paddingVertical: 20, alignItems: 'center' }}><ActivityIndicator color={ACCENT} /></View>
+                ? <View style={{ paddingVertical: 20, alignItems: 'center' }}><ActivityIndicator color={p.accentText} /></View>
                 : null
             }
             ListEmptyComponent={
@@ -433,7 +425,7 @@ export default function Invoices() {
             }
           />
         )}
-      </SafeAreaView>
+
 
       <DetailModal
         payout={selected}
@@ -441,6 +433,6 @@ export default function Invoices() {
         onCancel={handleCancel}
         palette={p}
       />
-    </View>
+    </ScreenShell>
   );
 }

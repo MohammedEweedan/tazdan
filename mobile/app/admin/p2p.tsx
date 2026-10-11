@@ -1,3 +1,4 @@
+import { StackHeader } from '@/components/ui/ScreenHeader';
 /**
  * Admin P2P — listings, trades, disputes with moderation actions.
  */
@@ -16,6 +17,7 @@ import { LoadingPulse } from '@/components/ui/LoadingPulse';
 import { formatRelativeTime } from '@/utils/format';
 import { TopGradient } from '@/components/ui/ScreenShell';
 
+import { BottomSheet } from '@/components/ui/BottomSheet';
 type Tab = 'TRADES' | 'LISTINGS' | 'DISPUTES';
 
 export default function AdminP2P() {
@@ -40,8 +42,8 @@ export default function AdminP2P() {
   });
 
   const resolveMut = useMutation({
-    mutationFn: ({ id, resolution }: { id: string; resolution: string }) =>
-      adminService.resolveP2PDispute(id, { resolution }),
+    mutationFn: ({ id, resolution, outcome }: { id: string; resolution: string; outcome: 'BUYER' | 'SELLER' }) =>
+      adminService.resolveP2PDispute(id, { resolution, outcome }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin-p2p'] });
       Alert.alert('Dispute resolved');
@@ -60,11 +62,7 @@ export default function AdminP2P() {
       <TopGradient />
       <StatusBar style={themeMode === 'light' ? 'dark' : 'light'} />
       <SafeAreaView style={{ flex: 1 }} edges={['top']}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingTop: 8, paddingBottom: 6 }}>
-          <Pressable onPress={() => router.back()} hitSlop={8}><Ionicons name="chevron-back" size={26} color={p.fg} /></Pressable>
-          <Text style={{ flex: 1, color: p.fg, fontSize: 18, fontWeight: '600' }}>P2P Admin</Text>
-          <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '700' }}>{q.data?.total ?? 0}</Text>
-        </View>
+        <StackHeader title="P2P Admin" right={<><Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '700' }}>{q.data?.total ?? 0}</Text></>} />
 
         <View style={{ flexDirection: 'row', gap: 8, paddingHorizontal: 16, marginBottom: 10 }}>
           {(['TRADES', 'LISTINGS', 'DISPUTES'] as Tab[]).map((t) => {
@@ -95,11 +93,8 @@ export default function AdminP2P() {
         )}
       </SafeAreaView>
 
-      <Modal visible={!!drill} transparent animationType="slide" onRequestClose={() => setDrill(null)}>
-        <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)' }} onPress={() => setDrill(null)}>
-          <View style={{ position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: p.bgElev, borderTopLeftRadius: 20, borderTopRightRadius: 20 }} onStartShouldSetResponder={() => true}>
-            <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: p.border, alignSelf: 'center', marginTop: 10, marginBottom: 12 }} />
-            <ScrollView contentContainerStyle={{ padding: 20 }}>
+      <BottomSheet visible={!!drill} onClose={() => setDrill(null)} title="Details" scroll={false} contentStyle={{ paddingHorizontal: 0 }}>
+            <ScrollView contentContainerStyle={{ paddingHorizontal: 24, paddingBottom: 24 }}>
               <Text style={{ color: p.fg, fontFamily: 'monospace', fontSize: 11, lineHeight: 17 }}>{JSON.stringify(drill, null, 2)}</Text>
               {tab === 'DISPUTES' && drill?.status !== 'RESOLVED' && (
                 <View style={{ marginTop: 20 }}>
@@ -115,26 +110,39 @@ export default function AdminP2P() {
                       style={{ color: p.fg, fontSize: 14, minHeight: 60, textAlignVertical: 'top' }}
                     />
                   </View>
-                  <Pressable
-                    onPress={() => resolveMut.mutate({ id: drill.id, resolution: resolution.trim() })}
-                    disabled={!resolution.trim() || resolveMut.isPending}
-                    style={{
-                      height: 48, borderRadius: 12,
-                      backgroundColor: resolution.trim() ? '#22c55e' : p.pillBg,
-                      alignItems: 'center', justifyContent: 'center',
-                      opacity: resolution.trim() ? 1 : 0.6,
-                    }}
-                  >
-                    <Text style={{ color: resolution.trim() ? '#fff' : p.fgFaint, fontWeight: '600' }}>
-                      {resolveMut.isPending ? 'Resolving…' : 'Mark Resolved'}
-                    </Text>
-                  </Pressable>
+                  {/* The decision moves the escrow, so the admin picks who it is decided for. */}
+                  <View style={{ flexDirection: 'row', gap: 10 }}>
+                    {([
+                      { outcome: 'BUYER' as const, label: 'Release to buyer', body: 'The escrowed crypto is released to the buyer and the trade completes.' },
+                      { outcome: 'SELLER' as const, label: 'Refund seller', body: 'The escrowed crypto returns to the seller and the trade is cancelled.' },
+                    ]).map((o, i) => {
+                      const ready = resolution.trim().length >= 5 && !resolveMut.isPending;
+                      return (
+                        <Pressable
+                          key={o.outcome}
+                          disabled={!ready}
+                          onPress={() => Alert.alert(o.label, `${o.body} This cannot be undone.`, [
+                            { text: 'Cancel', style: 'cancel' },
+                            { text: o.label, style: 'destructive', onPress: () => resolveMut.mutate({ id: drill.id, resolution: resolution.trim(), outcome: o.outcome }) },
+                          ])}
+                          style={{
+                            flex: 1, height: 48, borderRadius: 12, alignItems: 'center', justifyContent: 'center',
+                            backgroundColor: i === 0 && ready ? p.accent : 'transparent',
+                            borderWidth: 1, borderColor: ready ? p.accent : p.border, opacity: ready ? 1 : 0.6,
+                          }}
+                        >
+                          <Text style={{ color: i === 0 && ready ? p.accentFg : ready ? p.accent : p.fgFaint, fontWeight: '600', fontSize: 13 }}>
+                            {resolveMut.isPending ? 'Resolving…' : o.label}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                  <Text style={{ color: p.fgFaint, fontSize: 11, marginTop: 8 }}>Notes need at least 5 characters and are recorded in the audit trail.</Text>
                 </View>
               )}
             </ScrollView>
-          </View>
-        </Pressable>
-      </Modal>
+          </BottomSheet>
     </View>
   );
 }

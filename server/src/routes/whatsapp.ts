@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { WhatsAppController } from '../controllers/whatsapp.controller';
-import { authenticate } from '../middleware/auth';
+import { authenticate, requireAdmin } from '../middleware/auth';
+import { requirePermission } from '../services/platform/rbac';
 
 const router = Router();
 
@@ -12,9 +13,9 @@ router.post('/webhook/meta', WhatsAppController.receiveMetaMessage);
 router.post('/webhook',      WhatsAppController.receiveMessage);
 
 // Admin only routes
-router.use(authenticate);
-router.post('/send', WhatsAppController.sendMessage);
-router.get('/messages', WhatsAppController.getMessages);
-router.get('/stats', WhatsAppController.getStats);
+router.use(authenticate, requireAdmin);
+router.post('/send', requirePermission('support.reply'), WhatsAppController.sendMessage);
+router.get('/messages', requirePermission('support.read'), WhatsAppController.getMessages);
+router.get('/stats', requirePermission('support.read'), WhatsAppController.getStats);
 
 export default router;

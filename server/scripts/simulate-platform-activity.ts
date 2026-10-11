@@ -532,10 +532,13 @@ class AdminSimulator {
 
   async login(): Promise<boolean> {
     try {
-      // Try default admin credentials or create if needed
+            // Uses the bootstrap staff account from the environment — no defaults.
+      if (!process.env.ADMIN_EMAIL || !process.env.ADMIN_PASSWORD) {
+        throw new Error('Set ADMIN_EMAIL and ADMIN_PASSWORD to run the simulator');
+      }
       const response = await this.api.post('/auth/login', {
-        email: 'moeawidan99@gmail.com',
-        password: '11223344',
+        email: process.env.ADMIN_EMAIL,
+        password: process.env.ADMIN_PASSWORD,
       });
       
       this.token = response.data.accessToken;

@@ -1,3 +1,4 @@
+import { StackHeader } from '@/components/ui/ScreenHeader';
 /**
  * Admin Rates — a USD/LYD price chart on top, with the editable rate pairs
  * below it. Each pair shows the STORED value next to the current LIVE value so
@@ -6,7 +7,8 @@
  */
 
 import { useMemo, useState } from 'react';
-import { Alert, KeyboardAvoidingView, Modal, Platform, Pressable, RefreshControl, ScrollView, View } from 'react-native';
+import { Alert, Pressable, RefreshControl, ScrollView, View } from 'react-native';
+import { BottomSheet } from '@/components/ui/BottomSheet';
 import { Text, TextInput } from '@/components/ui/Text';
 import { Ionicons } from '@expo/vector-icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -109,16 +111,10 @@ export default function AdminRates() {
       <StatusBar style={themeMode === 'light' ? 'dark' : 'light'} />
       <TopGradient />
       <SafeAreaView style={{ flex: 1 }} edges={['top']}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingTop: 8, paddingBottom: 8 }}>
-          <Pressable onPress={() => router.back()} hitSlop={8}>
-            <Ionicons name="chevron-back" size={26} color={p.fg} />
-          </Pressable>
-          <Text style={{ flex: 1, color: p.fg, fontSize: 18, fontWeight: '600', letterSpacing: -0.3 }}>Exchange Rates</Text>
-          <Pressable onPress={() => setCreating(true)} hitSlop={8} style={{ paddingHorizontal: 11, paddingVertical: 7, borderRadius: 10, backgroundColor: p.ctaBg, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+        <StackHeader title="Exchange Rates" right={<><Pressable onPress={() => setCreating(true)} hitSlop={8} style={{ paddingHorizontal: 11, paddingVertical: 7, borderRadius: 10, backgroundColor: p.ctaBg, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
             <Ionicons name="add" size={15} color={p.ctaFg} />
             <Text style={{ color: p.ctaFg, fontSize: 12, fontWeight: '600' }}>NEW</Text>
-          </Pressable>
-        </View>
+          </Pressable></>} />
 
         <ScrollView
           contentContainerStyle={{ padding: 16, paddingBottom: 80 }}
@@ -218,7 +214,7 @@ export default function AdminRates() {
         </ScrollView>
 
         {/* Edit modal */}
-        <Modal visible={!!editing} transparent animationType="slide" onRequestClose={() => setEditing(null)}>
+        {!!editing && (
           <RateForm
             mode="edit"
             initial={editing}
@@ -226,10 +222,10 @@ export default function AdminRates() {
             onSaved={() => { setEditing(null); qc.invalidateQueries({ queryKey: ['admin-rates'] }); }}
             p={p}
           />
-        </Modal>
+        )}
 
         {/* Create modal */}
-        <Modal visible={creating} transparent animationType="slide" onRequestClose={() => setCreating(false)}>
+        {creating && (
           <RateForm
             mode="create"
             initial={null}
@@ -237,7 +233,7 @@ export default function AdminRates() {
             onSaved={() => { setCreating(false); qc.invalidateQueries({ queryKey: ['admin-rates'] }); }}
             p={p}
           />
-        </Modal>
+        )}
       </SafeAreaView>
     </View>
   );
@@ -274,7 +270,7 @@ function RateCard({ r, p, onEdit, onRefresh, onClear }: { r: Rate; p: any; onEdi
   const shownSpread = shownMid > 0 ? Math.abs(shownBuy - shownSell) / shownMid * 100 : 0;
 
   return (
-    <View style={{ backgroundColor: p.bgElev, borderRadius: 14, borderWidth: 1, borderColor: stale ? 'rgba(245,158,11,0.45)' : (activeOverride ? p.border : 'rgba(99,161,219,0.25)'), padding: 14, marginBottom: 10 }}>
+    <View style={{ backgroundColor: p.bgElev, borderRadius: 14, borderWidth: 1, borderColor: stale ? 'rgba(245,158,11,0.45)' : (activeOverride ? p.border : p.accentBorder), padding: 14, marginBottom: 10 }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
         <View style={{ paddingHorizontal: 10, paddingVertical: 6, borderRadius: 9, backgroundColor: p.fg }}>
           <Text style={{ color: p.bg, fontSize: 14, fontWeight: '600', letterSpacing: 0.3 }}>{r.baseCurrency}/{r.quoteCurrency}</Text>
@@ -291,7 +287,7 @@ function RateCard({ r, p, onEdit, onRefresh, onClear }: { r: Rate; p: any; onEdi
         </View>
         <View style={{
           paddingHorizontal: 7, paddingVertical: 3, borderRadius: 6,
-          backgroundColor: activeOverride ? 'rgba(245,158,11,0.15)' : 'rgba(99,161,219,0.15)',
+          backgroundColor: activeOverride ? 'rgba(245,158,11,0.15)' : p.accentSoft,
         }}>
           <Text style={{ color: activeOverride ? '#f59e0b' : p.accent, fontSize: 10, fontWeight: '700', letterSpacing: 0.4 }}>
             {liveLabel}
@@ -380,12 +376,7 @@ function RateForm({ mode, initial, onClose, onSaved, p }: { mode: 'create' | 'ed
   });
 
   return (
-    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' }}>
-      <View style={{ backgroundColor: p.bg, borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 20, paddingBottom: 36 }}>
-        <View style={{ alignSelf: 'center', width: 36, height: 4, borderRadius: 2, backgroundColor: p.border, marginBottom: 14 }} />
-        <Text style={{ color: p.fg, fontSize: 18, fontWeight: '600', marginBottom: 16 }}>
-          {mode === 'create' ? 'Create Pair' : `Edit ${base}/${quote}`}
-        </Text>
+    <BottomSheet visible onClose={onClose} title={mode === 'create' ? 'Create Pair' : `Edit ${base}/${quote}`}>
 
         {mode === 'create' && (
           <View style={{ flexDirection: 'row', gap: 10, marginBottom: 12 }}>
@@ -439,7 +430,6 @@ function RateForm({ mode, initial, onClose, onSaved, p }: { mode: 'create' | 'ed
             <Text style={{ color: p.ctaFg, fontWeight: '600' }}>{mut.isPending ? 'Saving…' : 'Save'}</Text>
           </Pressable>
         </View>
-      </View>
-    </KeyboardAvoidingView>
+    </BottomSheet>
   );
 }

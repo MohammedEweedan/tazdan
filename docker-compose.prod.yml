@@ -32,8 +32,12 @@ services:
       REDIS_URL: redis://:${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env}@redis:6379
       CLUSTER_WORKERS: ${CLUSTER_WORKERS:-1}
       CLIENT_URL: ${CLIENT_URL:-https://promrkts.com,https://www.promrkts.com}
+    # Loopback only: host nginx proxies api.promrkts.com → 127.0.0.1:5000.
+    # Publishing on 0.0.0.0 would let clients skip nginx (TLS, rate limits)
+    # and spoof X-Forwarded-For past the IP limits and admin allowlist —
+    # Docker-published ports bypass UFW, so the firewall would not stop it.
     ports:
-      - '5000:5000'
+      - '127.0.0.1:5000:5000'
     volumes:
       - uploads:/app/uploads
     networks:
@@ -51,10 +55,13 @@ services:
     env_file: .env
     volumes:
       - dbbackups:/backups
+      - uploads:/uploads:ro
       - ./scripts/db-backup.sh:/backup.sh:ro
     # Sleep-loop cron: runs once on start (so every deploy proves the backup
-    # path still works), then every 24h.
-    entrypoint: ["sh", "-c", "while true; do sh /backup.sh || echo '[backup] FAILED'; sleep 86400; done"]
+    # path still works), then every 24h. The aws CLI is installed at start —
+    # the postgres image doesn't ship it, and without it offsite copies fail.
+    # For DO Spaces also set AWS_ENDPOINT_URL (e.g. https://fra1.digitaloceanspaces.com).
+    entrypoint: ["sh", "-c", "apk add --no-cache aws-cli >/dev/null 2>&1 || echo '[backup] could not install aws-cli'; while true; do sh /backup.sh || echo '[backup] FAILED'; sleep 86400; done"]
     networks:
       - app
 

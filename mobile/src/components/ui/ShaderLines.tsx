@@ -1,5 +1,6 @@
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { Animated, Easing, LayoutChangeEvent, StyleSheet, ViewStyle } from 'react-native';
+import { useThemedPalette } from '@/store/themeStore';
 import { GLView } from 'expo-gl';
 
 const VERT = `
@@ -15,6 +16,8 @@ const FRAG = `
   uniform vec2 resolution;
   uniform float time;
   uniform float themeMode;
+  uniform vec3 themeAccent;
+  uniform vec3 themeSurface;
 
   float random(in float x) {
     return fract(sin(x) * 1e4);
@@ -47,37 +50,8 @@ const FRAG = `
     vec2 screenUV = gl_FragCoord.xy / resolution.xy;
     float grad = (screenUV.x + screenUV.y) * 0.5;
 
-    vec3 darkBaseA = vec3(0.043, 0.071, 0.125);
-    vec3 darkBaseB = vec3(0.059, 0.110, 0.180);
-    vec3 darkBaseC = vec3(0.067, 0.122, 0.208);
-
-    vec3 darkBlueA = vec3(0.106, 0.208, 0.357);
-    vec3 darkBlueB = vec3(0.392, 0.714, 0.976);
-    vec3 darkBlueC = vec3(0.231, 0.475, 0.690);
-
-    // Light mode: BreathingGradient palette — light-blue base fill (#e8f2fb →
-    // #cce1f5) with medium-blue lines (#4a8fd0 / #63a1db / #3b79b0) woven in.
-    vec3 lightBaseA = vec3(0.910, 0.949, 0.984);
-    vec3 lightBaseB = vec3(0.855, 0.918, 0.973);
-    vec3 lightBaseC = vec3(0.800, 0.882, 0.961);
-
-    vec3 lightBlueA = vec3(0.290, 0.560, 0.820);
-    vec3 lightBlueB = vec3(0.388, 0.631, 0.859);
-    vec3 lightBlueC = vec3(0.231, 0.475, 0.690);
-
-    vec3 baseA = mix(darkBaseA, lightBaseA, themeMode);
-    vec3 baseB = mix(darkBaseB, lightBaseB, themeMode);
-    vec3 baseC = mix(darkBaseC, lightBaseC, themeMode);
-
-    vec3 blueA = mix(darkBlueA, lightBlueA, themeMode);
-    vec3 blueB = mix(darkBlueB, lightBlueB, themeMode);
-    vec3 blueC = mix(darkBlueC, lightBlueC, themeMode);
-
-    vec3 base = mix(baseA, baseB, smoothstep(0.0, 0.55, grad));
-    base = mix(base, baseC, smoothstep(0.45, 1.0, grad));
-
-    vec3 accent = mix(blueA, blueB, smoothstep(0.0, 0.55, grad));
-    accent = mix(accent, blueC, smoothstep(0.45, 1.0, grad));
+    vec3 base = mix(themeSurface, themeAccent, mix(0.1, 0.2, grad));
+    vec3 accent = mix(themeAccent, vec3(1.0), 0.2 * sin(grad * 3.14));
 
     float mask = clamp((raw.r + raw.g + raw.b) * 0.18, 0.0, 1.0);
     vec3 color = mix(base, accent, mask);
@@ -118,6 +92,9 @@ export const ShaderLines = memo(function ShaderLines({
   dimTo?: number;
   mode?: 'dark' | 'light';
 }) {
+  const p = useThemedPalette();
+  const paletteRef = useRef(p);
+  paletteRef.current = p;
   const rafRef = useRef<number | null>(null);
   const mountedRef = useRef(true);
   const opacity = useRef(new Animated.Value(0)).current;
@@ -211,6 +188,9 @@ export const ShaderLines = memo(function ShaderLines({
     const themeModeLoc = gl.getUniformLocation(program, 'themeMode');
     gl.uniform1f(themeModeLoc, modeRef.current === 'light' ? 1.0 : 0.0);
 
+    const accentLoc = gl.getUniformLocation(program, 'themeAccent');
+    const surfaceLoc = gl.getUniformLocation(program, 'themeSurface');
+    const rgb = (color: string) => [1, 3, 5].map(i => parseInt(color.slice(i, i + 2), 16) / 255);
     let time = 1.0;
 
     const render = () => {
@@ -220,6 +200,11 @@ export const ShaderLines = memo(function ShaderLines({
 
       time += 0.05;
 
+      const [r, g, b] = rgb(paletteRef.current.accent);
+      const [br, bg, bb] = rgb(paletteRef.current.bg);
+      gl.uniform3f(accentLoc, r, g, b);
+      gl.uniform3f(surfaceLoc, br, bg, bb);
+      gl.uniform1f(themeModeLoc, modeRef.current === 'light' ? 1 : 0);
       gl.clear(gl.COLOR_BUFFER_BIT);
       gl.uniform1f(timeLoc, time);
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);

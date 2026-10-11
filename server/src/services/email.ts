@@ -332,14 +332,8 @@ export async function sendEmail({
 
   const from = fromHeader(sender);
 
-  // Prefer Resend (HTTP) when configured; the logos are embedded as inline
-  // data URIs in the HTML, so no attachments are needed on either transport.
-  if (useResend) {
-    await sendViaResend({ from, to, subject, html });
-    return;
-  }
-
-  if (!transporter) {
+  if (!useResend && !transporter) {
+    if (devOutboxEnabled()) { devOutbox(to, subject, html, 'no email transport configured'); return; }
     console.warn(
       '[email] No transport configured — skipping send:',
       subject, 'to', to,
@@ -348,7 +342,40 @@ export async function sendEmail({
     return;
   }
 
-  await transporter.sendMail({ from, to, subject, html });
+  try {
+    // Prefer Resend (HTTP) when configured; the logos are embedded as inline
+    // data URIs in the HTML, so no attachments are needed on either transport.
+    if (useResend) await sendViaResend({ from, to, subject, html });
+    else await transporter!.sendMail({ from, to, subject, html });
+  } catch (err) {
+    if (!devOutboxEnabled()) throw err;
+    devOutbox(to, subject, html, `send failed (${emailErrorSummary(err)})`);
+  }
+}
+
+/**
+ * Development only: when a message can't be delivered (expired SMTP password,
+ * no transport), print it to the server console instead of failing the
+ * request, so flows that email a code still work locally. Never active in
+ * production — there a failed send must surface as an error. Opt out locally
+ * with EMAIL_DEV_OUTBOX=0.
+ */
+function devOutboxEnabled(): boolean {
+  return process.env.NODE_ENV !== 'production' && process.env.EMAIL_DEV_OUTBOX !== '0';
+}
+
+function devOutbox(to: string, subject: string, html: string, reason: string): void {
+  const text = html
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 400);
+  console.warn(
+    `\n[email:dev-outbox] ${reason} — not delivered; shown here instead\n` +
+    `  to:      ${to}\n  subject: ${subject}\n  body:    ${text}\n`,
+  );
 }
 
 /* ─────────────────────────────────────────────────────────────

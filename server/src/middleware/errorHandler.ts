@@ -4,14 +4,55 @@ import { Prisma } from '@prisma/client';
 import * as Sentry from '@sentry/node';
 import { logger } from '../utils/logger';
 
+/**
+ * Stable, client-facing error categories. Clients can branch on `code`
+ * without parsing messages; `error` stays the human-readable text.
+ */
+export type ErrorCode =
+  | 'VALIDATION'
+  | 'AUTHENTICATION'
+  | 'STEP_UP_REQUIRED'
+  | 'AUTHORIZATION'
+  | 'NOT_FOUND'
+  | 'INSUFFICIENT_FUNDS'
+  | 'LIMIT_EXCEEDED'
+  | 'COMPLIANCE_HOLD'
+  | 'FRAUD_HOLD'
+  | 'FEATURE_DISABLED'
+  | 'PROVIDER_UNAVAILABLE'
+  | 'PROVIDER_REJECTED'
+  | 'PROVIDER_NOT_ACTIVATED'
+  | 'SETTLEMENT_PENDING'
+  | 'DUPLICATE_REQUEST'
+  | 'TRANSACTION_CONFLICT'
+  | 'RATE_LIMITED'
+  | 'ACCOUNT_CLOSED'
+  | 'CLOSURE_BLOCKED'
+  | 'SYSTEM_FAILURE';
+
+function defaultCode(statusCode: number): ErrorCode {
+  if (statusCode === 400) return 'VALIDATION';
+  if (statusCode === 401) return 'AUTHENTICATION';
+  if (statusCode === 403) return 'AUTHORIZATION';
+  if (statusCode === 404) return 'NOT_FOUND';
+  if (statusCode === 409) return 'TRANSACTION_CONFLICT';
+  if (statusCode === 429) return 'RATE_LIMITED';
+  if (statusCode === 503) return 'FEATURE_DISABLED';
+  return 'SYSTEM_FAILURE';
+}
+
 export class AppError extends Error {
   statusCode: number;
   isOperational: boolean;
+  code: ErrorCode;
+  details?: Record<string, unknown>;
 
-  constructor(message: string, statusCode: number) {
+  constructor(message: string, statusCode: number, code?: ErrorCode, details?: Record<string, unknown>) {
     super(message);
     this.statusCode = statusCode;
     this.isOperational = true;
+    this.code = code ?? defaultCode(statusCode);
+    this.details = details;
     Error.captureStackTrace(this, this.constructor);
   }
 }
@@ -61,12 +102,17 @@ export function errorHandler(
       logger.error(`[${ref}] ${req.method} ${req.originalUrl ?? req.path} → ${err.statusCode} ${err.message}`,
         buildLogMeta(err, req, err.statusCode, ref));
       Sentry.captureException(err);
-      return res.status(err.statusCode).json({ error: err.message, ref });
+      return res.status(err.statusCode).json({ error: err.message, code: err.code, ref });
     }
     // 4xx operational errors are expected (bad input, auth, etc.) — log at
     // warn so they're visible in logs without polluting error metrics.
     logger.warn(`${req.method} ${req.originalUrl ?? req.path} → ${err.statusCode} ${err.message}`);
-    return res.status(err.statusCode).json({ error: err.message });
+    return res.status(err.statusCode).json({
+      error: err.message,
+      code: err.code,
+      ...(err.details ? { details: err.details } : {}),
+      ...(err.code === 'STEP_UP_REQUIRED' ? { requiresStepUp: true } : {}),
+    });
   }
 
   // Zod validation — return a structured message but no Zod internals.
@@ -76,7 +122,7 @@ export function errorHandler(
       message: i.message,
     }));
     logger.warn(`${req.method} ${req.originalUrl ?? req.path} → 400 validation`, { issues });
-    return res.status(400).json({ error: 'Validation failed', issues });
+    return res.status(400).json({ error: 'Validation failed', code: 'VALIDATION', issues });
   }
 
   // Prisma errors — never leak schema / query details to the client, but log
@@ -89,7 +135,7 @@ export function errorHandler(
     logger.error(`[${ref}] ${req.method} ${req.originalUrl ?? req.path} → DB error ${err.name}`,
       buildLogMeta(err, req, 400, ref));
     Sentry.captureException(err);
-    return res.status(400).json({ error: 'Bad request', ref });
+    return res.status(400).json({ error: 'Bad request', code: 'VALIDATION', ref });
   }
 
   // Anything else is an unexpected internal error. Log the real name,
@@ -99,5 +145,5 @@ export function errorHandler(
   logger.error(`[${ref}] ${req.method} ${req.originalUrl ?? req.path} → 500 ${err.name}: ${err.message}`,
     buildLogMeta(err, req, 500, ref));
   Sentry.captureException(err);
-  return res.status(500).json({ error: 'Internal server error', ref });
+  return res.status(500).json({ error: 'Internal server error', code: 'SYSTEM_FAILURE', ref });
 }

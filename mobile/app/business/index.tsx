@@ -13,35 +13,32 @@
 
 import { useEffect, useState } from 'react';
 import {
-  ActivityIndicator, Pressable, RefreshControl, ScrollView, View,
+  Alert,
+  Linking, ActivityIndicator, Pressable, RefreshControl, ScrollView, View,
 } from 'react-native';
 import { Text } from '@/components/ui/Text';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 
-import { brand, useTheme, useThemedPalette } from '@/store/themeStore';
+import { useTheme, useThemedPalette } from '@/store/themeStore';
 import { useHaptics } from '@/hooks';
 import { businessService } from '@/services/business';
 import type { BusinessStats, BusinessPayout, BusinessProfile } from '@/types/business';
-import { TopGradient } from '@/components/ui/ScreenShell';
+import { ScreenShell, CTAButton } from '@/components/ui/ScreenShell';
 
-const ACCENT = '#737373';
 
 function StatCard({ label, value, sub, color }: { label: string; value: string; sub?: string; color?: string }) {
   const p = useThemedPalette();
   return (
     <View style={{
-      flex: 1, padding: 14, borderRadius: 18,
-      backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border,
+      flex: 1, paddingVertical: 14,
+      backgroundColor: 'transparent',
       minWidth: 0,
     }}>
-      <Text style={{ color: p.fgFaint, fontSize: 10, fontWeight: '700', letterSpacing: 0.7 }}>
+      <Text style={{ color: p.fgFaint, fontSize: 10, fontWeight: '600', letterSpacing: 0.7 }}>
         {label.toUpperCase()}
       </Text>
-      <Text style={{ color: color ?? p.fg, fontSize: 24, fontWeight: '800', letterSpacing: -0.7, marginTop: 4, fontVariant: ['tabular-nums'] }}>
+      <Text style={{ color: color ?? p.fg, fontSize: 22, fontWeight: '600', letterSpacing: -0.7, marginTop: 4, fontVariant: ['tabular-nums'] }}>
         {value}
       </Text>
       {sub && <Text style={{ color: p.fgMuted, fontSize: 10.5, fontWeight: '600', marginTop: 2 }}>{sub}</Text>}
@@ -49,7 +46,7 @@ function StatCard({ label, value, sub, color }: { label: string; value: string; 
   );
 }
 
-function QuickAction({ icon, label, onPress, accent = ACCENT }: {
+function QuickAction({ icon, label, onPress, accent }: {
   icon: any; label: string; onPress: () => void; accent?: string;
 }) {
   const p = useThemedPalette();
@@ -59,21 +56,18 @@ function QuickAction({ icon, label, onPress, accent = ACCENT }: {
       onPress={() => { h.selection(); onPress(); }}
       style={({ pressed }) => ({
         flex: 1, alignItems: 'center', gap: 8,
-        paddingVertical: 14, paddingHorizontal: 8,
-        borderRadius: 16, backgroundColor: p.bgElev,
-        borderWidth: 1, borderColor: p.border,
+        paddingVertical: 12, paddingHorizontal: 2,
         opacity: pressed ? 0.75 : 1,
       })}
     >
       <View style={{
-        width: 42, height: 42, borderRadius: 21,
-        backgroundColor: `${accent}18`,
-        borderWidth: 1, borderColor: `${accent}40`,
+        width: 54, height: 54, borderRadius: 27,
+        backgroundColor: p.bgElev,
         alignItems: 'center', justifyContent: 'center',
       }}>
-        <Ionicons name={icon} size={20} color={accent} />
+        <Ionicons name={icon} size={22} color={p.fg} />
       </View>
-      <Text style={{ color: p.fg, fontSize: 11.5, fontWeight: '700', textAlign: 'center' }} numberOfLines={1}>
+      <Text style={{ color: p.fg, fontSize: 12, fontWeight: '500', textAlign: 'center' }} numberOfLines={1}>
         {label}
       </Text>
     </Pressable>
@@ -86,16 +80,15 @@ function PayoutRow({ payout, palette: p }: { payout: BusinessPayout; palette: Re
     status === 'COMPLETED'  ? p.greenFg :
     status === 'FAILED'     ? p.redFg   :
     status === 'CANCELLED'  ? p.fgFaint :
-    status === 'PROCESSING' ? '#63a1db' : p.amberFg;
+    status === 'PROCESSING' ? p.accentText : p.amberFg;
 
   return (
     <View style={{
       flexDirection: 'row', alignItems: 'center', gap: 12,
-      paddingVertical: 12, paddingHorizontal: 16,
-      borderBottomWidth: 1, borderBottomColor: p.border,
+      paddingVertical: 16, paddingHorizontal: 0,
     }}>
       <View style={{
-        width: 36, height: 36, borderRadius: 18,
+        width: 36, height: 36, borderRadius: 24,
         backgroundColor: p.bgRaised,
         alignItems: 'center', justifyContent: 'center', flexShrink: 0,
       }}>
@@ -114,10 +107,10 @@ function PayoutRow({ payout, palette: p }: { payout: BusinessPayout; palette: Re
         </Text>
       </View>
       <View style={{ alignItems: 'flex-end' }}>
-        <Text style={{ color: p.fg, fontSize: 14, fontWeight: '700', fontVariant: ['tabular-nums'] }}>
+        <Text style={{ color: p.fg, fontSize: 14, fontWeight: '600', fontVariant: ['tabular-nums'] }}>
           {Number(payout.amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
         </Text>
-        <Text style={{ color: statusColor, fontSize: 10.5, fontWeight: '700', marginTop: 1 }}>
+        <Text style={{ color: statusColor, fontSize: 10.5, fontWeight: '600', marginTop: 1 }}>
           {status}
         </Text>
       </View>
@@ -136,6 +129,10 @@ export default function BusinessDashboard() {
   const [profile,  setProfile]  = useState<BusinessProfile | null>(null);
   const [loading,  setLoading]  = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  // Not on a business team: show invitations instead of the dashboard.
+  const [notMember, setNotMember] = useState(false);
+  const [invites,  setInvites]  = useState<Awaited<ReturnType<typeof businessService.myInvitations>>>([]);
+  const [submitting, setSubmitting] = useState(false);
 
   const load = async () => {
     try {
@@ -146,7 +143,11 @@ export default function BusinessDashboard() {
       ]);
       if (s.status === 'fulfilled')     setStats(s.value);
       if (pRes.status === 'fulfilled')  setPayouts(pRes.value.payouts);
-      if (pr.status === 'fulfilled')    setProfile(pr.value);
+      if (pr.status === 'fulfilled')    { setProfile(pr.value); setNotMember(false); }
+      else if ((pr.reason as any)?.response?.status === 403) {
+        setNotMember(true);
+        setInvites(await businessService.myInvitations().catch(() => []));
+      }
     } catch { /* handled per-call */ }
     finally { setLoading(false); setRefreshing(false); }
   };
@@ -156,35 +157,8 @@ export default function BusinessDashboard() {
   const onRefresh = () => { setRefreshing(true); load(); };
 
   return (
-    <View style={{ flex: 1, backgroundColor: p.bg }}>
-      <StatusBar style={mode === 'dark' ? 'light' : 'dark'} />
-      <TopGradient />
-      <SafeAreaView style={{ flex: 1 }} edges={['top']}>
-        {/* Header */}
-        <View style={{
-          flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-          paddingHorizontal: 20, paddingTop: 16, paddingBottom: 12,
-        }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-            <Pressable onPress={() => router.back()} hitSlop={8}
-              style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: p.bgElev,
-                borderWidth: 1, borderColor: p.border, alignItems: 'center', justifyContent: 'center' }}>
-              <Ionicons name="chevron-back" size={20} color={p.fg} />
-            </Pressable>
-            <View>
-              <Text style={{ color: p.fg, fontSize: 18, fontWeight: '800', letterSpacing: -0.5 }}>
-                tazdan Business
-              </Text>
-              {profile && (
-                <Text style={{ color: p.fgMuted, fontSize: 11.5, fontWeight: '600' }}>
-                  {profile.legalName}
-                </Text>
-              )}
-            </View>
-          </View>
-
-          {/* KYB badge */}
-          {profile && (
+    <ScreenShell title="Business" right={
+          profile && (
             <View style={{
               paddingHorizontal: 10, paddingVertical: 5, borderRadius: 10,
               backgroundColor: profile.kybStatus === 'APPROVED'
@@ -196,22 +170,43 @@ export default function BusinessDashboard() {
               <Text style={{
                 color: profile.kybStatus === 'APPROVED' ? p.greenFg
                   : profile.kybStatus === 'PENDING' ? p.amberFg : p.redFg,
-                fontSize: 10.5, fontWeight: '800', letterSpacing: 0.4,
+                fontSize: 10.5, fontWeight: '600', letterSpacing: 0.4,
               }}>
                 KYB {profile.kybStatus}
               </Text>
             </View>
-          )}
-        </View>
+          )
+        }  scroll={false} contentStyle={{ paddingHorizontal: 0 }}>
 
         <ScrollView
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 64 }}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={ACCENT} />}
+          contentContainerStyle={{ paddingHorizontal: 24, paddingBottom: 64 }}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={p.accentText} />}
         >
           {loading ? (
             <View style={{ alignItems: 'center', paddingTop: 80 }}>
-              <ActivityIndicator color={ACCENT} size="large" />
+              <ActivityIndicator color={p.accentText} size="large" />
+            </View>
+          ) : notMember ? (
+            <View style={{ paddingTop: 24, gap: 10 }}>
+              <Text style={{ color: p.fg, fontSize: 17, fontWeight: '600' }}>{invites.length ? 'Team invitations' : 'No business account'}</Text>
+              <Text style={{ color: p.fgMuted, fontSize: 13, lineHeight: 19 }}>
+                {invites.length ? 'Accept an invitation to work in that business’s account.' : 'This account isn’t part of a business yet. Ask the business owner to invite your email address.'}
+              </Text>
+              {invites.map((inv) => (
+                <View key={inv.id} style={{ backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border, borderRadius: 14, padding: 14 }}>
+                  <Text style={{ color: p.fg, fontSize: 15, fontWeight: '600' }}>{inv.business.tradingName ?? inv.business.companyName}</Text>
+                  <Text style={{ color: p.fgMuted, fontSize: 12, marginTop: 2 }}>Role: {inv.role.toLowerCase()} · {inv.business.country}</Text>
+                  <Pressable onPress={async () => {
+                      h.selection();
+                      try { await businessService.acceptInvitation(inv.id); h.success(); setLoading(true); await load(); }
+                      catch (e: any) { h.error(); Alert.alert('Could not accept', e?.response?.data?.error ?? 'Please try again.'); }
+                    }}
+                    style={({ pressed }) => ({ marginTop: 12, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: p.ctaBg, opacity: pressed ? 0.7 : 1 })}>
+                    <Text style={{ color: p.ctaFg, fontSize: 13, fontWeight: '600' }}>Accept invitation</Text>
+                  </Pressable>
+                </View>
+              ))}
             </View>
           ) : (
             <>
@@ -226,46 +221,45 @@ export default function BusinessDashboard() {
                   <Ionicons name="information-circle-outline" size={18} color={p.amberFg} />
                   <Text style={{ flex: 1, color: p.amberFg, fontSize: 12.5, fontWeight: '600', lineHeight: 17 }}>
                     {profile.kybStatus === 'PENDING'
-                      ? 'Your business verification is under review. Payouts are limited until approved.'
+                      ? 'Your business verification is under review. Payouts become available once it is approved.'
                       : profile.kybStatus === 'NOT_SUBMITTED'
-                        ? 'Submit your business documents to unlock full payout limits.'
-                        : 'Business verification was rejected. Contact support to resolve.'}
+                        ? 'Payouts become available once your business is verified. Submit it for review and our team will ask for the company documents.'
+                        : `Business verification was not approved${profile.kybNotes ? `: ${profile.kybNotes}` : '.'} You can resubmit once it is resolved.`}
                   </Text>
                 </View>
               )}
+              {profile && profile.role === 'OWNER' && (profile.kybStatus === 'NOT_SUBMITTED' || profile.kybStatus === 'REJECTED') && (
+                <Pressable disabled={submitting}
+                  onPress={async () => {
+                    setSubmitting(true); h.selection();
+                    try { await businessService.submitKyb(); h.success(); await load(); }
+                    catch (e: any) { h.error(); Alert.alert('Could not submit', e?.response?.data?.error ?? 'Please try again.'); }
+                    finally { setSubmitting(false); }
+                  }}
+                  style={({ pressed }) => ({ marginTop: 8, height: 44, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: p.ctaBg, opacity: pressed || submitting ? 0.7 : 1 })}>
+                  <Text style={{ color: p.ctaFg, fontSize: 14, fontWeight: '600' }}>{submitting ? 'Submitting…' : 'Submit for verification'}</Text>
+                </Pressable>
+              )}
 
-              {/* Stats grid */}
-              <View style={{ gap: 10, marginTop: 16 }}>
-                <View style={{ flexDirection: 'row', gap: 10 }}>
-                  <StatCard
-                    label="Payouts today"
-                    value={String(stats?.payoutsToday ?? '—')}
-                    sub={stats ? `${stats.payoutsThisMonth} this month` : undefined}
-                  />
-                  <StatCard
-                    label="Volume (USD)"
-                    value={stats ? `$${Number(stats.volumeUsdToday).toLocaleString('en-US', { maximumFractionDigits: 0 })}` : '—'}
-                    sub={stats ? `$${Number(stats.volumeUsdMonth).toLocaleString('en-US', { maximumFractionDigits: 0 })} / mo` : undefined}
-                    color={ACCENT}
-                  />
-                </View>
-                <View style={{ flexDirection: 'row', gap: 10 }}>
-                  <StatCard
-                    label="API calls today"
-                    value={String(stats?.apiCallsToday ?? '—')}
-                    sub={stats ? `${stats.activeKeys} active key${stats.activeKeys === 1 ? '' : 's'}` : undefined}
-                  />
-                  <StatCard
-                    label="Success rate"
-                    value={stats ? `${(stats.successRate * 100).toFixed(1)}%` : '—'}
-                    color={stats && stats.successRate >= 0.95 ? p.greenFg : stats && stats.successRate >= 0.80 ? p.amberFg : p.redFg}
-                    sub={stats ? `${stats.teamSize} team member${stats.teamSize === 1 ? '' : 's'}` : undefined}
-                  />
+              <View style={{ paddingTop: 24, paddingBottom: 8 }}>
+                <Text style={{ color: p.fgMuted, fontSize: 14 }}>{profile?.legalName ?? 'Business account'}</Text>
+                <Text style={{ color: p.fgFaint, fontSize: 12, marginTop: 22 }}>Paid today · USD</Text>
+                <Text style={{ color: p.fg, fontSize: 52, fontWeight: '500', letterSpacing: -2, marginTop: 6, fontVariant: ['tabular-nums'] }}>
+                  {stats ? `$${Number(stats.volumeUsdToday).toLocaleString('en-US', { maximumFractionDigits: 2 })}` : '—'}
+                </Text>
+                <Text style={{ color: p.fgMuted, fontSize: 13, marginTop: 6 }}>
+                  {stats ? `${stats.payoutsToday} payouts today · $${Number(stats.volumeUsdMonth).toLocaleString('en-US', { maximumFractionDigits: 0 })} this month` : '—'}
+                </Text>
+                <View style={{ flexDirection: 'row', gap: 16, marginTop: 18 }}>
+                  <StatCard label="Success rate" value={stats ? `${(stats.successRate * 100).toFixed(1)}%` : '—'}
+                    color={stats && stats.successRate >= .95 ? p.greenFg : p.fg} />
+                  <StatCard label="API calls today" value={stats ? stats.apiCallsToday.toLocaleString('en-US') : '—'} />
+                  <StatCard label="Team" value={stats ? String(stats.teamSize) : '—'} />
                 </View>
               </View>
 
               {/* Quick actions */}
-              <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '700', letterSpacing: 0.7, marginTop: 28, marginBottom: 10 }}>
+              <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '600', letterSpacing: 0.7, marginTop: 28, marginBottom: 10 }}>
                 QUICK ACTIONS
               </Text>
               <View style={{ flexDirection: 'row', gap: 10 }}>
@@ -276,12 +270,12 @@ export default function BusinessDashboard() {
               </View>
 
               {/* Recent payouts */}
-              <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '700', letterSpacing: 0.7, marginTop: 28, marginBottom: 10 }}>
+              <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '600', letterSpacing: 0.7, marginTop: 28, marginBottom: 10 }}>
                 RECENT PAYOUTS
               </Text>
               <View style={{
-                borderRadius: 18, overflow: 'hidden',
-                borderWidth: 1, borderColor: p.border, backgroundColor: p.bgElev,
+                borderRadius: 24, overflow: 'hidden',
+                backgroundColor: 'transparent',
               }}>
                 {payouts.length > 0 ? (
                   payouts.map((payout) => (
@@ -306,33 +300,33 @@ export default function BusinessDashboard() {
                       backgroundColor: pressed ? p.bgRaised : 'transparent',
                     })}
                   >
-                    <Text style={{ color: ACCENT, fontSize: 13, fontWeight: '700' }}>View all payouts →</Text>
+                    <Text style={{ color: p.accentText, fontSize: 13, fontWeight: '600' }}>View all payouts →</Text>
                   </Pressable>
                 )}
               </View>
 
               {/* API Docs link */}
               <Pressable
-                onPress={() => { h.selection(); /* Linking.openURL('https://docs.tazdan.com') */ }}
+                onPress={() => { h.selection(); void Linking.openURL('https://tazdan.com/business'); }}
                 style={({ pressed }) => ({
                   marginTop: 20, padding: 16, borderRadius: 16,
-                  borderWidth: 1, borderColor: `${ACCENT}44`,
-                  backgroundColor: `${ACCENT}0A`,
+                  borderWidth: 1, borderColor: `${p.accent}44`,
+                  backgroundColor: `${p.accent}0A`,
                   flexDirection: 'row', alignItems: 'center', gap: 12,
                   opacity: pressed ? 0.75 : 1,
                 })}
               >
-                <Ionicons name="code-slash-outline" size={22} color={ACCENT} />
+                <Ionicons name="code-slash-outline" size={22} color={p.accentText} />
                 <View style={{ flex: 1 }}>
-                  <Text style={{ color: p.fg, fontSize: 14, fontWeight: '700' }}>API Documentation</Text>
-                  <Text style={{ color: p.fgMuted, fontSize: 12, marginTop: 1 }}>docs.tazdan.com</Text>
+                  <Text style={{ color: p.fg, fontSize: 14, fontWeight: '600' }}>API Documentation</Text>
+                  <Text style={{ color: p.fgMuted, fontSize: 12, marginTop: 1 }}>tazdan.com/business</Text>
                 </View>
-                <Ionicons name="arrow-forward" size={16} color={ACCENT} />
+                <Ionicons name="arrow-forward" size={16} color={p.accentText} />
               </Pressable>
             </>
           )}
         </ScrollView>
-      </SafeAreaView>
-    </View>
+
+    </ScreenShell>
   );
 }

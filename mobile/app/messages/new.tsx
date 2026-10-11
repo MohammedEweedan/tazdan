@@ -1,3 +1,4 @@
+import { StackHeader } from '@/components/ui/ScreenHeader';
 /**
  * "Start a new chat" picker.
  *
@@ -33,7 +34,6 @@ interface SearchHit {
   kycTier?: string;
 }
 
-const BRAND_BLUE = '#737373'; // mono accent neutral
 
 export default function NewChat() {
   const router = useRouter();
@@ -77,27 +77,7 @@ export default function NewChat() {
       <StatusBar style={themeMode === 'light' ? 'dark' : 'light'} />
       <SafeAreaView style={{ flex: 1 }} edges={['top']}>
         {/* Header */}
-        <View style={{
-          flexDirection: 'row', alignItems: 'center',
-          paddingHorizontal: 16, paddingTop: 6, paddingBottom: 10,
-          gap: 10,
-        }}>
-          <Pressable
-            onPress={() => { h.selection(); router.back(); }}
-            hitSlop={8}
-            style={{
-              width: 36, height: 36, borderRadius: 18,
-              backgroundColor: p.pillBg,
-              borderWidth: 1, borderColor: p.border,
-              alignItems: 'center', justifyContent: 'center',
-            }}
-          >
-            <Ionicons name="chevron-back" size={18} color={p.fg} />
-          </Pressable>
-          <Text style={{ color: p.fg, fontSize: 18, fontWeight: '600', letterSpacing: -0.3 }}>
-            New chat
-          </Text>
-        </View>
+        <StackHeader title="New chat" />
 
         {/* Search box */}
         <View style={{
@@ -172,7 +152,7 @@ export default function NewChat() {
                   backgroundColor: '#7c3aed',
                   alignItems: 'center', justifyContent: 'center',
                 }}>
-                  <Text style={{ color: '#fff', fontSize: 16, fontWeight: '600' }}>
+                  <Text style={{ color: p.accentFg, fontSize: 16, fontWeight: '600' }}>
                     {(u.firstName[0] ?? u.username[0] ?? '?').toUpperCase()}
                   </Text>
                 </View>
@@ -218,10 +198,10 @@ function SupportTile({ palette: p, onPress }: { palette: Palette; onPress: () =>
     >
       <View style={{
         width: 44, height: 44, borderRadius: 22,
-        backgroundColor: BRAND_BLUE,
+        backgroundColor: p.accent,
         alignItems: 'center', justifyContent: 'center',
       }}>
-        <Ionicons name="headset" size={20} color="#fff" />
+        <Ionicons name="headset" size={20} color={p.accentFg} />
       </View>
       <View style={{ flex: 1 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
@@ -230,9 +210,9 @@ function SupportTile({ palette: p, onPress }: { palette: Palette; onPress: () =>
           </Text>
           <View style={{
             paddingHorizontal: 5, paddingVertical: 1, borderRadius: 5,
-            backgroundColor: BRAND_BLUE,
+            backgroundColor: p.accent,
           }}>
-            <Text style={{ color: '#fff', fontSize: 9, fontWeight: '600' }}>STAFF</Text>
+            <Text style={{ color: p.accentFg, fontSize: 9, fontWeight: '600' }}>STAFF</Text>
           </View>
         </View>
         <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '500', marginTop: 2 }}>

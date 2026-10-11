@@ -3,7 +3,8 @@
  *   • System: database, redis, email transport (from /health diagnostics).
  *   • Money integrity: trading halt, per-currency fund drift, ledger
  *     conservation + cache drift (from /admin/fund-integrity).
- *   • Actions: clear a trading halt, reconcile a drifted currency.
+ *   • Actions: clear a trading halt. Unbacked history is acknowledged in the
+ *     Control Cockpit (web) → Reconciliation, with a written note.
  *
  * Uses the shared AdminScreen chrome introduced in the admin redesign.
  */
@@ -32,11 +33,6 @@ export default function AdminDiagnostics() {
     onError: (e: any) => Alert.alert('Failed', e?.response?.data?.error ?? 'Try again'),
   });
 
-  const reconcile = useMutation({
-    mutationFn: (currency: string) => adminService.reconcileFundIntegrity(currency),
-    onSuccess: (r) => { qc.invalidateQueries({ queryKey: ['fund-integrity'] }); Alert.alert('Reconciled', `${r.currency}: ${r.reconciledAmount} (diff after ${r.diffAfter})`); },
-    onError: (e: any) => Alert.alert('Reconcile failed', e?.response?.data?.error ?? 'Try again'),
-  });
   const dailyClose = useMutation({
     mutationFn: adminService.runDailyClose,
     onSuccess: (r) => { readiness.refetch(); Alert.alert('Daily close completed', `${r.closeDate} · ${r.report.overall.toUpperCase()}`); },
@@ -161,7 +157,7 @@ export default function AdminDiagnostics() {
             )}
           </AdminCard>
 
-          {/* Per-currency drift (only the ones that aren't balanced get a reconcile button) */}
+          {/* Per-currency position; exceptions are reviewed in the Control Cockpit */}
           {!!fi.data?.funds?.perCurrency?.length && (
             <>
               <Text style={sectionLabel(p)}>PER-CURRENCY HOLDINGS</Text>
@@ -172,22 +168,14 @@ export default function AdminDiagnostics() {
                       <Text style={{ color: p.fg, fontSize: 14, fontWeight: '700' }}>{c.currency}</Text>
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                         <Ionicons name={c.ok ? 'checkmark-circle' : 'alert-circle'} size={15} color={c.ok ? p.greenFg : p.redFg} />
-                        <Text style={{ color: c.ok ? p.greenFg : p.redFg, fontSize: 12, fontWeight: '700' }}>{c.ok ? 'OK' : `diff ${c.diff}`}</Text>
+                        <Text style={{ color: c.ok ? p.greenFg : p.redFg, fontSize: 12, fontWeight: '700' }}>{c.ok ? 'OK' : Number(c.diff) !== 0 ? `drift ${c.diff}` : Number(c.unbackedSinceBaseline ?? 0) !== 0 ? `unbacked ${c.unbackedSinceBaseline}` : `${c.railExceptions ?? 0} mismatches`}</Text>
                       </View>
                     </View>
                     <Text style={{ color: p.fgFaint, fontSize: 11, marginTop: 2, fontVariant: ['tabular-nums'] }}>
                       held {c.internalHeld} · entered {c.enteredOutside}
                     </Text>
                     {!c.ok && (
-                      <Pressable
-                        onPress={() => Alert.alert(`Reconcile ${c.currency}?`, 'Writes a balancing reconciliation entry.', [
-                          { text: 'Cancel', style: 'cancel' },
-                          { text: 'Reconcile', onPress: () => reconcile.mutate(c.currency) },
-                        ])}
-                        style={{ alignSelf: 'flex-start', marginTop: 8, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10, backgroundColor: p.accentSoft, borderWidth: 1, borderColor: p.accentBorder }}
-                      >
-                        <Text style={{ color: p.accentText, fontSize: 12, fontWeight: '700' }}>{reconcile.isPending ? 'Reconciling…' : `Reconcile ${c.currency}`}</Text>
-                      </Pressable>
+                      <Text style={{ color: p.fgFaint, fontSize: 11, marginTop: 6 }}>Review in the Control Cockpit → Reconciliation → Fund integrity.</Text>
                     )}
                   </View>
                 ))}

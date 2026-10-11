@@ -1,3 +1,4 @@
+import { FiatFlag, hasFiatFlag } from './FiatFlag';
 /**
  * CurrencyBadge — the ONE way to render a currency anywhere in the app.
  *
@@ -56,6 +57,7 @@ export function CurrencyBadge({
   const meta = getCurrencyMeta(code);
   const s = SIZE_MAP[size];
 
+  const fiat = hasFiatFlag(code);
   const glyph = meta?.flagOrIcon ?? meta?.symbol ?? code.slice(0, 2);
   const displayCode = meta?.code ?? code;
   const displayName = meta?.name;
@@ -71,7 +73,7 @@ export function CurrencyBadge({
           gap: s.gap,
         }, style]}
       >
-        <Text style={{ fontSize: s.glyphFont, lineHeight: s.glyphFont + 2 }}>{glyph}</Text>
+        <>{fiat ? <FiatFlag currency={code} size={s.glyphFont + 4} /> : <Text style={{ fontSize: s.glyphFont, lineHeight: s.glyphFont + 2 }}>{glyph}</Text>}</>
         {!glyphOnly && (
           <Text style={[{ color: p.fg, fontSize: s.codeFont, fontWeight: '700', letterSpacing: 0.2 }, codeStyle]}>
             {displayCode}
@@ -86,13 +88,13 @@ export function CurrencyBadge({
       <View style={[{ flexDirection: 'row', alignItems: 'center', gap: s.gap }, style]}>
         <View
           style={{
-            width: s.tile, height: s.tile, borderRadius: s.tile / 4,
+            width: s.tile, height: s.tile, borderRadius: s.tile / 2,
             alignItems: 'center', justifyContent: 'center',
             backgroundColor: p.bgElev,
             borderWidth: 1, borderColor: p.border,
           }}
         >
-          <Text style={{ fontSize: s.glyphFont, lineHeight: s.glyphFont + 2 }}>{glyph}</Text>
+          <>{fiat ? <FiatFlag currency={code} size={s.glyphFont + 4} /> : <Text style={{ fontSize: s.glyphFont, lineHeight: s.glyphFont + 2 }}>{glyph}</Text>}</>
         </View>
         {!glyphOnly && (
           <View style={{ flex: 1 }}>
@@ -113,7 +115,7 @@ export function CurrencyBadge({
   // inline (default)
   return (
     <View style={[{ flexDirection: 'row', alignItems: 'center', gap: s.gap }, style]}>
-      <Text style={{ fontSize: s.glyphFont, lineHeight: s.glyphFont + 2 }}>{glyph}</Text>
+      <>{fiat ? <FiatFlag currency={code} size={s.glyphFont + 4} /> : <Text style={{ fontSize: s.glyphFont, lineHeight: s.glyphFont + 2 }}>{glyph}</Text>}</>
       {!glyphOnly && (
         <Text style={[{ color: p.fg, fontSize: s.codeFont, fontWeight: '700', letterSpacing: 0.2 }, codeStyle]}>
           {showName && displayName ? `${displayCode} · ${displayName}` : displayCode}

@@ -1,145 +1,148 @@
 /**
- * Wallet route integration tests.
- *
- * Requires DATABASE_URL — skipped when absent.
- * Tests GET /api/wallet (balance), and verifies the fee-estimation endpoint.
+ * Wallet, withdrawal and emergency-control integration tests against the
+ * real app and Postgres (RUN_DB_TESTS=1 locally; always in CI).
  */
-
 import request from 'supertest';
+import { Decimal } from '@prisma/client/runtime/library';
 import { app } from '../index';
 import { prisma } from '../utils/prisma';
+import { generateTokens } from '../middleware/auth';
+import { postLedger } from '../services/ledger/ledger.service';
+import { invalidateControlCache } from '../services/platform/controls.service';
+import { importWatchlist } from '../services/compliance/screening.service';
+import { ensureDefaultRules } from '../services/risk/engine';
 
-const DB = process.env.DATABASE_URL;
-const describeOrSkip = DB ? describe : describe.skip;
+jest.mock('../services/wallet/walletDerivation.service', () => ({
+  createUserWallets: jest.fn().mockResolvedValue(undefined),
+}));
+jest.mock('../services/security/stepUp.service', () => ({
+  ...jest.requireActual('../services/security/stepUp.service'),
+  enforceStepUp: jest.fn().mockResolvedValue(undefined),
+  enforceRiskBasedStepUp: jest.fn().mockResolvedValue(undefined),
+}));
 
-const unique = () => `wallet_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+const RUN_DB = process.env.CI === 'true' || process.env.RUN_DB_TESTS === '1';
+const describeDb = RUN_DB ? describe : describe.skip;
 
-async function registerAndLogin() {
-  const email = `${unique()}@example.com`;
-  const password = 'TestPass123!';
-  const res = await request(app)
-    .post('/api/auth/register')
-    .send({ email, password, fullName: 'Wallet Test', phone: '+218933333333' });
-  return { email, password, accessToken: res.body.accessToken as string };
+const marker = `wal${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+const emails: string[] = [];
+
+async function createUser(kyc = true) {
+  const email = `${marker}_${emails.length}@example.com`;
+  emails.push(email);
+  return prisma.user.create({
+    data: {
+      email, passwordHash: 'x', firstName: 'Wallet', lastName: 'Test', status: 'ACTIVE',
+      kycStatus: kyc ? 'APPROVED' : 'NOT_SUBMITTED', kycTier: kyc ? 'TIER_2' : 'TIER_0',
+      emailVerified: true, referralCode: `${marker}${emails.length}`.slice(0, 30),
+    },
+  });
+}
+const auth = (u: { id: string; email: string; role: string }) => `Bearer ${generateTokens(u).accessToken}`;
+
+async function fund(userId: string, currency: 'USDT' | 'USD', amount: string) {
+  await prisma.$transaction(async (tx) => {
+    await tx.wallet.upsert({
+      where: { userId_currency: { userId, currency } },
+      create: { userId, currency, balance: new Decimal(amount) },
+      update: { balance: { increment: new Decimal(amount) } },
+    });
+    await postLedger(tx, {
+      refType: 'test_fund', refId: `${userId}:${currency}`,
+      legs: [
+        { type: 'SYSTEM_ONRAMP', currency, amount: new Decimal(amount).neg() },
+        { type: 'USER', userId, currency, amount: new Decimal(amount) },
+      ],
+    });
+  });
 }
 
-describeOrSkip('GET /api/wallet', () => {
-  let email: string;
-  let accessToken: string;
-
-  beforeAll(async () => {
-    ({ email, accessToken } = await registerAndLogin());
-  });
-
+describeDb('wallets, withdrawals and controls', () => {
   afterAll(async () => {
-    await prisma.user.deleteMany({ where: { email } }).catch(() => {});
+    await prisma.controlSwitch.deleteMany({ where: { key: 'withdrawals' } }).catch(() => {});
+    await prisma.user.deleteMany({ where: { email: { in: emails } } }).catch(() => {});
+    await prisma.$disconnect().catch(() => {});
   });
 
-  it('returns a wallet with zero balances for a new user', async () => {
-    const res = await request(app)
-      .get('/api/wallet')
-      .set('Authorization', `Bearer ${accessToken}`);
-
+  it('lists the caller\'s wallets and requires authentication', async () => {
+    const u = await createUser();
+    await fund(u.id, 'USD', '10');
+    const res = await request(app).get('/api/wallets').set('Authorization', auth(u));
     expect(res.status).toBe(200);
-    expect(res.body).toHaveProperty('ethBalance');
-    expect(res.body).toHaveProperty('btcBalance');
-    expect(res.body).toHaveProperty('solBalance');
-    expect(parseFloat(res.body.ethBalance)).toBe(0);
+    const usd = res.body.wallets.find((w: any) => w.currency === 'USD');
+    expect(usd.balance).toBe('10');
+    expect((await request(app).get('/api/wallets')).status).toBe(401);
   });
 
-  it('requires authentication', async () => {
-    const res = await request(app).get('/api/wallet');
-    expect([401, 403]).toContain(res.status);
-  });
-});
-
-describeOrSkip('GET /api/wallet/fee-estimate', () => {
-  let accessToken: string;
-  let email: string;
-
-  beforeAll(async () => {
-    ({ email, accessToken } = await registerAndLogin());
+  it('rejects invalid withdrawal amounts and unsupported currencies', async () => {
+    const u = await createUser();
+    const zero = await request(app).post('/api/withdrawals').set('Authorization', auth(u))
+      .send({ currency: 'USDT', amount: 0, network: 'TRC20', walletAddress: 'Tabc' });
+    expect(zero.status).toBe(400);
+    const unknown = await request(app).post('/api/withdrawals').set('Authorization', auth(u))
+      .send({ currency: 'PEPE', amount: 5 });
+    expect(unknown.status).toBe(400);
   });
 
-  afterAll(async () => {
-    await prisma.user.deleteMany({ where: { email } }).catch(() => {});
+  it('screens the destination address: a watchlisted wallet is flagged for the approver and opens a case', async () => {
+    await ensureDefaultRules();
+    const u = await createUser();
+    await fund(u.id, 'USDT', '50');
+    const flagged = `TWatchlisted${marker}`.padEnd(34, 'x').slice(0, 34);
+    await importWatchlist([{ listName: 'INTERNAL', entityType: 'WALLET', walletAddress: flagged }], `${marker}-wl`, u.id);
+    try {
+      const res = await request(app).post('/api/withdrawals').set('Authorization', auth(u))
+        .send({ currency: 'USDT', amount: 10, network: 'TRC20', walletAddress: flagged });
+      expect(res.status).toBe(201);
+      const w = await prisma.withdrawal.findUniqueOrThrow({ where: { id: res.body.withdrawal.id } });
+      expect(w.status).toBe('PENDING');
+      expect(w.adminNotes).toMatch(/^Risk review/);
+      const c = await prisma.complianceCase.findFirst({ where: { subjectType: 'WITHDRAWAL', subjectId: w.reference } });
+      expect(c?.type).toBe('SANCTIONS');
+    } finally {
+      await prisma.watchlistEntry.updateMany({ where: { source: `${marker}-wl` }, data: { active: false } });
+    }
   });
 
-  it('returns fee estimate for ETH', async () => {
-    const res = await request(app)
-      .get('/api/wallet/fee-estimate?asset=ETH&network=ETH')
-      .set('Authorization', `Bearer ${accessToken}`);
+  it('reserves funds once, records one history row, and releases them on cancel', async () => {
+    const u = await createUser();
+    await fund(u.id, 'USDT', '50');
+    const created = await request(app).post('/api/withdrawals').set('Authorization', auth(u))
+      .send({ currency: 'USDT', amount: 20, network: 'TRC20', walletAddress: 'TXYZabcdefghijklmnopqrstuvwxyz1234' });
+    expect(created.status).toBe(201);
+    let w = await prisma.wallet.findUniqueOrThrow({ where: { userId_currency: { userId: u.id, currency: 'USDT' } } });
+    expect(w.frozen.toString()).toBe('20');
 
-    expect(res.status).toBe(200);
-    expect(res.body.asset).toBe('ETH');
-    expect(parseFloat(res.body.estimate)).toBeGreaterThan(0);
+    const cancel = await request(app).put(`/api/withdrawals/${created.body.withdrawal.id}/cancel`).set('Authorization', auth(u));
+    expect(cancel.status).toBe(200);
+    w = await prisma.wallet.findUniqueOrThrow({ where: { userId_currency: { userId: u.id, currency: 'USDT' } } });
+    expect(w.frozen.toString()).toBe('0');
+    expect(w.balance.toString()).toBe('50');
+
+    const rows = await prisma.transaction.findMany({ where: { reference: created.body.withdrawal.reference } });
+    expect(rows).toHaveLength(1);
+    expect((rows[0].metadata as any).status).toBe('CANCELLED');
+    const transitions = await prisma.stateTransition.findMany({ where: { entityType: 'WITHDRAWAL', entityId: created.body.withdrawal.id } });
+    expect(transitions.map((t) => t.toState)).toEqual(['PENDING', 'CANCELLED']);
   });
 
-  it('returns fee estimate for BTC', async () => {
-    const res = await request(app)
-      .get('/api/wallet/fee-estimate?asset=BTC&network=BTC')
-      .set('Authorization', `Bearer ${accessToken}`);
-
-    expect(res.status).toBe(200);
-    expect(res.body.asset).toBe('BTC');
-    expect(parseFloat(res.body.estimate)).toBeGreaterThan(0);
-  });
-
-  it('returns fee estimate for SOL', async () => {
-    const res = await request(app)
-      .get('/api/wallet/fee-estimate?asset=SOL&network=SOL')
-      .set('Authorization', `Bearer ${accessToken}`);
-
-    expect(res.status).toBe(200);
-    expect(res.body.asset).toBe('SOL');
-  });
-
-  it('rejects unsupported asset', async () => {
-    const res = await request(app)
-      .get('/api/wallet/fee-estimate?asset=DOGE&network=DOGE')
-      .set('Authorization', `Bearer ${accessToken}`);
-
-    expect(res.status).toBe(400);
-  });
-});
-
-describeOrSkip('POST /api/wallet/withdraw — guard rails', () => {
-  let accessToken: string;
-  let email: string;
-
-  beforeAll(async () => {
-    ({ email, accessToken } = await registerAndLogin());
-  });
-
-  afterAll(async () => {
-    await prisma.user.deleteMany({ where: { email } }).catch(() => {});
-  });
-
-  it('rejects withdrawal with zero balance', async () => {
-    const res = await request(app)
-      .post('/api/wallet/withdraw')
-      .set('Authorization', `Bearer ${accessToken}`)
-      .send({ asset: 'ETH', network: 'ETH', amount: '0.01', toAddress: '0x742d35Cc6634C0532925a3b8D4C9e7d8c9e7d8c9' });
-
-    // Insufficient balance → 400
-    expect(res.status).toBe(400);
-  });
-
-  it('rejects zero amount', async () => {
-    const res = await request(app)
-      .post('/api/wallet/withdraw')
-      .set('Authorization', `Bearer ${accessToken}`)
-      .send({ asset: 'ETH', network: 'ETH', amount: '0', toAddress: '0x742d35Cc6634C0532925a3b8D4C9e7d8c9e7d8c9' });
-
-    expect(res.status).toBe(400);
-  });
-
-  it('rejects missing toAddress', async () => {
-    const res = await request(app)
-      .post('/api/wallet/withdraw')
-      .set('Authorization', `Bearer ${accessToken}`)
-      .send({ asset: 'ETH', network: 'ETH', amount: '0.01' });
-
-    expect(res.status).toBe(400);
+  it('refuses new withdrawals while the withdrawals kill switch is on', async () => {
+    const u = await createUser();
+    await fund(u.id, 'USDT', '50');
+    await prisma.controlSwitch.upsert({
+      where: { scope_key: { scope: 'FEATURE', key: 'withdrawals' } },
+      create: { scope: 'FEATURE', key: 'withdrawals', blocked: true, reason: 'integration test', setById: u.id },
+      update: { blocked: true },
+    });
+    invalidateControlCache();
+    try {
+      const res = await request(app).post('/api/withdrawals').set('Authorization', auth(u))
+        .send({ currency: 'USDT', amount: 5, network: 'TRC20', walletAddress: 'TXYZabcdefghijklmnopqrstuvwxyz1234' });
+      expect(res.status).toBe(503);
+      expect(res.body.code).toBe('FEATURE_DISABLED');
+    } finally {
+      await prisma.controlSwitch.update({ where: { scope_key: { scope: 'FEATURE', key: 'withdrawals' } }, data: { blocked: false } });
+      invalidateControlCache();
+    }
   });
 });

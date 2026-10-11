@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" role="img" aria-label="tazdan wallet mark">
+  <style>:root{color:#24384F}@media (prefers-color-scheme:dark){:root{color:#FFFFFF}}</style>
+  <defs><mask id="snap"><rect width="100" height="100" fill="#fff"/><circle cx="79" cy="57" r="4.5" fill="#000"/></mask></defs>
+  <g mask="url(#snap)">
+    <path d="M35 29h-5c-10 0-18 8-18 18v19c0 10 8 18 18 18h36c10 0 18-8 18-18V47c0-10-8-18-18-18h-4" fill="none" stroke="currentColor" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="49" cy="18" r="8" fill="currentColor"/>
+    <path d="M63 45h17c7 0 12 5 12 12s-5 12-12 12H63c-7 0-12-5-12-12s5-12 12-12Z" fill="currentColor"/>
+  </g>
+</svg>

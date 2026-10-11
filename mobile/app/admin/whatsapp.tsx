@@ -1,3 +1,4 @@
+import { StackHeader } from '@/components/ui/ScreenHeader';
 /**
  * Admin WhatsApp — message log, stats, and compose pane.
  */
@@ -53,13 +54,9 @@ export default function AdminWhatsApp() {
       <TopGradient />
       <StatusBar style={themeMode === 'light' ? 'dark' : 'light'} />
       <SafeAreaView style={{ flex: 1 }} edges={['top']}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingTop: 8, paddingBottom: 6 }}>
-          <Pressable onPress={() => router.back()} hitSlop={8}><Ionicons name="chevron-back" size={26} color={p.fg} /></Pressable>
-          <Text style={{ flex: 1, color: p.fg, fontSize: 18, fontWeight: '600' }}>WhatsApp</Text>
-          <Pressable onPress={() => setCompose(true)} style={{ paddingHorizontal: 12, paddingVertical: 7, borderRadius: 9, backgroundColor: '#25d366' }}>
+        <StackHeader title="WhatsApp" right={<><Pressable onPress={() => setCompose(true)} style={{ paddingHorizontal: 12, paddingVertical: 7, borderRadius: 9, backgroundColor: '#25d366' }}>
             <Text style={{ color: '#fff', fontSize: 12, fontWeight: '600' }}>+ Send</Text>
-          </Pressable>
-        </View>
+          </Pressable></>} />
 
         {/* Stats strip */}
         {stats && (
@@ -95,7 +92,7 @@ export default function AdminWhatsApp() {
               <View key={row.id} style={{ backgroundColor: p.bgElev, borderWidth: 1, borderColor: row.direction === 'IN' ? 'rgba(37,211,102,0.3)' : p.border, borderRadius: 12, padding: 14, marginBottom: 8 }}>
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                    <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: row.direction === 'IN' ? '#25d366' : '#63a1db' }} />
+                    <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: row.direction === 'IN' ? '#25d366' : p.accentText }} />
                     <Text style={{ color: p.fgMuted, fontSize: 10, fontWeight: '600' }}>{row.direction} · +{row.phoneNumber}</Text>
                   </View>
                   <Text style={{ color: p.fgFaint, fontSize: 10 }}>{formatRelativeTime(row.createdAt)}</Text>

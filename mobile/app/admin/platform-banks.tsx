@@ -1,3 +1,4 @@
+import { StackHeader } from '@/components/ui/ScreenHeader';
 /**
  * Admin Platform Banks — full CRUD over the deposit-rail bank accounts.
  *  • List banks (active/inactive badge)
@@ -19,6 +20,7 @@ import { adminService } from '@/services';
 import { LoadingPulse } from '@/components/ui/LoadingPulse';
 import { TopGradient } from '@/components/ui/ScreenShell';
 
+import { BottomSheet } from '@/components/ui/BottomSheet';
 interface BankForm {
   bankName: string;
   currency: string;
@@ -63,10 +65,11 @@ export default function AdminPlatformBanks() {
       if (editing.id) return adminService.updatePlatformBank(editing.id, payload);
       return adminService.createPlatformBank(payload);
     },
-    onSuccess: () => {
+    onSuccess: (res: any) => {
       qc.invalidateQueries({ queryKey: ['admin-platform-banks'] });
       setEditing(null);
-      Alert.alert('Saved', 'Platform bank updated.');
+      // In production, new accounts and payment-detail changes wait for a second approver.
+      Alert.alert(res?.pendingApproval ? 'Sent for approval' : 'Saved', res?.pendingApproval ? res.message : 'Deposit account updated.');
     },
     onError: (e: any) => Alert.alert('Failed', e?.response?.data?.error ?? 'Could not save'),
   });
@@ -88,19 +91,13 @@ export default function AdminPlatformBanks() {
       <TopGradient />
       <StatusBar style={themeMode === 'light' ? 'dark' : 'light'} />
       <SafeAreaView style={{ flex: 1 }} edges={['top']}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingTop: 8, paddingBottom: 6 }}>
-          <Pressable onPress={() => router.back()} hitSlop={8}>
-            <Ionicons name="chevron-back" size={26} color={p.fg} />
-          </Pressable>
-          <Text style={{ flex: 1, color: p.fg, fontSize: 18, fontWeight: '600' }}>Platform Banks</Text>
-          <Pressable
+        <StackHeader title="Platform Banks" right={<><Pressable
             onPress={() => setEditing({ form: { ...EMPTY } })}
             hitSlop={8}
             style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: p.fg, alignItems: 'center', justifyContent: 'center' }}
           >
             <Ionicons name="add" size={20} color={p.bg} />
-          </Pressable>
-        </View>
+          </Pressable></>} />
 
         {q.isLoading ? (
           <LoadingPulse fullscreen icon="business-outline" label="Loading banks…" />
@@ -147,14 +144,7 @@ export default function AdminPlatformBanks() {
         )}
       </SafeAreaView>
 
-      <Modal visible={!!editing} transparent animationType="slide" onRequestClose={() => setEditing(null)}>
-        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' }}>
-          <View style={{ backgroundColor: p.bg, borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 20, paddingBottom: 36, maxHeight: '92%' }}>
-            <View style={{ alignSelf: 'center', width: 36, height: 4, borderRadius: 2, backgroundColor: p.border, marginBottom: 14 }} />
-            <Text style={{ color: p.fg, fontSize: 18, fontWeight: '700', marginBottom: 16 }}>
-              {editing?.id ? 'Edit bank' : 'Add platform bank'}
-            </Text>
-
+      <BottomSheet visible={!!editing} onClose={() => setEditing(null)} title={editing?.id ? 'Edit bank' : 'Add platform bank'} scroll={false}>
             <ScrollView showsVerticalScrollIndicator={false}>
               {editing && (
                 <>
@@ -208,9 +198,9 @@ export default function AdminPlatformBanks() {
               </Pressable>
               {editing?.id && (
                 <Pressable
-                  onPress={() => Alert.alert('Delete bank?', 'This cannot be undone.', [
+                  onPress={() => Alert.alert('Turn off this account?', 'Customers stop seeing it for top-ups. Its history is kept.', [
                     { text: 'Cancel', style: 'cancel' },
-                    { text: 'Delete', style: 'destructive', onPress: () => deleteMut.mutate(editing.id!) },
+                    { text: 'Turn off', style: 'destructive', onPress: () => deleteMut.mutate(editing.id!) },
                   ])}
                   style={{ width: 50, height: 50, borderRadius: 12, backgroundColor: 'rgba(239,68,68,0.15)', borderWidth: 1, borderColor: 'rgba(239,68,68,0.3)', alignItems: 'center', justifyContent: 'center' }}
                 >
@@ -232,9 +222,7 @@ export default function AdminPlatformBanks() {
                 </Text>
               </Pressable>
             </View>
-          </View>
-        </View>
-      </Modal>
+          </BottomSheet>
     </View>
   );
 }

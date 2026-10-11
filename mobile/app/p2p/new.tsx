@@ -17,10 +17,10 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
 import { useThemedPalette } from '@/store/themeStore';
-import { TopGradient } from '@/components/ui/ScreenShell';
 import { useCreateP2PListing, useHaptics } from '@/hooks';
 import type { Palette } from '@/store/themeStore';
 
+import { BottomSheet } from '@/components/ui/BottomSheet';
 const CRYPTOS = ['USDT', 'BTC', 'ETH', 'SOL'] as const;
 const FIATS   = ['USD', 'EUR', 'GBP', 'AED', 'SAR', 'EGP', 'LYD'] as const;
 const METHODS = ['Bank Transfer', 'Wise', 'Revolut', 'Cash', 'PayPal', 'Internal Wallet'] as const;
@@ -113,48 +113,17 @@ export default function NewListing() {
   };
 
   return (
-    <Modal visible animationType="slide" transparent onRequestClose={() => router.back()}>
-      <Pressable
-        style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' }}
-        onPress={() => router.back()}
-      >
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-          <Pressable
-            style={{
-              backgroundColor: p.bg,
-              borderTopLeftRadius: 28, borderTopRightRadius: 28,
-              maxHeight: '85%',
-              overflow: 'hidden',
-            }}
-            onPress={(e) => e.stopPropagation()}
-          >
-            <TopGradient height={220} />
-            {/* Handle + header */}
-            <View style={{ alignItems: 'center', paddingTop: 10, paddingBottom: 2 }}>
-              <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: p.border }} />
-            </View>
-            <View style={{
-              flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-              paddingHorizontal: 24, paddingTop: 8, paddingBottom: 4,
-            }}>
-              <Text style={{ color: p.fg, fontSize: 20, fontWeight: '600', letterSpacing: -0.4 }}>
-                New P2P listing
-              </Text>
-              <Pressable onPress={() => router.back()} hitSlop={8} style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border, alignItems: 'center', justifyContent: 'center' }}>
-                <Ionicons name="close" size={16} color={p.fg} />
-              </Pressable>
-            </View>
-
+    <BottomSheet visible={true} onClose={() => router.back()} title={"New P2P listing"} scroll={false} contentStyle={{ paddingHorizontal: 0 }}>
             <ScrollView
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
-              contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 80 }}
+              contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 4, paddingBottom: 80 }}
             >
         {/* Side toggle */}
         <View style={{
           flexDirection: 'row',
           backgroundColor: p.pillBg,
-          borderRadius: 14, padding: 4, gap: 4, marginTop: 12,
+          borderRadius: 14, padding: 4, gap: 4,
         }}>
           {(['BUY', 'SELL'] as const).map((s) => (
             <Pressable
@@ -392,10 +361,7 @@ export default function NewListing() {
           </Text>
         </Pressable>
       </View>
-    </Pressable>
-  </KeyboardAvoidingView>
-</Pressable>
-</Modal>
+    </BottomSheet>
   );
 }
 

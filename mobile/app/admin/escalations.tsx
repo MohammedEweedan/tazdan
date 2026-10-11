@@ -19,6 +19,7 @@ import { adminService } from '@/services';
 import { LoadingPulse } from '@/components/ui/LoadingPulse';
 import { AdminScreen, AdminTabs } from '@/components/admin/AdminScreen';
 
+import { BottomSheet } from '@/components/ui/BottomSheet';
 type Status = 'OPEN' | 'ASSIGNED' | 'RESOLVED' | 'CLOSED';
 
 export default function AdminEscalations() {
@@ -105,13 +106,7 @@ export default function AdminEscalations() {
       ))()}
 
       {/* Resolve modal */}
-      <Modal visible={!!resolving} animationType="slide" transparent onRequestClose={() => setResolving(null)}>
-          <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' }}>
-            <View style={{ backgroundColor: p.bg, borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 20, paddingBottom: 36 }}>
-              <View style={{ alignSelf: 'center', width: 36, height: 4, borderRadius: 2, backgroundColor: p.border, marginBottom: 14 }} />
-              <Text style={{ color: p.fg, fontSize: 18, fontWeight: '600', marginBottom: 6 }}>
-                Resolve Escalation
-              </Text>
+      <BottomSheet visible={!!resolving} onClose={() => setResolving(null)} title={"Resolve Escalation"}>
               <Text style={{ color: p.fgMuted, fontSize: 13, marginBottom: 16 }}>
                 {resolving?.reason}
               </Text>
@@ -146,9 +141,7 @@ export default function AdminEscalations() {
                   </Text>
                 </Pressable>
               </View>
-            </View>
-          </View>
-        </Modal>
+            </BottomSheet>
     </AdminScreen>
   );
 }
