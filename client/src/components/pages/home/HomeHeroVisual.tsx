@@ -56,7 +56,7 @@ export default function HomeHeroVisual({ playing = true }: { playing?: boolean }
         "@media (prefers-reduced-motion: reduce)": { animation: "none" },
       }}>
         <PhoneStage items={[{ screen: "home", alt: t("home.hero.alt") }]} index={0}
-          w={{ base: "min(200px, 49vw)", lg: "300px" }} priority />
+          w={{ base: "min(200px, 49vw)", lg: "300px" }} priority playing={playing && visible} />
       </Box>
       <Box position="absolute" zIndex={3} top={{ base: "19%", lg: "21%" }}
         left={{ base: "-1%", lg: "-4%" }} maxW="170px" bg={theme.bgElev}

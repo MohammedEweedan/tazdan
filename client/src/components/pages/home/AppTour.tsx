@@ -1,11 +1,11 @@
 "use client";
 
-// Eight silent, lightweight recordings. Only the active, visible clip loads.
-// A single timer advances the tour; reduced motion starts with posters only.
+// Silent recordings advance only after the complete flow has played.
+// The previous frame stays behind the next poster during each crossfade.
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Box } from "@chakra-ui/react";
-import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion";
 import { useTranslate } from "@tolgee/react";
 import type { IconType } from "react-icons";
 import {
@@ -16,7 +16,7 @@ import {
   AppScreen, Body, Container, EASE, Footnote, Headline, MONO, PhoneFrame, Reveal, Section, SectionHeader,
   StatusChip, useMediaVariant, useSiteLocale, useSiteTheme, type Status,
 } from "@/components/site";
-import { APP_VIDEOS, videoSrc } from "@/content/appMedia";
+import { APP_SCREENS, APP_VIDEOS, screenSrc, videoSrc } from "@/content/appMedia";
 
 /** How long a still (or a screen that hasn't been captured yet) stays up. */
 const STILL_MS = 8000;
@@ -71,48 +71,155 @@ const N = STOPS.length;
 const pad = (n: number) => String(n).padStart(2, "0");
 const GUTTER = "clamp(16px, 5vw, 48px)"; // = Container's side padding
 const FILL = { position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", objectPosition: "top center" } as const;
+type TourStage = { active: number; previous: number | null; ready: boolean };
+const changeStage = (stage: TourStage, active: number): TourStage => active === stage.active ? stage : {
+  active,
+  previous: stage.ready ? stage.active : stage.previous,
+  ready: false,
+};
 
 /* ── media ───────────────────────────────────────────────────────────────── */
 
-function TourMedia({
-  stop, index, alt, playing,
-}: {
+type TourMediaProps = {
   stop: Stop;
   index: number;
   alt: string;
   playing: boolean;
-}) {
+  onReady: (index: number) => void;
+  onProgress: (index: number, progress: number) => void;
+  onEnded: (index: number) => void;
+};
+
+/** A still also remains below the video while its first frame is decoding. */
+function TourStill({ stop, index, alt, onReady, decorative = false }: Pick<TourMediaProps, "stop" | "index" | "alt" | "onReady"> & { decorative?: boolean }) {
+  const variant = useMediaVariant(APP_SCREENS[stop.screen]?.variants);
+  useEffect(() => { if (!variant) onReady(index); }, [variant, index, onReady]);
+  if (!variant) return <AppScreen id={stop.screen} alt={alt} still />;
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={screenSrc(stop.screen, variant)}
+      alt={decorative ? "" : alt}
+      aria-hidden={decorative || undefined}
+      decoding="async"
+      draggable={false}
+      onLoad={() => onReady(index)}
+      onError={() => onReady(index)}
+      style={FILL}
+    />
+  );
+}
+
+function TourMedia(props: TourMediaProps) {
+  const { stop } = props;
   const variant = useMediaVariant(APP_VIDEOS[stop.video]?.variants);
+  // A language/theme change gets a fresh decoder and starts the new clip at 0.
+  const source = variant ? videoSrc(stop.video, variant) : null;
+  return <TourClip key={source?.mp4 ?? stop.screen} {...props} source={source} />;
+}
+
+function TourClip({ stop, index, alt, playing, source, onReady, onProgress, onEnded }: TourMediaProps & { source: ReturnType<typeof videoSrc> | null }) {
   const ref = useRef<HTMLVideoElement | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [failed, setFailed] = useState(false);
+  const [decoded, setDecoded] = useState(false);
+  const shouldPlay = useRef(playing);
+  const stillElapsed = useRef(0);
+  const ended = useRef(false);
+  shouldPlay.current = playing;
+  const video = Boolean(source && !failed);
+
   useEffect(() => { if (playing) setLoaded(true); }, [playing]);
 
   useEffect(() => {
     const el = ref.current;
-    if (!el) return;
-    if (playing) el.play().catch(() => {});
-    else el.pause();
-  }, [playing, variant, loaded]);
+    if (!el || !loaded || !video) return;
+    if (!playing) {
+      el.pause();
+      return;
+    }
+    if (el.ended) {
+      if (!ended.current) {
+        ended.current = true;
+        onEnded(index);
+      }
+      return;
+    }
+    el.play().then(() => {
+      // A pending play promise can resolve after the visitor pauses/leaves.
+      if (!shouldPlay.current) el.pause();
+    }).catch((error: DOMException) => {
+      if (shouldPlay.current && error.name !== "AbortError") setFailed(true);
+    });
+    return () => el.pause();
+  }, [playing, loaded, video, index, onEnded]);
 
-  if (!variant || failed) return <AppScreen id={stop.screen} alt={alt}  />;
-  const src = videoSrc(stop.video, variant);
+  // Reading media time means buffering consumes no tour progress. Updating the
+  // DOM directly keeps the chip smooth without rerendering React every frame.
+  useEffect(() => {
+    if (!playing || !video) return;
+    let frame = 0;
+    const tick = () => {
+      const el = ref.current;
+      if (el && Number.isFinite(el.duration) && el.duration > 0) onProgress(index, el.currentTime / el.duration);
+      frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [playing, video, index, onProgress]);
+
+  // Only a genuine still fallback uses a wall clock, and that clock pauses
+  // under the same controls as video playback.
+  useEffect(() => {
+    if (!playing || video) return;
+    const started = performance.now();
+    const previous = stillElapsed.current;
+    let frame = 0;
+    const tick = () => {
+      const elapsed = Math.min(STILL_MS, previous + performance.now() - started);
+      onProgress(index, elapsed / STILL_MS);
+      if (elapsed >= STILL_MS) {
+        if (!ended.current) {
+          ended.current = true;
+          onEnded(index);
+        }
+      } else frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => {
+      cancelAnimationFrame(frame);
+      stillElapsed.current = Math.min(STILL_MS, previous + performance.now() - started);
+    };
+  }, [playing, video, index, onProgress, onEnded]);
+
+  if (!source || failed) return <TourStill stop={stop} index={index} alt={alt} onReady={onReady} />;
   return (
-    <video
-      ref={ref}
-      key={src.mp4}
-      muted
-      playsInline
-      preload="none"
-      loop
-      src={loaded ? src.mp4 : undefined}
-      onError={() => setFailed(true)}
-      poster={src.poster}
-      aria-label={alt}
-      disablePictureInPicture
-      style={FILL}
-    >
-    </video>
+    <>
+      <TourStill stop={stop} index={index} alt={alt} onReady={onReady} decorative />
+      {/* The poster has its own layer so the phone never flashes a blank frame. */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={source.poster} alt="" aria-hidden decoding="async" draggable={false} onLoad={() => onReady(index)} style={FILL} />
+      <video
+        ref={ref}
+        muted
+        playsInline
+        preload="none"
+        src={loaded ? source.mp4 : undefined}
+        onLoadedData={() => { setDecoded(true); onReady(index); }}
+        onEnded={() => {
+          onProgress(index, 1);
+          if (shouldPlay.current && !ended.current) {
+            ended.current = true;
+            onEnded(index);
+          }
+        }}
+        onError={() => setFailed(true)}
+        poster={source.poster}
+        aria-label={alt}
+        disablePictureInPicture
+        style={{ ...FILL, opacity: decoded ? 1 : 0, transition: "opacity .18s ease" }}
+      />
+    </>
   );
 }
 
@@ -156,24 +263,32 @@ export default function AppTour() {
   const { isAr, sides } = useSiteLocale();
   const reduced = useReducedMotion();
 
-  const [active, setActive] = useState(0);
+  const [stage, setStage] = useState<TourStage>({ active: 0, previous: null, ready: false });
+  const active = stage.active;
   /** null = the visitor hasn't chosen; then reduced motion means paused. */
   const [userPaused, setUserPaused] = useState<boolean | null>(null);
   const [hover, setHover] = useState(false);
   const [kbFocus, setKbFocus] = useState(false);
   const [inView, setInView] = useState(false);
+  const [pageVisible, setPageVisible] = useState(true);
 
   const paused = userPaused ?? Boolean(reduced);
-  const playing = inView && !paused;
-  const hold = hover || kbFocus;
+  const playing = inView && pageVisible && !paused && !hover && !kbFocus;
 
   const rootRef = useRef<HTMLDivElement>(null);
   const scrollerRef = useRef<HTMLDivElement>(null);
   const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const barRefs = useRef<(HTMLSpanElement | null)[]>([]);
-  const elapsed = useRef(0);
+  const activeRef = useRef(active);
+  activeRef.current = active;
 
-  const next = useCallback(() => setActive((a) => (a + 1) % N), []);
+  const ready = useCallback((index: number) => setStage((current) => current.active === index && !current.ready ? { ...current, ready: true } : current), []);
+  const progress = useCallback((index: number, value: number) => {
+    if (activeRef.current !== index) return;
+    const bar = barRefs.current[index];
+    if (bar) bar.style.transform = `scaleX(${Math.max(0, Math.min(1, value))})`;
+  }, []);
+  const next = useCallback((index: number) => setStage((current) => current.active === index ? changeStage(current, (index + 1) % N) : current), []);
 
   // Play only while the tour is on screen.
   useEffect(() => {
@@ -184,10 +299,16 @@ export default function AppTour() {
     return () => io.disconnect();
   }, []);
 
+  useEffect(() => {
+    const update = () => setPageVisible(!document.hidden);
+    update();
+    document.addEventListener("visibilitychange", update);
+    return () => document.removeEventListener("visibilitychange", update);
+  }, []);
+
   // New topic: reset progress and keep its chip in view inside the scroller
   // (horizontal only — never moves the page).
   useEffect(() => {
-    elapsed.current = 0;
     barRefs.current.forEach((b) => { if (b) b.style.transform = "scaleX(0)"; });
     const sc = scrollerRef.current;
     const tab = tabRefs.current[active];
@@ -198,40 +319,9 @@ export default function AppTour() {
     }
   }, [active, reduced]);
 
-  // A single timeout advances each still. CSS handles the fill; the page does
-  // no per-frame JavaScript work while the tour is visible.
-  useEffect(() => {
-    if (!playing) return;
-    if (hold) return;
-
-    const started = performance.now();
-    const remaining = Math.max(0, STILL_MS - elapsed.current);
-    const bar = barRefs.current[active];
-    if (bar) {
-      bar.style.transition = "none";
-      bar.style.transform = `scaleX(${elapsed.current / STILL_MS})`;
-    }
-    const frame = requestAnimationFrame(() => {
-      if (bar) {
-        bar.style.transition = `transform ${remaining}ms linear`;
-        bar.style.transform = "scaleX(1)";
-      }
-    });
-    const timer = window.setTimeout(next, remaining);
-    return () => {
-      cancelAnimationFrame(frame);
-      clearTimeout(timer);
-      elapsed.current = Math.min(STILL_MS, elapsed.current + performance.now() - started);
-      if (bar) {
-        bar.style.transition = "none";
-        bar.style.transform = `scaleX(${elapsed.current / STILL_MS})`;
-      }
-    };
-  }, [playing, hold, active, next]);
-
   const select = (i: number, focus?: boolean) => {
     const n = ((i % N) + N) % N;
-    setActive(n);
+    setStage((current) => changeStage(current, n));
     if (focus) tabRefs.current[n]?.focus();
   };
 
@@ -378,23 +468,30 @@ export default function AppTour() {
               <Box position="relative" h={{ lg: "min(540px, 64vh)" }}>
                 <Box aria-hidden position="absolute" inset="-20%" bg={t.glow} pointerEvents="none" />
                 <PhoneFrame w={{ base: "min(225px, 59vw)", lg: "auto" }} h={{ base: "auto", lg: "100%" }}>
-                  <AnimatePresence initial={false} mode="sync">
-                    <motion.div
-                      key={stop.id}
-                      initial={reduced ? false : { opacity: 0, scale: 1.015 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      exit={{ opacity: 0 }}
-                      transition={{ duration: reduced ? 0 : 0.55, ease: EASE }}
-                      style={{ position: "absolute", inset: 0 }}
-                    >
-                      <TourMedia
-                        stop={stop}
-                        index={active}
-                        alt={tr(stop.alt)}
-                        playing={playing}
-                      />
-                    </motion.div>
-                  </AnimatePresence>
+                  {[stage.previous, active].filter((index): index is number => index !== null).map((index) => {
+                    const item = STOPS[index];
+                    const current = index === active;
+                    return (
+                      <motion.div
+                        key={item.id}
+                        initial={false}
+                        animate={{ opacity: !current || stage.previous === null || stage.ready ? 1 : 0 }}
+                        transition={{ duration: reduced ? 0 : 0.55, ease: EASE }}
+                        aria-hidden={!current}
+                        style={{ position: "absolute", inset: 0, zIndex: current ? 1 : 0 }}
+                      >
+                        <TourMedia
+                          stop={item}
+                          index={index}
+                          alt={tr(item.alt)}
+                          playing={playing && current}
+                          onReady={ready}
+                          onProgress={progress}
+                          onEnded={next}
+                        />
+                      </motion.div>
+                    );
+                  })}
                 </PhoneFrame>
               </Box>
             </Box>

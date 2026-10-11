@@ -55,9 +55,44 @@ export const APP_VIDEOS: Record<string, { variants: AppMediaVariant[]; durationS
 };
 /** Animated loops of page screens (public/app/gif/<variant>/<id>.gif). */
 export const APP_GIFS: Record<string, AppMediaVariant[]> = {
+  "asset": ['en-dark'],
+  "balances": ['en-dark'],
+  "budgets": ['en-dark'],
+  "business-approval": ['en-dark'],
+  "business-bulk": ['en-dark'],
+  "business-home": ['en-dark'],
+  "business-keys": ['en-dark'],
+  "business-payouts": ['en-dark'],
+  "business-team": ['en-dark'],
+  "cards": ['en-dark'],
+  "chat-payment": ['en-dark'],
+  "claim": ['en-dark'],
+  "contact": ['en-dark'],
+  "devices": ['en-dark'],
+  "history": ['en-dark'],
+  "home": ['en-dark'],
+  "kyc": ['en-dark'],
+  "linked": ['en-dark'],
+  "messages": ['en-dark'],
+  "onboarding": ['en-dark'],
+  "p2p": ['en-dark'],
+  "portfolio": ['en-dark'],
+  "privacy-hidden": ['en-dark'],
+  "receive": ['en-dark'],
+  "recurring": ['en-dark'],
+  "referrals": ['en-dark'],
+  "remit": ['en-dark'],
+  "remit-track": ['en-dark'],
+  "settings": ['en-dark'],
+  "statements": ['en-dark'],
+  "twofa": ['en-dark'],
+};
+/** Smooth screen loops captured from real app interaction at 30 fps. */
+export const APP_LOOPS: Record<string, { variants: AppMediaVariant[]; durationSec: number; caption: string }> = {
 
 };
 export const gifSrc = (id: string, v: AppMediaVariant = 'en-dark') => `/app/gif/${v}/${id}.gif`;
+export const loopSrc = (id: string, v: AppMediaVariant = 'en-dark') => ({ mp4: `/app/loops/${v}/${id}.mp4`, webm: `/app/loops/${v}/${id}.webm`, poster: `/app/loops/${v}/${id}.jpg` });
 export const screenSrc = (id: string, v: AppMediaVariant = 'en-dark') => `/app/screens/${v}/${id}.webp`;
 export const videoSrc = (id: string, v: AppMediaVariant = 'en-dark') => ({ mp4: `/app/video/${v}/${id}.mp4`, webm: `/app/video/${v}/${id}.webm`, poster: `/app/video/${v}/${id}.jpg` });
 export const APP_MEDIA_NOTES = ['Screens from the current app build. Names and amounts are illustrative.'];

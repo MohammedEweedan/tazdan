@@ -20,7 +20,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Box, type BoxProps } from "@chakra-ui/react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { APP_GIFS, APP_SCREENS, APP_VIDEOS, gifSrc, screenSrc, videoSrc, type AppMediaVariant } from "@/content/appMedia";
+import { APP_GIFS, APP_LOOPS, APP_SCREENS, APP_VIDEOS, gifSrc, loopSrc, screenSrc, videoSrc, type AppMediaVariant } from "@/content/appMedia";
 import { EASE, useSiteLocale, useSiteTheme } from "./tokens";
 
 /** Best available capture variant for this visitor. */
@@ -106,27 +106,98 @@ function Placeholder({ label }: { label?: string }) {
 
 const fill = { position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", objectPosition: "top center" } as const;
 
-/** A captured screen. Plays its animated GIF loop when one exists (the
- *  owner wants page screens animated), the still otherwise — and always the
- *  still under prefers-reduced-motion, since a GIF can't be paused.
- *  `alt` should be a translated description. */
-export function AppScreen({ id, alt, priority, still }: { id: string; alt: string; priority?: boolean; still?: boolean }) {
+/** Observe the media container, so posters and videos share the same lifecycle. */
+function useMediaVisibility() {
+  const ref = useRef<HTMLDivElement>(null);
+  const [visible, setVisible] = useState(false);
+  const [foreground, setForeground] = useState(true);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const io = new IntersectionObserver(([entry]) => setVisible(entry.isIntersecting), { threshold: 0.05 });
+    const update = () => setForeground(!document.hidden);
+    update();
+    io.observe(el);
+    document.addEventListener("visibilitychange", update);
+    return () => {
+      io.disconnect();
+      document.removeEventListener("visibilitychange", update);
+    };
+  }, []);
+  return { ref, visible: visible && foreground };
+}
+
+type MediaSource = { mp4: string; webm: string; poster: string };
+
+/** Load once near the viewport, then pause without losing the current frame. */
+function MediaLoop({ src, alt, playing, priority, onError }: {
+  src: MediaSource; alt: string; playing: boolean; priority?: boolean; onError: () => void;
+}) {
+  const { ref: containerRef, visible } = useMediaVisibility();
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [loaded, setLoaded] = useState(false);
+  const active = visible && playing;
+  useEffect(() => { if (active) setLoaded(true); }, [active]);
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    if (loaded && active) void video.play().catch(() => {});
+    else video.pause();
+  }, [loaded, active]);
+  return (
+    <Box ref={containerRef} position="absolute" inset={0}>
+      {/* A sharp poster also covers the first decode, so the bezel never flashes. */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={src.poster} alt="" aria-hidden loading={priority ? "eager" : "lazy"} decoding="async" style={fill} />
+      <video
+        ref={videoRef}
+        muted loop playsInline preload="none"
+        src={loaded ? src.mp4 : undefined}
+        poster={src.poster}
+        onLoadedData={() => { if (active) void videoRef.current?.play().catch(() => {}); }}
+        onError={onError}
+        aria-label={alt}
+        disablePictureInPicture
+        style={fill}
+      />
+    </Box>
+  );
+}
+
+function ScreenImage({ id, variant, gifVariant, alt, priority, playing }: {
+  id: string; variant: AppMediaVariant | null; gifVariant: AppMediaVariant | null;
+  alt: string; priority?: boolean; playing: boolean;
+}) {
+  const { ref, visible } = useMediaVisibility();
+  const animated = playing && visible && gifVariant && (!variant || gifVariant === variant);
+  const src = animated ? gifSrc(id, gifVariant) : variant ? screenSrc(id, variant) : null;
+  return (
+    <Box ref={ref} position="absolute" inset={0}>
+      {src ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={src} alt={alt} loading={priority ? "eager" : "lazy"} decoding="async" draggable={false} style={fill} />
+      ) : <Placeholder label={alt} />}
+    </Box>
+  );
+}
+
+/** Page-screen animations use smooth, controllable recordings when available.
+ *  GIFs remain a fallback; pausing or reduced motion shows the captured still. */
+export function AppScreen({ id, alt, priority, still, playing = true }: {
+  id: string; alt: string; priority?: boolean; still?: boolean; playing?: boolean;
+}) {
   const variant = useMediaVariant(APP_SCREENS[id]?.variants);
+  const loopVariant = useMediaVariant(APP_LOOPS[id]?.variants);
   const gifVariant = useMediaVariant(APP_GIFS[id]);
   const reduced = useReducedMotion();
-  if (!variant && !gifVariant) return <Placeholder label={alt} />;
-  const animated = !still && !reduced && gifVariant && (!variant || gifVariant === variant);
-  return (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img
-      src={animated ? gifSrc(id, gifVariant) : screenSrc(id, (variant ?? gifVariant)!)}
-      alt={alt}
-      loading={priority ? "eager" : "lazy"}
-      decoding="async"
-      draggable={false}
-      style={fill}
-    />
-  );
+  const [failedSource, setFailedSource] = useState<string | null>(null);
+  const animated = !still && !reduced;
+  const src = loopVariant ? loopSrc(id, loopVariant) : null;
+  if (animated && src && failedSource !== src.mp4 && (!variant || loopVariant === variant)) {
+    return <MediaLoop key={src.mp4} src={src} alt={alt} priority={priority} playing={playing}
+      onError={() => setFailedSource(src.mp4)} />;
+  }
+  return <ScreenImage id={id} variant={variant} gifVariant={gifVariant} alt={alt} priority={priority} playing={animated && playing} />;
 }
 
 /** A captured screen recording; falls back to the still with the same id
@@ -136,45 +207,12 @@ export function AppVideo({
 }: { id: string; alt: string; fallbackScreen?: string; playing?: boolean }) {
   const variant = useMediaVariant(APP_VIDEOS[id]?.variants);
   const reduced = useReducedMotion();
-  const ref = useRef<HTMLVideoElement>(null);
-  const [visible, setVisible] = useState(false);
-  const [loaded, setLoaded] = useState(false);
-  const [failed, setFailed] = useState(false);
-  useEffect(() => { if (visible && playing && !reduced) setLoaded(true); }, [visible, playing, reduced]);
-
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const io = new IntersectionObserver(([e]) => setVisible(e.isIntersecting), { threshold: 0.25 });
-    io.observe(el);
-    return () => io.disconnect();
-  }, [variant]);
-
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    if (visible && playing && !reduced) el.play().catch(() => {});
-    else el.pause();
-  }, [visible, playing, reduced, loaded]);
-
-  if (!variant || failed) return <AppScreen id={fallbackScreen ?? id} alt={alt} />;
-  const src = videoSrc(id, variant);
-  return (
-    <video
-      ref={ref}
-      key={src.mp4}
-      muted
-      loop
-      playsInline
-      preload="none"
-      src={loaded ? src.mp4 : undefined}
-      onError={() => setFailed(true)}
-      poster={src.poster}
-      aria-label={alt}
-      style={fill}
-    >
-    </video>
-  );
+  const [failedSource, setFailedSource] = useState<string | null>(null);
+  const src = variant ? videoSrc(id, variant) : null;
+  if (!src || failedSource === src.mp4 || reduced) {
+    return <AppScreen id={fallbackScreen ?? id} alt={alt} still={Boolean(reduced)} playing={playing} />;
+  }
+  return <MediaLoop key={src.mp4} src={src} alt={alt} playing={playing} onError={() => setFailedSource(src.mp4)} />;
 }
 
 /** One item a phone can show: a recording or a still. */
@@ -182,17 +220,17 @@ export type PhoneMedia = { video?: string; screen?: string; alt: string };
 
 /** A phone that crossfades between media items (driven by `index`). */
 export function PhoneStage({
-  items, index, priority, ...rest
-}: { items: PhoneMedia[]; index: number; priority?: boolean } & BoxProps) {
+  items, index, priority, playing = true, ...rest
+}: { items: PhoneMedia[]; index: number; priority?: boolean; playing?: boolean } & BoxProps) {
   const reduced = useReducedMotion();
   const item = items[Math.max(0, Math.min(index, items.length - 1))];
   if (items.length === 1) {
     return (
       <PhoneFrame {...rest}>
         {item.video ? (
-          <AppVideo id={item.video} alt={item.alt} fallbackScreen={item.screen} />
+          <AppVideo id={item.video} alt={item.alt} fallbackScreen={item.screen} playing={playing} />
         ) : (
-          <AppScreen id={item.screen ?? ""} alt={item.alt} priority={priority} />
+          <AppScreen id={item.screen ?? ""} alt={item.alt} priority={priority} playing={playing} />
         )}
       </PhoneFrame>
     );
@@ -209,9 +247,9 @@ export function PhoneStage({
           style={{ position: "absolute", inset: 0 }}
         >
           {item.video ? (
-            <AppVideo id={item.video} alt={item.alt} fallbackScreen={item.screen} />
+            <AppVideo id={item.video} alt={item.alt} fallbackScreen={item.screen} playing={playing} />
           ) : (
-            <AppScreen id={item.screen ?? ""} alt={item.alt} priority={priority} />
+            <AppScreen id={item.screen ?? ""} alt={item.alt} priority={priority} playing={playing} />
           )}
         </motion.div>
       </AnimatePresence>

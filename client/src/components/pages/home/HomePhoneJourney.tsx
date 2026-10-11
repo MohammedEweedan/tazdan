@@ -1,8 +1,8 @@
 "use client";
 
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { Box } from "@chakra-ui/react";
-import { motion, useReducedMotion, useScroll, useTransform, type MotionValue } from "framer-motion";
+import { motion, useMotionValueEvent, useReducedMotion, useScroll, useTransform, type MotionValue } from "framer-motion";
 import {
   AppScreen, Body, Container, Eyebrow, Headline, PhoneFrame, StatusChip,
   useSiteTheme, type Chapter,
@@ -41,13 +41,13 @@ function useScreenOpacity(progress: MotionValue<number>, index: number, count: n
     index === 0 ? [1, 1] : [0, 0, 1, 1]);
 }
 
-function ScreenLayer({ chapter, index, count, progress, reduced }: {
-  chapter: Chapter; index: number; count: number; progress: MotionValue<number>; reduced: boolean;
+function ScreenLayer({ chapter, index, count, progress, reduced, active }: {
+  chapter: Chapter; index: number; count: number; progress: MotionValue<number>; reduced: boolean; active: boolean;
 }) {
   const opacity = useScreenOpacity(progress, index, count, reduced);
   return (
-    <motion.div data-journey-screen={index} style={{ position: "absolute", inset: 0, opacity, pointerEvents: "none" }}>
-      <AppScreen id={chapter.media.screen ?? ""} alt={chapter.media.alt} />
+    <motion.div data-journey-screen={index} aria-hidden={!active} style={{ position: "absolute", inset: 0, opacity, pointerEvents: "none" }}>
+      <AppScreen id={chapter.media.screen ?? ""} alt={chapter.media.alt} playing={active} />
     </motion.div>
   );
 }
@@ -91,13 +91,22 @@ export default function HomePhoneJourney({ chapters }: { chapters: Chapter[] }) 
   const { scrollYProgress } = useScroll({ target: ref, offset: ["start start", "end end"] });
   const progress = scrollYProgress;
   const count = chapters.length;
+  const [active, setActive] = useState(0);
+  const activeRef = useRef(0);
+  useMotionValueEvent(progress, "change", (value) => {
+    const next = Math.max(0, Math.min(count - 1, Math.round(value * (count - 1))));
+    if (next !== activeRef.current) {
+      activeRef.current = next;
+      setActive(next);
+    }
+  });
   const media = (
     <Box position="relative" h="100%" display="flex" alignItems="center" justifyContent="center">
       <Box aria-hidden position="absolute" inset="-12%" bg={theme.glow} pointerEvents="none" />
       <PhoneFrame w="auto" h={{ base: "min(59dvh, calc(100dvh - 350px), 500px)", lg: "min(72vh, 650px)" }}>
         {chapters.map((chapter, index) => (
           <ScreenLayer key={chapter.id} chapter={chapter} index={index}
-            count={count} progress={progress} reduced={reduced} />
+            count={count} progress={progress} reduced={reduced} active={active === index} />
         ))}
       </PhoneFrame>
     </Box>
