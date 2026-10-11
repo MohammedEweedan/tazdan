@@ -12,21 +12,47 @@
  *   useMessageRealtime()— mounts a single ws subscriber per query client
  *
  * Optimistic strategy: the send mutation appends a placeholder bubble
- * with `id: 'local_…'` and `isRead=false`. When the server response or
- * the ws push lands, the real row replaces the placeholder by
- * `txRef`/`createdAt` heuristics. Edit + delete update in place.
+ * with `id: 'local_…'` and `isRead=false`. Whichever of the HTTP response
+ * or the ws echo lands first replaces it — matched by id, then by the
+ * client-generated `clientId` (never by content). Edit + delete update in place.
  */
 
 import { useEffect } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { Socket } from 'socket.io-client';
 
+import type { QueryClient } from '@tanstack/react-query';
 import { QUERY_KEYS } from '@/constants';
-import { messageService } from '@/services';
+import { messageService, profileService } from '@/services';
 import { getSocket } from '@/lib/socket';
+import { useAuthStore } from '@/store/authStore';
 import type {
   ApiMessage, BlockedUser, Conversation,
 } from '@/types/messages';
+
+/**
+ * Reserved system handles that may appear in a `/messages/<x>` route instead of
+ * a user id (e.g. the "Message tazdan Support" tile). The messaging API only
+ * accepts user ids, so these must be resolved before a thread is opened.
+ */
+const SYSTEM_HANDLES = new Set(['support']);
+export const isHandleParam = (raw: string): boolean =>
+  raw.startsWith('@') || SYSTEM_HANDLES.has(raw.toLowerCase());
+
+/** Resolve an @handle to a user id: conversation cache first, then the public profile. */
+export async function resolveUserIdByHandle(qc: QueryClient, raw: string): Promise<string | null> {
+  const handle = raw.replace(/^@/, '').toLowerCase();
+  if (!handle) return null;
+  const convs = qc.getQueryData<Conversation[]>(QUERY_KEYS.conversations) ?? [];
+  const hit = convs.find((c) => c.partner.username?.toLowerCase() === handle);
+  if (hit) return hit.partner.id;
+  try {
+    const profile = await profileService.byHandle(handle);
+    return profile?.id ?? null;
+  } catch {
+    return null;
+  }
+}
 
 // ── Queries ────────────────────────────────────────────────────────
 
@@ -82,7 +108,9 @@ export const useSendMessage = (partnerId: string) => {
       const placeholder: ApiMessage = {
         id:         `local_${clientId}`,
         clientId,
-        senderId:   'me',
+        // Must be the real id: bubbles decide sides by `senderId === me.id`, so a
+        // literal 'me' drew the pending bubble on the partner's side, then it jumped.
+        senderId:   useAuthStore.getState().user?.id ?? 'me',
         receiverId: vars.receiverId,
         content:    vars.content,
         type:       vars.type ?? 'TEXT',
@@ -98,22 +126,26 @@ export const useSendMessage = (partnerId: string) => {
       return { prev, clientId };
     },
     onError: (_err, _vars, ctx) => {
-      if (ctx?.prev) qc.setQueryData(QUERY_KEYS.thread(partnerId), ctx.prev);
+      // Remove only our placeholder — restoring the pre-send snapshot would also
+      // wipe any message that arrived over the socket while the request was in flight.
+      qc.setQueryData<ApiMessage[]>(QUERY_KEYS.thread(partnerId), (cur) =>
+        cur?.filter((m) => !(m.id.startsWith('local_') && m.clientId === ctx?.clientId)),
+      );
     },
     onSuccess: (real, _vars, ctx) => {
-      qc.setQueryData<ApiMessage[]>(QUERY_KEYS.thread(partnerId), (cur = []) => {
-        // Drop any row that's already the real one (the ws echo may have
-        // landed first), then replace OUR placeholder (matched by clientId)
-        // with the server row. Guard against the real id appearing twice.
-        const withoutDupes = cur.filter(
-          (m) => !(m.id === real.id && m.clientId !== ctx?.clientId),
-        );
-        const hasReal = withoutDupes.some((m) => m.id === real.id);
-        return withoutDupes
-          .map((m) => (m.clientId && m.clientId === ctx?.clientId
-            ? (hasReal ? null : real)   // if real already present, mark placeholder for removal
-            : m))
-          .filter(Boolean) as ApiMessage[];
+      qc.setQueryData<ApiMessage[]>(QUERY_KEYS.thread(partnerId), (cur) => {
+        if (!cur) return cur;
+        // Rows that are this message: the real id, or our placeholder by clientId.
+        // The ws echo usually lands first (the server emits before it responds) and
+        // has already swapped the placeholder for the real row — keep exactly one
+        // row, at the placeholder's position. (Previously the echoed row was matched
+        // by clientId and dropped, so the sent message vanished until the next poll.)
+        const cid = ctx?.clientId;
+        const isThis = (m: ApiMessage) => m.id === real.id || (!!cid && m.clientId === cid);
+        const at = cur.findIndex(isThis);
+        if (at === -1) return [...cur, real];
+        const keep = cur.find((m) => m.id === real.id) ?? real;
+        return cur.flatMap((m, i) => (i === at ? [keep] : isThis(m) ? [] : [m]));
       });
       qc.invalidateQueries({ queryKey: QUERY_KEYS.conversations });
     },
@@ -194,15 +226,29 @@ export function useMessageRealtime(currentUserId: string | undefined) {
   useEffect(() => {
     if (!currentUserId) return;
     let socket: Socket | null = null;
+    const handlers: Array<[string, (...args: any[]) => void]> = [];
     let cancelled = false;
 
     (async () => {
       socket = await getSocket();
       if (cancelled) return;
 
+      // Thread caches are only patched once loaded. Seeding an unloaded thread
+      // with just the pushed row made it look "fresh" (30s staleTime), so opening
+      // it showed only that row — e.g. a support reply with the history missing.
       const onNew = (m: ApiMessage & { clientId?: string | null }) => {
+        qc.invalidateQueries({ queryKey: QUERY_KEYS.conversations });
+        // Not a party (e.g. an escalation notice addressed to the counterparty):
+        // never file it under our thread with its sender.
+        if (m.senderId !== currentUserId && m.receiverId !== currentUserId) return;
         const partnerId = m.senderId === currentUserId ? m.receiverId : m.senderId;
-        qc.setQueryData<ApiMessage[]>(QUERY_KEYS.thread(partnerId), (cur = []) => {
+        const key = QUERY_KEYS.thread(partnerId);
+        if (qc.getQueryData(key) === undefined) {
+          qc.invalidateQueries({ queryKey: key });   // refetches only if it's on screen / loading
+          return;
+        }
+        qc.setQueryData<ApiMessage[]>(key, (cur) => {
+          if (!cur) return cur;
           // Already have the real row → no-op (the HTTP onSuccess beat us here).
           if (cur.some((x) => x.id === m.id)) return cur;
           // Our own echo: replace the optimistic placeholder by its clientId —
@@ -214,12 +260,11 @@ export function useMessageRealtime(currentUserId: string | undefined) {
           // Genuinely new inbound message → append.
           return [...cur, m];
         });
-        qc.invalidateQueries({ queryKey: QUERY_KEYS.conversations });
       };
       const onUpdate = (m: ApiMessage) => {
         const partnerId = m.senderId === currentUserId ? m.receiverId : m.senderId;
-        qc.setQueryData<ApiMessage[]>(QUERY_KEYS.thread(partnerId), (cur = []) =>
-          cur.map((x) => (x.id === m.id ? m : x)),
+        qc.setQueryData<ApiMessage[]>(QUERY_KEYS.thread(partnerId), (cur) =>
+          cur?.map((x) => (x.id === m.id ? m : x)),
         );
       };
       const onDelete = (m: ApiMessage) => onUpdate(m);  // soft-delete is just an update
@@ -227,8 +272,10 @@ export function useMessageRealtime(currentUserId: string | undefined) {
       const onRead = (payload: { by: string; ids?: string[]; partnerId?: string }) => {
         // Mark my outbound messages to that partner as read.
         const partnerId = payload.by;
-        qc.setQueryData<ApiMessage[]>(QUERY_KEYS.thread(partnerId), (cur = []) =>
-          cur.map((x) =>
+        // (cur) not (cur = []): a read receipt must never create an empty cache
+        // for an unopened thread — it rendered as a blank conversation.
+        qc.setQueryData<ApiMessage[]>(QUERY_KEYS.thread(partnerId), (cur) =>
+          cur?.map((x) =>
             x.senderId === currentUserId && (!payload.ids || payload.ids.includes(x.id))
               ? { ...x, isRead: true, readAt: new Date().toISOString() }
               : x,
@@ -241,24 +288,23 @@ export function useMessageRealtime(currentUserId: string | undefined) {
         qc.invalidateQueries({ queryKey: QUERY_KEYS.conversations });
       };
 
-      socket.on('message:new',    onNew);
-      socket.on('message:update', onUpdate);
-      socket.on('message:delete', onDelete);
-      socket.on('message:read',   onRead);
-      socket.on('block:new',      onBlock);
-      socket.on('block:remove',   onBlock);
+      handlers.push(
+        ['message:new',    onNew],
+        ['message:update', onUpdate],
+        ['message:delete', onDelete],
+        ['message:read',   onRead],
+        ['block:new',      onBlock],
+        ['block:remove',   onBlock],
+      );
+      for (const [event, fn] of handlers) socket.on(event, fn);
     })();
 
     return () => {
       cancelled = true;
-      if (socket) {
-        socket.off('message:new');
-        socket.off('message:update');
-        socket.off('message:delete');
-        socket.off('message:read');
-        socket.off('block:new');
-        socket.off('block:remove');
-      }
+      // Detach only OUR handlers. `off(event)` with no handler removed every
+      // listener — so leaving a P2P trade chat (which mounts its own bridge)
+      // silently killed the app-wide bridge and live replies stopped arriving.
+      if (socket) for (const [event, fn] of handlers) socket.off(event, fn);
     };
   }, [currentUserId, qc]);
 }

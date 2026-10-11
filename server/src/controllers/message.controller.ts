@@ -67,7 +67,9 @@ function mergeMessagePrivacy(prefs: any, patch: Partial<MessagePrivacy>) {
   };
 }
 
-function toWire(m: any) {
+/** Wire shape of a message — shared with the admin support-reply path so socket
+ *  payloads are identical whichever controller emits them. */
+export function toWire(m: any) {
   return {
     id:         m.id,
     senderId:   m.senderId,
@@ -686,8 +688,11 @@ export class MessageController {
         },
       });
 
-      emit(req, [me, data.counterpartyId, support.id], 'message:new', toWire(sysMsg));
-      emit(req, [me, data.counterpartyId, support.id], 'message:new', toWire(sysMsg2));
+      // Each notice only to its addressee (+ support). Broadcasting both to both
+      // parties filed the other side's notice into each user's support thread
+      // until the next refetch removed it again.
+      emit(req, [me, support.id],                     'message:new', toWire(sysMsg));
+      emit(req, [data.counterpartyId, support.id],    'message:new', toWire(sysMsg2));
       emit(req, [me, support.id],                     'message:new', toWire(opener));
       emit(req, [me, data.counterpartyId, support.id], 'escalation:new', { escalation });
 

@@ -10,6 +10,7 @@
  */
 
 import { designEn, designAr } from '@/theme/copy';
+import { confirmCopy } from '@/theme/confirmCopy';
 import { tourEn, tourAr } from '@/components/onboarding/copy';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Alert, ActionSheetIOS, I18nManager, Platform } from 'react-native';
@@ -4329,6 +4330,9 @@ const dict: Record<Locale, Strings> = {
     'claim.linkUnavailable': '分享不可用', 'claim.expiringSoon': '即将过期',
   },
 };
+
+// ConfirmAction copy (slide / hold / review) lives beside its component.
+for (const [locale, strings] of Object.entries(confirmCopy)) Object.assign(dict[locale as Locale], strings);
 
 for (const locale of LOCALES) {
   if (locale === 'en') continue;

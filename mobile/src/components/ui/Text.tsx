@@ -83,17 +83,39 @@ function resolveFontFamily(style: any, useCairo: boolean): any {
   return { ...flattened, fontFamily: mapped, fontWeight: undefined };
 }
 
+// Fiat currency names stay strictly LTR — written left-to-right and aligned
+// left — even when they render in Arabic (owner rule, 11 Oct 2026). They sit in
+// LTR rows beside flags and amounts; right-aligning them pushed "دولار أمريكي"
+// into its balance. Matched in English (before literal translation) and in
+// Arabic, optionally wrapped with a code: "LYD · Libyan Dinar".
+const FIAT_NAMES_EN = [
+  'US Dollar', 'Euro', 'British Pound', 'Pound', 'UAE Dirham', 'Saudi Riyal', 'Egyptian Pound',
+  'Libyan Dinar', 'Canadian Dollar', 'Australian Dollar', 'Swiss Franc', 'Japanese Yen',
+  'Chinese Yuan', 'Turkish Lira', 'Tunisian Dinar',
+];
+let fiatNames: Set<string> | null = null;
+function isFiatName(text: string): boolean {
+  if (!text) return false;
+  if (!fiatNames) fiatNames = new Set(FIAT_NAMES_EN.flatMap((n) => [n, translateLiteral(n, 'ar') ?? n]));
+  const core = text.replace(/\b[A-Z]{3}\b/g, '').replace(/[·•|—–\-()]/g, '').trim();
+  return core.length > 0 && fiatNames.has(core);
+}
+
 export const Text = forwardRef<RNText, TextProps>((props, ref) => {
   const locale = useI18n((s) => s.locale);
   // Arabic uses Cairo — except for numeric/currency content, which stays Outfit.
   const content = flattenChildrenToString(props.children);
   const localizedContent = translateLiteral(content, locale) ?? content;
-  const arabicText = locale === 'ar' && ARABIC_LETTER.test(localizedContent);
+  const fiatName = locale === 'ar' && (isFiatName(content) || isFiatName(localizedContent));
+  const arabicText = locale === 'ar' && !fiatName && ARABIC_LETTER.test(localizedContent);
   const useCairo = locale === 'ar' && !isNumericContent(props.children);
+  // A deliberately centred title stays centred; anything else is pinned left.
+  const callerAlign = fiatName ? StyleSheet.flatten(props.style)?.textAlign : undefined;
   const resolvedStyle = resolveFontFamily([
     { writingDirection: arabicText ? 'rtl' : 'ltr' },
     arabicText ? { textAlign: 'right' } : undefined,
     props.style,
+    fiatName ? { writingDirection: 'ltr', textAlign: callerAlign === 'center' ? 'center' : 'left' } : undefined,
   ], useCairo);
   const localizedChildren = localizeChildren(props.children, locale);
   return <RNText {...props} ref={ref} style={resolvedStyle}>{localizedChildren}</RNText>;

@@ -11,6 +11,7 @@ import { Box } from "@chakra-ui/react";
 import { useTranslate } from "@tolgee/react";
 import { FiArrowUp, FiChevronDown } from "react-icons/fi";
 import { SectionLabel, useSiteLocale, useSiteTheme } from "@/components/site";
+import { useAutoDir } from "./LegalText";
 
 export type TocItem = { id: string; label: string; num: string | null };
 
@@ -20,6 +21,7 @@ function TocList({
   items, active, onNavigate, dense,
 }: { items: TocItem[]; active: string | null; onNavigate?: () => void; dense?: boolean }) {
   const t = useSiteTheme();
+  const dir = useAutoDir();
   return (
     <Box as="ol" listStyleType="none" m={0} p={0}>
       {items.map((it) => {
@@ -59,7 +61,7 @@ function TocList({
               >
                 {it.num}
               </Box>
-              <Box as="span" dir="auto" minW={0}>
+              <Box as="span" dir={dir} minW={0}>
                 {it.label}
               </Box>
             </Box>

@@ -22,23 +22,32 @@ function wsBase(): string {
 
 /**
  * Returns a singleton Socket.IO client. The first call begins
- * connection; subsequent calls reuse the same instance unless the
- * access token has changed (in which case we tear down + reconnect).
+ * connection; subsequent calls reuse the same instance. When the
+ * access token changes we reconnect THAT instance with the new token.
  */
 export async function getSocket(): Promise<Socket> {
   const token = (await secureStore.get(STORAGE_KEYS.accessToken)) ?? null;
 
   if (socket && token === cachedToken) return socket;
-  // Token rotated — drop the old socket and reconnect with the new one.
-  if (socket) {
-    socket.disconnect();
-    socket = null;
-  }
   cachedToken = token;
+  if (socket) {
+    // Token rotated (15-min refresh): reconnect the SAME instance so every
+    // listener already attached (message bridge, typing, notifications)
+    // survives. Swapping in a new instance orphaned them, and live messages
+    // silently stopped until the app restarted.
+    socket.disconnect().connect();
+    return socket;
+  }
 
   socket = io(wsBase(), {
     transports: ['websocket'],
-    auth: token ? { token } : undefined,
+    // Read on every (re)connect, so automatic reconnects never present an
+    // expired token (the server would accept the socket but join no rooms).
+    auth: (cb) => {
+      secureStore.get(STORAGE_KEYS.accessToken)
+        .then((t) => cb(t ? { token: t } : {}))
+        .catch(() => cb({}));
+    },
     reconnection: true,
     reconnectionAttempts: 10,
     reconnectionDelay: 1_000,

@@ -19,8 +19,11 @@ const CSS = `
   nav, footer, a[href="#main"], [data-legal-noprint] { display: none !important; }
 
   [data-legal-doc] * { color: #000 !important; border-color: #c9c9c9 !important; }
-  [data-legal-doc] [data-legal-header] > div { padding-top: 0 !important; padding-bottom: 14pt !important; }
-  [data-legal-doc] [data-legal-body] { padding-top: 14pt !important; padding-bottom: 0 !important; }
+  [data-legal-doc] [data-legal-hero] header { min-height: 0 !important; padding: 0 0 14pt !important; align-items: flex-start !important; }
+  [data-legal-doc] [data-legal-hero] header > div { align-items: flex-start !important; text-align: start !important; padding: 0 !important; }
+  [data-legal-doc] [data-legal-hero] header > div[aria-hidden] { display: none !important; }
+  [data-legal-doc] .media-hero-step { opacity: 1 !important; transform: none !important; animation: none !important; }
+  [data-legal-doc] [data-legal-body] { padding: 14pt 0 0 !important; border: none !important; }
   [data-legal-doc] [data-legal-grid] { display: block !important; }
   [data-legal-doc] [data-legal-content] { max-width: none !important; font-size: 10.5pt !important; }
   [data-legal-doc] h1 { font-size: 24pt !important; line-height: 1.15 !important; }

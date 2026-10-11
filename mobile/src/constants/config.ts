@@ -48,3 +48,16 @@ export const DEEP_LINKS = {
   profile: (handle: string) => `tazdan://profile/${handle}`,
   asset:   (currency: string) => `tazdan://asset/${currency}`,
 } as const;
+
+/**
+ * How money flows (send · buy · sell · exchange · top up) ask for the final
+ * confirmation. This is the ONE default for every `ConfirmAction`:
+ *   'review' — "Review" → summary sheet → Confirm   (recommended)
+ *   'hold'   — press and hold the pill for ~0.8 s
+ *   'slide'  — drag the knob across the track
+ * Testers can override it on a device in Settings → Appearance; that choice
+ * is persisted in `uiStore.confirmStyle`. Step-up / biometrics run after the
+ * confirmation either way — the style only expresses intent.
+ */
+export type ConfirmStyle = 'review' | 'hold' | 'slide';
+export const CONFIRM_STYLE: ConfirmStyle = 'review';

@@ -15,6 +15,7 @@ import { createUserWallets } from '../services/wallet/walletDerivation.service';
 import { writeAudit } from '../services/platform/audit';
 import { recordTransition } from '../services/platform/lifecycle';
 import { markWithdrawalHistory } from '../services/wallet/withdrawalHistory';
+import { toWire as messageWire } from './message.controller';
 
 const rateSchema = z.object({
   buyPrice: z.number().positive(),
@@ -1449,12 +1450,13 @@ export class AdminController {
         const content = note
           ? `Escalation #${updated.id.slice(0, 8)} resolved by support: ${note}`
           : `Escalation #${updated.id.slice(0, 8)} marked as resolved by support.`;
-        await prisma.message.createMany({
-          data: [
-            { senderId: support.id, receiverId: updated.raisedById,     content, type: 'SYSTEM', metadata: { escalationId: updated.id } as any, tradeId: updated.tradeId },
-            { senderId: support.id, receiverId: updated.counterpartyId, content, type: 'SYSTEM', metadata: { escalationId: updated.id } as any, tradeId: updated.tradeId },
-          ],
-        });
+        const notices = await prisma.$transaction([updated.raisedById, updated.counterpartyId].map((receiverId) =>
+          prisma.message.create({
+            data: { senderId: support.id, receiverId, content, type: 'SYSTEM', metadata: { escalationId: updated.id } as any, tradeId: updated.tradeId },
+          })));
+        // Push them live — previously they only appeared after a refresh/poll.
+        const io = req.app.get('io');
+        if (io) for (const n of notices) io.to([`user:${n.receiverId}`, `user:${support.id}`]).emit('message:new', messageWire(n));
       }
 
       res.json({ escalation: updated });
@@ -1714,14 +1716,10 @@ export class AdminController {
         },
       });
 
+      // Full wire shape, to the customer AND the support account's own sessions
+      // (the partial payload lacked readAt/editedAt/deletedAt/tradeId).
       const io = req.app.get('io');
-      if (io) {
-        io.to(`user:${data.userId}`).emit('message:new', {
-          id: message.id, senderId: support.id, receiverId: data.userId,
-          content: message.content, type: message.type, isRead: false,
-          createdAt: message.createdAt, metadata: message.metadata,
-        });
-      }
+      if (io) io.to([`user:${data.userId}`, `user:${support.id}`]).emit('message:new', messageWire(message));
 
       // If the last inbound message from this user came via WhatsApp, mirror the reply there.
       try {

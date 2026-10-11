@@ -10,7 +10,7 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ActionSheetIOS, Alert, Animated, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, Switch, View } from 'react-native';
+import { ActionSheetIOS, ActivityIndicator, Alert, Animated, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, Switch, View } from 'react-native';
 import { Text, TextInput } from '@/components/ui/Text';
 import { SendMoneySheet } from '@/components/messages/SendMoneySheet';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -29,6 +29,7 @@ import {
   useBlockUser, useReportMessage, useEscalateP2P, useHaptics,
   useStepUpAuth, StepUpDeniedError,
 } from '@/hooks';
+import { isHandleParam, resolveUserIdByHandle } from '@/hooks/useMessages';
 import { useUsdValue } from '@/hooks/useForexRates';
 import { StepUpModal } from '@/components/ui/StepUpModal';
 import { isStepUpChallengeError } from '@/lib/stepUpErrors';
@@ -42,7 +43,52 @@ import { useTransactionSound } from '@/hooks/useTransactionSound';
 
 import { BottomSheet } from '@/components/ui/BottomSheet';
 
-export default function MessageThread() {
+/**
+ * `/messages/<id>` normally carries a user id, but entry points like the
+ * "Message tazdan Support" tile pass a handle (`support`). The messaging API
+ * only understands ids — opening the thread with the handle showed a blank
+ * "Conversation" screen whose sends were rejected (400) and vanished — so
+ * resolve the handle first and swap the route for the real id.
+ */
+export default function MessageThreadScreen() {
+  const { id } = useLocalSearchParams<{ id: string }>();
+  const raw = String(id ?? '');
+  return isHandleParam(raw) ? <ResolveHandle handle={raw} /> : <MessageThread />;
+}
+
+function ResolveHandle({ handle }: { handle: string }) {
+  const router = useRouter();
+  const qc = useQueryClient();
+  const p = useThemedPalette();
+  const t = useT();
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    let live = true;
+    resolveUserIdByHandle(qc, handle).then((userId) => {
+      if (!live) return;
+      if (userId) router.replace(`/messages/${userId}`);
+      else setFailed(true);
+    });
+    return () => { live = false; };
+  }, [handle, qc, router]);
+  return (
+    <View style={{ flex: 1, backgroundColor: p.bg, alignItems: 'center', justifyContent: 'center', padding: 32, gap: 16 }}>
+      {failed ? (
+        <>
+          <Ionicons name="cloud-offline-outline" size={32} color={p.fgFaint} />
+          <Text style={{ color: p.fgMuted, fontSize: 14, fontWeight: '600', textAlign: 'center' }}>{t('common.error')}</Text>
+          <Pressable onPress={() => router.back()} hitSlop={8}>
+            <Text style={{ color: p.accentText, fontSize: 14, fontWeight: '700' }}>{t('common.close')}</Text>
+          </Pressable>
+        </>
+      ) : (
+        <ActivityIndicator color={p.fgMuted} />
+      )}
+    </View>
+  );
+}
+
+function MessageThread() {
   const { id: partnerIdParam, openPay } = useLocalSearchParams<{ id: string; openPay?: string }>();
   const partnerId = String(partnerIdParam ?? '');
   const router = useRouter();
@@ -104,8 +150,13 @@ const { data: messages = [], isLoading } = useThread(partnerId);  const sendMut 
 
   // Mark inbound as read whenever we open the thread or a new ws push lands.
   useEffect(() => {
-    if (partnerId && privacy.readReceiptsOn) messageService.markRead(partnerId).catch(() => {});
-  }, [partnerId, messages?.length, privacy.readReceiptsOn]);
+    if (!partnerId || !privacy.readReceiptsOn) return;
+    // Refresh the inbox once the server has the read, so the unread badge
+    // clears right away instead of on the next 10s poll.
+    messageService.markRead(partnerId)
+      .then(() => qc.invalidateQueries({ queryKey: QUERY_KEYS.conversations }))
+      .catch(() => {});
+  }, [partnerId, messages?.length, privacy.readReceiptsOn, qc]);
 
   // Typing indicator — subscribe to partner's typing events via socket.
   useEffect(() => {
@@ -221,7 +272,14 @@ const { data: messages = [], isLoading } = useThread(partnerId);  const sendMut 
       }
       return;
     }
-    sendMut.mutate({ receiverId: partnerId, content: body });
+    sendMut.mutate({ receiverId: partnerId, content: body }, {
+      // The bubble is removed on failure — hand the text back instead of
+      // silently losing it, and say why.
+      onError: (e: any) => {
+        setDraft((cur) => cur || body);
+        Alert.alert(t('common.error'), e?.response?.data?.error ?? e?.message ?? t('common.retry'));
+      },
+    });
     setDraft('');
   };
 
@@ -591,6 +649,9 @@ const { data: messages = [], isLoading } = useThread(partnerId);  const sendMut 
                 label is aspirational and must be replaced with
                 "Secured in transit" (or implemented for real) before
                 any public launch. */}
+            {/* Never on a support thread: staff read it in the cockpit, so the
+                claim is plainly untrue there. */}
+            {!isSupport && (
             <View style={{
               alignSelf: 'center',
               flexDirection: 'row', alignItems: 'center', gap: 6,
@@ -606,6 +667,7 @@ const { data: messages = [], isLoading } = useThread(partnerId);  const sendMut 
                 {t('chat.e2eBanner')}
               </Text>
             </View>
+            )}
 
             {isLoading && !messages?.length ? (
               <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '500', textAlign: 'center', marginTop: 48 }}>

@@ -12,7 +12,7 @@ import * as Haptics from 'expo-haptics';
 import { useAuthStore } from '@/store/authStore';
 import { useThemedPalette } from '@/store/themeStore';
 import { useI18n, useT } from '@/store/i18nStore';
-import { SlideToConfirm } from '@/components/ui/SlideToConfirm';
+import { ConfirmAction } from '@/components/ui/ConfirmAction';
 import { NumericKeypad } from '@/components/ui/NumericKeypad';
 import { AmountDisplay } from '@/components/ui/AmountDisplay';
 import { StatusBanner } from '@/components/ui/StatusBanner';
@@ -505,8 +505,6 @@ export function BuyWidget({ defaultAsset, lockAsset = false }: BuyWidgetProps = 
     ? 'Select a payment method'
     : limit.blocked
     ? tr('limits.reached')
-    : canConfirm
-    ? tr('buy.slideToBuy').replace('{asset}', asset)
     : tr('buy.enterAmount');
 
   // Top gainers: top 5 by 24h change from tickers
@@ -554,8 +552,25 @@ export function BuyWidget({ defaultAsset, lockAsset = false }: BuyWidgetProps = 
   };
   const showExpressPay = fiatNum > 0 && !!STRIPE.publishableKey && (Platform.OS === 'ios' || Platform.OS === 'android');
 
+  // Summary for the review sheet — only once a live quote exists.
+  const networkLabel = ASSET_NETWORKS[serverAsset(asset)]?.find((n) => n.network === network)?.label;
+  const payWithLabel = !payMethod ? '' : payMethod.type === 'card' ? `${payMethod.brand} •••• ${payMethod.last4}`
+    : payMethod.type === 'fiat' ? payMethod.currency : payMethod.asset;
+  const review = quote ? {
+    amount: `${fmt(quote.cryptoAmount, 8)} ${asset}`,
+    rows: [
+      { label: tr('confirm.youPay'), value: `${fmt(quote.totalUserPays, 2)} ${fundingCurrency}` },
+      { label: tr('buy.platformFee'), value: `${fmt(quote.platformFeeSettlement ?? quote.platformFee, 2)} ${fundingCurrency}` },
+      { label: tr('buy.networkFee'), value: `${fmt(quote.networkFeeSettlement ?? quote.networkFee, 2)} ${fundingCurrency}` },
+      { label: tr('confirm.payWith'), value: payWithLabel },
+      ...(networkLabel ? [{ label: tr('confirm.network'), value: networkLabel }] : []),
+      { label: tr('confirm.priceHeld'), value: `${seconds}s` },
+    ],
+  } : undefined;
+
   return (
-    <View style={{ flex: 1, paddingHorizontal: 20, paddingBottom: 8 }}>
+    // Bottom spacing comes from ConfirmAction's dock (clear of the home indicator).
+    <View style={{ flex: 1, paddingHorizontal: 20 }}>
 
       {/* ── Top row: crypto picker (½) + chain selector (½) ── */}
       {(() => {
@@ -737,19 +752,14 @@ export function BuyWidget({ defaultAsset, lockAsset = false }: BuyWidgetProps = 
 
       {/* ── CTA — pinned at the bottom ── */}
       <LimitNotice action="ONRAMP_BUY" amountUsd={quote ? Number(quote.fiatAmount) : null} style={{ marginBottom: 10 }} />
-      <SlideToConfirm
-        label={slideLabel}
+      <ConfirmAction
+        action={tr('confirm.act.buy', { asset })}
+        prompt={slideLabel}
         onConfirm={() => { if (canConfirm && !error && !exec) doExecute(payMethod); }}
-        enabled={canConfirm && !error}
+        disabled={!canConfirm || !!error}
         status={exec ? 'loading' : error ? 'error' : 'idle'}
         errorLabel={error || undefined}
-        accent={brandAccent}
-        accentFg={p.accentFg}
-        trackBg={p.bgElev}
-        trackFg={p.fg}
-        border={p.border}
-        greenBg={p.greenBg} greenFg={p.greenFg}
-        redBg={p.redBg} redFg={p.redFg}
+        review={review}
       />
 
       {/* Step-up 6-digit confirmation (high-value / new device) */}

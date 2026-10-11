@@ -8,7 +8,7 @@ import { Text, TextInput } from '@/components/ui/Text';
 import { NumericKeypad } from '@/components/ui/NumericKeypad';
 import { AmountDisplay } from '@/components/ui/AmountDisplay';
 import { CurrencyPicker, type CurrencyItem } from '@/components/ui/CurrencyPicker';
-import { SlideToConfirm } from '@/components/ui/SlideToConfirm';
+import { ConfirmAction, ltr } from '@/components/ui/ConfirmAction';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useQuery } from '@tanstack/react-query';
@@ -210,9 +210,15 @@ export function SendWidget({ initialRecipient }: { initialRecipient?: Profile } 
   };
 
   const meta       = assetMeta(currency);
+  const amountText = `${sendAmount.toLocaleString('en-US', { maximumFractionDigits: 8 })} ${currency}`;
+  const prompt = !picked ? t('confirm.selectRecipient')
+    : limit.blocked ? t('limits.reached')
+    : overspend ? t('sell.insufficient')
+    : t('buy.enterAmount');
 
   return (
-    <View style={{ flex: 1, paddingHorizontal: 20, paddingBottom: 8 }}>
+    // Bottom spacing comes from ConfirmAction's dock (clear of the home indicator).
+    <View style={{ flex: 1, paddingHorizontal: 20 }}>
 
       {/* ── Recipient field ── */}
       <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '700', letterSpacing: 0.5, marginBottom: 8 }}>{t('send.recipient') || 'Recipient'}</Text>
@@ -460,20 +466,22 @@ export function SendWidget({ initialRecipient }: { initialRecipient?: Profile } 
       </View>
 
       <LimitNotice action="SEND" amountUsd={sendUsd} style={{ marginBottom: 10 }} />
-      <SlideToConfirm
-        label={valid ? (t('send.cta') || 'Slide to send') : (picked ? 'Enter amount' : 'Select recipient')}
+      <ConfirmAction
+        action={t('confirm.act.send', { amount: ltr(amountText) })}
+        prompt={prompt}
         onConfirm={() => { if (valid && ctaState === 'idle') onSend(); }}
-        enabled={valid && ctaState === 'idle'}
+        disabled={!valid || ctaState !== 'idle'}
         status={ctaState}
         successLabel={t('send.sent') || 'Sent'}
         errorLabel={ctaError ?? t('send.failed')}
-        accent={p.accent}
-        accentFg={p.accentFg}
-        trackBg={p.bgElev}
-        trackFg={p.fg}
-        border={p.border}
-        greenBg={p.greenBg} greenFg={p.greenFg}
-        redBg={p.redBg} redFg={p.redFg}
+        review={picked ? {
+          amount: amountText,
+          rows: [
+            { label: t('confirm.to'), value: `${picked.firstName ?? ''} ${picked.lastName ?? ''}`.trim() || `@${picked.username}`, sub: `@${picked.username}` },
+            { label: t('confirm.from'), value: `${meta.label} · ${currency}`, sub: `${t('common.available')}: ${ltr(`${balance.toLocaleString('en-US', { maximumFractionDigits: 8 })} ${currency}`)}` },
+            ...(note.trim() ? [{ label: t('confirm.note'), value: note.trim() }] : []),
+          ],
+        } : undefined}
       />
 
       {/* ── QR Code Modal ── */}
