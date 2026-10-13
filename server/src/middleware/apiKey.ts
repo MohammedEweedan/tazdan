@@ -31,6 +31,8 @@ export function requireApiKey(scope: ApiScope) {
         : (await prisma.businessTeamMember.findFirst({ where: { businessId: key.businessId!, userId: key.userId, status: 'ACTIVE' }, select: { role: true } }))?.role;
       if (!role) throw new AppError('The person who created this key is no longer on the team', 401);
       if (scope === 'PAYOUTS' && !read && !['OWNER', 'ADMIN'].includes(role)) throw new AppError('This key’s creator can no longer send payouts', 403);
+      // Same for webhook management: a key never does more than its creator may now do in the app.
+      if (scope === 'WEBHOOKS' && !read && !['OWNER', 'ADMIN', 'DEVELOPER'].includes(role)) throw new AppError('This key’s creator can no longer manage webhooks', 403);
       req.apiKey = { id: key.id, businessId: key.businessId, userId: key.userId, permissions: key.permissions, role };
       recordUsage(key.id);
       next();

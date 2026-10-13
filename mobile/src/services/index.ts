@@ -589,6 +589,19 @@ export const messageService = {
 
   // ───────── Transfers ─────────
 
+  /** Can this account receive a transfer right now? A UX pre-check so the
+   *  sender hears it before confirming — the transfer endpoint still enforces
+   *  it. A server without the endpoint yet (404) never blocks. */
+  recipientCheck: async (recipientId: string): Promise<{ canReceive: boolean; reason?: 'UNAVAILABLE' | 'SELF' }> => {
+    try {
+      const { data } = await api.get('/transactions/recipient-check', { params: { recipientId } });
+      return { canReceive: data?.canReceive !== false, reason: data?.reason };
+    } catch (e: any) {
+      if (e?.response?.status === 404) return { canReceive: true };
+      throw e;
+    }
+  },
+
   /** Internal wallet-to-wallet transfer (used by /send page) */
   transfer: async (payload: {
     receiverId: string;

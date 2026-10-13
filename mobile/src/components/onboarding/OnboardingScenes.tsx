@@ -166,14 +166,15 @@ function WalletsScene({ p, t, width, isAr }: SceneProps) {
     { code: 'USD', name: t('onboard2.v.usd'), amount: '1,250.00', glyph: '$' },
     { code: 'USDT', name: t('onboard2.v.usdt'), amount: '640.00', glyph: '₮' },
   ];
-  const align = isAr ? 'right' as const : 'left' as const;
+  // Currency rows stay strictly LTR in Arabic (owner rule, 11 Oct 2026).
+  const align = 'left' as const;
   return (
     <Drift>
       <View style={{ width: cardW, gap: 10 }}>
         {cards.map((c, i) => (
           <Animated.View key={c.code} entering={FadeInDown.delay(150 + i * 160).duration(650)}>
             <Surface p={p} style={{
-              padding: 16, flexDirection: isAr ? 'row-reverse' : 'row', alignItems: 'center', gap: 14,
+              padding: 16, flexDirection: 'row', alignItems: 'center', gap: 14,
               borderColor: i === 0 ? p.accentBorder : p.border,
             }}>
               <View style={{

@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import rateLimit from 'express-rate-limit';
 import { sendWaitlistConfirmation } from '../services/email';
 import { prisma } from '../utils/prisma';
 
@@ -29,7 +30,17 @@ async function addToMailchimp(email: string): Promise<void> {
   }
 }
 
-waitlistRouter.post('/', async (req: Request, res: Response) => {
+// Public and it sends mail: a tight per-IP budget so it cannot be used to
+// mail-bomb an address or burn the sender's reputation.
+const waitlistLimiter = rateLimit({
+  windowMs: 60 * 60_000,
+  max: Number(process.env.WAITLIST_RATE_PER_HOUR ?? 10),
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many signups from this network. Try again later.' },
+});
+
+waitlistRouter.post('/', waitlistLimiter, async (req: Request, res: Response) => {
   try {
     const email = typeof req.body?.email === 'string'
       ? req.body.email.trim().toLowerCase()
@@ -41,20 +52,34 @@ waitlistRouter.post('/', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Invalid email' });
     }
 
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({ error: 'Invalid email' });
+    }
+
     // Persist to our own DB first — this is the source of truth for the
-    // launch-day mailout. Idempotent: a repeat signup just no-ops.
-    await prisma.waitlistEntry.upsert({
-      where: { email },
-      create: { email, source, locale },
-      update: {}, // already on the list — keep the original signup timestamp
-    });
+    // launch-day mailout. A repeat signup is a no-op and sends nothing: it
+    // used to re-send the confirmation every time, so anyone could make us
+    // mail an address over and over.
+    const existing = await prisma.waitlistEntry.findUnique({ where: { email }, select: { id: true } });
+    let created = false;
+    if (!existing) {
+      try {
+        await prisma.waitlistEntry.create({ data: { email, source, locale } });
+        created = true;
+      } catch (err: any) {
+        if (err?.code !== 'P2002') throw err; // a parallel signup won the race
+      }
+    }
 
-    // Best-effort external sync + confirmation; never block the signup on them.
-    addToMailchimp(email).catch((err) => console.error('[waitlist] Mailchimp failed:', err));
-    sendWaitlistConfirmation({ to: email }).catch((err) =>
-      console.error('[waitlist] confirmation email failed:', err),
-    );
+    if (created) {
+      // Best-effort external sync + confirmation; never block the signup on them.
+      addToMailchimp(email).catch((err) => console.error('[waitlist] Mailchimp failed:', err));
+      sendWaitlistConfirmation({ to: email }).catch((err) =>
+        console.error('[waitlist] confirmation email failed:', err),
+      );
+    }
 
+    // Same answer either way, so the endpoint does not reveal who signed up.
     return res.json({ success: true });
   } catch (err) {
     console.error('[waitlist] error', err);

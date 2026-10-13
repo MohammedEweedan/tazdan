@@ -4,13 +4,15 @@
  *
  * Call once from src/index.ts before any router is mounted.
  */
+import { currentLaunchReadiness } from '../services/ops/launchReadiness.service';
+import { custodyMode } from '../services/wallet/custodyProvider.service';
 
 const REQUIRED_ALWAYS = ['JWT_SECRET', 'JWT_REFRESH_SECRET', 'DATABASE_URL'] as const;
 
 const REQUIRED_IN_PRODUCTION = [
-  'MASTER_SEED_ENC_KEY',
   'CLIENT_URL',
   'DEPOSIT_WEBHOOK_SECRET',
+  'REDIS_URL',
 ] as const;
 
 const PLACEHOLDER_FRAGMENTS = [
@@ -19,6 +21,8 @@ const PLACEHOLDER_FRAGMENTS = [
   'your-refresh-secret',
   'changeme',
   'placeholder',
+  'changemeinproduction',
+  'secret123',
 ];
 
 function fail(msg: string): never {
@@ -49,8 +53,10 @@ export function validateEnv() {
     if (!v || v.length < 16) {
       fail(`Missing or too-short ${key}. Generate with: openssl rand -hex 48`);
     }
-    const lower = v.toLowerCase();
-    if (PLACEHOLDER_FRAGMENTS.some((p) => lower.includes(p))) {
+    // Compare without punctuation so "change_me_in_production" (the dev
+    // compose default) is caught as well as "change-in-production".
+    const bare = v.toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (PLACEHOLDER_FRAGMENTS.some((p) => bare.includes(p.replace(/[^a-z0-9]/g, '')))) {
       fail(`${key} looks like the placeholder value. Replace before starting.`);
     }
   }
@@ -59,12 +65,11 @@ export function validateEnv() {
     for (const key of REQUIRED_IN_PRODUCTION) {
       if (!process.env[key]) fail(`Missing required production env: ${key}`);
     }
-    const masterKey = process.env.MASTER_SEED_ENC_KEY;
-    if (masterKey && !/^[0-9a-fA-F]{64}$/.test(masterKey)) {
-      fail('MASTER_SEED_ENC_KEY must be 32 bytes hex (64 hex chars).');
+    for (const key of ['JWT_SECRET', 'JWT_REFRESH_SECRET', 'DEPOSIT_WEBHOOK_SECRET']) {
+      if ((process.env[key]?.length ?? 0) < 32) fail(`${key} must contain at least 32 characters in production.`);
     }
-    if (process.env.JWT_SECRET === process.env.JWT_REFRESH_SECRET) {
-      fail('JWT_SECRET and JWT_REFRESH_SECRET must differ in production.');
+    if (new Set([process.env.JWT_SECRET, process.env.JWT_REFRESH_SECRET, process.env.DEPOSIT_WEBHOOK_SECRET]).size !== 3) {
+      fail('JWT, refresh and deposit webhook secrets must differ in production.');
     }
 
     // MOCK KYC approves any uploaded file, which would let unverified users
@@ -88,24 +93,30 @@ export function validateEnv() {
       warn(`DB pool budget is ${connectionLimit * clusterWorkers} connections (${connectionLimit} x ${clusterWorkers}). Confirm your Postgres plan can handle this.`);
     }
 
-    // ── Custody key posture ─────────────────────────────────────────
-    // With only MASTER_SEED_ENC_KEY, one env leak + one DB read = every
-    // user's crypto. KMS envelope encryption removes that single point:
-    // the data key is decryptable only via an AWS KMS call the attacker
-    // can't make. Loud on every prod boot; hard-fail once the org is
-    // ready to enforce it (MASTER_SEED_REQUIRE_KMS=1).
-    if (!process.env.MASTER_SEED_KMS_KEY_ID) {
-      if (process.env.MASTER_SEED_REQUIRE_KMS === '1') {
-        fail(
-          'MASTER_SEED_KMS_KEY_ID is not set but MASTER_SEED_REQUIRE_KMS=1. ' +
-          'Configure AWS KMS envelope encryption (see docs/runbooks/custody-kms.md) before starting.'
-        );
-      }
-      warn(
-        'CUSTODY RISK: master seed is protected only by MASTER_SEED_ENC_KEY in the environment. ' +
-        'A server+DB compromise exposes ALL user funds. Enable KMS envelope encryption ' +
-        '(MASTER_SEED_KMS_KEY_ID — see docs/runbooks/custody-kms.md), then set MASTER_SEED_REQUIRE_KMS=1.'
-      );
+    if (process.env.MASTER_SEED_ENC_KEY || process.env.MASTER_SEED_KMS_KEY_ID || process.env.MASTER_SEED_PASSPHRASE) {
+      fail('Production API processes must not hold master-seed keys or KMS decrypt configuration. Move custody to an isolated provider.');
+    }
+    try { custodyMode(); } catch { fail('Production CUSTODY_MODE must be disabled or remote.'); }
+    for (const origin of process.env.CLIENT_URL!.split(',')) {
+      try {
+        const url = new URL(origin.trim());
+        if (url.protocol !== 'https:' || url.origin !== origin.trim()) throw new Error();
+      } catch { fail('Production CLIENT_URL must contain HTTPS origins only.'); }
+    }
+    if (process.env.REAL_MONEY_ENABLED === '1') {
+      if (process.env.FUND_AUDIT_HALT !== '1') fail('Real-money operation requires FUND_AUDIT_HALT=1.');
+      if (process.env.LEDGER_BACKFILL_ON_BOOT !== '0') fail('Real-money operation requires LEDGER_BACKFILL_ON_BOOT=0.');
+      const readiness = currentLaunchReadiness();
+      if (!readiness.ok) fail(`Launch verification failed: ${readiness.problems.join('; ')}`);
+      if ((process.env.FEATURE_BLOCKCHAIN === '1' || process.env.FEATURE_CRYPTO_TRADING === '1') && custodyMode() !== 'remote') fail('Crypto activity requires an isolated custody provider.');
+    }
+    if (custodyMode() === 'remote') {
+      if ((process.env.CUSTODY_PROVIDER_CODE?.length ?? 0) < 2) fail('A reviewed CUSTODY_PROVIDER_CODE is required.');
+      if ((process.env.CUSTODY_PROVIDER_TOKEN?.length ?? 0) < 32) fail('A custody provider credential is required.');
+      try {
+        const url = new URL(process.env.CUSTODY_PROVIDER_URL ?? '');
+        if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash) throw new Error();
+      } catch { fail('CUSTODY_PROVIDER_URL must be an HTTPS endpoint without embedded credentials.'); }
     }
   }
 

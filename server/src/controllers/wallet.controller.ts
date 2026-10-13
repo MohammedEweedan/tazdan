@@ -134,8 +134,9 @@ export class WalletController {
       if (!validCurrencies.includes(currency)) {
         return res.status(400).json({ error: 'Invalid currency. Must be LYD, USD, or USDT' });
       }
-      const page = parseInt(req.query.page as string) || 1;
-      const limit = parseInt(req.query.limit as string) || 20;
+      // Bounded paging: one request can't pull (or skip through) the table.
+      const page = Math.min(Math.max(parseInt(req.query.page as string) || 1, 1), 10_000);
+      const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 20, 1), 100);
 
       const [transactions, total] = await Promise.all([
         prisma.transaction.findMany({
@@ -339,8 +340,8 @@ export class WalletController {
    */
   static async getAllTransactions(req: AuthRequest, res: Response, next: NextFunction) {
     try {
-      const page  = parseInt(req.query.page as string)  || 1;
-      const limit = Math.min(parseInt(req.query.limit as string) || 50, 100);
+      const page  = Math.min(Math.max(parseInt(req.query.page as string) || 1, 1), 10_000);
+      const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 50, 1), 100);
 
       const [items, total] = await Promise.all([
         prisma.transaction.findMany({

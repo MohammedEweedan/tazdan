@@ -10,7 +10,7 @@ import type { AuthRequest } from '../../types';
 import { AppError } from '../../middleware/errorHandler';
 import { setControl, listControls, CONTROL_FEATURES } from '../../services/platform/controls.service';
 import { listApprovals, requestApproval, decideApproval, type ApprovalType } from '../../services/platform/approvals.service';
-import { invalidateStaffCache, ROLE_PERMISSIONS, PERMISSIONS } from '../../services/platform/rbac';
+import { invalidateStaffCache, ROLE_PERMISSIONS, PERMISSIONS, hasPermission, type Permission } from '../../services/platform/rbac';
 import { writeAudit } from '../../services/platform/audit';
 import { recordSecurityEvent } from '../../services/platform/securityEvents';
 import { FUND_CLASS } from '../../services/ledger/ledger.service';
@@ -26,24 +26,31 @@ export const CockpitOperationsController = {
       if (q.length < 2) return res.json({ results: [] });
       const like = { contains: q, mode: 'insensitive' as const };
       const handle = q.replace(/^@/, '');
+      // Each category needs the permission that its own screen needs, and
+      // contact details / account numbers are only matched for staff holding
+      // customers.pii — otherwise search is an oracle that recovers masked
+      // data (does +21891… belong to a customer? which IBAN is whose?).
+      const can = (p: Permission) => hasPermission(req, p);
+      const pii = can('customers.pii');
+      const when = <T,>(ok: boolean, run: () => Promise<T[]>): Promise<T[]> => (ok ? run() : Promise.resolve([]));
       const [users, businesses, txs, deposits, withdrawals, transfers, remittances, claims, cards, wallets, onchain, beneficiaries, escalations, logins, devices, audits, cases] = await Promise.all([
-        prisma.user.findMany({ where: { OR: [{ id: q }, { email: like }, { username: { contains: handle, mode: 'insensitive' } }, { phone: { contains: q } }, { firstName: like }, { lastName: like }] }, take: 8, select: { id: true, email: true, username: true, firstName: true, lastName: true, role: true, accountType: true } }),
-        prisma.businessProfile.findMany({ where: { OR: [{ id: q }, { companyName: like }, { legalName: like }, { registrationNo: q }] }, take: 5, select: { id: true, userId: true, companyName: true, country: true } }),
-        prisma.transaction.findMany({ where: { OR: [{ id: q }, { reference: q }] }, take: 5, select: { id: true, reference: true, type: true, currency: true, amount: true, userId: true } }),
-        prisma.deposit.findMany({ where: { OR: [{ id: q }, { reference: q }] }, take: 5, select: { id: true, reference: true, currency: true, amount: true, status: true } }),
-        prisma.withdrawal.findMany({ where: { OR: [{ id: q }, { reference: q }, { walletAddress: q }] }, take: 5, select: { id: true, reference: true, currency: true, amount: true, status: true } }),
-        prisma.transfer.findMany({ where: { OR: [{ id: q }, { reference: q }] }, take: 5, select: { id: true, reference: true, currency: true, amount: true } }),
-        prisma.remittanceTransfer.findMany({ where: { OR: [{ id: q }, { reference: q }, { providerRef: q }] }, take: 5, select: { id: true, reference: true, state: true, sendAmount: true, sourceCurrency: true } }),
-        prisma.claimLink.findMany({ where: { OR: [{ id: q }, { claimToken: { startsWith: q } }] }, take: 3, select: { id: true, asset: true, amount: true, status: true } }),
-        prisma.card.findMany({ where: { OR: [{ id: q }, { externalCardId: q }] }, take: 3, select: { id: true, last4: true, userId: true, status: true } }),
-        prisma.userWallet.findMany({ where: { OR: [{ ethAddress: q }, { btcAddress: q }, { solAddress: q }, { tronAddress: q }] }, take: 3, select: { userId: true, ethAddress: true } }),
-        prisma.onChainTransaction.findMany({ where: { OR: [{ txHash: q }, { toAddress: q }, { fromAddress: q }] }, take: 5, select: { id: true, txHash: true, asset: true, amount: true, userId: true, type: true } }),
-        prisma.remittanceBeneficiary.findMany({ where: { OR: [{ id: q }, { fullName: like }, { accountNumber: q }, { iban: q }] }, take: 5, select: { id: true, fullName: true, country: true, userId: true } }),
-        prisma.supportEscalation.findMany({ where: { id: q }, take: 3, select: { id: true, reason: true, status: true, raisedById: true } }),
-        prisma.loginHistory.findMany({ where: { ipAddress: q }, take: 5, distinct: ['userId'], select: { userId: true, ipAddress: true, createdAt: true } }),
-        prisma.knownDevice.findMany({ where: { OR: [{ id: q }, { fingerprint: { startsWith: q } }, { ipAddress: q }] }, take: 5, select: { id: true, userId: true, label: true } }),
-        prisma.auditLog.findMany({ where: { OR: [{ id: q }, { entityId: q }] }, take: 5, orderBy: { createdAt: 'desc' }, select: { id: true, action: true, entity: true, entityId: true } }),
-        prisma.complianceCase.findMany({ where: { OR: [{ id: q }, { reference: q }] }, take: 3, select: { id: true, reference: true, title: true, status: true } }),
+        when(can('customers.read'), () => prisma.user.findMany({ where: { OR: [{ id: q }, { username: { contains: handle, mode: 'insensitive' } }, { firstName: like }, { lastName: like }, ...(pii ? [{ email: like }, { phone: { contains: q } }] : [])] }, take: 8, select: { id: true, email: true, username: true, firstName: true, lastName: true, role: true, accountType: true } })),
+        when(can('businesses.read'), () => prisma.businessProfile.findMany({ where: { OR: [{ id: q }, { companyName: like }, { legalName: like }, { registrationNo: q }] }, take: 5, select: { id: true, userId: true, companyName: true, country: true } })),
+        when(can('transactions.read'), () => prisma.transaction.findMany({ where: { OR: [{ id: q }, { reference: q }] }, take: 5, select: { id: true, reference: true, type: true, currency: true, amount: true, userId: true } })),
+        when(can('transactions.read'), () => prisma.deposit.findMany({ where: { OR: [{ id: q }, { reference: q }] }, take: 5, select: { id: true, reference: true, currency: true, amount: true, status: true } })),
+        when(can('transactions.read'), () => prisma.withdrawal.findMany({ where: { OR: [{ id: q }, { reference: q }, { walletAddress: q }] }, take: 5, select: { id: true, reference: true, currency: true, amount: true, status: true } })),
+        when(can('transactions.read'), () => prisma.transfer.findMany({ where: { OR: [{ id: q }, { reference: q }] }, take: 5, select: { id: true, reference: true, currency: true, amount: true } })),
+        when(can('remittance.read'), () => prisma.remittanceTransfer.findMany({ where: { OR: [{ id: q }, { reference: q }, { providerRef: q }] }, take: 5, select: { id: true, reference: true, state: true, sendAmount: true, sourceCurrency: true } })),
+        when(can('transactions.read'), () => prisma.claimLink.findMany({ where: { OR: [{ id: q }, { claimToken: { startsWith: q } }] }, take: 3, select: { id: true, asset: true, amount: true, status: true } })),
+        when(can('transactions.read'), () => prisma.card.findMany({ where: { OR: [{ id: q }, { externalCardId: q }] }, take: 3, select: { id: true, last4: true, userId: true, status: true } })),
+        when(can('transactions.read'), () => prisma.userWallet.findMany({ where: { OR: [{ ethAddress: q }, { btcAddress: q }, { solAddress: q }, { tronAddress: q }] }, take: 3, select: { userId: true, ethAddress: true } })),
+        when(can('transactions.read'), () => prisma.onChainTransaction.findMany({ where: { OR: [{ txHash: q }, { toAddress: q }, { fromAddress: q }] }, take: 5, select: { id: true, txHash: true, asset: true, amount: true, userId: true, type: true } })),
+        when(can('remittance.read'), () => prisma.remittanceBeneficiary.findMany({ where: { OR: [{ id: q }, ...(pii ? [{ fullName: like }, { accountNumber: q }, { iban: q }] : [])] }, take: 5, select: { id: true, fullName: true, country: true, userId: true } })),
+        when(can('support.read'), () => prisma.supportEscalation.findMany({ where: { id: q }, take: 3, select: { id: true, reason: true, status: true, raisedById: true } })),
+        when(can('security.read'), () => prisma.loginHistory.findMany({ where: { ipAddress: q }, take: 5, distinct: ['userId'], select: { userId: true, ipAddress: true, createdAt: true } })),
+        when(can('security.read'), () => prisma.knownDevice.findMany({ where: { OR: [{ id: q }, { fingerprint: { startsWith: q } }, { ipAddress: q }] }, take: 5, select: { id: true, userId: true, label: true } })),
+        when(can('audit.read'), () => prisma.auditLog.findMany({ where: { OR: [{ id: q }, { entityId: q }] }, take: 5, orderBy: { createdAt: 'desc' }, select: { id: true, action: true, entity: true, entityId: true } })),
+        when(can('compliance.read'), () => prisma.complianceCase.findMany({ where: { OR: [{ id: q }, { reference: q }] }, take: 3, select: { id: true, reference: true, title: true, status: true } })),
       ]);
       const results: SearchHit[] = [
         ...users.map((u) => ({ kind: u.role === 'ADMIN' ? 'staff' : 'customer', id: u.id, title: `${u.firstName} ${u.lastName}`, subtitle: `@${u.username ?? '—'} · ${u.accountType}`, href: `/admin/customers/${u.id}` })),

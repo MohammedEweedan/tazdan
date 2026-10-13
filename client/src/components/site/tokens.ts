@@ -36,6 +36,7 @@ export function siteTokens(dark: boolean) {
         accentSoft: "rgba(36,56,79,0.16)",
         accentBorder: "rgba(36,56,79,0.42)",
         accentText: "#9BA8B7",
+        focus: "#9BA8B7",        // focus rings — navy is ~1.5:1 on charcoal
         green: "#3FCF8E",
         greenSoft: "rgba(63,207,142,0.14)",
         amber: "#E9B866",
@@ -61,6 +62,7 @@ export function siteTokens(dark: boolean) {
         accentSoft: "rgba(36,56,79,0.12)",
         accentBorder: "rgba(36,56,79,0.38)",
         accentText: "#24384F",
+        focus: "#24384F",
         green: "#1F8F58",
         greenSoft: "rgba(31,143,88,0.10)",
         amber: "#A86A12",

@@ -19,6 +19,7 @@ import crypto from 'crypto';
 import * as bip39 from 'bip39';
 import { prisma } from '../../utils/prisma';
 import { logger } from '../../utils/logger';
+import { custodyMode } from './custodyProvider.service';
 
 const ALGO = 'aes-256-gcm';
 const SEED_VERSION = 1;
@@ -116,6 +117,7 @@ async function decrypt(blob: string): Promise<string> {
  * If a seed row already exists it is left untouched.
  */
 export async function ensureMasterSeed(): Promise<void> {
+  if (custodyMode() !== 'local') return;
   const existing = await prisma.masterSeedStore.findUnique({ where: { version: SEED_VERSION } });
   if (existing) return;
 
@@ -139,6 +141,7 @@ export async function ensureMasterSeed(): Promise<void> {
  * Do not expose the return value outside the server process.
  */
 export async function getMasterMnemonic(): Promise<string> {
+  if (process.env.NODE_ENV === 'production' || custodyMode() !== 'local') throw new Error('Master seed access is disabled in this process');
   const row = await prisma.masterSeedStore.findUnique({ where: { version: SEED_VERSION } });
   if (!row) {
     throw new Error('Master seed has not been initialised. Call ensureMasterSeed() first.');

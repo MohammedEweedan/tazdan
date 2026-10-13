@@ -26,13 +26,37 @@ import { createUserWallets } from '../services/wallet/walletDerivation.service';
 import { startVerification, checkVerification } from '../services/whatsapp';
 import { recordSecurityEvent } from '../services/platform/securityEvents';
 import { recordRiskEvent } from '../services/risk/engine';
-import { clearAttempts, getAttempts, incrAttempts } from '../utils/redis';
+import { clearAttempts, reserveAttempt } from '../utils/redis';
+import { logger } from '../utils/logger';
+import {
+  BCRYPT_COST,
+  burnPasswordCompare,
+  normalizeEmail,
+  isReservedHandle,
+  normalizeLoginIdentifier,
+  reserveAccountLoginAttempt,
+  reserveUnknownLoginAttempt,
+  safeEqual,
+  sensitiveActionSucceeded,
+  verifyPasswordForSensitiveAction,
+} from '../services/security/credentials';
+import { verifyTotpOnce } from '../services/security/totp';
+import { sendSecurityNotice } from '../services/security/notify';
+import { recordLogin } from './security.controller';
 
 const PHONE_OTP_MAX_ATTEMPTS = 5;
 const PHONE_OTP_LOCK_SECONDS = 15 * 60;
+const PHONE_OTP_SENDS_PER_HOUR = 5;
+const EMAIL_CODE_MAX_ATTEMPTS = 5;
+const EMAIL_CODES_PER_HOUR = 5;
+const RESET_EMAILS_PER_HOUR = 3;
+const RECOVERY_EMAILS_PER_HOUR = 3;
+const RECOVERY_MAX_ATTEMPTS = 5;
+
+const sha256 = (s: string) => crypto.createHash('sha256').update(s).digest('hex');
 
 const refreshSchema = z.object({
-  refreshToken: z.string().min(10),
+  refreshToken: z.string().min(10).max(4096),
 });
 
 /**
@@ -44,6 +68,22 @@ function isAdult(dob: Date): boolean {
   const cutoff = new Date(now.getFullYear() - 18, now.getMonth(), now.getDate());
   return dob.getTime() <= cutoff.getTime();
 }
+
+// Legal names: letters (any script) with spaces, apostrophes, hyphens and
+// dots. No markup — names are interpolated into emails the platform sends.
+const personName = z
+  .string()
+  .trim()
+  .min(1)
+  .max(100)
+  .regex(/^[\p{L}\p{M}][\p{L}\p{M} .'’-]*$/u, 'Use letters, spaces, apostrophes and hyphens only');
+
+// Same rule as profile updates: an https URL, a small raster data URL, or an
+// emoji — never javascript:/SVG/HTML.
+const safeAvatar = z.string().max(512).refine(
+  (v) => v === '' || /^https:\/\//i.test(v) || /^data:image\/(png|jpe?g|webp|gif);base64,/i.test(v) || [...v].length <= 8,
+  'Avatar must be an https URL, image data URL, or emoji',
+);
 
 // Business profile payload. Required when accountType === 'BUSINESS'.
 // Validated via zod refinement on the outer schema below.
@@ -63,17 +103,18 @@ const businessProfileSchema = z.object({
 });
 
 const registerSchema = z.object({
-  email: z.string().email(),
+  email: z.string().email().max(254),
   password: z.string().min(8).max(128),
-  firstName: z.string().min(1).max(100),
-  lastName: z.string().min(1).max(100),
+  firstName: personName,
+  lastName: personName,
   // Required public @handle. Becomes the user's @username and the slug
   // for /u/[handle] (QR-pay flows). Lower-cased server-side.
   username: z
     .string()
     .min(3, 'Handle must be 3-30 characters')
     .max(30, 'Handle must be 3-30 characters')
-    .regex(/^[a-z0-9._]+$/i, 'Handle: a-z 0-9 . _ only'),
+    .regex(/^[a-z0-9._]+$/i, 'Handle: a-z 0-9 . _ only')
+    .refine((h) => !isReservedHandle(h), 'That handle is reserved'),
   // ISO 3166-1 alpha-2.
   country: z.string().length(2, 'Select your country'),
   // Dial code WITHOUT the '+' prefix (server normalises). E.g. "218".
@@ -82,8 +123,8 @@ const registerSchema = z.object({
   phone: z.string().min(4, 'Phone number required').max(20),
   // ISO date string (YYYY-MM-DD). Coerced to Date.
   dateOfBirth: z.coerce.date({ errorMap: () => ({ message: 'Enter a valid date of birth' }) }),
-  avatarUrl: z.string().optional(),
-  referralCode: z.string().optional(),
+  avatarUrl: safeAvatar.optional(),
+  referralCode: z.string().max(64).optional(),
   // ── B2B ──────────────────────────────────────────────────────
   // Defaults to PERSONAL. When BUSINESS, the businessProfile object
   // becomes required (refinement below).
@@ -101,30 +142,126 @@ const loginSchema = z.object({
   twoFactorCode: z.string().min(6).max(8).optional(),
 });
 
-// Per-user brute-force protection. Lockout grows from 5 → 15 → 60 min
-// after each subsequent burst of 5 failed attempts. Combined with the
-// per-IP authLimiter this stops both credential-stuffing (many emails
-// from one IP) and password-spray (many IPs against one email).
-async function recordFailedLogin(userId: string) {
-  const u = await prisma.user.update({
-    where: { id: userId },
-    data: { failedLoginAttempts: { increment: 1 } },
-    select: { failedLoginAttempts: true },
+// ── Email verification codes ─────────────────────────────────────────
+// Stored as a digest bound to the user (never the bare 6 digits): a DB or
+// backup leak yields no live code, and two users can no longer collide on
+// the unique column. Rows written before this change hold the bare code and
+// are still accepted until they expire.
+function emailCodeDigest(userId: string, code: string): string {
+  return `ev1:${sha256(`${userId}:${code}`)}`;
+}
+function emailCodeMatches(stored: string, userId: string, code: string): boolean {
+  return /^\d{6}$/.test(stored) ? safeEqual(stored, code) : safeEqual(stored, emailCodeDigest(userId, code));
+}
+
+type VerifiableUser = {
+  id: string; email: string; firstName: string; status: string; emailVerified: boolean;
+  emailVerificationToken: string | null; emailVerificationExpires: Date | null;
+};
+
+/** 5 tries per issued code (reserved before comparing); then the code is burned. */
+async function confirmEmailCode(user: VerifiableUser, code: string): Promise<void> {
+  if (user.emailVerified) throw new AppError('Email already verified', 400);
+  const triesKey = `auth:emailcode:${user.id}`;
+  const burn = () => prisma.user.updateMany({
+    where: { id: user.id, emailVerified: false },
+    data: { emailVerificationToken: null, emailVerificationExpires: null },
   });
-  if (u.failedLoginAttempts >= 5) {
-    const tier = Math.min(3, Math.floor(u.failedLoginAttempts / 5));
-    const minutes = [5, 15, 60][tier - 1] ?? 60;
-    await prisma.user.update({
-      where: { id: userId },
-      data: { lockoutUntil: new Date(Date.now() + minutes * 60 * 1000) },
-    });
+  const slot = await reserveAttempt(triesKey, EMAIL_CODE_MAX_ATTEMPTS, 24 * 60 * 60);
+  if (!slot.allowed) {
+    await burn();
+    throw new AppError('Too many attempts. Request a new code.', 429);
   }
+  const stored = user.emailVerificationToken;
+  const valid = !!stored && !!user.emailVerificationExpires && user.emailVerificationExpires > new Date() &&
+    emailCodeMatches(stored, user.id, code);
+  if (!valid) {
+    if (slot.count >= EMAIL_CODE_MAX_ATTEMPTS) await burn();
+    throw new AppError('Invalid or expired verification code', 400);
+  }
+  // Single use: only the request that clears this exact code verifies.
+  const done = await prisma.user.updateMany({
+    where: { id: user.id, emailVerificationToken: stored },
+    data: {
+      emailVerified: true,
+      emailVerificationToken: null,
+      emailVerificationExpires: null,
+      emailVerificationCode: null,
+      emailVerificationCodeExpires: null,
+      ...(user.status === 'PENDING' ? { status: 'ACTIVE' as const } : {}),
+    },
+  });
+  if (done.count !== 1) throw new AppError('Invalid or expired verification code', 400);
+  await clearAttempts(triesKey);
+  // Welcome email is sent ONLY now — proves the address is real and
+  // avoids polluting inboxes for half-finished signups.
+  sendWelcomeEmail({ to: user.email, firstName: user.firstName })
+    .catch((e) => console.error('[email] welcome failed:', emailErrorSummary(e)));
+}
+
+/** E.164 for the OTP providers. Registration stores `+<cc><digits>`; older rows may hold the national number only. */
+function e164(phone: string | null, countryCode: string | null): string {
+  if (phone?.startsWith('+')) return phone;
+  return `+${countryCode ?? ''}${(phone ?? '').replace(/\D/g, '')}`;
+}
+
+// Issued in the background AFTER the generic response, so neither the
+// answer nor its timing reveals whether the address is registered.
+async function issuePasswordReset(email: string): Promise<void> {
+  const user = await prisma.user.findUnique({ where: { email } });
+  if (!user || user.status === 'CLOSED') return;
+  // Each new code would buy a guesser 5 fresh tries (and spams the owner).
+  const slot = await reserveAttempt(`auth:reset:issue:${user.id}`, RESET_EMAILS_PER_HOUR, 60 * 60);
+  if (!slot.allowed) return;
+
+  // Two ways to reset, two separate secrets:
+  //   • a LINK with a 32-byte random token (web) — unguessable, so it
+  //     can be verified by bare hash lookup, and
+  //   • a 6-digit CODE the user types into the mobile app — guessable
+  //     in principle (1e6 space), so it is only valid together with
+  //     the account email and is capped at 5 attempts.
+  // Only SHA-256 hashes are persisted (a DB/backup/replica leak must
+  // not yield a live reset secret).
+  const linkToken = crypto.randomBytes(32).toString('hex');
+  const code      = crypto.randomInt(100000, 1000000).toString(); // 6 digits, CSPRNG
+  await prisma.user.update({
+    where: { id: user.id },
+    data: {
+      passwordResetToken: sha256(linkToken),
+      passwordResetCode: sha256(code),
+      passwordResetAttempts: 0,
+      passwordResetExpires: new Date(Date.now() + 60 * 60 * 1000),
+    },
+  });
+  await sendPasswordResetEmail({ to: user.email, firstName: user.firstName, token: linkToken, code })
+    .catch((e) => console.error('[email] password reset failed:', emailErrorSummary(e)));
+}
+
+async function issue2FARecovery(email: string): Promise<void> {
+  const user = await prisma.user.findUnique({ where: { email } });
+  // Only send when the account exists AND has 2FA enabled (nothing to recover otherwise).
+  if (!user || !user.twoFactorEnabled || user.status === 'CLOSED') return;
+  const slot = await reserveAttempt(`auth:2farec:issue:${user.id}`, RECOVERY_EMAILS_PER_HOUR, 60 * 60);
+  if (!slot.allowed) return;
+  const code = crypto.randomInt(100000, 1000000).toString();
+  await prisma.user.update({
+    where: { id: user.id },
+    data: {
+      twoFactorRecoveryCode: sha256(code),
+      twoFactorRecoveryExpires: new Date(Date.now() + 30 * 60 * 1000), // 30 min
+    },
+  });
+  await clearAttempts(`auth:2farec:try:${user.id}`);
+  await send2FARecoveryEmail({ to: user.email, firstName: user.firstName, code })
+    .catch((e) => console.error('[email] 2FA recovery failed:', emailErrorSummary(e)));
 }
 
 export class AuthController {
   static async register(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const data = registerSchema.parse(req.body);
+      const email = normalizeEmail(data.email);
+      const handle = data.username.toLowerCase();
 
       // 18+ check (legal requirement for trading + AML).
       if (!isAdult(data.dateOfBirth)) {
@@ -139,11 +276,13 @@ export class AuthController {
       // specific conflicting field (the old behaviour) gave them a
       // free user-existence oracle for credential-stuffing list
       // priming and phishing-target qualification.
+      // Emails and handles are compared case-insensitively, so
+      // "Alice@x.com" / "@Alice" cannot shadow an existing account.
       const ENUM_GENERIC = 'Registration failed — those credentials are already in use.';
       const [existing, existingPhone, existingHandle] = await Promise.all([
-        prisma.user.findUnique({ where: { email: data.email } }),
-        prisma.user.findUnique({ where: { phone: normalisedPhone } }),
-        prisma.user.findFirst({ where: { username: data.username.toLowerCase() } }),
+        prisma.user.findFirst({ where: { email: { equals: email, mode: 'insensitive' } }, select: { id: true } }),
+        prisma.user.findUnique({ where: { phone: normalisedPhone }, select: { id: true } }),
+        prisma.user.findFirst({ where: { username: { equals: handle, mode: 'insensitive' } }, select: { id: true } }),
       ]);
       if (existing || existingPhone || existingHandle) {
         throw new AppError(ENUM_GENERIC, 400);
@@ -156,12 +295,12 @@ export class AuthController {
         referrerId = referrer.id;
       }
 
-      const passwordHash = await bcrypt.hash(data.password, 12);
+      const passwordHash = await bcrypt.hash(data.password, BCRYPT_COST);
       const referralCode = generateReferralCode();
 
       const user = await prisma.user.create({
         data: {
-          email: data.email,
+          email,
           passwordHash,
           firstName: data.firstName,
           lastName: data.lastName,
@@ -172,7 +311,7 @@ export class AuthController {
           // The handle the user picked at registration becomes their public
           // @username. Public-by-default so QR-code payments work out of the
           // box; can be flipped private from Settings.
-          username: data.username.toLowerCase(),
+          username: handle,
           avatarUrl: data.avatarUrl || null,
           profilePublic: true,
           referralCode,
@@ -192,7 +331,7 @@ export class AuthController {
                     industry:         data.businessProfile.industry,
                     employeeCount:    data.businessProfile.employeeCount,
                     website:          data.businessProfile.website || null,
-                    billingEmail:     data.businessProfile.billingEmail || data.email,
+                    billingEmail:     data.businessProfile.billingEmail || email,
                     supportEmail:     data.businessProfile.supportEmail || null,
                     useCase:          data.businessProfile.useCase,
                     monthlyVolumeUsd: data.businessProfile.monthlyVolumeUsd,
@@ -222,15 +361,12 @@ export class AuthController {
         { ipAddress: req.ip, userAgent: req.headers['user-agent']?.toString() },
       );
 
-      // Generate 6-digit email verification code via CSPRNG.
-      // Math.random() is predictable from a single observed output
-      // (Mersenne Twister state recovery) and is not safe for any
-      // value that gates auth flow.  randomInt draws from /dev/urandom.
+      // 6-digit email verification code via CSPRNG (never Math.random).
       const verificationCode = crypto.randomInt(100000, 1000000).toString();
       await prisma.user.update({
         where: { id: user.id },
         data: {
-          emailVerificationToken: verificationCode,
+          emailVerificationToken: emailCodeDigest(user.id, verificationCode),
           emailVerificationExpires: new Date(Date.now() + 24 * 60 * 60 * 1000),
         },
       });
@@ -261,23 +397,40 @@ export class AuthController {
       const data = loginSchema.parse(req.body);
 
       // Support login by email OR handle (@username).
-      const loginIdentifier = data.email.toLowerCase().replace(/^@/, '');
-      const isEmail = loginIdentifier.includes('@');
+      const identifier = normalizeLoginIdentifier(data.email);
+      const isEmail = identifier.includes('@');
+
+      // Every failure says the same thing at the same speed, whether or not
+      // the account exists, is locked, closed or banned: account state is
+      // only revealed to someone who has just proved the password.
+      const GENERIC = 'Invalid credentials';
+      const LOCKED = 'Too many failed attempts. Try again later.';
 
       const user = await prisma.user.findFirst({
-        where: isEmail
-          ? { email: loginIdentifier }
-          : { username: loginIdentifier },
+        where: isEmail ? { email: identifier } : { username: identifier },
       });
 
-      // Single, generic message for all credential failures to defeat
-      // enumeration. Bcrypt dummy compare keeps response time uniform
-      // whether the email exists or not.
-      const GENERIC = 'Invalid credentials';
-      const DUMMY_HASH = '$2a$12$abcdefghijklmnopqrstuv0123456789012345678901234567890123';
-
       if (!user) {
-        await bcrypt.compare(data.password, DUMMY_HASH).catch(() => false);
+        // Same lockout schedule and the same bcrypt cost as a real account.
+        if (!(await reserveUnknownLoginAttempt(identifier))) throw new AppError(LOCKED, 429);
+        await burnPasswordCompare(data.password);
+        throw new AppError(GENERIC, 401);
+      }
+
+      // Count the attempt BEFORE checking the password (atomic), so parallel
+      // guesses cannot all pass the lockout check before a failure lands.
+      // Combined with the per-IP authLimiter this stops both credential
+      // stuffing (many emails from one IP) and password spraying (many IPs
+      // against one email).
+      if (!(await reserveAccountLoginAttempt(user.id))) {
+        throw new AppError(LOCKED, 429);
+      }
+
+      // CRITICAL: never short-circuit bcrypt (no request-header bypasses).
+      const validPassword = await bcrypt.compare(data.password, user.passwordHash);
+      if (!validPassword) {
+        void recordSecurityEvent({ type: 'FAILED_LOGIN', severity: user.role === 'ADMIN' ? 'HIGH' : 'LOW', userId: user.id, ipAddress: req.ip, path: req.originalUrl });
+        void recordLogin(user.id, req, false);
         throw new AppError(GENERIC, 401);
       }
 
@@ -288,33 +441,11 @@ export class AuthController {
         throw new AppError('Account is suspended or banned', 403);
       }
 
-      // Per-account lockout window. Independent from the per-IP rate
-      // limiter (which catches credential stuffing across many emails).
-      if (user.lockoutUntil && user.lockoutUntil > new Date()) {
-        throw new AppError('Too many failed attempts. Try again later.', 429);
-      }
-
-      // CRITICAL: never short-circuit bcrypt. The previous
-      // `x-simulator: true` header bypass meant any staging /
-      // preview / QA environment (which often carries real prod
-      // data) accepted ANY password, and a single `NODE_ENV`
-      // misconfiguration in prod was full auth bypass. If load
-      // testing needs to skip bcrypt, do it via a build-time flag
-      // tied to a non-prod database, not a request header.
-      const validPassword = await bcrypt.compare(data.password, user.passwordHash);
-      if (!validPassword) {
-        await recordFailedLogin(user.id);
-        void recordSecurityEvent({ type: 'FAILED_LOGIN', severity: user.role === 'ADMIN' ? 'HIGH' : 'LOW', userId: user.id, ipAddress: req.ip, path: req.originalUrl });
-        throw new AppError(GENERIC, 401);
-      }
-
       if (user.twoFactorEnabled) {
         if (!data.twoFactorCode) return res.status(200).json({ requires2FA: true });
-        const verified = speakeasy.totp.verify({
-          secret: user.twoFactorSecret!, encoding: 'base32', token: data.twoFactorCode, window: 1,
-        });
+        // Single use: a code seen once (shoulder, phishing proxy) cannot be replayed.
+        const verified = await verifyTotpOnce(user.id, user.twoFactorSecret, data.twoFactorCode);
         if (!verified) {
-          await recordFailedLogin(user.id);
           void recordSecurityEvent({ type: 'MFA_FAILURE', severity: user.role === 'ADMIN' ? 'HIGH' : 'MEDIUM', userId: user.id, ipAddress: req.ip, path: req.originalUrl });
           throw new AppError('Invalid 2FA code', 401);
         }
@@ -332,6 +463,7 @@ export class AuthController {
           lockoutUntil: null,
         },
       });
+      void recordLogin(user.id, req, true);
 
       const { sessionId: _sessionId, ...tokens } = await issueSessionTokens(
         { id: user.id, email: user.email, role: user.role },
@@ -357,13 +489,14 @@ export class AuthController {
    * POST /api/auth/refresh
    * Body: { refreshToken }
    * Rotates the refresh token: revokes the presented one, issues a new pair.
-   * Reuse of an already-revoked token revokes ALL sessions for the user.
+   * Reuse of an already-rotated token revokes ALL sessions (and their live
+   * access tokens) for the user.
    */
   static async refresh(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const { refreshToken: presented } = refreshSchema.parse(req.body);
 
-      // Verifies signature, DB presence, expiry, and not-revoked.
+      // Verifies signature, token type, DB presence, expiry, and not-revoked.
       const stored = await verifyAndConsumeRefreshToken(presented);
 
       const user = await prisma.user.findUnique({ where: { id: stored.userId } });
@@ -400,9 +533,8 @@ export class AuthController {
   /**
    * POST /api/auth/logout
    * Body: { refreshToken }
-   * Revokes the presented refresh token. Access token simply expires (24h).
-   * If you need instant access-token revocation, add a denylist with the JWT
-   * `jti` claim — out of scope here.
+   * Revokes the presented refresh token AND the access token issued with it
+   * (session denylist), so the access token stops working at once.
    */
   static async logout(req: AuthRequest, res: Response, next: NextFunction) {
     try {
@@ -473,19 +605,42 @@ export class AuthController {
     }
   }
 
+  /**
+   * Turn 2FA on. Requires the account PASSWORD as well as a code from the new
+   * authenticator: once 2FA is on, every step-up challenge (transfers,
+   * withdrawals, account closure) is answered from the authenticator instead
+   * of an email code, so a stolen session alone must not be able to enrol an
+   * authenticator it controls.
+   */
   static async verify2FA(req: AuthRequest, res: Response, next: NextFunction) {
     try {
-      const { code } = req.body;
+      const { code, password } = z.object({
+        code: z.string().regex(/^\d{6}$/, 'Enter the 6-digit code from your authenticator'),
+        password: z.string().max(256).optional(),
+      }).parse(req.body);
+      if (!password) throw new AppError('Enter your account password to turn on two-factor authentication.', 400);
+
       const user = await prisma.user.findUnique({ where: { id: req.user!.id } });
       if (!user?.twoFactorSecret) throw new AppError('2FA setup not initiated', 400);
+      if (user.twoFactorEnabled) throw new AppError('Two-factor authentication is already on.', 409);
 
-      const verified = speakeasy.totp.verify({
-        secret: user.twoFactorSecret, encoding: 'base32', token: code, window: 2,
+      const pw = await verifyPasswordForSensitiveAction(user.id, user.passwordHash, password);
+      if (pw === 'locked') throw new AppError('Too many attempts. Try again in 15 minutes.', 429);
+      if (pw === 'invalid') throw new AppError('Incorrect password', 400);
+
+      if (!(await verifyTotpOnce(user.id, user.twoFactorSecret, code))) throw new AppError('Invalid 2FA code', 400);
+
+      // Activate exactly the secret that was just verified (a concurrent
+      // /2fa/enable could have replaced it).
+      const activated = await prisma.user.updateMany({
+        where: { id: user.id, twoFactorEnabled: false, twoFactorSecret: user.twoFactorSecret },
+        data: { twoFactorEnabled: true },
       });
-      if (!verified) throw new AppError('Invalid 2FA code', 400);
-
-      await prisma.user.update({ where: { id: user.id }, data: { twoFactorEnabled: true } });
+      if (activated.count !== 1) throw new AppError('2FA setup changed. Start again.', 409);
+      await sensitiveActionSucceeded(user.id);
       clearAdminCache(user.id);
+      void recordRiskEvent(user.id, 'SECURITY_CHANGE', { change: '2fa_enabled' }, 'MEDIUM');
+      sendSecurityNotice(user.id, 'two_factor_enabled', { ip: req.ip });
       res.json({ message: '2FA enabled successfully' });
     } catch (error) {
       next(error);
@@ -494,32 +649,32 @@ export class AuthController {
 
   static async disable2FA(req: AuthRequest, res: Response, next: NextFunction) {
     try {
-      // Require BOTH password and current TOTP code.  Previously
-      // only the TOTP was required, so a stolen unlocked phone (the
-      // TOTP app + a session) could disable 2FA in one tap, then go
-      // change the withdrawal address (which only requires 2FA).
-      // Forcing a password re-prompt breaks that chain.
+      // Require BOTH password and current TOTP code, under one shared attempt
+      // budget and one answer — a stolen session can use this neither as a
+      // password oracle nor to guess codes once it knows the password.
       const { code, password } = z.object({
-        code: z.string().min(6),
-        password: z.string().min(1),
+        code: z.string().min(6).max(8),
+        password: z.string().min(1).max(256),
       }).parse(req.body);
       const user = await prisma.user.findUnique({ where: { id: req.user!.id } });
       if (!user?.twoFactorSecret || !user.twoFactorEnabled) throw new AppError('2FA is not enabled', 400);
 
-      const validPw = await bcrypt.compare(password, user.passwordHash);
-      if (!validPw) throw new AppError('Invalid password', 401);
-
-      const verified = speakeasy.totp.verify({
-        secret: user.twoFactorSecret, encoding: 'base32', token: code, window: 2,
-      });
-      if (!verified) throw new AppError('Invalid 2FA code', 400);
+      const pw = await verifyPasswordForSensitiveAction(user.id, user.passwordHash, password);
+      if (pw === 'locked') throw new AppError('Too many attempts. Try again in 15 minutes.', 429);
+      const totpOk = pw === 'ok' && await verifyTotpOnce(user.id, user.twoFactorSecret, code);
+      if (!totpOk) {
+        void recordSecurityEvent({ type: 'MFA_FAILURE', severity: user.role === 'ADMIN' ? 'HIGH' : 'MEDIUM', userId: user.id, ipAddress: req.ip, path: req.originalUrl });
+        throw new AppError('Incorrect password or authentication code', 400);
+      }
 
       await prisma.user.update({
         where: { id: user.id },
         data: { twoFactorEnabled: false, twoFactorSecret: null },
       });
+      await sensitiveActionSucceeded(user.id);
       clearAdminCache(user.id); // staff lose console access at once in production
       void recordRiskEvent(req.user!.id, 'SECURITY_CHANGE', { change: '2fa_disabled' }, 'HIGH');
+      sendSecurityNotice(user.id, 'two_factor_disabled', { ip: req.ip });
       res.json({ message: '2FA disabled successfully' });
     } catch (error) {
       next(error);
@@ -527,31 +682,20 @@ export class AuthController {
   }
 
   /* ─── Email verification ─── */
+  /**
+   * GET /verify-email?email=&token= — the code alone no longer identifies an
+   * account (it used to verify whichever user happened to hold that 6-digit
+   * value, unauthenticated and uncapped).
+   */
   static async verifyEmail(req: AuthRequest, res: Response, next: NextFunction) {
     try {
-      const { token } = req.query as { token: string };
-      if (!token) throw new AppError('Token required', 400);
-
-      const user = await prisma.user.findFirst({
-        where: {
-          emailVerificationToken: token,
-          emailVerificationExpires: { gt: new Date() },
-        },
-      });
-      if (!user) throw new AppError('Invalid or expired verification token', 400);
-
-      await prisma.user.update({
-        where: { id: user.id },
-        data: {
-          emailVerified: true,
-          emailVerificationToken: null,
-          emailVerificationExpires: null,
-          emailVerificationCode: null,
-          emailVerificationCodeExpires: null,
-          status: user.status === 'PENDING' ? 'ACTIVE' : user.status,
-        },
-      });
-
+      const { token, email } = z.object({
+        token: z.string().regex(/^\d{6}$/, 'Enter the 6-digit code'),
+        email: z.string().email().max(254),
+      }).parse(req.query);
+      const user = await prisma.user.findUnique({ where: { email: normalizeEmail(email) } });
+      if (!user) throw new AppError('Invalid or expired verification code', 400);
+      await confirmEmailCode(user, token);
       res.json({ message: 'Email verified successfully' });
     } catch (error) {
       next(error);
@@ -563,35 +707,11 @@ export class AuthController {
       const user = req.user;
       if (!user) throw new AppError('Authentication required', 401);
 
-      const { code } = z.object({ code: z.string().length(6) }).parse(req.body);
+      const { code } = z.object({ code: z.string().regex(/^\d{6}$/) }).parse(req.body);
 
       const dbUser = await prisma.user.findUnique({ where: { id: user.id } });
       if (!dbUser) throw new AppError('User not found', 404);
-      if (dbUser.emailVerified) throw new AppError('Email already verified', 400);
-      if (
-        !dbUser.emailVerificationToken ||
-        dbUser.emailVerificationToken !== code ||
-        !dbUser.emailVerificationExpires ||
-        dbUser.emailVerificationExpires < new Date()
-      ) {
-        throw new AppError('Invalid or expired verification code', 400);
-      }
-
-      await prisma.user.update({
-        where: { id: dbUser.id },
-        data: {
-          emailVerified: true,
-          emailVerificationToken: null,
-          emailVerificationExpires: null,
-          status: dbUser.status === 'PENDING' ? 'ACTIVE' : dbUser.status,
-        },
-      });
-
-      // Welcome email is sent ONLY now — proves the address is real and
-      // avoids polluting inboxes for half-finished signups.
-      sendWelcomeEmail({ to: dbUser.email, firstName: dbUser.firstName })
-        .catch((e) => console.error('[email] welcome failed:', emailErrorSummary(e)));
-
+      await confirmEmailCode(dbUser, code);
       res.json({ message: 'Email verified successfully' });
     } catch (error) {
       next(error);
@@ -607,21 +727,20 @@ export class AuthController {
       if (!dbUser) throw new AppError('User not found', 404);
       if (dbUser.emailVerified) throw new AppError('Email already verified', 400);
 
+      const slot = await reserveAttempt(`auth:emailcode:issue:${dbUser.id}`, EMAIL_CODES_PER_HOUR, 60 * 60);
+      if (!slot.allowed) throw new AppError('Too many codes requested. Try again later.', 429);
+
       // CSPRNG, not Math.random — see register() above.
       const verificationCode = crypto.randomInt(100000, 1000000).toString();
-      // Write to the SAME field pair `verifyEmailCode()` reads from
-      // (`emailVerificationToken` / `emailVerificationExpires`).  The
-      // previous code wrote to `emailVerificationCode` / `…Expires`,
-      // which `verifyEmailCode()` never reads — so after a resend the
-      // user could no longer verify with any code.  Pre-existing
-      // breakage, fixed in passing.
+      // Write to the SAME field pair `confirmEmailCode()` reads from.
       await prisma.user.update({
         where: { id: dbUser.id },
         data: {
-          emailVerificationToken: verificationCode,
+          emailVerificationToken: emailCodeDigest(dbUser.id, verificationCode),
           emailVerificationExpires: new Date(Date.now() + 24 * 60 * 60 * 1000),
         },
       });
+      await clearAttempts(`auth:emailcode:${dbUser.id}`);
 
       sendVerificationEmail({
         to: dbUser.email,
@@ -638,43 +757,12 @@ export class AuthController {
   /* ─── Password reset ─── */
   static async forgotPassword(req: AuthRequest, res: Response, next: NextFunction) {
     try {
-      const { email } = z.object({ email: z.string().email() }).parse(req.body);
-
-      const user = await prisma.user.findUnique({ where: { email } });
-      if (!user) {
-        // Always return success to prevent email enumeration
-        return res.json({ message: 'If an account exists, a reset email has been sent.' });
-      }
-
-      // Two ways to reset, two separate secrets:
-      //   • a LINK with a 32-byte random token (web) — unguessable, so it
-      //     can be verified by bare hash lookup, and
-      //   • a 6-digit CODE the user types into the mobile app — guessable
-      //     in principle (1e6 space), so it is only valid together with
-      //     the account email and is capped at 5 attempts.
-      // Only SHA-256 hashes are persisted (a DB/backup/replica leak must
-      // not yield a live reset secret).
-      const linkToken = crypto.randomBytes(32).toString('hex');
-      const code      = crypto.randomInt(100000, 1000000).toString(); // 6 digits, CSPRNG
-      const sha256    = (s: string) => crypto.createHash('sha256').update(s).digest('hex');
-      await prisma.user.update({
-        where: { id: user.id },
-        data: {
-          passwordResetToken: sha256(linkToken),
-          passwordResetCode: sha256(code),
-          passwordResetAttempts: 0,
-          passwordResetExpires: new Date(Date.now() + 60 * 60 * 1000),
-        },
-      });
-
-      sendPasswordResetEmail({
-        to: user.email,
-        firstName: user.firstName,
-        token: linkToken,
-        code,
-      }).catch((e) => console.error('[email] password reset failed:', emailErrorSummary(e)));
-
+      const { email } = z.object({ email: z.string().email().max(254) }).parse(req.body);
+      // Answer first: the same response, at the same speed, whether or not
+      // the address is registered (no enumeration by content or timing).
       res.json({ message: 'If an account exists, a reset email has been sent.' });
+      void issuePasswordReset(normalizeEmail(email))
+        .catch((e) => logger.warn('[auth] password reset issue failed', { err: e }));
     } catch (error) {
       next(error);
     }
@@ -689,67 +777,80 @@ export class AuthController {
         // Required for the 6-digit code path (identifies the account so
         // attempts can be counted). The link token needs no email — it
         // has 256 bits of entropy and is verified by unique hash lookup.
-        email: z.string().email().optional(),
+        email: z.string().email().max(254).optional(),
       }).parse(req.body);
 
-      const sha256 = (s: string) => crypto.createHash('sha256').update(s).digest('hex');
       const isCode = /^\d{6}$/.test(token);
       const MAX_RESET_ATTEMPTS = 5;
+      const now = new Date();
+      const cleared = {
+        passwordResetToken: null, passwordResetCode: null,
+        passwordResetExpires: null, passwordResetAttempts: 0,
+      };
 
-      let user: { id: string } | null = null;
-
+      let userId: string;
       if (isCode) {
         if (!email) throw new AppError('Email is required with a reset code', 400);
-        const candidate = await prisma.user.findUnique({ where: { email } });
-        const valid =
-          candidate &&
-          candidate.passwordResetCode &&
-          candidate.passwordResetExpires &&
-          candidate.passwordResetExpires > new Date() &&
-          candidate.passwordResetAttempts < MAX_RESET_ATTEMPTS &&
-          candidate.passwordResetCode === sha256(token);
-        if (!valid) {
-          // Count the failure; after the cap, burn the whole reset so the
-          // remaining code space can't be walked.
-          if (candidate?.passwordResetCode) {
-            const attempts = candidate.passwordResetAttempts + 1;
-            await prisma.user.update({
-              where: { id: candidate.id },
-              data: attempts >= MAX_RESET_ATTEMPTS
-                ? { passwordResetCode: null, passwordResetToken: null,
-                    passwordResetExpires: null, passwordResetAttempts: 0 }
-                : { passwordResetAttempts: attempts },
-            });
-          }
-          throw new AppError('Invalid or expired reset code', 400);
+        const INVALID = new AppError('Invalid or expired reset code', 400);
+        const candidate = await prisma.user.findUnique({
+          where: { email: normalizeEmail(email) },
+          select: { id: true, passwordResetCode: true },
+        });
+        if (!candidate?.passwordResetCode) throw INVALID;
+        const issued = candidate.passwordResetCode;
+
+        // Reserve this attempt atomically BEFORE comparing: the conditional
+        // increment is re-checked by Postgres under the row lock, so a burst
+        // of parallel guesses gets at most 5 comparisons per code (the old
+        // read-compare-write let every parallel request see "0 attempts").
+        const reserved = await prisma.user.updateMany({
+          where: {
+            id: candidate.id, passwordResetCode: issued,
+            passwordResetExpires: { gt: now }, passwordResetAttempts: { lt: MAX_RESET_ATTEMPTS },
+          },
+          data: { passwordResetAttempts: { increment: 1 } },
+        });
+        const burn = () => prisma.user.updateMany({ where: { id: candidate.id, passwordResetCode: issued }, data: cleared });
+        if (reserved.count !== 1) {
+          await burn(); // exhausted or expired — the remaining space can't be walked
+          throw INVALID;
         }
-        user = candidate;
+        if (!safeEqual(issued, sha256(token))) {
+          await prisma.user.updateMany({
+            where: { id: candidate.id, passwordResetCode: issued, passwordResetAttempts: { gte: MAX_RESET_ATTEMPTS } },
+            data: cleared,
+          });
+          throw INVALID;
+        }
+        const passwordHash = await bcrypt.hash(password, BCRYPT_COST);
+        // Single use: only one request can consume this exact code.
+        const consumed = await prisma.user.updateMany({
+          where: { id: candidate.id, passwordResetCode: issued, passwordResetExpires: { gt: new Date() } },
+          data: { ...cleared, passwordHash, failedLoginAttempts: 0, lockoutUntil: null },
+        });
+        if (consumed.count !== 1) throw INVALID;
+        userId = candidate.id;
       } else {
         // Link-token path — hash lookup, mirrors forgotPassword storage.
-        user = await prisma.user.findFirst({
-          where: {
-            passwordResetToken: sha256(token),
-            passwordResetExpires: { gt: new Date() },
-          },
+        const tokenHash = sha256(token);
+        const user = await prisma.user.findFirst({
+          where: { passwordResetToken: tokenHash, passwordResetExpires: { gt: now } },
+          select: { id: true },
         });
         if (!user) throw new AppError('Invalid or expired reset token', 400);
+        const passwordHash = await bcrypt.hash(password, BCRYPT_COST);
+        const consumed = await prisma.user.updateMany({
+          where: { id: user.id, passwordResetToken: tokenHash, passwordResetExpires: { gt: new Date() } },
+          data: { ...cleared, passwordHash, failedLoginAttempts: 0, lockoutUntil: null },
+        });
+        if (consumed.count !== 1) throw new AppError('Invalid or expired reset token', 400);
+        userId = user.id;
       }
 
-      const passwordHash = await bcrypt.hash(password, 12);
-      await prisma.user.update({
-        where: { id: user.id },
-        data: {
-          passwordHash,
-          passwordResetToken: null,
-          passwordResetCode: null,
-          passwordResetExpires: null,
-          passwordResetAttempts: 0,
-        },
-      });
-
-      // Kills refresh tokens (DB) AND outstanding access tokens (Redis cutoff).
-      await revokeAllUserSessions(user.id);
-      void recordRiskEvent(user.id, 'SECURITY_CHANGE', { change: 'password_reset' }, 'MEDIUM');
+      // Kills refresh tokens (DB) AND outstanding access tokens (cutoff).
+      await revokeAllUserSessions(userId);
+      void recordRiskEvent(userId, 'SECURITY_CHANGE', { change: 'password_reset' }, 'MEDIUM');
+      sendSecurityNotice(userId, 'password_reset', { ip: req.ip });
 
       res.json({ message: 'Password reset successfully. Please log in again.' });
     } catch (error) {
@@ -762,31 +863,16 @@ export class AuthController {
        1. request: email a 6-digit code to the account email.
        2. verify:  code + phone + date-of-birth must all match → disable 2FA.
      The extra phone+DOB identity check means an attacker needs the email
-     inbox AND knowledge of the user's phone and birthday — not just one. */
+     inbox AND knowledge of the user's phone and birthday — not just one.
+     Each code gets 5 tries (then it is burned) and at most 3 codes are
+     sent per hour, so the 1e6 code space cannot be walked. */
   static async request2FARecovery(req: AuthRequest, res: Response, next: NextFunction) {
     try {
-      const { email } = z.object({ email: z.string().email() }).parse(req.body);
-      const GENERIC = { message: 'If an account with 2FA exists, a recovery code has been sent.' };
-
-      const user = await prisma.user.findUnique({ where: { email } });
-      // Always return success (no enumeration). Only actually send when the
-      // account exists AND has 2FA enabled (nothing to recover otherwise).
-      if (!user || !user.twoFactorEnabled) return res.json(GENERIC);
-
-      const code     = crypto.randomInt(100000, 1000000).toString();
-      const codeHash = crypto.createHash('sha256').update(code).digest('hex');
-      await prisma.user.update({
-        where: { id: user.id },
-        data: {
-          twoFactorRecoveryCode: codeHash,
-          twoFactorRecoveryExpires: new Date(Date.now() + 30 * 60 * 1000), // 30 min
-        },
-      });
-
-      send2FARecoveryEmail({ to: user.email, firstName: user.firstName, code })
-        .catch((e) => console.error('[email] 2FA recovery failed:', emailErrorSummary(e)));
-
-      res.json(GENERIC);
+      const { email } = z.object({ email: z.string().email().max(254) }).parse(req.body);
+      // Always the same answer, sent before any lookup (no enumeration).
+      res.json({ message: 'If an account with 2FA exists, a recovery code has been sent.' });
+      void issue2FARecovery(normalizeEmail(email))
+        .catch((e) => logger.warn('[auth] 2FA recovery issue failed', { err: e }));
     } catch (error) {
       next(error);
     }
@@ -795,36 +881,48 @@ export class AuthController {
   static async verify2FARecovery(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const { email, code, phone, dateOfBirth } = z.object({
-        email: z.string().email(),
-        code: z.string().min(6).max(6),
-        phone: z.string().min(3),
-        dateOfBirth: z.string().min(8), // YYYY-MM-DD
+        email: z.string().email().max(254),
+        code: z.string().regex(/^\d{6}$/),
+        phone: z.string().min(3).max(32),
+        dateOfBirth: z.string().regex(/^\d{4}-\d{2}-\d{2}/), // YYYY-MM-DD
       }).parse(req.body);
 
       const GENERIC_FAIL = new AppError('Recovery details do not match. Check your code, phone, and date of birth.', 400);
 
-      const codeHash = crypto.createHash('sha256').update(code).digest('hex');
-      const user = await prisma.user.findFirst({
-        where: {
-          email,
-          twoFactorRecoveryCode: codeHash,
-          twoFactorRecoveryExpires: { gt: new Date() },
-        },
+      const user = await prisma.user.findUnique({ where: { email: normalizeEmail(email) } });
+      if (!user?.twoFactorRecoveryCode || !user.twoFactorRecoveryExpires || user.twoFactorRecoveryExpires <= new Date()) {
+        throw GENERIC_FAIL;
+      }
+      const issued = user.twoFactorRecoveryCode;
+      const burn = () => prisma.user.updateMany({
+        where: { id: user.id, twoFactorRecoveryCode: issued },
+        data: { twoFactorRecoveryCode: null, twoFactorRecoveryExpires: null },
       });
-      if (!user) throw GENERIC_FAIL;
 
-      // Identity gate: phone (digits-only compare, ignoring dial code) + DOB.
-      const norm = (s: string) => s.replace(/\D/g, '');
-      const phoneOk = !!user.phone && norm(user.phone).endsWith(norm(phone).slice(-9));
+      // Reserved before checking, so parallel guesses count too.
+      const triesKey = `auth:2farec:try:${user.id}`;
+      const slot = await reserveAttempt(triesKey, RECOVERY_MAX_ATTEMPTS, 30 * 60);
+      if (!slot.allowed) {
+        await burn();
+        throw new AppError('Too many attempts. Request a new recovery code.', 429);
+      }
+
+      // Identity gate: phone (digits only; the last 9 digits so the dial code
+      // and a national trunk 0 don't matter, at least 7 digits) + DOB.
+      const supplied = phone.replace(/\D/g, '');
+      const stored = (user.phone ?? '').replace(/\D/g, '');
+      const phoneOk = supplied.length >= 7 && stored.length >= 7 && stored.endsWith(supplied.slice(-9));
       const dobOk = !!user.dateOfBirth &&
         new Date(user.dateOfBirth).toISOString().slice(0, 10) === dateOfBirth.slice(0, 10);
-      if (!phoneOk || !dobOk) throw GENERIC_FAIL;
+      const codeOk = safeEqual(issued, sha256(code));
+      if (!codeOk || !phoneOk || !dobOk) {
+        if (slot.count >= RECOVERY_MAX_ATTEMPTS) await burn();
+        throw GENERIC_FAIL;
+      }
 
-      // All checks pass → disable 2FA and clear the recovery code. Also revoke
-      // sessions (refresh + live access tokens) so a re-login is required with
-      // the (now 2FA-free) account.
-      await prisma.user.update({
-        where: { id: user.id },
+      // All checks pass → disable 2FA and consume the code (single use).
+      const consumed = await prisma.user.updateMany({
+        where: { id: user.id, twoFactorRecoveryCode: issued },
         data: {
           twoFactorEnabled: false,
           twoFactorSecret: null,
@@ -832,9 +930,14 @@ export class AuthController {
           twoFactorRecoveryExpires: null,
         },
       });
+      if (consumed.count !== 1) throw GENERIC_FAIL;
+      await clearAttempts(triesKey);
+      // Revoke sessions (refresh + live access tokens) so a re-login is
+      // required with the (now 2FA-free) account.
       await revokeAllUserSessions(user.id);
       clearAdminCache(user.id);
       void recordRiskEvent(user.id, 'SECURITY_CHANGE', { change: '2fa_recovery' }, 'HIGH');
+      sendSecurityNotice(user.id, 'two_factor_recovered', { ip: req.ip });
 
       res.json({ message: '2FA has been removed. Sign in with your email and password.' });
     } catch (error) {
@@ -859,8 +962,13 @@ export class AuthController {
       });
       if (!dbUser) throw new AppError('User not found', 404);
       if (dbUser.phoneVerified) throw new AppError('Phone already verified', 400);
+      if (!dbUser.phone) throw new AppError('No phone number on this account', 400);
 
-      const phone = `+${dbUser.phoneCountryCode}${dbUser.phone}`;
+      // SMS/WhatsApp cost money (SMS pumping) and every new code buys 5 tries.
+      const slot = await reserveAttempt(`otp:phone:issue:${user.id}`, PHONE_OTP_SENDS_PER_HOUR, 60 * 60);
+      if (!slot.allowed) throw new AppError('Too many codes requested. Try again later.', 429);
+
+      const phone = e164(dbUser.phone, dbUser.phoneCountryCode);
       const result = await startVerification({ phone, channel, userId: user.id });
       if (!result.ok) throw new AppError(result.reason ?? 'Failed to send code', 502);
       await clearAttempts(`otp:phone:fail:${user.id}`);
@@ -876,7 +984,7 @@ export class AuthController {
       const user = req.user;
       if (!user) throw new AppError('Authentication required', 401);
 
-      const { code } = z.object({ code: z.string().min(4).max(8) }).parse(req.body);
+      const { code } = z.object({ code: z.string().regex(/^\d{4,8}$/) }).parse(req.body);
 
       const dbUser = await prisma.user.findUnique({
         where: { id: user.id },
@@ -886,18 +994,21 @@ export class AuthController {
       if (dbUser.phoneVerified) throw new AppError('Phone already verified', 400);
 
       // 5 wrong codes burns the pending code — a 6-digit code must not be
-      // guessable by retrying, whichever provider issued it.
+      // guessable by retrying, whichever provider issued it. The attempt is
+      // reserved before the check so parallel guesses count.
       const attemptsKey = `otp:phone:fail:${user.id}`;
-      if (await getAttempts(attemptsKey) >= PHONE_OTP_MAX_ATTEMPTS) {
+      const burn = () => prisma.user.update({ where: { id: user.id }, data: { phoneOtpCode: null, phoneOtpExpires: null } });
+      const slot = await reserveAttempt(attemptsKey, PHONE_OTP_MAX_ATTEMPTS, PHONE_OTP_LOCK_SECONDS);
+      if (!slot.allowed) {
+        await burn();
         throw new AppError('Too many attempts. Request a new code.', 429);
       }
 
-      const phone = `+${dbUser.phoneCountryCode}${dbUser.phone}`;
+      const phone = e164(dbUser.phone, dbUser.phoneCountryCode);
       const result = await checkVerification({ phone, code, userId: user.id });
       if (!result.valid) {
-        const n = await incrAttempts(attemptsKey, PHONE_OTP_LOCK_SECONDS);
-        if (n >= PHONE_OTP_MAX_ATTEMPTS) {
-          await prisma.user.update({ where: { id: user.id }, data: { phoneOtpCode: null, phoneOtpExpires: null } });
+        if (slot.count >= PHONE_OTP_MAX_ATTEMPTS) {
+          await burn();
           throw new AppError('Too many attempts. Request a new code.', 429);
         }
         throw new AppError('Invalid or expired code', 400);

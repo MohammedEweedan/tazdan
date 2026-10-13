@@ -129,3 +129,8 @@ html.snap-landing { scroll-snap-type: y proximity; scroll-padding-top: 0; }
 .snap-section-normal { scroll-snap-align: start; }
 /* Disable snap inside the sticky-scroll phone theater */
 .snap-none { scroll-snap-align: none; }
+
+/* Focus rings: the brand navy (#24384F) is ~1.5:1 on the charcoal dark
+   surfaces, so in dark mode every focus outline uses the lifted slate accent
+   (#9BA8B7, the app's dark accentText) instead. Light mode keeps navy. */
+.chakra-ui-dark :focus-visible { outline-color: #9BA8B7 !important; }

@@ -19,7 +19,8 @@ import { enforceStepUp } from '../services/security/stepUp.service';
 import { sendBuyConfirmed, sendSellConfirmed } from '../services/email';
 import { pushCopy, pushTxEvent } from '../services/push.service';
 import { logger } from '../utils/logger';
-import { isFeatureEnabled } from '../utils/features';
+import { isFeatureEnabled, assertFeatureEnabled } from '../utils/features';
+import { assertMovementAllowed } from '../services/platform/controls.service';
 
 const positiveAmount = z.union([z.string(), z.number()]).refine(
   (v) => { const n = Number(v); return Number.isFinite(n) && n > 0; },
@@ -181,6 +182,9 @@ export class ExchangeController {
   static async createQuote(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const body = quoteSchema.parse(req.body);
+      assertFeatureEnabled('cryptoTrading');
+      await assertMovementAllowed({ userId: req.user!.id, feature: 'fx', currency: body.asset });
+      await assertMovementAllowed({ userId: req.user!.id, feature: 'fx', currency: body.fundingCurrency ?? body.receiveCurrency });
       if (body.side === 'BUY' && body.fiatAmount == null) {
         throw new AppError('fiatAmount required for BUY', 400);
       }

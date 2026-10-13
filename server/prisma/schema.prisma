@@ -1967,6 +1967,7 @@ model CryptoOrder {
 
 model OnChainTransaction {
   id            String    @id @default(cuid())
+  idempotencyKey String?   @unique
   userId        String
   type          String
   asset         String

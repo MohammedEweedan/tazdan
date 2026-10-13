@@ -14,7 +14,7 @@ if (process.env.SENTRY_DSN) {
 }
 
 import { validateEnv, isProduction } from './utils/env';
-import { initRedis } from './utils/redis';
+import { initRedis, getRedisClient } from './utils/redis';
 import { logger } from './utils/logger';
 validateEnv();
 
@@ -27,9 +27,14 @@ import compression from 'compression';
 import cookieParser from 'cookie-parser';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
-import jwt from 'jsonwebtoken';
 import path from 'path';
 import cluster from 'cluster';
+import crypto from 'crypto';
+import { attachRequestContext } from './middleware/requestContext';
+import { attachSocketAuth } from './services/security/socketAuth';
+import { parseQueryString, jsonReviver, noStoreApi } from './middleware/httpHardening';
+import { dependencyReadiness, withDeadline } from './services/ops/health.service';
+import { currentLaunchReadiness, isRealMoneyEnabled } from './services/ops/launchReadiness.service';
 
 import { authRouter } from './routes/auth';
 import { userRouter } from './routes/user';
@@ -72,15 +77,16 @@ import { budgetRouter } from './routes/budget';
 import { assetDiscussionRouter } from './routes/assetDiscussion';
 import { startBudgetScheduler } from './services/budget.service';
 import { startLydSampler } from './services/exchange/lydOrderBook.service';
-import { startReconciliation } from './services/ledger/reconcile.service';
+import { startReconciliation, reconcileLedger, isTradingHalted } from './services/ledger/reconcile.service';
 import { getEmailStatus } from './services/email';
-import { startFundIntegrityAudit } from './services/ledger/fundIntegrity.service';
+import { startFundIntegrityAudit, auditFundIntegrity } from './services/ledger/fundIntegrity.service';
+import { startCustodyReconciliation } from './services/wallet/custodyReconciliation.service';
 import { startOperationalReadinessAlerts } from './services/ops/operationalReadiness.service';
-import { globalLimiter, authLimiter, registerLimiter, withdrawalLimiter, webhookLimiter } from './middleware/rateLimiters';
+import { globalLimiter, authLimiter, refreshLimiter, registerLimiter, withdrawalLimiter, webhookLimiter } from './middleware/rateLimiters';
 import { protectedUploadsRouter } from './middleware/protectedUploads';
 import { ipBanMiddleware } from './middleware/ipBan';
 import { featureFlags } from './utils/features';
-import { metricsMiddleware, startMetricsSampler } from './services/platform/metrics';
+import { metricsMiddleware, startMetricsSampler, prometheusMetrics } from './services/platform/metrics';
 import { cockpitRouter } from './routes/cockpit';
 import { remittanceRouter } from './routes/remittance';
 import { businessRouter } from './routes/business';
@@ -150,7 +156,8 @@ const corsOrigin: cors.CorsOptions['origin'] = (origin, cb) => {
     if (DEV_EXTRA_ORIGINS.includes(origin)) return cb(null, true);
     if (DEV_LAN_REGEX.test(origin)) return cb(null, true);
   }
-  return cb(new Error(`CORS: origin ${origin} not allowed`));
+  // 403 (not a 500): a foreign Origin is the caller's problem, not ours.
+  return cb(Object.assign(new Error('CORS: origin not allowed'), { status: 403, expose: true }));
 };
 
 const io = new Server(httpServer, {
@@ -159,11 +166,19 @@ const io = new Server(httpServer, {
 const onlineUsers = new Map<string, number>();
 app.set('onlineUsers', onlineUsers);
 
-// Trust the first proxy hop (load balancer / ingress) so req.ip is the
-// real client IP — required for rate limiting to work behind a proxy.
-app.set('trust proxy', 1);
+// Trust exactly the proxy hops in front of the API (default 1: host nginx,
+// which appends the client address to X-Forwarded-For) so req.ip is the real
+// client for rate limits, IP bans and audit. Adding a CDN/WAF in front of
+// nginx (e.g. Cloudflare) needs TRUST_PROXY_HOPS=2 or nginx real_ip, or every
+// customer shares the edge's IP.
+app.set('trust proxy', Math.max(0, Number.parseInt(process.env.TRUST_PROXY_HOPS ?? '1', 10) || 0));
+// Query values are plain strings only: no nested objects (Prisma operator
+// injection, type confusion) and repeated keys collapse to the last value
+// (parameter pollution). Must be set before the first app.use().
+app.set('query parser', parseQueryString);
 
 // Block banned IPs before any processing
+app.use(attachRequestContext);
 app.use(ipBanMiddleware);
 
 // Latency / throughput / error-rate samples for the cockpit (in-process).
@@ -197,7 +212,10 @@ app.use(cookieParser());
 // inside the deposit router using its own raw() middleware; here we
 // just exempt it from JSON parsing.
 app.use((req, res, next) => {
-  if (req.path === '/api/deposits/webhook/stripe') return next();
+  // Provider webhooks that verify a signature over the raw bytes use the
+  // router's own raw() parser. Alchemy and TronGrid used to be JSON-parsed
+  // here first, so raw() never ran and their signature checks could not pass.
+  if (req.path.startsWith('/api/deposits/webhook/')) return next();
   // Capture raw body on webhooks that verify an HMAC over the exact bytes the
   // sender signed (Meta WhatsApp X-Hub-Signature-256, Fulus X-Webhook-Signature).
   // The body is still parsed into req.body.
@@ -207,12 +225,17 @@ app.use((req, res, next) => {
     req.path.startsWith('/api/remittance/webhooks/');
   return express.json({
     limit:  '1mb',
+    reviver: jsonReviver,
     verify: needsRawBody
       ? (req2: any, _res, buf) => { req2.rawBody = buf.toString('utf8'); }
       : undefined,
   })(req, res, next);
 });
-app.use(express.urlencoded({ extended: true, limit: '1mb' }));
+// Flat form bodies only (Twilio posts flat fields); no nested qs objects.
+app.use(express.urlencoded({ extended: false, limit: '1mb', parameterLimit: 200 }));
+
+// API responses are private by default; public read-only routes opt back in.
+app.use('/api/', noStoreApi);
 
 // ── Cache-Control on public read-only endpoints ───────────────────────
 // Allows CDN / reverse-proxy caching for high-traffic public routes.
@@ -235,7 +258,7 @@ app.use('/api/auth/2fa/verify', authLimiter);
 app.use('/api/auth/2fa/disable', authLimiter);
 app.use('/api/auth/phone', authLimiter);
 app.use('/api/auth/resend-verification', authLimiter);
-app.use('/api/auth/refresh', authLimiter);
+app.use('/api/auth/refresh', refreshLimiter); // own budget, no IP-ban strikes (CGNAT)
 app.use('/api/auth/register', registerLimiter);
 app.use('/api/withdrawals', withdrawalLimiter);
 app.use('/api/withdrawal', withdrawalLimiter);
@@ -312,38 +335,42 @@ app.use('/api/v1', publicApiRouter);
 
 // Feature switches — public so the apps can hide surfaces that are off.
 app.get('/api/features', (_req, res) => {
-  res.json({ features: featureFlags() });
+  const flags = featureFlags();
+  if (isProduction()) {
+    const report = currentLaunchReadiness();
+    const open = isRealMoneyEnabled() && report.ok;
+    const mapping = { p2p: 'p2p', cards: 'cards', altTrading: 'fx', blockchain: 'blockchain', cryptoTrading: 'fx', remittance: 'remittance' };
+    for (const key of Object.keys(flags) as (keyof typeof flags)[]) flags[key] = flags[key] && open && Boolean(report.evidence?.scope.features.includes(mapping[key] as any));
+  }
+  res.setHeader('Cache-Control', 'no-store');
+  res.json({ features: flags });
+});
+
+app.get('/api/health/live', (_req, res) => res.json({ status: 'alive' }));
+app.get('/api/health/ready', async (_req, res) => {
+  const health = await dependencyReadiness();
+  res.setHeader('Cache-Control', 'no-store');
+  res.status(health.dependenciesReady ? 200 : 503).json({ status: health.dependenciesReady ? 'ready' : 'unavailable', moneyReady: health.moneyReady, checks: health.checks });
+});
+app.get('/api/metrics', async (req, res) => {
+  const expected = process.env.METRICS_TOKEN ?? '';
+  const received = req.get('Authorization')?.replace(/^Bearer /, '') ?? '';
+  if (expected.length < 32 || expected.length !== received.length || !crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(received))) {
+    res.status(401).json({ error: 'Unauthorized' }); return;
+  }
+  const health = await dependencyReadiness();
+  const unknown = await withDeadline(prisma.onChainTransaction.count({ where: { type: 'WITHDRAWAL', status: 'BROADCAST_UNKNOWN' } })).catch(() => null);
+  res.setHeader('Cache-Control', 'no-store');
+  res.type('text/plain; version=0.0.4').send(prometheusMetrics() +
+    `tazdan_dependencies_ready ${Number(health.dependenciesReady)}\ntazdan_money_ready ${Number(health.moneyReady)}\ntazdan_custody_status_query_ok ${Number(unknown !== null)}\n` +
+    (unknown === null ? '' : `tazdan_custody_unknown_operations ${unknown}\n`));
 });
 
 // Health check
 // Public: status + dependency checks only. Config details (email transport,
 // sender addresses, missing env names, pid) go to signed-in admins only.
 app.get('/api/health', optionalAuthenticate, async (req: AuthRequest, res) => {
-  const checks: Record<string, 'ok' | 'error'> = {};
-
-  // DB check
-  try {
-    await prisma.$queryRaw`SELECT 1`;
-    checks.database = 'ok';
-  } catch {
-    checks.database = 'error';
-  }
-
-  // Redis check
-  try {
-    const { getRedisClient } = await import('./utils/redis');
-    const client = getRedisClient();
-    if (client) {
-      await client.ping();
-      checks.redis = 'ok';
-    } else {
-      checks.redis = 'error';
-    }
-  } catch {
-    checks.redis = 'error';
-  }
-
-  const healthy = Object.values(checks).every(v => v === 'ok');
+  const { checks, dependenciesReady: healthy } = await dependencyReadiness();
   const status = healthy ? 200 : 503;
 
   const isAdmin = req.user?.role === 'ADMIN';
@@ -370,27 +397,12 @@ app.use(errorHandler);
 /**
  * Socket.IO — authenticated namespace.
  *
- * Clients pass a JWT either via `auth.token` on the handshake or as a
- * `?token=` query string. Authenticated sockets are auto-joined to
- * `user:{id}` so controllers can emit per-user events without the
- * client having to subscribe explicitly.
+ * Clients pass a JWT via `auth.token` on the handshake (never the query
+ * string). Authentication, revocation, expiry and in-band re-auth live in
+ * services/security/socketAuth.ts; authenticated sockets are auto-joined to
+ * `user:{id}` here so controllers can emit per-user events.
  */
-io.use((socket, next) => {
-  // Only accept tokens via the handshake `auth` object — never via the
-  // query string. URL-borne tokens leak through proxy logs, browser
-  // history, and Referer headers.
-  const raw = (socket.handshake.auth as any)?.token as string | undefined;
-  if (!raw) return next();   // allow unauthenticated for public events
-  try {
-    const decoded = jwt.verify(raw, process.env.JWT_SECRET as string, {
-      algorithms: ['HS256'],
-    }) as { id: string; email: string; role: string };
-    (socket.data as any).user = decoded;
-    next();
-  } catch {
-    next();                  // invalid token → unauthenticated socket, no rooms
-  }
-});
+attachSocketAuth(io);
 
 io.on('connection', (socket) => {
   const user = (socket.data as any).user as { id: string } | undefined;
@@ -404,7 +416,7 @@ io.on('connection', (socket) => {
   // Asset-discussion live feed — join/leave the per-symbol room as the user
   // opens/closes the Discussions tab on an asset page.
   socket.on('discussion:join', (symbol: string) => {
-    if (typeof symbol === 'string' && symbol.length <= 24) {
+    if (user?.id && typeof symbol === 'string' && /^[A-Za-z0-9_]{1,24}$/.test(symbol)) {
       socket.join(`discussion:${symbol.toUpperCase()}`);
     }
   });
@@ -422,12 +434,19 @@ io.on('connection', (socket) => {
     if (user?.id) socket.join(`user:${user.id}`);
   });
 
-  socket.on('typing:start', ({ toUserId }: { toUserId: string }) => {
-    if (user?.id) io.to(`user:${toUserId}`).emit('typing:start', { fromUserId: user.id });
-  });
-  socket.on('typing:stop', ({ toUserId }: { toUserId: string }) => {
-    if (user?.id) io.to(`user:${toUserId}`).emit('typing:stop', { fromUserId: user.id });
-  });
+  // Typing indicators: only a well-formed user id, never yourself, and at
+  // most a few per second per socket (they fan out to another user's devices).
+  let typingBudget = { at: 0, n: 0 };
+  const relayTyping = (event: 'typing:start' | 'typing:stop', payload: unknown) => {
+    const toUserId = (payload as { toUserId?: unknown } | null)?.toUserId;
+    if (!user?.id || typeof toUserId !== 'string' || !/^[0-9a-f-]{36}$/i.test(toUserId) || toUserId === user.id) return;
+    const now = Date.now();
+    if (now - typingBudget.at > 1000) typingBudget = { at: now, n: 0 };
+    if (++typingBudget.n > 5) return;
+    io.to(`user:${toUserId}`).emit(event, { fromUserId: user.id });
+  };
+  socket.on('typing:start', (payload: unknown) => relayTyping('typing:start', payload));
+  socket.on('typing:stop', (payload: unknown) => relayTyping('typing:stop', payload));
 
   socket.on('disconnect', () => {
     if (!user?.id) return;
@@ -449,6 +468,12 @@ async function start() {
     await seedAdmin().catch((e) => logger.error('[boot] seedAdmin failed', { err: e }));
     await ensureMasterSeed();
     await initRedis();
+    if (isProduction() && !getRedisClient()) throw new Error('Redis must be available before production startup');
+    if (isProduction() && process.env.REAL_MONEY_ENABLED === '1') {
+      const ledger = await reconcileLedger();
+      const funds = await auditFundIntegrity({ haltOnBreach: true });
+      if (!ledger.ok || !funds.ok || await isTradingHalted()) throw new Error('Financial integrity must be verified before real-money startup');
+    }
 
     httpServer.keepAliveTimeout = 65_000;
     httpServer.headersTimeout    = 66_000;
@@ -515,6 +540,7 @@ async function start() {
     if (isSchedulerWorker) {
       startMetricsSampler();
       startFundIntegrityAudit();
+      startCustodyReconciliation();
       startOperationalReadinessAlerts();
       // Official sanctions lists (UN, OFAC SDN, UK): first download soon after
       // boot when missing or stale, then daily.

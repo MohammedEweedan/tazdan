@@ -18,7 +18,10 @@ import { logger } from '../../utils/logger';
 interface Sample { at: number; ms: number; status: number }
 
 const MAX_SAMPLES_PER_GROUP = 2_000;
+const MAX_GROUPS = 256;
 const groups = new Map<string, Sample[]>();
+const counters = new Map<string, { count: number; errors: number; sum: number; buckets: number[] }>();
+const BOUNDS = [0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10];
 const startedAt = Date.now();
 
 const loop = monitorEventLoopDelay({ resolution: 20 });
@@ -40,13 +43,33 @@ export function metricsMiddleware(req: Request, res: Response, next: NextFunctio
   const start = process.hrtime.bigint();
   res.on('finish', () => {
     const ms = Number(process.hrtime.bigint() - start) / 1e6;
-    const key = routeGroup(req.method, req.originalUrl);
+    // Matched route templates contain no account/address/token values. Never
+    // label unmatched paths with attacker-controlled URLs.
+    let key = req.route?.path ? `${req.method} ${String(req.route.path)}` : 'UNMATCHED';
+    if (!groups.has(key) && groups.size >= MAX_GROUPS) key = 'OTHER';
     let buf = groups.get(key);
     if (!buf) { buf = []; groups.set(key, buf); }
     buf.push({ at: Date.now(), ms, status: res.statusCode });
     if (buf.length > MAX_SAMPLES_PER_GROUP) buf.splice(0, buf.length - MAX_SAMPLES_PER_GROUP);
+    const count = counters.get(key) ?? { count: 0, errors: 0, sum: 0, buckets: BOUNDS.map(() => 0) };
+    count.count++; count.errors += Number(res.statusCode >= 500); count.sum += ms / 1000;
+    BOUNDS.forEach((bound, i) => { if (ms / 1000 <= bound) count.buckets[i]++; });
+    counters.set(key, count);
   });
   next();
+}
+
+/** Cumulative counters/histograms, per process. Scrape each worker separately. */
+export function prometheusMetrics() {
+  const lines = ['# TYPE tazdan_http_requests_total counter', '# TYPE tazdan_http_errors_total counter', '# TYPE tazdan_http_duration_seconds histogram'];
+  for (const [group, c] of counters) {
+    const label = `route=${JSON.stringify(group)},worker="${process.pid}"`;
+    lines.push(`tazdan_http_requests_total{${label}} ${c.count}`, `tazdan_http_errors_total{${label}} ${c.errors}`);
+    BOUNDS.forEach((bound, i) => lines.push(`tazdan_http_duration_seconds_bucket{${label},le="${bound}"} ${c.buckets[i]}`));
+    lines.push(`tazdan_http_duration_seconds_bucket{${label},le="+Inf"} ${c.count}`, `tazdan_http_duration_seconds_count{${label}} ${c.count}`, `tazdan_http_duration_seconds_sum{${label}} ${c.sum}`);
+  }
+  lines.push('# TYPE tazdan_event_loop_lag_seconds gauge', `tazdan_event_loop_lag_seconds ${loop.percentile(99) / 1e9}`);
+  return lines.join('\n') + '\n';
 }
 
 function percentile(sorted: number[], p: number): number {

@@ -17,13 +17,14 @@ import { CockpitRiskController as K } from '../controllers/cockpit/risk.controll
 import { CockpitAnalyticsController as A } from '../controllers/cockpit/analytics.controller';
 import { CockpitAiController as AI } from '../controllers/cockpit/ai.controller';
 import { aiLimiter } from '../middleware/rateLimiters';
+import { maskPiiForStaff } from '../services/platform/pii';
 // Registers approval handlers (side-effect imports).
 import '../services/ledger/adjustments.service';
 import '../services/remittance/refunds.service';
 import '../services/exchange/fxOverride.service';
 
 export const cockpitRouter = Router();
-cockpitRouter.use(authenticate, requireAdmin);
+cockpitRouter.use(authenticate, requireAdmin, maskPiiForStaff);
 
 cockpitRouter.get('/me', P('cockpit.view'), O.me);
 cockpitRouter.get('/overview', P('cockpit.view'), O.overview);

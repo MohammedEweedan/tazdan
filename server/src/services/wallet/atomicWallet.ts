@@ -44,8 +44,21 @@ export function parsePositiveAmount(value: unknown, field = 'amount'): Decimal {
   return parsed;
 }
 
+/** `Wallet.balance` and `Wallet.frozen` are NUMERIC(20, 8). */
+export const WALLET_SCALE = 8;
+
+/**
+ * Amount for a Wallet-table statement. More than 8 decimal places is refused:
+ * Postgres would round each side of a move on its own (a 0.000000015 debit
+ * stores −0.00000001 while the matching credit stores +0.00000002), so
+ * sub-unit amounts could create value one rounding at a time.
+ */
 function amountParam(amount: Amount): string {
-  return parsePositiveAmount(amount.toString()).toFixed();
+  const parsed = parsePositiveAmount(amount.toString());
+  if (parsed.decimalPlaces() > WALLET_SCALE) {
+    throw new AppError(`amount has too many decimal places (at most ${WALLET_SCALE})`, 400);
+  }
+  return parsed.toFixed();
 }
 
 /** Move `amount` from spendable into `frozen`, only if spendable covers it. */

@@ -89,11 +89,15 @@ export async function release(
   userId: string,
   budgetId: string,
   amount?: Decimal | number | string,
+  opts: { stepUpVerified?: boolean } = {},
 ) {
   return prisma.$transaction(async (tx: any) => {
     await lockBudget(tx, budgetId);
     const budget = await tx.budgetWallet.findFirst({ where: { id: budgetId, userId } });
     if (!budget) throw new AppError('Budget not found', 404);
+    // Re-checked on the locked row: a lock added or tightened after the
+    // caller's own check still applies.
+    assertReleasable(budget, opts.stepUpVerified === true);
     return releaseLocked(tx, userId, budget, amount);
   });
 }
@@ -103,13 +107,18 @@ export async function release(
  * transaction — a contribution can't land between the release and the close
  * and end up frozen inside a closed budget.
  */
-export async function close(userId: string, budgetId: string) {
+export async function close(userId: string, budgetId: string, opts: { stepUpVerified?: boolean } = {}) {
   return prisma.$transaction(async (tx: any) => {
     await lockBudget(tx, budgetId);
     const budget = await tx.budgetWallet.findFirst({ where: { id: budgetId, userId } });
     if (!budget) throw new AppError('Budget not found', 404);
     if (budget.status === 'CLOSED') return budget;
-    if (new Decimal(budget.balance).gt(0)) await releaseLocked(tx, userId, budget);
+    if (new Decimal(budget.balance).gt(0)) {
+      // The caller checked the lock on a balance read outside this lock; money
+      // that landed since must not leave a locked budget.
+      assertReleasable(budget, opts.stepUpVerified === true);
+      await releaseLocked(tx, userId, budget);
+    }
     return tx.budgetWallet.update({ where: { id: budget.id }, data: { status: 'CLOSED', autoEnabled: false } });
   });
 }
@@ -147,6 +156,48 @@ export function isDateLocked(budget: { lockType: string; unlockDate: Date | null
 }
 export function requiresStepUp(budget: { lockType: string }): boolean {
   return budget.lockType === 'STEP_UP' || budget.lockType === 'DATE_AND_STEP_UP';
+}
+
+const hasDateLock = (lockType: string) => lockType === 'DATE' || lockType === 'DATE_AND_STEP_UP';
+
+/** Throw unless money may leave this budget now (date passed, step-up proven when required). */
+export function assertReleasable(
+  budget: { lockType: string; unlockDate: Date | null },
+  stepUpVerified: boolean,
+  now = new Date(),
+): void {
+  if (isDateLocked(budget, now)) {
+    throw new AppError(`Locked until ${new Date(budget.unlockDate!).toISOString().slice(0, 10)}`, 403);
+  }
+  if (requiresStepUp(budget) && !stepUpVerified) {
+    throw new AppError('A security code is required to take money out of this budget', 401, 'STEP_UP_REQUIRED');
+  }
+}
+
+/**
+ * Validate a change to a budget's lock. A lock is a commitment: while a date
+ * lock is running it can only be extended (never removed or shortened), and
+ * removing a step-up lock needs the step-up code the lock exists to demand.
+ * Returns true when the change needs that code. Tightening is always allowed.
+ */
+export function lockChangeNeedsStepUp(
+  existing: { lockType: string; unlockDate: Date | null },
+  patch: { lockType?: string; unlockDate?: string | Date | null },
+  now = new Date(),
+): boolean {
+  if (patch.lockType === undefined && patch.unlockDate === undefined) return false;
+  const nextType = patch.lockType ?? existing.lockType;
+  const nextDate = patch.unlockDate !== undefined && patch.unlockDate !== null
+    ? new Date(patch.unlockDate)
+    : existing.unlockDate;
+  if (hasDateLock(nextType) && !nextDate) throw new AppError('unlockDate is required for a date lock', 400);
+  if (isDateLocked(existing, now)) {
+    const current = new Date(existing.unlockDate!);
+    if (!hasDateLock(nextType) || !nextDate || nextDate.getTime() < current.getTime()) {
+      throw new AppError(`This budget is locked until ${current.toISOString().slice(0, 10)}. The lock can be extended, not removed or shortened.`, 403);
+    }
+  }
+  return requiresStepUp(existing) && !requiresStepUp({ lockType: nextType });
 }
 
 /* ── Auto-contribution scheduler (mirrors recurringBuy) ──────────────── */

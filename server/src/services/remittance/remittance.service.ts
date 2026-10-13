@@ -24,6 +24,8 @@ import { logger } from '../../utils/logger';
 import { AppError } from '../../middleware/errorHandler';
 import { postLedger } from '../ledger/ledger.service';
 import { debitAvailable } from '../wallet/atomicWallet';
+import { assertFeatureEnabled } from '../../utils/features';
+import { assertLaunchMovement } from '../ops/launchReadiness.service';
 import { assertMovementAllowed } from '../platform/controls.service';
 import { writeAudit } from '../platform/audit';
 import { evaluateRisk } from '../risk/engine';
@@ -134,6 +136,11 @@ export async function createTransfer(input: CreateTransferInput) {
     const existing = await prisma.remittanceTransfer.findUnique({ where: { idempotencyKey: input.idempotencyKey } });
     if (existing) {
       if (existing.userId !== input.userId) throw new AppError('Idempotency key already used', 409, 'DUPLICATE_REQUEST');
+      // A replay is the same request; a key reused for another quote or
+      // beneficiary must not answer "done" for a transfer that was never sent.
+      if (existing.quoteId !== input.quoteId || existing.beneficiaryId !== input.beneficiaryId) {
+        throw new AppError('This idempotency key was already used for a different transfer', 409, 'DUPLICATE_REQUEST');
+      }
       return { transfer: existing, duplicate: true };
     }
   }
@@ -143,6 +150,8 @@ export async function createTransfer(input: CreateTransferInput) {
   if (quote.consumedAt) throw new AppError('This quote has already been used — request a new one', 409, 'DUPLICATE_REQUEST');
   if (quote.expiresAt.getTime() < Date.now()) throw new AppError('This quote has expired — request a new one', 409);
   const corridor = quote.corridor;
+  assertFeatureEnabled('remittance');
+  assertLaunchMovement('remittance', corridor.destCurrency, corridor.code);
   await assertMovementAllowed({ userId: input.userId, feature: 'remittance', currency: corridor.sourceCurrency, corridor: corridor.code });
   if (corridor.status === 'PAUSED' || corridor.status === 'DISABLED') throw new AppError(`${corridor.name} is paused`, 503, 'FEATURE_DISABLED');
   if (corridor.status === 'SANDBOX_ONLY' && process.env.NODE_ENV === 'production') {
@@ -208,6 +217,21 @@ export async function createTransfer(input: CreateTransferInput) {
   const review = ['REVIEW', 'REQUEST_INFORMATION'].includes(risk.outcome);
 
   const result = await prisma.$transaction(async (tx) => {
+    // Per-customer corridor limits are re-checked with the customer's limit
+    // lock held: parallel transfers (each on its own quote) are decided one
+    // at a time, so together they cannot exceed the daily/monthly limit.
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`remittance-limits:${input.userId}`}))`;
+    const live = { userId: input.userId, corridorId: corridor.id, state: { notIn: ['REJECTED', 'CANCELLED', 'REFUNDED', 'EXPIRED'] as RemittanceState[] } };
+    const [lockedDay, lockedMonth] = await Promise.all([
+      tx.remittanceTransfer.aggregate({ where: { ...live, createdAt: { gte: dayAgo } }, _sum: { receiveAmount: true } }),
+      tx.remittanceTransfer.aggregate({ where: { ...live, createdAt: { gte: monthAgo } }, _sum: { receiveAmount: true } }),
+    ]);
+    if (corridor.dailyLimitPerCustomer && D(lockedDay._sum.receiveAmount).plus(receive).gt(corridor.dailyLimitPerCustomer.toString())) {
+      throw new AppError(`This would exceed your daily ${corridor.code} limit of ${corridor.dailyLimitPerCustomer} ${corridor.destCurrency}`, 400, 'LIMIT_EXCEEDED');
+    }
+    if (corridor.monthlyLimitPerCustomer && D(lockedMonth._sum.receiveAmount).plus(receive).gt(corridor.monthlyLimitPerCustomer.toString())) {
+      throw new AppError(`This would exceed your 30-day ${corridor.code} limit of ${corridor.monthlyLimitPerCustomer} ${corridor.destCurrency}`, 400, 'LIMIT_EXCEEDED');
+    }
     const consumed = await tx.remittanceQuote.updateMany({ where: { id: quote.id, consumedAt: null }, data: { consumedAt: new Date() } });
     if (consumed.count !== 1) throw new AppError('This quote has already been used — request a new one', 409, 'DUPLICATE_REQUEST');
     const t = await tx.remittanceTransfer.create({

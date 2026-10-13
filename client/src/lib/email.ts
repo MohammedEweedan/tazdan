@@ -80,7 +80,21 @@ export function waitlistConfirmation(email: string) {
   return { to: email, subject: 'You\'re on the tazdan waitlist', html };
 }
 
-export function contactConfirmation(name: string, email: string) {
+/** Escape user-supplied text before it goes into email HTML. */
+export function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+export function contactConfirmation(rawName: string, rawEmail: string) {
+  // Both values come straight from the public contact form and the mail goes
+  // to whatever address was typed, so never let them carry markup or links.
+  const name = escapeHtml(rawName);
+  const email = escapeHtml(rawEmail);
   const html = base(
     'We received your message — tazdan',
     `<h1 class="main">We got your message, ${name}.</h1>
@@ -92,5 +106,5 @@ export function contactConfirmation(name: string, email: string) {
       <p class="muted" style="margin:0;font-size:13px;">tazdan will never ask for your password, 2FA code, or seed phrase via email. If you receive a suspicious message, contact us at <a href="mailto:security@tazdan.com" style="color:inherit">security@tazdan.com</a>.</p>
     </div>`,
   );
-  return { to: email, subject: 'We received your message — tazdan support', html };
+  return { to: rawEmail, subject: 'We received your message — tazdan support', html };
 }

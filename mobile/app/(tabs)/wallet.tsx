@@ -346,7 +346,10 @@ function AssetRow({ holding, value, hidden, rtl, last, onPress }: {
     maximumFractionDigits: meta?.decimals ?? 8,
   });
   const up = (change ?? 0) >= 0;
-  const align = rtl ? 'flex-start' : 'flex-end';
+  // Holdings rows stay strictly LTR in Arabic too (owner rule, 11 Oct 2026):
+  // flag/icon and currency name on the left, value on the right — the same
+  // order as the home screen's asset rows.
+  void rtl;
 
   return (
     <Pressable
@@ -354,7 +357,7 @@ function AssetRow({ holding, value, hidden, rtl, last, onPress }: {
       accessibilityLabel={`${meta?.name ?? wallet.currency}, ${value}`}
       onPress={onPress}
       style={({ pressed }) => ({
-        flexDirection: rtl ? 'row-reverse' : 'row', alignItems: 'center', gap: 14,
+        flexDirection: 'row', alignItems: 'center', gap: 14,
         paddingHorizontal: 16, paddingVertical: 15,
         borderBottomWidth: last ? 0 : 1, borderBottomColor: p.border,
         backgroundColor: pressed ? p.bgRaised : 'transparent',
@@ -369,14 +372,14 @@ function AssetRow({ holding, value, hidden, rtl, last, onPress }: {
         <CoinIcon symbol={wallet.currency} size={40} />
       )}
 
-      <View style={{ flex: 1, alignItems: rtl ? 'flex-end' : 'flex-start' }}>
+      <View style={{ flex: 1, alignItems: 'flex-start' }}>
         <Text numberOfLines={1} style={{ color: p.fg, fontSize: 15, fontWeight: '600' }}>{meta?.name ?? wallet.currency}</Text>
         <Text numberOfLines={1} style={{ color: p.fgMuted, fontSize: 13, marginTop: 3, fontVariant: ['tabular-nums'] }}>
           {amount} {meta?.code ?? wallet.currency}
         </Text>
       </View>
 
-      <View style={{ alignItems: align }}>
+      <View style={{ alignItems: 'flex-end' }}>
         <Text style={{ color: p.fg, fontSize: 15, fontWeight: '600', fontVariant: ['tabular-nums'] }}>{value}</Text>
         {change !== undefined && Number.isFinite(change) && !empty && (
           <Text style={{ color: up ? p.greenFg : p.redFg, fontSize: 12, fontWeight: '600', marginTop: 3, fontVariant: ['tabular-nums'] }}>

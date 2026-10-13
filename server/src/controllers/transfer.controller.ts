@@ -14,6 +14,7 @@ import { collectFee } from '../services/fee/feeCollector.service';
 import { enforceKycLimit } from '../utils/kycLimits';
 import { assertMovementAllowed } from '../services/platform/controls.service';
 import { parsePositiveAmount } from '../services/wallet/atomicWallet';
+import { assertRecipientCanReceive } from '../services/wallet/recipientEligibility';
 
 // Internal-transfer accepts the same set as wallet creation, including
 // the USDT on-chain variants. We normalise them to a single logical
@@ -96,8 +97,9 @@ export class TransferController {
       }
 
       if (!recipient) throw new AppError('Recipient not found', 404);
-      if (recipient.id === req.user!.id) throw new AppError('Cannot transfer to yourself', 400);
-      if (recipient.status !== 'ACTIVE') throw new AppError('Recipient account is not active', 400);
+      // Same rules as GET /api/transactions/recipient-check (self, account
+      // status, house accounts, compliance holds) — never says which one.
+      await assertRecipientCanReceive(req.user!.id, recipient.id, { currency: logicalCurrency });
 
       // Fee lookup (per-currency, with a sensible default)
       const feeKey = `transfer_fee_${logicalCurrency.toLowerCase()}`;

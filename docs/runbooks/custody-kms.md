@@ -1,3 +1,5 @@
+> Production activation is superseded by [isolated custody](isolated-custody.md). The API now refuses production master-seed access, including KMS decrypt. The procedures below are for legacy/local development migration only; KMS encryption in an API process does not provide signer isolation.
+
 # Custody hardening: KMS envelope encryption + hot/cold split
 
 The master BIP-39 seed derives **every user wallet**. Today it sits in the DB

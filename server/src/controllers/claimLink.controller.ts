@@ -36,7 +36,7 @@ import { assertTransitioned, releaseReserve, reserveFunds, settleReserve } from 
 import { enforceKycLimit, valueInUsd } from '../utils/kycLimits';
 import { assertMovementAllowed } from '../services/platform/controls.service';
 import { enforceRiskBasedStepUp } from '../services/security/stepUp.service';
-import { incrAttempts, getAttempts } from '../utils/redis';
+import { reserveAttempt } from '../utils/redis';
 
 // Wrong-PIN attempts allowed per link before it locks for the window.
 const MAX_PIN_ATTEMPTS = 5;
@@ -271,6 +271,12 @@ export class ClaimLinkController {
       if (!link) throw new AppError('Claim link not found', 404);
       if (link.senderId === claimerId) throw new AppError('You cannot claim your own link', 400);
       if (link.status !== 'PENDING') throw new AppError(`Claim link is ${link.status.toLowerCase()}`, 400);
+      // A claim moves money: kill switches, account restrictions and wallet
+      // holds apply to the person receiving it AND to the sender whose
+      // reservation pays it (a frozen sender's funds stay put; the link
+      // simply expires back to them).
+      await assertMovementAllowed({ userId: claimerId, feature: 'transfers', currency: link.asset });
+      await assertMovementAllowed({ userId: link.senderId, feature: 'transfers', currency: link.asset });
       if (link.expiresAt.getTime() < Date.now()) {
         // Auto-flip to EXPIRED + refund sender atomically.
         await ClaimLinkController._refundExpired(link.id);
@@ -288,10 +294,13 @@ export class ClaimLinkController {
       if (hasBinding) {
         const claimer = await prisma.user.findUnique({
           where: { id: claimerId },
-          select: { email: true, phone: true, username: true },
+          select: { email: true, phone: true, username: true, emailVerified: true, phoneVerified: true },
         });
-        const emailMatch  = link.recipientEmail && claimer?.email && claimer.email.toLowerCase() === link.recipientEmail.toLowerCase();
-        const phoneMatch  = link.recipientPhone && claimer?.phone && claimer.phone === link.recipientPhone;
+        // Only VERIFIED contact details count: anyone can type someone
+        // else's phone number (or sign up with an address they don't own)
+        // and would otherwise satisfy the binding.
+        const emailMatch  = link.recipientEmail && claimer?.emailVerified && claimer?.email && claimer.email.toLowerCase() === link.recipientEmail.toLowerCase();
+        const phoneMatch  = link.recipientPhone && claimer?.phoneVerified && claimer?.phone && claimer.phone === link.recipientPhone;
         const handleMatch = link.recipientHandle && claimer?.username && claimer.username.toLowerCase() === link.recipientHandle.toLowerCase().replace(/^@/, '');
         if (!emailMatch && !phoneMatch && !handleMatch) {
           // Generic 403 so an attacker can't enumerate which field was
@@ -303,15 +312,18 @@ export class ClaimLinkController {
       if (link.pinHash) {
         // A 4-digit PIN has 10,000 values; cap guesses per link so an
         // unbound link cannot be brute-forced.
+        if (!body.pin) throw new AppError('PIN required', 401);
+        // Reserve the attempt BEFORE comparing (atomic increment): a burst of
+        // parallel guesses consumes one attempt each instead of all reading
+        // "0 used" and every guess being checked.
         const attemptsKey = `claimlink:pin:${link.id}`;
-        if ((await getAttempts(attemptsKey)) >= MAX_PIN_ATTEMPTS) {
+        const attempt = await reserveAttempt(attemptsKey, MAX_PIN_ATTEMPTS, PIN_LOCK_SECONDS);
+        if (!attempt.allowed) {
           throw new AppError('Too many incorrect PIN attempts. Ask the sender to send a new link.', 429, 'RATE_LIMITED');
         }
-        if (!body.pin) throw new AppError('PIN required', 401);
         const expected = Buffer.from(hashPin(body.pin, link.claimToken.slice(0, 16)), 'hex');
         const stored = Buffer.from(link.pinHash, 'hex');
         if (expected.length !== stored.length || !crypto.timingSafeEqual(expected, stored)) {
-          await incrAttempts(attemptsKey, PIN_LOCK_SECONDS);
           throw new AppError('Incorrect PIN', 401);
         }
       }
@@ -320,7 +332,8 @@ export class ClaimLinkController {
         // Claim the link before moving money: a concurrent claim, cancel or
         // expiry finds it no longer PENDING and moves nothing.
         const moved = await tx.claimLink.updateMany({
-          where: { id: link.id, status: 'PENDING' },
+          // Still pending AND not expired at the moment of the claim.
+          where: { id: link.id, status: 'PENDING', expiresAt: { gt: new Date() } },
           data: { status: 'CLAIMED', claimedAt: new Date(), claimedById: claimerId },
         });
         assertTransitioned(moved, 'This claim link has already been used');

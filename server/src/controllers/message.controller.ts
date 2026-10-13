@@ -67,7 +67,9 @@ function mergeMessagePrivacy(prefs: any, patch: Partial<MessagePrivacy>) {
   };
 }
 
-function toWire(m: any) {
+/** Wire shape of a message — shared with the admin support-reply path so socket
+ *  payloads are identical whichever controller emits them. */
+export function toWire(m: any) {
   return {
     id:         m.id,
     senderId:   m.senderId,
@@ -107,6 +109,44 @@ async function assertNotBlocked(a: string, b: string) {
 }
 
 // ── Schemas ─────────────────────────────────────────────────────────
+
+const MAX_METADATA_BYTES = 2_048;
+
+/**
+ * Client metadata, reduced to what each message type renders. Payment status
+ * and transaction references are server facts: a REQUEST (or any non-payment
+ * message) can no longer arrive saying `status: COMPLETED, txRef: TRF-…`, and
+ * nothing large or nested is stored.
+ */
+function sanitizeMetadata(type: string, raw: Record<string, unknown> | undefined): Record<string, unknown> | undefined {
+  if (!raw) return undefined;
+  const str = (v: unknown, max: number) => (typeof v === 'string' ? v.slice(0, max) : undefined);
+  const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : undefined);
+  let out: Record<string, unknown>;
+  switch (type) {
+    case 'PAYMENT':
+      // amount/currency drive the transfer; stepUpCode/biometricVerified are
+      // read and then deleted before the message is stored.
+      out = { amount: raw.amount, currency: str(raw.currency, 16), note: str(raw.note, 200), stepUpCode: str(raw.stepUpCode, 12), biometricVerified: raw.biometricVerified === true ? true : undefined };
+      break;
+    case 'REQUEST':
+      out = { amount: num(raw.amount), currency: str(raw.currency, 16), note: str(raw.note, 200), status: 'PENDING' };
+      break;
+    case 'STICKER':
+      out = { id: str(raw.id, 64), emoji: str(raw.emoji, 16), label: str(raw.label, 64) };
+      break;
+    default:
+      out = {};
+      for (const [k, v] of Object.entries(raw).slice(0, 20)) {
+        if (k === 'status' || k === 'txRef' || k === 'transferId') continue;
+        if (typeof v === 'string') out[k.slice(0, 40)] = v.slice(0, 500);
+        else if (typeof v === 'number' || typeof v === 'boolean') out[k.slice(0, 40)] = v;
+      }
+  }
+  for (const k of Object.keys(out)) if (out[k] === undefined) delete out[k];
+  if (Buffer.byteLength(JSON.stringify(out)) > MAX_METADATA_BYTES) throw new AppError('Message metadata is too large', 400);
+  return out;
+}
 
 const sendSchema = z.object({
   receiverId: z.string().uuid(),
@@ -186,6 +226,7 @@ export class MessageController {
   static async send(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const data = sendSchema.parse(req.body);
+      data.metadata = sanitizeMetadata(data.type, data.metadata as Record<string, unknown> | undefined) as typeof data.metadata;
       const senderId = req.user!.id;
       if (data.receiverId === senderId) throw new AppError('Cannot message yourself', 400);
 
@@ -600,7 +641,9 @@ export class MessageController {
       // accused user — prevents reporting unrelated content.
       if (data.messageId) {
         const m = await prisma.message.findUnique({ where: { id: data.messageId } });
-        if (!m) throw new AppError('Message not found', 404);
+        // Only a message you received can be reported (and only by you), so
+        // reports cannot pull arbitrary conversations in front of moderators.
+        if (!m || m.receiverId !== me) throw new AppError('Message not found', 404);
         if (m.senderId !== data.reportedUserId) {
           throw new AppError('Message does not belong to reported user', 400);
         }
@@ -635,6 +678,15 @@ export class MessageController {
       const data = escalateSchema.parse(req.body);
       const me = req.user!.id;
       if (data.counterpartyId === me) throw new AppError('Counterparty cannot be yourself', 400);
+      // An escalation names a real counterparty: someone you have a trade or a
+      // conversation with. Otherwise anyone could make "support" message any
+      // customer about a dispute that does not exist.
+      const [trade, convo] = await Promise.all([
+        data.tradeId ? prisma.p2PTrade.findFirst({ where: { id: data.tradeId, OR: [{ buyerId: me, sellerId: data.counterpartyId }, { buyerId: data.counterpartyId, sellerId: me }] }, select: { id: true } }) : Promise.resolve(null),
+        prisma.message.findFirst({ where: { OR: [{ senderId: me, receiverId: data.counterpartyId }, { senderId: data.counterpartyId, receiverId: me }] }, select: { id: true } }),
+      ]);
+      if (data.tradeId && !trade) throw new AppError('Trade not found', 404);
+      if (!trade && !convo) throw new AppError('You can only escalate a trade or conversation you are part of', 403);
 
       const support = await prisma.user.findFirst({
         where: { username: 'support' },
@@ -686,8 +738,11 @@ export class MessageController {
         },
       });
 
-      emit(req, [me, data.counterpartyId, support.id], 'message:new', toWire(sysMsg));
-      emit(req, [me, data.counterpartyId, support.id], 'message:new', toWire(sysMsg2));
+      // Each notice only to its addressee (+ support). Broadcasting both to both
+      // parties filed the other side's notice into each user's support thread
+      // until the next refetch removed it again.
+      emit(req, [me, support.id],                     'message:new', toWire(sysMsg));
+      emit(req, [data.counterpartyId, support.id],    'message:new', toWire(sysMsg2));
       emit(req, [me, support.id],                     'message:new', toWire(opener));
       emit(req, [me, data.counterpartyId, support.id], 'escalation:new', { escalation });
 

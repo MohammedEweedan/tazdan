@@ -23,34 +23,83 @@ const REFRESH_TOKEN_TTL_DAYS = 7;
 // residual exposure is bounded by the 15m token TTL, and a hard dependency
 // on Redis for EVERY request would turn a cache blip into a full outage.
 const cutoffKey = (userId: string) => `sec:cutoff:${userId}`;
+const REVOCATION_TTL_MS = (ACCESS_TOKEN_TTL_SECONDS + 60) * 1000;
+
+// In-process mirror of every revocation this process makes. Checked before
+// Redis, so a revocation made while Redis is down (or between Redis blips)
+// still takes effect at once in this process — the production deploy runs
+// one worker by default, so this closes the fail-open gap there entirely.
+const localUserCutoff = new Map<string, { at: number; exp: number }>();
+const localSidRevoked = new Map<string, number>(); // sid → expiry (ms)
+const LOCAL_REVOCATION_MAX = 50_000;
+
+function pruneRevocations(): void {
+  const now = Date.now();
+  if (localUserCutoff.size > LOCAL_REVOCATION_MAX) {
+    for (const [k, v] of localUserCutoff) if (v.exp <= now) localUserCutoff.delete(k);
+  }
+  if (localSidRevoked.size > LOCAL_REVOCATION_MAX) {
+    for (const [k, exp] of localSidRevoked) if (exp <= now) localSidRevoked.delete(k);
+  }
+}
+
+// Long-lived channels (Socket.IO) register here so a revocation also drops
+// already-open connections instead of waiting for them to re-authenticate.
+type RevocationListener = { user?: (userId: string) => void; session?: (sid: string) => void };
+const revocationListeners: RevocationListener[] = [];
+export function onSessionRevocation(listener: RevocationListener): void {
+  revocationListeners.push(listener);
+}
+function notifyRevocation(kind: 'user' | 'session', id: string): void {
+  for (const l of revocationListeners) {
+    try { (kind === 'user' ? l.user : l.session)?.(id); } catch (err) { logger.warn('[auth] revocation listener failed', { err }); }
+  }
+}
 
 export async function revokeAllUserSessions(userId: string): Promise<void> {
-  // Refresh tokens die in the DB (authoritative), access tokens via Redis.
+  // Refresh tokens die in the DB (authoritative), access tokens via the
+  // cutoff (Redis for every worker + this process's mirror).
   await prisma.refreshToken.updateMany({
     where: { userId, revokedAt: null },
     data: { revokedAt: new Date() },
   });
+  const now = Date.now();
+  pruneRevocations();
+  localUserCutoff.set(userId, { at: now, exp: now + REVOCATION_TTL_MS });
   const client = getRedisClient();
   if (client) {
     await client
-      .set(cutoffKey(userId), String(Date.now()), { EX: ACCESS_TOKEN_TTL_SECONDS + 60 })
+      .set(cutoffKey(userId), String(now), { EX: ACCESS_TOKEN_TTL_SECONDS + 60 })
       .catch((err) => logger.warn('[auth] failed to set session cutoff', { userId, err }));
   }
+  notifyRevocation('user', userId);
 }
 
 const sessionKey = (sid: string) => `sec:sid-revoked:${sid}`;
 
 /** Kill one session's outstanding access tokens immediately (its refresh token is revoked in the DB). */
 export async function revokeSessionAccess(sid: string): Promise<void> {
+  pruneRevocations();
+  localSidRevoked.set(sid, Date.now() + REVOCATION_TTL_MS);
   const client = getRedisClient();
-  if (!client) return;
-  await client
-    .set(sessionKey(sid), '1', { EX: ACCESS_TOKEN_TTL_SECONDS + 60 })
-    .catch((err) => logger.warn('[auth] failed to mark session revoked', { sid, err }));
+  if (client) {
+    await client
+      .set(sessionKey(sid), '1', { EX: ACCESS_TOKEN_TTL_SECONDS + 60 })
+      .catch((err) => logger.warn('[auth] failed to mark session revoked', { sid, err }));
+  }
+  notifyRevocation('session', sid);
 }
 
 async function isRevokedByCutoff(userId: string, iatSeconds?: number, sid?: string): Promise<boolean> {
   if (!iatSeconds) return false;
+  const now = Date.now();
+  if (sid) {
+    const exp = localSidRevoked.get(sid);
+    if (exp && exp > now) return true;
+  }
+  const local = localUserCutoff.get(userId);
+  if (local && local.exp > now && iatSeconds * 1000 < local.at) return true;
+
   const client = getRedisClient();
   if (!client) return false;
   try {
@@ -62,8 +111,43 @@ async function isRevokedByCutoff(userId: string, iatSeconds?: number, sid?: stri
     if (!raw) return false;
     return iatSeconds * 1000 < Number(raw);
   } catch {
-    return false; // fail-open, bounded by the 15m TTL
+    return false; // fail-open across workers, bounded by the 15m TTL
   }
+}
+
+/** Revocation check for long-lived connections that authenticated earlier. */
+export function isAccessRevoked(userId: string, iatSeconds?: number, sid?: string): Promise<boolean> {
+  return isRevokedByCutoff(userId, iatSeconds, sid);
+}
+
+export type AccessClaims = { id: string; email: string; role: string; iat?: number; exp?: number; sid?: string };
+
+/**
+ * Verify an ACCESS token: HS256 only (no `none`, no RS/HS confusion), and the
+ * token type pinned. A refresh token is never accepted as an access token,
+ * even if an environment reuses one secret for both (legacy refresh tokens
+ * carry no `role`, current ones carry `typ: 'refresh'`).
+ */
+export function verifyAccessToken(token: string): AccessClaims | null {
+  let decoded: unknown;
+  try {
+    decoded = jwt.verify(token, jwtSecret(), { algorithms: ['HS256'] });
+  } catch {
+    return null;
+  }
+  if (!decoded || typeof decoded !== 'object') return null;
+  const c = decoded as Record<string, unknown>;
+  if (c.typ !== undefined && c.typ !== 'access') return null;
+  if (typeof c.id !== 'string' || !c.id || typeof c.role !== 'string') return null;
+  if (c.sid !== undefined && typeof c.sid !== 'string') return null;
+  // `iat` has whole-second precision, the revocation cutoff milliseconds: a
+  // token issued later in the same second as a revocation would be refused.
+  // Tokens carry their exact issue time (`ims`); use it when it agrees with
+  // the signed `iat`.
+  if (typeof c.ims === 'number' && typeof c.iat === 'number' && Math.floor(c.ims / 1000) === c.iat) {
+    c.iat = c.ims / 1000;
+  }
+  return c as unknown as AccessClaims;
 }
 
 function jwtSecret(): string {
@@ -86,10 +170,8 @@ export function authenticate(req: AuthRequest, res: Response, next: NextFunction
     return next(new AppError('Authentication required', 401));
   }
 
-  let decoded: { id: string; email: string; role: string; iat?: number; sid?: string };
-  try {
-    decoded = jwt.verify(token, jwtSecret(), { algorithms: ['HS256'] }) as typeof decoded;
-  } catch {
+  const decoded = verifyAccessToken(token);
+  if (!decoded) {
     return next(new AppError('Invalid or expired token', 401));
   }
 
@@ -113,12 +195,8 @@ export function optionalAuthenticate(req: AuthRequest, _res: Response, next: Nex
   const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
   if (!token) return next();
 
-  let decoded: { id: string; email: string; role: string; iat?: number; sid?: string };
-  try {
-    decoded = jwt.verify(token, jwtSecret(), { algorithms: ['HS256'] }) as typeof decoded;
-  } catch {
-    return next();
-  }
+  const decoded = verifyAccessToken(token);
+  if (!decoded) return next();
   isRevokedByCutoff(decoded.id, decoded.iat, decoded.sid)
     .then((revoked) => { if (!revoked) req.user = decoded; next(); })
     .catch(() => next());
@@ -210,13 +288,13 @@ export function requireKYC(req: AuthRequest, _res: Response, next: NextFunction)
 
 export function generateTokens(user: { id: string; email: string; role: string }) {
   const accessToken = jwt.sign(
-    { id: user.id, email: user.email, role: user.role },
+    { id: user.id, email: user.email, role: user.role, typ: 'access', ims: Date.now() },
     jwtSecret(),
     { expiresIn: ACCESS_TOKEN_TTL, algorithm: 'HS256' }
   );
 
   const refreshToken = jwt.sign(
-    { id: user.id, jti: crypto.randomUUID() },
+    { id: user.id, jti: crypto.randomUUID(), typ: 'refresh' },
     jwtRefreshSecret(),
     { expiresIn: `${REFRESH_TOKEN_TTL_DAYS}d`, algorithm: 'HS256' }
   );
@@ -273,19 +351,28 @@ export async function issueSessionTokens(
     userAgent: meta.userAgent,
   });
   const accessToken = jwt.sign(
-    { id: user.id, email: user.email, role: user.role, sid: row.id },
+    { id: user.id, email: user.email, role: user.role, sid: row.id, typ: 'access', ims: Date.now() },
     jwtSecret(),
     { expiresIn: ACCESS_TOKEN_TTL, algorithm: 'HS256' },
   );
   return { accessToken, refreshToken, sessionId: row.id };
 }
 
+/**
+ * Sign out one session: its refresh token dies in the DB AND the access
+ * token issued with it stops working now (it carries this row id as `sid`),
+ * instead of staying usable for the rest of its 15 minutes.
+ */
 export async function revokeRefreshToken(rawToken: string) {
   const tokenHash = hashRefreshToken(rawToken);
-  return prisma.refreshToken.updateMany({
-    where: { tokenHash, revokedAt: null },
+  const row = await prisma.refreshToken.findUnique({ where: { tokenHash }, select: { id: true } });
+  if (!row) return { count: 0 };
+  const result = await prisma.refreshToken.updateMany({
+    where: { id: row.id, revokedAt: null },
     data: { revokedAt: new Date() },
   });
+  await revokeSessionAccess(row.id);
+  return result;
 }
 
 /**
@@ -294,14 +381,18 @@ export async function revokeRefreshToken(rawToken: string) {
  * user's active refresh tokens (defense against token theft).
  */
 export async function verifyAndConsumeRefreshToken(rawToken: string) {
-  let payload: { id: string; jti?: string };
+  let payload: { id: string; jti?: string; typ?: string };
   try {
     payload = jwt.verify(
       rawToken,
       jwtRefreshSecret(),
       { algorithms: ['HS256'] },
-    ) as { id: string; jti?: string };
+    ) as { id: string; jti?: string; typ?: string };
   } catch {
+    throw new AppError('Invalid or expired refresh token', 401);
+  }
+  if (!payload || typeof payload !== 'object' || typeof payload.id !== 'string' ||
+      (payload.typ !== undefined && payload.typ !== 'refresh')) {
     throw new AppError('Invalid or expired refresh token', 401);
   }
 
@@ -318,11 +409,11 @@ export async function verifyAndConsumeRefreshToken(rawToken: string) {
   if (stored.revokedAt) {
     if (stored.replacedById) {
       // A ROTATED-OUT token came back: someone else holds a copy of this
-      // session. Revoke the entire chain for this user.
-      await prisma.refreshToken.updateMany({
-        where: { userId: stored.userId, revokedAt: null },
-        data: { revokedAt: new Date() },
-      });
+      // session. Revoke every refresh token AND every live access token —
+      // otherwise whoever rotated first keeps a working access token (and
+      // any open socket) for up to 15 minutes after the theft is detected.
+      await revokeAllUserSessions(stored.userId);
+      logger.warn('[auth] refresh token reuse — all sessions revoked', { userId: stored.userId, sessionId: stored.id });
       throw new AppError('Refresh token already used. All sessions revoked.', 401);
     }
     // Explicitly signed out (logout / "sign out other devices"): refuse it,

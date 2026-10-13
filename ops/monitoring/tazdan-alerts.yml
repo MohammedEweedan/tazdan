@@ -1,0 +1,40 @@
+# Import into the deployment's Prometheus rule_files. Route critical alerts
+# to a named on-call owner and test delivery before opening money activity.
+groups:
+  - name: tazdan-critical
+    rules:
+      - alert: TazdanMoneyPaused
+        expr: tazdan_money_ready == 0
+        for: 1m
+        labels: { severity: critical }
+        annotations: { summary: 'Money services are paused; inspect launch approval, shared coordination and the integrity halt.' }
+      - alert: TazdanDependencyUnavailable
+        expr: tazdan_dependencies_ready == 0
+        for: 1m
+        labels: { severity: critical }
+        annotations: { summary: 'Database or Redis readiness failed. Preserve pending operations.' }
+      - alert: TazdanCustodyOutcomeUnknown
+        expr: tazdan_custody_unknown_operations > 0
+        for: 1m
+        labels: { severity: critical }
+        annotations: { summary: 'Custody operations have an unknown broadcast outcome. Reconcile references; do not rebroadcast or refund blindly.' }
+      - alert: TazdanCustodyStatusUnavailable
+        expr: tazdan_custody_status_query_ok == 0
+        for: 1m
+        labels: { severity: critical }
+        annotations: { summary: 'Custody status monitoring could not query pending operations.' }
+      - alert: TazdanApiErrorBudgetBurn
+        expr: sum(rate(tazdan_http_errors_total[5m])) / clamp_min(sum(rate(tazdan_http_requests_total[5m])), 0.001) > 0.0144
+        for: 5m
+        labels: { severity: critical }
+        annotations: { summary: 'API 5xx ratio exceeds 1.44%. This is an API proxy, not the critical-payment journey SLI.' }
+      - alert: TazdanApiLatency
+        expr: histogram_quantile(0.95, sum by (le) (rate(tazdan_http_duration_seconds_bucket[5m]))) > 2
+        for: 5m
+        labels: { severity: warning }
+        annotations: { summary: 'Internal API p95 exceeds two seconds.' }
+      - alert: TazdanMetricsMissing
+        expr: up{job="tazdan"} == 0
+        for: 2m
+        labels: { severity: critical }
+        annotations: { summary: 'A configured Tazdan metrics target is unreachable.' }

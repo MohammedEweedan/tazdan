@@ -228,7 +228,18 @@ export class P2PController {
         (prisma as any).p2PListing.count({ where }),
       ]);
 
-      const resolvedListings = listings.map(resolveListingAssets);
+      // Public marketplace: never full names, and nothing that identifies the
+      // owner of an anonymous listing (same rules as /offers).
+      const resolvedListings = listings.map((l: any) => {
+        const out: any = resolveListingAssets(l);
+        if (l.anonymous) {
+          delete out.userId;
+          out.user = { firstName: 'Anonymous trader', lastName: '', username: null, kycStatus: l.user?.kycStatus };
+        } else if (out.user) {
+          out.user = { ...out.user, lastName: l.user.lastName ? `${String(l.user.lastName).charAt(0)}.` : '' };
+        }
+        return out;
+      });
       res.json({ listings: resolvedListings, total, page, totalPages: Math.ceil(total / limit) });
     } catch (error) {
       next(error);
@@ -520,9 +531,14 @@ export class P2PController {
       });
       if (!trade) throw new AppError('Trade not found', 404);
       if (trade.status !== 'ESCROW_FUNDED') throw new AppError('Trade is not in the correct state', 400);
+      // The payment window is part of the deal: once it has passed the seller
+      // may cancel and take the escrow back, so "paid" can't be claimed late.
+      if (trade.expiresAt && new Date(trade.expiresAt).getTime() <= Date.now()) {
+        throw new AppError('The payment window for this trade has ended. Do not send money; open a new trade.', 409, 'TRANSACTION_CONFLICT');
+      }
 
       const moved = await (prisma as any).p2PTrade.updateMany({
-        where: { id: trade.id, buyerId: req.user!.id, status: 'ESCROW_FUNDED' },
+        where: { id: trade.id, buyerId: req.user!.id, status: 'ESCROW_FUNDED', expiresAt: { gt: new Date() } },
         data: { status: 'PAYMENT_SENT' },
       });
       assertTransitioned(moved, 'Trade is not in the correct state');
@@ -606,13 +622,12 @@ export class P2PController {
       // Ledger currency for Transaction records — must be a valid enum value
       const ledgerCurrency = isEnumCrypto ? realTicker : 'USDT';
 
-      // Look up the trading-fee percent (used by orders) and apply
-      // half of it to each side of a P2P trade as the platform cut.
-      const feeSetting = await prisma.platformSettings.findUnique({ where: { key: 'p2p_fee_percent' } })
-        ?? await prisma.platformSettings.findUnique({ where: { key: 'trading_fee_percent' } });
-      const feePercent = new Decimal(feeSetting?.value ?? '0.5');
-      const cryptoAmount = new Decimal(trade.cryptoAmount.toString());
-      const p2pFee = cryptoAmount.mul(feePercent).div(100);
+      // No P2P fee is taken: the escrow releases the full amount to the buyer
+      // and nothing debits either party for a fee. Booking one anyway credited
+      // the platform with revenue nobody paid (an unbacked PLATFORM balance).
+      // A real P2P fee must be deducted from the escrow at release, shown to
+      // both parties before they trade.
+      const p2pFee = new Decimal(0);
 
       await prisma.$transaction(async (tx: any) => {
         const moved = await tx.p2PTrade.updateMany({
@@ -745,13 +760,25 @@ export class P2PController {
       if (!['AWAITING_ESCROW', 'ESCROW_FUNDED'].includes(trade.status)) {
         throw new AppError('Cannot cancel trade after payment is sent. Raise a dispute instead.', 400);
       }
+      // Cancel-after-paid: the buyer may already have sent the fiat without
+      // tapping "payment sent" yet. While the payment window is open only the
+      // buyer can cancel a funded trade; the seller can once it has expired.
+      const isSeller = trade.sellerId === req.user!.id;
+      const windowOpen = !trade.expiresAt || new Date(trade.expiresAt).getTime() > Date.now();
+      if (trade.status === 'ESCROW_FUNDED' && isSeller && windowOpen) {
+        throw new AppError('The buyer may already be paying. You can cancel once the payment window ends, or raise a dispute.', 403, 'AUTHORIZATION');
+      }
 
       // One transaction, transitioning from exactly the status we read: the
       // cancel, the escrow refund and the listing update commit together, and
       // a second concurrent cancel moves nothing.
       await prisma.$transaction(async (tx) => {
         const moved = await (tx as any).p2PTrade.updateMany({
-          where: { id: trade.id, status: trade.status },
+          where: {
+            id: trade.id, status: trade.status,
+            // Re-checked atomically: the seller's cancel only lands after expiry.
+            ...(trade.status === 'ESCROW_FUNDED' && isSeller ? { expiresAt: { lte: new Date() } } : {}),
+          },
           data: { status: 'CANCELLED', cancelledAt: new Date() },
         });
         assertTransitioned(moved, 'This trade has already been processed');

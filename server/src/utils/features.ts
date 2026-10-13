@@ -12,12 +12,15 @@
 import type { Request, Response, NextFunction } from 'express';
 import { AppError } from '../middleware/errorHandler';
 
-export type FeatureName = 'p2p' | 'cards' | 'altTrading';
+export type FeatureName = 'p2p' | 'cards' | 'altTrading' | 'blockchain' | 'cryptoTrading' | 'remittance';
 
 const ENV_KEYS: Record<FeatureName, string> = {
   p2p: 'FEATURE_P2P',
   cards: 'FEATURE_CARDS',
   altTrading: 'FEATURE_ALT_TRADING',
+  blockchain: 'FEATURE_BLOCKCHAIN',
+  cryptoTrading: 'FEATURE_CRYPTO_TRADING',
+  remittance: 'FEATURE_REMITTANCE',
 };
 
 export function isFeatureEnabled(name: FeatureName): boolean {
@@ -33,6 +36,9 @@ export function featureFlags(): Record<FeatureName, boolean> {
     p2p: isFeatureEnabled('p2p'),
     cards: isFeatureEnabled('cards'),
     altTrading: isFeatureEnabled('altTrading'),
+    blockchain: isFeatureEnabled('blockchain'),
+    cryptoTrading: isFeatureEnabled('cryptoTrading'),
+    remittance: isFeatureEnabled('remittance'),
   };
 }
 

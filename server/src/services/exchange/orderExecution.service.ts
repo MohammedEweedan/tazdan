@@ -21,11 +21,13 @@ import { prisma } from '../../utils/prisma';
 import { AppError } from '../../middleware/errorHandler';
 import { createUserWallets } from '../wallet/walletDerivation.service';
 import { consumeQuote, getQuote, type Quote, type SupportedAsset } from './priceEngine.service';
-import { lockUserWallets } from '../wallet/atomicWallet';
+import { debitAvailable, lockUserWallets } from '../wallet/atomicWallet';
 import { enforceKycLimit } from '../../utils/kycLimits';
 import { collectFee } from '../fee/feeCollector.service';
 import { assertPrincipalCapacity, executionMode, markVenueResult } from './principalExposure.service';
 import { postLedger, isLedgerCurrency, type Leg } from '../ledger/ledger.service';
+import { assertFeatureEnabled } from '../../utils/features';
+import { assertMovementAllowed } from '../platform/controls.service';
 
 // Local alias for the centralized ledger-currency check.
 const isLedgerCcy = (c: string) => isLedgerCurrency(c);
@@ -239,6 +241,8 @@ export async function executeQuote(opts: {
   fundingCurrency?: string;
 }) {
   const { userId, quoteId, idempotencyKey } = opts;
+  assertFeatureEnabled('cryptoTrading');
+  await assertMovementAllowed({ userId, feature: 'fx', currency: opts.fundingCurrency });
 
   // Treasury safety: refuse to execute while a ledger/fund-integrity breach
   // has halted trading. Better to block orders than compound a discrepancy.
@@ -249,7 +253,12 @@ export async function executeQuote(opts: {
 
   if (idempotencyKey) {
     const prior = await prisma.cryptoOrder.findUnique({ where: { idempotencyKey } });
-    if (prior) return prior;
+    if (prior) {
+      // Keys are unique across all users: someone else's key must not return
+      // (or block) their order.
+      if (prior.userId !== userId) throw new AppError('Idempotency key already used', 409, 'DUPLICATE_REQUEST');
+      return prior;
+    }
   }
 
   // Check tier limits before taking the quote, so a limit refusal doesn't
@@ -270,6 +279,8 @@ export async function executeQuote(opts: {
   // quote (validated at quote time). No silent default — defaulting to USDT is
   // exactly what credited/debited the wrong wallet and corrupted balances.
   const settlementCurrency = (quote.settlementCurrency || '').toUpperCase();
+  await assertMovementAllowed({ userId, feature: 'fx', currency: assetUpper });
+  await assertMovementAllowed({ userId, feature: 'fx', currency: settlementCurrency });
   if (!settlementCurrency || !isLedgerCurrency(settlementCurrency)) {
     throw new AppError('Quote is missing a valid settlement currency. Request a new quote.', 400);
   }
@@ -326,26 +337,17 @@ export async function executeQuote(opts: {
       // Debit the funding wallet the user chose. USDT debits the dedicated USDT
       // wallet; every other currency (USD, USDC, GBP, …) debits its own Wallet
       // row at the resolved amount.
+      // Spendable only (balance − frozen), checked and debited in one
+      // statement: funds reserved for a withdrawal, a claim link, a budget
+      // lock or a business batch cannot pay for a trade.
       if (creditsUsdtWallet) {
-        if (new Decimal(usdt.balance.toString()).lt(fiat)) {
-          throw new AppError('Insufficient USDT balance', 400);
-        }
-        await tx.wallet.update({
-          where: { id: usdt.id },
-          data: { balance: { decrement: new Prisma.Decimal(fiat.toFixed(8)) } },
-        });
+        await debitAvailable(tx, userId, 'USDT', fiat.toFixed(8));
       } else {
         const fundWallet = await tx.wallet.findUnique({
           where: { userId_currency: { userId, currency: settlementCurrency as any } },
         });
         if (!fundWallet) throw new AppError(`${settlementCurrency} wallet missing`, 400);
-        if (new Decimal(fundWallet.balance.toString()).lt(settlementAmount)) {
-          throw new AppError(`Insufficient ${settlementCurrency} balance`, 400);
-        }
-        await tx.wallet.update({
-          where: { id: fundWallet.id },
-          data: { balance: { decrement: new Prisma.Decimal(settlementAmount.toFixed(8)) } },
-        });
+        await debitAvailable(tx, userId, settlementCurrency, settlementAmount.toFixed(8));
       }
 
       // Credit the bought asset. USDT/USDC live in the Wallet table (the
@@ -369,15 +371,8 @@ export async function executeQuote(opts: {
     } else {
       // SELL — debit the sold asset from where the user actually holds it.
       if (isWalletAsset(assetUpper)) {
-        const assetWallet = await tx.wallet.findUnique({
-          where: { userId_currency: { userId, currency: assetUpper as any } },
-        });
-        const current = new Decimal(assetWallet?.balance.toString() ?? '0');
-        if (current.lt(crypto_)) throw new AppError(`Insufficient ${quote.asset} balance`, 400);
-        await tx.wallet.update({
-          where: { id: assetWallet!.id },
-          data: { balance: { decrement: new Prisma.Decimal(crypto_.toFixed(8)) } },
-        });
+        // Spendable only — reserved funds stay reserved (see BUY above).
+        await debitAvailable(tx, userId, assetUpper, crypto_.toFixed(8));
       } else if (native) {
         const current = new Decimal((uw as any)[native].toString());
         if (current.lt(crypto_)) throw new AppError(`Insufficient ${quote.asset} balance`, 400);

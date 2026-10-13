@@ -8,7 +8,7 @@ import { Text, TextInput } from '@/components/ui/Text';
 import { NumericKeypad } from '@/components/ui/NumericKeypad';
 import { AmountDisplay } from '@/components/ui/AmountDisplay';
 import { CurrencyPicker, type CurrencyItem } from '@/components/ui/CurrencyPicker';
-import { SlideToConfirm } from '@/components/ui/SlideToConfirm';
+import { ConfirmAction, ltr } from '@/components/ui/ConfirmAction';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useQuery } from '@tanstack/react-query';
@@ -154,10 +154,24 @@ export function SendWidget({ initialRecipient }: { initialRecipient?: Profile } 
     staleTime: 30_000,
   });
 
+  // Can the picked account receive right now? Checked as soon as it's picked
+  // so the sender hears it before confirming, not as a 400 afterwards. The
+  // reason is never more specific than "can't receive" (no account status).
+  const { data: eligibility } = useQuery({
+    queryKey:  ['recipient-check', picked?.id],
+    queryFn:   () => messageService.recipientCheck(picked!.id),
+    enabled:   !!picked?.id,
+    staleTime: 30_000,
+  });
+  const recipientBlocked = eligibility?.canReceive === false;
+  const recipientNotice = !recipientBlocked ? null
+    : eligibility?.reason === 'SELF' ? t('confirm.recipientSelf')
+    : t('confirm.recipientUnavailable');
+
   // Limits before confirming (and before any Face ID / security code).
   const sendUsd = sendAmount > 0 ? toUsd(sendAmount, currency) : null;
   const limit = useLimitBlock('SEND', sendUsd);
-  const valid = !!picked && sendAmount > 0 && !overspend && !limit.blocked;
+  const valid = !!picked && !recipientBlocked && sendAmount > 0 && !overspend && !limit.blocked;
 
   const onSend = async (stepUpCode?: string) => {
     if (!valid || !picked) return;
@@ -210,9 +224,16 @@ export function SendWidget({ initialRecipient }: { initialRecipient?: Profile } 
   };
 
   const meta       = assetMeta(currency);
+  const amountText = `${sendAmount.toLocaleString('en-US', { maximumFractionDigits: 8 })} ${currency}`;
+  const prompt = !picked ? t('confirm.selectRecipient')
+    : recipientNotice ? recipientNotice
+    : limit.blocked ? t('limits.reached')
+    : overspend ? t('sell.insufficient')
+    : t('buy.enterAmount');
 
   return (
-    <View style={{ flex: 1, paddingHorizontal: 20, paddingBottom: 8 }}>
+    // Bottom spacing comes from ConfirmAction's dock (clear of the home indicator).
+    <View style={{ flex: 1, paddingHorizontal: 20 }}>
 
       {/* ── Recipient field ── */}
       <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '700', letterSpacing: 0.5, marginBottom: 8 }}>{t('send.recipient') || 'Recipient'}</Text>
@@ -232,8 +253,24 @@ export function SendWidget({ initialRecipient }: { initialRecipient?: Profile } 
           autoCorrect={false}
           style={{ flex: 1, color: p.fg, fontSize: 16, fontWeight: '500', paddingVertical: 16, marginLeft: 10, letterSpacing: 0 }}
         />
-        {picked && <Ionicons name="checkmark-circle" size={18} color={p.greenFg} />}
+        {picked && (
+          <Ionicons
+            name={recipientBlocked ? 'alert-circle' : 'checkmark-circle'}
+            size={18}
+            color={recipientBlocked ? p.redFg : p.greenFg}
+          />
+        )}
       </View>
+
+      {recipientNotice && (
+        <View
+          accessibilityRole="alert"
+          style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: -4, marginBottom: 12, paddingHorizontal: 4 }}
+        >
+          <Ionicons name="information-circle-outline" size={16} color={p.redFg} />
+          <Text style={{ flex: 1, color: p.redFg, fontSize: 13, fontWeight: '500' }}>{recipientNotice}</Text>
+        </View>
+      )}
 
       {/* Type-ahead dropdown */}
       {recipient.trim().length >= 1 && !picked && (
@@ -460,20 +497,22 @@ export function SendWidget({ initialRecipient }: { initialRecipient?: Profile } 
       </View>
 
       <LimitNotice action="SEND" amountUsd={sendUsd} style={{ marginBottom: 10 }} />
-      <SlideToConfirm
-        label={valid ? (t('send.cta') || 'Slide to send') : (picked ? 'Enter amount' : 'Select recipient')}
+      <ConfirmAction
+        action={t('confirm.act.send', { amount: ltr(amountText) })}
+        prompt={prompt}
         onConfirm={() => { if (valid && ctaState === 'idle') onSend(); }}
-        enabled={valid && ctaState === 'idle'}
+        disabled={!valid || ctaState !== 'idle'}
         status={ctaState}
         successLabel={t('send.sent') || 'Sent'}
         errorLabel={ctaError ?? t('send.failed')}
-        accent={p.accent}
-        accentFg={p.accentFg}
-        trackBg={p.bgElev}
-        trackFg={p.fg}
-        border={p.border}
-        greenBg={p.greenBg} greenFg={p.greenFg}
-        redBg={p.redBg} redFg={p.redFg}
+        review={picked ? {
+          amount: amountText,
+          rows: [
+            { label: t('confirm.to'), value: `${picked.firstName ?? ''} ${picked.lastName ?? ''}`.trim() || `@${picked.username}`, sub: `@${picked.username}` },
+            { label: t('confirm.from'), value: `${meta.label} · ${currency}`, sub: `${t('common.available')}: ${ltr(`${balance.toLocaleString('en-US', { maximumFractionDigits: 8 })} ${currency}`)}` },
+            ...(note.trim() ? [{ label: t('confirm.note'), value: note.trim() }] : []),
+          ],
+        } : undefined}
       />
 
       {/* ── QR Code Modal ── */}

@@ -8,7 +8,7 @@ import type { Currency, CurrencyMeta } from '@/types';
 
 export const APP = {
   name: 'tazdan',
-  tagline: 'Arab roots. Crypto. Connected.',
+  tagline: 'Your money. Your next move.',
   supportEmail: 'support@tazdan.com',
   apiBaseUrl: API_BASE_URL,
 };

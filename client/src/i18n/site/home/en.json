@@ -1,6 +1,6 @@
 {
   "home.hero.eyebrow": "Built for Libya. Ready for wherever life goes.",
-  "home.hero.title": "The real rate. *Finally.*",
+  "home.hero.title": "Your money. *Your next move.*",
   "home.hero.lead": "Your dinars, dollars and digital assets in one place. Move money with people you trust, at a rate you can see before you commit.",
   "home.hero.primary": "Join the waitlist",
   "home.hero.secondary": "Tour the app",
@@ -86,5 +86,13 @@
   "home.tour.business.chip": "Business",
   "home.tour.business.title": "One place for the team.",
   "home.tour.business.body": "Business payouts, roles and API access live in a dedicated workspace.",
-  "home.tour.business.alt": "Business home with payout summary"
+  "home.tour.business.alt": "Business home with payout summary",
+  "home.tour.buy.chip": "Buy",
+  "home.tour.buy.title": "Review the rate. Make your move.",
+  "home.tour.buy.body": "Choose an asset, enter an amount and review the rate and fees before confirming your purchase.",
+  "home.tour.buy.alt": "Asset purchase flow with an amount, quote and confirmation",
+  "home.tour.security.chip": "Security",
+  "home.tour.security.title": "Your account, under your control.",
+  "home.tour.security.body": "Review two-step verification, trusted devices and the controls that protect your account.",
+  "home.tour.security.alt": "Security settings with trusted devices and two-step verification"
 }

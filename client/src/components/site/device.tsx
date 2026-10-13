@@ -17,9 +17,9 @@
    pages never break while media is still being produced.
    ═══════════════════════════════════════════════════════════════════════════ */
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Box, type BoxProps } from "@chakra-ui/react";
-import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import { APP_GIFS, APP_LOOPS, APP_SCREENS, APP_VIDEOS, gifSrc, loopSrc, screenSrc, videoSrc, type AppMediaVariant } from "@/content/appMedia";
 import { EASE, useSiteLocale, useSiteTheme } from "./tokens";
 
@@ -36,6 +36,20 @@ export function useMediaVariant(available: AppMediaVariant[] | undefined): AppMe
 
 export const hasScreen = (id: string) => Boolean(APP_SCREENS[id]?.variants?.length);
 export const hasVideo = (id: string) => Boolean(APP_VIDEOS[id]?.variants?.length);
+
+const MOTION_QUERY = "(prefers-reduced-motion: reduce)";
+const subscribeMotion = (onChange: () => void) => {
+  const query = window.matchMedia(MOTION_QUERY);
+  query.addEventListener("change", onChange);
+  return () => query.removeEventListener("change", onChange);
+};
+const motionSnapshot = () => window.matchMedia(MOTION_QUERY).matches;
+// Hydrate from the same static screen the server rendered, then read the live
+// preference. This also stops motion immediately if the setting changes.
+const serverMotionSnapshot = () => true;
+export function useMediaReducedMotion() {
+  return useSyncExternalStore(subscribeMotion, motionSnapshot, serverMotionSnapshot);
+}
 
 /* ── frame ───────────────────────────────────────────────────────────────── */
 
@@ -137,12 +151,24 @@ function MediaLoop({ src, alt, playing, priority, onError }: {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [loaded, setLoaded] = useState(false);
   const active = visible && playing;
+  const shouldPlay = useRef(active);
+  shouldPlay.current = active;
+  const play = () => {
+    const video = videoRef.current;
+    if (video && shouldPlay.current) void video.play().then(() => {
+      if (!shouldPlay.current) video.pause();
+    }).catch(() => {});
+  };
   useEffect(() => { if (active) setLoaded(true); }, [active]);
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
-    if (loaded && active) void video.play().catch(() => {});
+    shouldPlay.current = active;
+    if (loaded && active) void video.play().then(() => {
+      if (!shouldPlay.current) video.pause();
+    }).catch(() => {});
     else video.pause();
+    return () => { shouldPlay.current = false; video.pause(); };
   }, [loaded, active]);
   return (
     <Box ref={containerRef} position="absolute" inset={0}>
@@ -154,7 +180,7 @@ function MediaLoop({ src, alt, playing, priority, onError }: {
         muted loop playsInline preload="none"
         src={loaded ? src.mp4 : undefined}
         poster={src.poster}
-        onLoadedData={() => { if (active) void videoRef.current?.play().catch(() => {}); }}
+        onLoadedData={play}
         onError={onError}
         aria-label={alt}
         disablePictureInPicture
@@ -189,7 +215,7 @@ export function AppScreen({ id, alt, priority, still, playing = true }: {
   const variant = useMediaVariant(APP_SCREENS[id]?.variants);
   const loopVariant = useMediaVariant(APP_LOOPS[id]?.variants);
   const gifVariant = useMediaVariant(APP_GIFS[id]);
-  const reduced = useReducedMotion();
+  const reduced = useMediaReducedMotion();
   const [failedSource, setFailedSource] = useState<string | null>(null);
   const animated = !still && !reduced;
   const src = loopVariant ? loopSrc(id, loopVariant) : null;
@@ -206,7 +232,7 @@ export function AppVideo({
   id, alt, fallbackScreen, playing = true,
 }: { id: string; alt: string; fallbackScreen?: string; playing?: boolean }) {
   const variant = useMediaVariant(APP_VIDEOS[id]?.variants);
-  const reduced = useReducedMotion();
+  const reduced = useMediaReducedMotion();
   const [failedSource, setFailedSource] = useState<string | null>(null);
   const src = variant ? videoSrc(id, variant) : null;
   if (!src || failedSource === src.mp4 || reduced) {
@@ -222,7 +248,7 @@ export type PhoneMedia = { video?: string; screen?: string; alt: string };
 export function PhoneStage({
   items, index, priority, playing = true, ...rest
 }: { items: PhoneMedia[]; index: number; priority?: boolean; playing?: boolean } & BoxProps) {
-  const reduced = useReducedMotion();
+  const reduced = useMediaReducedMotion();
   const item = items[Math.max(0, Math.min(index, items.length - 1))];
   if (items.length === 1) {
     return (

@@ -5,9 +5,9 @@ import { AppError } from '../middleware/errorHandler';
 import { AuthRequest } from '../types';
 
 const linkedWalletSchema = z.object({
-  address: z.string().min(1, 'Wallet address is required'),
-  network: z.string().min(1, 'Network is required'),
-  label: z.string().optional(),
+  address: z.string().trim().min(1, 'Wallet address is required').max(128),
+  network: z.string().trim().min(1, 'Network is required').max(32),
+  label: z.string().trim().max(60).optional(),
   isDefault: z.boolean().optional(),
 });
 

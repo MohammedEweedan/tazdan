@@ -7,7 +7,7 @@ import { Text } from '@/components/ui/Text';
 import { CurrencyPicker, type CurrencyItem } from '@/components/ui/CurrencyPicker';
 import { AmountDisplay } from '@/components/ui/AmountDisplay';
 import { NumericKeypad } from '@/components/ui/NumericKeypad';
-import { SlideToConfirm } from '@/components/ui/SlideToConfirm';
+import { ConfirmAction, ltr } from '@/components/ui/ConfirmAction';
 import { CTAButton } from '@/components/ui/ScreenShell';
 import { useWallets, useHaptics } from '@/hooks';
 import { useAuthStore } from '@/store/authStore';
@@ -134,11 +134,26 @@ export function FiatExchangeWidget({ initialFrom, initialTo }: { initialFrom?: s
           {error ?? (insufficient ? t('fx.insufficient') : (quote.error as any)?.response?.data?.error ?? t('fx.quoteFailed'))}
         </Text>}
       </ScrollView>
-      <View pointerEvents={busy ? 'none' : 'auto'} style={{ paddingHorizontal: 20, paddingBottom: 20 }}>
+      {/* Bottom spacing comes from ConfirmAction's dock (clear of the home indicator). */}
+      <View pointerEvents={busy ? 'none' : 'auto'} style={{ paddingHorizontal: 20 }}>
         <NumericKeypad value={amount} onChange={setAmount} palette={p} maxDecimals={getCurrencyMeta(from)?.decimals ?? 2}
           keyHeight={height < 750 ? 40 : 48} fontSize={25} />
         <Text style={{ color: p.fgFaint, fontSize: 11, textAlign: 'center', marginVertical: 10 }}>{t('fx.spreadNote')}</Text>
-        <SlideToConfirm label={t('fx.exchange')} enabled={valid} status={busy ? 'loading' : 'idle'} onConfirm={exchange} />
+        <ConfirmAction
+          action={t('confirm.act.exchange', { amount: ltr(`${format(value || 0, from)} ${from}`) })}
+          prompt={insufficient ? t('fx.insufficient') : value > 0 ? t('confirm.priceRefresh') : t('buy.enterAmount')}
+          disabled={!valid}
+          status={busy ? 'loading' : 'idle'}
+          onConfirm={exchange}
+          review={currentQuote ? {
+            amount: `${format(value, from)} ${from}`,
+            rows: [
+              { label: t('fx.youReceive'), value: `${format(currentQuote.credited, to)} ${to}` },
+              { label: t('confirm.rate'), value: `1 ${from} = ${Number(currentQuote.rate).toLocaleString('en-US', { maximumFractionDigits: 6 })} ${to}` },
+            ],
+            footnote: t('fx.spreadNote'),
+          } : undefined}
+        />
       </View>
     </View>
   );

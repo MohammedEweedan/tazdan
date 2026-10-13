@@ -1,58 +1,31 @@
-# Database backup & restore
+# Backups, point-in-time recovery and restore evidence
 
-Backups are produced nightly by the `backup` sidecar in
-`docker-compose.prod.yml` (pg_dump custom format, 14-day rotation, volume
-`dbbackups`). It also runs once on every deploy, so a broken backup path is
-discovered at deploy time, not at restore time.
+The backup sidecar uses the reviewed image in `scripts/backup/Dockerfile`, runs as an unprivileged user and installs no packages at startup. It creates a custom-format PostgreSQL dump and uploaded-file archive, verifies the dump is readable, and writes a SHA-256 manifest. The offsite manifest is uploaded last, marking a complete set. Upload failure fails the run, does not update the success marker and does not rotate the previous good local set. The container becomes unhealthy on a failed run or when the last successful run exceeds 30 hours; failures retry after five minutes.
 
-## Verify backups exist (run monthly)
+Production compose requires `BACKUP_S3_URI` and separate `BACKUP_AWS_ACCESS_KEY_ID` / `BACKUP_AWS_SECRET_ACCESS_KEY`; `BACKUP_AWS_REGION` and optional `BACKUP_AWS_ENDPOINT_URL` select the storage region/endpoint. Give this identity only write access to the backup prefix, use a separate restore/read identity, server-side encryption and restricted bucket policy. Configure versioning/retention/immutability separately in the storage service, and test that a compromised application identity cannot delete backups. Do not reuse custody/KMS credentials. Keep uploads mounted read-only. Files and manifests must stay private.
 
-```bash
-docker compose -f docker-compose.prod.yml exec backup ls -lh /backups
+## Automated disposable restore
+
+Download one complete offsite backup set into a private directory using the restore identity. The utility checks the database and optional uploads digests before touching the target. It creates a **new** database whose name starts `tazdan_restore_`; it refuses an existing target and never drops or cleans it. Use the environment to pass credentials rather than writing them into commands or reports:
+
+```sh
+export RESTORE_MANIFEST_PATH=/private/recovery/tazdan-TIMESTAMP.manifest.json
+export RESTORE_TARGET_DATABASE_URL # set securely; fresh tazdan_restore_<unique> database
+export RESTORE_DRILL_CONFIRMED=1
+export RESTORE_REPORT_PATH=/private/recovery/restore-report.json
+node scripts/restore-drill.mjs
 ```
 
-## Offsite copies — REQUIRED before launch
+The restore role needs permission to create the disposable database. Native `psql`/`pg_restore` must match the source's PostgreSQL version. For a local PostgreSQL test container set `PG_TOOL_CONTAINER=<container name>`; target connection then uses the container's hostname/port perspective. The script streams the dump, verifies journal conservation/cached balances and nonnegative valid reservations, and records elapsed time without credentials or private rows. The retained target can be examined and removed later under the database operator's procedure.
 
-A droplet loss must not take the backups with it. Set in `/srv/promrkts/.env`:
+A passing script is one part of recovery evidence. Verify restored Wallet/UserWallet totals against the journal; actual deposit, withdrawal, remittance and provider references; pending/unknown operations; uploads and document reads; authentication and encryption/key recovery; downstream provider webhook replay; and safe cutover. The uploads hash does not prove the application can decrypt/read documents. Archive the reviewed report, backup age, complete outage timing and independent approver. Test failure and rollback as well as the happy path.
 
-```
-BACKUP_S3_URI=s3://tazdan-db-backups/prod      # DO Spaces works (S3 API)
-AWS_ACCESS_KEY_ID=…  AWS_SECRET_ACCESS_KEY=…   # Spaces keys
-```
+## PITR and customer-money recovery
 
-(DO Spaces needs `aws` CLI in the sidecar; alternatively run
-`rclone copy` from the host against the volume path.)
+A nightly dump permits up to 24 hours of database loss and cannot meet a five-minute infrastructure RPO. Enable managed PostgreSQL point-in-time recovery or independently operated continuous WAL archiving with monitored archive lag, encrypted offsite retention and restore to a chosen timestamp. This is a deployment prerequisite, not something the repository can enable without database-provider access.
 
-If the DB is DigitalOcean **Managed** Postgres: enable its built-in daily
-backups + PITR too — the sidecar is then the offsite/portable copy.
+Drill restore immediately before a committed payment, recover the database to the selected timestamp, then reconcile durable provider references and accepted requests before reopening. Every accepted money operation must be recovered or explicitly reconciled; a nominal infrastructure RPO never permits an unexplained missing customer payment. Initial targets are RTO within 60 minutes and infrastructure RPO at most 5 minutes, with zero unexplained accepted money records lost.
 
-## Restore drill (run once now, then quarterly)
+## Failure response
 
-Restoring is the only proof a backup works.
-
-```bash
-# 1. Fresh scratch database (NEVER the live one for a drill)
-createdb tazdan_restore_test          # or a throwaway managed DB
-
-# 2. Restore
-docker compose -f docker-compose.prod.yml run --rm backup \
-  pg_restore --clean --if-exists --no-owner \
-  -d "postgresql://USER:PASS@HOST:5432/tazdan_restore_test?sslmode=require" \
-  /backups/<latest>.dump
-
-# 3. Sanity: row counts + the money invariant
-psql "$RESTORE_URL" -c 'SELECT count(*) FROM "User";'
-psql "$RESTORE_URL" -c 'SELECT currency, sum(balance) FROM "Wallet" GROUP BY 1;'
-```
-
-## Real disaster recovery order
-
-1. Provision new droplet, install Docker, clone repo @ master.
-2. Restore `/srv/promrkts/.env` from the password-manager copy
-   (**keep an encrypted copy of prod .env in the team password manager —
-   the droplet must not be the only holder of JWT/encryption secrets**).
-3. `pg_restore` the newest dump into the (new) database.
-4. `docker compose -f docker-compose.prod.yml up -d --build`.
-5. Re-point DNS A record for api.promrkts.com; re-issue certbot certs.
-6. Master seed: lives in the DB (restored) + KMS — confirm one withdrawal
-   signs on testnet-sized amount before announcing recovery.
+Alert on backup container health and storage/WAL failures through the deployment's monitoring system; this repo cannot attach the actual on-call notification route. A recent local dump is not proof of an offsite copy. Check complete manifests from the restore identity and perform an offsite-to-fresh-host drill. Pause new activity if the recovery plan cannot meet the reviewed pilot conditions. Restore into a fresh target first; never run `pg_restore --clean` against production as a drill. Use an immutable image SHA and a separately reviewed database rollback/cutover plan.

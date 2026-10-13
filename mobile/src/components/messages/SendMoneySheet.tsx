@@ -33,10 +33,13 @@ export interface SendMoneySheetProps {
   mode?: 'SEND' | 'REQUEST';
   onClose: () => void;
   onSubmit: (amount: number, currency: string, note?: string) => void;
+  /** Set when the recipient can't receive right now — shown above the
+   *  button, which stays disabled (SEND only; requests are unaffected). */
+  blockedNotice?: string | null;
 }
 
 export function SendMoneySheet({
-  visible, palette: p, recipientLabel, mode = 'SEND', onClose, onSubmit,
+  visible, palette: p, recipientLabel, mode = 'SEND', onClose, onSubmit, blockedNotice,
 }: SendMoneySheetProps) {
   const { data: wallets } = useWallets();
   const t = useT();
@@ -102,7 +105,8 @@ export function SendMoneySheet({
   const available = selected?.balance ?? 0;
   const numAmount = parseFloat(amount);
   const overflow = numAmount > available;
-  const valid = !!selected && numAmount > 0 && (mode === 'REQUEST' || (selected.balance > 0 && !overflow));
+  const blocked = mode === 'SEND' && !!blockedNotice;
+  const valid = !blocked && !!selected && numAmount > 0 && (mode === 'REQUEST' || (selected.balance > 0 && !overflow));
 
   return (
     <BottomSheet
@@ -246,6 +250,13 @@ export function SendMoneySheet({
                   />
                 </View>
               </>
+            )}
+
+            {blocked && (
+              <View accessibilityRole="alert" style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                <Ionicons name="information-circle-outline" size={16} color={p.redFg} />
+                <Text style={{ flex: 1, color: p.redFg, fontSize: 13, fontWeight: '500' }}>{blockedNotice}</Text>
+              </View>
             )}
 
             {/* Send / request CTA */}

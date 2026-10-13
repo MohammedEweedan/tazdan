@@ -210,12 +210,14 @@ type ButtonProps = {
   external?: boolean;
   onClick?: () => void;
   arrow?: boolean;
+  type?: "button" | "submit" | "reset";
+  disabled?: boolean;
 } & Omit<BoxProps, "onClick">;
 
 /** Ink pill (primary, like the app's Continue button), hairline pill
  *  (secondary) or accent text link with an arrow. */
 export function SiteButton({
-  children, variant = "primary", size = "md", href, external, onClick, arrow, ...rest
+  children, variant = "primary", size = "md", href, external, onClick, arrow, type = "button", disabled, ...rest
 }: ButtonProps) {
   const t = useSiteTheme();
   const { forward } = useSiteLocale();
@@ -224,7 +226,7 @@ export function SiteButton({
     ? external
       ? { as: "a" as const, href, target: "_blank", rel: "noopener noreferrer" }
       : { as: NextLink, href }
-    : { as: "button" as const, type: "button", onClick };
+    : { as: "button" as const, type, disabled, onClick };
   return (
     <Box
       {...linkProps}
@@ -281,7 +283,8 @@ export type Status =
   | "inApp" | "pilot" | "planned" | "inProgress" | "discussion" | "pipeline"
   | "notBuilt" | "signed" | "licensed" | "live";
 
-export function StatusChip({ status, ...rest }: { status: Status } & BoxProps) {
+/** `label` overrides the status text (e.g. "Pre-launch") while keeping its tone. */
+export function StatusChip({ status, label, ...rest }: { status: Status; label?: string } & BoxProps) {
   const t = useSiteTheme();
   const { t: tr } = useTranslate();
   const { isAr } = useSiteLocale();
@@ -327,7 +330,7 @@ export function StatusChip({ status, ...rest }: { status: Status } & BoxProps) {
         border={status === "notBuilt" ? `1px solid ${t.fgFaint}` : undefined}
         aria-hidden
       />
-      {tr(`common.status.${status}`)}
+      {label ?? tr(`common.status.${status}`)}
     </Box>
   );
 }

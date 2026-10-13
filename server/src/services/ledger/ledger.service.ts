@@ -24,6 +24,7 @@ import { randomUUID } from 'crypto';
 import { Prisma, type Currency, type LedgerAccountType } from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/library';
 import { prisma } from '../../utils/prisma';
+import { AppError } from '../../middleware/errorHandler';
 
 export type Tx = Prisma.TransactionClient;
 
@@ -105,13 +106,36 @@ export async function resolveAccount(
 }
 
 /**
+ * May a journal take a USER account below zero?
+ *
+ * Only when the caller asks for it AND the deployment allows it. In
+ * production the ledger is the spending gate for every customer debit: a
+ * crypto asset can sit in two stores (the Wallet row and a UserWallet
+ * column), and a debit that is not gated on the ledger lets the same coins be
+ * spent once from each store. Production therefore refuses negative customer
+ * balances unless an operator explicitly opts in with
+ * LEDGER_ALLOW_NEGATIVE_USER=1 on a deployment that does not hold real money
+ * (a migration or demo environment). LEDGER_ALLOW_NEGATIVE_USER=0 forces the
+ * gate everywhere.
+ */
+export function negativeUserBalanceAllowed(requested: boolean | undefined): boolean {
+  if (!requested) return false;
+  const flag = process.env.LEDGER_ALLOW_NEGATIVE_USER;
+  if (flag === '0') return false;
+  if (process.env.NODE_ENV === 'production') {
+    return flag === '1' && process.env.REAL_MONEY_ENABLED !== '1';
+  }
+  return true;
+}
+
+/**
  * Post a balanced set of legs to the ledger. Throws if the legs don't sum to
  * zero per currency (the conservation invariant). Runs inside the caller's
  * transaction so the whole business operation is atomic with the ledger.
  *
- * @param allowNegative accounts allowed to go negative (system rails do; user
- *   wallets must not — passing the user's account here would be a bug, so the
- *   default forbids negative USER balances).
+ * @param allowNegativeUser lets a USER account go negative (system rails may;
+ *   customer balances must not). Honoured only where
+ *   `negativeUserBalanceAllowed` permits it — never in real-money production.
  */
 export async function postLedger(
   tx: Tx,
@@ -119,7 +143,7 @@ export async function postLedger(
   opts: { allowNegativeUser?: boolean } = {},
 ): Promise<{ groupId: string }> {
   if (!input.legs.length) throw new Error('postLedger: no legs');
-  const allowNegativeUser = Boolean(opts.allowNegativeUser) && process.env.LEDGER_ALLOW_NEGATIVE_USER !== '0';
+  const allowNegativeUser = negativeUserBalanceAllowed(opts.allowNegativeUser);
 
   // 1) Assert conservation: signed sum per currency must be ~0.
   const perCurrency = new Map<string, Decimal>();
@@ -167,10 +191,11 @@ export async function postLedger(
         },
       });
       if (updated.count !== 1) {
-        throw new Error(
-          `Insufficient ${leg.currency} balance for user ${leg.userId}: ` +
-            `need ${amount.abs().toString()}`,
-        );
+        // A customer-facing refusal (not a 500): the ledger, which is the
+        // authoritative balance, does not cover this debit.
+        throw new AppError(`Insufficient ${leg.currency} balance`, 400, 'INSUFFICIENT_FUNDS', {
+          ledger: true, currency: leg.currency, need: amount.abs().toString(),
+        });
       }
     } else {
       await tx.ledgerAccount.update({

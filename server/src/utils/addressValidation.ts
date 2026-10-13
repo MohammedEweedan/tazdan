@@ -3,6 +3,9 @@
  * send funds into the void. Each chain uses its native checksum.
  */
 import { ethers } from 'ethers';
+import { address as bitcoinAddress, networks as bitcoinNetworks } from 'bitcoinjs-lib';
+import { PublicKey } from '@solana/web3.js';
+import { TronWeb } from 'tronweb';
 
 const BASE58_ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
 const BASE58_RE = new RegExp(`^[${BASE58_ALPHABET}]+$`);
@@ -36,30 +39,19 @@ function isValidEthAddress(addr: string): boolean {
 }
 
 function isValidTronAddress(addr: string): boolean {
-  if (!addr.startsWith('T')) return false;
-  if (addr.length !== 34) return false;
-  if (!BASE58_RE.test(addr)) return false;
-  // Full Base58Check verification requires sha256 work — done at the
-  // tronweb layer when actually building the tx. Reject obvious typos
-  // here (length + charset) which is the bulk of mistakes.
-  return true;
+  return addr.startsWith('T') && addr.length === 34 && TronWeb.isAddress(addr);
 }
 
 function isValidBtcAddress(addr: string): boolean {
-  if (addr.startsWith('bc1')) {
-    // bech32
-    return /^bc1[023456789acdefghjklmnpqrstuvwxyz]{6,87}$/.test(addr.toLowerCase());
-  }
-  // Legacy P2PKH (1...) and P2SH (3...) — Base58Check, length 25–35 chars.
-  if (!/^[13]/.test(addr)) return false;
-  if (addr.length < 25 || addr.length > 35) return false;
-  return BASE58_RE.test(addr);
+  try { bitcoinAddress.toOutputScript(addr, bitcoinNetworks.bitcoin); return true; }
+  catch { return false; }
 }
 
 function isValidSolAddress(addr: string): boolean {
   // Solana addresses: 32 bytes Base58, length 32–44 chars.
   if (addr.length < 32 || addr.length > 44) return false;
-  return BASE58_RE.test(addr);
+  if (!BASE58_RE.test(addr)) return false;
+  try { return new PublicKey(addr).toBytes().length === 32; } catch { return false; }
 }
 
 export function validateAddress(chain: Chain, address: string): void {

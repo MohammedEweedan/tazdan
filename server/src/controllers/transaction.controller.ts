@@ -24,6 +24,13 @@ import { postAssetLedger, normaliseAsset } from '../services/ledger/assetLedger.
 import { assertMovementAllowed } from '../services/platform/controls.service';
 import { enforceRiskBasedStepUp } from '../services/security/stepUp.service';
 import { valueInUsd } from '../utils/kycLimits';
+import { assertRecipientCanReceive, checkRecipient } from '../services/wallet/recipientEligibility';
+import { incrAttempts } from '../utils/redis';
+import { z } from 'zod';
+
+/** Recipient pre-checks per customer per window (enumeration guard). */
+const RECIPIENT_CHECK_LIMIT = 60;
+const RECIPIENT_CHECK_WINDOW_S = 10 * 60;
 
 export class TransactionController {
   /**
@@ -53,12 +60,9 @@ export class TransactionController {
       }
       const amountDec = parsePositiveAmount(amount);
       const currency = String(rawCurrency).toUpperCase();
-      if (receiverId === senderId) {
-        throw new AppError('Cannot transfer to yourself', 400);
-      }
-      const receiver = await prisma.user.findUnique({ where: { id: receiverId }, select: { status: true } });
-      if (!receiver) throw new AppError('Recipient not found', 404);
-      if (receiver.status !== 'ACTIVE') throw new AppError('Recipient account is not active', 400);
+      // Same rules as GET /api/transactions/recipient-check. An unknown id is
+      // refused like any other unavailable recipient (no enumeration).
+      await assertRecipientCanReceive(senderId, receiverId, { currency });
 
       // Currencies that exist in the Prisma Currency enum
       const ENUM_CURRENCIES = new Set([
@@ -178,6 +182,27 @@ export class TransactionController {
       } else {
         next(new AppError('Transfer failed', 500));
       }
+    }
+  }
+
+  /**
+   * GET /api/transactions/recipient-check?recipientId=<uuid>
+   * Pre-check for the Send screen and chat send sheet:
+   *   200 { canReceive: true } | { canReceive: false, reason: 'SELF' | 'UNAVAILABLE' }
+   * Never says why a recipient is unavailable and treats unknown ids the same
+   * (no 404), so it reveals nothing about other customers. UX only — the
+   * transfer endpoints enforce the same rules themselves.
+   */
+  static async recipientCheck(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const { recipientId } = z.object({ recipientId: z.string().uuid() }).parse(req.query);
+      const used = await incrAttempts(`recipient-check:${req.user!.id}`, RECIPIENT_CHECK_WINDOW_S);
+      if (used > RECIPIENT_CHECK_LIMIT) throw new AppError('Too many checks. Try again in a few minutes.', 429, 'RATE_LIMITED');
+      const result = await checkRecipient(req.user!.id, recipientId);
+      res.set('Cache-Control', 'no-store');
+      res.json(result);
+    } catch (error) {
+      next(error);
     }
   }
 

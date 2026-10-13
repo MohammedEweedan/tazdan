@@ -10,8 +10,9 @@ import { AppError } from '../middleware/errorHandler';
 import { AuthRequest } from '../types';
 import {
   contribute, release, close, computeNextRun,
-  isDateLocked, requiresStepUp,
+  isDateLocked, requiresStepUp, lockChangeNeedsStepUp,
 } from '../services/budget.service';
+import { lockBudget } from '../services/wallet/atomicWallet';
 import { issueStepUp, verifyStepUp } from '../services/security/stepUp.service';
 
 const CURRENCIES = z.string().min(2).max(12);
@@ -98,29 +99,50 @@ export class BudgetController {
 
   static async update(req: AuthRequest, res: Response, next: NextFunction) {
     try {
-      const d = createSchema.partial().parse(req.body);
+      const d = createSchema.partial().extend({ stepUpCode: z.string().regex(/^\d{6}$/).optional() }).parse(req.body);
       const existing = await prisma.budgetWallet.findFirst({ where: { id: req.params.id, userId: req.user!.id } });
       if (!existing) throw new AppError('Budget not found', 404);
 
-      const budget = await prisma.budgetWallet.update({
-        where: { id: existing.id },
-        data: {
-          name: d.name?.trim() ?? undefined,
-          emoji: d.emoji ?? undefined,
-          targetAmount: d.targetAmount ?? undefined,
-          targetDate: d.targetDate ? new Date(d.targetDate) : undefined,
-          lockType: d.lockType ?? undefined,
-          unlockDate: d.unlockDate ? new Date(d.unlockDate) : undefined,
-          ...(d.auto
-            ? {
-                autoEnabled: true,
-                autoAmount: d.auto.amount,
-                autoFrequency: d.auto.frequency as any,
-                autoSourceCurrency: (d.auto.sourceCurrency as any) ?? undefined,
-                nextRunAt: existing.nextRunAt ?? computeNextRun(new Date(), d.auto.frequency),
-              }
-            : {}),
-        },
+      // A running date lock can be extended but never removed or shortened,
+      // and dropping a step-up lock needs the code the lock demands.
+      let stepUpVerified = false;
+      if (lockChangeNeedsStepUp(existing, d)) {
+        if (!d.stepUpCode) {
+          const { method } = await issueStepUp(req.user!.id, 'withdrawal');
+          return res.status(401).json({ requiresStepUp: true, method });
+        }
+        await verifyStepUp(req.user!.id, 'withdrawal', d.stepUpCode);
+        stepUpVerified = true;
+      }
+
+      const budget = await prisma.$transaction(async (tx: any) => {
+        // Re-validate against the locked row so a concurrent change can't
+        // slip a weakening past the check above.
+        await lockBudget(tx, existing.id);
+        const locked = await tx.budgetWallet.findUniqueOrThrow({ where: { id: existing.id } });
+        if (lockChangeNeedsStepUp(locked, d) && !stepUpVerified) {
+          throw new AppError('A security code is required to remove this lock', 401, 'STEP_UP_REQUIRED');
+        }
+        return tx.budgetWallet.update({
+          where: { id: existing.id },
+          data: {
+            name: d.name?.trim() ?? undefined,
+            emoji: d.emoji ?? undefined,
+            targetAmount: d.targetAmount ?? undefined,
+            targetDate: d.targetDate ? new Date(d.targetDate) : undefined,
+            lockType: d.lockType ?? undefined,
+            unlockDate: d.unlockDate ? new Date(d.unlockDate) : undefined,
+            ...(d.auto
+              ? {
+                  autoEnabled: true,
+                  autoAmount: d.auto.amount,
+                  autoFrequency: d.auto.frequency as any,
+                  autoSourceCurrency: (d.auto.sourceCurrency as any) ?? undefined,
+                  nextRunAt: existing.nextRunAt ?? computeNextRun(new Date(), d.auto.frequency),
+                }
+              : {}),
+          },
+        });
       });
       res.json({ budget: progress(budget) });
     } catch (e) { next(e); }
@@ -172,6 +194,7 @@ export class BudgetController {
       if (isDateLocked(b)) {
         throw new AppError(`Locked until ${new Date(b.unlockDate!).toISOString().slice(0, 10)}`, 403);
       }
+      let stepUpVerified = false;
       if (requiresStepUp(b)) {
         // No code yet → issue one and tell the client to prompt for it.
         if (!stepUpCode) {
@@ -179,9 +202,11 @@ export class BudgetController {
           return res.status(401).json({ requiresStepUp: true, method });
         }
         await verifyStepUp(req.user!.id, 'withdrawal', stepUpCode);
+        stepUpVerified = true;
       }
 
-      const budget = await release(req.user!.id, req.params.id, amount);
+      // The service re-checks the lock on the locked row.
+      const budget = await release(req.user!.id, req.params.id, amount, { stepUpVerified });
       res.json({ budget: progress(budget) });
     } catch (e) { next(e); }
   }
@@ -193,6 +218,7 @@ export class BudgetController {
       const b = await prisma.budgetWallet.findFirst({ where: { id: req.params.id, userId: req.user!.id } });
       if (!b) throw new AppError('Budget not found', 404);
 
+      let stepUpVerified = false;
       if (Number(b.balance) > 0) {
         if (isDateLocked(b)) throw new AppError(`Locked until ${new Date(b.unlockDate!).toISOString().slice(0, 10)}`, 403);
         if (requiresStepUp(b)) {
@@ -201,9 +227,11 @@ export class BudgetController {
             return res.status(401).json({ requiresStepUp: true, method });
           }
           await verifyStepUp(req.user!.id, 'withdrawal', stepUpCode);
+          stepUpVerified = true;
         }
       }
-      await close(req.user!.id, b.id);
+      // close() re-checks the lock if money arrived after the read above.
+      await close(req.user!.id, b.id, { stepUpVerified });
       res.json({ message: 'Budget closed' });
     } catch (e) { next(e); }
   }

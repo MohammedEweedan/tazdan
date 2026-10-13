@@ -39,6 +39,10 @@ import { sendDepositConfirmed } from '../email';
 import { pushCopy, pushTxEvent } from '../push.service';
 import { postLedger } from '../ledger/ledger.service';
 import { deriveKeyForChain } from './walletDerivation.service';
+import { parsePositiveAmount } from './atomicWallet';
+import { custodyMode, submitRemoteWithdrawal } from './custodyProvider.service';
+import { assertMovementAllowed } from '../platform/controls.service';
+import { assertFeatureEnabled } from '../../utils/features';
 import {
   verifyOnChainDeposit,
   unverifiedDepositsAllowed,
@@ -187,8 +191,8 @@ function supportsLiveBroadcast(asset: string, network: string): boolean {
   const n = network.toUpperCase();
   if (a === 'ETH' && (n === 'ETH' || n === 'ERC20')) return true;
   if (a === 'USDT' && n === 'ERC20') return true;
-  if (a === 'BTC') return true;   // P2WPKH via mempool.space (broadcastBtc)
-  if (a === 'SOL') return true;   // native transfer via RPC (broadcastSol)
+  if (a === 'BTC' && (n === 'BTC' || n === 'NATIVE')) return true;
+  if (a === 'SOL' && (n === 'SOL' || n === 'NATIVE')) return true;
   // USDT/TRC20 stays gated until the TRX fee-delegation treasury exists.
   return false;
 }
@@ -454,15 +458,32 @@ export async function initiateWithdrawal(opts: {
   network: string;
   amount: string;
   toAddress: string;
+  idempotencyKey?: string;
 }) {
   const asset = opts.asset.toUpperCase();
   const network = opts.network.toUpperCase();
-  const amount = new Decimal(opts.amount);
-  if (amount.lte(0)) throw new AppError('Amount must be > 0', 400);
+  const amount = new Decimal(parsePositiveAmount(opts.amount).toString());
+  const decimals = asset === 'BTC' ? 8 : asset === 'SOL' ? 9 : asset === 'USDT' ? 6 : 18;
+  if (amount.decimalPlaces() > decimals) throw new AppError(`${asset} amounts support at most ${decimals} decimal places`, 400);
+  if (opts.idempotencyKey && !/^[A-Za-z0-9_-]{8,128}$/.test(opts.idempotencyKey)) throw new AppError('Invalid idempotency key', 400);
+  if (process.env.NODE_ENV === 'production' && !opts.idempotencyKey) throw new AppError('An idempotency key is required', 400);
+  const idempotencyKey = opts.idempotencyKey ? `${opts.userId}:${opts.idempotencyKey}` : null;
+  const existingWithdrawal = async () => {
+    if (!idempotencyKey) return null;
+    const row = await prisma.onChainTransaction.findUnique({ where: { idempotencyKey } });
+    if (row && (row.type !== 'WITHDRAWAL' || row.asset !== asset || row.network !== network || row.toAddress !== opts.toAddress || !amount.eq(row.amount.toString()))) {
+      throw new AppError('Idempotency key was used for different withdrawal terms', 409, 'DUPLICATE_REQUEST');
+    }
+    return row;
+  };
+  const prior = await existingWithdrawal();
+  if (prior) return prior;
+  assertFeatureEnabled('blockchain');
+  const mode = custodyMode();
+  await assertMovementAllowed({ userId: opts.userId, feature: 'blockchain', currency: asset, provider: mode === 'remote' ? process.env.CUSTODY_PROVIDER_CODE : undefined });
+  if (mode === 'disabled') throw new AppError('Custody provider is not activated', 503, 'PROVIDER_NOT_ACTIVATED');
 
-  // Fail BEFORE the debit for assets we cannot broadcast. Anything else
-  // either errors-and-refunds (wasted ledger churn) or, with the simulated
-  // flag, silently strands user funds.
+  // Unsupported signing paths are rejected before committing a debit.
   if (!supportsLiveBroadcast(asset, network) && !simulatedBroadcastAllowed()) {
     throw new AppError(
       `${asset}/${network} withdrawals are temporarily unavailable. Please contact support.`,
@@ -506,13 +527,16 @@ export async function initiateWithdrawal(opts: {
       const onChainTx = await tx.onChainTransaction.create({
         data: {
           userId: opts.userId,
+          idempotencyKey,
           type: 'WITHDRAWAL',
           asset,
           network,
           amount: new Prisma.Decimal(amount.toFixed(18)),
           fromAddress: (w as any)[fromField] as string,
           toAddress: opts.toAddress,
-          status: 'PENDING',
+          // If the process dies before it records a hash, operators must
+          // reconcile this operation instead of assuming nothing was sent.
+          status: 'BROADCAST_UNKNOWN',
         },
       });
 
@@ -524,7 +548,7 @@ export async function initiateWithdrawal(opts: {
           { type: 'USER', userId: opts.userId, currency: asset as any, amount: amount.mul(-1).toFixed(18) },
           { type: 'SYSTEM_CHAIN', currency: asset as any, amount: amount.toFixed(18) },
         ],
-      }, { allowNegativeUser: true });
+      });
 
       return {
         onChainTx,
@@ -532,13 +556,28 @@ export async function initiateWithdrawal(opts: {
       };
     },
     { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }
-  );
+  ).catch(async (error) => {
+    const retryable = error instanceof Prisma.PrismaClientKnownRequestError &&
+      (['P2002', 'P2034'].includes(error.code) || (error.code === 'P2010' && ['40001', '40P01'].includes(String(error.meta?.code))));
+    if (idempotencyKey && retryable) {
+      const existing = await existingWithdrawal();
+      if (existing) return { onChainTx: existing, walletIndex: null };
+    }
+    throw error;
+  });
+
+  // Another request already owns the operation; its journal is committed.
+  if (walletIndex === null) return onChainTx;
 
   // Derive signer on demand (never persisted).
   let txHash = '';
   let simulated = false;
+  let key: Awaited<ReturnType<typeof deriveKeyForChain>> | undefined;
   try {
-    const key = await deriveKeyForChain(chain, walletIndex);
+    if (mode === 'remote') {
+      txHash = await submitRemoteWithdrawal({ operationId: onChainTx.id, userId: opts.userId, walletIndex, asset, network, amount: amount.toFixed(), toAddress: opts.toAddress });
+    } else {
+    key = await deriveKeyForChain(chain, walletIndex);
     if (asset === 'ETH' && network === 'ETH' || (asset === 'ETH' && network === 'ERC20')) {
       txHash = await broadcastEvm({ privateKey: key.privateKey, toAddress: opts.toAddress, amountEth: amount.toFixed(18) });
     } else if (asset === 'USDT' && network === 'ERC20') {
@@ -565,37 +604,25 @@ export async function initiateWithdrawal(opts: {
     }
     if (!txHash && simulatedBroadcastAllowed()) simulated = true;
     if (!txHash && !simulated) throw new Error(`Broadcast returned no tx hash for ${asset}/${network}`);
-    // Wipe the key reference ASAP.
-    (key as any).privateKey = '';
+    }
   } catch (err: any) {
-    logger.error('[withdrawal] broadcast failed — refunding', { id: onChainTx.id, err });
-    await prisma.$transaction(async (tx) => {
-      await tx.userWallet.update({
-        where: { userId: opts.userId },
-        data: { [field]: { increment: new Prisma.Decimal(amount.toFixed(18)) } },
-      });
-      await tx.onChainTransaction.update({
-        where: { id: onChainTx.id },
-        data: { status: 'FAILED' },
-      });
-      await postLedger(tx as any, {
-        refType: 'onchain_withdrawal_refund',
-        refId: onChainTx.id,
-        memo: `Refund failed on-chain withdrawal ${asset} ${network}`,
-        legs: [
-          { type: 'SYSTEM_CHAIN', currency: asset as any, amount: amount.mul(-1).toFixed(18) },
-          { type: 'USER', userId: opts.userId, currency: asset as any, amount: amount.toFixed(18) },
-        ],
-      }, { allowNegativeUser: true });
+    // A transport error can occur AFTER the network accepted the payment.
+    // Keep the debit and durable operation reference until chain/provider
+    // reconciliation proves the outcome. Never refund or rebroadcast blindly.
+    logger.error('[withdrawal] broadcast outcome unknown — reconciliation required', { id: onChainTx.id, errorName: err?.name });
+    return prisma.onChainTransaction.update({
+      where: { id: onChainTx.id },
+      data: { status: 'BROADCAST_UNKNOWN', txHash: txHash || null },
     });
-    throw new AppError('Withdrawal broadcast failed — refunded', 502);
+  } finally {
+    if (key) key.privateKey = '';
   }
 
   return prisma.onChainTransaction.update({
     where: { id: onChainTx.id },
     data: {
       txHash: txHash || null,
-      status: simulated ? 'PENDING' : 'PENDING', // stays pending until confirmed
+      status: simulated ? 'SIMULATED' : 'PENDING',
     },
   });
 }

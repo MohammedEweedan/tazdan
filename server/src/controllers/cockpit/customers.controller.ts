@@ -16,6 +16,7 @@ import { recordSecurityEvent } from '../../services/platform/securityEvents';
 import { getKycHeadroom } from '../../utils/kycLimits';
 import { openCase } from '../../services/compliance/cases.service';
 import { maskEmail, maskPhone, pageParams, systemUserIds } from './helpers';
+import { assertNotSelf } from '../../services/platform/segregation';
 
 const reasonSchema = z.object({ reason: z.string().trim().min(5).max(1000) });
 
@@ -27,10 +28,12 @@ export const CockpitCustomersController = {
       const exclude = await systemUserIds();
       const where: Prisma.UserWhereInput = { id: { notIn: exclude }, role: 'USER' };
       if (q) {
+        // Contact-detail matching only for staff who may see contact details;
+        // otherwise the search recovers a masked email/phone one guess at a time.
+        const pii = hasPermission(req, 'customers.pii');
         where.OR = [
-          { email: { contains: q, mode: 'insensitive' } },
+          ...(pii ? [{ email: { contains: q, mode: 'insensitive' as const } }, { phone: { contains: q } }] : []),
           { username: { contains: q.replace(/^@/, ''), mode: 'insensitive' } },
-          { phone: { contains: q } },
           { firstName: { contains: q, mode: 'insensitive' } },
           { lastName: { contains: q, mode: 'insensitive' } },
           { id: q },
@@ -157,6 +160,7 @@ export const CockpitCustomersController = {
   async unfreeze(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const { reason } = reasonSchema.parse(req.body);
+      assertNotSelf(req.user!.id, [req.params.id], 'unfreeze_customer', { ipAddress: req.ip, path: req.originalUrl });
       const user = await prisma.user.findUnique({ where: { id: req.params.id }, select: { id: true, status: true } });
       if (!user) throw new AppError('Customer not found', 404);
       await prisma.user.update({ where: { id: user.id }, data: { status: 'ACTIVE' } });
@@ -175,6 +179,7 @@ export const CockpitCustomersController = {
         reason: z.string().trim().min(5).max(1000),
         expiresAt: z.coerce.date().optional(),
       }).parse(req.body);
+      assertNotSelf(req.user!.id, [req.params.id], 'customer_restriction', { ipAddress: req.ip, path: req.originalUrl });
       const user = await prisma.user.findUnique({ where: { id: req.params.id }, select: { id: true } });
       if (!user) throw new AppError('Customer not found', 404);
       const sw = await setControl({
