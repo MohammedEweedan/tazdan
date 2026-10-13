@@ -2,7 +2,7 @@ import { API_BASE_URL } from './environment';
 
 export const APP = {
   name: 'Tazdan',
-  tagline: 'Arab roots. Crypto. Connected.',
+  tagline: 'Your money. Your next move.',
   supportEmail: 'support@tazdan.com',
   apiBaseUrl: API_BASE_URL,
 } as const;

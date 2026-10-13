@@ -9,6 +9,8 @@
 export const confirmCopy: Record<string, Record<string, string>> = {
   en: {
     'confirm.selectRecipient': 'Select a recipient',
+    'confirm.recipientUnavailable': 'This account can’t receive payments right now.',
+    'confirm.recipientSelf': 'You can’t send money to yourself.',
     'confirm.slideTo': 'Slide to {action}',
     'confirm.holdTo': 'Hold to {action}',
     'confirm.holdLonger': 'Hold a little longer',
@@ -32,6 +34,8 @@ export const confirmCopy: Record<string, Record<string, string>> = {
   },
   ar: {
     'confirm.selectRecipient': 'اختر المستلم',
+    'confirm.recipientUnavailable': 'لا يمكن لهذا الحساب استلام المدفوعات حالياً.',
+    'confirm.recipientSelf': 'لا يمكنك إرسال الأموال إلى نفسك.',
     'confirm.slideTo': 'اسحب ل{action}',
     'confirm.holdTo': 'اضغط مطولاً ل{action}',
     'confirm.holdLonger': 'استمر بالضغط قليلاً',
@@ -55,6 +59,8 @@ export const confirmCopy: Record<string, Record<string, string>> = {
   },
   fr: {
     'confirm.selectRecipient': 'Choisissez un destinataire',
+    'confirm.recipientUnavailable': 'Ce compte ne peut pas recevoir de paiements pour le moment.',
+    'confirm.recipientSelf': 'Vous ne pouvez pas vous envoyer de l’argent.',
     'confirm.slideTo': 'Glissez pour {action}',
     'confirm.holdTo': 'Maintenez pour {action}',
     'confirm.holdLonger': 'Maintenez encore un peu',
@@ -78,6 +84,8 @@ export const confirmCopy: Record<string, Record<string, string>> = {
   },
   es: {
     'confirm.selectRecipient': 'Elige un destinatario',
+    'confirm.recipientUnavailable': 'Esta cuenta no puede recibir pagos en este momento.',
+    'confirm.recipientSelf': 'No puedes enviarte dinero a ti mismo.',
     'confirm.slideTo': 'Desliza para {action}',
     'confirm.holdTo': 'Mantén pulsado para {action}',
     'confirm.holdLonger': 'Mantén un poco más',

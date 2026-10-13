@@ -18,6 +18,7 @@ import { redisGet, redisSet, redisDel, redisGetDel, getRedisClient } from '../..
 import { prisma } from '../../utils/prisma';
 import { isLedgerCurrency } from '../ledger/ledger.service';
 import { logger } from '../../utils/logger';
+import { AppError } from '../../middleware/errorHandler';
 
 Decimal.set({ precision: 40 });
 
@@ -435,6 +436,7 @@ export async function consumeQuote(id: string, userId?: string): Promise<Quote |
     }
   }
   if (!taken || taken.expiresAt <= Date.now()) return null;
+  await assertLockedLydPrice(taken);
   return taken;
 }
 
@@ -453,31 +455,74 @@ export async function consumeQuote(id: string, userId?: string): Promise<Quote |
  *   → fees debited from fiat proceeds, remainder credited as USDT
  */
 /**
- * Convert an amount in `currency` to USD. USD/USDT/USDC are 1:1; other fiats
- * route through the FX provider (getRate(currency,'USD') = USD per 1 unit).
- * Falls back to 1:1 only if no rate is resolvable, which should be rare given
- * the provider's static fallback table.
+ * LYD settlement is priced by the LYD market maker. A BUY funded in LYD
+ * means the customer buys USD from us at our ASK; a SELL into LYD means we
+ * buy their USD at our BID. Throws 503 when LYD quoting is halted, stale or
+ * unavailable.
  */
-async function fundingToUsd(currency: string, amount: Decimal): Promise<Decimal> {
-  const c = currency.toUpperCase();
-  if (c === 'USD' || c === 'USDT' || c === 'USDC') return amount;
-  const { getRate } = await import('./fxRateProvider.service');
-  const pair = await getRate(c, 'USD').catch(() => null);
-  // User is converting funding currency into USD purchasing power, so use the
-  // SELL side: what the user receives when selling 1 unit of the funding fiat.
-  const usdPerUnit = pair ? new Decimal(pair.sellPrice || pair.buyPrice) : new Decimal(0);
-  if (usdPerUnit.lte(0)) return amount; // last-resort: treat as USD
-  return amount.mul(usdPerUnit);
+interface LydPricing { rate: Decimal; reference: Decimal }
+async function lydPricing(side: Side): Promise<LydPricing> {
+  const { quoteLydMarket } = await import('./lydMarketMaker.service');
+  const q = await quoteLydMarket('USD');
+  return { rate: new Decimal((side === 'BUY' ? q.ask : q.bid).toString()), reference: new Decimal(q.reference.toString()) };
 }
 
-async function usdToFunding(currency: string, usdAmount: Decimal): Promise<Decimal> {
+/**
+ * USD per unit (toUsd) or units per USD (fromUsd) for a non-LYD fiat. An
+ * unavailable or static-fallback rate is refused. The old code treated such
+ * an amount as USD 1:1, which priced 1,000 LYD as $1,000.
+ */
+async function fiatUsdRate(currency: string, direction: 'toUsd' | 'fromUsd'): Promise<Decimal> {
+  const { getRate } = await import('./fxRateProvider.service');
+  let pair;
+  try {
+    pair = direction === 'toUsd' ? await getRate(currency, 'USD') : await getRate('USD', currency);
+  } catch {
+    throw new AppError(`No live ${currency} rate is available right now. Please try again shortly.`, 503, 'PROVIDER_UNAVAILABLE');
+  }
+  if (pair.source.startsWith('fallback:')) {
+    throw new AppError(`Live ${currency} pricing is unavailable right now. Please try again shortly.`, 503, 'PROVIDER_UNAVAILABLE');
+  }
+  // The customer's side: what they receive for 1 unit (toUsd) or per USD (fromUsd).
+  const px = new Decimal(pair.sellPrice || pair.buyPrice);
+  if (!px.isFinite() || px.lte(0)) throw new AppError(`No live ${currency} rate is available right now`, 503, 'PROVIDER_UNAVAILABLE');
+  return px;
+}
+
+/** Convert a funding amount to USD. USD/USDT/USDC are 1:1. */
+async function fundingToUsd(currency: string, amount: Decimal, lyd?: LydPricing): Promise<Decimal> {
+  const c = currency.toUpperCase();
+  if (c === 'USD' || c === 'USDT' || c === 'USDC') return amount;
+  if (c === 'LYD' && lyd) return amount.div(lyd.rate).toDecimalPlaces(8, Decimal.ROUND_DOWN);
+  return amount.mul(await fiatUsdRate(c, 'toUsd'));
+}
+
+async function usdToFunding(currency: string, usdAmount: Decimal, lyd?: LydPricing): Promise<Decimal> {
   const c = currency.toUpperCase();
   if (c === 'USD' || c === 'USDT' || c === 'USDC') return usdAmount;
-  const { getRate } = await import('./fxRateProvider.service');
-  const pair = await getRate('USD', c).catch(() => null);
-  const unitsPerUsd = pair ? new Decimal(pair.sellPrice || pair.buyPrice) : new Decimal(0);
-  if (unitsPerUsd.lte(0)) return usdAmount; // last-resort: treat as USD
-  return usdAmount.mul(unitsPerUsd);
+  if (c === 'LYD' && lyd) return usdAmount.mul(lyd.rate);
+  return usdAmount.mul(await fiatUsdRate(c, 'fromUsd'));
+}
+
+/** USD value captured by the LYD leg against the Fulus reference (never negative). */
+function lydMarginUsd(side: Side, lydAmount: Decimal, usdAmount: Decimal, reference: Decimal): Decimal {
+  const atReference = lydAmount.div(reference);
+  const m = side === 'BUY' ? atReference.minus(usdAmount) : usdAmount.minus(atReference);
+  return Decimal.max(0, m).toDecimalPlaces(8, Decimal.ROUND_DOWN);
+}
+
+/**
+ * Execution re-check for quotes settled in LYD: the locked LYD/USD price must
+ * still be on the profitable side of the reference now. A quote the market
+ * moved through is refused (409). It was consumed, so the customer requotes.
+ */
+async function assertLockedLydPrice(q: Quote): Promise<void> {
+  if ((q.settlementCurrency || '').toUpperCase() !== 'LYD') return;
+  const usd = new Decimal(q.fiatAmount || 0);
+  const lyd = new Decimal(q.settlementAmount || 0);
+  if (!usd.gt(0) || !lyd.gt(0)) return;
+  const { assertLydFillWithinMarket } = await import('./lydMarketMaker.service');
+  await assertLydFillWithinMarket({ currency: 'USD', side: q.side === 'BUY' ? 'ASK' : 'BID', price: lyd.div(usd) });
 }
 
 export async function buildQuote(opts: {
@@ -502,6 +547,8 @@ export async function buildQuote(opts: {
   
   const nkey = networkKey(asset, network);
   const spreadPct = await getConfiguredSpread();
+  // One market-maker snapshot prices every LYD amount in this quote.
+  const lyd = settlementCurrency === 'LYD' ? await lydPricing(side) : undefined;
   const netCfg = getNetworkFees(asset, network);
   const networkPct = new Decimal(netCfg.gas).plus(netCfg.slippage);
   const platformPct = new Decimal(FEES.platform);
@@ -552,7 +599,7 @@ export async function buildQuote(opts: {
     const enteredAmount = new Decimal(opts.fiatAmount);
     if (enteredAmount.lte(0)) throw new Error('fiatAmount must be > 0');
     settlementAmount = enteredAmount;
-    fiatAmount = await fundingToUsd(settlementCurrency, enteredAmount);
+    fiatAmount = await fundingToUsd(settlementCurrency, enteredAmount, lyd);
 
     platformFee = fiatAmount.mul(platformPct);
     networkFee = fiatAmount.mul(networkPct);
@@ -577,11 +624,18 @@ export async function buildQuote(opts: {
     fiatAmount = gross.minus(platformFee).minus(networkFee);
     if (fiatAmount.lte(0)) throw new Error('Amount too small to cover fees');
     spreadCapture = marketPrice.minus(quotedPrice).mul(cryptoAmount); // positive on SELL
-    settlementAmount = await usdToFunding(settlementCurrency, fiatAmount);
+    settlementAmount = await usdToFunding(settlementCurrency, fiatAmount, lyd);
+    // LYD proceeds are paid in whole dirhams, rounded down.
+    if (lyd) settlementAmount = settlementAmount.toDecimalPlaces(3, Decimal.ROUND_DOWN);
   }
 
-  platformFeeSettlement = await usdToFunding(settlementCurrency, platformFee);
-  networkFeeSettlement = await usdToFunding(settlementCurrency, networkFee);
+  // LYD FX margin (vs the Fulus reference) is part of the profit on this
+  // order. Folding it into spreadCapture books it through the existing fee
+  // collection at execution, with no new money path.
+  if (lyd) spreadCapture = spreadCapture.plus(lydMarginUsd(side, settlementAmount, fiatAmount, lyd.reference));
+
+  platformFeeSettlement = await usdToFunding(settlementCurrency, platformFee, lyd);
+  networkFeeSettlement = await usdToFunding(settlementCurrency, networkFee, lyd);
 
   const quote: Quote = {
     id: randomUUID(),

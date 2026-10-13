@@ -90,7 +90,7 @@ router.get('/history', async (req: Request, res: Response) => {
     res.setHeader('Cache-Control', 'public, max-age=60');
     return res.json(body);
   } catch (err: any) {
-    return res.status(500).json({ error: 'Failed to load rate history', detail: err?.message });
+    return res.status(500).json({ error: 'Failed to load rate history' });
   }
 });
 
@@ -182,7 +182,7 @@ router.get('/live', async (_req: Request, res: Response) => {
     res.setHeader('Cache-Control', 'public, max-age=30');
     return res.json(body);
   } catch (err: any) {
-    return res.status(500).json({ error: 'Failed to load live rates', detail: err?.message });
+    return res.status(500).json({ error: 'Failed to load live rates' });
   }
 });
 
@@ -219,7 +219,7 @@ router.get('/', async (_req: Request, res: Response) => {
     if (cache) {
       return res.json({ rates: cache.rates, cachedAt: new Date(cache.fetchedAt).toISOString(), stale: true });
     }
-    return res.status(502).json({ error: 'Failed to fetch exchange rates', detail: err?.message });
+    return res.status(502).json({ error: 'Failed to fetch exchange rates' });
   }
 });
 

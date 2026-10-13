@@ -142,6 +142,41 @@ export interface CreateBatchInput {
 
 const batchInclude = { payouts: { orderBy: { createdAt: 'asc' as const } } };
 
+/** USD value of the business's live batches in the last 24 hours (structuring guard). */
+async function recentBatchUsd(client: Tx | typeof prisma, businessId: string): Promise<number> {
+  const rows = await client.businessPayoutBatch.findMany({
+    where: { businessId, createdAt: { gte: new Date(Date.now() - 86400_000) }, status: { notIn: ['FAILED', 'REJECTED', 'CANCELLED'] } },
+    select: { totalAmount: true, currency: true },
+  });
+  let usd = 0;
+  for (const r of rows) {
+    const rate = await usdRate(r.currency).catch(() => 0);
+    // An unpriceable batch counts as large rather than as nothing.
+    usd += rate > 0 ? Number(r.totalAmount) * rate : maxPayoutUsd() * MAX_BATCH_ROWS;
+  }
+  return usd;
+}
+
+/**
+ * An Idempotency-Key replays the batch it first created — only for the same
+ * request. Reusing a key for different recipients, amounts or currency is a
+ * client error, never a silent "already done" for a batch that was not sent.
+ */
+function assertSameBatch(existing: { currency: string; payouts: Array<{ recipientHandle: string | null; recipientEmail: string | null; amount: unknown }> }, input: CreateBatchInput): void {
+  const same = existing.currency === input.currency.toUpperCase()
+    && existing.payouts.length === input.recipients.length
+    && input.recipients.every((r, i) => {
+      const p = existing.payouts[i];
+      let amountOk = false;
+      try { amountOk = D(r.amount).eq(D(p.amount)); } catch { amountOk = false; }
+      const handle = r.handle?.trim().replace(/^@/, '').toLowerCase();
+      const email = r.email?.trim().toLowerCase();
+      const who = handle ? (p.recipientHandle ?? '').toLowerCase() === handle : (p.recipientEmail ?? '') === email;
+      return amountOk && who;
+    });
+  if (!same) throw new AppError('This Idempotency-Key was already used for a different batch', 409, 'DUPLICATE_REQUEST');
+}
+
 export async function createBatch(ctx: BusinessContext, input: CreateBatchInput) {
   assertCan(ctx, 'payouts.create');
   assertKybApproved(ctx.business);
@@ -151,7 +186,10 @@ export async function createBatch(ctx: BusinessContext, input: CreateBatchInput)
   if (key) {
     if (key.length > 120) throw new AppError('Idempotency-Key is too long', 400);
     const existing = await prisma.businessPayoutBatch.findUnique({ where: { businessId_idempotencyKey: { businessId: business.id, idempotencyKey: key } }, include: batchInclude });
-    if (existing) return { batch: existing, replayed: true };
+    if (existing) {
+      assertSameBatch(existing, input);
+      return { batch: existing, replayed: true };
+    }
   }
   const lines = await resolveLines(business, input.recipients, input.currency);
   if (lines.invalid.length) throw new AppError(`${lines.invalid.length} recipient row(s) are invalid — preview the batch first`, 400, 'VALIDATION', { invalid: lines.invalid });
@@ -159,11 +197,14 @@ export async function createBatch(ctx: BusinessContext, input: CreateBatchInput)
 
   const usdValue = lines.usdValue ?? Number.POSITIVE_INFINITY; // unknown value → treat as large
   const threshold = Number(business.approvalThresholdUsd ?? defaultThresholdUsd());
+  // The threshold applies to what the business sends in a rolling 24 hours,
+  // not per batch: ten 9,000 USD batches are one 90,000 USD decision.
+  const recentUsd = await recentBatchUsd(prisma, business.id);
   let approvalReason: string | null = null;
-  if (usdValue >= threshold) {
+  if (usdValue + recentUsd >= threshold) {
     const approvers = await otherApprovers(business.id, ctx.userId);
     if (approvers > 0 || source === 'API') {
-      approvalReason = `Batch value ${Number.isFinite(usdValue) ? `≈ ${Math.round(usdValue).toLocaleString('en-US')} USD` : 'could not be valued'} is at or above the approval threshold of ${threshold.toLocaleString('en-US')} USD`;
+      approvalReason = `Batch value ${Number.isFinite(usdValue) ? `≈ ${Math.round(usdValue).toLocaleString('en-US')} USD` : 'could not be valued'}${recentUsd > 0 ? ` (≈ ${Math.round(recentUsd).toLocaleString('en-US')} USD already sent in the last 24 hours)` : ''} is at or above the approval threshold of ${threshold.toLocaleString('en-US')} USD`;
     } else {
       // Single-signatory business: the second control is a fresh step-up from the maker.
       if (!input.stepUp) throw new AppError('Confirm this batch with your security code', 403, 'STEP_UP_REQUIRED');
@@ -190,11 +231,27 @@ export async function createBatch(ctx: BusinessContext, input: CreateBatchInput)
   const review = assessed.filter((a) => REVIEW.includes(a.risk.outcome));
   const payable = assessed.filter((a) => !BLOCKING.includes(a.risk.outcome));
   const reserve = payable.reduce((n, a) => n.plus(a.amount).plus(a.fee), new Decimal(0));
-  const status = !payable.length ? 'FAILED' : approvalReason ? 'PENDING_APPROVAL' : review.length ? 'COMPLIANCE_REVIEW' : 'EXECUTING';
+  const steppedUp = Boolean(input.stepUp) && approvalReason === null && usdValue + recentUsd >= threshold;
+  let status: string = !payable.length ? 'FAILED' : approvalReason ? 'PENDING_APPROVAL' : review.length ? 'COMPLIANCE_REVIEW' : 'EXECUTING';
 
   let batch;
   try {
     batch = await prisma.$transaction(async (tx) => {
+      // One batch decision at a time per business: parallel submissions can't
+      // each see the other's volume as "not yet sent" and slip under the
+      // threshold together. Re-checked here with the lock held.
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`business-payouts:${business.id}`}))`;
+      if (status === 'EXECUTING' || status === 'COMPLIANCE_REVIEW') {
+        const lockedRecent = await recentBatchUsd(tx, business.id);
+        if (usdValue + lockedRecent >= threshold && !steppedUp) {
+          if (source === 'API' || (await otherApprovers(business.id, ctx.userId)) > 0) {
+            status = 'PENDING_APPROVAL';
+            approvalReason = `Batch value with the last 24 hours (≈ ${Math.round(usdValue + lockedRecent).toLocaleString('en-US')} USD) is at or above the approval threshold of ${threshold.toLocaleString('en-US')} USD`;
+          } else {
+            throw new AppError('Confirm this batch with your security code', 403, 'STEP_UP_REQUIRED');
+          }
+        }
+      }
       const b = await tx.businessPayoutBatch.create({
         data: {
           businessId: business.id, reference: `BPB-${crypto.randomBytes(6).toString('hex').toUpperCase()}`, currency: lines.currency as any,
@@ -344,13 +401,25 @@ async function releaseOpenLines(tx: Tx, batchId: string, ownerId: string, to: 'C
 }
 
 /** Second OWNER/ADMIN approves (maker-checker). */
-export async function approveBatch(ctx: BusinessContext, batchId: string) {
+export async function approveBatch(
+  ctx: BusinessContext,
+  batchId: string,
+  stepUp?: { req: { headers: Record<string, any> }; code?: string },
+) {
   assertCan(ctx, 'payouts.approve');
   const batch = await prisma.businessPayoutBatch.findFirst({ where: { id: batchId, businessId: ctx.business.id } });
   if (!batch) throw new AppError('Batch not found', 404);
   if (batch.status !== 'PENDING_APPROVAL') throw new AppError(`Batch is ${batch.status}, not awaiting approval`, 409);
   // The maker cannot be the checker; an API-created batch is approved by a person in the app.
   if (batch.source !== 'API' && batch.createdById === ctx.userId) throw new AppError('A different owner or admin must approve this batch', 403, 'AUTHORIZATION');
+  // When the person approving an API batch is the one whose key created it,
+  // the second control is a fresh security code — otherwise a stolen app
+  // session plus that person's key could create and approve alone.
+  if (batch.source === 'API' && batch.createdById === ctx.userId) {
+    if (!stepUp) throw new AppError('Confirm this approval with your security code', 403, 'STEP_UP_REQUIRED');
+    const usd = Number(batch.totalAmount) * (await usdRate(batch.currency).catch(() => 0));
+    await enforceStepUp({ userId: ctx.userId, action: 'transfer', valueUsd: usd > 0 ? usd : Number.POSITIVE_INFINITY, req: stepUp.req, code: stepUp.code, biometricVerified: false });
+  }
   const needsReview = await prisma.businessPayout.count({ where: { batchId, status: 'PENDING', riskOutcome: { in: REVIEW } } });
   const next = needsReview ? 'COMPLIANCE_REVIEW' : 'EXECUTING';
   const moved = await prisma.businessPayoutBatch.updateMany({ where: { id: batchId, status: 'PENDING_APPROVAL' }, data: { status: next, approvedById: ctx.userId, approvedAt: new Date() } });

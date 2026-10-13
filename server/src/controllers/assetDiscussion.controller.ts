@@ -3,6 +3,7 @@ import { prisma } from '../utils/prisma';
 import { AuthRequest } from '../types';
 import { AppError } from '../middleware/errorHandler';
 import { emitDiscussion } from '../utils/realtime';
+import { loadStaffContext } from '../services/platform/rbac';
 
 const TAGS = new Set(['BULLISH', 'BEARISH', 'WATCH']);
 const EMOJI_AVATARS = ['🟦', '🟩', '🟧', '🟪', '🟨', '💎', '🚀', '⚡', '🌙', '🔥', '🧠', '🪙', '📈', '🛡️'];
@@ -84,7 +85,8 @@ function shapePost(row: any, viewerId?: string | null) {
     author: {
       id: user.id,
       username: user.username,
-      displayName: user.username ? `@${user.username}` : name || 'Trader',
+      // Legal (KYC) names are not published: handle, else first name + initial.
+      displayName: user.username ? `@${user.username}` : (user.firstName ? `${user.firstName}${user.lastName ? ` ${String(user.lastName).charAt(0)}.` : ''}` : 'Trader'),
       avatarUrl: looksLikeUrl(user.avatarUrl) ? user.avatarUrl : null,
       avatarEmoji: emojiForUser(user),
     },
@@ -222,8 +224,11 @@ export class AssetDiscussionController {
       const post = await (prisma as any).assetDiscussionPost.findUnique({ where: { id } });
       if (!post || post.deletedAt) throw new AppError('Post not found', 404);
       const isAuthor = post.userId === req.user.id;
-      const isAdmin = req.user.role === 'ADMIN';
-      if (!isAuthor && !isAdmin) throw new AppError('Not allowed', 403);
+      // Moderators are checked against the database (active staff with a
+      // support permission), not the role claim inside the access token.
+      const staff = isAuthor ? null : await loadStaffContext(req.user.id);
+      const isModerator = Boolean(staff && (staff.permissions.has('support.reply') || staff.permissions.has('support.read')));
+      if (!isAuthor && !isModerator) throw new AppError('Not allowed', 403);
       await (prisma as any).assetDiscussionPost.update({
         where: { id },
         data: { deletedAt: new Date() },
@@ -269,7 +274,7 @@ export class AssetDiscussionController {
   /** GET /moderation/queue — admin: posts pending review (reported/hidden). */
   static async moderationQueue(req: AuthRequest, res: Response, next: NextFunction) {
     try {
-      if (req.user?.role !== 'ADMIN') throw new AppError('Not allowed', 403);
+      // Route-level requireAdmin + requirePermission('support.read') guard this.
       const rows = await (prisma as any).assetDiscussionPost.findMany({
         where: { deletedAt: null, reportCount: { gt: 0 } },
         orderBy: { reportCount: 'desc' },

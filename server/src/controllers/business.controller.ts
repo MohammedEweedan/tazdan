@@ -14,6 +14,7 @@ import { assertCan, resolveBusiness, TEAM_ROLES } from '../services/business/acc
 import { approveBatch, businessStats, cancelPayout, createBatch, previewBulkPay, rejectBatch } from '../services/business/payouts.service';
 import { createKey, listKeys, revokeKey } from '../services/business/apiKeys.service';
 import { createEndpoint, publicEndpoint } from '../services/business/webhooks.service';
+import { enforceStepUp } from '../services/security/stepUp.service';
 
 const ctxOf = (req: AuthRequest) => resolveBusiness(req.user!.id);
 
@@ -61,13 +62,28 @@ export const BusinessController = {
       const ctx = await ctxOf(req);
       assertCan(ctx, 'profile.edit');
       const body = z.object({
-        tradingName: z.string().trim().min(1).max(120).optional(), website: z.string().trim().url().max(200).nullable().optional(),
-        logoUrl: z.string().trim().url().max(500).nullable().optional(), approvalThresholdUsd: z.number().min(0).max(10_000_000).nullable().optional(),
+        // https only: these render as links/images in the dashboard and cockpit,
+        // and z.url() alone accepts javascript: and data: URLs.
+        tradingName: z.string().trim().min(1).max(120).optional(), website: z.string().trim().url().max(200).regex(/^https:\/\//i, 'Website must be an https URL').nullable().optional(),
+        logoUrl: z.string().trim().url().max(500).regex(/^https:\/\//i, 'Logo must be an https URL').nullable().optional(), approvalThresholdUsd: z.number().min(0).max(10_000_000).nullable().optional(),
+        stepUpCode: z.string().regex(/^\d{6}$/).optional(),
       }).parse(req.body);
-      if (body.approvalThresholdUsd !== undefined && ctx.role !== 'OWNER') throw new AppError('Only the owner can change the approval threshold', 403);
+      const { stepUpCode, ...changes } = body;
+      if (changes.approvalThresholdUsd !== undefined && ctx.role !== 'OWNER') throw new AppError('Only the owner can change the approval threshold', 403);
       const before = ctx.business;
-      const updated = await prisma.businessProfile.update({ where: { id: before.id }, data: body });
-      await writeAudit(prisma, { actorId: ctx.userId, action: 'BUSINESS_PROFILE_UPDATED', entity: 'BusinessProfile', entityId: before.id, before: { tradingName: before.tradingName, website: before.website, logoUrl: before.logoUrl, approvalThresholdUsd: before.approvalThresholdUsd }, after: body });
+      // Raising the threshold switches off maker-checker (and the single-
+      // signatory step-up) for larger batches, so it needs a fresh security
+      // code — a stolen session alone must not be able to do it.
+      if (changes.approvalThresholdUsd !== undefined) {
+        const defaultUsd = Number(process.env.BUSINESS_APPROVAL_THRESHOLD_USD ?? 10_000);
+        const current = before.approvalThresholdUsd != null ? Number(before.approvalThresholdUsd) : defaultUsd;
+        const next = changes.approvalThresholdUsd ?? defaultUsd;
+        if (next > current) {
+          await enforceStepUp({ userId: ctx.userId, action: 'transfer', valueUsd: next, req, code: stepUpCode, biometricVerified: false });
+        }
+      }
+      const updated = await prisma.businessProfile.update({ where: { id: before.id }, data: changes });
+      await writeAudit(prisma, { actorId: ctx.userId, action: 'BUSINESS_PROFILE_UPDATED', entity: 'BusinessProfile', entityId: before.id, before: { tradingName: before.tradingName, website: before.website, logoUrl: before.logoUrl, approvalThresholdUsd: before.approvalThresholdUsd }, after: changes });
       res.json({ profile: { id: updated.id, legalName: updated.legalName ?? updated.companyName, tradingName: updated.tradingName, country: updated.country, kybStatus: updated.kybStatus, website: updated.website, logoUrl: updated.logoUrl, createdAt: updated.createdAt } });
     } catch (e) { next(e); }
   },
@@ -257,7 +273,10 @@ export const BusinessController = {
   },
 
   async approve(req: AuthRequest, res: Response, next: NextFunction) {
-    try { res.json({ batch: publicBatch(await approveBatch(await ctxOf(req), req.params.id)) }); } catch (e) { next(e); }
+    try {
+      const code = typeof req.body?.stepUpCode === 'string' ? req.body.stepUpCode : undefined;
+      res.json({ batch: publicBatch(await approveBatch(await ctxOf(req), req.params.id, { req, code })) });
+    } catch (e) { next(e); }
   },
 
   async reject(req: AuthRequest, res: Response, next: NextFunction) {

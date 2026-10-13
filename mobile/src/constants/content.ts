@@ -51,7 +51,7 @@ export const COPY = {
 
   onboarding: {
     step1: {
-      title: 'Arab roots. Crypto. Connected.',
+      title: 'Your money. Your next move.',
       body: 'Bring everyday money and supported crypto together, from Libya to the wider Arab world.',
     },
     step2: {

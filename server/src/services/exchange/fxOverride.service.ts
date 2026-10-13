@@ -1,6 +1,13 @@
 /**
  * Treasury FX override — maker-checker, with a reason and an expiry.
  *
+ * The same FX_OVERRIDE approval also carries LYD market-maker configuration
+ * changes: payload { kind: 'MARKET_MAKER_CONFIG', changes: { <setting>: <pips|…> } },
+ * requested through POST /api/cockpit/approvals and approved by a second
+ * holder of `fx.override`. Validation bounds and the application/audit live
+ * in lydMarketMaker.service.ts. (LYD pairs are priced from Fulus, so a rate
+ * override does not apply to them; the market maker is the control there.)
+ *
  * A treasury operator requests a manual rate for a pair (FX_OVERRIDE
  * approval). Once a second authorised person approves, the rate replaces the
  * live feed until `overrideExpiresAt` (max 24h), then the pair falls back to
@@ -12,6 +19,7 @@ import { AppError } from '../../middleware/errorHandler';
 import { registerApprovalHandler } from '../platform/approvals.service';
 import { writeAudit } from '../platform/audit';
 import { invalidateRate } from './fxRateProvider.service';
+import { applyMarketMakerRequest, isMarketMakerRequest, validateMarketMakerRequest } from './lydMarketMaker.service';
 
 const CURRENCIES = new Set(['USD', 'USDT', 'EUR', 'GBP', 'AED', 'SAR', 'EGP', 'LYD', 'TRY', 'TND']);
 
@@ -31,8 +39,12 @@ function check(p: Partial<OverridePayload>): OverridePayload {
 registerApprovalHandler('FX_OVERRIDE', {
   requestPermission: 'fx.override',
   approvePermission: 'fx.override',
-  validate: (payload) => { check(payload); },
+  validate: async (payload) => {
+    if (isMarketMakerRequest(payload)) { await validateMarketMakerRequest(payload); return; }
+    check(payload);
+  },
   execute: async (payload, ctx) => {
+    if (isMarketMakerRequest(payload)) return applyMarketMakerRequest(payload, ctx);
     const p = check(payload);
     const previous = await prisma.exchangeRate.findUnique({ where: { baseCurrency_quoteCurrency: { baseCurrency: p.base as any, quoteCurrency: p.quote as any } } });
     const expiresAt = new Date(Date.now() + p.expiresInMinutes * 60_000);

@@ -16,6 +16,7 @@ import type { RampPaymentMethod, RampProvider } from '@prisma/client';
 import { sendDepositConfirmed } from '../services/email';
 import { pushCopy, pushTxEvent } from '../services/push.service';
 import { assertMovementAllowed } from '../services/platform/controls.service';
+import { confirmBankDeposit } from '../services/wallet/bankDeposits.service';
 
 const depositSchema = z.object({
   currency: z.enum(['USD', 'EUR', 'GBP', 'AED', 'SAR', 'EGP', 'USDT', 'LYD', 'BTC', 'ETH', 'BNB', 'SOL', 'XRP', 'ADA', 'DOGE', 'MATIC', 'DOT', 'AVAX']),
@@ -28,6 +29,17 @@ const depositSchema = z.object({
 });
 
 const FIAT_CURRENCIES = new Set(['USD', 'EUR', 'GBP', 'AED', 'SAR', 'EGP', 'LYD']);
+
+/** Amount (minor units) and currency the provider reports as collected. */
+export function paidMinorUnits(raw: unknown): { minor: number; currency: string } | null {
+  const r = raw as any;
+  const o = r?.data?.object ?? r?.data ?? null;
+  if (!o || typeof o !== 'object') return null;
+  const minor = Number(o.amount_received ?? o.amount);
+  const currency = typeof o.currency === 'string' ? o.currency.toUpperCase() : null;
+  if (!Number.isSafeInteger(minor) || minor <= 0 || !currency) return null;
+  return { minor, currency };
+}
 
 export class DepositController {
   /**
@@ -87,83 +99,17 @@ export class DepositController {
   // bank account before releasing the credit.
   static async confirm(req: AuthRequest, res: Response, next: NextFunction) {
     try {
-      const { id } = req.params;
       // Look up by id alone; the admin is confirming someone else's
-      // pending deposit.  Scoping to req.user.id (the old behaviour)
-      // was the original bug — it made the route safe ONLY for the
-      // depositor, who was also the attacker.
-      const deposit = await prisma.deposit.findUnique({ where: { id } });
-
-      if (!deposit) throw new AppError('Deposit not found', 404);
-      if (deposit.status !== 'WAITING_CONFIRMATION') {
-        throw new AppError('Deposit is not waiting for confirmation', 400);
-      }
-
-      const depositorId = deposit.userId;
-      const adminId     = req.user!.id;
-
-      await prisma.$transaction(async (tx) => {
-        // Claim the transition before crediting: the conditional UPDATE
-        // makes a second concurrent confirm (two admins, a double-click, a
-        // retry) find the deposit no longer waiting and credit nothing.
-        const note = `Confirmed by admin ${adminId} at ${new Date().toISOString()}`;
-        const moved = await tx.deposit.updateMany({
-          where: { id: deposit.id, status: 'WAITING_CONFIRMATION' },
-          data: {
-            status: 'CONFIRMED',
-            confirmedAt: new Date(),
-            confirmedBy: adminId,
-            adminNotes: deposit.adminNotes ? `${deposit.adminNotes}\n${note}` : note,
-          },
-        });
-        assertTransitioned(moved, 'Deposit already processed');
-
-        // Credit the DEPOSITOR's wallet, not the admin's.
-        const wallet = await tx.wallet.findUnique({
-          where: { userId_currency: { userId: depositorId, currency: deposit.currency } },
-        });
-        const balanceBefore = parseFloat(wallet?.balance.toString() || '0');
-
-        await tx.wallet.upsert({
-          where:  { userId_currency: { userId: depositorId, currency: deposit.currency } },
-          update: { balance: { increment: deposit.amount } },
-          create: { userId: depositorId, currency: deposit.currency, balance: deposit.amount },
-        });
-
-        // Ledger mirror: money enters from the external on-ramp into the user.
-        if (isLedgerCurrency(deposit.currency)) {
-          await postLedger(tx, {
-            refType: 'deposit', refId: deposit.id, memo: `Deposit ${deposit.currency}`,
-            legs: [
-              { type: 'SYSTEM_ONRAMP', currency: deposit.currency as any, amount: new Decimal(deposit.amount.toString()).neg() },
-              { type: 'USER', userId: depositorId, currency: deposit.currency as any, amount: new Decimal(deposit.amount.toString()) },
-            ],
-          });
-        }
-
-        await tx.transaction.create({
-          data: {
-            userId: depositorId,
-            type: 'DEPOSIT',
-            currency: deposit.currency,
-            amount: deposit.amount,
-            balanceBefore,
-            balanceAfter: new (require('decimal.js'))(balanceBefore.toString()).add(deposit.amount).toString(),
-            reference: deposit.reference,
-            description: `Bank transfer deposit confirmed`,
-          },
-        });
-
-        await tx.notification.create({
-          data: {
-            userId: depositorId,
-            title: 'Deposit Confirmed',
-            message: `Your deposit of ${deposit.amount} ${deposit.currency} has been confirmed and credited to your account.`,
-            type: 'deposit',
-          },
-        });
+      // pending deposit. Segregation of duties (never your own deposit),
+      // dual control above the threshold and exactly-once crediting live in
+      // the shared service used by every staff confirmation path.
+      const result = await confirmBankDeposit({
+        depositId: req.params.id, staffId: req.user!.id, notes: typeof req.body?.notes === 'string' ? req.body.notes : null,
+        permissions: (req as any).staff?.permissions, req,
       });
-
+      if (!result.credited) {
+        return res.status(202).json({ message: 'A second staff member must approve this deposit before it is credited', pendingApproval: true, approvalId: result.approvalId });
+      }
       res.json({ message: 'Deposit confirmed and credited' });
     } catch (error) {
       next(error);
@@ -306,17 +252,24 @@ export class DepositController {
       const provider = getActiveOnRampProvider();
       const reference = generateReference('ONR');
       await assertMovementAllowed({ userId: req.user!.id, feature: 'deposits', currency: body.fiatCurrency });
+      // Charge and record the same amount: the card is charged in minor units,
+      // so the credit is exactly what the provider collects.
+      const amountCents = Math.round(body.fiatAmount * 100);
+      if (!Number.isSafeInteger(amountCents) || amountCents <= 0) throw new AppError('Invalid amount', 400);
 
       // Persist the intent BEFORE calling the provider so we can
       // correlate the webhook even if the response is lost in flight.
+      // The provider reference is never taken from the client: it is set
+      // only from the provider's own response below. (A client-chosen value
+      // let one payment be matched to a different, larger intent.)
       const txn = await prisma.onRampTransaction.create({
         data: {
           userId: req.user!.id,
           provider: provider.name as RampProvider,
-          providerRef: body.providerRef,
+          providerRef: null,
           reference,
           fiatCurrency: body.fiatCurrency.toUpperCase() as Currency,
-          fiatAmount: body.fiatAmount,
+          fiatAmount: amountCents / 100,
           cryptoCurrency: body.cryptoCurrency.toUpperCase() as Currency,
           cryptoAmount: 0,                 // updated by webhook
           exchangeRate: 0,                 // updated when quote refreshed
@@ -326,15 +279,28 @@ export class DepositController {
         },
       });
 
-      const result = await provider.confirm({
-        providerRef: body.providerRef,
-        // For Stripe we tunnel the amount + currency here.
-        paymentToken: JSON.stringify({
-          amountCents: Math.round(body.fiatAmount * 100),
-          currency: body.fiatCurrency,
-          idempotencyKey: body.idempotencyKey,
-        }),
-      });
+      let result;
+      try {
+        result = await provider.confirm({
+          // Our own reference travels with the payment (Stripe metadata,
+          // Checkout reference), never the client-supplied one.
+          providerRef: reference,
+          // For Stripe we tunnel the amount + currency here.
+          paymentToken: JSON.stringify({
+            amountCents,
+            currency: body.fiatCurrency,
+            // Scoped to this user so one customer's key can never collide
+            // with another's at the provider.
+            idempotencyKey: body.idempotencyKey ? `${req.user!.id}:${body.idempotencyKey}` : undefined,
+          }),
+        });
+      } catch (err) {
+        await prisma.onRampTransaction.update({
+          where: { id: txn.id },
+          data: { status: 'FAILED', failureReason: String((err as Error)?.message ?? err).slice(0, 300) },
+        }).catch(() => undefined);
+        throw err;
+      }
 
       await prisma.onRampTransaction.update({
         where: { id: txn.id },
@@ -371,24 +337,62 @@ export class DepositController {
 
       // Idempotent: update the on-ramp transaction, and on COMPLETED
       // credit the user wallet exactly once.
-      const txn = await prisma.onRampTransaction.findFirst({
-        where: { providerRef: event.providerRef },
+      const matches = await prisma.onRampTransaction.findMany({
+        where: { providerRef: event.providerRef, provider: provider.name as RampProvider },
+        take: 2,
       });
-      if (!txn) {
+      if (matches.length === 0) {
         // Stripe will retry — return 200 anyway, the txn may not be
         // created yet if confirm() raced the webhook.
         return res.status(200).json({ ok: true, reason: 'unknown-ref' });
       }
+      if (matches.length > 1) {
+        // Never guess which intent a payment belongs to.
+        logger.error('[deposit.webhookStripe] provider reference matches several intents — not credited', { providerRef: event.providerRef });
+        return res.status(200).json({ ok: false, reason: 'ambiguous-ref' });
+      }
+      const txn = matches[0];
       if (txn.status === 'COMPLETED' && event.status === 'COMPLETED') {
         return res.json({ ok: true, idempotent: true });
       }
+      if (event.status === 'COMPLETED') {
+        // Credit what the provider says it collected, and only if that is the
+        // amount and currency this intent was created for.
+        const paid = paidMinorUnits(event.raw);
+        const expected = Math.round(Number(txn.fiatAmount) * 100);
+        if (!paid || paid.minor !== expected || paid.currency !== txn.fiatCurrency) {
+          logger.error('[deposit.webhookStripe] paid amount/currency differs from the intent — not credited', {
+            id: txn.id, expected, currency: txn.fiatCurrency, paid,
+          });
+          await prisma.onRampTransaction.updateMany({
+            where: { id: txn.id, status: { not: 'COMPLETED' } },
+            data: { status: 'PROCESSING', failureReason: 'Paid amount differs from the intent — operator review required' },
+          });
+          return res.status(200).json({ ok: false, reason: 'amount-mismatch' });
+        }
+      }
 
+      let credited = false;
       await prisma.$transaction(async (tx) => {
-        await tx.onRampTransaction.update({
-          where: { id: txn.id },
-          data: { status: event.status },
+        if (event.status !== 'COMPLETED') {
+          // A credited payment never moves back to a pending state from a
+          // late or out-of-order event (that is what let a re-delivered
+          // "succeeded" credit twice). Refunds after crediting need an
+          // operator and a ledger reversal.
+          await tx.onRampTransaction.updateMany({
+            where: { id: txn.id, status: { not: 'COMPLETED' }, completedAt: null },
+            data: { status: event.status },
+          });
+          return;
+        }
+        // Claim the credit: exactly one delivery moves the intent to
+        // COMPLETED; concurrent or repeated deliveries credit nothing.
+        const claimed = await tx.onRampTransaction.updateMany({
+          where: { id: txn.id, status: { not: 'COMPLETED' }, completedAt: null },
+          data: { status: 'COMPLETED', completedAt: new Date() },
         });
-        if (event.status === 'COMPLETED' && txn.status !== 'COMPLETED') {
+        if (claimed.count !== 1) return;
+        {
           // Credit the fiat wallet.
           await tx.wallet.upsert({
             where: { userId_currency: { userId: txn.userId, currency: txn.fiatCurrency } },
@@ -428,11 +432,12 @@ export class DepositController {
               type: 'deposit',
             },
           });
+          credited = true;
         }
       });
 
       // Transactional email + push (fiat card deposit). Fire-and-forget.
-      if (event.status === 'COMPLETED' && txn.status !== 'COMPLETED') {
+      if (credited) {
         (async () => {
           try {
             const u = await prisma.user.findUnique({
@@ -495,7 +500,9 @@ export class DepositController {
           .createHmac('sha256', signingKey)
           .update(rawBody)
           .digest('hex');
-        if (!crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected))) {
+        const sigBuf = Buffer.from(String(sig));
+        const expBuf = Buffer.from(expected);
+        if (sigBuf.length !== expBuf.length || !crypto.timingSafeEqual(sigBuf, expBuf)) {
           logger.warn('[webhook:alchemy] invalid signature');
           return res.status(401).json({ error: 'Invalid signature' });
         }
@@ -543,7 +550,9 @@ export class DepositController {
       }
       if (apiKey) {
         const provided = req.headers['x-api-key'] as string | undefined;
-        if (!provided || provided !== apiKey) {
+        const got = Buffer.from(String(provided ?? ''));
+        const want = Buffer.from(apiKey);
+        if (got.length !== want.length || !crypto.timingSafeEqual(got, want)) {
           logger.warn('[webhook:trongrid] invalid API key');
           return res.status(401).json({ error: 'Unauthorized' });
         }

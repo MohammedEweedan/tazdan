@@ -122,6 +122,11 @@ interface UsageWindow {
 
 interface UsageRow { amount: Prisma.Decimal; currency: string; createdAt: Date }
 
+function assetOf(metadata: unknown): string | null {
+  const a = metadata && typeof metadata === 'object' ? (metadata as Record<string, unknown>).asset : null;
+  return typeof a === 'string' && /^[A-Z0-9_]{2,15}$/.test(a.toUpperCase()) ? a.toUpperCase().replace(/_(ERC20|TRC20|BEP20)$/, '') : null;
+}
+
 // ── Calendar periods in the limits time zone ─────────────────────────
 export const LIMITS_TIMEZONE = () => process.env.LIMITS_TIMEZONE ?? 'Africa/Tripoli';
 
@@ -178,8 +183,35 @@ async function getUsage(userId: string, action: LimitedAction, now = new Date())
   } else {
     rows = (await prisma.transaction.findMany({
       where: { userId, type: { in: TX_TYPES_FOR_ACTION[action] }, createdAt: { gte: monthStart } },
-      select: { amount: true, currency: true, createdAt: true },
-    })).map((r) => ({ amount: r.amount, currency: r.currency as string, createdAt: r.createdAt }));
+      select: { amount: true, currency: true, createdAt: true, metadata: true },
+    })).map((r) => ({
+      amount: r.amount,
+      // Long-tail coins sent person-to-person are recorded under a
+      // placeholder currency (USDT) with the real asset in metadata; value
+      // them as the asset actually sent. (Trade rows carry the traded asset
+      // in metadata while amount is the settlement amount — not applicable.)
+      currency: (action === 'SEND' ? assetOf(r.metadata) : null) ?? (r.currency as string),
+      createdAt: r.createdAt,
+    }));
+    if (action === 'SEND') {
+      // Value already committed to leave but not yet booked as TRANSFER_OUT:
+      // pending claim links (booked when claimed) and P2P escrow handed to a
+      // buyer (booked as a SELL on completion). Without these, many pending
+      // links or trades — each under the per-transaction cap — added up to
+      // far more than the daily limit.
+      const [links, trades] = await Promise.all([
+        prisma.claimLink.findMany({
+          where: { senderId: userId, status: 'PENDING', createdAt: { gte: monthStart } },
+          select: { amount: true, asset: true, createdAt: true },
+        }),
+        prisma.p2PTrade.findMany({
+          where: { sellerId: userId, status: { notIn: ['CANCELLED', 'EXPIRED'] }, createdAt: { gte: monthStart } },
+          select: { cryptoAmount: true, currency: true, baseAsset: true, createdAt: true },
+        }),
+      ]);
+      for (const l of links) rows.push({ amount: l.amount, currency: l.asset as string, createdAt: l.createdAt });
+      for (const t of trades) rows.push({ amount: t.cryptoAmount, currency: (t.baseAsset ?? t.currency) as string, createdAt: t.createdAt });
+    }
   }
 
   const rates = new Map<string, number>();

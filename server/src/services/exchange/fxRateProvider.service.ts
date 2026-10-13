@@ -19,6 +19,7 @@ import Decimal from 'decimal.js';
 import { Currency } from '@prisma/client';
 import { prisma } from '../../utils/prisma';
 import { FULUS_CURRENCIES, getFulusLydRate } from './fulus.service';
+import { invalidateLydMarketMaker, lydMarketMakerView, lydRatePair } from './lydMarketMaker.service';
 
 /** Cash LYD pairs are priced from Fulus in either direction. */
 export function isFulusPair(base: string, quote: string): boolean {
@@ -31,7 +32,11 @@ export function isFulusPair(base: string, quote: string): boolean {
  *  persist paths instead of spamming prisma validation errors. */
 const isDbCurrency = (c: string): boolean => c in Currency;
 
-interface RatePair { buyPrice: string; sellPrice: string; source: string; fetchedAt: Date; }
+interface RatePair {
+  buyPrice: string; sellPrice: string; source: string; fetchedAt: Date;
+  /** Staff-only market-maker view. Set by getLiveProviderRate, never by getRate. */
+  marketMaker?: unknown;
+}
 interface ProviderMid { mid: number; source: string; derived?: boolean }
 
 // Cache structure: `${base}/${quote}` → { value, expires }
@@ -375,7 +380,37 @@ export function guardRateJump(key: string, mid: number, source: string, now = Da
  */
 const MAX_OVERRIDE_AGE_MS = Number(process.env.FX_OVERRIDE_MAX_AGE_MS ?? 2 * 60 * 60 * 1000);
 
+/**
+ * Fulus pairs (X/LYD and LYD/X) are priced by the LYD market maker: two-sided
+ * pip quotes around the Fulus reference, with the demand skew and the floor
+ * and cap clamps. No 60-second cache here; the market maker caches its
+ * inputs briefly and checks the pair's kill switch on every call.
+ */
+const lydPersistedAt = new Map<string, number>();
+async function getLydMarketRate(base: string, quote: string): Promise<RatePair> {
+  const pair: RatePair = await lydRatePair(base, quote);
+  if (base === 'USD' && quote === 'LYD') {
+    const { noteLydPrice } = await import('./lydOrderBook.service');
+    noteLydPrice((Number(pair.buyPrice) + Number(pair.sellPrice)) / 2); // history sampler's live price
+  }
+  // Persist the latest quote for admin views (isActive=false, never an
+  // override), at most once a minute per pair.
+  const k = `${base}/${quote}`;
+  const now = Date.now();
+  if (isDbCurrency(base) && isDbCurrency(quote) && now - (lydPersistedAt.get(k) ?? 0) > CACHE_TTL_MS) {
+    lydPersistedAt.set(k, now);
+    void Promise.resolve(prisma.exchangeRate.upsert({
+      where: { baseCurrency_quoteCurrency: { baseCurrency: base as any, quoteCurrency: quote as any } },
+      create: { baseCurrency: base as any, quoteCurrency: quote as any, buyPrice: pair.buyPrice, sellPrice: pair.sellPrice, isActive: false },
+      update: { buyPrice: pair.buyPrice, sellPrice: pair.sellPrice },
+    })).catch(() => { /* non-critical */ });
+  }
+  return pair;
+}
+
 export async function getRate(base: string, quote: string): Promise<RatePair> {
+  if (isFulusPair(base, quote)) return getLydMarketRate(base, quote);
+
   // Memory cache (cuts back-to-back screen loads to single-digit ms).
   const k = `${base}/${quote}`;
   const now = Date.now();
@@ -417,25 +452,9 @@ export async function getRate(base: string, quote: string): Promise<RatePair> {
   }
   if (providerRate != null) {
     let mid = providerRate.mid;
-    // Adaptive USD/LYD: lift the scraped market FLOOR by the current demand
-    // skew. Skew is >= 0, so the result never dips below the street rate even
-    // when platform demand is low. Applied to both USD/LYD and the derived
-    // LYD/USD (where the skew makes LYD/USD slightly *cheaper*, consistently).
-    let skewSource = '';
-    if (base === 'USD' && quote === 'LYD' && providerRate.source !== 'fulus') {
-      const { applyLydDemandSkew, currentLydSkewPct, noteLydPrice } = await import('./lydOrderBook.service');
-      mid = (applyLydDemandSkew(mid)).toNumber();
-      noteLydPrice(mid); // feed the history sampler the live effective price
-      if (currentLydSkewPct() > 0) skewSource = '+skew';
-    } else if (base === 'LYD' && quote === 'USD' && providerRate.source !== 'fulus') {
-      const { currentLydSkewPct } = await import('./lydOrderBook.service');
-      const skew = currentLydSkewPct();
-      if (skew > 0) { mid = mid / (1 + skew); skewSource = '+skew'; }
-    }
-    if (base === 'USD' && quote === 'LYD' && providerRate.source === 'fulus') {
-      const { noteLydPrice } = await import('./lydOrderBook.service');
-      noteLydPrice(mid);
-    }
+    // Demand skew for LYD lives in the market maker (Fulus pairs return
+    // above). Scraped-only LYD pairs (CAD, CHF, KWD) are not traded and keep
+    // the plain percentage spread.
     // Parallel-market pairs: never let a feed switch move the quote silently.
     let heldSource = '';
     if (PARALLEL_ONLY_QUOTES.has(quote.toUpperCase()) || PARALLEL_ONLY_QUOTES.has(base.toUpperCase())) {
@@ -444,7 +463,7 @@ export async function getRate(base: string, quote: string): Promise<RatePair> {
     }
     const { buy, sell } = await applySpread(base, quote, mid);
     const baseSource = `${providerRate.derived ? 'derived' : 'live'}:${providerRate.source}${heldSource}`;
-    const pair: RatePair = { buyPrice: buy, sellPrice: sell, source: baseSource + skewSource, fetchedAt: new Date() };
+    const pair: RatePair = { buyPrice: buy, sellPrice: sell, source: baseSource, fetchedAt: new Date() };
     memoryCache.set(k, { value: pair, expires: now + CACHE_TTL_MS });
 
     // Persist the latest fetched rate so admin UIs can read recent history.
@@ -489,6 +508,7 @@ export async function getRate(base: string, quote: string): Promise<RatePair> {
 /** Force-refresh cache for a pair. Called by admin "refresh rate" endpoint. */
 export function invalidateRate(base: string, quote: string) {
   memoryCache.delete(`${base}/${quote}`);
+  if (base === 'LYD' || quote === 'LYD') invalidateLydMarketMaker();
 }
 
 /**
@@ -496,31 +516,29 @@ export function invalidateRate(base: string, quote: string) {
  * surfaces to show "what the market is right now" next to the stored value, so
  * a stale override is visible rather than silently winning. Returns null when
  * no provider can price the pair (the caller decides how to render that).
+ *
+ * Fulus pairs return the raw Fulus reference (buy = sell = reference) plus a
+ * staff-only `marketMaker` view: bid, ask, mid, skew, widening, flow,
+ * configuration and halt state. Only staff endpoints call this function.
  */
 export async function getLiveProviderRate(base: string, quote: string): Promise<RatePair | null> {
+  if (isFulusPair(base, quote)) {
+    const currency = base === 'LYD' ? quote : base;
+    const rate = await getFulusLydRate(currency);
+    if (rate == null) return null;
+    const mid = quote === 'LYD' ? rate : 1 / rate;
+    const marketMaker = await lydMarketMakerView(currency).catch((e: Error) => ({ error: e.message }));
+    return { buyPrice: mid.toFixed(8), sellPrice: mid.toFixed(8), source: quote === 'LYD' ? 'live:fulus' : 'derived:fulus', fetchedAt: new Date(), marketMaker };
+  }
   let providerRate = await fetchProviderMid(base, quote);
   if (providerRate == null) {
     const inv = await fetchProviderMid(quote, base);
     if (inv != null && inv.mid > 0) providerRate = { mid: 1 / inv.mid, source: inv.source, derived: true };
   }
   if (providerRate == null) return null;
-  let mid = providerRate.mid;
-
-  // Mirror getRate's USD/LYD demand-skew so the "live" figure matches what a
-  // user would actually transact at.
-  let skewSource = '';
-  if (base === 'USD' && quote === 'LYD' && providerRate.source !== 'fulus') {
-    const { applyLydDemandSkew, currentLydSkewPct } = await import('./lydOrderBook.service');
-    mid = applyLydDemandSkew(mid).toNumber();
-    if (currentLydSkewPct() > 0) skewSource = '+skew';
-  } else if (base === 'LYD' && quote === 'USD' && providerRate.source !== 'fulus') {
-    const { currentLydSkewPct } = await import('./lydOrderBook.service');
-    const skew = currentLydSkewPct();
-    if (skew > 0) { mid = mid / (1 + skew); skewSource = '+skew'; }
-  }
-  const { buy, sell } = await applySpread(base, quote, mid);
+  const { buy, sell } = await applySpread(base, quote, providerRate.mid);
   const baseSource = `${providerRate.derived ? 'derived' : 'live'}:${providerRate.source}`;
-  return { buyPrice: buy, sellPrice: sell, source: baseSource + skewSource, fetchedAt: new Date() };
+  return { buyPrice: buy, sellPrice: sell, source: baseSource, fetchedAt: new Date() };
 }
 
 /**

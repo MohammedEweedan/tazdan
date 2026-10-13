@@ -15,6 +15,17 @@ import { Decimal } from '@prisma/client/runtime/library';
 import { AppError } from '../../middleware/errorHandler';
 import { debitAvailable, lockUserWallets, lockWallets, parsePositiveAmount } from './atomicWallet';
 
+/**
+ * A move needs two different people. Same-account "moves" are refused here so
+ * no caller can forget it: for the altBalances path the second write would
+ * overwrite the first with a stale map and credit the amount out of nothing.
+ */
+function assertTwoParties(senderId: string, receiverId: string): void {
+  if (!senderId || !receiverId || senderId === receiverId) {
+    throw new AppError('Cannot transfer to yourself', 400);
+  }
+}
+
 type Tx = Prisma.TransactionClient;
 
 export interface MoveResult {
@@ -33,12 +44,18 @@ export const USER_WALLET_COLUMNS = {
 } as const;
 export type UserWalletColumn = (typeof USER_WALLET_COLUMNS)[keyof typeof USER_WALLET_COLUMNS];
 
+/** NUMERIC scale of each UserWallet balance column (prisma/schema.prisma). */
+const COLUMN_SCALE: Record<UserWalletColumn, number> = {
+  ethBalance: 18, btcBalance: 8, solBalance: 9, usdtErc20Bal: 6, usdtTrc20Bal: 6,
+};
+
 const dec = (v: unknown) => new Decimal((v ?? 0).toString());
 
 /** Move a Wallet-table balance. The receiver's row is created if missing. */
 export async function moveWalletBalance(
   tx: Tx, senderId: string, receiverId: string, currency: string, amount: unknown,
 ): Promise<MoveResult> {
+  assertTwoParties(senderId, receiverId);
   const amt = parsePositiveAmount(amount);
   const where = (userId: string) => ({ userId_currency: { userId, currency: currency as any } });
 
@@ -67,10 +84,16 @@ export async function moveWalletBalance(
 export async function moveUserWalletColumn(
   tx: Tx, senderId: string, receiverId: string, column: UserWalletColumn, asset: string, amount: unknown,
 ): Promise<MoveResult> {
+  assertTwoParties(senderId, receiverId);
   if (!Object.values(USER_WALLET_COLUMNS).includes(column)) {
     throw new AppError('Unsupported balance column', 400);
   }
   const amt = parsePositiveAmount(amount);
+  // Each column has its own scale; beyond it Postgres rounds the debit and the
+  // credit separately and the pair stops summing to zero.
+  if (amt.decimalPlaces() > COLUMN_SCALE[column]) {
+    throw new AppError(`${asset} amounts support at most ${COLUMN_SCALE[column]} decimal places`, 400);
+  }
 
   await lockUserWallets(tx, [senderId, receiverId]);
   const [sender, receiver] = await Promise.all([
@@ -102,6 +125,7 @@ export async function moveUserWalletColumn(
 export async function moveAltBalance(
   tx: Tx, senderId: string, receiverId: string, asset: string, amount: unknown,
 ): Promise<MoveResult> {
+  assertTwoParties(senderId, receiverId);
   const amt = parsePositiveAmount(amount);
 
   await lockUserWallets(tx, [senderId, receiverId]);

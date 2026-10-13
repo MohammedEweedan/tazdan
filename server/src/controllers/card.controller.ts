@@ -10,7 +10,7 @@ import { postLedger, isLedgerCurrency } from '../services/ledger/ledger.service'
 import { assertTransitioned, debitAvailable, lockBudget, settleReserve } from '../services/wallet/atomicWallet';
 import { enforceKycLimit } from '../utils/kycLimits';
 import { emitActivity } from '../utils/realtime';
-import { isDateLocked, requiresStepUp } from '../services/budget.service';
+import { assertReleasable, isDateLocked, requiresStepUp } from '../services/budget.service';
 import { getActiveCardIssuer, getCardIssuer } from '../services/cardIssuer';
 import { assertMovementAllowed } from '../services/platform/controls.service';
 import { issueStepUp, verifyStepUp } from '../services/security/stepUp.service';
@@ -553,12 +553,14 @@ export class CardController {
       if (isDateLocked(budget)) {
         throw new AppError(`Locked until ${new Date(budget.unlockDate!).toISOString().slice(0, 10)}`, 403);
       }
+      let stepUpVerified = false;
       if (requiresStepUp(budget)) {
         if (!stepUpCode) {
           const { method } = await issueStepUp(userId, 'withdrawal');
           return res.status(401).json({ requiresStepUp: true, method });
         }
         await verifyStepUp(userId, 'withdrawal', stepUpCode);
+        stepUpVerified = true;
       }
 
       await enforceKycLimit(userId, 'SEND', amount, budget.currency);
@@ -569,6 +571,8 @@ export class CardController {
         // may have changed, and two loads must not both spend it.
         await lockBudget(tx, budget.id);
         const locked = await tx.budgetWallet.findUniqueOrThrow({ where: { id: budget.id } });
+        // The lock is re-checked on the locked row (it may have changed).
+        assertReleasable(locked, stepUpVerified);
         if (new Decimal(locked.balance.toString()).lt(amt)) throw new AppError('Amount exceeds budget balance', 400);
 
         // Release the budget hold AND move the money off the wallet onto the card.

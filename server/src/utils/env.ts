@@ -21,6 +21,8 @@ const PLACEHOLDER_FRAGMENTS = [
   'your-refresh-secret',
   'changeme',
   'placeholder',
+  'changemeinproduction',
+  'secret123',
 ];
 
 function fail(msg: string): never {
@@ -51,8 +53,10 @@ export function validateEnv() {
     if (!v || v.length < 16) {
       fail(`Missing or too-short ${key}. Generate with: openssl rand -hex 48`);
     }
-    const lower = v.toLowerCase();
-    if (PLACEHOLDER_FRAGMENTS.some((p) => lower.includes(p))) {
+    // Compare without punctuation so "change_me_in_production" (the dev
+    // compose default) is caught as well as "change-in-production".
+    const bare = v.toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (PLACEHOLDER_FRAGMENTS.some((p) => bare.includes(p.replace(/[^a-z0-9]/g, '')))) {
       fail(`${key} looks like the placeholder value. Replace before starting.`);
     }
   }

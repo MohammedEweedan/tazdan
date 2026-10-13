@@ -201,6 +201,18 @@ const { data: messages = [], isLoading } = useThread(partnerId);  const sendMut 
   const [composerHeight, setComposerHeight] = useState(36);
   const [editing, setEditing] = useState<ApiMessage | null>(null);
   const [paymentSheet, setPaymentSheet] = useState(false);
+  // Recipient eligibility, checked while the payment sheet is open so the
+  // sender hears "can't receive right now" before sending (UX only — the
+  // transfer endpoint still enforces it). Never more specific than that.
+  const { data: payEligibility } = useQuery({
+    queryKey: ['recipient-check', partnerId],
+    queryFn: () => messageService.recipientCheck(partnerId),
+    enabled: paymentSheet && !!partnerId,
+    staleTime: 30_000,
+  });
+  const payBlockedNotice = payEligibility?.canReceive === false
+    ? (payEligibility.reason === 'SELF' ? t('confirm.recipientSelf') : t('confirm.recipientUnavailable'))
+    : null;
   const [requestSheet, setRequestSheet] = useState(false);
   const [profileSheet, setProfileSheet] = useState(false);
   const [reportTarget, setReportTarget] = useState<{ messageId?: string } | null>(null);
@@ -889,6 +901,7 @@ const { data: messages = [], isLoading } = useThread(partnerId);  const sendMut 
       <SendMoneySheet
         visible={paymentSheet}
         palette={p}
+        blockedNotice={payBlockedNotice}
         mode="SEND"
         recipientLabel={partner ? (partner.username ? `@${partner.username}` : `${partner.firstName ?? ''} ${partner.lastName ?? ''}`.trim()) : undefined}
         onClose={() => setPaymentSheet(false)}

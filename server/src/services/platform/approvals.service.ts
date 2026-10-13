@@ -14,12 +14,30 @@ import { AppError } from '../../middleware/errorHandler';
 import { logger } from '../../utils/logger';
 import { writeAudit } from './audit';
 import type { Permission } from './rbac';
+import { assertNotSelf } from './segregation';
+
+/**
+ * Customers who benefit from an approval. The requester and the approver must
+ * both be someone else: requester ≠ approver alone still let a staff member
+ * approve a colleague's request to credit the approver's own account.
+ */
+async function beneficiariesOf(type: string, payload: any, subjectType?: string | null, subjectId?: string | null): Promise<string[]> {
+  const ids: string[] = [];
+  if (payload && typeof payload.userId === 'string') ids.push(payload.userId);
+  if (subjectType === 'USER' && subjectId) ids.push(subjectId);
+  if (type === 'REMITTANCE_REFUND' && typeof payload?.transferId === 'string') {
+    const t = await prisma.remittanceTransfer.findUnique({ where: { id: payload.transferId }, select: { userId: true } }).catch(() => null);
+    if (t?.userId) ids.push(t.userId);
+  }
+  return ids;
+}
 
 export type ApprovalType =
   | 'LEDGER_ADJUSTMENT'
   | 'REMITTANCE_REFUND'
   | 'FX_OVERRIDE'
-  | 'DEPOSIT_ACCOUNT_CHANGE';
+  | 'DEPOSIT_ACCOUNT_CHANGE'
+  | 'DEPOSIT_CONFIRMATION';
 
 interface Handler {
   /** Permission needed to request this type. */
@@ -69,6 +87,7 @@ export async function requestApproval(input: {
     throw new AppError('A reason of at least 10 characters is required', 400);
   }
   await h.validate(input.payload);
+  assertNotSelf(input.requestedById, await beneficiariesOf(input.type, input.payload, input.subjectType, input.subjectId), `approval_request:${input.type}`, { ipAddress: input.req?.ip });
   const row = await prisma.$transaction(async (tx) => {
     const created = await tx.approvalRequest.create({
       data: {
@@ -108,6 +127,7 @@ export async function decideApproval(input: {
   if (request.requestedById === input.deciderId) {
     throw new AppError('The requester cannot approve their own request (maker-checker)', 403, 'AUTHORIZATION');
   }
+  assertNotSelf(input.deciderId, await beneficiariesOf(request.type, request.payload, request.subjectType, request.subjectId), `approval_decide:${request.type}`, { ipAddress: input.req?.ip });
   if (request.status !== 'PENDING') throw new AppError(`Request is already ${request.status.toLowerCase()}`, 409);
   if (request.expiresAt.getTime() < Date.now()) {
     await prisma.approvalRequest.updateMany({ where: { id: request.id, status: 'PENDING' }, data: { status: 'EXPIRED' } });

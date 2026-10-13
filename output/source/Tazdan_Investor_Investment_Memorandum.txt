@@ -1,0 +1,525 @@
+tazdan
+CONFIDENTIAL / INVESTOR & STRATEGIC REVIEW
+Financial infrastructure
+for Libya and beyond.
+An integrated money platform for consumers, businesses
+and the partners that serve them.
+$2.0m 10% 5,000
+Total primary + secondary investment Total investor ownership after closing Month-12 active-user target
+INVESTMENT MEMORANDUM
+13 October 2026 | Pre-revenue funding proposal | USD
+$400k to the owner for existing shares; $1.6m to Tazdan for its first 1-3 years.
+Same-price proposal: $18.4m pre-money / $20m post-money.
+Growth, revenue and the funding horizon are modeled objectives, conditional on costs, approvals and execution.
+
+TAZDAN / INVESTOR MEMORANDUM 01 / INVESTMENT
+The investment in one page
+Tazdan already has the integrated software foundation of a fintech platform. The funding opportunity is to turn
+that foundation into a trusted, licensed money service with measurable customer activity and repeat
+transaction revenue.
+$2.44m 5,000 $49.2k
+Upper engineering reproduction-cost Modeled monthly active users by month Base month-12 revenue; scenario, not
+estimate [I1] 12 traction
+What exists What investment unlocks
+Mobile consumer app, business payouts, public API and Licensed partner activation, safeguarding arrangements
+staff operations and commercial distribution
+Ledger, risk, treasury, reconciliation and release controls Independent assurance, current release acceptance and
+controlled real-money pilot
+Libya-focused FX and 12 sandbox remittance corridors First approved live corridor, actual settlement economics
+and recurring customer usage
+The proposed transaction
+$2.0 million total for 10% ownership: $400,000 paid to the founder/owner for existing shares and $1,600,000
+invested into Tazdan to support its first 1-3 years. At the same share price, this comprises 2% purchased from
+the owner plus 8% newly issued, measured fully diluted after closing. Implied valuation: $18.4m pre-money /
+$20m post-money; final cap table and rights to be agreed.
+The business thesis
+Start with a focused Libya corridor and repeat users: households moving money, diaspora families supporting
+relatives, and businesses paying Tazdan customers. Earn disclosed spread and transaction fees; use wallets,
+chat and business tools to drive retention. Add corridors and issuer products only after the first economics and
+controls work in production.
+Base case at month 12: $49,175 revenue, 70.2% gross margin and a $4,806 operating loss after team,
+compliance and acquisition spending. At the same unit economics and acquisition intensity, operating
+break-even is approximately 5,920 active users.
+Pre-revenue status is supplied in the founder brief. No verified production user, revenue, partner-contract or audit traction is
+represented. Technology cost estimates and the proposed equity valuation are separate measures.
+Confidential | 13 October 2026 | All financial figures in USD 02
+
+TAZDAN / INVESTOR MEMORANDUM 02 / PRODUCT SCREENSHOTS
+The app: everyday money
+Repository-supplied app captures. Displayed balances, prices and identities are sample UI data, not financial evidence.
+Wallet and portfolio Send money Exchange
+Balances, assets and activity. Recipient and amount flow. Asset discovery and trading.
+One customer relationship, several repeat uses
+The app brings funding, wallet balances, internal payments, conversion, transaction history and support into a
+single interface. Local language, clear payment confirmations and a usable operations backend are part of the
+product value.
+Households use wallets and internal payments. Diaspora families use cross-border transfers after corridor activation. Traders use
+quoted conversion within approved products and risk limits.
+Screens show the product experience; code implementation and UI presence do not establish a live licensed service. Production
+money features are explicitly gated. [I2-I5]
+Confidential | 13 October 2026 | All financial figures in USD 03
+
+TAZDAN / INVESTOR MEMORANDUM 03 / PRODUCT SCREENSHOTS
+Business and cross-border journeys
+Actual app assets supplied with the repository. The remittance flow currently operates against sandbox rails.
+Business dashboard Bulk payouts Send abroad
+Account and payment activity. Pay multiple Tazdan users. Partner activation required.
+Business volume can deepen the customer network
+Businesses have KYB review, teams, approval workflows and batch payouts. A business can pay workers,
+suppliers or other recipients who are Tazdan customers. The public API supports integration with business
+systems; signed webhooks report payout outcomes.
+The cross-border engine adds beneficiary records, auditable quotes, screening, routing, treasury reservations,
+payout status, refunds and reconciliation. Twelve corridor configurations cover Libya in both directions with the
+UK, euro area, Egypt, Turkey, UAE and Tunisia.
+Screenshot assets: client/public/app/screens/en-light/{business-home,business-bulk,remit}.webp. Business capabilities [I4];
+cross-border state and pricing [I5].
+Confidential | 13 October 2026 | All financial figures in USD 04
+
+TAZDAN / INVESTOR MEMORANDUM 04 / OPERATING MODEL
+How the business will operate
+Acquire and verify
+1
+A customer registers, completes required checks and agrees the approved terms.
+Fund and quote
+2
+A supported bank or approved rail funds the wallet; Tazdan presents the executable price and fee.
+Reserve and route
+3
+The ledger reserves funds; risk and limits determine whether to proceed or review.
+Deliver and record
+4
+Internal credit or activated partner payout completes; earned fees and spread are recorded.
+Reconcile and retain
+5
+Provider statements and ledgers reconcile; support, history and repeat use close the loop.
+The proposed launch structure
+Tazdan operates the product, technology, customer journey and control workflows. Authorised entities and
+contracted banks, payout providers and liquidity venues perform the regulated activities within their agreed
+legal scope. Entity structure, allocation of compliance duties and customer-fund ownership must be fixed in
+contracts before activation.
+Money and revenue are accounted for separately
+Customer balances and transfer principal are obligations or settlement flows. Revenue consists of earned fees
+and spread, not the value of money passing through the system. Corporate capital funds operating expenses
+and prefunding; customer funds are not a source of business profit or funding.
+This is the proposed commercial operating model, not a statement that approvals or contracts already exist. Manual bank confirmation
+and payout operations require named staff, cutoffs and daily close procedures. [I3-I6]
+Confidential | 13 October 2026 | All financial figures in USD 05
+
+TAZDAN / INVESTOR MEMORANDUM 05 / PROPRIETARY PLATFORM
+Technology worth building on
+97 85 55
+Prisma data models Mobile route files, excluding layouts Web page routes; 33 in admin
+Current static review also finds 57 migrations and approximately 139,000 application source lines across
+server, mobile and web, including tests. Breadth is supported by the workflows and controls below; line count
+is not a valuation method.
+Layer Integrated capabilities Commercial implication
+Customer surfaces Expo iOS/Android; Next.js web; business and staff Several customer segments share one financial
+interfaces core.
+Money core PostgreSQL-enforced double entry; holds; conditional Money movement can be traced and operational
+transitions; append-only evidence exceptions investigated.
+FX and delivery Fulus-referenced LYD maker; immutable quotes; provider Pricing and delivery can be managed
+routing; treasury and reconciliation independently of a single rail.
+Risk and 17-rule risk engine; screening; cases; 12 staff roles/49 Operational and compliance work is embedded in
+operations permissions; dual control the platform.
+Release and Production evidence gates; kill switches; monitoring; Controlled activation rather than broad automatic
+recovery migration and recovery tools enablement.
+The premium is integration and time saved
+A new entrant would need to assemble consumer experience, accounting, settlement, risk, support and staff
+workflows together. Tazdan gives an investor an existing integrated starting point. Provider flexibility, local
+product knowledge and business APIs support a premium positioning; distribution and liquidity network effects
+still need to be earned.
+Counts are a 13 October 2026 working-tree inventory, not a production benchmark. Historical 151 passing server tests were reported
+on 7 October; tests and capacity were not rerun for this memorandum. [I1-I3,I6-I8]
+Confidential | 13 October 2026 | All financial figures in USD 06
+
+TAZDAN / INVESTOR MEMORANDUM 06 / VALUATION RATIONALE
+A strong technology value case
+Up to approximately $2.4 million estimated engineering reproduction cost provides a substantial, documented
+foundation for the technology discussion. It excludes licences, live partner activation and independent
+assurance, all of which can add to the cost of recreating a commercial platform.
+Reproduction scenario Effort × fully loaded cost Estimated cost
+Lower 72 engineer-months × $12,000 $864,000
+Midpoint illustration 97 engineer-months × $16,000 $1,552,000
+Upper 122 engineer-months × $20,000 $2,440,000
+Source: internal engineering effort estimate [I1]. Effort is judgement-based, not time-sheet expenditure. International specialist-team
+economics are assumed; local or AI-assisted delivery may cost less. U.S. BLS reports a $133,080 median developer wage for May
+2024, a salary benchmark rather than a turnkey fintech build quote. [E1]
+What the investor is buying exposure to
+• An integrated platform: ledger, customer apps, business tools, operator controls and provider orchestration.
+• A faster commercial starting point: the study estimates 12-18 elapsed months for a six-to-eight-person build
+team, subject to sequencing.
+• Several growth paths: consumer transfers, business payouts, additional corridors and future platform
+licensing after validation.
+The proposed $18.4 million pre-money price
+The same-price primary/secondary proposal implies $20m post-money less $1.6m of new company capital =
+$18.4m pre-money. The $400k owner share purchase is paid to the owner. This venture price reflects future
+potential; reproduction cost alone does not establish it. Legal access, delivery economics, reliable operations
+and repeat usage support the premium case.
+Proposed funding structure: $2m for 10% in total, split into $400k owner liquidity and $1.6m company
+support for the first 1-3 years. Support the price with partner commitments, independent security
+evidence and pilot cohorts; deploy company capital against reviewed milestones.
+Contributor IP assignments, licence terms of dependencies and chain of title should be confirmed in diligence. No comparable funding
+transaction, audited IP appraisal or investor return is asserted. [I7]
+Confidential | 13 October 2026 | All financial figures in USD 07
+
+TAZDAN / INVESTOR MEMORANDUM 07 / BASE MONETISATION
+How Tazdan earns revenue
+The base scenario monetises transactions after permitted features and partners go live. Each activity below is
+counted once. The same customer may use several products; the underlying transaction principal is separated
+to avoid double-counting.
+Month-12 stream Illustrative usage and price Monthly revenue
+Cross-border transfers 2,250 users × $600 volume × 1.8% blended fee + spread $24,300
+Standalone LYD conversion 750 users × $600 × 0.5% effective gross yield $2,250
+Separate crypto exchange 1,250 users × $500 × 2.5% effective gross yield $15,625
+Withdrawals 1,500 chargeable withdrawals × $3 fee $4,500
+Internal business payouts 100 business accounts × 50 payments × $0.50 $2,500
+Total 5,000 MAU; blended revenue of $9.835 per MAU $49,175
+Pricing is a commercial assumption
+Remittance corridors have configurable spread, fixed and percentage fees; the model uses a 1.8% blended
+realised fee/spread yield and does not add seeded flat fees. The LYD market maker uses pips, not a fixed
+2.5% conversion charge: a 0.05 LYD half-spread would be 0.5% at a purely illustrative 10 LYD/USD reference.
+Actual capture changes with rates, skew and inventory.
+The crypto 2.5%, withdrawal $3 and business $0.50 are modeled realised pricing. They require approved
+tariffs and correctly charged, reconciled fee postings. Business fees are configurable and can currently default
+to zero. LYD swap margin journal wiring and testing are a launch prerequisite for that revenue line.
+Excluded from base revenue: P2P escrow fees (currently zero), cards/interchange, subscriptions,
+customer-balance yield, group-wallet or pool returns, DEX execution fees and white-label licensing.
+These are optional future upside, not assumed cash flow.
+Month-12 distinct remittance/FX/crypto volume: $2.425m; business payouts $0.500m are tracked separately. Fee revenue is not
+transaction principal. [I4,I5,I9,I10]
+Confidential | 13 October 2026 | All financial figures in USD 08
+
+TAZDAN / INVESTOR MEMORANDUM 08 / PROFIT DRIVERS
+Margins and unit economics
+$9.84 70.2% -9.8%
+Revenue per MAU in the base case Month-12 gross margin Month-12 operating margin
+Direct cost, month 12 Assumption Monthly cost
+Remittance fulfilment 0.35% of volume + $0.40 per transfer $5,625
+LYD / crypto execution 0.10% / 0.25% of separate volumes $2,013
+Withdrawal / business handling $1 withdrawal / $0.05 business payment $1,750
+Loss reserve 0.05% of remittance + LYD + crypto volume $1,213
+KYC verification ~1,035 checks × $2 $2,069
+Monitoring and infrastructure $0.10/MAU monitoring; $1,000 + $0.10/MAU infra $2,000
+Total direct costs Rounded components; exact total shown $14,669
+Gross margin becomes profit only after operating costs
+Month-12 gross profit is $34,506. Fixed operating costs of $30,000 and growth spending of $9,312 produce a
+$4,806 operating loss. Fixed costs cover engineering/product ($10k), founder/business ($4k), compliance/legal
+($6k), support/ops ($6k), and security/custody/insurance/admin ($4k).
+At the same 5,000 users in a steady state with only 4% monthly churn replacement, modeled KYC and
+acquisition costs fall. The result becomes approximately $3,642 operating profit, or 7.4% margin. This requires
+stable activity, pricing and costs; it is not the month-12 growth case.
+Gross margin = (revenue - direct costs) / revenue. Operating margin includes recurring team and growth costs, before tax, interest,
+depreciation and $450k assumed one-time launch spending. Bank/local funding is assumed; card processing is excluded.
+Partner/insurance costs are not contracted. Sumsub lists a $1.85 compliance check with a $299 minimum; the model allows $2/check
+but excludes separately negotiated KYB/monitoring extras. [E2]
+Confidential | 13 October 2026 | All financial figures in USD 09
+
+TAZDAN / INVESTOR MEMORANDUM 09 / ACQUISITION PLAN
+The route to 5,000 active users
+Active means a customer completing at least one genuine permitted money transaction in the preceding 30
+days. Downloads, registrations, chat-only visits and sandbox transactions do not count. Business owners are
+included in the total MAU; 100 active business accounts is a month-12 subset target.
+5,000
+2,500
+0
+1 2 3 4 5 6 7 8 9 10 11 12
+Month from funding close; live customer activity begins in M4
+Acquisition assumptions Base target
+Monthly active-user retention 96% (4% monthly churn), an unvalidated assumption
+Gross first-time activations during year 1 5,698; includes replacing customers who leave the active cohort
+Verified accounts needed ~7,597 at 75% verified-to-active conversion
+Registrations needed ~10,853 if 70% of registrations verify
+Acquisition spend 60% paid at $20 CAC, 40% organic; $12 blended spend per
+activation
+Year-1 acquisition budget in forecast $70,376, including $2,000 prelaunch spend
+Distribution starts with trust and repeat need
+Proposed channels: community referrals and recipient claim links; targeted diaspora and local-market
+campaigns; and direct onboarding of employers, merchants and supplier-payment businesses. Measure
+activation, first-to-second transaction conversion, cohort retention, cost per activated user and revenue per
+cohort weekly.
+The channel split is a spending assumption, not secured distribution or measured CAC. Ramp begins only if release gates and the first
+corridor are accepted by the end of month 3. Delay shifts the revenue curve and consumes runway.
+Confidential | 13 October 2026 | All financial figures in USD 10
+
+TAZDAN / INVESTOR MEMORANDUM 10 / BASE FORECAST
+The 12-month financial scenario
+Months run from funding close. M1-M3 are preparation; all subsequent revenue is conditional on approved launch in M4.
+Month MAU Revenue Direct Gross Operating Operating
+costs profit costs result
+1 0 0 1,000 (1,000) 25,000 (26,000)
+2 0 0 1,000 (1,000) 25,000 (26,000)
+3 0 0 1,000 (1,000) 27,000 (28,000)
+4 300 2,950 2,496 454 31,600 (31,146)
+5 650 6,393 3,473 2,919 32,344 (29,425)
+6 1,100 10,818 4,821 5,997 33,712 (27,715)
+7 1,700 16,720 6,661 10,058 37,728 (27,670)
+8 2,400 23,604 8,616 14,988 39,216 (24,228)
+9 3,100 30,488 10,315 20,174 39,552 (19,378)
+10 3,800 37,373 12,013 25,360 39,888 (14,528)
+11 4,400 43,274 13,213 30,061 39,024 (8,963)
+12 5,000 49,175 14,669 34,506 39,312 (4,806)
+Year 1 5,000¹ 220,796 79,279 141,517 409,376 (267,859)
+$220.8k 64.1% ($267.9k)
+Year-1 earned revenue Year-1 weighted gross margin Year-1 recurring operating result
+Read the ramp correctly
+Month-12 revenue annualised is $590,100. This is an exit run rate, not year-1 revenue, contracted recurring
+revenue or SaaS ARR. The ramp produces less revenue in the earlier months and carries preparation costs
+before the first transaction.
+If the assumed $450,000 one-time launch budget is fully expensed, modeled year-1 loss before tax is
+$717,859. No after-tax net profit is forecast.
+¹ Month-12 endpoint, not a sum of monthly users. Figures are rounded; exact values reconcile in the saved model. Direct costs include
+prelaunch infrastructure; operating costs include acquisition. No regulatory minimum capital, taxes or financing costs are assumed.
+Confidential | 13 October 2026 | All financial figures in USD 11
+
+TAZDAN / INVESTOR MEMORANDUM 11 / SCENARIOS
+Profit potential and sensitivity
+The 5,000-user goal does not guarantee profitability. Transaction frequency, corridor economics, fee capture
+and retention determine whether the platform turns activity into cash contribution.
+At 5,000 MAU Revenue Gross margin Operating result Operating margin
+Downside $21,562 30.6% ($34,212) -158.7%
+Base $49,175 70.2% ($4,806) -9.8%
+Upside $71,225 74.1% $13,431 18.9%
+Scenario What must be true
+Downside 30% remit users at $450/1.6%; 15% LYD at $450/0.3%; 15% crypto at $350/2%; 1,250 withdrawals; 50
+businesses × 30 payouts. Higher execution costs/losses and 900 new activations.
+Base The activity and yields on page 8 hold; model partner costs and retention are achieved.
+Upside 55% remit users at $700/1.9%; 15% LYD at $700/0.6%; 30% crypto at $600/2.5%; 1,750 withdrawals; 125
+businesses × 60 payouts. Base cost rates and acquisition spending.
+Two routes to operating break-even
+• Grow beyond the initial target: approximately 5,920 MAU at base unit economics and the month-12
+new-activation rate per user, with fixed operating costs unchanged.
+• Improve repeat economics: stable 5,000-MAU activity can generate a modeled 7.4% operating margin when
+growth spending falls to churn replacement.
+The fee and volume levers
+At base month-12 volumes, 0.1 percentage point less remittance yield reduces monthly revenue by $1,350;
+0.1 point less crypto yield reduces it by $625. A one-point rise in total fulfilment cost on the $1.35m remittance
+volume costs $13,500 - larger than the base operating loss.
+Downside direct costs assume remittance 0.6% + $1, LYD 0.2%, crypto 0.4%, withdrawal $1.50, business $0.10, and a 0.10% loss
+reserve. Other monitoring/infra rates stay at base. Scenarios are not probability-weighted; tax and one-time launch spending are
+excluded.
+Confidential | 13 October 2026 | All financial figures in USD 12
+
+TAZDAN / INVESTOR MEMORANDUM 12 / CAPITAL PLAN
+Funding the first 1-3 years
+Of the $2m total commitment, $400k buys existing shares from the founder/owner and is paid to the owner.
+The remaining $1.6m goes into Tazdan to support operations, launch and growth over its first 1-3 years. The
+company allocation below excludes the owner payment.
+Company capital use Proposed amount Share of $1.6m
+Year-1 recurring operating cash deficit¹ $268,000 16.8%
+One-time legal and provider activation $250,000 15.6%
+Incremental engineering, release and independent assurance $200,000 12.5%
+Corporate settlement/prefunding liquidity² $400,000 25.0%
+Contingency $200,000 12.5%
+Years 2-3 support and expansion reserve $282,000 17.6%
+Total new company capital $1,600,000 100.0%
+What remains after the first year
+From the $1.6m company capital, base year-1 cash deployment is about $718k for recurring burn and
+one-time launch spending. Earmarking $400k for corporate prefunding leaves approximately $482k: $200k
+contingency plus $282k for subsequent support. Prefunding remains corporate liquidity.
+Release capital against evidence
+Milestone 1: approved legal scope, bank/safeguarding arrangements and contracted first rail. Milestone 2:
+independent security and money-path acceptance plus recovery/device testing. Milestone 3: controlled live
+pilot with clean reconciliation. Milestone 4: scale acquisition only after cohort retention and contribution
+margins meet agreed thresholds.
+1-3 year support objective: deploy the $1.6m company funding in reviewed stages. Support through
+years 2-3 depends on actual spending, launch timing and earned revenue; 36 months of runway is not
+guaranteed. Settle the separate $400k owner share purchase under the agreed closing terms.
+¹ Rounded from $267,859 forecast loss, including growth spend. ² Corporate capital only; customer principal is excluded. Budgets and
+proceeds are gross planning amounts; deal costs, regulatory minimum capital and partner collateral need confirmation. Primary capital
+goes to the company; secondary proceeds go to the selling owner. [E3]
+Confidential | 13 October 2026 | All financial figures in USD 13
+
+TAZDAN / INVESTOR MEMORANDUM 13 / ACTIVATION MILESTONES
+Execution, readiness and risk
+Timing Acceptance objective
+Months 1-3 Legal approval for scope; partner and banking contracts; independent review; current release
+money/device/recovery evidence.
+Months 4-6 Capped live pilot; daily reconciliation; 300 to 1,100 active users; support and complaints ownership.
+Months 7-9 1,700 to 3,100 MAU; repeat-cohort economics; business activation; contracted rail reliability.
+Months 10-12 5,000 MAU and 100 business accounts; measured cost and retention; capacity evidence before further
+corridors.
+Risks that determine the investment outcome
+Risk Mitigation and evidence required
+Regulatory / partner access Issued authorisation for exact activities; signed contracts; approved currencies and
+corridors.
+Customer funds / cyber / custody Independent pentest and mobile review; money-path race/replay/reversal tests; isolated
+custody; recovery drill and daily close.
+Liquidity / FX / venue exposure Position and prefunding limits; stale-quote stopping; contracted hedging; treasury stress
+tests.
+Unit economics / acquisition Tariff acceptance; provider invoices; measured active-user cohorts and losses; pause
+spend if contribution fails.
+Operational / deployment reliability Named on-call owners; measured alerts and recovery; scoped kill switches; production
+capacity acceptance.
+Current status: substantial implementation exists, but a broad real-money launch is not evidenced.
+Remittance rails are sandbox, issuer/PSP activation is pending and money features default to gated/off
+configurations. Production access is conditional on release-bound evidence and explicit feature scope.
+Schedule assumes approvals and partners by month 3, a planning assumption rather than an approval timetable. One first corridor can
+launch while other features stay gated. Historical readiness reports are supplemented by the current scoped-release runbook. [I2,I3,I8]
+Confidential | 13 October 2026 | All financial figures in USD 14
+
+TAZDAN / INVESTOR MEMORANDUM 14 / FULL INVENTORY
+Feature catalogue: customer money
+Implemented means source workflows exist. Live availability still depends on approved release scope, configuration and any stated
+external dependency.
+Capability group Features and practical scope
+Account and security Registration/login; email verification and recovery; TOTP 2FA/recovery; device/session
+management; biometric app access; risk-based confirmation; security preferences.
+SMS/WhatsApp needs activation.
+Wallets and portfolio Fiat USD/EUR/GBP/AED/SAR/EGP/LYD and crypto/stablecoin balances; portfolio
+valuation; activity/history; supported currency views; balance privacy.
+Internal payments Payments to eligible Tazdan users; handles/contact lookup; notes; chat payments;
+receipts/history; minimum and risk limits.
+Claim links Public preview before account creation; optional PIN; protected claim; expiry; cancellation
+and refunds.
+Bank money movement Customer bank accounts; deposits to staff-entered platform accounts with confirmation;
+screened withdrawals and staff approval/manual payout. Requires real bank accounts
+and operating process.
+Crypto funding Deposit addresses; detection/confirmation for supported networks; linked external-wallet
+records; on-chain withdrawals subject to custody, RPC and release activation.
+Savings and habits Budget wallets/goals; contributions/withdrawals; scheduled contributions; recurring crypto
+purchases depend on trading activation.
+Records and service Statements; CSV/JSON exports; portfolio history; notification preferences;
+in-app/push/email notices; guides; support escalation.
+Account lifecycle Profile settings; public profiles/search; obligations checks; confirmed account closure and
+retention/anonymisation workflow.
+Customer-money evidence: mobile/app and mobile/src; server routes for auth, wallets, transfers, messages, claim links, bank accounts,
+deposits, withdrawals, crypto wallets, budgets, recurring buys, exports and account closure. Feature states reviewed against current
+code, not just the older matrix. [I2,I3]
+Confidential | 13 October 2026 | All financial figures in USD 15
+
+TAZDAN / INVESTOR MEMORANDUM 15 / FULL INVENTORY
+Feature catalogue: exchange and reach
+Capability group Features and availability
+Trading and conversion Own-wallet conversion; executable buy/sell pricing; previews and minimum received;
+locked single-use crypto quotes; fee/spread disclosure; idempotent execution; orders and
+recurring buys. Trading activation and real hedge venue required.
+LYD pricing engine Fulus reference; pip-based bid/ask; flow-sensitive skew; netting and per-user caps;
+stale-rate widening/stopping; shared Redis coordination; maker-checker configuration;
+cockpit visibility. Swap fee journal completion remains required.
+P2P marketplace Offers/listings, distance sort, escrow, payment confirmation, cancellation, disputes and
+merchant reputation. Production gated; current escrow fee is zero.
+Market and social Asset search/data/charts/news; authenticated asset discussions, replies, likes, reporting
+and moderation; direct chat, read status, edit/delete, block/report and privacy controls.
+Remittance experience 12 sandbox corridor configurations; beneficiaries and bank validation; locked quotes;
+fixed/percentage fees, spreads and tier discounts; limits, purpose and source-of-funds
+thresholds; neutral status tracking.
+Remittance execution 23-state lifecycle; screening/manual review; route ranking; treasury reservation/prefund;
+callbacks/polling; unknown outcomes; retries/cancellation/refunds/returns;
+provider-statement reconciliation. All external rails await activation.
+Cards and card funding Virtual/physical card interfaces; tiers, controls, freeze/cancel, top-up/order,
+activity/cashback and budget funding. PSP adapters and mobile pay configuration exist.
+Issuer/PSP contracts and production adapters required.
+Reach and experience Referral/reward workflows; light/dark/monochrome themes; nine locale dictionaries
+including Arabic; contact discovery and announcements. Localisation acceptance still
+requires device QA.
+Supported withdrawal broadcast paths include ETH/USDT-ERC20, BTC and SOL, subject to isolated remote custody and release
+acceptance. TRON withdrawal broadcasting is incomplete; not every tradable asset is withdrawable. Read-only DEX quotes are not an
+executable DEX product. [I2,I3,I5,I9,I10]
+Confidential | 13 October 2026 | All financial figures in USD 16
+
+TAZDAN / INVESTOR MEMORANDUM 16 / FULL INVENTORY
+Feature catalogue: business and staff
+Capability group Features and practical scope
+Business onboarding Business profile/dashboard; KYB submission and compliance review; payout verification
+gate. Automated vendor checks require activation; company-document upload is not
+represented as complete.
+Teams Invitations/acceptance/removal; OWNER, ADMIN, DEVELOPER and ANALYST
+permissions; API keys tied to current member roles.
+Business payouts Preview/validation/fees; reserve full batches; maker-checker; single-signatory step-up;
+human approval for API batches; compliance holds/release; cancellation; atomic lines and
+partial outcomes. Internal Tazdan recipients only.
+Developer platform Hashed/scoped/expiring/revocable keys; public balances/rates and single/bulk
+payouts/status APIs; write idempotency; webhook management; signed delivery,
+retries/backoff, dead-letter state and network restrictions.
+Customer operations Staff overview/search/Customer 360; PII masking; customer freezes/session revocation;
+business review; transaction detail; deposit/withdrawal/KYC queues; support
+assignment/reply/resolution.
+Money operations Ledger accounts/journals; remittance queue/retry/refunds/corridors; FX prices/overrides;
+treasury pools/movements/thresholds; reconciliation exceptions and approvals.
+Risk operations 17 default risk rules; screening/name matching and Arabic normalisation; watchlist import;
+cases, evidence, owners and SLAs; fraud/linked-account/device views and withdrawal
+review. Screening data must be activated.
+Platform operations Providers/mode/health/circuit breakers/call logs; finance/take-rate/cost views; statistical
+forecasts with sufficient data; health/security/audit views; staff roles; mobile admin.
+Dual control and AI 12 staff roles/49 permissions; privileged-action audit; sensitive adjustments/refunds/FX
+require separate approval; scoped kill switches. Optional read-only AI assistant, 13 tools,
+case/support drafts with human acceptance; off by default.
+External-bank business payouts are not built as a separate service and would use activated remittance rails. Statistical projections
+need actual historical activity. AI is optional and subject to provider agreement, permissions and privacy configuration. [I4,I6,I11]
+Confidential | 13 October 2026 | All financial figures in USD 17
+
+TAZDAN / INVESTOR MEMORANDUM 17 / FULL INVENTORY
+Feature catalogue: financial controls
+Control group Built mechanisms / limits
+Accounting integrity Double-entry journals checked at database commit; customer, settlement and
+corporate classifications; fees, holds/reservations; asset ledger; continuous
+reconciliation and trading halt on drift.
+Evidence and state Append-only ledger/audit/security/treasury/lifecycle evidence; immutable quotes;
+conditional transitions; idempotent remittance/business/API writes and operation
+references.
+Provider safety Explicit live/sandbox/mock registry; production guards; circuit breakers; callbacks,
+polling, retry and reconciliation; an unavailable outcome is resolved before another
+payout.
+Identity and surface TOTP/step-up, credentials/session controls, permission checks, rate limits, guarded
+webhooks, upload controls, API key scopes and PII masking. These require
+independent assurance, not implied certification.
+Custody and crypto risk Key/seed-protection and custody interfaces; production remote-custody requirements;
+withdrawal screening/approvals; configured principal crypto exposure limits. Venue
+availability and key recovery require acceptance.
+Deployment and continuity Docker/TLS; CI dependency/secret/migration checks; live/ready/metrics endpoints;
+backup/recovery/PITR and rollback tooling; release-scoped evidence manifest.
+Recovery and notification drills still required.
+Release governance Legal/provider/security/money-path/device/recovery/operations evidence bound to
+release SHA; dated reviews and scope; feature/currency/corridor/provider/customer
+controls; fail-closed new-money access.
+Development opportunities excluded from base claims
+Group-wallet/liquidity-pool controllers are unmounted; passkey/FIDO2 server support is not evidenced;
+executable DEX swaps, complete automated safeguarding reconciliation, automated SAR/STR or Travel Rule
+messaging, and second-region failover are not represented as delivered. Future subscriptions and platform
+licensing need product and customer validation.
+No SOC 2/ISO certification, completed independent audit, operating licence, confirmed partner network or audited traction is implied.
+Source controls are valuable; their effectiveness in live operations must be established with current independent evidence. [I3,I7,I8,I11]
+Confidential | 13 October 2026 | All financial figures in USD 18
+
+TAZDAN / INVESTOR MEMORANDUM 18 / DILIGENCE REFERENCES
+Evidence and model notes
+Internal sources below are available in the project data room. Current code is an uncommitted working-tree review dated 13 October
+2026; written October 7 assessments are historical. No current production deployment or contracts were inspected.
+I1 docs/dataroom/21_REPLACEMENT_COST.md
+72-122 engineer-month assumption; reproduction scope and exclusions.
+I2 docs/audit/FEATURE_MATRIX.md
+Historical state matrix; current source spot-checks override stale claims.
+I3 docs/runbooks/launch-readiness.md
+Current release gates, required acceptance evidence and pilot scope.
+I4 docs/BUSINESS.md; server/src/services/business/
+KYB, internal payouts, roles, API and fee implementation.
+I5 docs/REMITTANCE.md; server/src/services/remittance/
+Sandbox corridors, pricing, state lifecycle and revenue recognition.
+I6 docs/CONTROL_COCKPIT.md; docs/LEDGER.md
+Staff operations, permissions and money controls.
+I7 docs/dataroom/03_IP_INVENTORY.md; docs/dataroom/18_SCALABILITY.md
+IP/title checks and capacity limitations.
+I8 server/prisma/schema.prisma; server/prisma/migrations/
+Current static counts and ledger/evidence constraints.
+I9 docs/FX.md; server/src/services/exchange/
+Current pip pricing, principal exposure and fee capture.
+I10 server/src/controllers/p2p.controller.ts
+Current zero-fee escrow implementation.
+I11 docs/AI_AUTOMATION.md; server/src/services/platform/
+AI permission boundaries, controls and configuration.
+External checks - accessed 13 October 2026
+E1 U.S. Bureau of Labor Statistics, Software Developers (May 2024 wage data).
+bls.gov/ooh/computer-and-information-technology/software-developers.htm
+E2 Sumsub published pricing: Compliance $1.85/check, $299 monthly minimum.
+sumsub.com/pricing/ - reference cost only; no partnership or jurisdictional eligibility asserted.
+E3 Carta, The secondary market, explained: primary proceeds fund the company; secondary proceeds belong to the selling shareholder.
+carta.com/learn/equity/liquidity-events/secondary-transactions/
+Interpretation of the financial model
+Every forecast input is an illustrative planning assumption. Fractions of users/checks are expected averages, not actual people.
+Revenue is earned fees and spread; all principal, balances, card income, subscriptions and P2P fees are excluded unless explicitly
+modeled. Proposed tariffs and fee posting must be accepted before launch. Reported margins exclude tax, financing and depreciation;
+one-time launch costs are shown separately. Investor ownership and returns depend on definitive terms and future dilution.
+Screenshots are unaltered repository app captures, resized for print. They illustrate UI rather than verified account values, live delivery
+or customer traction. The saved build source and exact monthly model allow the projections to be revised when partner quotations and
+pilot evidence arrive.
+Confidential | 13 October 2026 | All financial figures in USD 19

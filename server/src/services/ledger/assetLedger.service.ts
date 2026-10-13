@@ -9,6 +9,8 @@
 import { Prisma } from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/library';
 import { v4 as uuidv4 } from 'uuid';
+import { AppError } from '../../middleware/errorHandler';
+import { negativeUserBalanceAllowed } from './ledger.service';
 
 export type AssetAccountType =
   | 'USER'
@@ -94,7 +96,7 @@ export async function postAssetLedger(
   opts: { allowNegativeUser?: boolean } = {},
 ): Promise<{ groupId: string }> {
   if (!input.legs.length) throw new Error('postAssetLedger: no legs');
-  const allowNegativeUser = Boolean(opts.allowNegativeUser) && process.env.LEDGER_ALLOW_NEGATIVE_USER !== '0';
+  const allowNegativeUser = negativeUserBalanceAllowed(opts.allowNegativeUser);
 
   const perAsset = new Map<string, Decimal>();
   for (const leg of input.legs) {
@@ -124,15 +126,20 @@ export async function postAssetLedger(
     if (amount.isZero()) continue;
     const acct = await resolveAssetAccount(tx, leg.type, leg.asset, leg.userId ?? null);
 
-    if (leg.type === 'USER' && !allowNegativeUser && amount.lt(0) && acct.balance.lt(amount.abs())) {
-      throw new Error(`Insufficient ${leg.asset} asset-ledger balance for user ${leg.userId}: need ${amount.abs().toString()}`);
-    }
-
-    await tx.$executeRaw`
+    const gated = leg.type === 'USER' && !allowNegativeUser && amount.lt(0);
+    // One conditional statement: the sufficiency check and the debit cannot be
+    // split by a concurrent posting (the old read-then-update could be).
+    const updated = await tx.$executeRaw`
       UPDATE "AssetLedgerAccount"
       SET "balance" = "balance" + ${new Prisma.Decimal(amount.toFixed(18))}, "updatedAt" = CURRENT_TIMESTAMP
       WHERE "id" = ${acct.id}
+        AND (${!gated} OR "balance" + ${new Prisma.Decimal(amount.toFixed(18))} >= 0)
     `;
+    if (updated !== 1) {
+      throw new AppError(`Insufficient ${leg.asset} balance`, 400, 'INSUFFICIENT_FUNDS', {
+        ledger: true, asset: leg.asset, need: amount.abs().toString(),
+      });
+    }
     await tx.$executeRaw`
       INSERT INTO "AssetLedgerEntry" ("id", "groupId", "accountId", "asset", "amount", "refType", "refId", "memo")
       VALUES (

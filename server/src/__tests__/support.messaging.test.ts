@@ -22,7 +22,10 @@ const mockPrisma: any = {
     updateMany: jest.fn(async () => ({ count: 1 })),
     findUniqueOrThrow: jest.fn(async () => ({ id: ESC, raisedById: ME, counterpartyId: PEER, tradeId: null })),
   },
-  message: { create: jest.fn(async ({ data }: any) => row(data)) },
+  // The raiser and the counterparty already have a conversation (escalation
+  // requires a real trade or conversation between them).
+  message: { create: jest.fn(async ({ data }: any) => row(data)), findFirst: jest.fn(async () => ({ id: 'm-prev' })) },
+  p2PTrade: { findFirst: jest.fn(async () => null) },
   whatsAppMessage: { findFirst: jest.fn(async () => null) },
   $transaction: jest.fn(async (ops: Promise<any>[]) => Promise.all(ops)),
 };
@@ -57,6 +60,14 @@ describe('support messaging fan-out', () => {
     expect(roomsFor(h.emits, /counterparty/)).toEqual([`user:${PEER}`, `user:${SUPPORT}`].sort());
     // The opener stays in the raiser <-> support thread.
     expect(roomsFor(h.emits, /Payment not received/)).toEqual([`user:${ME}`, `user:${SUPPORT}`].sort());
+  });
+
+  it('escalate: refuses a counterparty you have no trade or conversation with', async () => {
+    mockPrisma.message.findFirst.mockResolvedValueOnce(null);
+    const h = harness(ME, { counterpartyId: PEER, reason: 'Payment not received' });
+    await MessageController.escalate(h.req, h.res, h.next);
+    expect(h.next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 403 }));
+    expect(mockPrisma.supportEscalation.create).not.toHaveBeenCalled();
   });
 
   it('sendAsSupport: emits the full wire shape to the customer and to support sessions', async () => {

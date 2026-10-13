@@ -88,6 +88,36 @@ function buildLogMeta(err: Error, req: Request, statusCode: number, ref: string)
   };
 }
 
+const MULTER_STATUS: Record<string, [number, string]> = {
+  LIMIT_FILE_SIZE: [413, 'File is too large'],
+  LIMIT_FILE_COUNT: [400, 'Too many files'],
+  LIMIT_UNEXPECTED_FILE: [400, 'Unexpected file field'],
+  LIMIT_PART_COUNT: [400, 'Too many form parts'],
+  LIMIT_FIELD_KEY: [400, 'Form field name too long'],
+  LIMIT_FIELD_VALUE: [400, 'Form field too long'],
+  LIMIT_FIELD_COUNT: [400, 'Too many form fields'],
+};
+
+/** Status + safe message for errors the client caused before any handler ran. */
+export function clientTransportError(err: unknown): { status: number; message: string } | null {
+  const e = err as { name?: string; code?: string; type?: string; status?: number; statusCode?: number; expose?: boolean } | null;
+  if (!e || typeof e !== 'object') return null;
+  if (e.name === 'MulterError') {
+    const [status, message] = MULTER_STATUS[e.code ?? ''] ?? [400, 'Invalid upload'];
+    return { status, message };
+  }
+  const status = e.status ?? e.statusCode;
+  if (e.expose === true && typeof status === 'number' && status >= 400 && status < 500) {
+    const message = e.type === 'entity.too.large' ? 'Request body too large'
+      : e.type === 'entity.parse.failed' ? 'Malformed request body'
+      : status === 403 ? 'Forbidden'
+      : status === 415 ? 'Unsupported content type'
+      : 'Bad request';
+    return { status, message };
+  }
+  return null;
+}
+
 export function errorHandler(
   err: Error | AppError,
   req: Request,
@@ -136,6 +166,15 @@ export function errorHandler(
       buildLogMeta(err, req, 400, ref));
     Sentry.captureException(err);
     return res.status(400).json({ error: 'Bad request', code: 'VALIDATION', ref });
+  }
+
+  // Client-caused transport errors: malformed or oversized bodies
+  // (body-parser), multipart limits (multer) and refused CORS origins. These
+  // used to surface as 500s and Sentry reports anyone could trigger at will.
+  const transport = clientTransportError(err);
+  if (transport) {
+    logger.warn(`${req.method} ${req.originalUrl ?? req.path} → ${transport.status} ${transport.message}`);
+    return res.status(transport.status).json({ error: transport.message, code: defaultCode(transport.status) });
   }
 
   // Anything else is an unexpected internal error. Log the real name,

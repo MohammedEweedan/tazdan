@@ -17,6 +17,7 @@ import { RedisStore } from 'rate-limit-redis';
 import { recordStrike } from './ipBan';
 import { getRedisClient } from '../utils/redis';
 import { logger } from '../utils/logger';
+import { clientIpKey } from '../utils/clientIp';
 
 const minutes = (n: number) => n * 60 * 1000;
 
@@ -106,6 +107,8 @@ function baseOpts(prefix: string) {
     legacyHeaders: false,
     skip: skipRateLimit,
     store: redisStore(prefix),
+    // IPv4-mapped addresses folded, IPv6 counted per /64 (see clientIp.ts).
+    keyGenerator: (req: any) => clientIpKey(req.ip),
     // Fail open on store errors (Redis blip ≠ platform outage).
     passOnStoreError: true,
   };
@@ -161,6 +164,21 @@ export const authLimiter = rateLimit({
 });
 
 /**
+ * Token refresh — its own budget, no IP-ban strikes. Refreshing is not a
+ * guessable credential check (the token is a 256-bit+ secret checked against
+ * the DB), and every signed-in phone refreshes every 15 minutes: sharing the
+ * 10-per-15-minutes login budget meant customers behind one carrier NAT
+ * address throttled each other out of their sessions and earned the shared
+ * address a 24-hour IP ban.
+ */
+export const refreshLimiter = rateLimit({
+  ...baseOpts('refresh'),
+  windowMs: minutes(15),
+  max: Number(process.env.REFRESH_RATE_PER_15MIN ?? 120),
+  message: { error: 'Too many session refreshes. Try again shortly.' },
+});
+
+/**
  * Registration limiter (most important for your issue)
  */
 export const registerLimiter = rateLimit({
@@ -198,7 +216,7 @@ export const apiKeyLimiter = rateLimit({
   ...baseOpts('apikey'),
   windowMs: minutes(1),
   max: Number(process.env.API_KEY_RATE_PER_MIN ?? 120),
-  keyGenerator: (req: any) => `key:${req.apiKey?.id ?? req.ip}`,
+  keyGenerator: (req: any) => `key:${req.apiKey?.id ?? clientIpKey(req.ip)}`,
   message: { error: 'API rate limit exceeded for this key.', code: 'RATE_LIMITED' },
 });
 
@@ -207,7 +225,7 @@ export const aiLimiter = rateLimit({
   ...baseOpts('ai'),
   windowMs: minutes(10),
   max: Number(process.env.AI_RATE_PER_10MIN ?? 40),
-  keyGenerator: (req: any) => `staff:${req.user?.id ?? req.ip}`,
+  keyGenerator: (req: any) => `staff:${req.user?.id ?? clientIpKey(req.ip)}`,
   message: { error: 'Too many assistant requests — wait a few minutes.', code: 'RATE_LIMITED' },
 });
 

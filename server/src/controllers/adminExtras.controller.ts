@@ -17,6 +17,8 @@ import { escrowState, releaseEscrowToBuyer, refundEscrowToSeller, clawBackFromBu
 import { recordTransition } from '../services/platform/lifecycle';
 import { writeAudit } from '../services/platform/audit';
 import { AuthRequest } from '../types';
+import { assertNotSelf } from '../services/platform/segregation';
+import { verifyMagic } from '../middleware/upload';
 import { emitNotification } from '../utils/realtime';
 import {
   getEmailStatus,
@@ -142,6 +144,7 @@ export class AdminExtrasController {
           throw new AppError(`Dispute is already ${dispute.status.toLowerCase()}`, 409);
         }
         const trade = dispute.trade;
+        assertNotSelf(actorId, [trade.buyerId, trade.sellerId], 'p2p_dispute_resolve', { ipAddress: req.ip, path: req.originalUrl });
         const movedTrade = await tx.p2PTrade.updateMany({
           where: { id: trade.id, status: 'DISPUTED' },
           data: outcome === 'BUYER'
@@ -553,6 +556,7 @@ export class AdminExtrasController {
           MAX(n."createdAt")                              AS "createdAt"
         FROM "Notification" n
         LEFT JOIN "User" u ON u.id = n."createdBy"
+        WHERE n."broadcastId" IS NOT NULL OR n."createdBy" IS NOT NULL
         GROUP BY
           n."broadcastId",
           n.title, n.subtitle, n.message, n.description,
@@ -566,6 +570,7 @@ export class AdminExtrasController {
       const totalGroups = await prisma.$queryRaw<Array<{ count: bigint }>>`
         SELECT COUNT(*) AS count FROM (
           SELECT 1 FROM "Notification"
+          WHERE "broadcastId" IS NOT NULL OR "createdBy" IS NOT NULL
           GROUP BY "broadcastId", title, subtitle, message, description, "mediaUrl", "mediaType", type, "createdBy", date_trunc('minute', "createdAt")
         ) sub
       `;
@@ -642,7 +647,7 @@ export class AdminExtrasController {
         message:      z.string().min(1).max(2000).optional(),
         body:         z.string().min(1).max(2000).optional(),
         type:         z.string().optional(),
-        mediaUrl:     z.string().url().max(500).optional(),
+        mediaUrl:     z.string().url().max(500).refine((u) => /^https?:\/\//i.test(u), 'mediaUrl must be an http(s) URL').optional(),
         mediaType:    z.enum(['image', 'gif', 'video', 'none']).optional(),
         locales:      z.record(z.object({ title: z.string(), subtitle: z.string().optional(), description: z.string().optional() })).optional(),
         targetRoles:  z.array(z.string()).optional(),
@@ -689,11 +694,10 @@ export class AdminExtrasController {
 
   static async uploadMedia(req: AuthRequest, res: Response, next: NextFunction) {
     try {
-      console.log('[uploadMedia] content-type:', req.headers['content-type']);
-      console.log('[uploadMedia] req.file:', req.file);
-      console.log('[uploadMedia] req.files:', req.files);
-      console.log('[uploadMedia] req.body keys:', Object.keys(req.body ?? {}));
       if (!req.file) return next(new AppError('No file uploaded', 400));
+      // The content must match the declared type (a renamed HTML/SVG file
+      // would otherwise be served from /media to every customer).
+      await verifyMagic(req.file).catch(() => { throw new AppError('File contents do not match the declared type', 400); });
       const baseUrl = process.env.BASE_URL || `${req.protocol}://${req.get('host')}`;
       const url = `${baseUrl}/media/${req.file.filename}`;
       const mediaType = req.file.mimetype.startsWith('video/') ? 'video' : 'image';
@@ -886,7 +890,7 @@ export class AdminExtrasController {
         heading:   z.string().max(160).optional(),
         body:      z.string().max(8000).optional(),
         ctaLabel:  z.string().max(60).optional(),
-        ctaUrl:    z.string().url().max(500).optional(),
+        ctaUrl:    z.string().url().max(500).refine((u) => /^https:\/\//i.test(u), 'ctaUrl must be an https URL').optional(),
         // 'pending' (default) only emails entries not yet notified; 'all' re-sends to everyone.
         audience:  z.enum(['pending', 'all']).optional(),
         // Optional: limit a run for testing (e.g. send to the first 5).

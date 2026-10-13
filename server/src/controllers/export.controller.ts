@@ -70,18 +70,40 @@ function nativeCryptoHoldings(userWallet: any | null | undefined): Array<{ curre
   return out;
 }
 
+/**
+ * One CSV cell. Quoted, quotes doubled, and a text value that a spreadsheet
+ * would run as a formula (= + - @, tab, CR) is prefixed with an apostrophe.
+ * Plain numbers (including negatives) stay numeric.
+ */
+export function csvCell(value: unknown): string {
+  const s = value === null || value === undefined ? '' : String(value);
+  const numeric = /^-?\d+(\.\d+)?(e-?\d+)?$/i.test(s);
+  const safe = !numeric && /^[=+\-@\t\r]/.test(s) ? `'${s}` : s;
+  return `"${safe.replace(/"/g, '""')}"`;
+}
+
+const str = (v: unknown, max = 40) => (typeof v === 'string' && v ? v.slice(0, max) : undefined);
+function dateParam(v: unknown): Date | undefined {
+  if (typeof v !== 'string' || !v) return undefined;
+  const d = new Date(v);
+  if (Number.isNaN(d.getTime())) throw new AppError('Invalid date', 400);
+  return d;
+}
+
 export class ExportController {
   // Export transactions as CSV
   static async exportCSV(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const userId = req.user!.id;
-      const { from, to, type } = req.query;
+      const from = dateParam(req.query.from);
+      const to = dateParam(req.query.to);
+      const type = str(req.query.type);
 
       const where: any = { userId };
       if (from || to) {
         where.createdAt = {};
-        if (from) where.createdAt.gte = new Date(from as string);
-        if (to) where.createdAt.lte = new Date(to as string);
+        if (from) where.createdAt.gte = from;
+        if (to) where.createdAt.lte = to;
       }
       if (type) where.type = type;
 
@@ -102,8 +124,8 @@ export class ExportController {
           t.balanceBefore.toString(),
           t.balanceAfter.toString(),
           t.reference || '',
-          `"${(t.description || '').replace(/"/g, '""')}"`,
-        ].join(',')
+          t.description || '',
+        ].map(csvCell).join(',')
       ).join('\n');
 
       res.setHeader('Content-Type', 'text/csv');
@@ -119,10 +141,14 @@ export class ExportController {
   static async exportJSON(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const userId = req.user!.id;
-      const { from, to, type, currency } = req.query;
+      const from = str(req.query.from);
+      const to = str(req.query.to);
+      const type = str(req.query.type);
+      const currency = str(req.query.currency, 12);
+      dateParam(from); dateParam(to);
 
       const where: any = { userId };
-      const createdAt = inclusiveDateRange(from as string | undefined, to as string | undefined);
+      const createdAt = inclusiveDateRange(from, to);
       if (createdAt) where.createdAt = createdAt;
       if (type) where.type = type;
       if (currency) where.currency = String(currency).toUpperCase();

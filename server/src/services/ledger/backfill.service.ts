@@ -16,6 +16,7 @@
 import { Decimal } from '@prisma/client/runtime/library';
 import { prisma } from '../../utils/prisma';
 import { logger } from '../../utils/logger';
+import { AppError } from '../../middleware/errorHandler';
 import { postLedger, isLedgerCurrency, getUserBalance } from './ledger.service';
 import { isDynamicAsset, normaliseAsset, postAssetLedger } from './assetLedger.service';
 
@@ -32,6 +33,13 @@ export interface BackfillReport {
 }
 
 export async function backfillLedgerOpeningBalances(): Promise<BackfillReport> {
+  // Opening balances are minted from SYSTEM_ONRAMP to match whatever the
+  // Wallet tables say. With real money that would legitimise any balance a
+  // bug or an attacker managed to write outside the ledger, so it is refused:
+  // differences are corrected with maker-checked adjustments instead.
+  if (process.env.NODE_ENV === 'production' && process.env.REAL_MONEY_ENABLED === '1') {
+    throw new AppError('Opening-balance backfill is disabled while real money is enabled. Use a maker-checked ledger adjustment.', 409);
+  }
   const report: BackfillReport = { ran: 0, skipped: 0, perCurrency: {} };
 
   // 1) Fiat-style Wallet rows.

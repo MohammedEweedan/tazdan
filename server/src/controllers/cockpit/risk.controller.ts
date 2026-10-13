@@ -15,6 +15,7 @@ import { LIST_NAMES, refreshSanctionsLists, sanctionsListStatus, type ListName }
 let refreshing: Promise<unknown> | null = null;
 import { DEFAULT_RULES, invalidateRuleCache } from '../../services/risk/engine';
 import { pageParams, systemUserIds } from './helpers';
+import { assertNotSelf } from '../../services/platform/segregation';
 import { complianceDecideBatch } from '../../services/business/payouts.service';
 
 export const CockpitRiskController = {
@@ -77,6 +78,9 @@ export const CockpitRiskController = {
         to: z.enum(CASE_STATUSES), note: z.string().trim().min(5).max(4000), resolution: z.string().trim().max(4000).optional(),
         assignedToId: z.string().nullable().optional(),
       }).parse(req.body);
+      const c = await prisma.complianceCase.findUnique({ where: { id: req.params.id }, select: { subjectUserId: true, subjectBusinessId: true } });
+      const owner = c?.subjectBusinessId ? (await prisma.businessProfile.findUnique({ where: { id: c.subjectBusinessId }, select: { userId: true } }))?.userId : null;
+      assertNotSelf(req.user!.id, [c?.subjectUserId, owner], 'case_transition', { ipAddress: req.ip, path: req.originalUrl });
       res.json({ case: await transitionCase({ caseId: req.params.id, to: body.to, actorId: req.user!.id, note: body.note, resolution: body.resolution, assignedToId: body.assignedToId, req }) });
     } catch (e) { next(e); }
   },
@@ -95,6 +99,7 @@ export const CockpitRiskController = {
       const body = z.object({ status: z.enum(['FALSE_POSITIVE', 'CONFIRMED_MATCH']), note: z.string().trim().min(5) }).parse(req.body);
       const r = await prisma.screeningResult.findUnique({ where: { id: req.params.id } });
       if (!r) throw new AppError('Screening result not found', 404);
+      assertNotSelf(req.user!.id, [r.userId], 'screening_review', { ipAddress: req.ip, path: req.originalUrl });
       const updated = await prisma.screeningResult.update({ where: { id: r.id }, data: { status: body.status, reviewedById: req.user!.id, reviewedAt: new Date() } });
       if (r.subjectType === 'BENEFICIARY') {
         await prisma.remittanceBeneficiary.update({ where: { id: r.subjectId }, data: { screeningStatus: body.status === 'FALSE_POSITIVE' ? 'CLEAR' : 'BLOCKED' } }).catch(() => undefined);
@@ -300,6 +305,8 @@ export const CockpitRiskController = {
   async batchReview(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const body = z.object({ approve: z.boolean(), note: z.string().trim().min(5).max(2000) }).parse(req.body);
+      const batch = await prisma.businessPayoutBatch.findUnique({ where: { id: req.params.id }, select: { business: { select: { userId: true } } } });
+      assertNotSelf(req.user!.id, [batch?.business.userId], 'batch_compliance_review', { ipAddress: req.ip, path: req.originalUrl });
       res.json({ batch: await complianceDecideBatch(req.params.id, body.approve, req.user!.id, body.note, req) });
     } catch (e) { next(e); }
   },
@@ -309,6 +316,7 @@ export const CockpitRiskController = {
       const body = z.object({ decision: z.enum(['APPROVED', 'REJECTED']), note: z.string().trim().min(5).max(2000) }).parse(req.body);
       const b = await prisma.businessProfile.findUnique({ where: { id: req.params.id } });
       if (!b) throw new AppError('Business not found', 404);
+      assertNotSelf(req.user!.id, [b.userId], 'kyb_decision', { ipAddress: req.ip, path: req.originalUrl });
       const updated = await prisma.businessProfile.update({ where: { id: b.id }, data: { kybStatus: body.decision, kybNotes: body.note, kybReviewedAt: new Date(), kybReviewedBy: req.user!.id } });
       await writeAudit(prisma, { actorId: req.user!.id, action: 'KYB_DECISION', entity: 'BusinessProfile', entityId: b.id, before: { kybStatus: b.kybStatus }, after: { kybStatus: body.decision }, reason: body.note, req });
       await prisma.notification.create({ data: { userId: b.userId, title: body.decision === 'APPROVED' ? 'Business verified' : 'Business verification declined', message: body.decision === 'APPROVED' ? `${b.companyName} is verified. Business payouts are now available.` : `We could not verify ${b.companyName}: ${body.note}`, type: 'kyc' } });

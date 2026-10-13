@@ -16,6 +16,9 @@ import { writeAudit } from '../services/platform/audit';
 import { recordTransition } from '../services/platform/lifecycle';
 import { markWithdrawalHistory } from '../services/wallet/withdrawalHistory';
 import { toWire as messageWire } from './message.controller';
+import { assertNotSelf } from '../services/platform/segregation';
+import { canSeePii } from '../services/platform/pii';
+import { getRedisClient } from '../utils/redis';
 
 const rateSchema = z.object({
   buyPrice: z.number().positive(),
@@ -54,12 +57,83 @@ type CreditOutcome =
  * Up to MANUAL_ADJUSTMENT_SINGLE_USD it posts now; above that it becomes a
  * maker-checker request a second staff member must approve.
  */
+/** Rolling-24h caps on credits one person may post without a second approver. */
+const DAILY_STAFF_SINGLE_CONTROL_USD = (single: number) => Number(process.env.MANUAL_ADJUSTMENT_DAILY_STAFF_USD ?? single * 5);
+const DAILY_CUSTOMER_SINGLE_CONTROL_USD = (single: number) => Number(process.env.MANUAL_ADJUSTMENT_DAILY_CUSTOMER_USD ?? single);
+
+/**
+ * USD already credited under single control (no approval request) in the last
+ * 24 hours, by this staff member and to this customer. Read from the
+ * append-only audit trail that postAdjustment writes.
+ */
+export async function singleControlCreditsUsd(staffId: string, userId: string): Promise<{ staffUsd: number; customerUsd: number }> {
+  const { valueInUsd } = await import('../utils/kycLimits');
+  const rows = await prisma.auditLog.findMany({
+    where: { action: 'LEDGER_ADJUSTMENT_CREDIT', createdAt: { gte: new Date(Date.now() - 86_400_000) }, OR: [{ userId: staffId }, { entityId: userId }] },
+    select: { userId: true, entityId: true, newValues: true },
+    take: 2000,
+  });
+  let staffUsd = 0;
+  let customerUsd = 0;
+  for (const r of rows) {
+    const v = (r.newValues ?? {}) as Record<string, any>;
+    if (v.approvalRequestId) continue; // dual-controlled credits are not single-control usage
+    const usd = await valueInUsd(String(v.amount ?? '0'), String(v.currency ?? 'USD')).catch(() => Number(v.amount ?? 0));
+    if (r.userId === staffId) staffUsd += usd;
+    if (r.entityId === userId) customerUsd += usd;
+  }
+  return { staffUsd, customerUsd };
+}
+
+// Single-control credits are serialised so parallel requests cannot all pass
+// the cumulative check before any of them is recorded.
+let creditChain: Promise<unknown> = Promise.resolve();
+async function serialiseCredits<T>(fn: () => Promise<T>): Promise<T> {
+  const run = creditChain.then(fn, fn);
+  creditChain = run.catch(() => undefined);
+  return run;
+}
+
 async function creditOrRequestApproval(req: AuthRequest, input: { userId: string; currency: string; amount: string; reason: string }): Promise<CreditOutcome> {
+  return serialiseCredits(() => creditOrRequestApprovalNow(req, input));
+}
+
+async function creditOrRequestApprovalNow(req: AuthRequest, input: { userId: string; currency: string; amount: string; reason: string }): Promise<CreditOutcome> {
   const { postAdjustment, validateAdjustment, SINGLE_CONTROL_LIMIT_USD } = await import('../services/ledger/adjustments.service');
   validateAdjustment({ userId: input.userId, currency: input.currency, amount: input.amount, direction: 'CREDIT' });
+  // Nobody credits their own account, with or without a second approver.
+  assertNotSelf(req.user!.id, [input.userId], 'manual_credit', { ipAddress: req.ip, path: req.originalUrl });
   const { valueInUsd } = await import('../utils/kycLimits');
   const usd = await valueInUsd(input.amount, input.currency);
-  if (usd > SINGLE_CONTROL_LIMIT_USD()) {
+  const single = SINGLE_CONTROL_LIMIT_USD();
+  let needsApproval = usd > single;
+  if (!needsApproval) {
+    // Splitting a large credit into many small ones must not avoid dual
+    // control: cap what one person may post alone per day, and what one
+    // customer may receive that way.
+    const used = await singleControlCreditsUsd(req.user!.id, input.userId);
+    needsApproval = used.staffUsd + usd > DAILY_STAFF_SINGLE_CONTROL_USD(single)
+      || used.customerUsd + usd > DAILY_CUSTOMER_SINGLE_CONTROL_USD(single);
+    // Several API workers each serialise only themselves; hold a short
+    // cross-worker lock when Redis is there, and send to approval if busy.
+    const redis = getRedisClient();
+    if (!needsApproval && redis) {
+      const got = await redis.set('lock:single-control-credit', req.user!.id, { NX: true, PX: 15_000 }).catch(() => null);
+      if (got !== 'OK') needsApproval = true;
+      else {
+        try {
+          const result = await postAdjustment({
+            userId: input.userId, currency: input.currency, amount: input.amount, direction: 'CREDIT', reason: input.reason,
+            requestedById: req.user!.id, approvedById: req.user!.id,
+          });
+          return { pendingApproval: false, reference: result.reference, ledgerGroupId: result.ledgerGroupId };
+        } finally {
+          await redis.del('lock:single-control-credit').catch(() => undefined);
+        }
+      }
+    }
+  }
+  if (needsApproval) {
     const { requestApproval } = await import('../services/platform/approvals.service');
     const { loadStaffContext } = await import('../services/platform/rbac');
     const staff = await loadStaffContext(req.user!.id);
@@ -81,6 +155,35 @@ async function creditOrRequestApproval(req: AuthRequest, input: { userId: string
     requestedById: req.user!.id, approvedById: req.user!.id,
   });
   return { pendingApproval: false, reference: result.reference, ledgerGroupId: result.ledgerGroupId };
+}
+
+/**
+ * A live rate override changes every customer price on the pair, so in
+ * production it needs a second approver like the cockpit's FX override. The
+ * legacy admin console wrote the override directly (and indefinitely), which
+ * let one person reprice a pair. Development keeps the direct write for the
+ * simulators.
+ */
+function fxOverridesNeedApproval(): boolean {
+  return process.env.NODE_ENV === 'production' || process.env.FX_OVERRIDE_REQUIRE_APPROVAL === '1';
+}
+
+async function requestLegacyFxOverride(req: AuthRequest, p: { base: string; quote: string; buyPrice: number; sellPrice: number; reason: string }) {
+  await import('../services/exchange/fxOverride.service'); // registers the FX_OVERRIDE handler
+  const { requestApproval } = await import('../services/platform/approvals.service');
+  const { loadStaffContext } = await import('../services/platform/rbac');
+  const staff = req.staff ?? await loadStaffContext(req.user!.id);
+  if (!staff) throw new AppError('Staff access required', 403);
+  return requestApproval({
+    type: 'FX_OVERRIDE',
+    payload: { base: p.base, quote: p.quote, buyPrice: p.buyPrice, sellPrice: p.sellPrice, expiresInMinutes: 120 },
+    reason: p.reason.length >= 10 ? p.reason : `Rate override: ${p.reason}`,
+    requestedById: req.user!.id,
+    subjectType: 'FX_PAIR',
+    subjectId: `${p.base}/${p.quote}`,
+    permissions: staff.permissions,
+    req,
+  });
 }
 
 export class AdminController {
@@ -341,6 +444,10 @@ export class AdminController {
       const baseU  = base.toUpperCase()  as any;
       const quoteU = quote.toUpperCase() as any;
       const reason = typeof req.body?.reason === 'string' && req.body.reason.trim() ? req.body.reason.trim() : 'Manual rate set from admin console';
+      if (fxOverridesNeedApproval()) {
+        const approval = await requestLegacyFxOverride(req, { base: baseU, quote: quoteU, buyPrice: data.buyPrice, sellPrice: data.sellPrice, reason });
+        return res.status(202).json({ pendingApproval: true, approvalId: approval.id, message: 'Rate overrides need a second approver. The request is waiting in the cockpit approvals queue.' });
+      }
       const previous = await prisma.exchangeRate.findUnique({ where: { baseCurrency_quoteCurrency: { baseCurrency: baseU, quoteCurrency: quoteU } } });
       const rate = await prisma.exchangeRate.upsert({
         where:  { baseCurrency_quoteCurrency: { baseCurrency: baseU, quoteCurrency: quoteU } },
@@ -449,49 +556,16 @@ export class AdminController {
 
   static async confirmDeposit(req: AuthRequest, res: Response, next: NextFunction) {
     try {
-      const deposit = await prisma.deposit.findUnique({ where: { id: req.params.id } });
-      if (!deposit) throw new AppError('Deposit not found', 404);
-      // Deposits awaiting review are WAITING_CONFIRMATION (a few legacy ones may
-      // be PENDING). Accept either — checking only PENDING made every confirm
-      // fail with "Deposit is not pending".
-      if (!['WAITING_CONFIRMATION', 'PENDING'].includes(deposit.status)) {
-        throw new AppError('Deposit is not awaiting confirmation', 400);
-      }
-
-      await prisma.$transaction(async (tx: any) => {
-        // Conditional transition — a concurrent confirm/reject finds the
-        // deposit already processed and nothing is credited twice.
-        const moved = await tx.deposit.updateMany({
-          where: { id: deposit.id, status: { in: ['WAITING_CONFIRMATION', 'PENDING'] } },
-          data: { status: 'CONFIRMED', confirmedAt: new Date(), confirmedBy: req.user!.id, adminNotes: req.body.notes },
-        });
-        assertTransitioned(moved, 'Deposit already processed');
-        const wallet = await tx.wallet.findUnique({ where: { userId_currency: { userId: deposit.userId, currency: deposit.currency } } });
-        const balanceBefore = parseFloat(wallet?.balance.toString() || '0');
-        const amount = new Decimal(deposit.amount.toString());
-        await tx.wallet.upsert({
-          where: { userId_currency: { userId: deposit.userId, currency: deposit.currency } },
-          update: { balance: { increment: amount } },
-          create: { userId: deposit.userId, currency: deposit.currency, balance: amount },
-        });
-
-        if (isLedgerCurrency(deposit.currency)) {
-          await postLedger(tx, {
-            refType: 'deposit',
-            refId: deposit.id,
-            memo: `Admin-confirmed deposit ${deposit.currency}`,
-            legs: [
-              { type: 'SYSTEM_ONRAMP', currency: deposit.currency as any, amount: amount.neg() },
-              { type: 'USER', userId: deposit.userId, currency: deposit.currency as any, amount },
-            ],
-          });
-        }
-
-        await tx.transaction.create({ data: { userId: deposit.userId, type: 'DEPOSIT', currency: deposit.currency, amount: deposit.amount, balanceBefore, balanceAfter: new Decimal(balanceBefore).add(amount), reference: deposit.reference, description: `Deposit confirmed via ${deposit.paymentMethod}` } });
-        await tx.notification.create({ data: { userId: deposit.userId, title: 'Deposit Confirmed', message: `Your deposit of ${amount.toString()} ${deposit.currency} has been confirmed.`, type: 'deposit' } });
-        await recordTransition(tx, { entityType: 'DEPOSIT', entityId: deposit.id, fromState: deposit.status, toState: 'CONFIRMED', actorType: 'STAFF', actorId: req.user!.id, reason: req.body?.notes ?? null });
-        await writeAudit(tx, { actorId: req.user!.id, action: 'CONFIRM_DEPOSIT', entity: 'Deposit', entityId: deposit.id, before: { status: deposit.status }, after: { status: 'CONFIRMED', amount: deposit.amount, currency: deposit.currency }, reason: req.body?.notes ?? null, req });
+      // Shared with /api/deposits/:id/confirm: segregation of duties, dual
+      // control above DEPOSIT_DUAL_CONTROL_USD and an exactly-once credit.
+      const { confirmBankDeposit } = await import('../services/wallet/bankDeposits.service');
+      const result = await confirmBankDeposit({
+        depositId: req.params.id, staffId: req.user!.id, notes: typeof req.body?.notes === 'string' ? req.body.notes : null,
+        permissions: req.staff?.permissions, req,
       });
+      if (!result.credited) {
+        return res.status(202).json({ message: 'A second staff member must approve this deposit before it is credited', pendingApproval: true, approvalId: result.approvalId });
+      }
       res.json({ message: 'Deposit confirmed and funds credited' });
     } catch (error) { next(error); }
   }
@@ -543,6 +617,8 @@ export class AdminController {
       const withdrawal = await prisma.withdrawal.findUnique({ where: { id: req.params.id } });
       if (!withdrawal) throw new AppError('Withdrawal not found', 404);
       if (withdrawal.status !== 'PENDING') throw new AppError('Withdrawal is not pending', 400);
+      // Neither the release nor one of the multi-sig approvals may come from the owner.
+      assertNotSelf(req.user!.id, [withdrawal.userId], 'process_withdrawal', { ipAddress: req.ip, path: req.originalUrl });
 
       // ── MULTI-SIG GATE ──────────────────────────────────────────────
       // Withdrawals at/above WITHDRAWAL_MULTISIG_USD require N distinct admin
@@ -712,6 +788,7 @@ export class AdminController {
       const { tier } = z.object({
         tier: z.enum(['TIER_1', 'TIER_2', 'TIER_3']).default('TIER_1'),
       }).parse(req.body ?? {});
+      assertNotSelf(req.user!.id, [req.params.userId], 'kyc_approve', { ipAddress: req.ip, path: req.originalUrl });
       const before = await prisma.user.findUnique({ where: { id: req.params.userId }, select: { kycStatus: true, kycTier: true } });
       if (!before) throw new AppError('User not found', 404);
       await prisma.user.update({ where: { id: req.params.userId }, data: { kycStatus: 'APPROVED', kycTier: tier } });
@@ -724,6 +801,7 @@ export class AdminController {
 
   static async rejectKYC(req: AuthRequest, res: Response, next: NextFunction) {
     try {
+      assertNotSelf(req.user!.id, [req.params.userId], 'kyc_reject', { ipAddress: req.ip, path: req.originalUrl });
       const before = await prisma.user.findUnique({ where: { id: req.params.userId }, select: { kycStatus: true, kycTier: true } });
       if (!before) throw new AppError('User not found', 404);
       // Declining a verified customer's request for a higher level leaves the
@@ -909,12 +987,13 @@ export class AdminController {
       const where: any = { role: 'USER' };
       if (status) where.status = status.toUpperCase();
       if (kycStatus) where.kycStatus = kycStatus.toUpperCase();
+      // Matching on email/phone would let staff without customers.pii recover
+      // masked contact details one character at a time.
       if (search) where.OR = [
-        { email: { contains: search, mode: 'insensitive' } },
+        ...(canSeePii(req) ? [{ email: { contains: search, mode: 'insensitive' } }, { phone: { contains: search, mode: 'insensitive' } }] : []),
         { firstName: { contains: search, mode: 'insensitive' } },
         { lastName: { contains: search, mode: 'insensitive' } },
         { username: { contains: search, mode: 'insensitive' } },
-        { phone: { contains: search, mode: 'insensitive' } },
       ];
 
       const [users, total] = await Promise.all([
@@ -1340,6 +1419,7 @@ export class AdminController {
 
       const flag = await prisma.aMLFlag.findUnique({ where: { id } });
       if (!flag) throw new AppError('AML flag not found', 404);
+      assertNotSelf(req.user!.id, [flag.userId], 'aml_flag_resolve', { ipAddress: req.ip, path: req.originalUrl });
 
       await prisma.aMLFlag.update({
         where: { id },
@@ -1535,6 +1615,11 @@ export class AdminController {
       }
       const baseU  = data.baseCurrency.toUpperCase()  as any;
       const quoteU = data.quoteCurrency.toUpperCase() as any;
+      if (fxOverridesNeedApproval()) {
+        const reason = typeof req.body?.reason === 'string' && req.body.reason.trim() ? req.body.reason.trim() : 'New rate pair from admin console';
+        const approval = await requestLegacyFxOverride(req, { base: baseU, quote: quoteU, buyPrice: data.buyPrice, sellPrice: data.sellPrice, reason });
+        return res.status(202).json({ pendingApproval: true, approvalId: approval.id, message: 'Rate overrides need a second approver. The request is waiting in the cockpit approvals queue.' });
+      }
       const rate = await prisma.exchangeRate.upsert({
         where:  { baseCurrency_quoteCurrency: { baseCurrency: baseU, quoteCurrency: quoteU } },
         update: { buyPrice: data.buyPrice, sellPrice: data.sellPrice, isActive: true, setBy: req.user!.id },
@@ -1597,6 +1682,7 @@ export class AdminController {
     try {
       const { id } = req.params;
       const reason = (req.body?.reason as string | undefined)?.trim() || 'Unfrozen via admin console';
+      assertNotSelf(req.user!.id, [id], 'unfreeze_user', { ipAddress: req.ip, path: req.originalUrl });
       const user = await prisma.user.findUnique({ where: { id }, select: { id: true, status: true } });
       if (!user) throw new AppError('User not found', 404);
 
@@ -1851,7 +1937,7 @@ export class AdminController {
           ok: true,
           pendingApproval: true,
           approvalId: outcome.approvalId,
-          message: `Credits above ${SINGLE_CONTROL_LIMIT_USD()} USD need a second approver. Request ${outcome.approvalId} is waiting in the cockpit approvals queue.`,
+          message: `This credit needs a second approver (single credits above ${SINGLE_CONTROL_LIMIT_USD()} USD, and daily single-control totals, are dual-controlled). Request ${outcome.approvalId} is waiting in the cockpit approvals queue.`,
         });
         return;
       }
