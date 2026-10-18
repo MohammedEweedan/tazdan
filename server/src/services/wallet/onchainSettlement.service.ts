@@ -34,6 +34,7 @@ import {
 } from '@solana/web3.js';
 import { prisma } from '../../utils/prisma';
 import { AppError } from '../../middleware/errorHandler';
+import { enforceKycLimit } from '../../utils/kycLimits';
 import { logger } from '../../utils/logger';
 import { sendDepositConfirmed } from '../email';
 import { pushCopy, pushTxEvent } from '../push.service';
@@ -500,6 +501,7 @@ export async function initiateWithdrawal(opts: {
 
   const { onChainTx, walletIndex } = await prisma.$transaction(
     async (tx) => {
+      await enforceKycLimit(opts.userId, 'WITHDRAW', amount.toString(), asset, tx);
       // Pessimistic row lock — prevents two concurrent withdrawal calls
       // from racing past the balance check and double-spending. Without
       // FOR UPDATE both reads can see the same balance and both pass.

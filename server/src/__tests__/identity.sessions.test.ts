@@ -42,6 +42,19 @@ async function rotate(user: { id: string; email: string; role: string }, refresh
 }
 
 describe('tokens', () => {
+  it('checks persisted revocation even without a local/cache revocation event, and fails closed on a database outage', async () => {
+    const user = await makeUser();
+    const session = await issueSessionTokens(user, meta);
+    expect(await authStatus(session.accessToken)).toBe('ok');
+    // A different API worker revoked this row. This worker has no local event.
+    await fakePrisma.refreshToken.updateMany({ where: { id: session.sessionId }, data: { revokedAt: new Date() } });
+    expect(await authStatus(session.accessToken)).toBe(401);
+    const fresh = await issueSessionTokens(user, meta);
+    const read = jest.spyOn(fakePrisma.refreshToken, 'findUnique').mockRejectedValueOnce(new Error('database offline'));
+    expect(await authStatus(fresh.accessToken)).toBe(503);
+    read.mockRestore();
+    expect(await authStatus(fresh.accessToken)).toBe('ok');
+  });
   it('a refresh token is never accepted as an access token, even if one secret is reused for both', async () => {
     const saved = process.env.JWT_REFRESH_SECRET;
     process.env.JWT_REFRESH_SECRET = process.env.JWT_SECRET;

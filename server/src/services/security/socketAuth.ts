@@ -43,7 +43,7 @@ export function socketAuthExpired(auth: SocketAuth, nowSeconds = Date.now() / 10
 }
 
 async function revoked(auth: SocketAuth): Promise<boolean> {
-  try { return await isAccessRevoked(auth.id, auth.iat, auth.sid); } catch { return false; }
+  try { return await isAccessRevoked(auth.id, auth.iat, auth.sid); } catch { return true; }
 }
 
 function expire(socket: Socket, reason: string): void {

@@ -41,8 +41,8 @@ export async function assessWithdrawal(input: {
 }): Promise<WithdrawalRisk> {
   const subjectId = input.subjectId ?? `wd_${randomUUID()}`;
   const user = await prisma.user.findUniqueOrThrow({ where: { id: input.userId }, select: { firstName: true, lastName: true, country: true, dateOfBirth: true } });
-  const rate = await usdRate(input.currency).catch(() => 0);
-  const amountUsd = Number(input.amount) * (rate || 1);
+  const rate = await usdRate(input.currency);
+  const amountUsd = Number(input.amount) * rate;
 
   const sender = await screenAndRecord({
     subjectType: 'USER', subjectId: input.userId, userId: input.userId,

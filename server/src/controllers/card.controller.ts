@@ -382,6 +382,7 @@ export class CardController {
       await enforceKycLimit(userId, 'SEND', amount, currency);
 
       const tx = await prisma.$transaction(async (prismaTx) => {
+        await enforceKycLimit(userId, 'SEND', amount, currency, prismaTx);
         // Checked against spendable balance in the same statement.
         await debitAvailable(prismaTx, userId, currency, amount);
         // Double-entry: funds leave the user's wallet onto the card spend rail
@@ -567,6 +568,7 @@ export class CardController {
 
       const amt = new Decimal(amount);
       const result = await prisma.$transaction(async (tx) => {
+        await enforceKycLimit(userId, 'SEND', amount, budget.currency, tx);
         // Re-read the budget under its row lock: the balance checked above
         // may have changed, and two loads must not both spend it.
         await lockBudget(tx, budget.id);

@@ -1,33 +1,23 @@
-# Launch blockers
+# Launch blockers — 17 October 2026
 
-Status 2026-10-08. A blocker must be cleared before real customers move real money through the affected capability. "Owner" = decision, contract, credential or action outside the codebase.
+This replaces the 8 October checklist. Local hardening and tests do not authorise a public launch. All nine evidence gates must pass for the exact entity, customer countries, capabilities, currencies, corridors and providers. See the [release runbook](../runbooks/launch-readiness.md).
 
-## Platform-wide
+| Blocker | Evidence needed to clear | Responsible function |
+| --- | --- | --- |
+| Lawful Libya collection, FX conversion and outward settlement | Issued permissions or approved regulated-principal arrangement, signed legal scope and bank acceptance; review applicable CBL circulars and permitted pricing | Board / Libyan counsel / banking partner |
+| Destination reach | Written country, residency, currency and payout-method coverage for Libya-origin funds; production agreements and tested adapters | Partnerships / compliance / engineering |
+| Customer safeguarding | Opening and daily independent bank/custody-to-liability reconciliation, account ownership and insolvency treatment, pending and returned funds reconciled | Finance / auditor / counsel |
+| Historic discrepancy | Explain and evidence every historical imbalance, including the previously reported approximately 2,444 USDT issue; reverse unsupported credits with approved journals | Finance / independent reviewer |
+| Sister-company separation | Separate entity books, custody and bank accounts; exact intercompany records, settlement terms, transfer pricing and lawful replenishment | Group finance / counsel |
+| Liquidity | Own capital funded in each payout currency/partner pool; stress test one-way flows and blocked settlement; exclude customer balances | Treasury / board |
+| Production migration | Rehearse all pending migrations including `20261017120000_exact_ledger_controls` on a restored production copy; resolve duplicate accounts/references/fees and invalid owners without deleting evidence | Engineering / finance |
+| Legacy crypto execution | Real-money route disabled in code. Build durable reserve/submit/reconcile/finalise execution; certify lost replies and crash recovery with the venue | Engineering / venue |
+| Group-wide exposure policy | Local transfer, chat, claim, P2P, card-load and withdrawal creation now repeat KYC checks under a transaction/customer lock, with completed and pending usage in one SQL snapshot. Compliance must still approve aggregate cross-product/group exposure policy and rail-specific thresholds | Compliance / engineering |
+| Additional pooled products | Group-pool controller contains assumed USD-to-USDT conversion and legacy updates; it is not currently routed. Keep unrouted and exclude from launch; rebuild native-currency custody before exposing it | Engineering / finance |
+| Independent security | External penetration test, current sanctions/PEP coverage and monitoring acceptance, isolated remote custody/recovery test, secret rotation | Security / compliance |
+| Current dependency advisory scan | Re-run runtime dependency audits for server, client and mobile from a network that can reach npm's advisory registry. This attempt failed with registry DNS errors and supplies no clean audit result | Security / engineering |
+| Device and operational readiness | Physical iOS/Android English/Arabic RTL QA, complaints ownership, real notifications, monitoring drill, recovery and money-state reconciliation after restore | QA / operations |
 
-| # | Blocker | Type | How to clear |
-|---|---|---|---|
-| 1 | Regulatory authorisation for the activities and countries served | Owner | Legal; nothing in code substitutes for it |
-| 2 | Deploy and rehearse migrations `20261006120000` … `20261008110000` (six) on a restored copy of production data | Engineering + owner | Rehearsed on a copy of the development database 2026-10-08 (applied in under a second; placeholder banks switched off). The production container runs `prisma migrate deploy` on boot |
-| 3 | Confirm no placeholder deposit bank account is active after deploy; enter real accounts | Owner | Cockpit or mobile admin → Platform banks; see CL-20 |
-| 4 | Device test of the mobile changes; new native build (prior blocker: expo-location and SDK realignment need a native build) | Engineering | Build, test, submit |
-| 5 | Offsite backups and a restore drill | Owner | `BACKUP_S3_URI` and keys; [docs/runbooks/backup-restore.md](../runbooks/backup-restore.md) |
-| 6 | Production secrets held outside the droplet (password manager) | Owner | Disaster-recovery prerequisite |
-| 7 | Phone OTP provider configured (or phone verification disabled in the product) | Owner | Twilio or Meta credentials |
-| 8 | Custody KMS key for the master seed (`MASTER_SEED_KMS_KEY_ID`) | Owner | [docs/runbooks/custody-kms.md](../runbooks/custody-kms.md) |
-| 9 | Explain the reported fund-integrity discrepancy | Owner (tooling done) | Audit rebuilt (CL-47). Run `scripts/diagnose-fund-integrity.ts USDT` in production, acknowledge each currency's history in the cockpit, then set `FUND_AUDIT_HALT=1` |
-| 10 | Staff accounts given explicit roles (no implicit SUPER_ADMIN) | Owner | Cockpit → Staff & roles. Staff 2FA is enforced in production and the cockpit guides setup (CL-53) |
-| 11 | External penetration test | Owner | [docs/security/pentest-scope.md](../security/pentest-scope.md) |
+No worldwide approval is assumed. Add each corridor only when origin settlement, destination payout and the operating legal entity are covered together. A shell-company registration and an overseas reserve do not clear these blockers.
 
-## Per capability
-
-| Capability | Blocker |
-|---|---|
-| Remittance | Payout partner contract and production adapter per corridor; prefunding; corridor set `LIVE` by an authorised operator |
-| Crypto buy/sell | Reachable hedge venue, or approve the principal-exposure limits (enforced in code, CL-51) and a hedging routine |
-| Cards, card deposits | Issuer and PSP |
-| Sanctions screening | UN, OFAC SDN and UK lists load automatically (CL-52); PEP and EU data need a vendor |
-| AI assistant | Data-processing agreement; `AI_LEVEL`; `ANTHROPIC_API_KEY` |
-
-## Readiness statement
-
-The brief's launch criteria require, among others, live provider integrations, backups with a tested restore, and validated production configuration. Those are not yet met, so this programme does **not** declare the platform launch ready. The accurate statement is in [TAZDAN_LAUNCH_READINESS_REPORT.md](../../TAZDAN_LAUNCH_READINESS_REPORT.md).
+Changes and projections are documented in the [financial hardening and launch assessment](../../deliverables/TAZDAN_FINANCIAL_HARDENING_AND_LAUNCH_2026_10_17.md). Production was not accessed or deployed.

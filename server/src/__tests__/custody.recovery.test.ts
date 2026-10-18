@@ -21,6 +21,10 @@ describeDb('durable custody withdrawal recovery', () => {
   let reconcile: typeof import('../services/wallet/custodyReconciliation.service').reconcileCustodyWithdrawals;
   let postLedger: typeof import('../services/ledger/ledger.service').postLedger;
   let submissions = 0; let rejectSubmit = false; const outcomes = new Map<string, any>();
+  let clock = Date.now();
+  let clockSpy: jest.SpyInstance;
+  beforeEach(() => { clock += 60_000; clockSpy = jest.spyOn(Date, 'now').mockReturnValue(clock); });
+  afterEach(() => { clockSpy.mockRestore(); });
   const address = '0x000000000000000000000000000000000000dEaD';
   const secret = 'JBSWY3DPEHPK3PXP'; // Public test TOTP fixture.
   const payload = (key: string, amount = '0.1') => ({ asset: 'ETH', network: 'ERC20', amount, toAddress: address, idempotencyKey: key, twoFactorCode: speakeasy.totp({ secret, encoding: 'base32' }) });

@@ -86,6 +86,7 @@ export class TransactionController {
       });
 
       const result = await prisma.$transaction(async (tx) => {
+        await enforceKycLimit(senderId, 'SEND', amountDec, currency, tx);
         const reference = `TRF-${uuidv4().slice(0, 8).toUpperCase()}`;
 
         // Enum currencies live in the Wallet table, everything else in

@@ -29,6 +29,7 @@ function makeFakeTx() {
   };
 
   const tx = {
+    $executeRaw: async () => 0,
     ledgerAccount: {
       findFirst: async ({ where }: any) => {
         const { type, userId, currency } = where;
@@ -66,6 +67,27 @@ function makeFakeTx() {
 }
 
 describe('postLedger — conservation invariant', () => {
+  it.each(['NaN', 'Infinity', '0.0000000000000000001', '100000000000000000000'])('rejects an unrepresentable amount %s before writes', async (amount) => {
+    const tx = makeFakeTx();
+    await expect(postLedger(tx, { refType: 'bad', legs: [
+      { type: 'SYSTEM_ONRAMP', currency: 'USD', amount },
+      { type: 'USER', userId: 'alice', currency: 'USD', amount: '0' },
+    ] })).rejects.toThrow(/Ledger amount/);
+    expect(tx._entries).toHaveLength(0);
+  });
+
+  it('rejects even one atomic unit of imbalance and malformed account ownership', async () => {
+    const tx = makeFakeTx();
+    await expect(postLedger(tx, { refType: 'dust', legs: [
+      { type: 'SYSTEM_ONRAMP', currency: 'USD', amount: '-1' },
+      { type: 'USER', userId: 'alice', currency: 'USD', amount: '1.000000000000000001' },
+    ] })).rejects.toThrow(/imbalance/);
+    await expect(postLedger(tx, { refType: 'owner', legs: [
+      { type: 'USER', currency: 'USD', amount: '1' },
+      { type: 'SYSTEM_ONRAMP', currency: 'USD', amount: '-1' },
+    ] })).rejects.toThrow(/owner/);
+    expect(tx._entries).toHaveLength(0);
+  });
   it('commits a balanced single-currency transfer and moves balances exactly', async () => {
     const tx = makeFakeTx();
     // Seed alice with 100 USDT by crediting from the on-ramp system account.

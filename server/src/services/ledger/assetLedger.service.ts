@@ -10,7 +10,8 @@ import { Prisma } from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/library';
 import { v4 as uuidv4 } from 'uuid';
 import { AppError } from '../../middleware/errorHandler';
-import { negativeUserBalanceAllowed } from './ledger.service';
+import { isLedgerCurrency, negativeUserBalanceAllowed } from './ledger.service';
+import { ledgerAmount, LedgerDecimal, validateAccountOwner } from './validation';
 
 export type AssetAccountType =
   | 'USER'
@@ -37,18 +38,15 @@ export interface AssetPostInput {
 
 export type AssetTx = Prisma.TransactionClient;
 
-const EPS = new Decimal('0.000000000001');
-
 export function normaliseAsset(asset: string): string {
-  return asset.trim().toUpperCase().replace(/[^A-Z0-9._-]/g, '');
+  const normalised = asset.trim().toUpperCase();
+  if (!/^[A-Z0-9][A-Z0-9._-]{0,31}$/.test(normalised)) throw new Error('Invalid ledger asset identifier');
+  return normalised;
 }
 
 export function isDynamicAsset(asset: string): boolean {
   const a = normaliseAsset(asset);
-  return Boolean(a) && ![
-    'USDT', 'BTC', 'ETH', 'BNB', 'SOL', 'XRP', 'ADA', 'DOGE', 'MATIC', 'DOT', 'AVAX',
-    'USD', 'EUR', 'GBP', 'AED', 'SAR', 'EGP', 'LYD',
-  ].includes(a);
+  return !isLedgerCurrency(a);
 }
 
 async function resolveAssetAccount(
@@ -100,13 +98,14 @@ export async function postAssetLedger(
 
   const perAsset = new Map<string, Decimal>();
   for (const leg of input.legs) {
+    validateAccountOwner(leg.type, leg.userId);
     const asset = normaliseAsset(leg.asset);
     if (!asset) throw new Error('postAssetLedger: blank asset');
-    const amt = new Decimal(leg.amount.toString());
-    perAsset.set(asset, (perAsset.get(asset) ?? new Decimal(0)).plus(amt));
+    const amt = ledgerAmount(leg.amount);
+    perAsset.set(asset, (perAsset.get(asset) ?? new LedgerDecimal(0)).plus(amt));
   }
   for (const [asset, sum] of perAsset) {
-    if (sum.abs().gt(EPS)) {
+    if (!sum.isZero()) {
       throw new Error(`Asset ledger imbalance for ${asset}: legs sum to ${sum.toString()} refType=${input.refType}`);
     }
   }
@@ -116,13 +115,13 @@ export async function postAssetLedger(
   const affectedUsers = new Map<string, { userId: string; asset: string }>();
   for (const leg of input.legs) {
     const k = keyFor(leg);
-    const amt = new Decimal(leg.amount.toString());
+    const amt = ledgerAmount(leg.amount);
     const cur = agg.get(k);
     if (cur) cur.amount = cur.amount.plus(amt);
     else agg.set(k, { leg: { ...leg, asset: normaliseAsset(leg.asset) }, amount: amt });
   }
 
-  for (const { leg, amount } of agg.values()) {
+  for (const [, { leg, amount }] of [...agg.entries()].sort(([a], [b]) => a.localeCompare(b))) {
     if (amount.isZero()) continue;
     const acct = await resolveAssetAccount(tx, leg.type, leg.asset, leg.userId ?? null);
 

@@ -484,7 +484,12 @@ export async function getRate(base: string, quote: string): Promise<RatePair> {
     throw Object.assign(new Error(`Fulus rate unavailable for ${base}/${quote}`), { statusCode: 503 });
   }
 
-  // 3. Stale override (even if outside the freshness window) beats nothing.
+  // Real money never prices an exchange from an expired override or a
+  // historical constant when all live providers are unavailable.
+  if (process.env.NODE_ENV === 'production' && process.env.REAL_MONEY_ENABLED === '1') {
+    throw Object.assign(new Error(`Current FX rate unavailable for ${base}/${quote}`), { statusCode: 503 });
+  }
+  // 3. Stale override for demonstrations only.
   if (override) {
     return {
       buyPrice:  override.buyPrice.toString(),

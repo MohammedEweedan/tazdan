@@ -6,7 +6,7 @@
 import { Response, NextFunction } from 'express';
 import { z } from 'zod';
 import crypto from 'crypto';
-import { verifyTotpOnce } from '../services/security/totp';
+import { Decimal } from '@prisma/client/runtime/library';
 import type { Server as IOServer } from 'socket.io';
 import { prisma } from '../utils/prisma';
 import { AuthRequest } from '../types';
@@ -24,11 +24,15 @@ import { recordSecurityEvent } from '../services/platform/securityEvents';
 import { enforceKycLimit } from '../utils/kycLimits';
 import { assertMovementAllowed } from '../services/platform/controls.service';
 import { assessWithdrawal } from '../services/risk/withdrawalRisk';
+import { authorizeWithdrawal } from '../services/security/withdrawalAuthorization.service';
 
 const initiateSchema = z.object({
   asset: z.enum(['ETH', 'BTC', 'SOL', 'USDT']),
   network: z.string().min(1),
-  amount: z.union([z.string(), z.number()]).transform(String),
+  amount: z.union([z.string(), z.number()]).transform(String).refine(value => {
+    try { const amount = new Decimal(value); return amount.isFinite() && amount.gt(0) && amount.decimalPlaces() <= 8; }
+    catch { return false; }
+  }, 'Amount must be positive, finite and have at most eight decimal places'),
   toAddress: z.string().min(10),
   twoFactorCode: z.string().min(6).max(8).optional(),
   idempotencyKey: z.string().regex(/^[A-Za-z0-9_-]{8,128}$/).optional(),
@@ -83,7 +87,11 @@ export class CryptoWithdrawalController {
 
       // Single-use: a code accepted once (here or anywhere else) cannot
       // authorise a second, parallel or replayed withdrawal.
-      const ok = await verifyTotpOnce(req.user!.id, user.twoFactorSecret, body.twoFactorCode, { window: 1 });
+      const ok = await authorizeWithdrawal({
+        userId: req.user!.id, secret: user.twoFactorSecret, code: body.twoFactorCode,
+        key: body.idempotencyKey ?? req.get('Idempotency-Key'), asset: body.asset, network: body.network,
+        amount: body.amount, toAddress: body.toAddress,
+      });
       if (!ok) throw new AppError('Invalid 2FA code', 401);
 
       // First-time withdrawal-address whitelist (24h delay). Stops a

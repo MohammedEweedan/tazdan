@@ -60,6 +60,8 @@ export async function buildOperationalReadiness() {
     close,
     walletExposure,
     platformFees,
+    unpricedFees,
+    legacyFeeValuations,
     recentAuditLogs,
   ] = await Promise.all([
     auditFundIntegrity({ haltOnBreach: false }),
@@ -83,6 +85,8 @@ export async function buildOperationalReadiness() {
     latestDailyClose(),
     prisma.wallet.groupBy({ by: ['currency'], _sum: { balance: true, frozen: true } }),
     (prisma as any).platformFee.aggregate({ _sum: { amountUsd: true }, _count: { id: true } }).catch(() => null),
+    prisma.platformFee.count({ where: { amountUsd: null } }),
+    prisma.platformFee.count({ where: { valuationSource: 'LEGACY_UNVERIFIED' } }),
     prisma.auditLog.findMany({ orderBy: { createdAt: 'desc' }, take: 20 }).catch(() => []),
   ]);
 
@@ -134,7 +138,7 @@ export async function buildOperationalReadiness() {
 
   return {
     generatedAt: now.toISOString(),
-    overall: worst(reconciliationStatus, fxStatus, webhookStatus, supportStatus, hotWalletStatus, auditStatus, dailyCloseStatus),
+    overall: worst(reconciliationStatus, fxStatus, webhookStatus, supportStatus, hotWalletStatus, auditStatus, dailyCloseStatus, unpricedFees || legacyFeeValuations ? 'warn' : 'ok'),
     controls: {
       reconciliation: { status: reconciliationStatus, tradingHalted, funds, ledger },
       dailyClose: {
@@ -148,10 +152,13 @@ export async function buildOperationalReadiness() {
         staleFxRates: { status: fxStatus, staleExchangeRates, staleFulusRates, thresholdMs: staleFxMs },
       },
       liquidityExposure: {
-        status: 'ok' as Status,
+        status: (unpricedFees || legacyFeeValuations ? 'warn' : 'ok') as Status,
         byCurrency: exposureByCurrency,
         feesUsd: String(platformFees?._sum?.amountUsd ?? 0),
         feeEvents: platformFees?._count?.id ?? 0,
+        unpricedFeeEvents: unpricedFees,
+        unverifiedLegacyValuations: legacyFeeValuations,
+        feeValuationIsCash: false,
       },
       hotWalletLimits: { status: hotWalletStatus, limits: hotWalletLimits },
       adminApprovals: {

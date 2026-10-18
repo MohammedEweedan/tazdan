@@ -140,6 +140,7 @@ export class TransferController {
       let senderCurrencyOnRow: string = '';
       let senderBalanceBefore: number = 0;
       await prisma.$transaction(async (tx: any) => {
+        await enforceKycLimit(req.user!.id, 'SEND', data.amount, logicalCurrency, tx);
         // Re-read inside the tx; this is the source of truth.
         const senderVariants = await tx.wallet.findMany({
           where: { userId: req.user!.id, currency: { in: variants as any } },

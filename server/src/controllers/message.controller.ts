@@ -291,6 +291,7 @@ export class MessageController {
         });
 
         const result = await prisma.$transaction(async (tx) => {
+          await enforceKycLimit(senderId, 'SEND', amountDec, baseCurrency, tx);
           const reference = `TRF-${require('uuid').v4().slice(0, 8).toUpperCase()}`;
 
           // Each branch locks (or atomically checks) before it reads, so two

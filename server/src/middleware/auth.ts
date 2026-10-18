@@ -8,9 +8,8 @@ import { getRedisClient } from '../utils/redis';
 import { logger } from '../utils/logger';
 
 // Token lifetimes — kept here so they're discoverable from one place.
-// Access tokens are short-lived; clients refresh silently via the refresh
-// token. 15min limits damage from a stolen access token, and is the window
-// a banned/demoted user can keep acting if Redis is down (see cutoff below).
+// Access tokens are short-lived; persisted sessions remain authoritative
+// even when Redis is unavailable or another API worker issued a revocation.
 const ACCESS_TOKEN_TTL  = '15m';
 const ACCESS_TOKEN_TTL_SECONDS = 15 * 60;
 const REFRESH_TOKEN_TTL_DAYS = 7;
@@ -19,9 +18,8 @@ const REFRESH_TOKEN_TTL_DAYS = 7;
 // Redis holds a per-user "tokens issued before T are dead" cutoff. Setting
 // it (ban, password reset, 2FA recovery) kills every outstanding access
 // token immediately instead of waiting out the TTL. Key TTL only needs to
-// outlive the access-token lifetime. Fail-open when Redis is missing: the
-// residual exposure is bounded by the 15m token TTL, and a hard dependency
-// on Redis for EVERY request would turn a cache blip into a full outage.
+// outlive the access-token lifetime. Redis is an early-rejection accelerator;
+// its absence or a missing cache key is never proof that a session is live.
 const cutoffKey = (userId: string) => `sec:cutoff:${userId}`;
 const REVOCATION_TTL_MS = (ACCESS_TOKEN_TTL_SECONDS + 60) * 1000;
 
@@ -91,7 +89,7 @@ export async function revokeSessionAccess(sid: string): Promise<void> {
 }
 
 async function isRevokedByCutoff(userId: string, iatSeconds?: number, sid?: string): Promise<boolean> {
-  if (!iatSeconds) return false;
+  if (!iatSeconds || !Number.isFinite(iatSeconds)) return true;
   const now = Date.now();
   if (sid) {
     const exp = localSidRevoked.get(sid);
@@ -101,18 +99,24 @@ async function isRevokedByCutoff(userId: string, iatSeconds?: number, sid?: stri
   if (local && local.exp > now && iatSeconds * 1000 < local.at) return true;
 
   const client = getRedisClient();
-  if (!client) return false;
-  try {
+  if (client) try {
     const [raw, sidRevoked] = await Promise.all([
       client.get(cutoffKey(userId)),
       sid ? client.get(sessionKey(sid)) : Promise.resolve(null),
     ]);
     if (sidRevoked) return true;
-    if (!raw) return false;
-    return iatSeconds * 1000 < Number(raw);
+    if (raw && iatSeconds * 1000 < Number(raw)) return true;
   } catch {
-    return false; // fail-open across workers, bounded by the 15m TTL
+    // Continue with the database. A cache outage cannot revive a session.
   }
+  if (sid) {
+    const session = await prisma.refreshToken.findUnique({
+      where: { id: sid }, select: { userId: true, revokedAt: true, expiresAt: true },
+    });
+    return !session || session.userId !== userId || Boolean(session.revokedAt) || session.expiresAt.getTime() <= now;
+  }
+  // Old stateless tokens cannot prove a revocable session in production.
+  return process.env.NODE_ENV === 'production';
 }
 
 /** Revocation check for long-lived connections that authenticated earlier. */
@@ -182,7 +186,7 @@ export function authenticate(req: AuthRequest, res: Response, next: NextFunction
       req.user = decoded;
       next();
     })
-    .catch(() => { req.user = decoded; next(); });
+    .catch(() => next(new AppError('Session verification is temporarily unavailable. Please try again.', 503)));
 }
 
 /**
@@ -287,8 +291,9 @@ export function requireKYC(req: AuthRequest, _res: Response, next: NextFunction)
 }
 
 export function generateTokens(user: { id: string; email: string; role: string }) {
+  const issuedAt = Date.now();
   const accessToken = jwt.sign(
-    { id: user.id, email: user.email, role: user.role, typ: 'access', ims: Date.now() },
+    { id: user.id, email: user.email, role: user.role, typ: 'access', ims: issuedAt, iat: Math.floor(issuedAt / 1000) },
     jwtSecret(),
     { expiresIn: ACCESS_TOKEN_TTL, algorithm: 'HS256' }
   );
@@ -350,8 +355,9 @@ export async function issueSessionTokens(
     ipAddress: meta.ipAddress,
     userAgent: meta.userAgent,
   });
+  const issuedAt = Date.now();
   const accessToken = jwt.sign(
-    { id: user.id, email: user.email, role: user.role, sid: row.id, typ: 'access', ims: Date.now() },
+    { id: user.id, email: user.email, role: user.role, sid: row.id, typ: 'access', ims: issuedAt, iat: Math.floor(issuedAt / 1000) },
     jwtSecret(),
     { expiresIn: ACCESS_TOKEN_TTL, algorithm: 'HS256' },
   );

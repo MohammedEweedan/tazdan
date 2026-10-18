@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, type Prisma } from '@prisma/client';
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
@@ -27,11 +27,35 @@ function buildDbUrl(): string {
   return `${base}${sep}connection_limit=${connectionLimit}&pool_timeout=${poolTimeout}`;
 }
 
-export const prisma =
+const client =
   globalForPrisma.prisma ??
   new PrismaClient({
     log: process.env.NODE_ENV === 'development' ? ['error', 'warn'] : ['error'],
     datasources: { db: { url: buildDbUrl() } },
   });
+
+// Some Prisma/database combinations can resolve the callback's return value
+// even when a deferred constraint rejects COMMIT. Force pending constraints
+// while query errors are still observable, before returning financial success.
+// Keep constraints deferred throughout the user's callback so multi-leg
+// journals can still be written one leg at a time.
+const guarded = Symbol.for('tazdan.prisma.constraints-guarded');
+if (!(client as any)[guarded]) {
+  const transact = client.$transaction.bind(client) as any;
+  (client as any).$transaction = (operation: any, options?: any) => {
+    if (typeof operation === 'function') {
+      return transact(async (tx: Prisma.TransactionClient) => {
+        const result = await operation(tx);
+        await tx.$executeRawUnsafe('SET CONSTRAINTS ALL IMMEDIATE');
+        return result;
+      }, options);
+    }
+    return transact([...operation, client.$executeRawUnsafe('SET CONSTRAINTS ALL IMMEDIATE')], options)
+      .then((results: unknown[]) => results.slice(0, -1));
+  };
+  (client as any)[guarded] = true;
+}
+
+export const prisma = client;
 
 if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma;

@@ -157,6 +157,7 @@ export class WithdrawalController {
       // Atomically reserve + create the withdrawal record + log activity.
       // The fee is booked when an admin completes the withdrawal, not here.
       const withdrawal = await prisma.$transaction(async (tx) => {
+        await enforceKycLimit(req.user!.id, 'WITHDRAW', data.amount, currency, tx);
         // Checked and applied in one statement: concurrent requests can never
         // reserve more than the spendable balance.
         await reserveFunds(tx, req.user!.id, currency, amountDec);

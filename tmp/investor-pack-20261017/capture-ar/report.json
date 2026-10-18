@@ -1,0 +1,135 @@
+{
+  "results": [
+    {
+      "id": "exchange",
+      "route": "/exchange",
+      "title": "Currency conversion",
+      "status": "Simulated pricing. Lawful FX access required",
+      "success": true,
+      "seconds": 4.462,
+      "body": "صرف العملات\nتصرف\n\nUSD\n\n\n$\n0\nالمتاح: 2.340,00 USD\n\nتستلم\n\nLYD\n\n\n—\nأدخل المبلغ لعرض سعر الصرف.\n1\n2\n3\n4\n5\n6\n7\n8\n9\n.\n0\n\nيشمل السعر هامش الصرف.\nأدخل المبلغ\n"
+    },
+    {
+      "id": "portfolio",
+      "route": "/portfolio/crypto",
+      "title": "Portfolio",
+      "status": "Asset holdings and allocation views",
+      "success": true,
+      "seconds": 4.46,
+      "body": "\nمحفظة الكريبتو\nTotal Crypto Value\n$11.59K\n+$167.16\n\n1.44%\n24h\nAsset Allocation\n4\nASSETS\nBitcoin\n36.1%\nTether\n28.0%\nEthereum\n25.6%\nSolana\n10.3%\nValue\nChange\nName\nBitcoin\n0.0425 BTC\n$4.18K\n+2.14%\nTether\n3,250 USDT\n$3.25K\n+0.01%\nEthereum\n0.82 ETH\n$2.96K\n+1.38%\nSolana\n6.4 SOL\n$1.20K\n+3.05%"
+    },
+    {
+      "id": "receive",
+      "route": "/receive",
+      "title": "Receive and QR",
+      "status": "Payment identifiers and receiving interface",
+      "success": true,
+      "seconds": 4.457,
+      "body": "@HANDLE\nBANK TRANSFER\n@amira\nhttps://tazdan.com/u/amira\nScanning the QR opens your public profile so anyone can pay you, see your KYC tier, and view your P2P offers.\n\nPreview public profile\n\nنسخ\n\nمشاركة\n"
+    },
+    {
+      "id": "withdraw",
+      "route": "/withdraw",
+      "title": "Withdrawals",
+      "status": "Bank and crypto withdrawal interface. Activation pending",
+      "success": true,
+      "seconds": 4.476,
+      "body": "SELECT CURRENCY TO WITHDRAW\nLYD\n18,450.5\nUSD\n2,340\nEUR\n860\nGBP\n415.2\nUSDT\n3,250\nBTC\n0.0425\nETH\n0.82\nSOL\n6.4\nContinue with USD\n\n"
+    },
+    {
+      "id": "history",
+      "route": "/history",
+      "title": "Activity history",
+      "status": "Payment records and transaction details",
+      "success": true,
+      "seconds": 4.458,
+      "body": "\nتحديث\nروابط المطالبة المعلقة\n\n50.00 USD → +44 7••• ••• 210\n5d left\n\nمشاركة\nإلغاء\n18 أكتوبر 2026\n\nTransfer In\n18 أكتوبر 2026، 10:10:40\n+250 GBP\n\nTZ-8F2K-41QD\n\n\nBought 500 USDT · 3,585 LYD\n18 أكتوبر 2026، 08:34:40\n+500 USDT\n\nP2P-7731\n\n\nادخار في «حج 2027»\n18 أكتوبر 2026، 06:46:40\n−2,200 LYD\n\nSV-2207\n\n17 أكتوبر 2026\n\nTransfer Out\n17 أكتوبر 2026، 21:42:00\n−36 USD\n\nTZ-3J9A-77PL\n\n\nإيداع بتحويل بنكي\n17 أكتوبر 2026، 11:05:00\n+2,000 LYD\n\nDP-55120\n\n\nشراء USDT الأسبوعي\n17 أكتوبر 2026، 09:00:00\n−500 USDT\n\nRB-0418\n\n16 أكتوبر 2026\n\nتحويل للخارج · المملكة المتحدة\n16 أكتوبر 2026، 17:26:00\n−2,400 LYD\n\nRM-LYGB-2291\n\n\nTransfer In\n16 أكتوبر 2026، 13:10:00\n+120 LYD\n\nTZ-1Q8C-02ZK\n\n15 أكتوبر 2026\n\nالبطاقة · اشتراك أدوات التصميم\n15 أكتوبر 2026، 10:30:00\n−14.99 USD\n\nCD-99812\n\n\nالنشاط\nكل معاملة وكل إيصال"
+    },
+    {
+      "id": "statements",
+      "route": "/statements",
+      "title": "Statements",
+      "status": "Statement selection and export interface",
+      "success": true,
+      "seconds": 4.463,
+      "body": "\nمركز كشوف الحساب\n9 عملية جاهزة\nالعمليات\n42\nالرسوم\n$38.40\nالإيداعات\n$6.00\nالسحوبات\n$1.00\nالفترة\nهذا الشهر\nالشهر الماضي\nمن بداية السنة\nالسنة الماضية\nكل الفترات\nاختر شهراً\nالعملة\nكل العملات\nLYD\nUSD\nEUR\nGBP\n₮\nUSDT\n₿\nBTC\nΞ\nETH\n◎\nSOL\n\nPDF · ورق A4 عمودي\nملخص الحساب · الأرصدة · سجل العمليات الكامل\nآخر عمليات السجل\n\nTRANSFER IN\nOct 18 · TZ-8F2K-41QD\n+250 GBP\n\nP2P BUY\nOct 18 · P2P-7731\n+500 USDT\n\nBUDGET CONTRIBUTION\nOct 18 · SV-2207\n-2,200 LYD\n\nTRANSFER OUT\nOct 17 · TZ-3J9A-77PL\n-36 USD\n\nDEPOSIT\nOct 17 · DP-55120\n+2,000 LYD\n\nBUY\nOct 17 · RB-0418\n-500 USDT\n\nإنشاء كشف PDF\n\nكشوف الحساب\nتصدير الأرصدة والرسوم وسجل العمليات للمراجعة"
+    },
+    {
+      "id": "recurring",
+      "route": "/recurring",
+      "title": "Recurring purchases",
+      "status": "Scheduling interface. Execution currently disabled",
+      "success": true,
+      "seconds": 4.464,
+      "body": "شراء متكرر\nاختر المبلغ والجدول، ودعنا نتولى كل عملية شراء.\nBitcoin\nBTC\n\nالمبلغ\n$\nUSD\n$10\n$25\n$50\n$100\n\nالتكرار\nأسبوعياً\n\n\nمصدر التمويل\nUSD الرصيد\n$2,340 المتاح\n\n\nسنقوم تلقائياً بالشراء وفق الجدول الذي تختاره، مع الخصم من مصدر التمويل المحدد. يمكنك الإيقاف أو الإلغاء في أي وقت.\nبدء الشراء المتكرر\nعمليات الشراء المتكررة\nLD500 → USDT\nأسبوعياً\n\n\n$25 → BTC\nشهرياً\n\n\n"
+    },
+    {
+      "id": "linked",
+      "route": "/linked-accounts",
+      "title": "Linked accounts",
+      "status": "Bank and card linking interface. Partners pending",
+      "success": true,
+      "seconds": 4.458,
+      "body": "الحسابات المرتبطة\nManage your payment methods\nالبطاقات\nBank Accounts\nVISA\nاليومية\n•••• 4417\nACTIVE\nManage"
+    },
+    {
+      "id": "kyc",
+      "route": "/kyc",
+      "title": "Identity verification",
+      "status": "KYC interface with a fictional verified profile",
+      "success": true,
+      "seconds": 4.453,
+      "body": "\nمستواك\nالمستوى 3\nموثّق بالكامل — أعلى الحدود\nالهوية\nالعنوان\nمصدر الأموال\nحدودك\n\nشراء\n$20,000,000 شهرياً\nالمتبقي $19,999,580 · يتجدد في 08/11/2026 · حتى $500,000 للعملية\n\nبيع\n$10,000,000 شهرياً\nالمتبقي $10,000,000 · يتجدد في 08/11/2026 · حتى $250,000 للعملية\n\nإرسال\n$10,000,000 شهرياً\nالمتبقي $9,997,774 · يتجدد في 08/11/2026 · حتى $250,000 للعملية\n\nسحب\n$10,000,000 شهرياً\nالمتبقي $10,000,000 · يتجدد في 08/11/2026 · حتى $250,000 للعملية\n\nأنت في أعلى مستوى توثيق.\n\nالتوثيق"
+    },
+    {
+      "id": "referral",
+      "route": "/referral",
+      "title": "Referrals",
+      "status": "Referral interface. Rewards shown are fictional",
+      "success": true,
+      "seconds": 4.466,
+      "body": "\nEarn $10 for every friend\nShare your code. Friends get $10 when they sign up and complete KYC. You earn $10 too.\nYOUR CODE\nAMIRA7\n\nFRIENDS INVITED\n3\nTOTAL EARNED\n$30\nHOW IT WORKS\n\nShare your unique code with friends.\n\nThey sign up and complete KYC.\n\nYou both get $10 instantly.\n\nShare my code\n\nRefer & earn"
+    },
+    {
+      "id": "claim",
+      "route": "/claim/demo-token",
+      "title": "Claim links",
+      "status": "Fictional payment claim interface",
+      "success": true,
+      "seconds": 4.455,
+      "body": "المطالبة\n\nلقد تلقيت\n50.00\nUSD\nع\nمن @omar.benali\n\n5d 23h left\nملاحظة\nأهلاً بك في تزدان! القهوة عليّ ☕\n\nالمطالبة 50.00 USD\nتستقر الأموال فورًا. لا يمكن المطالبة بالروابط مرتين.\nما هو tazdan؟"
+    },
+    {
+      "id": "business-team",
+      "route": "/business/team",
+      "title": "Business team",
+      "status": "Team membership and role interfaces",
+      "success": true,
+      "seconds": 4.462,
+      "body": "4 people\nManage access and permissions for your business.\nACTIVE (4)\nأ\nأميرة بن علي\n@amira · amira@example.com\nOwner\nك\nكريم الزاوي\n@karim.z · karim@example.com\nAdmin ↓\nRemove\nس\nسلمى الطرابلسي\n@salma.t · salma@example.com\nAnalyst ↓\nRemove\nه\nهناء الكبير\n@hana.k · hana@example.com\nDeveloper ↓\nRemove\nPENDING INVITES (1)\nF\nfinance@example.com\nقيد الانتظار\nfinance@example.com\nAnalyst\nRemove\nROLE PERMISSIONS\nOwner\nFull access including billing\nAdmin\nManage team and API keys\nDeveloper\nAPI key access, view payouts\nAnalyst\nView-only — stats and payouts\n\nTeam\n\nInvite"
+    },
+    {
+      "id": "business-keys",
+      "route": "/business/api-keys",
+      "title": "Business API",
+      "status": "Scoped keys and webhook configuration interface",
+      "success": true,
+      "seconds": 4.461,
+      "body": "2 active keys\nConnect your tools with only the access they need.\nACTIVE KEYS (2)\n\nتكامل الفواتير\ntzk_test_••••9f3a\n\nRevoke\nPayouts\nBalances\nLast used Oct 18 · Expires Apr 6, 2027\n\nالتقارير (قراءة فقط)\ntzk_test_••••41c7\n\nRevoke\nRead only\nFX Rates\nLast used Oct 17\nREVOKED KEYS\n\nنموذج قديم\ntzk_test_••••0b12\nREVOKED\nPayouts\nLast used Aug 9\n\nKeys are shown once at creation. Use them in the Authorization: Bearer header. See docs.tazdan.com for the full API reference.\n\nAPI Keys\n\nNew key"
+    },
+    {
+      "id": "business-payouts",
+      "route": "/business/invoices",
+      "title": "Payout approvals",
+      "status": "Batch status and approval interface",
+      "success": true,
+      "seconds": 4.458,
+      "body": "الكل\nPending\nProcessing\nمكتملة\nFailed\nCancelled\nWAITING FOR APPROVAL\n14,250 LYD · 8 payouts\nBATCH-1007\nتتجاوز حد الموافقة المزدوجة 10,000 د.ل\nReject\nApprove\n\n@leila.h\nUSD · Oct 18, 2026 · batch\n420.00\nمكتمل\n\n@yusuf.m\nLYD · Oct 18, 2026 · batch\n1,800.00\nمكتمل\n\nstudio-assist@example.com\nUSD · Oct 18, 2026\n150.00\nPROCESSING\n\n@nour.s\nUSD · Oct 17, 2026\n260.00\nمكتمل\n\n@salma.t\nLYD · Oct 16, 2026\n950.00\nمكتمل\n\n@karim.z\nUSD · Oct 15, 2026\n75.00\nلم يكتمل\n\nPayouts"
+    }
+  ],
+  "errors": [
+    "console: Invalid DOM property `%s`. Did you mean `%s`? transform-origin transformOrigin",
+    "console: Received `%s` for a non-boolean attribute `%s`.\n\nIf you want to write it to the DOM, pass a string instead: %s=\"%s\" or %s={value.toString()}.\n\nIf you used to conditionally omit it with %s={condition && value}, pass %s={condition ? value : undefined} instead. false collapsable collapsable false colla"
+  ],
+  "unmatched": []
+}

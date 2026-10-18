@@ -1,5 +1,7 @@
 # Tazdan — Project Brief for Marketing & Investor Materials
 
+> **Historical brief — superseded for current sales and investor claims on 17 October 2026.** The descriptions below include unverified “live”, “all shipped” and safety claims. Do not reuse them as evidence of production availability, regulatory permissions, commercial integrations or guaranteed fund safety. Use the current [buyer brief](deliverables/TAZDAN_BUYER_BRIEF_2026_10_17.md), [financial launch assessment](deliverables/TAZDAN_FINANCIAL_HARDENING_AND_LAUNCH_2026_10_17.md) and [validation record](docs/audit/FINANCIAL_HARDENING_VALIDATION_2026_10_17.md). In particular, legacy real-money crypto execution is disabled in the current hardened configuration; configured integrations do not establish live partner agreements.
+
 **Audience:** Claude Design (marketing material + investor pitch decks)
 **Date:** 2026-05-31 · reflects the *current* shipped codebase, not earlier drafts.
 **One-liner:** The financial operating system for the world's broken-currency corridors — buy, sell, send, and spend crypto and fiat at the *real* rate, in markets the global giants won't touch.

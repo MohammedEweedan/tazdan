@@ -104,6 +104,7 @@ export function validateEnv() {
       } catch { fail('Production CLIENT_URL must contain HTTPS origins only.'); }
     }
     if (process.env.REAL_MONEY_ENABLED === '1') {
+      if (!process.env.OPERATING_ENTITY_ID || currentLaunchReadiness().evidence?.scope.legalEntityId !== process.env.OPERATING_ENTITY_ID) fail('Real-money operation requires OPERATING_ENTITY_ID matching the reviewed launch scope.');
       if (process.env.FUND_AUDIT_HALT !== '1') fail('Real-money operation requires FUND_AUDIT_HALT=1.');
       if (process.env.LEDGER_BACKFILL_ON_BOOT !== '0') fail('Real-money operation requires LEDGER_BACKFILL_ON_BOOT=0.');
       const readiness = currentLaunchReadiness();

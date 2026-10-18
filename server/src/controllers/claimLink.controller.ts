@@ -144,6 +144,7 @@ export class ClaimLinkController {
       // recipient's tap feel intentional. Same behaviour either way.
 
       const link = await prisma.$transaction(async (tx) => {
+        await enforceKycLimit(senderId, 'SEND', body.amount, asset, tx);
         // Reserve the funds: frozen grows, balance stays put, so the
         // refund path is a plain release. Checked and applied in one
         // statement so concurrent sends can't reserve more than is spendable.

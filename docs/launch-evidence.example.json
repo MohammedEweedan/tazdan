@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "releaseSha": "0000000000000000000000000000000000000000",
   "scope": {
     "market": "REPLACE_WITH_APPROVED_MARKET",
@@ -10,7 +10,11 @@
       "transfers"
     ],
     "corridors": [],
-    "providers": []
+    "providers": [],
+    "legalEntityId": "REQUIRES_VERIFIED_LEGAL_ENTITY",
+    "customerCountries": [
+      "LY"
+    ]
   },
   "gates": {
     "authorization": {
@@ -40,6 +44,14 @@
     "operations": {
       "status": "pending",
       "owner": "Assign a named reviewer"
+    },
+    "safeguarding": {
+      "status": "pending",
+      "owner": "Owner must appoint reviewer"
+    },
+    "treasury": {
+      "status": "pending",
+      "owner": "Owner must appoint reviewer"
     }
   }
 }

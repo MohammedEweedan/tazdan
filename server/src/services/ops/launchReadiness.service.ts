@@ -4,7 +4,7 @@ import crypto from 'crypto';
 import { z } from 'zod';
 import { AppError } from '../../middleware/errorHandler';
 
-export const LAUNCH_GATES = ['authorization', 'providers', 'security', 'moneyPaths', 'deviceQa', 'recovery', 'operations'] as const;
+export const LAUNCH_GATES = ['authorization', 'providers', 'safeguarding', 'treasury', 'security', 'moneyPaths', 'deviceQa', 'recovery', 'operations'] as const;
 const FEATURES = ['withdrawals', 'deposits', 'p2p', 'fx', 'remittance', 'blockchain', 'cards', 'transfers', 'business_payouts'] as const;
 const review = z.object({
   status: z.enum(['verified', 'pending']),
@@ -15,16 +15,18 @@ const review = z.object({
   sha256: z.string().regex(/^[a-f0-9]{64}$/).optional(),
 }).strict();
 export const launchEvidenceSchema = z.object({
-  version: z.literal(1),
+  version: z.literal(2),
   releaseSha: z.string().regex(/^[a-f0-9]{40}$/),
   scope: z.object({
+    legalEntityId: z.string().min(3),
+    customerCountries: z.array(z.string().regex(/^[A-Z]{2}$/)).nonempty(),
     market: z.string().min(2),
     currencies: z.array(z.string().regex(/^[A-Z0-9_]{2,12}$/)).nonempty(),
     features: z.array(z.enum(FEATURES)).nonempty(),
     corridors: z.array(z.string().min(3)).default([]),
     providers: z.array(z.string().min(2)).default([]),
   }).strict(),
-  gates: z.object({ authorization: review, providers: review, security: review, moneyPaths: review, deviceQa: review, recovery: review, operations: review }).strict(),
+  gates: z.object({ authorization: review, providers: review, safeguarding: review, treasury: review, security: review, moneyPaths: review, deviceQa: review, recovery: review, operations: review }).strict(),
 }).strict();
 export type LaunchEvidence = z.infer<typeof launchEvidenceSchema>;
 
@@ -96,6 +98,9 @@ export function assertLaunchMovement(feature: string, currency?: string | null, 
   const report = currentLaunchReadiness();
   if (!report.ok || !report.evidence) throw new AppError('Money services are temporarily paused for launch verification.', 503, 'FEATURE_DISABLED');
   const { scope } = report.evidence;
+  if (!process.env.OPERATING_ENTITY_ID || scope.legalEntityId !== process.env.OPERATING_ENTITY_ID) {
+    throw new AppError('Money services are paused for operating entity verification.', 503, 'FEATURE_DISABLED');
+  }
   if (!scope.features.includes(feature as typeof FEATURES[number]) || (currency && !scope.currencies.includes(currency.toUpperCase())) ||
       (corridor && !scope.corridors.includes(corridor)) || (provider && !scope.providers.includes(provider))) {
     throw new AppError('This service is outside the current launch scope.', 503, 'FEATURE_DISABLED');

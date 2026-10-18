@@ -13,6 +13,9 @@
  */
 import speakeasy from 'speakeasy';
 import { markOnce } from '../../utils/redis';
+import crypto from 'crypto';
+import { prisma } from '../../utils/prisma';
+import type { Prisma } from '@prisma/client';
 
 const STEP_SECONDS = 30;
 
@@ -29,7 +32,7 @@ export async function verifyTotpOnce(
   userId: string,
   secret: string | null | undefined,
   code: unknown,
-  opts: { window?: number } = {},
+  opts: { window?: number; client?: Pick<Prisma.TransactionClient, 'stepUpChallenge'> } = {},
 ): Promise<boolean> {
   if (!secret || !isTotpFormat(code)) return false;
   const window = opts.window ?? 1;
@@ -46,5 +49,14 @@ export async function verifyTotpOnce(
   const step = counter + match.delta;
   // Keep the marker until the step can no longer verify (window on both sides).
   const ttl = (window * 2 + 2) * STEP_SECONDS;
-  return markOnce(`totp:used:${userId}:${step}`, ttl);
+  if (!await markOnce(`totp:used:${userId}:${step}`, ttl)) return false;
+  if (process.env.NODE_ENV === 'production') {
+    // The database unique key remains authoritative across API workers and
+    // Redis outages. Persist no OTP or authenticator secret in the marker.
+    const id = `totp_used_${crypto.createHash('sha256').update(`${userId}:${step}`).digest('hex')}`;
+    try {
+      await (opts.client ?? prisma).stepUpChallenge.create({ data: { id, userId, action: 'totp_consumed', method: 'TOTP_MARKER', codeHash: 'CONSUMED', consumedAt: new Date(), expiresAt: new Date(Date.now() + ttl * 1000) } });
+    } catch { return false; }
+  }
+  return true;
 }

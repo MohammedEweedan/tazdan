@@ -25,6 +25,7 @@ import { Prisma, type Currency, type LedgerAccountType } from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/library';
 import { prisma } from '../../utils/prisma';
 import { AppError } from '../../middleware/errorHandler';
+import { ledgerAmount, LedgerDecimal, validateAccountOwner } from './validation';
 
 export type Tx = Prisma.TransactionClient;
 
@@ -79,9 +80,6 @@ export interface PostInput {
   legs: Leg[];
 }
 
-// Tolerance for floating-point dust when summing high-precision decimals.
-const EPS = new Decimal('0.000000000001'); // 1e-12
-
 function keyFor(leg: Pick<Leg, 'type' | 'userId' | 'currency'>): string {
   return `${leg.type}:${leg.userId ?? 'SYSTEM'}:${leg.currency}`;
 }
@@ -96,6 +94,10 @@ export async function resolveAccount(
   currency: Currency,
   userId: string | null = null,
 ): Promise<{ id: string; balance: Decimal }> {
+  validateAccountOwner(type, userId);
+  // Serialise first creation too. NULL is distinct in PostgreSQL UNIQUE
+  // constraints, so the database also has a partial system-account index.
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`ledger-account:${type}:${userId ?? 'SYSTEM'}:${currency}`}))`;
   // `findFirst` (not findUnique) because the compound unique key includes a
   // nullable userId, which Prisma's unique-where input can't express for the
   // system-account (userId = null) case.
@@ -145,14 +147,16 @@ export async function postLedger(
   if (!input.legs.length) throw new Error('postLedger: no legs');
   const allowNegativeUser = negativeUserBalanceAllowed(opts.allowNegativeUser);
 
-  // 1) Assert conservation: signed sum per currency must be ~0.
+  // 1) Assert conservation: signed sum per currency must be exactly zero.
   const perCurrency = new Map<string, Decimal>();
   for (const leg of input.legs) {
-    const amt = new Decimal(leg.amount.toString());
-    perCurrency.set(leg.currency, (perCurrency.get(leg.currency) ?? new Decimal(0)).plus(amt));
+    validateAccountOwner(leg.type, leg.userId);
+    if (!isLedgerCurrency(leg.currency)) throw new Error(`Unsupported ledger currency ${leg.currency}`);
+    const amt = ledgerAmount(leg.amount);
+    perCurrency.set(leg.currency, (perCurrency.get(leg.currency) ?? new LedgerDecimal(0)).plus(amt));
   }
   for (const [currency, sum] of perCurrency) {
-    if (sum.abs().gt(EPS)) {
+    if (!sum.isZero()) {
       throw new Error(
         `Ledger imbalance for ${currency}: legs sum to ${sum.toString()} (must be 0). ` +
           `refType=${input.refType} refId=${input.refId ?? '-'}`,
@@ -165,7 +169,7 @@ export async function postLedger(
   const agg = new Map<string, { leg: Leg; amount: Decimal }>();
   for (const leg of input.legs) {
     const k = keyFor(leg);
-    const amt = new Decimal(leg.amount.toString());
+    const amt = ledgerAmount(leg.amount);
     const cur = agg.get(k);
     if (cur) cur.amount = cur.amount.plus(amt);
     else agg.set(k, { leg, amount: amt });
@@ -176,9 +180,20 @@ export async function postLedger(
   // debits must compete against the current DB value, otherwise two requests
   // can both pass a stale balance check and overwrite each other's result.
   const affectedUserAccounts = new Map<string, { userId: string; currency: Currency }>();
-  for (const { leg, amount } of agg.values()) {
+  const accounts = new Map<string, { id: string; balance: Decimal }>();
+  for (const [key, { leg, amount }] of [...agg.entries()].sort(([a], [b]) => a.localeCompare(b))) {
     if (amount.isZero()) continue;
-    const acct = await resolveAccount(tx, leg.type, leg.currency, leg.userId ?? null);
+    const account = await resolveAccount(tx, leg.type, leg.currency, leg.userId ?? null);
+    accounts.set(key, account);
+    if (leg.type === 'USER' && !allowNegativeUser && amount.lt(0) && account.balance.plus(amount).lt(0)) {
+      throw new AppError(`Insufficient ${leg.currency} balance`, 400, 'INSUFFICIENT_FUNDS', { ledger: true, currency: leg.currency, need: amount.abs().toString() });
+    }
+  }
+  // All journals acquire account locks in the same order, including reverse
+  // transfers. This prevents opposite-direction transfers deadlocking.
+  for (const [, { leg, amount }] of [...agg.entries()].sort(([a], [b]) => a.localeCompare(b))) {
+    if (amount.isZero()) continue;
+    const acct = accounts.get(keyFor(leg))!;
 
     if (leg.type === 'USER' && !allowNegativeUser && amount.lt(0)) {
       const updated = await tx.ledgerAccount.updateMany({

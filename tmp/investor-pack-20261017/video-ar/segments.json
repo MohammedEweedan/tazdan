@@ -1,0 +1,191 @@
+{
+  "total": 219.3,
+  "index": [
+    {
+      "id": "intro",
+      "start": 0,
+      "dur": 6,
+      "speed": 1
+    },
+    {
+      "id": "home",
+      "start": 5.6,
+      "dur": 10.5,
+      "speed": 1.18
+    },
+    {
+      "id": "topup",
+      "start": 15.7,
+      "dur": 7.4,
+      "speed": 1
+    },
+    {
+      "id": "send",
+      "start": 22.7,
+      "dur": 10.5,
+      "speed": 1.27
+    },
+    {
+      "id": "receive",
+      "start": 32.8,
+      "dur": 5.6,
+      "speed": 1
+    },
+    {
+      "id": "claim",
+      "start": 38,
+      "dur": 5.6,
+      "speed": 1
+    },
+    {
+      "id": "history",
+      "start": 43.2,
+      "dur": 5.6,
+      "speed": 1
+    },
+    {
+      "id": "statements",
+      "start": 48.4,
+      "dur": 5.6,
+      "speed": 1
+    },
+    {
+      "id": "messages",
+      "start": 53.6,
+      "dur": 10.2,
+      "speed": 1
+    },
+    {
+      "id": "chat-payment",
+      "start": 63.4,
+      "dur": 10.5,
+      "speed": 1.18
+    },
+    {
+      "id": "exchange",
+      "start": 73.5,
+      "dur": 5.6,
+      "speed": 1
+    },
+    {
+      "id": "buy",
+      "start": 78.7,
+      "dur": 7.867,
+      "speed": 1
+    },
+    {
+      "id": "asset",
+      "start": 86.17,
+      "dur": 7.5,
+      "speed": 1
+    },
+    {
+      "id": "portfolio",
+      "start": 93.27,
+      "dur": 5.6,
+      "speed": 1
+    },
+    {
+      "id": "recurring",
+      "start": 98.47,
+      "dur": 5.6,
+      "speed": 1
+    },
+    {
+      "id": "remit",
+      "start": 103.67,
+      "dur": 10.5,
+      "speed": 1
+    },
+    {
+      "id": "withdraw",
+      "start": 113.77,
+      "dur": 5.6,
+      "speed": 1
+    },
+    {
+      "id": "linked",
+      "start": 118.97,
+      "dur": 5.6,
+      "speed": 1
+    },
+    {
+      "id": "cards",
+      "start": 124.17,
+      "dur": 8.733,
+      "speed": 1
+    },
+    {
+      "id": "budgets",
+      "start": 132.5,
+      "dur": 8.933,
+      "speed": 1
+    },
+    {
+      "id": "p2p",
+      "start": 141.03,
+      "dur": 8.933,
+      "speed": 1
+    },
+    {
+      "id": "referral",
+      "start": 149.57,
+      "dur": 5.6,
+      "speed": 1
+    },
+    {
+      "id": "kyc",
+      "start": 154.77,
+      "dur": 5.6,
+      "speed": 1
+    },
+    {
+      "id": "security",
+      "start": 159.97,
+      "dur": 10.5,
+      "speed": 1.37
+    },
+    {
+      "id": "privacy",
+      "start": 170.07,
+      "dur": 8.833,
+      "speed": 1
+    },
+    {
+      "id": "business",
+      "start": 178.5,
+      "dur": 10.5,
+      "speed": 1.1
+    },
+    {
+      "id": "business-team",
+      "start": 188.6,
+      "dur": 5.6,
+      "speed": 1
+    },
+    {
+      "id": "business-payouts",
+      "start": 193.8,
+      "dur": 5.6,
+      "speed": 1
+    },
+    {
+      "id": "business-keys",
+      "start": 199,
+      "dur": 5.6,
+      "speed": 1
+    },
+    {
+      "id": "arabic",
+      "start": 204.2,
+      "dur": 8.5,
+      "speed": 1
+    },
+    {
+      "id": "outro",
+      "start": 212.3,
+      "dur": 7,
+      "speed": 1
+    }
+  ]
+}

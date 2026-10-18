@@ -465,6 +465,7 @@ export class P2PController {
       // means two buyers can never both take the last units of a listing, and
       // the escrow reservation is checked and applied in a single statement.
       const trade = await prisma.$transaction(async (tx) => {
+        await enforceKycLimit(sellerId, 'SEND', data.amount, isEnumCrypto ? realTicker : normaliseAsset(realTicker), tx);
         const amt = new Decimal(data.amount).toFixed();
         const claimed = await tx.$executeRaw`
           UPDATE "P2PListing"

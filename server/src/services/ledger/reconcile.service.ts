@@ -6,7 +6,7 @@
  *      entries. A mismatch means a balance was mutated outside postLedger() or
  *      a write was lost; the cache is not trustworthy.
  *   2. GLOBAL CONSERVATION — for each currency, the signed sum of ALL entries
- *      must be ~0. The whole ledger is closed: every user credit is matched by
+ *      must be exactly zero. The whole ledger is closed: every user credit is matched by
  *      a system/platform debit. Non-zero ⇒ money was created or destroyed.
  *
  * On any drift we set an in-memory + persisted halt flag. The exchange/quote
@@ -19,8 +19,6 @@ import { prisma } from '../../utils/prisma';
 import { logger } from '../../utils/logger';
 
 const HALT_KEY = 'ledger_trading_halt';
-const EPS = new Decimal('0.000001'); // 1e-6 tolerance on aggregate sums
-
 let _haltedMemo: boolean | null = null;
 let _haltedAt = 0;
 let _unpersistedHalt = false;
@@ -44,20 +42,34 @@ export async function reconcileLedger(): Promise<ReconcileResult> {
     SELECT a."id", a."balance"::text AS cached, COALESCE(s.total, 0)::text AS derived
     FROM "LedgerAccount" a
     LEFT JOIN (SELECT "accountId", SUM("amount") AS total FROM "LedgerEntry" GROUP BY "accountId") s ON s."accountId" = a."id"
-    WHERE ABS(a."balance" - COALESCE(s.total, 0)) > ${EPS.toString()}::numeric
+    WHERE a."balance" <> COALESCE(s.total, 0)
   `;
   const cacheDrift: ReconcileResult['cacheDrift'] = drift.map((d) => {
     const cached = new Decimal(d.cached); const derived = new Decimal(d.derived);
     return { accountId: d.id, cached: cached.toString(), derived: derived.toString(), diff: cached.minus(derived).toString() };
   });
 
-  // 2) Global conservation — signed entry sum per currency must be ~0.
+  // 2) Global conservation — signed entry sum per currency must be exactly zero.
   const byCurrency = await prisma.ledgerEntry.groupBy({ by: ['currency'], _sum: { amount: true } });
   const conservation: ReconcileResult['conservation'] = [];
   for (const c of byCurrency) {
     const sum = new Decimal((c._sum.amount ?? 0).toString());
-    if (sum.abs().gt(EPS)) conservation.push({ currency: c.currency, sum: sum.toString() });
+    if (!sum.isZero()) conservation.push({ currency: c.currency, sum: sum.toString() });
   }
+
+  // Long-tail assets have their own ledger and must satisfy the same checks.
+  // They previously escaped the scheduler entirely.
+  const assetDrift = await prisma.$queryRaw<Array<{ id: string; cached: string; derived: string }>>`
+    SELECT a."id", a."balance"::text AS cached, COALESCE(s.total, 0)::text AS derived
+    FROM "AssetLedgerAccount" a
+    LEFT JOIN (SELECT "accountId", SUM("amount") AS total FROM "AssetLedgerEntry" GROUP BY "accountId") s ON s."accountId" = a."id"
+    WHERE a."balance" <> COALESCE(s.total, 0)
+  `;
+  for (const d of assetDrift) cacheDrift.push({ accountId: d.id, cached: d.cached, derived: d.derived, diff: new Decimal(d.cached).minus(d.derived).toString() });
+  const assetSums = await prisma.$queryRaw<Array<{ asset: string; total: string }>>`
+    SELECT "asset", SUM("amount")::text AS total FROM "AssetLedgerEntry" GROUP BY "asset" HAVING SUM("amount") <> 0
+  `;
+  for (const row of assetSums) conservation.push({ currency: `asset:${row.asset}`, sum: row.total });
 
   const ok = cacheDrift.length === 0 && conservation.length === 0;
   if (!ok) {

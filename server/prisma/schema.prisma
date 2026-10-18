@@ -867,8 +867,9 @@ model PlatformFee {
   payerId     String?
   amount      Decimal  @db.Decimal(20, 8)
   currency    Currency
-  /// USD equivalent at time of capture, for dashboard aggregation
-  amountUsd   Decimal  @default(0) @db.Decimal(20, 8)
+  /// Reporting valuation only. Missing rates remain null; no asset conversion.
+  amountUsd   Decimal? @db.Decimal(20, 8)
+  valuationSource String @default("LEGACY_UNVERIFIED")
   description String?
   metadata    Json?
   createdAt   DateTime @default(now())

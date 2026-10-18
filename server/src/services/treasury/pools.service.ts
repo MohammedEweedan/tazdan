@@ -27,6 +27,18 @@ import { writeAudit } from '../platform/audit';
 type Tx = Prisma.TransactionClient;
 const D = (v: unknown) => new Decimal(String(v ?? 0));
 
+function positivePoolAmount(amount: Decimal): void {
+  if (!amount.isFinite() || amount.lte(0) || amount.decimalPlaces() > 8) {
+    throw new AppError('Treasury amount must be positive and have at most 8 decimal places', 400);
+  }
+}
+
+function poolEntityScope(): { entity?: string } {
+  if (process.env.NODE_ENV !== 'production') return {};
+  if (!process.env.OPERATING_ENTITY_ID) throw new AppError('Treasury operating entity is not configured', 503);
+  return { entity: process.env.OPERATING_ENTITY_ID };
+}
+
 export interface PoolPosition {
   id: string; code: string; name: string; currency: Currency; entity: string; location: string; providerCode: string | null;
   corridorCodes: string[]; fundClass: string;
@@ -60,8 +72,10 @@ export async function poolPositions(): Promise<PoolPosition[]> {
   }));
 }
 
-export async function poolFor(providerCode: string, currency: Currency) {
-  return prisma.treasuryPool.findFirst({ where: { providerCode, currency } });
+export async function poolFor(providerCode: string, currency: Currency, client: Tx | typeof prisma = prisma) {
+  const pools = await client.treasuryPool.findMany({ where: { providerCode, currency, ...poolEntityScope() }, take: 2 });
+  if (pools.length > 1) throw new AppError(`Ambiguous ${currency} treasury pool for ${providerCode}. Select one operating pool.`, 409, 'PROVIDER_UNAVAILABLE');
+  return pools[0] ?? null;
 }
 
 export async function availableIn(providerCode: string, currency: Currency): Promise<Decimal | null> {
@@ -72,7 +86,8 @@ export async function availableIn(providerCode: string, currency: Currency): Pro
 
 /** Earmark liquidity for a transfer (locks the pool row). Throws when short. */
 export async function reserveLiquidity(tx: Tx, input: { providerCode: string; currency: Currency; amount: Decimal; transferId: string; reference: string }) {
-  const pool = await tx.treasuryPool.findFirst({ where: { providerCode: input.providerCode, currency: input.currency } });
+  positivePoolAmount(input.amount);
+  const pool = await poolFor(input.providerCode, input.currency, tx);
   if (!pool) throw new AppError(`No treasury pool for ${input.providerCode} ${input.currency}`, 409, 'PROVIDER_UNAVAILABLE');
   await tx.$queryRaw`SELECT "id" FROM "TreasuryPool" WHERE "id" = ${pool.id} FOR UPDATE`;
   const t = await totals(tx, pool.id);
@@ -114,19 +129,28 @@ export async function moveTreasury(input: {
   req?: { ip?: string; headers?: Record<string, any> };
 }) {
   const amount = D(input.amount);
-  if (!amount.isFinite() || amount.lte(0)) throw new AppError('Amount must be positive', 400);
+  positivePoolAmount(amount);
+  if (input.reference.trim().length < 3) throw new AppError('An external treasury reference is required', 400);
   if (input.note.trim().length < 5) throw new AppError('A note of at least 5 characters is required', 400);
   return prisma.$transaction(async (tx) => {
     const pool = await tx.treasuryPool.findUnique({ where: { id: input.poolId } });
     if (!pool) throw new AppError('Pool not found', 404);
+    const entity = poolEntityScope().entity;
+    if (entity && pool.entity !== entity) throw new AppError('Treasury pool belongs to a different operating entity', 403);
     await tx.$queryRaw`SELECT "id" FROM "TreasuryPool" WHERE "id" = ${pool.id} FOR UPDATE`;
+    const reference = input.reference.trim();
+    const existing = await tx.treasuryMovement.findFirst({ where: { poolId: pool.id, type: input.direction, reference } });
+    if (existing) {
+      if (!D(existing.amount).eq(amount)) throw new AppError('Treasury reference already used with a different amount', 409, 'DUPLICATE_REQUEST');
+      return existing;
+    }
     const outgoing = input.direction === 'WITHDRAW' || input.direction === 'ADJUST_OUT';
     if (outgoing) {
       const t = await totals(tx, pool.id);
       if (t.available.lt(amount)) throw new AppError(`Only ${t.available.toFixed(2)} ${pool.currency} is unreserved in this pool`, 409);
     }
     const mv = await tx.treasuryMovement.create({
-      data: { poolId: pool.id, type: input.direction, amount: new Prisma.Decimal(amount.toFixed(8)), reference: input.reference, actorId: input.actorId, note: input.note },
+      data: { poolId: pool.id, type: input.direction, amount: new Prisma.Decimal(amount.toFixed(8)), reference, actorId: input.actorId, note: input.note },
     });
     // Ledger: capital entering/leaving the platform's books through the treasury position.
     const signed = outgoing ? amount.neg() : amount;

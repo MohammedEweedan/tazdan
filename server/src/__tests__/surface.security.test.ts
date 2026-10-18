@@ -11,6 +11,7 @@ import os from 'os';
 import path from 'path';
 import express from 'express';
 import request from 'supertest';
+import jwt from 'jsonwebtoken';
 
 jest.mock('../utils/prisma', () => {
   const store: Record<string, Record<string, jest.Mock>> = {};
@@ -234,9 +235,13 @@ describe('staff controls', () => {
 
   it('a legacy rate override in production becomes a maker-checker request (was a direct, open-ended override)', async () => {
     process.env.NODE_ENV = 'production';
-    const auth = staff('staff-tre-1', ['TREASURY']);
+    staff('staff-tre-1', ['TREASURY']);
+    // Production access requires a real revocable session, not a stateless
+    // test token. The role/approval behavior below remains the same.
+    db.refreshToken.findUnique.mockResolvedValue({ userId: 'staff-tre-1', revokedAt: null, expiresAt: new Date(Date.now() + 60_000) });
+    const sessionAuth = `Bearer ${jwt.sign({ id: 'staff-tre-1', email: 'staff-tre-1@example.com', role: 'ADMIN', typ: 'access', sid: 'staff-session' }, process.env.JWT_SECRET!, { expiresIn: '5m', algorithm: 'HS256' })}`;
     db.approvalRequest.create.mockResolvedValue({ id: 'apr-fx' });
-    const res = await request(app).put('/api/admin/rates/EUR/USD').set('Authorization', auth).send({ buyPrice: 1.02, sellPrice: 1.01, reason: 'cheap euros for a friend' });
+    const res = await request(app).put('/api/admin/rates/EUR/USD').set('Authorization', sessionAuth).send({ buyPrice: 1.02, sellPrice: 1.01, reason: 'cheap euros for a friend' });
     expect(res.status).toBe(202);
     expect(res.body).toMatchObject({ pendingApproval: true, approvalId: 'apr-fx' });
     expect(db.exchangeRate.upsert).not.toHaveBeenCalled();

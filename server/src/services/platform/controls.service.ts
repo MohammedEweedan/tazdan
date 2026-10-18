@@ -17,7 +17,7 @@ import { logger } from '../../utils/logger';
 import { writeAudit } from './audit';
 import { recordSecurityEvent } from './securityEvents';
 import { isTradingHalted } from '../ledger/reconcile.service';
-import { assertLaunchMovement } from '../ops/launchReadiness.service';
+import { assertLaunchMovement, currentLaunchReadiness } from '../ops/launchReadiness.service';
 import { getRedisClient } from '../../utils/redis';
 
 export const CONTROL_FEATURES = [
@@ -96,10 +96,13 @@ export async function assertMovementAllowed(check: MovementCheck): Promise<void>
     });
   }
   if (check.userId) {
-    const user = await prisma.user.findUnique({ where: { id: check.userId }, select: { status: true } });
+    const user = await prisma.user.findUnique({ where: { id: check.userId }, select: { status: true, country: true } });
     if (!user) throw new AppError('User not found', 404);
     if (user.status !== 'ACTIVE') {
       throw new AppError('Your account is restricted. Please contact support.', 403, 'COMPLIANCE_HOLD');
+    }
+    if (process.env.NODE_ENV === 'production' && (!user.country || !currentLaunchReadiness().evidence?.scope.customerCountries.includes(user.country.toUpperCase()))) {
+      throw new AppError('Money services are not available for your account jurisdiction.', 403, 'COMPLIANCE_HOLD');
     }
     if (
       (await blockedReason('USER', check.userId)) ||

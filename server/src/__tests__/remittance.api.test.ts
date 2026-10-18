@@ -4,6 +4,7 @@
  * an unknown device, and customer-safe wording. RUN_DB_TESTS=1 locally; always in CI.
  */
 import request from 'supertest';
+import { randomInt } from 'crypto';
 import { Decimal } from '@prisma/client/runtime/library';
 import { app } from '../index';
 import { prisma } from '../utils/prisma';
@@ -26,6 +27,9 @@ jest.mock('../services/exchange/fulus.service', () => ({
 const RUN_DB = process.env.CI === 'true' || process.env.RUN_DB_TESTS === '1';
 const describeDb = RUN_DB ? describe : describe.skip;
 const marker = `ra${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`;
+// A distinct account per run avoids correctly triggering the shared-account
+// fraud rule on financial evidence left by previous local test runs.
+const beneficiaryAccount = String(randomInt(10_000_000, 100_000_000));
 const DEVICE = { 'user-agent': 'TazdanMobile/1.0 test', 'x-device-id': `${marker}-device` };
 
 async function pin(base: string, quote: string, mid: number) {
@@ -74,7 +78,7 @@ describeDb('customer remittance API', () => {
 
     const bad = await call('post', '/beneficiaries').send({ fullName: 'Leila Api', country: 'GB', currency: 'GBP', payoutMethod: 'BANK_ACCOUNT', sortCode: '12', accountNumber: '1' });
     expect(bad.status).toBe(400);
-    const ben = await call('post', '/beneficiaries').send({ fullName: 'Leila Api', relationship: 'Sister', country: 'GB', currency: 'GBP', payoutMethod: 'BANK_ACCOUNT', sortCode: '04-00-04', accountNumber: '12345678' });
+    const ben = await call('post', '/beneficiaries').send({ fullName: 'Leila Api', relationship: 'Sister', country: 'GB', currency: 'GBP', payoutMethod: 'BANK_ACCOUNT', sortCode: '04-00-04', accountNumber: beneficiaryAccount });
     expect(ben.status).toBe(201);
     expect(ben.body.beneficiary).not.toHaveProperty('screeningStatus');
 

@@ -1,0 +1,207 @@
+{
+  "results": [
+    {
+      "id": "wallet",
+      "route": "/wallet",
+      "title": "Wallets",
+      "status": "Fiat and crypto balance views",
+      "success": true,
+      "seconds": 4.449,
+      "body": "Wallets\n\n\nTotal balance\n$18,075.64\nFiat\n36%\nCrypto\n64%\n\n\nTop up\n\nSend\n\nReceive\nAll\nFiat\nCrypto\nCards\nFIAT\nLD\nLibyan Dinar\n18,450.50 LYD\n$2,591.36\n$\nUS Dollar\n2,340.00 USD\n$2,340.00\n€\nEuro\n860.00 EUR\n$997.68\n£\nBritish Pound\n415.20 GBP\n$556.57\nCRYPTO\nBitcoin\n0.0425 BTC\n$4,182.86\n+2.14%\nTether\n3,250 USDT\n$3,250.00\n+0.01%\nEthereum\n0.82 ETH\n$2,962.17\n+1.38%\nSolana\n6.4 SOL\n$1,195.01\n+3.05%\nTotals are estimates at current market prices and exchange rates.\n\nChat\n\nChat\n\nWallet\n\nWallet\n\nP2P\n\nP2P\n\nProfile\n\nProfile"
+    },
+    {
+      "id": "sell",
+      "route": "/sell",
+      "title": "Sell interface",
+      "status": "Simulated quote. Real-money crypto execution disabled",
+      "success": true,
+      "seconds": 4.456,
+      "body": "USDT\nTether\n\nEthereum (ERC-20)\n\nCredit to\n\nUSD\n\n\nUSE MAX\nUSDT\n0\nBalance: 3,250 USDT\nEnter an amount to see what you'll receive\n1\n2\n3\n4\n5\n6\n7\n8\n9\n.\n0\n\nEnter an amount to sell\n"
+    },
+    {
+      "id": "exchange",
+      "route": "/exchange",
+      "title": "Currency conversion",
+      "status": "Simulated pricing. Lawful FX access required",
+      "success": true,
+      "seconds": 4.452,
+      "body": "Currency exchange\nYou exchange\n\nUSD\n\n\n$\n0\nAvailable: 2,340.00 USD\n\nYou receive\n\nLYD\n\n\n—\nEnter an amount to see your rate.\n1\n2\n3\n4\n5\n6\n7\n8\n9\n.\n0\n\nThe rate includes the exchange spread.\nEnter amount\n"
+    },
+    {
+      "id": "portfolio",
+      "route": "/portfolio/crypto",
+      "title": "Portfolio",
+      "status": "Asset holdings and allocation views",
+      "success": true,
+      "seconds": 4.454,
+      "body": "\nCrypto Portfolio\nTotal Crypto Value\n$11.59K\n+$167.16\n\n1.44%\n24h\nAsset Allocation\n4\nASSETS\nBitcoin\n36.1%\nTether\n28.0%\nEthereum\n25.6%\nSolana\n10.3%\nValue\nChange\nName\nBitcoin\n0.0425 BTC\n$4.18K\n+2.14%\nTether\n3,250 USDT\n$3.25K\n+0.01%\nEthereum\n0.82 ETH\n$2.96K\n+1.38%\nSolana\n6.4 SOL\n$1.20K\n+3.05%"
+    },
+    {
+      "id": "receive",
+      "route": "/receive",
+      "title": "Receive and QR",
+      "status": "Payment identifiers and receiving interface",
+      "success": true,
+      "seconds": 4.45,
+      "body": "@HANDLE\nBANK TRANSFER\n@amira\nhttps://tazdan.com/u/amira\nScanning the QR opens your public profile so anyone can pay you, see your KYC tier, and view your P2P offers.\n\nPreview public profile\n\nCopy\n\nShare\n"
+    },
+    {
+      "id": "withdraw",
+      "route": "/withdraw",
+      "title": "Withdrawals",
+      "status": "Bank and crypto withdrawal interface. Activation pending",
+      "success": true,
+      "seconds": 4.455,
+      "body": "SELECT CURRENCY TO WITHDRAW\nLYD\n18,450.5\nUSD\n2,340\nEUR\n860\nGBP\n415.2\nUSDT\n3,250\nBTC\n0.0425\nETH\n0.82\nSOL\n6.4\nContinue with USD\n\n"
+    },
+    {
+      "id": "history",
+      "route": "/history",
+      "title": "Activity history",
+      "status": "Payment records and transaction details",
+      "success": true,
+      "seconds": 4.452,
+      "body": "\nREFRESH\nPENDING CLAIM LINKS\n\n50.00 USD → +44 7••• ••• 210\n5d left\n\nShare\nCancel\n17 OCT 2026\n\nTransfer In\n17 Oct 2026, 14:44:38\n+250 GBP\n\nTZ-8F2K-41QD\n\n\nBought 500 USDT · 3,585 LYD\n17 Oct 2026, 13:08:38\n+500 USDT\n\nP2P-7731\n\n\nSaved to “Hajj 2027”\n17 Oct 2026, 11:20:38\n−2,200 LYD\n\nSV-2207\n\n16 OCT 2026\n\nTransfer Out\n16 Oct 2026, 21:42:00\n−36 USD\n\nTZ-3J9A-77PL\n\n\nBank transfer top-up\n16 Oct 2026, 11:05:00\n+2,000 LYD\n\nDP-55120\n\n\nWeekly USDT buy\n16 Oct 2026, 09:00:00\n−500 USDT\n\nRB-0418\n\n15 OCT 2026\n\nSent abroad · United Kingdom\n15 Oct 2026, 17:26:00\n−2,400 LYD\n\nRM-LYGB-2291\n\n\nTransfer In\n15 Oct 2026, 13:10:00\n+120 LYD\n\nTZ-1Q8C-02ZK\n\n14 OCT 2026\n\nCard · Design tools subscription\n14 Oct 2026, 10:30:00\n−14.99 USD\n\nCD-99812\n\n\nActivity\nEvery transaction, every receipt"
+    },
+    {
+      "id": "statements",
+      "route": "/statements",
+      "title": "Statements",
+      "status": "Statement selection and export interface",
+      "success": true,
+      "seconds": 4.452,
+      "body": "\nStatement center\n9 rows ready\nTRANSACTIONS\n42\nFEES\n$38.40\nDEPOSITS\n$6.00\nWITHDRAWALS\n$1.00\nPERIOD\nThis month\nLast month\nYear to date\nLast year\nAll time\nPick month\nCURRENCY\nAll currencies\nLYD\nUSD\nEUR\nGBP\n₮\nUSDT\n₿\nBTC\nΞ\nETH\n◎\nSOL\n\nPDF · A4 portrait\nAccount summary · balances · full transaction ledger\nRECENT LEDGER ROWS\n\nTRANSFER IN\nOct 17 · TZ-8F2K-41QD\n+250 GBP\n\nP2P BUY\nOct 17 · P2P-7731\n+500 USDT\n\nBUDGET CONTRIBUTION\nOct 17 · SV-2207\n-2,200 LYD\n\nTRANSFER OUT\nOct 16 · TZ-3J9A-77PL\n-36 USD\n\nDEPOSIT\nOct 16 · DP-55120\n+2,000 LYD\n\nBUY\nOct 16 · RB-0418\n-500 USDT\n\nGenerate PDF statement\n\nStatements\nAudit-ready exports with balances, fees, and a full ledger"
+    },
+    {
+      "id": "recurring",
+      "route": "/recurring",
+      "title": "Recurring purchases",
+      "status": "Scheduling interface. Execution currently disabled",
+      "success": true,
+      "seconds": 4.451,
+      "body": "Recurring buy\nChoose your amount and rhythm. We take care of each buy.\nBitcoin\nBTC\n\nAmount\n$\nUSD\n$10\n$25\n$50\n$100\n\nFrequency\nWeekly\n\n\nFunding source\nUSD balance\n$2,340 available\n\n\nWe will automatically buy on your chosen schedule, charging the funding source you select. You can pause or cancel anytime.\nStart recurring buy\nYOUR RECURRING BUYS\nLD500 → USDT\nWeekly\n\n\n$25 → BTC\nMonthly\n\n\n"
+    },
+    {
+      "id": "linked",
+      "route": "/linked-accounts",
+      "title": "Linked accounts",
+      "status": "Bank and card linking interface. Partners pending",
+      "success": true,
+      "seconds": 4.457,
+      "body": "Linked accounts\nManage your payment methods\nCards\nBank Accounts\nVISA\nEveryday\n•••• 4417\nACTIVE\nManage"
+    },
+    {
+      "id": "kyc",
+      "route": "/kyc",
+      "title": "Identity verification",
+      "status": "KYC interface with a fictional verified profile",
+      "success": true,
+      "seconds": 4.423,
+      "body": "\nYOUR LEVEL\nLevel 3\nFully verified — highest limits\nIdentity\nAddress\nSource of funds\nYOUR LIMITS\n\nBuy\n$20,000,000 / month\n$19,999,580 left · resets 07/11/2026 · up to $500,000 per transaction\n\nSell\n$10,000,000 / month\n$10,000,000 left · resets 07/11/2026 · up to $250,000 per transaction\n\nSend\n$10,000,000 / month\n$9,997,774 left · resets 07/11/2026 · up to $250,000 per transaction\n\nWithdraw\n$10,000,000 / month\n$10,000,000 left · resets 07/11/2026 · up to $250,000 per transaction\n\nYou're at the highest verification level.\n\nVerification"
+    },
+    {
+      "id": "devices",
+      "route": "/settings/devices",
+      "title": "Trusted devices",
+      "status": "Session visibility and device controls",
+      "success": true,
+      "seconds": 4.455,
+      "body": "TRUSTED DEVICES\nDevices you've verified. On these, Face ID confirms purchases — no code needed. Forget one to require full verification again.\n\niPhone 16 Pro\nThis device\n\niOS 18.6\n\nTripoli, Libya\n\n41.208.x.x\n\nLast used 2m ago\nForget\n\niPad Air\n\niPadOS 18.5\n\nTripoli, Libya\n\n41.208.x.x\n\nLast used 1d ago\nForget\n\nMacBook Pro\n\nmacOS 15\n\nTripoli, Libya\n\n41.208.x.x\n\nLast used 9d ago\nForget\nACTIVE SESSIONS\nSign out all others\n\niPhone 16 Pro\nThis device\n\niOS 18.6\n\nTripoli, Libya\n\n41.208.x.x\n\nLast login 2m ago\n\n\niPad Air · Safari\n\niPadOS 18.5\n\nTripoli, Libya\n\n41.208.x.x\n\nLast login 1d ago\nSign out\n\nTrusted devices"
+    },
+    {
+      "id": "twofa",
+      "route": "/settings/2fa",
+      "title": "Two-factor authentication",
+      "status": "Authenticator configuration interface",
+      "success": true,
+      "seconds": 4.457,
+      "body": "\nEnabled\nA code from your authenticator is required to sign in and confirm sensitive actions.\nReset 2FA (new device)\nDisable 2FA\nLost your authenticator? Contact support\n\nTwo-factor authentication"
+    },
+    {
+      "id": "referral",
+      "route": "/referral",
+      "title": "Referrals",
+      "status": "Referral interface. Rewards shown are fictional",
+      "success": true,
+      "seconds": 4.451,
+      "body": "\nEarn $10 for every friend\nShare your code. Friends get $10 when they sign up and complete KYC. You earn $10 too.\nYOUR CODE\nAMIRA7\n\nFRIENDS INVITED\n3\nTOTAL EARNED\n$30\nHOW IT WORKS\n\nShare your unique code with friends.\n\nThey sign up and complete KYC.\n\nYou both get $10 instantly.\n\nShare my code\n\nRefer & earn"
+    },
+    {
+      "id": "claim",
+      "route": "/claim/demo-token",
+      "title": "Claim links",
+      "status": "Fictional payment claim interface",
+      "success": true,
+      "seconds": 4.453,
+      "body": "Claim\n\nYOU RECEIVED\n50.00\nUSD\nO\nfrom @omar.benali\n\n5d 23h left\nNOTE\nWelcome to tazdan! Coffee is on me ☕\n\nClaim 50.00 USD\nFunds settle instantly. Claim links cannot be claimed twice.\nWhat is tazdan?"
+    },
+    {
+      "id": "business-team",
+      "route": "/business/team",
+      "title": "Business team",
+      "status": "Team membership and role interfaces",
+      "success": true,
+      "seconds": 4.456,
+      "body": "4 people\nManage access and permissions for your business.\nACTIVE (4)\nA\nAmira Ben Ali\n@amira · amira@example.com\nOwner\nK\nKarim Zawi\n@karim.z · karim@example.com\nAdmin ↓\nRemove\nS\nSalma Trabelsi\n@salma.t · salma@example.com\nAnalyst ↓\nRemove\nH\nHana Kabir\n@hana.k · hana@example.com\nDeveloper ↓\nRemove\nPENDING INVITES (1)\nF\nfinance@example.com\nPENDING\nfinance@example.com\nAnalyst\nRemove\nROLE PERMISSIONS\nOwner\nFull access including billing\nAdmin\nManage team and API keys\nDeveloper\nAPI key access, view payouts\nAnalyst\nView-only — stats and payouts\n\nTeam\n\nInvite"
+    },
+    {
+      "id": "business-keys",
+      "route": "/business/api-keys",
+      "title": "Business API",
+      "status": "Scoped keys and webhook configuration interface",
+      "success": true,
+      "seconds": 4.451,
+      "body": "2 active keys\nConnect your tools with only the access they need.\nACTIVE KEYS (2)\n\nInvoicing integration\ntzk_test_••••9f3a\n\nRevoke\nPayouts\nBalances\nLast used Oct 17 · Expires Apr 5, 2027\n\nReporting (read-only)\ntzk_test_••••41c7\n\nRevoke\nRead only\nFX Rates\nLast used Oct 16\nREVOKED KEYS\n\nOld prototype\ntzk_test_••••0b12\nREVOKED\nPayouts\nLast used Aug 8\n\nKeys are shown once at creation. Use them in the Authorization: Bearer header. See docs.tazdan.com for the full API reference.\n\nAPI Keys\n\nNew key"
+    },
+    {
+      "id": "business-bulk",
+      "route": "/business/bulk-pay",
+      "title": "Bulk payments",
+      "status": "Batch preparation for internal recipients",
+      "success": true,
+      "seconds": 4.451,
+      "body": "Create a payout batch\nAdd recipients, then review the total and fees before sending.\n1\nRecipient 1\n\nHANDLE OR EMAIL\n@\nAMOUNT\nCURRENCY\nUSD\n\nNOTE (OPTIONAL)\n\nAdd recipient\nPreview batch\n\nBulk Pay\n1 recipient"
+    },
+    {
+      "id": "business-payouts",
+      "route": "/business/invoices",
+      "title": "Payout approvals",
+      "status": "Batch status and approval interface",
+      "success": true,
+      "seconds": 4.457,
+      "body": "All\nPending\nProcessing\nCompleted\nFailed\nCancelled\nWAITING FOR APPROVAL\n14,250 LYD · 8 payouts\nBATCH-1007\nOver the 10,000 LYD dual-approval threshold\nReject\nApprove\n\n@leila.h\nUSD · Oct 17, 2026 · batch\n420.00\nCOMPLETED\n\n@yusuf.m\nLYD · Oct 17, 2026 · batch\n1,800.00\nCOMPLETED\n\nstudio-assist@example.com\nUSD · Oct 17, 2026\n150.00\nPROCESSING\n\n@nour.s\nUSD · Oct 16, 2026\n260.00\nCOMPLETED\n\n@salma.t\nLYD · Oct 15, 2026\n950.00\nCOMPLETED\n\n@karim.z\nUSD · Oct 14, 2026\n75.00\nFAILED\n\nPayouts"
+    },
+    {
+      "id": "notifications",
+      "route": "/notifications",
+      "title": "Notifications",
+      "status": "Customer alerts and notification centre",
+      "success": true,
+      "seconds": 4.448,
+      "body": "TODAY\n\n£250.00 received\n40m ago\nOmar Ben Ali sent you £250.00 — “For mum's birthday 🎂”\n\nP2P trade completed\n2h ago\n500 USDT released from escrow to your wallet.\n\nSavings: Hajj 2027\n4h ago\nYour monthly 2,200 LYD went in. You’re 71% of the way there.\nYESTERDAY\n\nWeekly USDT buy done\n1d ago\nBought 69.86 USDT for 500 LYD at your locked quote.\n\nTop-up confirmed\n1d ago\n2,000.000 LYD added to your wallet.\nEARLIER\n\nDelivered to Omar\n1d ago\n£257.83 arrived in Manchester. Ref RM-LYGB-2291.\n\nFull verification complete\nSep 29\nLevel 3 unlocked — your highest limits are now active.\n\nHana joined with your code\nSep 25\nThanks for spreading the word.\n\nRe-enable announcements\n\n\nNotifications\n3 unread\n\nMark all read"
+    },
+    {
+      "id": "guide",
+      "route": "/guide",
+      "title": "Product guide",
+      "status": "In-app guidance and capability navigation",
+      "success": true,
+      "seconds": 4.458,
+      "body": "tazdan\n\n\n\nThe tazdan guide  / 01\nSkip\nYOUR WORLD. CONNECTED.\nYour world.\nOne wallet.\nEveryday money meets digital assets. Hold, exchange and send from one beautifully simple home.\nHow it works\n\n01 / YOUR MONEY\nMany currencies.\nOne clear picture.\nKeep dinars, dollars and supported crypto together. See each balance and explore an asset in a tap.\nHow it works\n\n02 / ADD & RECEIVE\nYour next move\nstarts here.\nReceive from another member, use an available bank transfer method, or deposit supported crypto.\nHow it works\n\n03 / EXCHANGE\nYour exchange.\nEvery detail.\nBuy, sell or exchange supported assets. Review the quote, fees and receiving amount before confirming.\nHow it works\n\n04 / MONEY & PEOPLE\nLess distance.\nMore connection.\nSend to a @handle, pay within a conversation, or share a claim link. Keep the payment and the conversation together.\nHow it works\n\n05 / YOUR EVERYDAY TOOLKIT\nMore possibility.\nSame simple app.\nOrganise money with budgets and pools, explore P2P offers, and manage"
+    },
+    {
+      "id": "admin",
+      "route": "/admin",
+      "title": "Staff administration",
+      "status": "Simulated administration. No production access",
+      "success": true,
+      "seconds": 4.452,
+      "body": "A\n@amira\n\n\n\n3\nTotal balance\n$\n18,075.64\n\n+$163.65 (0.91%)\ntoday\nLibyan Dinar · LYD\nLD\n18,450.50\n≈ $2,591.36  ·  $1 = 7.12 LD\nUS Dollar · USD\n$\n2,340.00\nEuro · EUR\n€\n860.00\n≈ $997.68  ·  €1 = $1.1601\nBritish Pound · GBP\n£\n415.20\n≈ $556.57  ·  £1 = $1.3405\nCrypto\n$\n11,590.03\n\n+$163.65 (1.43%)\n4 assets · today\n\nTop up\n\nSend\n\nBuy\n\nMore\nCONTACTS\n\nSend\nOB\nOmar\nLH\nLeila\nNE\nNour\nYM\nYusuf\nST\nSalma\nKZ\nKarim\nHK\nHana\nAssets\nActivity\nCRYPTO ASSETS\n\n$11,590.03\n\nUSDT\n$1\n$3,250.00\n3,250 USDT\n▲ 0.01%\nBTC\n$98,420.15\n$4,182.86\n0.0425 BTC\n▲ 2.14%\nETH\n$3,612.4\n$2,962.17\n0.82 ETH\n▲ 1.38%\nSOL\n$186.72\n$1,195.01\n6.4 SOL\n▲ 3.05%\nFIAT ASSETS\n$6,485.61\n\nLibyan Dinar\n$1 = 7.12 LD\n$2,591.36\n18,450.5 LYD\n▲ 0.42%\nUS Dollar\n$1 = $1\n$2,340.00\n2,340 USD\nEuro\n€1 = $1.1601\n$997.68\n860 EUR\n▲ 0.18%\nBritish Pound\n£1 = $1.3405\n$556.57\n415.2 GBP\n▼ 0.11%\nSAVINGS\n3 goals\n\n🕋\nHajj 2027\n\nLD31,800\n💻\nNew laptop\n$1,240\n🛟\nEmergency fund\n\n$3,400\n\nNew goal\n\nA\n@amira\n\n\n3\nTotal balance\n$18,075.64\n▲ 0.91%\n\nChat\n\nCha"
+    }
+  ],
+  "errors": [
+    "console: Invalid DOM property `%s`. Did you mean `%s`? transform-origin transformOrigin",
+    "console: Received `%s` for a non-boolean attribute `%s`.\n\nIf you want to write it to the DOM, pass a string instead: %s=\"%s\" or %s={value.toString()}.\n\nIf you used to conditionally omit it with %s={condition && value}, pass %s={condition ? value : undefined} instead. false collapsable collapsable false colla"
+  ],
+  "unmatched": []
+}

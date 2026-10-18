@@ -24,6 +24,10 @@ const ENV_KEYS: Record<FeatureName, string> = {
 };
 
 export function isFeatureEnabled(name: FeatureName): boolean {
+  // The legacy execution path credits assets before the venue responds and
+  // refunds ambiguous transport failures. Keep real money out until the
+  // reserve/submit/reconcile/finalise saga has provider certification.
+  if (name === 'cryptoTrading' && process.env.NODE_ENV === 'production' && process.env.REAL_MONEY_ENABLED === '1') return false;
   const raw = process.env[ENV_KEYS[name]];
   if (raw === '1') return true;
   if (raw === '0') return false;

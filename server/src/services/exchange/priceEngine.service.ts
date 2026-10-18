@@ -318,6 +318,9 @@ export async function getMarketPrice(symbol: string): Promise<Decimal> {
 
   // 4. All providers failed. Serve the last known good price rather than
   // 500ing the quote. Only if we have never fetched this symbol do we throw.
+  if (process.env.NODE_ENV === 'production' && process.env.REAL_MONEY_ENABLED === '1') {
+    throw Object.assign(new Error(`Current market price unavailable for ${base}`), { statusCode: 503 });
+  }
   const stale = await readStalePrice(symbol);
   if (stale) {
     logger.warn('[priceEngine] all providers failed — serving stale price', {
