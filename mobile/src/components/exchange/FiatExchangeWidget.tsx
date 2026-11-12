@@ -119,7 +119,7 @@ export function FiatExchangeWidget({ initialFrom, initialTo }: { initialFrom?: s
             <Ionicons name="swap-vertical" size={19} color={p.accentText} />
           </Pressable>
           <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '600', marginBottom: 8 }}>{t('fx.youReceive')}</Text>
-          <CurrencyPicker items={items} value={to} onChange={(currency) => changeCurrency('to', currency)} palette={p} />
+          <CurrencyPicker items={items} value={to} onChange={(currency) => changeCurrency('to', currency)} palette={p} pairWith={from} />
           <View style={{ marginTop: 14, minHeight: 42, alignItems: 'center', justifyContent: 'center' }}>
             {quote.isFetching && !currentQuote ? <ActivityIndicator color={p.fgMuted} /> :
               <Text style={{ color: p.fg, fontSize: 32, fontWeight: '600', fontVariant: ['tabular-nums'] }}>

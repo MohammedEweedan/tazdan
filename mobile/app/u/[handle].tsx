@@ -19,6 +19,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
 import { ScreenShell, CTAButton, Panel } from '@/components/ui/ScreenShell';
+import { BusinessPostList } from '@/components/pay/BusinessPosts';
 import { useThemedPalette } from '@/store/themeStore';
 import { useHaptics, useP2POffers, usePublicProfile } from '@/hooks';
 import type { Palette } from '@/store/themeStore';
@@ -123,6 +124,9 @@ export default function PublicProfile() {
         </View>
       </Panel>
 
+      {/* ── A business's offers and news ──────── */}
+      <BusinessPostList refId={data.username} />
+
       {/* ── Stats row ─────────────────────────── */}
       <View style={{ flexDirection: 'row', gap: 10, marginTop: 14 }}>
         <StatCard palette={p} value={String(data.totalTrades)}     label="P2P trades" />
@@ -214,7 +218,7 @@ export default function PublicProfile() {
           }}
         />
         <Pressable
-          onPress={() => { h.selection(); router.push('/(tabs)/p2p'); }}
+          onPress={() => { h.selection(); router.push('/p2p'); }}
           style={({ pressed }) => ({
             height: 52, borderRadius: 26,
             alignItems: 'center', justifyContent: 'center',

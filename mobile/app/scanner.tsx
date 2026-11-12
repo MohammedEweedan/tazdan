@@ -9,6 +9,8 @@ import { useThemedPalette, useTheme } from '@/store/themeStore';
 import { useHaptics } from '@/hooks';
 import { View, Pressable, Animated, Dimensions, Image } from 'react-native';
 import { TopGradient } from '@/components/ui/ScreenShell';
+import { useT } from '@/store/i18nStore';
+import { parseScannedCode } from '@/lib/payCode';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 const SCAN_SIZE = Math.min(SCREEN_W * 0.72, 280);
@@ -19,10 +21,13 @@ export default function ScannerPage() {
   const p = useThemedPalette();
   const LOGO = require('../assets/logo-white.png');
   const themeMode = useTheme((s) => s.mode);
+  const t = useT();
 
   const [permission, requestPermission] = useCameraPermissions();
   const [scanned, setScanned] = useState(false);
   const [scannedHandle, setScannedHandle] = useState('');
+  const [unknownCode, setUnknownCode] = useState(false);
+  const [scannedKind, setScannedKind] = useState<'pay' | 'claim'>('pay');
 
   const scaleAnim = useRef(new Animated.Value(0)).current;
   const opacityAnim = useRef(new Animated.Value(0)).current;
@@ -37,59 +42,40 @@ export default function ScannerPage() {
     ]).start();
   };
 
+  // One parser for every code (see lib/payCode): claim links open the claim
+  // flow; a person's or shop's code opens Pay, with any amount the code asks.
   const handleBarcodeScanned = ({ data }: { data: string }) => {
     if (scanned) return;
-    setScanned(true);
-
-    // Check for claim link first:
-    //   https://tazdan.com/claim/TOKEN or https://tazdan.com/claim/TOKEN
-    //   tazdan://claim/TOKEN
-    //   http://localhost:PORT/claim/TOKEN  (dev only — see below)
-    //
-    // SECURITY: the localhost branch is dev-only.  Shipping it in
-    // release builds let an attacker print a QR encoding a localhost
-    // URL pointing at any process they could trick the victim into
-    // running (e.g. a malicious dev tool / fake proxy on a known
-    // port) and have the claim flow auto-credit whatever that local
-    // server returned.  Gating behind __DEV__ closes that.
-    const claimPattern = __DEV__
-      ? /(?:tazdan:\/\/claim\/|https?:\/\/(?:[^\/]+\.)?tazdan\.(?:com|app)\/claim\/|https?:\/\/localhost:\d+\/claim\/)([a-zA-Z0-9]+)/i
-      : /(?:tazdan:\/\/claim\/|https?:\/\/(?:[^\/]+\.)?tazdan\.(?:com|app)\/claim\/)([a-zA-Z0-9]+)/i;
-    const claimMatch = data.match(claimPattern);
-    if (claimMatch) {
-      const token = claimMatch[1];
-      setScannedHandle(`Claim link`);
-      playSuccess();
-      setTimeout(() => {
-        router.replace(`/claim/${token}`);
-      }, 900);
+    const code = parseScannedCode(data);
+    if (!code) {
+      // Not ours — say so and keep scanning.
+      setScanned(true);
+      setUnknownCode(true);
+      h.warning();
+      setTimeout(() => { setUnknownCode(false); setScanned(false); }, 1600);
       return;
     }
-
-    // Parse handle from QR data. Supports:
-    //   @handle
-    //   tazdan://u/handle
-    //   https://tazdan.com/u/handle
-    let handle = '';
-    const atMatch = data.match(/@([a-zA-Z0-9._]+)/);
-    // Case-insensitive — iOS lowercases custom URL schemes when the
-    // OS hands them back, so `tazdan://` and `fortuni://` both need
-    // to match the same handle regex.
-    const urlMatch = data.match(/(?:tazdan:\/\/u\/|https?:\/\/(?:[^\/]+\.)?tazdan\.(?:com|app)\/u\/)([a-zA-Z0-9._]+)/i);
-    if (atMatch) handle = atMatch[1];
-    else if (urlMatch) handle = urlMatch[1];
-    else handle = data.replace(/^@/, '').trim();
-
-    setScannedHandle(handle);
+    setScanned(true);
+    setScannedKind(code.kind);
+    // Codes of accounts without a handle carry an id — not worth showing.
+    setScannedHandle(code.kind === 'claim' ? t('pay.scanner.claim') : /^[A-Za-z0-9_]{1,30}$/.test(code.payee) ? `@${code.payee}` : '');
     playSuccess();
-
     setTimeout(() => {
-      if (handle) {
-        router.replace(`/u/${handle}`);
-      } else {
-        setScanned(false);
+      if (code.kind === 'claim') {
+        router.replace(`/claim/${code.token}`);
+        return;
       }
-    }, 900);
+      router.replace({
+        pathname: '/pay/[payee]',
+        params: {
+          payee: code.payee,
+          ...(code.currency ? { currency: code.currency } : {}),
+          ...(code.amount ? { amount: code.amount } : {}),
+          ...(code.reference ? { ref: code.reference } : {}),
+          ...(code.till ? { till: code.till } : {}),
+        },
+      });
+    }, 700);
   };
 
   if (!permission) {
@@ -97,7 +83,7 @@ export default function ScannerPage() {
       <View style={{ flex: 1, backgroundColor: p.bg, alignItems: 'center', justifyContent: 'center' }}>
       <TopGradient />
         <StatusBar style={themeMode === 'light' ? 'dark' : 'light'} />
-        <Text style={{ color: p.fgMuted, fontSize: 14 }}>Requesting camera permission…</Text>
+        <Text style={{ color: p.fgMuted, fontSize: 14 }}>{t('pay.scanner.waiting')}</Text>
       </View>
     );
   }
@@ -108,10 +94,10 @@ export default function ScannerPage() {
         <StatusBar style={themeMode === 'light' ? 'dark' : 'light'} />
         <Ionicons name="camera-outline" size={48} color={p.fgFaint} />
         <Text style={{ color: p.fg, fontSize: 18, fontWeight: '600', marginTop: 16, textAlign: 'center' }}>
-          Camera access denied
+          {t('pay.scanner.denied')}
         </Text>
         <Text style={{ color: p.fgMuted, fontSize: 14, marginTop: 8, textAlign: 'center', lineHeight: 22 }}>
-          Camera permission is needed to scan QR codes.
+          {t('pay.scanner.deniedHint')}
         </Text>
         <Pressable
           onPress={requestPermission}
@@ -120,7 +106,7 @@ export default function ScannerPage() {
             borderRadius: 22, backgroundColor: p.ctaBg,
           }}
         >
-          <Text style={{ color: p.ctaFg, fontSize: 14, fontWeight: '700' }}>Grant permission</Text>
+          <Text style={{ color: p.ctaFg, fontSize: 14, fontWeight: '700' }}>{t('pay.scanner.allow')}</Text>
         </Pressable>
         <Pressable
           onPress={() => router.back()}
@@ -129,7 +115,7 @@ export default function ScannerPage() {
             borderRadius: 22, backgroundColor: p.pillBg, borderWidth: 1, borderColor: p.border,
           }}
         >
-          <Text style={{ color: p.fg, fontSize: 14, fontWeight: '700' }}>Go back</Text>
+          <Text style={{ color: p.fg, fontSize: 14, fontWeight: '700' }}>{t('pay.scanner.back')}</Text>
         </Pressable>
       </View>
     );
@@ -200,7 +186,7 @@ export default function ScannerPage() {
             <Ionicons name="chevron-back" size={20} color="#fff" />
           </Pressable>
           <Text style={{ flex: 1, textAlign: 'center', color: '#fff', fontSize: 17, fontWeight: '600', marginRight: 48 }}>
-            Scan QR Code
+            {t('pay.scan')}
           </Text>
         </View>
       </SafeAreaView>
@@ -232,12 +218,12 @@ export default function ScannerPage() {
             fontWeight: '600',
           }}
         >
-          Point camera at a tazdan QR code
+          {unknownCode ? t('pay.scanner.unknown') : t('pay.scanHint')}
         </Text>
       </View>
 
       {/* Success overlay */}
-      {scanned && (
+      {scanned && !unknownCode && (
         <View style={{
           position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
           alignItems: 'center', justifyContent: 'center',
@@ -259,13 +245,15 @@ export default function ScannerPage() {
               color: '#fff', fontSize: 16, fontWeight: '700',
               marginTop: 16,
             }}>
-              {scannedHandle ? `@${scannedHandle}` : 'Scanned!'}
+              {scannedHandle}
             </Text>
-            <Text style={{
-              color: 'rgba(255,255,255,0.6)', fontSize: 13, marginTop: 4,
-            }}>
-              Opening profile…
-            </Text>
+            {scannedKind === 'pay' && (
+              <Text style={{
+                color: 'rgba(255,255,255,0.6)', fontSize: 13, marginTop: 4,
+              }}>
+                {t('pay.scanner.opening')}
+              </Text>
+            )}
           </Animated.View>
         </View>
       )}

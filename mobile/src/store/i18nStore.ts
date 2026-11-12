@@ -11,6 +11,8 @@
 
 import { designEn, designAr } from '@/theme/copy';
 import { confirmCopy } from '@/theme/confirmCopy';
+import { payCopy } from '@/components/pay/copy';
+import { lydtCopy } from '@/components/lydt/copy';
 import { tourEn, tourAr } from '@/components/onboarding/copy';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Alert, ActionSheetIOS, I18nManager, Platform } from 'react-native';
@@ -215,6 +217,12 @@ const dict: Record<Locale, Strings> = {
     'common.cancel':         'Cancel',
     'common.confirm':        'Confirm',
     'common.loading':        'Loading…',
+    // Availability (features, currencies and pairs staff have locked or hidden)
+    'avail.lockedTitle':     'Not available yet',
+    'avail.lockedBody':      "This isn't open on your account yet. We'll let you know when it is.",
+    'avail.hiddenTitle':     'Not available',
+    'avail.back':            'Go back',
+    'avail.locked':          'Locked',
     'common.done':           'Done',
     'common.retry':          'Try again',
     'common.noData':         'Nothing here yet.',
@@ -406,6 +414,29 @@ const dict: Record<Locale, Strings> = {
     'chat.youRequested':             'YOU REQUESTED',
     'chat.requestedFromYou':         'REQUESTED FROM YOU',
     'chat.deleted':                  'Message deleted',
+    'widget.payments':               'Payments',
+    'widget.scan':                   'Scan',
+    'widget.noPayments':             'No payments yet',
+    'widget.chats':                  'Chats',
+    'widget.noChats':                'No messages yet',
+    'widget.unread':                 'unread',
+    'widget.newMessage':             'New message',
+    'widget.support':                'tazdan Support',
+    'widget.noAssets':               'No assets yet',
+    'widget.updated':                'Updated',
+    'widget.openApp':                'Open tazdan to set up this widget',
+    'chat.notSent':                  'Not sent · Tap to retry',
+    'chat.notSentTitle':             'Message not sent',
+    'chat.sendAgain':                'Send again',
+    'chat.loadEarlier':              'Load earlier messages',
+    'chat.paymentUnconfirmed':       'Couldn’t confirm the payment',
+    'chat.paymentUnconfirmedBody':   'The connection dropped before we heard back. Check the chat — if the payment isn’t there, send it again. You won’t be charged twice.',
+    'notifPrefs.channel.chats':      'Chats',
+    'notifPrefs.messages.title':     'Messages',
+    'notifPrefs.messages.desc':      'New messages, requests and replies from support.',
+    'notifPrefs.preview.title':      'Show preview',
+    'notifPrefs.preview.desc':       'Show the message or amount in the notification.',
+    'send.unconfirmed':              'Couldn’t confirm the transfer. Check your activity — if it isn’t there, send again. You won’t be charged twice.',
     'chat.edited':                   'edited',
     'chat.loadingThread':            'Loading…',
     'chat.emptyThread':              'Say hi to {name} — your conversation starts now.',
@@ -2162,6 +2193,11 @@ const dict: Record<Locale, Strings> = {
     'common.cancel':         'إلغاء',
     'common.confirm':        'تأكيد',
     'common.loading':        'جارٍ التحميل…',
+    'avail.lockedTitle':     'غير متاح بعد',
+    'avail.lockedBody':      'هذه الخدمة غير مفعّلة على حسابك بعد. سنخبرك عند تفعيلها.',
+    'avail.hiddenTitle':     'غير متاح',
+    'avail.back':            'رجوع',
+    'avail.locked':          'مقفل',
     'common.done':           'تم',
     'common.retry':          'حاول مجدداً',
     'common.noData':         'لا يوجد شيء هنا بعد.',
@@ -2619,6 +2655,29 @@ const dict: Record<Locale, Strings> = {
     'slide.expired':                 'Quote expired',
     // ── Chat / Messages ──────────────────────────────────────────
     'chat.e2eBanner':                'تشفير من طرف إلى طرف',
+    'widget.payments':               'المدفوعات',
+    'widget.scan':                   'مسح',
+    'widget.noPayments':             'لا توجد مدفوعات بعد',
+    'widget.chats':                  'المحادثات',
+    'widget.noChats':                'لا توجد رسائل بعد',
+    'widget.unread':                 'غير مقروءة',
+    'widget.newMessage':             'رسالة جديدة',
+    'widget.support':                'دعم tazdan',
+    'widget.noAssets':               'لا توجد أصول بعد',
+    'widget.updated':                'آخر تحديث',
+    'widget.openApp':                'افتح tazdan لإعداد هذه الأداة',
+    'chat.notSent':                  'لم تُرسل · اضغط لإعادة المحاولة',
+    'chat.notSentTitle':             'لم تُرسل الرسالة',
+    'chat.sendAgain':                'أعد الإرسال',
+    'chat.loadEarlier':              'تحميل الرسائل السابقة',
+    'chat.paymentUnconfirmed':       'تعذّر تأكيد الدفعة',
+    'chat.paymentUnconfirmedBody':   'انقطع الاتصال قبل وصول الرد. تحقّق من المحادثة — إن لم تجد الدفعة فأرسلها مجدداً. لن يُخصم المبلغ مرتين.',
+    'notifPrefs.channel.chats':      'المحادثات',
+    'notifPrefs.messages.title':     'الرسائل',
+    'notifPrefs.messages.desc':      'الرسائل الجديدة والطلبات وردود الدعم.',
+    'notifPrefs.preview.title':      'إظهار المعاينة',
+    'notifPrefs.preview.desc':       'إظهار نص الرسالة أو المبلغ في الإشعار.',
+    'send.unconfirmed':              'تعذّر تأكيد التحويل. تحقّق من سجل العمليات — إن لم تجده فأرسله مجدداً. لن يُخصم المبلغ مرتين.',
     'chat.typing':                   'يكتب…',
     'chat.pin':                      'تثبيت المحادثة',
     'chat.unpin':                    'إلغاء التثبيت',
@@ -4337,6 +4396,8 @@ const dict: Record<Locale, Strings> = {
 
 // ConfirmAction copy (slide / hold / review) lives beside its component.
 for (const [locale, strings] of Object.entries(confirmCopy)) Object.assign(dict[locale as Locale], strings);
+for (const [locale, strings] of Object.entries(payCopy)) Object.assign(dict[locale as Locale], strings);
+for (const [locale, strings] of Object.entries(lydtCopy)) Object.assign(dict[locale as Locale], strings);
 
 for (const locale of LOCALES) {
   if (locale === 'en') continue;

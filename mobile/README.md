@@ -84,11 +84,46 @@ without a dedicated PROD override is rejected in release builds.
 Use a release export/build (`eas build --profile production`); Expo dev mode
 intentionally connects locally. Native rebuilds are needed after native config changes.
 
+## Home-screen widgets
+
+Three widgets on iOS (WidgetKit, `targets/widgets`) and Android
+(`src/widgets/android`): **Payments** (Send / Receive / Scan / Top up and the
+latest payments), **Chats** (unread count and latest conversations) and
+**Prices & holdings** (total plus each crypto and currency held, with 24 h
+change). Small, medium and large sizes; dark and light; English and Arabic.
+
+The app writes one JSON snapshot (`src/widgets/snapshot.ts`) from data it has
+already loaded; iOS reads it from the App Group `group.com.tazdan.app`,
+Android from AsyncStorage. The widgets hold no login token. Prices refresh on
+their own from the public `/markets/ticker` and `/rates/live` feeds (iOS every
+~15 min, Android every 30 min); payments and chats are as fresh as the app's
+last run. Hide-balances masks amounts but not prices; chat text shows only
+with "Show preview" on; signing out clears the widgets.
+
+Before the first build that includes them:
+
+1. Set `ios.appleTeamId` in `app.json`.
+2. Let EAS register the App Group and the `com.tazdan.app.widgets` extension
+   (or add both in the Apple Developer portal).
+3. Make a new native build — the version is 0.2.0, so 0.1.x binaries never
+   receive this JavaScript over the air.
+
+The iOS app targets 16.4 or later, matching the `ExtensionStorage` pod's
+minimum version. Expo autolinking silently skips that pod for lower targets,
+leaving widgets without data. The local test script installs pods on every
+build and checks the generated module provider before compiling. Widget
+publishing uses the installed app's bundle ID for its App Group and logs
+failed writes once, including builds with a missing native bridge.
+
+`index.ts` registers the Android widget task; builds without the native
+modules simply show no widgets.
+
 ## Verification
 
 ```sh
 npm run typecheck
 npm run test:api-config
+npm run test:widgets
 npm run i18n:audit
 ```
 

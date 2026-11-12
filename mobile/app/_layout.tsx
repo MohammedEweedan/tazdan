@@ -9,7 +9,6 @@ import { Stack, useRouter, useSegments } from 'expo-router';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-import { LinearGradient } from 'expo-linear-gradient';
 import { QueryClientProvider } from '@tanstack/react-query';
 import * as SystemUI from 'expo-system-ui';
 import Animated, {
@@ -21,7 +20,7 @@ import Animated, {
   withTiming,
   Easing,
 } from 'react-native-reanimated';
-import { ShaderLines } from '@/components/ui/ShaderLines';
+import { LaunchSplash, SPLASH_NAVY } from '@/components/ui/LaunchSplash';
 import {
   useFonts,
   Outfit_300Light,
@@ -49,12 +48,14 @@ import { setUnauthorizedHandler } from '@/lib/api';
 import { initObservability } from '@/lib/observability';
 import { useAuthStore } from '@/store/authStore';
 import { useChatPrefs } from '@/store/chatPrefsStore';
+import { useI18n } from '@/store/i18nStore';
 import { authService } from '@/services';
 import { secureStore } from '@/lib/secureStore';
 import { STORAGE_KEYS, STRIPE } from '@/constants';
 import { StripeProvider } from '@/lib/stripeShim';
 import { usePushDeepLink, registerPushToken } from '@/lib/pushNotifications';
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
+import { AvailabilityGate } from '@/components/ui/AvailabilityGate';
 
 // Match the dark palette bg exactly so the system chrome (keyboard toolbar,
 // nav bar on Android) never flashes a different shade of black.
@@ -86,11 +87,13 @@ function AuthGate() {
   // updates) are the strongest re-engagement surface a fintech has — the
   // server-side pipeline and the tap deep-linking below were already built,
   // but nothing ever registered the token, so no device received them.
+  // Re-registered when the language changes so pushes arrive in it.
+  const locale = useI18n((s) => s.locale);
   useEffect(() => {
     if (isAuthenticated) {
-      registerPushToken().catch(() => { /* non-fatal; retried next session */ });
+      registerPushToken(locale).catch(() => { /* non-fatal; retried next session */ });
     }
-  }, [isAuthenticated]);
+  }, [isAuthenticated, locale]);
 
   // Re-fetch /me whenever the app comes back to the foreground so the
   // handle, avatar, and other profile fields are always fresh — no reload needed.
@@ -124,61 +127,6 @@ function AuthGate() {
   return null;
 }
 
-const { height: SH } = Dimensions.get('screen');
-
-function SplashOverlay() {
-  const isHydrating = useAuthStore((s) => s.isHydrating);
-  const [show, setShow] = useState(true);
-  const p = useThemedPalette();
-  const dark = useTheme((s) => s.mode !== 'light');
-
-  const scanY = useSharedValue(0);
-
-  useEffect(() => {
-    scanY.value = withRepeat(
-      withTiming(SH, { duration: 2200, easing: Easing.inOut(Easing.quad) }),
-      -1,
-      true,
-    );
-  }, []);
-
-  useEffect(() => {
-    if (!isHydrating) {
-      const t = setTimeout(() => setShow(false), 900);
-      return () => clearTimeout(t);
-    }
-  }, [isHydrating]);
-
-  const scanStyle = useAnimatedStyle(() => {
-    const progress = scanY.value / SH;
-    const opacity = progress < 0.1 ? progress / 0.1 * 0.7
-                  : progress > 0.9 ? (1 - progress) / 0.1 * 0.7
-                  : 0.7;
-    return {
-      transform: [{ translateY: scanY.value - SH * 0.5 }],
-      opacity,
-    };
-  });
-
-  if (!show) return null;
-
-  return (
-    <Animated.View
-      exiting={FadeOut.duration(700)}
-      style={StyleSheet.absoluteFillObject}
-      pointerEvents="none"
-    >
-      {/* Base — inverts with system colour scheme */}
-      <LinearGradient
-        colors={[p.bg, p.bgElev, p.bg]}
-        locations={[0, 0.5, 1]}
-        style={StyleSheet.absoluteFillObject}
-      />
-      {/* WebGL shader lines — exact port of the web ShaderAnimation */}
-      <ShaderLines />
-    </Animated.View>
-  );
-}
 
 export default function RootLayout() {
   const p = useThemedPalette();
@@ -203,8 +151,9 @@ export default function RootLayout() {
   // Listen for push taps and route to the relevant receipt screen.
   usePushDeepLink();
 
-  // Block rendering until custom fonts are ready so no FOUT on first frame.
-  if (!fontsLoaded) return null;
+  // Block rendering until custom fonts are ready so no FOUT on first frame —
+  // same navy as the native launch screen, so there is no flash.
+  if (!fontsLoaded) return <View style={{ flex: 1, backgroundColor: SPLASH_NAVY }} />;
 
   return (
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: p.bg }}>
@@ -232,12 +181,15 @@ export default function RootLayout() {
             <Stack.Screen name="buy"      options={{ animation: 'slide_from_right' }} />
             <Stack.Screen name="sell"     options={{ animation: 'slide_from_right' }} />
             <Stack.Screen name="send"     options={{ animation: 'slide_from_right' }} />
+            <Stack.Screen name="pay/[payee]" options={{ animation: 'slide_from_right' }} />
+            <Stack.Screen name="lydt/convert" options={{ animation: 'slide_from_right' }} />
             <Stack.Screen name="receive"  options={{ animation: 'slide_from_right' }} />
             <Stack.Screen name="transfer" options={{ animation: 'slide_from_right' }} />
             <Stack.Screen name="topup"    options={{ animation: 'slide_from_right' }} />
             <Stack.Screen name="withdraw" options={{ animation: 'slide_from_right' }} />
             <Stack.Screen name="recurring" options={{ animation: 'slide_from_right' }} />
           </Stack>
+          <AvailabilityGate />
           <SplashGate />
           <OfflineGate />
           </StripeProvider>
@@ -248,17 +200,14 @@ export default function RootLayout() {
   );
 }
 
+/** Animated ن launch mark until auth state has loaded (see LaunchSplash). */
 function SplashGate() {
   const isHydrating = useAuthStore((s) => s.isHydrating);
-  if (!isHydrating) return null;
-  return <SplashOverlay />;
+  const [gone, setGone] = useState(false);
+  if (gone) return null;
+  return <LaunchSplash ready={!isHydrating} onGone={() => setGone(true)} />;
 }
 
-/**
- * Covers the whole app with the offline screen whenever connectivity drops,
- * so no stale or fabricated balance is ever visible behind it. Sits above the
- * navigator (absolute fill) and disappears the instant we're back online.
- */
 function OfflineGate() {
   const { isOnline, refresh } = useConnectivity();
   const [reconnecting, setReconnecting] = useState(false);

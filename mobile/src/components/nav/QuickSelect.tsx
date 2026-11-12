@@ -3,8 +3,8 @@ import { accentTokens } from '@/theme/accent';
  * Home button + quick select.
  *
  *  - Tap the home button → Home.
- *  - Hold it (or slide up from it) → the screen above the tab bar blurs and
- *    the quick actions fan out in a curved pill above the button. Slide toward one and let go
+ *  - Hold it (or slide up from it) → the whole screen blurs behind the
+ *    floating tab bar and the quick actions fan out in a curved pill above the button. Slide toward one and let go
  *    to run it; the nearest action by angle is picked, so a rough flick
  *    works.
  *  - Hold and let go without moving → the menu stays open for tapping.
@@ -13,7 +13,7 @@ import { accentTokens } from '@/theme/accent';
  * that opened it keeps flowing to the button's responder while the finger
  * slides over the actions.
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { BackHandler, Image, PanResponder, Platform, Pressable, StyleSheet, View, type ViewStyle } from 'react-native';
 import { BlurView } from 'expo-blur';
 import Svg, { Path as SvgPath } from 'react-native-svg';
@@ -129,7 +129,8 @@ export type QuickSelectController = ReturnType<typeof useQuickSelect>;
 
 function BrandMark({ size, mono }: { size: number; mono: boolean }) {
   const p = useThemedPalette();
-  const tint = accentTokens(p.accent, [p.ctaBg], p.ctaBg !== '#0A0A0B').accentText;
+  // The disc is ink-on-accent (it sits in the accent tab bar).
+  const tint = accentTokens(p.accent, [p.accentFg], p.accentFg === '#FFFFFF').accentText;
   return (
     <Image
       source={mono ? require('../../../assets/icon-asterisk-black.png') : require('../../../assets/icon-asterisk.png')}
@@ -140,7 +141,8 @@ function BrandMark({ size, mono }: { size: number; mono: boolean }) {
   );
 }
 
-/** The disc itself — black on light, white on dark (the theme's CTA colour). */
+/** The disc itself — ink on accent (white on the navy bar), ringed in the
+ *  bar colour so it reads as cut out of the bar. */
 function FabDisc({ pressed, style }: { pressed?: boolean; style?: ViewStyle }) {
   const p = useThemedPalette();
   const mode = useTheme((s) => s.mode);
@@ -149,8 +151,8 @@ function FabDisc({ pressed, style }: { pressed?: boolean; style?: ViewStyle }) {
     <View style={[{
       width: FAB_SIZE, height: FAB_SIZE, borderRadius: FAB_SIZE / 2,
       alignItems: 'center', justifyContent: 'center',
-      backgroundColor: p.ctaBg,
-      borderWidth: 4, borderColor: p.bgElev,
+      backgroundColor: p.accentFg,
+      borderWidth: 4, borderColor: p.accent,
       shadowColor: mode === 'light' ? '#000000' : mono ? '#000000' : p.accent,
       shadowOpacity: mode === 'light' ? 0.22 : 0.2,
       shadowRadius: 14,
@@ -165,12 +167,14 @@ function FabDisc({ pressed, style }: { pressed?: boolean; style?: ViewStyle }) {
 
 /* ── Button (lives in the tab bar) ──────────────────────────────────── */
 
-export function HomeFab({ qs, onPress, label, hint, selected }: {
+export function HomeFab({ qs, onPress, label, hint, selected, children }: {
   qs: QuickSelectController;
   onPress: () => void;
   label: string;
   hint: string;
   selected?: boolean;
+  /** Render as a regular tab-bar item (icon + name) instead of the raised disc. */
+  children?: ReactNode;
 }) {
   const h = useHaptics();
   const ref = useRef<View>(null);
@@ -243,7 +247,7 @@ export function HomeFab({ qs, onPress, label, hint, selected }: {
   useEffect(() => () => clearTimeout(g.current.timer), []);
 
   return (
-    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'flex-start' }}>
+    <View style={{ flex: 1, alignItems: 'center', justifyContent: children ? 'center' : 'flex-start' }}>
       <View
         ref={ref}
         {...responder.panHandlers}
@@ -257,9 +261,10 @@ export function HomeFab({ qs, onPress, label, hint, selected }: {
           const i = qs.actions.findIndex((a) => a.key === e.nativeEvent.actionName);
           if (i >= 0) qs.actions[i].onSelect();
         }}
-        style={{ marginTop: -22 }}
+        // Centred on the 64pt bar row, lifted 12pt: level with the tab icons, only its top rises above the bar.
+        style={children ? { width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center', opacity: pressed ? 0.7 : 1 } : { marginTop: (64 - FAB_SIZE) / 2 - 12 }}
       >
-        <FabDisc pressed={pressed || qs.mode === 'drag'} />
+        {children ?? <FabDisc pressed={pressed || qs.mode === 'drag'} />}
       </View>
     </View>
   );
@@ -276,13 +281,12 @@ function arcPath(cx: number, cy: number, angles: number[]): string {
 }
 
 /**
- * Everything above the tab bar blurs; the bar, the button and the fan stay
- * sharp. `barHeight` is the tab bar's full height so the blur stops at its top edge.
+ * The fan of quick actions, above everything. The blur behind it is
+ * QuickSelectBackdrop, drawn by the tab bar under the floating bar.
  */
-export function QuickSelectOverlay({ qs, barHeight }: { qs: QuickSelectController; barHeight: number }) {
+export function QuickSelectOverlay({ qs }: { qs: QuickSelectController }) {
   const p = useThemedPalette();
   const t = useT();
-  const mode = useTheme((s) => s.mode);
   const [origin, setOrigin] = useState<Point>({ x: 0, y: 0 });
   const rootRef = useRef<View>(null);
 
@@ -291,7 +295,6 @@ export function QuickSelectOverlay({ qs, barHeight }: { qs: QuickSelectControlle
   const boxHalfW = ARC_RADIUS + PILL_THICKNESS / 2 + 2;
   const boxH = ARC_RADIUS + PILL_THICKNESS / 2 + 2;
 
-  const backdrop = useAnimatedStyle(() => ({ opacity: qs.progress.value }));
   const pill = useAnimatedStyle(() => ({
     opacity: qs.progress.value,
     // Grow out of the button: scale about the box's bottom-centre.
@@ -315,18 +318,6 @@ export function QuickSelectOverlay({ qs, barHeight }: { qs: QuickSelectControlle
       // The tab bar below the blur stays usable: tapping a tab closes the menu.
       pointerEvents={interactive ? 'box-none' : 'none'}
     >
-      <Animated.View style={[{ position: 'absolute', left: 0, right: 0, top: 0, bottom: barHeight }, backdrop]}>
-        {Platform.OS === 'ios'
-          ? <BlurView intensity={45} tint={mode === 'light' ? 'light' : 'dark'} style={StyleSheet.absoluteFill} />
-          : null}
-        <View style={[StyleSheet.absoluteFill, {
-          backgroundColor: mode === 'light'
-            ? (Platform.OS === 'ios' ? 'rgba(10,10,11,0.08)' : 'rgba(250,250,247,0.86)')
-            : (Platform.OS === 'ios' ? 'rgba(0,0,0,0.30)' : 'rgba(12,13,16,0.86)'),
-        }]} />
-        <Pressable style={StyleSheet.absoluteFill} onPress={qs.close} accessibilityRole="button" accessibilityLabel={t('common.close')} />
-      </Animated.View>
-
       {/* Curved pill the actions sit in — a thick round-capped stroke along their arc. */}
       <Animated.View pointerEvents="none" style={[{
         position: 'absolute', left: c.x - boxHalfW, top: c.y - boxH,
@@ -353,6 +344,31 @@ export function QuickSelectOverlay({ qs, barHeight }: { qs: QuickSelectControlle
         <FabDisc pressed={qs.mode === 'drag'} />
       </Pressable>
     </View>
+  );
+}
+
+/**
+ * The blur behind the quick select. The tab bar draws it under the floating
+ * bar, so the whole screen blurs — beside and below the bar too — while the
+ * bar itself stays sharp and usable. Tap it to close.
+ */
+export function QuickSelectBackdrop({ qs }: { qs: QuickSelectController }) {
+  const t = useT();
+  const mode = useTheme((s) => s.mode);
+  const fade = useAnimatedStyle(() => ({ opacity: qs.progress.value }));
+  if (qs.mode === 'closed') return null;
+  return (
+    <Animated.View style={[StyleSheet.absoluteFill, fade]} pointerEvents={qs.mode === 'tap' ? 'auto' : 'none'}>
+      {Platform.OS === 'ios'
+        ? <BlurView intensity={45} tint={mode === 'light' ? 'light' : 'dark'} style={StyleSheet.absoluteFill} />
+        : null}
+      <View style={[StyleSheet.absoluteFill, {
+        backgroundColor: mode === 'light'
+          ? (Platform.OS === 'ios' ? 'rgba(10,10,11,0.08)' : 'rgba(250,250,247,0.86)')
+          : (Platform.OS === 'ios' ? 'rgba(0,0,0,0.30)' : 'rgba(12,13,16,0.86)'),
+      }]} />
+      <Pressable style={StyleSheet.absoluteFill} onPress={qs.close} accessibilityRole="button" accessibilityLabel={t('common.close')} />
+    </Animated.View>
   );
 }
 

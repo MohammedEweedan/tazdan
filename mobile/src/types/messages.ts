@@ -33,9 +33,11 @@ export interface ApiMessage {
   deletedAt: string | null;
   tradeId: string | null;
   createdAt: string;
-  /** Transient idempotency key echoed by the server for the sender's own
-   *  message — used to dedup the optimistic placeholder. Absent on most rows. */
+  /** The sender's idempotency key — matches an optimistic placeholder to its
+   *  real row, and makes a resend return the original instead of a duplicate. */
   clientId?: string | null;
+  /** Local-only delivery state of the sender's unconfirmed bubble. */
+  localStatus?: 'sending' | 'failed';
 }
 
 export interface ConversationPartner {

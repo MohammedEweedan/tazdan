@@ -1,5 +1,6 @@
 /**
- * P2P marketplace — theme-aware.
+ * P2P marketplace — theme-aware. A pushed page (More → P2P) since the Pay
+ * tab took its place in the tab bar.
  * "Create listing" and "Start trade" both happen as inline bottom sheets,
  * no page navigation required.
  */
@@ -19,7 +20,7 @@ import { useTheme, useThemedPalette, type Palette } from '@/store/themeStore';
 import { useI18n, useT } from '@/store/i18nStore';
 import type { Currency, MarketTicker, P2POffer } from '@/types';
 import { TopGradient, SectionLabel, Panel, ToggleRow } from '@/components/ui/ScreenShell';
-import { HEADER, HeaderIconButton, TabHeader } from '@/components/ui/ScreenHeader';
+import { HEADER, HeaderIconButton, StackHeader } from '@/components/ui/ScreenHeader';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { useApproxLocation, openLocationSettings } from '@/hooks/useApproxLocation';
@@ -103,7 +104,7 @@ export default function P2P() {
       <TopGradient />
       <StatusBar style={themeMode === 'light' ? 'dark' : 'light'} />
       <SafeAreaView style={{ flex: 1 }} edges={['top']}>
-        <TabHeader
+        <StackHeader
           title={t('p2p.title')}
           right={
             <>

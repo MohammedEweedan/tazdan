@@ -561,6 +561,52 @@ export const profileService = {
   },
 };
 
+// ───────── Pay ─────────
+/** Who a code or @handle belongs to. Merchant name/logo only after KYB. */
+export type Payee = {
+  id: string;
+  username: string | null;
+  kind: 'MERCHANT' | 'PERSON';
+  name: string;
+  avatarUrl: string | null;
+  verified: boolean;
+  self?: boolean;
+  lastPaidAt?: string;
+};
+
+// ───────── LYDT (dinar token, sandbox) ─────────
+export type LydtReserves = {
+  asset: 'LYDT'; peg: string; supply: string; reserveLedger: string;
+  attestation: { balance: string; statementDate: string; reference: string; fresh: boolean } | null;
+  coverage: string | null; fullyBacked: boolean; headroom: string; issuanceOpen: boolean;
+  holders: number; holdingCap: string; asOf: string;
+};
+export type LydtActivity = { kind: 'ISSUE' | 'REDEEM' | 'TRANSFER'; reference: string; amount: string; counterpartyId: string | null; note: string | null; createdAt: string; direction: 'IN' | 'OUT' };
+
+export const lydtService = {
+  me: async (): Promise<{ balance: string; frozen: boolean; activity: LydtActivity[] }> => (await api.get('/lydt/me')).data.lydt,
+  reserves: async (): Promise<LydtReserves> => (await api.get('/lydt/reserves')).data.reserves,
+  issue: async (amount: number, idempotencyKey: string) => (await api.post('/lydt/issue', { amount, idempotencyKey }, { timeout: 25_000 })).data.operation,
+  redeem: async (amount: number, idempotencyKey: string) => (await api.post('/lydt/redeem', { amount, idempotencyKey }, { timeout: 25_000 })).data.operation,
+  transfer: async (payload: { receiverId: string; amount: number; note?: string; idempotencyKey: string; stepUpCode?: string; biometricVerified?: boolean }) =>
+    (await api.post('/lydt/transfer', payload, { timeout: 25_000 })).data.operation as { reference: string },
+};
+
+export const payService = {
+  /** Handle (any case) or user id. Unknown and unavailable accounts both 404. */
+  payee: async (ref: string): Promise<Payee> => {
+    const { data } = await api.get(`/pay/payee/${encodeURIComponent(ref.replace(/^@/, ''))}`);
+    return data.payee;
+  },
+  /** A merchant's live offers, deals and news (empty for people). */
+  posts: async (ref: string): Promise<Array<{ id: string; kind: 'OFFER' | 'DEAL' | 'NEWS'; title: string; body: string; endsAt: string | null; createdAt: string }>> =>
+    (await api.get(`/pay/payee/${encodeURIComponent(ref)}/posts`)).data.posts,
+  recent: async (): Promise<Payee[]> => {
+    const { data } = await api.get('/pay/recent');
+    return data.payees ?? [];
+  },
+};
+
 // ───────── Notifications ─────────
 export const notificationService = {
   list: async (page = 1): Promise<{ notifications: any[]; total: number; unreadCount: number; page: number; pages: number }> => {
@@ -612,13 +658,23 @@ export const messageService = {
     stepUpCode?: string;
     /** Set only right after a successful local Face ID / Touch ID check. */
     biometricVerified?: boolean;
+    /** Same key on a retry → the server returns the original transfer. */
+    idempotencyKey?: string;
+    /** Business till from a till QR or kiosk (per-till metrics). */
+    tillId?: string;
   }) => {
-    const { data } = await api.post('/transactions/transfer', payload);
+    const { data } = await api.post('/transactions/transfer', payload, { timeout: 25_000 });
     return data;
   },
-  thread: async (userId: string): Promise<ApiMessage[]> => {
-    const { data } = await api.get(`/messages/${userId}`);
-    return data.messages ?? [];
+  /** One page of a thread, oldest first. `before` pages back from a message
+   *  id; `hasMore` says whether older history exists. */
+  thread: async (userId: string, opts: { limit?: number; before?: string } = {}): Promise<{ messages: ApiMessage[]; hasMore: boolean }> => {
+    const { data } = await api.get(`/messages/${userId}`, { params: opts });
+    return { messages: data.messages ?? [], hasMore: data.hasMore === true };
+  },
+  unreadCount: async (): Promise<number> => {
+    const { data } = await api.get('/messages/unread-count');
+    return Number(data?.unread ?? 0);
   },
   send: async (payload: {
     receiverId: string;
@@ -629,7 +685,9 @@ export const messageService = {
     /** Idempotency key — echoed back so the optimistic placeholder dedups exactly. */
     clientId?: string;
   }): Promise<ApiMessage> => {
-    const { data } = await api.post('/messages', payload);
+    // Payments get longer than the 8s default on slow networks; a retry with
+    // the same clientId is safe either way (the server replays, never repays).
+    const { data } = await api.post('/messages', payload, payload.type === 'PAYMENT' ? { timeout: 25_000 } : undefined);
     return data.message;
   },
   edit: async (id: string, content: string): Promise<ApiMessage> => {

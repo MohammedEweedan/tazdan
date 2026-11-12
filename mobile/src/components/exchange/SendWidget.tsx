@@ -2,7 +2,7 @@
  * SendWidget — clean internal transfer sheet.
  * Recipient search · currency chips · large amount input · summary · CTA.
  */
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Keyboard, Pressable, ScrollView, View, useWindowDimensions } from 'react-native';
 import { Text, TextInput } from '@/components/ui/Text';
 import { NumericKeypad } from '@/components/ui/NumericKeypad';
@@ -20,6 +20,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { LimitNotice } from '@/components/limits/LimitNotice';
 import { StepUpModal } from '@/components/ui/StepUpModal';
 import { isStepUpChallengeError } from '@/lib/stepUpErrors';
+import { isTransientSendError } from '@/hooks/useMessages';
 import { useUsdValue } from '@/hooks/useForexRates';
 import { profileService, messageService, claimLinkService } from '@/services';
 import type { Currency } from '@/types';
@@ -173,6 +174,17 @@ export function SendWidget({ initialRecipient }: { initialRecipient?: Profile } 
   const limit = useLimitBlock('SEND', sendUsd);
   const valid = !!picked && !recipientBlocked && sendAmount > 0 && !overspend && !limit.blocked;
 
+  // One key per intended transfer: pressing Send again for the same
+  // recipient and amount after a lost reply reuses it, so the server returns
+  // the first transfer instead of moving the money twice.
+  const attemptRef = useRef<{ key: string; sig: string } | null>(null);
+  const transferKey = (sig: string) => {
+    if (attemptRef.current?.sig === sig) return attemptRef.current.key;
+    const key = `send_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+    attemptRef.current = { key, sig };
+    return key;
+  };
+
   const onSend = async (stepUpCode?: string) => {
     if (!valid || !picked) return;
     setCta('loading'); setCtaErr(null);
@@ -189,9 +201,11 @@ export function SendWidget({ initialRecipient }: { initialRecipient?: Profile } 
 
       await messageService.transfer({
         receiverId: picked.id, currency: currency as Currency, amount: sendAmount, note: note || undefined,
+        idempotencyKey: transferKey(`${picked.id}|${currency}|${sendAmount}|${note}`),
         ...(stepUpCode ? { stepUpCode } : {}),
         ...(biometricVerified ? { biometricVerified: true } : {}),
       });
+      attemptRef.current = null;
       setStepUpOpen(false);
       playSuccess('transfer');
       void qc.invalidateQueries({ queryKey: LIMITS_QUERY_KEY });
@@ -215,9 +229,11 @@ export function SendWidget({ initialRecipient }: { initialRecipient?: Profile } 
         setStepUpOpen(true);
         return;
       }
-      if (stepUpCode) { setCta('idle'); throw e; } // the modal shows a wrong-code error
+      if (stepUpCode && !isTransientSendError(e)) { setCta('idle'); throw e; } // the modal shows a wrong-code error
+      setStepUpOpen(false);
       playError();
-      setCtaErr(extractErrorMessage(e, t('send.failed')));
+      // No reply: it may have gone through — pressing Send again is safe.
+      setCtaErr(isTransientSendError(e) ? t('send.unconfirmed') : extractErrorMessage(e, t('send.failed')));
       setCta('error');
       setTimeout(() => setCta('idle'), 2000);
     }

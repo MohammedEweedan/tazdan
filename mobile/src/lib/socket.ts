@@ -48,10 +48,13 @@ export async function getSocket(): Promise<Socket> {
         .then((t) => cb(t ? { token: t } : {}))
         .catch(() => cb({}));
     },
+    // Never give up: on a weak mobile network ten attempts (~50 s) left chat
+    // without live delivery until the app restarted. Backoff caps at 10 s;
+    // foregrounding the app reconnects at once (useMessageRealtime).
     reconnection: true,
-    reconnectionAttempts: 10,
+    reconnectionAttempts: Infinity,
     reconnectionDelay: 1_000,
-    reconnectionDelayMax: 5_000,
+    reconnectionDelayMax: 10_000,
   });
   return socket;
 }

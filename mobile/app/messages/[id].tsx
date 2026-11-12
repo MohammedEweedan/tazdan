@@ -7,9 +7,11 @@
  *   • Header overflow      → View profile · Block · Report · Escalate to support.
  *   • Cash icon next to send → opens a sheet to attach a payment receipt.
  *   • PaymentReceiptBubble plays the gradual checkmark animation on first render.
+ *   • Unconfirmed sends stay as "Not sent" bubbles; tap resends with the same
+ *     clientId (never a duplicate). Scrolling to the top loads earlier history.
  */
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActionSheetIOS, ActivityIndicator, Alert, Animated, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, Switch, View } from 'react-native';
 import { Text, TextInput } from '@/components/ui/Text';
 import { SendMoneySheet } from '@/components/messages/SendMoneySheet';
@@ -17,7 +19,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import * as Clipboard from 'expo-clipboard';
 import { Ionicons } from '@expo/vector-icons';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { useTheme, useThemedPalette, type Palette } from '@/store/themeStore';
@@ -29,7 +31,11 @@ import {
   useBlockUser, useReportMessage, useEscalateP2P, useHaptics,
   useStepUpAuth, StepUpDeniedError,
 } from '@/hooks';
-import { isHandleParam, resolveUserIdByHandle } from '@/hooks/useMessages';
+import {
+  isHandleParam, resolveUserIdByHandle, useLoadEarlier, isTransientSendError,
+  isLocalMessage, removeLocalMessage, resendVars,
+} from '@/hooks/useMessages';
+import { setActiveChat } from '@/lib/pushNotifications';
 import { useUsdValue } from '@/hooks/useForexRates';
 import { StepUpModal } from '@/components/ui/StepUpModal';
 import { isStepUpChallengeError } from '@/lib/stepUpErrors';
@@ -137,7 +143,9 @@ function MessageThread() {
     useChatPrefs.getState().setLastSeenOn(serverPrivacy.lastSeenOn).catch(() => {});
   }, [serverPrivacy]);
 
-const { data: messages = [], isLoading } = useThread(partnerId);  const sendMut   = useSendMessage(partnerId);
+  const { data: messages = [], isLoading } = useThread(partnerId);
+  const sendMut   = useSendMessage(partnerId);
+  const earlier   = useLoadEarlier(partnerId);
   const editMut   = useEditMessage(partnerId);
   const deleteMut = useDeleteMessage(partnerId);
   const blockMut  = useBlockUser();
@@ -149,14 +157,24 @@ const { data: messages = [], isLoading } = useThread(partnerId);  const sendMut 
   const [payStepUp, setPayStepUp] = useState<{ amount: number; currency: string; note?: string } | null>(null);
 
   // Mark inbound as read whenever we open the thread or a new ws push lands.
+  // Always — the server clears my unread count either way and sends the
+  // partner a receipt only when I share them (receipts off used to leave
+  // the badge stuck).
+  const lastMessageId = messages[messages.length - 1]?.id;
   useEffect(() => {
-    if (!partnerId || !privacy.readReceiptsOn) return;
+    if (!partnerId) return;
     // Refresh the inbox once the server has the read, so the unread badge
-    // clears right away instead of on the next 10s poll.
+    // clears right away instead of on the next poll.
     messageService.markRead(partnerId)
       .then(() => qc.invalidateQueries({ queryKey: QUERY_KEYS.conversations }))
       .catch(() => {});
-  }, [partnerId, messages?.length, privacy.readReceiptsOn, qc]);
+  }, [partnerId, lastMessageId, qc]);
+
+  // This chat is on screen: its pushes would only repeat what's visible.
+  useFocusEffect(useCallback(() => {
+    setActiveChat(partnerId);
+    return () => setActiveChat(null);
+  }, [partnerId]));
 
   // Typing indicator — subscribe to partner's typing events via socket.
   useEffect(() => {
@@ -191,10 +209,28 @@ const { data: messages = [], isLoading } = useThread(partnerId);  const sendMut 
     };
   }, [partnerId]);
 
-  // Auto-scroll on new messages.
+  // Auto-scroll on new messages (not when older history is paged in on top).
   useEffect(() => {
     requestAnimationFrame(() => scrollRef.current?.scrollToEnd({ animated: true }));
-  }, [messages?.length]);
+  }, [lastMessageId]);
+
+  // "Load earlier": keep the reader's place while older bubbles are inserted
+  // above (the content grows by exactly their height).
+  const scrollYRef = useRef(0);
+  const contentHeightRef = useRef(0);
+  const prependRef = useRef<{ height: number; offset: number } | null>(null);
+  const loadingEarlierRef = useRef(false); // scroll events outrun state updates
+  const loadEarlier = async () => {
+    if (!earlier.hasEarlier || loadingEarlierRef.current) return;
+    loadingEarlierRef.current = true;
+    prependRef.current = { height: contentHeightRef.current, offset: scrollYRef.current };
+    try {
+      const added = await earlier.loadEarlier();
+      if (!added) prependRef.current = null;
+    } finally {
+      loadingEarlierRef.current = false;
+    }
+  };
 
   // ── Compose state ───────────────────────────────────────────────
   const [draft, setDraft]   = useState('');
@@ -285,14 +321,28 @@ const { data: messages = [], isLoading } = useThread(partnerId);  const sendMut 
       return;
     }
     sendMut.mutate({ receiverId: partnerId, content: body }, {
-      // The bubble is removed on failure — hand the text back instead of
-      // silently losing it, and say why.
+      // No reply (offline, timeout, 5xx): the bubble stays as "Not sent" and is
+      // resent with the same id on tap or reconnect. A refusal removes the
+      // bubble — hand the text back instead of silently losing it, and say why.
       onError: (e: any) => {
+        if (isTransientSendError(e)) return;
         setDraft((cur) => cur || body);
         Alert.alert(t('common.error'), e?.response?.data?.error ?? e?.message ?? t('common.retry'));
       },
     });
     setDraft('');
+  };
+
+  // One key per intended payment: sending the same amount again after a lost
+  // reply reuses it, so the server returns the first payment instead of
+  // paying twice. Cleared once a payment is confirmed.
+  const payAttemptRef = useRef<{ key: string; amount: number; currency: string; note?: string } | null>(null);
+  const paymentKey = (amount: number, currency: string, note?: string) => {
+    const a = payAttemptRef.current;
+    if (a && a.amount === amount && a.currency === currency && (a.note ?? '') === (note ?? '')) return a.key;
+    const key = `pay_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+    payAttemptRef.current = { key, amount, currency, note };
+    return key;
   };
 
   const sendPayment = async (amount: number, currency: string, note?: string, stepUpCode?: string): Promise<void> => {
@@ -311,6 +361,7 @@ const { data: messages = [], isLoading } = useThread(partnerId);  const sendMut 
       sendMut.mutate(
         {
           receiverId: partnerId,
+          clientId: paymentKey(amount, currency, note),
           content: note || `${amount} ${currency}`,
           type: 'PAYMENT',
           metadata: {
@@ -321,6 +372,7 @@ const { data: messages = [], isLoading } = useThread(partnerId);  const sendMut 
         },
         {
           onSuccess: () => {
+            payAttemptRef.current = null;
             h.success();
             txSound.playSuccess('transfer');
             setPaymentSheet(false);
@@ -329,6 +381,14 @@ const { data: messages = [], isLoading } = useThread(partnerId);  const sendMut 
           },
           onError: (e: any) => {
             if (isStepUpChallengeError(e) && !stepUpCode) { setPayStepUp({ amount, currency, note }); resolve(); return; }
+            if (isTransientSendError(e)) {
+              // It may have gone through. Sending it again reuses the key.
+              h.error();
+              setPayStepUp(null);
+              Alert.alert(t('chat.paymentUnconfirmed'), t('chat.paymentUnconfirmedBody'));
+              resolve();
+              return;
+            }
             if (stepUpCode) { reject(e); return; } // the modal shows the wrong-code error
             // Surface the server's actual reason for the rejection — a
             // silent failure (the old behaviour) made the user think
@@ -364,6 +424,8 @@ const { data: messages = [], isLoading } = useThread(partnerId);  const sendMut 
         },
         onError: (e: any) => {
           h.error();
+          // Unconfirmed: the "Not sent" bubble in the thread offers the retry.
+          if (isTransientSendError(e)) { setRequestSheet(false); return; }
           Alert.alert(t('chat.requestFailed'), e?.response?.data?.error ?? e?.message ?? t('chat.requestFailedBody'));
         },
       },
@@ -466,8 +528,25 @@ const { data: messages = [], isLoading } = useThread(partnerId);  const sendMut 
   };
 
   // ── Per-bubble action menu ──────────────────────────────────────
+  const retrySend = (m: ApiMessage) => {
+    if (!m.clientId || m.localStatus !== 'failed') return;
+    h.light();
+    sendMut.mutate(resendVars(m));
+  };
+
   const onBubbleLongPress = (m: ApiMessage) => {
     if (m.deletedAt) return;
+    if (isLocalMessage(m)) {
+      if (m.localStatus !== 'failed' || !m.clientId) return;
+      const clientId = m.clientId;
+      h.selection();
+      Alert.alert(t('chat.notSentTitle'), undefined, [
+        { text: t('chat.sendAgain'), onPress: () => retrySend(m) },
+        { text: t('common.delete'), style: 'destructive', onPress: () => removeLocalMessage(qc, partnerId, clientId) },
+        { text: t('common.cancel'), style: 'cancel' },
+      ]);
+      return;
+    }
     const mine = m.senderId === me?.id;
     h.selection();
     const options = mine
@@ -650,8 +729,30 @@ const { data: messages = [], isLoading } = useThread(partnerId);  const sendMut 
             ref={scrollRef}
             contentContainerStyle={{ paddingHorizontal: 14, paddingTop: 18, paddingBottom: 16, gap: 8 }}
             showsVerticalScrollIndicator={false}
-            onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: false })}
+            scrollEventThrottle={32}
+            onScroll={(e) => {
+              scrollYRef.current = e.nativeEvent.contentOffset.y;
+              // Near the top with more history on the server: page it in.
+              if (scrollYRef.current < 80 && contentHeightRef.current > 0) void loadEarlier();
+            }}
+            onContentSizeChange={(_w, height) => {
+              const pre = prependRef.current;
+              if (pre) {
+                prependRef.current = null;
+                scrollRef.current?.scrollTo({ y: pre.offset + (height - pre.height), animated: false });
+              } else {
+                scrollRef.current?.scrollToEnd({ animated: false });
+              }
+              contentHeightRef.current = height;
+            }}
           >
+            {earlier.hasEarlier && (
+              <Pressable onPress={() => void loadEarlier()} hitSlop={8} style={{ alignSelf: 'center', paddingVertical: 6, marginBottom: 4 }}>
+                {earlier.loading
+                  ? <ActivityIndicator size="small" color={p.fgMuted} />
+                  : <Text style={{ color: p.accentText, fontSize: 12, fontWeight: '600' }}>{t('chat.loadEarlier')}</Text>}
+              </Pressable>
+            )}
             {/* Privacy banner.
                 WARNING — current implementation is NOT end-to-end
                 encrypted.  Messages traverse the server in plaintext
@@ -707,6 +808,7 @@ const { data: messages = [], isLoading } = useThread(partnerId);  const sendMut 
                         meId={me?.id ?? ''}
                         palette={p}
                         onLongPress={() => onBubbleLongPress(m)}
+                        onRetry={() => retrySend(m)}
                         showReadReceipt={canSeeReadReceipts}
                         t={t}
                       />
@@ -970,13 +1072,15 @@ const { data: messages = [], isLoading } = useThread(partnerId);  const sendMut 
 
 /* ── Bubble ─── */
 function Bubble({
-  message: m, isLastInRun, meId, palette: p, onLongPress, showReadReceipt, t,
+  message: m, isLastInRun, meId, palette: p, onLongPress, onRetry, showReadReceipt, t,
 }: {
   message: ApiMessage;
   isLastInRun: boolean;
   meId: string;
   palette: Palette;
   onLongPress: () => void;
+  /** Resend an unconfirmed bubble (same clientId). */
+  onRetry: () => void;
   /** When false, the bubble shows a generic delivered tick instead
    *  of the "read" double-check, reflecting the local user's
    *  read-receipts preference. */
@@ -986,23 +1090,36 @@ function Bubble({
   const isMe = m.senderId === meId;
   const time = new Date(m.createdAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
   const isSoloEmoji = !m.deletedAt && /^\p{Emoji_Presentation}$/u.test(m.content.trim());
+  const failed = isMe && m.localStatus === 'failed';
+  // Tap a failed bubble to resend; otherwise taps do nothing.
+  const onPress = failed ? onRetry : undefined;
+  const notSent = failed ? (
+    <Pressable onPress={onRetry} hitSlop={6} style={{
+      flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 3,
+      alignSelf: 'flex-end', paddingHorizontal: 8,
+    }}>
+      <Ionicons name="alert-circle" size={13} color={p.redFg} />
+      <Text style={{ color: p.redFg, fontSize: 10, fontWeight: '600' }}>{t('chat.notSent')}</Text>
+    </Pressable>
+  ) : null;
 
   if (isSoloEmoji) {
     return (
       <Pressable
+        onPress={onPress}
         onLongPress={onLongPress}
         delayLongPress={350}
         style={{ alignSelf: isMe ? 'flex-end' : 'flex-start', marginTop: 1 }}
       >
         <Text style={{ fontSize: 44, lineHeight: 52 }}>{m.content.trim()}</Text>
-        {isLastInRun && (
+        {notSent ?? (isLastInRun && (
           <Text style={{
             color: p.fgFaint, fontSize: 10, fontWeight: '600', marginTop: 3,
             textAlign: isMe ? 'right' : 'left', paddingHorizontal: 4,
           }}>
             {time}
           </Text>
-        )}
+        ))}
       </Pressable>
     );
   }
@@ -1060,6 +1177,7 @@ function Bubble({
     const label = String(m.metadata.label ?? '');
     return (
       <Pressable
+        onPress={onPress}
         onLongPress={onLongPress}
         delayLongPress={350}
         style={{ alignSelf: isMe ? 'flex-end' : 'flex-start', marginTop: 2 }}
@@ -1079,11 +1197,11 @@ function Bubble({
             </Text>
           )}
         </View>
-        {isLastInRun && (
+        {notSent ?? (isLastInRun && (
           <Text style={{ color: p.fgFaint, fontSize: 10, fontWeight: '600', marginTop: 4, textAlign: isMe ? 'right' : 'left', paddingHorizontal: 8 }}>
             {time}
           </Text>
-        )}
+        ))}
       </Pressable>
     );
   }
@@ -1092,6 +1210,7 @@ function Bubble({
   const deleted = !!m.deletedAt;
   return (
     <Pressable
+      onPress={onPress}
       onLongPress={onLongPress}
       delayLongPress={350}
       style={{
@@ -1118,7 +1237,7 @@ function Bubble({
           {deleted ? t('chat.deleted') : m.content}
         </Text>
       </View>
-      {isLastInRun && (
+      {notSent ?? (isLastInRun && (
         <View style={{
           flexDirection: 'row', alignItems: 'center', gap: 4,
           marginTop: 3,
@@ -1142,7 +1261,7 @@ function Bubble({
             />
           )}
         </View>
-      )}
+      ))}
     </Pressable>
   );
 }

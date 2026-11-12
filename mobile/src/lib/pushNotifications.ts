@@ -3,8 +3,8 @@
  *
  * Call `registerPushToken()` after a successful login to store the
  * device's Expo push token on the server. The server uses it to send
- * transactional confirmations (buy/sell/swap/send/receive/deposit/
- * withdrawal), P2P trade updates, and KYC status changes.
+ * chat messages, transactional confirmations (buy/sell/swap/send/receive/
+ * deposit/withdrawal), P2P trade updates, and KYC status changes.
  *
  * Mount `usePushDeepLink()` once in the root layout — it subscribes
  * to taps on push banners and routes to the correct in-app screen.
@@ -17,17 +17,32 @@ import { Platform } from 'react-native';
 import { router } from 'expo-router';
 import { api } from './api';
 
+/** The chat on screen right now — its pushes would only repeat what's visible. */
+let activeChatPartnerId: string | null = null;
+export function setActiveChat(partnerId: string | null): void {
+  activeChatPartnerId = partnerId;
+}
+
 Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert:  true,
-    shouldShowBanner: true,
-    shouldShowList:   true,
-    shouldPlaySound:  true,
-    shouldSetBadge:   true,
-  }),
+  handleNotification: async (n) => {
+    const d = (n.request.content.data ?? {}) as Record<string, unknown>;
+    const onScreen = d.kind === 'message' && typeof d.partnerId === 'string' && d.partnerId === activeChatPartnerId;
+    return {
+      shouldShowAlert:  !onScreen,
+      shouldShowBanner: !onScreen,
+      shouldShowList:   !onScreen,
+      shouldPlaySound:  !onScreen,
+      shouldSetBadge:   true,
+    };
+  },
 });
 
-export async function registerPushToken(): Promise<void> {
+/** App-icon badge = unread chat messages (cleared as threads are opened). */
+export function syncAppBadge(unread: number): void {
+  Notifications.setBadgeCountAsync(Math.max(0, unread)).catch(() => { /* unsupported launcher */ });
+}
+
+export async function registerPushToken(locale?: string): Promise<void> {
   if (!Device.isDevice) return; // simulators can't receive push
 
   const { status: existing } = await Notifications.getPermissionsAsync();
@@ -60,7 +75,8 @@ export async function registerPushToken(): Promise<void> {
   ).data;
 
   try {
-    await api.post('/notifications/register-token', { token });
+    // The language pushes are written in (the server knows en/ar).
+    await api.post('/notifications/register-token', { token, ...(locale ? { locale } : {}) });
   } catch {
     // Non-fatal — the app works without push; retry on next login
   }
@@ -85,6 +101,7 @@ function routeFromPayload(data: unknown): void {
   const d = data as Record<string, unknown>;
   const kind = typeof d.kind === 'string' ? d.kind : (typeof d.type === 'string' ? d.type : '');
   const id   = typeof d.id   === 'string' ? d.id   : (typeof d.tradeId === 'string' ? d.tradeId : '');
+  const partnerId = typeof d.partnerId === 'string' && /^[0-9a-f-]{36}$/i.test(d.partnerId) ? d.partnerId : '';
 
   // Defer routing one tick so Expo Router has its layout mounted (cold
   // start). Same call works fine warm — `router.push` from inside the
@@ -92,9 +109,14 @@ function routeFromPayload(data: unknown): void {
   setTimeout(() => {
     try {
       switch (kind) {
+        case 'message':
+          if (partnerId) router.push(`/messages/${partnerId}` as any);
+          else           router.push('/(tabs)/messages' as any);
+          break;
         case 'tx':
-          if (id) router.push(`/history/${id}` as any);
-          else    router.push('/history' as any);
+          // There is no per-receipt route: `/history/<id>` opened the
+          // "unmatched route" screen. The list shows the newest first.
+          router.push('/history' as any);
           break;
         case 'deposit_confirmed':
           router.push('/(tabs)/wallet' as any);
@@ -104,7 +126,7 @@ function routeFromPayload(data: unknown): void {
           break;
         case 'p2p_trade':
           if (id) router.push(`/chat/${id}` as any);
-          else    router.push('/(tabs)/p2p' as any);
+          else    router.push('/p2p' as any);
           break;
         case 'kyc_update':
           router.push('/kyc' as any);

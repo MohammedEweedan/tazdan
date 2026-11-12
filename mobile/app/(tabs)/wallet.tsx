@@ -17,7 +17,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { Text } from '@/components/ui/Text';
 import { useWallets, useCards, useHaptics, useMarkets, useDisplayCurrency } from '@/hooks';
-import { useFeatures } from '@/hooks/useFeatures';
+import { useAvailability, useFeatures } from '@/hooks/useFeatures';
 import { CoinIcon } from '@/components/ui/CoinIcon';
 import { getCurrencyMeta, normalizeCurrencyCode } from '@/constants';
 import { useTheme, useThemedPalette } from '@/store/themeStore';
@@ -60,6 +60,7 @@ export default function WalletScreen() {
   const cardQuery = useCards();
   const { data: tickers } = useMarkets();
   const features = useFeatures();
+  const avail = useAvailability();
   const cards = cardQuery.data ?? [];
 
   const [filter, setFilter] = useState<Filter>('ALL');
@@ -80,8 +81,10 @@ export default function WalletScreen() {
         return { wallet, kind, usd: Number.isFinite(usd) ? usd : 0, change };
       })
       .filter((x): x is Holding => x !== null)
+      // A hidden currency stays listed while the customer holds any of it.
+      .filter((x) => avail.currency(x.wallet.currency).state !== 'HIDDEN' || Number(x.wallet.balance) > 0)
       .sort((a, b) => b.usd - a.usd || Number(b.wallet.balance) - Number(a.wallet.balance));
-  }, [walletQuery.data, tickers]);
+  }, [walletQuery.data, tickers, avail]);
 
   const fiat = holdings.filter((x) => x.kind === 'fiat');
   const crypto = holdings.filter((x) => x.kind === 'crypto');
@@ -189,7 +192,7 @@ export default function WalletScreen() {
       <SafeAreaView edges={['top']} style={{ flex: 1 }}>
         <ScrollView
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ paddingBottom: 48 }}
+          contentContainerStyle={{ paddingBottom: 140 }}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={p.accentText} colors={[p.accent]} />}
         >
           <TabHeader

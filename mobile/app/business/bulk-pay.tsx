@@ -25,6 +25,7 @@ import { useHaptics } from '@/hooks';
 import { StepUpModal } from '@/components/ui/StepUpModal';
 import { isStepUpChallengeError, stepUpErrorMessage } from '@/lib/stepUpErrors';
 import { businessService } from '@/services/business';
+import { useAvailability } from '@/hooks/useFeatures';
 import type { BulkPayRecipient, BulkPayPreview, BusinessPayout } from '@/types/business';
 
 
@@ -52,6 +53,7 @@ function RecipientEditor({
   onRemove: (id: string) => void;
   palette: ReturnType<typeof useThemedPalette>;
 }) {
+  const avail = useAvailability();
   const [currOpen, setCurrOpen] = useState(false);
   const inp: any = {
     color: p.fg, fontSize: 14, fontWeight: '500',
@@ -156,7 +158,7 @@ function RecipientEditor({
           borderRadius: 12, borderWidth: 1, borderColor: p.border,
           backgroundColor: p.bg, overflow: 'hidden',
         }}>
-          {CURRENCIES.map((c) => (
+          {CURRENCIES.filter((c) => avail.canUse(c)).map((c) => (
             <Pressable
               key={c}
               onPress={() => { onChange(row._id, { currency: c }); setCurrOpen(false); }}

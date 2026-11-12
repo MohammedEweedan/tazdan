@@ -6,14 +6,19 @@ import { FiatFlag } from './FiatFlag';
  *
  * The parent owns the selected `value` and renders the balance under the
  * amount input separately (as the Send screen already does).
+ *
+ * Currencies staff have locked or hidden for this account are left out (and
+ * pairs with `pairWith`, the other side of a conversion). If the selected
+ * one drops out, the picker moves to the first one still available.
  */
-import { memo, useRef, useState } from 'react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { View, Pressable, PanResponder, Modal, ScrollView } from 'react-native';
 import { Text } from '@/components/ui/Text';
 import { Ionicons } from '@expo/vector-icons';
 import { CoinIcon } from '@/components/ui/CoinIcon';
 import { useHaptics } from '@/hooks';
 import type { Palette } from '@/store/themeStore';
+import { useAvailability } from '@/hooks/useFeatures';
 
 import { BottomSheet } from '@/components/ui/BottomSheet';
 export interface CurrencyItem {
@@ -51,22 +56,37 @@ function CurrencyGlyph({ item, size, palette: p }: { item: CurrencyItem; size: n
 }
 
 export const CurrencyPicker = memo(function CurrencyPicker({
-  items,
+  items: allItems,
   value,
   onChange,
   palette: p,
   fmtBalance = (n) => n.toLocaleString('en-US', { maximumFractionDigits: 8 }),
+  pairWith,
 }: {
   items: CurrencyItem[];
   value: string;
   onChange: (currency: string) => void;
   palette: Palette;
   fmtBalance?: (n: number) => string;
+  /** The other currency of a conversion — pairs staff have restricted are left out. */
+  pairWith?: string;
 }) {
   const h = useHaptics();
   const [listOpen, setListOpen] = useState(false);
+  const avail = useAvailability();
+  const items = useMemo(
+    () => allItems.filter((it) => it.kind === 'card' || avail.canUse(it.currency, pairWith && pairWith !== it.currency ? pairWith : null)),
+    [allItems, avail, pairWith],
+  );
 
   const itemId = (it: CurrencyItem) => it.id ?? it.currency;
+  useEffect(() => {
+    // Never fall back to the other side's currency: conversion screens swap
+    // the two when they match, which would undo this choice.
+    const fallback = items.find((it) => !pairWith || it.currency !== pairWith);
+    if (fallback && !items.some((it) => itemId(it) === value)) onChange(itemId(fallback));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items, value, pairWith]);
   const idx = Math.max(0, items.findIndex((it) => itemId(it) === value));
   const current = items[idx] ?? items[0];
 
