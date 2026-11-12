@@ -698,6 +698,11 @@ export const messageService = {
     const { data } = await api.delete(`/messages/${id}`);
     return data.message;
   },
+  /** Decline (the person asked) or cancel (the person who asked) a money request. */
+  respondRequest: async (id: string, action: 'DECLINE' | 'CANCEL'): Promise<ApiMessage> => {
+    const { data } = await api.post(`/messages/${id}/request`, { action });
+    return data.message;
+  },
   markRead: (userId: string) => api.post(`/messages/read/${userId}`),
 
   privacy: async (): Promise<MessagePrivacy> => {

@@ -42,7 +42,10 @@ import { isStepUpChallengeError } from '@/lib/stepUpErrors';
 import { getSocket } from '@/lib/socket';
 import { profileService, messageService } from '@/services';
 import { QUERY_KEYS } from '@/constants';
-import { PaymentReceiptBubble } from '@/components/messages/PaymentReceiptBubble';
+import { MoneyRequestCard, PaymentReceiptBubble, type RequestStatus } from '@/components/messages/PaymentReceiptBubble';
+
+const STICKER_IDS = ['paid', 'thanks', 'deal', 'gift', 'moon', 'chart', 'locked', 'verified'];
+const STICKER_EMOJI: Record<string, string> = { paid: '💸', thanks: '🙏', deal: '🤝', gift: '🎁', moon: '🚀', chart: '📈', locked: '🔒', verified: '✅' };
 import { REPORT_REASONS, type ApiMessage, type Conversation } from '@/types/messages';
 import { TopGradient } from '@/components/ui/ScreenShell';
 import { useTransactionSound } from '@/hooks/useTransactionSound';
@@ -154,7 +157,9 @@ function MessageThread() {
   const stepUp = useStepUpAuth();
   const toUsd = useUsdValue();
   // A payment waiting for the server's 6-digit step-up code.
-  const [payStepUp, setPayStepUp] = useState<{ amount: number; currency: string; note?: string } | null>(null);
+  const [payStepUp, setPayStepUp] = useState<{ amount: number; currency: string; note?: string; requestId?: string } | null>(null);
+  // The money request being paid, declined or cancelled (its card shows a spinner).
+  const [requestBusy, setRequestBusy] = useState<string | null>(null);
 
   // Mark inbound as read whenever we open the thread or a new ws push lands.
   // Always — the server clears my unread count either way and sends the
@@ -261,16 +266,7 @@ function MessageThread() {
   const typingStopTimerRef    = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isEmittingTypingRef   = useRef(false);
 
-  const STICKERS = useMemo(() => [
-    { id: 'paid', emoji: '💸', label: t('chat.sticker.paid') },
-    { id: 'moon', emoji: '🚀', label: t('chat.sticker.moon') },
-    { id: 'locked', emoji: '🔒', label: t('chat.sticker.locked') },
-    { id: 'thanks', emoji: '🙏', label: t('chat.sticker.thanks') },
-    { id: 'deal', emoji: '🤝', label: t('chat.sticker.deal') },
-    { id: 'chart', emoji: '📈', label: t('chat.sticker.chart') },
-    { id: 'verified', emoji: '✅', label: t('chat.sticker.verified') },
-    { id: 'gift', emoji: '🎁', label: t('chat.sticker.gift') },
-  ], [t]);
+  const STICKERS = useMemo(() => STICKER_IDS.map((id) => ({ id, emoji: STICKER_EMOJI[id], label: t(`chat.sticker.${id}`) })), [t]);
 
   // Auto-open the payment sheet when arriving with ?openPay=1 (e.g. from
   // the public profile page's "Send money" CTA). Tiny delay so the
@@ -336,16 +332,17 @@ function MessageThread() {
   // One key per intended payment: sending the same amount again after a lost
   // reply reuses it, so the server returns the first payment instead of
   // paying twice. Cleared once a payment is confirmed.
-  const payAttemptRef = useRef<{ key: string; amount: number; currency: string; note?: string } | null>(null);
-  const paymentKey = (amount: number, currency: string, note?: string) => {
+  const payAttemptRef = useRef<{ key: string; amount: number; currency: string; note?: string; requestId?: string } | null>(null);
+  const paymentKey = (amount: number, currency: string, note?: string, requestId?: string) => {
     const a = payAttemptRef.current;
-    if (a && a.amount === amount && a.currency === currency && (a.note ?? '') === (note ?? '')) return a.key;
+    if (a && a.amount === amount && a.currency === currency && (a.note ?? '') === (note ?? '') && a.requestId === requestId) return a.key;
     const key = `pay_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
-    payAttemptRef.current = { key, amount, currency, note };
+    payAttemptRef.current = { key, amount, currency, note, requestId };
     return key;
   };
 
-  const sendPayment = async (amount: number, currency: string, note?: string, stepUpCode?: string): Promise<void> => {
+  /** `requestId`: the money request this payment settles (the server checks amount, currency and people). */
+  const sendPayment = async (amount: number, currency: string, note?: string, stepUpCode?: string, requestId?: string): Promise<void> => {
     // High-value payments confirm with Face ID / Touch ID first; the server
     // may still ask for a 6-digit code (new device), handled by the modal.
     let biometricVerified = false;
@@ -361,11 +358,12 @@ function MessageThread() {
       sendMut.mutate(
         {
           receiverId: partnerId,
-          clientId: paymentKey(amount, currency, note),
+          clientId: paymentKey(amount, currency, note, requestId),
           content: note || `${amount} ${currency}`,
           type: 'PAYMENT',
           metadata: {
             amount, currency, note, status: 'COMPLETED',
+            ...(requestId ? { requestId } : {}),
             ...(biometricVerified ? { biometricVerified: true } : {}),
             ...(stepUpCode ? { stepUpCode } : {}),
           },
@@ -380,7 +378,7 @@ function MessageThread() {
             resolve();
           },
           onError: (e: any) => {
-            if (isStepUpChallengeError(e) && !stepUpCode) { setPayStepUp({ amount, currency, note }); resolve(); return; }
+            if (isStepUpChallengeError(e) && !stepUpCode) { setPayStepUp({ amount, currency, note, requestId }); resolve(); return; }
             if (isTransientSendError(e)) {
               // It may have gone through. Sending it again reuses the key.
               h.error();
@@ -430,6 +428,44 @@ function MessageThread() {
         },
       },
     );
+  };
+
+  // ── Money requests: pay (the exact amount asked), decline, or cancel ──
+  const partnerName = partner ? (partner.username ? `@${partner.username}` : `${partner.firstName ?? ''}`.trim() || t('chat.request')) : '';
+  const payRequest = (m: ApiMessage) => {
+    const amount = Number(m.metadata?.amount);
+    const currency = String(m.metadata?.currency ?? '');
+    const note = (m.metadata?.note as string | undefined) || undefined;
+    const label = `${new Intl.NumberFormat('en-US', { maximumFractionDigits: 8 }).format(amount)} ${currency}`;
+    h.selection();
+    Alert.alert(
+      t('chat.payRequestTitle', { amount: label }),
+      t('chat.payRequestBody', { name: partnerName, note: note ? ` — “${note}”` : '' }),
+      [
+        { text: t('common.cancel'), style: 'cancel' },
+        { text: t('chat.pay'), onPress: async () => {
+          setRequestBusy(m.id);
+          try { await sendPayment(amount, currency, note, undefined, m.id); } finally { setRequestBusy(null); }
+        } },
+      ],
+    );
+  };
+  const respondRequest = (m: ApiMessage, action: 'DECLINE' | 'CANCEL') => {
+    h.selection();
+    Alert.alert(action === 'DECLINE' ? t('chat.declineTitle') : t('chat.cancelTitle'), undefined, [
+      { text: t('common.cancel'), style: 'cancel' },
+      { text: action === 'DECLINE' ? t('chat.decline') : t('chat.cancelRequest'), style: 'destructive', onPress: async () => {
+        setRequestBusy(m.id);
+        try {
+          const updated = await messageService.respondRequest(m.id, action);
+          qc.setQueryData<ApiMessage[]>(QUERY_KEYS.thread(partnerId), (cur) => cur?.map((x) => (x.id === updated.id ? updated : x)));
+          h.success();
+        } catch (e: any) {
+          h.error();
+          Alert.alert(t('common.error'), e?.response?.data?.error ?? e?.message ?? t('common.retry'));
+        } finally { setRequestBusy(null); }
+      } },
+    ]);
   };
 
   const sendSticker = (sticker: { id: string; emoji: string; label: string }) => {
@@ -811,6 +847,9 @@ function MessageThread() {
                         onRetry={() => retrySend(m)}
                         showReadReceipt={canSeeReadReceipts}
                         t={t}
+                        requestBusy={requestBusy === m.id}
+                        onPayRequest={() => payRequest(m)}
+                        onRespondRequest={(action) => respondRequest(m, action)}
                       />
                     );
                   })}
@@ -969,30 +1008,36 @@ function MessageThread() {
               </Pressable>
             </View>
 
-            {/* Sticker picker */}
+            {/* Sticker tray — four even columns */}
             {showStickers && (
               <View style={{
-                flexDirection: 'row', flexWrap: 'wrap',
-                gap: 8, paddingTop: 10, paddingBottom: 4,
+                marginTop: 10, borderRadius: 24, paddingVertical: 8, paddingHorizontal: 6,
+                backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border,
               }}>
-                {STICKERS.map((s) => (
-                  <Pressable
-                    key={s.id}
-                    onPress={() => sendSticker(s)}
-                    style={({ pressed }) => ({
-                      width: 72, height: 78, borderRadius: 18,
-                      alignItems: 'center', justifyContent: 'center',
-                      backgroundColor: pressed ? p.pillBg : p.bgElev,
-                      borderWidth: 1, borderColor: p.border,
-                      shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 8, shadowOffset: { width: 0, height: 3 },
-                    })}
-                  >
-                    <Text style={{ fontSize: 30 }}>{s.emoji}</Text>
-                    <Text numberOfLines={1} style={{ color: p.fgMuted, fontSize: 10, fontWeight: '700', marginTop: 4 }}>
-                      {s.label}
-                    </Text>
-                  </Pressable>
-                ))}
+                <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '700', letterSpacing: 0.6, marginLeft: 10, marginBottom: 2 }}>
+                  {t('chat.stickersTitle').toUpperCase()}
+                </Text>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
+                  {STICKERS.map((s) => (
+                    <View key={s.id} style={{ width: '25%', padding: 4 }}>
+                      <Pressable
+                        onPress={() => sendSticker(s)}
+                        accessibilityRole="button"
+                        accessibilityLabel={s.label}
+                        style={({ pressed }) => ({
+                          height: 82, borderRadius: 18, alignItems: 'center', justifyContent: 'center',
+                          backgroundColor: pressed ? p.pillBg : 'transparent',
+                          transform: [{ scale: pressed ? 0.94 : 1 }],
+                        })}
+                      >
+                        <Text style={{ fontSize: 36, lineHeight: 44 }}>{s.emoji}</Text>
+                        <Text numberOfLines={1} style={{ color: p.fgMuted, fontSize: 11, fontWeight: '700', marginTop: 2 }}>
+                          {s.label}
+                        </Text>
+                      </Pressable>
+                    </View>
+                  ))}
+                </View>
               </View>
             )}
           </View>
@@ -1013,7 +1058,7 @@ function MessageThread() {
         visible={Boolean(payStepUp)}
         action="transfer"
         subtitle={payStepUp ? `${payStepUp.amount} ${payStepUp.currency}` : undefined}
-        onSubmit={(code) => sendPayment(payStepUp!.amount, payStepUp!.currency, payStepUp!.note, code)}
+        onSubmit={(code) => sendPayment(payStepUp!.amount, payStepUp!.currency, payStepUp!.note, code, payStepUp!.requestId)}
         onCancel={() => setPayStepUp(null)}
       />
       <SendMoneySheet
@@ -1072,7 +1117,7 @@ function MessageThread() {
 
 /* ── Bubble ─── */
 function Bubble({
-  message: m, isLastInRun, meId, palette: p, onLongPress, onRetry, showReadReceipt, t,
+  message: m, isLastInRun, meId, palette: p, onLongPress, onRetry, showReadReceipt, t, requestBusy, onPayRequest, onRespondRequest,
 }: {
   message: ApiMessage;
   isLastInRun: boolean;
@@ -1086,6 +1131,10 @@ function Bubble({
    *  read-receipts preference. */
   showReadReceipt: boolean;
   t: ReturnType<typeof useT>;
+  /** A pay / decline / cancel on this request is in flight. */
+  requestBusy?: boolean;
+  onPayRequest?: () => void;
+  onRespondRequest?: (action: 'DECLINE' | 'CANCEL') => void;
 }) {
   const isMe = m.senderId === meId;
   const time = new Date(m.createdAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
@@ -1141,64 +1190,79 @@ function Bubble({
     );
   }
 
-  // PAYMENT / REQUEST bubble — animated money cards.
-  if ((m.type === 'PAYMENT' || m.type === 'REQUEST') && m.metadata) {
-    const amount = Number(m.metadata.amount);
-    const currency = String(m.metadata.currency ?? '');
+  // REQUEST — the person asked pays or declines; the asker can cancel.
+  if (m.type === 'REQUEST' && m.metadata) {
+    const status = String(m.metadata.status ?? 'PENDING') as RequestStatus;
     return (
-      <Pressable
-        onLongPress={onLongPress}
-        delayLongPress={350}
-        style={{
-          alignSelf: isMe ? 'flex-end' : 'flex-start',
-          maxWidth: '88%',
-          marginTop: 2,
-        }}
-      >
+      <Pressable onLongPress={onLongPress} delayLongPress={350} style={{ alignSelf: isMe ? 'flex-end' : 'flex-start', marginTop: 2 }}>
+        <MoneyRequestCard
+          amount={Number(m.metadata.amount)}
+          currency={String(m.metadata.currency ?? '')}
+          note={(m.metadata.note as string) || undefined}
+          at={m.createdAt}
+          status={['PENDING', 'PAID', 'DECLINED', 'CANCELLED'].includes(status) ? status : 'PENDING'}
+          mine={isMe}
+          busy={requestBusy}
+          onPay={onPayRequest}
+          onDecline={() => onRespondRequest?.('DECLINE')}
+          onCancel={() => onRespondRequest?.('CANCEL')}
+        />
+      </Pressable>
+    );
+  }
+
+  // PAYMENT — the animated receipt card.
+  if (m.type === 'PAYMENT' && m.metadata) {
+    const settlesRequest = typeof m.metadata.requestId === 'string';
+    return (
+      <Pressable onLongPress={onLongPress} delayLongPress={350} style={{ alignSelf: isMe ? 'flex-end' : 'flex-start', marginTop: 2 }}>
         <PaymentReceiptBubble
-          amount={amount}
-          currency={currency}
+          amount={Number(m.metadata.amount)}
+          currency={String(m.metadata.currency ?? '')}
           status={m.metadata.status as any}
-          note={(m.metadata.note as string) || (m.content || undefined)}
+          note={(m.metadata.note as string) || undefined}
           txRef={m.metadata.txRef as string | undefined}
           at={m.createdAt}
-          fromMe={m.type === 'REQUEST' ? !isMe : isMe}
-          labelOverride={m.type === 'REQUEST' ? (isMe ? t('chat.youRequested') : t('chat.requestedFromYou')) : undefined}
-          // Only animate if the bubble was created in the last 5s, so old
-          // receipts don't replay every time the user scrolls.
+          fromMe={isMe}
+          labelOverride={settlesRequest && !isMe ? t('chat.paidRequest').toUpperCase() : undefined}
+          // Only animate fresh receipts, so old ones don't replay on scroll.
           animate={Date.now() - +new Date(m.createdAt) < 5_000}
         />
+        {notSent}
       </Pressable>
     );
   }
 
   if (m.type === 'STICKER' && m.metadata) {
     const emoji = String(m.metadata.emoji ?? m.content ?? '✨');
-    const label = String(m.metadata.label ?? '');
+    const id = String(m.metadata.id ?? '');
+    const known = STICKER_IDS.includes(id);
+    const label = known ? t(`chat.sticker.${id}`) : String(m.metadata.label ?? '');
     return (
       <Pressable
         onPress={onPress}
         onLongPress={onLongPress}
         delayLongPress={350}
-        style={{ alignSelf: isMe ? 'flex-end' : 'flex-start', marginTop: 2 }}
+        style={{ alignSelf: isMe ? 'flex-end' : 'flex-start', alignItems: 'center', marginTop: 4, marginBottom: 2 }}
       >
         <View style={{
-          width: 138, minHeight: 142, borderRadius: 28,
-          backgroundColor: isMe ? '#262626' : p.bgElev,
-          borderWidth: 1, borderColor: p.border,
+          width: 116, height: 116, borderRadius: 58,
+          backgroundColor: isMe ? p.accentSoft : p.pillBg,
           alignItems: 'center', justifyContent: 'center',
-          padding: 14,
-          shadowColor: '#000', shadowOpacity: 0.16, shadowRadius: 16, shadowOffset: { width: 0, height: 8 },
         }}>
-          <Text style={{ fontSize: 58, lineHeight: 70 }}>{emoji}</Text>
-          {!!label && (
-            <Text style={{ color: isMe ? p.accentFg : p.fg, fontSize: 14, fontWeight: '800', marginTop: 8, textAlign: 'center' }}>
-              {label}
-            </Text>
-          )}
+          <Text style={{ fontSize: 66, lineHeight: 80 }}>{emoji}</Text>
         </View>
+        {!!label && (
+          <View style={{
+            marginTop: -14, paddingHorizontal: 12, paddingVertical: 5, borderRadius: 13,
+            backgroundColor: isMe ? p.accent : p.bgElev, borderWidth: isMe ? 0 : 1, borderColor: p.border,
+            shadowColor: '#000', shadowOpacity: 0.12, shadowRadius: 6, shadowOffset: { width: 0, height: 2 },
+          }}>
+            <Text style={{ color: isMe ? p.accentFg : p.fg, fontSize: 13, fontWeight: '800' }}>{label}</Text>
+          </View>
+        )}
         {notSent ?? (isLastInRun && (
-          <Text style={{ color: p.fgFaint, fontSize: 10, fontWeight: '600', marginTop: 4, textAlign: isMe ? 'right' : 'left', paddingHorizontal: 8 }}>
+          <Text style={{ color: p.fgFaint, fontSize: 10, fontWeight: '600', marginTop: 4, alignSelf: isMe ? 'flex-end' : 'flex-start', paddingHorizontal: 8 }}>
             {time}
           </Text>
         ))}

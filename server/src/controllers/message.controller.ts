@@ -151,7 +151,8 @@ function sanitizeMetadata(type: string, raw: Record<string, unknown> | undefined
     case 'PAYMENT':
       // amount/currency drive the transfer; stepUpCode/biometricVerified are
       // read and then deleted before the message is stored.
-      out = { amount: raw.amount, currency: str(raw.currency, 16), note: str(raw.note, 200), stepUpCode: str(raw.stepUpCode, 12), biometricVerified: raw.biometricVerified === true ? true : undefined };
+      // requestId: the REQUEST message this payment settles (checked in sendPayment).
+      out = { amount: raw.amount, currency: str(raw.currency, 16), note: str(raw.note, 200), requestId: str(raw.requestId, 64), stepUpCode: str(raw.stepUpCode, 12), biometricVerified: raw.biometricVerified === true ? true : undefined };
       break;
     case 'REQUEST':
       out = { amount: num(raw.amount), currency: str(raw.currency, 16), note: str(raw.note, 200), status: 'PENDING' };
@@ -313,6 +314,11 @@ export class MessageController {
       const wire = { ...toWire(msg), clientId };
       emit(req, [senderId, data.receiverId], 'message:new', wire);
       if (msg.transferId) emitActivity(req, [senderId, data.receiverId], { kind: 'transaction', type: 'TRANSFER' });
+      const settled = data.type === 'PAYMENT' ? (msg.metadata as Record<string, unknown> | null)?.requestId : null;
+      if (typeof settled === 'string') {
+        const request = await prisma.message.findUnique({ where: { id: settled } });
+        if (request) emit(req, [request.senderId, request.receiverId], 'message:update', toWire(request));
+      }
 
       res.status(201).json({ message: wire });
       void notifyNewMessage(msg);
@@ -352,6 +358,8 @@ export class MessageController {
     const isWalletTable = WALLET_TABLE_CURRENCIES.has(currency);
 
     const baseCurrency = currency.replace(/_(ERC20|TRC20)$/, '');
+    const requestId = typeof m.requestId === 'string' ? m.requestId : null;
+    if (requestId) await MessageController.assertPayableRequest(prisma, requestId, senderId, data.receiverId, amountDec, currency);
     // Same recipient rules as the Send screen: no suspended, closed or held
     // account, and never a house account.
     await assertRecipientCanReceive(senderId, data.receiverId, { currency: baseCurrency });
@@ -454,6 +462,16 @@ export class MessageController {
           metadata: { transferId: transfer.id, senderId, note: m.note, asset: currency },
         },
       });
+
+      if (requestId) {
+        // Locked so two payments can't both settle one request.
+        await tx.$queryRaw`SELECT "id" FROM "Message" WHERE "id" = ${requestId} FOR UPDATE`;
+        const req0 = await MessageController.assertPayableRequest(tx, requestId, senderId, data.receiverId, amountDec, currency);
+        await tx.message.update({
+          where: { id: requestId },
+          data: { metadata: { ...(req0.metadata as Record<string, unknown>), status: 'PAID', txRef: reference, paidAt: new Date().toISOString() } as any },
+        });
+      }
 
       // Status and reference are server facts, written with the payment.
       const metadata = { ...storable(m), txRef: reference, status: 'COMPLETED' };
@@ -631,6 +649,55 @@ export class MessageController {
   }
 
   /** PATCH /api/messages/:id — edit own TEXT message within EDIT_WINDOW_MS. */
+  /**
+   * A REQUEST the payer can settle: sent to the payer by the person being
+   * paid, still pending, and for exactly this amount and currency.
+   */
+  private static async assertPayableRequest(
+    db: Prisma.TransactionClient | typeof prisma, requestId: string, payerId: string, payeeId: string, amount: Decimal, currency: string,
+  ) {
+    const r = await db.message.findUnique({ where: { id: requestId } });
+    const meta = (r?.metadata ?? {}) as Record<string, unknown>;
+    if (!r || r.type !== 'REQUEST' || r.deletedAt || r.receiverId !== payerId || r.senderId !== payeeId) {
+      throw new AppError('This request can\'t be paid from here', 400);
+    }
+    if (meta.status !== 'PENDING') {
+      throw new AppError(meta.status === 'PAID' ? 'This request has already been paid' : 'This request is no longer open', 409, 'TRANSACTION_CONFLICT');
+    }
+    if (String(meta.currency ?? '').toUpperCase() !== currency || !new Decimal(String(meta.amount ?? 0)).eq(amount)) {
+      throw new AppError('The payment must match the requested amount and currency', 400);
+    }
+    return r;
+  }
+
+  /**
+   * POST /api/messages/:id/request { action }
+   * DECLINE — the person asked turns a pending request down.
+   * CANCEL  — the person who asked withdraws it.
+   */
+  static async respondRequest(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const { action } = z.object({ action: z.enum(['DECLINE', 'CANCEL']) }).parse(req.body);
+      const me = req.user!.id;
+      const updated = await prisma.$transaction(async (tx) => {
+        await tx.$queryRaw`SELECT "id" FROM "Message" WHERE "id" = ${req.params.id} FOR UPDATE`;
+        const r = await tx.message.findUnique({ where: { id: req.params.id } });
+        const meta = (r?.metadata ?? {}) as Record<string, unknown>;
+        if (!r || r.type !== 'REQUEST' || r.deletedAt) throw new AppError('Request not found', 404);
+        const allowed = action === 'DECLINE' ? r.receiverId === me : r.senderId === me;
+        if (!allowed) throw new AppError(action === 'DECLINE' ? 'Only the person asked can decline' : 'Only the person who asked can cancel', 403);
+        if (meta.status !== 'PENDING') throw new AppError('This request is no longer open', 409, 'TRANSACTION_CONFLICT');
+        return tx.message.update({
+          where: { id: r.id },
+          data: { metadata: { ...meta, status: action === 'DECLINE' ? 'DECLINED' : 'CANCELLED', closedAt: new Date().toISOString() } as any },
+        });
+      });
+      const wire = toWire(updated);
+      emit(req, [updated.senderId, updated.receiverId], 'message:update', wire);
+      res.json({ message: wire });
+    } catch (e) { next(e); }
+  }
+
   static async edit(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const data = editSchema.parse(req.body);

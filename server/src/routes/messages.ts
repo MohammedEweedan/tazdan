@@ -42,6 +42,8 @@ messageRouter.post('/escalate',                    MessageController.escalate);
 messageRouter.post('/read/:userId',                MessageController.markRead);
 
 // Single-message edit / delete (wildcard `:id` last)
+// Decline (the person asked) or cancel (the person who asked) a money request.
+messageRouter.post('/:id/request',                 MessageController.respondRequest);
 messageRouter.patch('/:id',                        MessageController.edit);
 messageRouter.delete('/:id',                       MessageController.remove);
 
