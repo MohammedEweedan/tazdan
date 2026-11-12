@@ -86,5 +86,19 @@
   "home.tour.business.chip": "Negócios",
   "home.tour.business.title": "Um lugar para a equipe.",
   "home.tour.business.body": "Pagamentos comerciais, funções e acesso à API ficam em um espaço de trabalho dedicado.",
-  "home.tour.business.alt": "Casa comercial com resumo de pagamentos"
+  "home.tour.business.alt": "Casa comercial com resumo de pagamentos",
+  "home.widgets.eyebrow": "Widgets na tela inicial",
+  "home.widgets.title": "Seu dinheiro *num relance.*",
+  "home.widgets.lead": "Pagamentos, conversas e os preços do que você tem, direto na tela inicial do seu iPhone ou Android. Toque num widget para ir direto ao app.",
+  "home.widgets.ios": "iPhone",
+  "home.widgets.android": "Android",
+  "home.widgets.iosAlt": "Widgets do tazdan na tela inicial de um iPhone",
+  "home.widgets.androidAlt": "Widgets do tazdan na tela inicial de um Android",
+  "home.widgets.payments.title": "Pagamentos",
+  "home.widgets.payments.body": "Envie, receba, pague por leitura de código ou recarregue com um toque, com seu último pagamento ao lado.",
+  "home.widgets.chats.title": "Conversas",
+  "home.widgets.chats.body": "Mensagens não lidas e suas conversas mais recentes. O texto só aparece se as pré-visualizações de notificação estiverem ativadas.",
+  "home.widgets.prices.title": "Preços e ativos",
+  "home.widgets.prices.body": "Seu total e o preço de cada cripto e moeda que você tem, atualizados em segundo plano. Oculte os saldos no app e os valores ficam ocultos aqui também.",
+  "home.widgets.note": "Widgets gerados a partir do código atual do app. Nomes e valores são ilustrativos."
 }

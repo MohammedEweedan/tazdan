@@ -3,6 +3,7 @@ import { headers } from 'next/headers';
 import localFont from 'next/font/local';
 import AppProviders from '@/providers/AppProviders';
 import PageTitle from '@/components/PageTitle';
+import { FirstLoadOverlay, LOADER_SEEN_SCRIPT } from '@/components/site/BrandLoader';
 
 /* ─────────────────────────────────────────────────────────────────
    Fonts — TRULY self-hosted via next/font/local.
@@ -193,6 +194,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const locale = (await headers()).get('x-tazdan-locale') === 'ar' ? 'ar' : 'en';
   return (
     <html
+      suppressHydrationWarning
       lang={locale}
       dir={locale === 'ar' ? 'rtl' : 'ltr'}
       className={`${dmSans.variable} ${inter.variable} ${outfit.variable} ${cairo.variable}`}
@@ -216,8 +218,14 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           // eslint-disable-next-line react/no-danger
           dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
         />
+        {/* Skip the first-load ن overlay before paint once this session has seen it. */}
+        <script
+          // eslint-disable-next-line react/no-danger
+          dangerouslySetInnerHTML={{ __html: LOADER_SEEN_SCRIPT }}
+        />
       </head>
       <body>
+        <FirstLoadOverlay />
         <AppProviders initialLanguage={locale}>
           <PageTitle />
           {children}

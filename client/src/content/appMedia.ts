@@ -41,6 +41,8 @@ export const APP_SCREENS: Record<string, { variants: AppMediaVariant[]; caption:
   "topup": { variants: ['en-dark', 'ar-dark', 'en-light'], caption: "topup", route: "_topup" },
   "twofa": { variants: ['en-dark', 'ar-dark', 'en-light'], caption: "twofa", route: "_settings_2fa" },
   "wallet": { variants: ['en-dark', 'ar-dark', 'en-light'], caption: "wallet", route: "_portfolio_fiat" },
+  "widgets-android": { variants: ['en-dark', 'ar-dark', 'en-light'], caption: "widgets android", route: "" },
+  "widgets-ios": { variants: ['en-dark', 'ar-dark', 'en-light'], caption: "widgets ios", route: "" },
   "withdraw": { variants: ['en-dark', 'ar-dark', 'en-light'], caption: "withdraw", route: "_withdraw" },
 };
 export const APP_VIDEOS: Record<string, { variants: AppMediaVariant[]; durationSec: number; caption: string }> = {

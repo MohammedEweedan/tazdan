@@ -86,5 +86,19 @@
   "home.tour.business.chip": "Zakelijk",
   "home.tour.business.title": "Eén plek voor het team.",
   "home.tour.business.body": "Zakelijke uitbetalingen, rollen en API-toegang bevinden zich in een speciale werkruimte.",
-  "home.tour.business.alt": "Bedrijfshuis met uitbetalingsoverzicht"
+  "home.tour.business.alt": "Bedrijfshuis met uitbetalingsoverzicht",
+  "home.widgets.eyebrow": "Widgets voor je beginscherm",
+  "home.widgets.title": "Je geld *in één oogopslag.*",
+  "home.widgets.lead": "Betalingen, chats en de koersen van wat je bezit, direct op het beginscherm van je iPhone of Android. Tik op een widget om er in de app naartoe te gaan.",
+  "home.widgets.ios": "iPhone",
+  "home.widgets.android": "Android",
+  "home.widgets.iosAlt": "tazdan-widgets op een iPhone-beginscherm",
+  "home.widgets.androidAlt": "tazdan-widgets op een Android-beginscherm",
+  "home.widgets.payments.title": "Betalingen",
+  "home.widgets.payments.body": "Versturen, ontvangen, scannen om te betalen of opwaarderen met één tik, met je laatste betaling ernaast.",
+  "home.widgets.chats.title": "Chats",
+  "home.widgets.chats.body": "Ongelezen berichten en je nieuwste gesprekken. Berichttekst verschijnt alleen als meldingsvoorbeelden aan staan.",
+  "home.widgets.prices.title": "Koersen & bezit",
+  "home.widgets.prices.body": "Je totaal en de koers van elke crypto en valuta die je bezit, op de achtergrond bijgewerkt. Verberg je saldi in de app, dan blijven bedragen ook hier verborgen.",
+  "home.widgets.note": "Widgets weergegeven vanuit de huidige appcode. Namen en bedragen zijn illustratief."
 }

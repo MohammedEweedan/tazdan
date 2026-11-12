@@ -86,5 +86,19 @@
   "home.tour.business.chip": "iş",
   "home.tour.business.title": "Takım için tek yer.",
   "home.tour.business.body": "İş ödemeleri, roller ve API erişimi özel bir çalışma alanında yaşar.",
-  "home.tour.business.alt": "Ödeme özetini içeren iş evi"
+  "home.tour.business.alt": "Ödeme özetini içeren iş evi",
+  "home.widgets.eyebrow": "Ana ekran widget’ları",
+  "home.widgets.title": "Paran *bir bakışta.*",
+  "home.widgets.lead": "Ödemeler, sohbetler ve sahip olduklarının fiyatları doğrudan iPhone veya Android ana ekranında. Uygulamada ilgili yere gitmek için bir widget’a dokun.",
+  "home.widgets.ios": "iPhone",
+  "home.widgets.android": "Android",
+  "home.widgets.iosAlt": "iPhone ana ekranında tazdan widget’ları",
+  "home.widgets.androidAlt": "Android ana ekranında tazdan widget’ları",
+  "home.widgets.payments.title": "Ödemeler",
+  "home.widgets.payments.body": "Tek dokunuşla gönder, al, tarayarak öde veya bakiye yükle; yanında son ödemen.",
+  "home.widgets.chats.title": "Sohbetler",
+  "home.widgets.chats.body": "Okunmamış mesajlar ve en son sohbetlerin. Mesaj metni yalnızca bildirim önizlemeleri açıksa görünür.",
+  "home.widgets.prices.title": "Fiyatlar ve varlıklar",
+  "home.widgets.prices.body": "Toplamın ve sahip olduğun her kripto ile para biriminin fiyatı, arka planda güncellenir. Uygulamada bakiyeleri gizlersen tutarlar burada da gizli kalır.",
+  "home.widgets.note": "Widget’lar mevcut uygulama kodundan oluşturuldu. İsimler ve tutarlar temsilîdir."
 }

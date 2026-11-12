@@ -86,5 +86,19 @@
   "home.tour.business.chip": "商务",
   "home.tour.business.title": "为团队提供一席之地。",
   "home.tour.business.body": "业务支出、角色和 API 访问位于专用工作区中。",
-  "home.tour.business.alt": "带有付款摘要的企业主页"
+  "home.tour.business.alt": "带有付款摘要的企业主页",
+  "home.widgets.eyebrow": "主屏幕小组件",
+  "home.widgets.title": "你的资金*一目了然。*",
+  "home.widgets.lead": "付款、聊天以及你所持资产的价格，直接显示在 iPhone 或 Android 主屏幕上。轻点小组件即可直达应用中的对应页面。",
+  "home.widgets.ios": "iPhone",
+  "home.widgets.android": "Android",
+  "home.widgets.iosAlt": "iPhone 主屏幕上的 tazdan 小组件",
+  "home.widgets.androidAlt": "Android 主屏幕上的 tazdan 小组件",
+  "home.widgets.payments.title": "付款",
+  "home.widgets.payments.body": "一键发送、收款、扫码付款或充值，旁边显示你最近一笔付款。",
+  "home.widgets.chats.title": "聊天",
+  "home.widgets.chats.body": "未读消息和最近的对话。只有开启通知预览时才会显示消息内容。",
+  "home.widgets.prices.title": "价格与持仓",
+  "home.widgets.prices.body": "你的总额以及所持每种加密货币和法币的价格，在后台自动刷新。在应用中隐藏余额后，这里的金额也会隐藏。",
+  "home.widgets.note": "小组件根据当前应用代码渲染。姓名和金额仅作示例。"
 }
