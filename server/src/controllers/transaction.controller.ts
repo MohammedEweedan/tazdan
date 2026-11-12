@@ -25,12 +25,55 @@ import { assertMovementAllowed } from '../services/platform/controls.service';
 import { enforceRiskBasedStepUp } from '../services/security/stepUp.service';
 import { valueInUsd } from '../utils/kycLimits';
 import { assertRecipientCanReceive, checkRecipient } from '../services/wallet/recipientEligibility';
+import { assertTillForReceiver } from '../services/business/tills.service';
 import { incrAttempts } from '../utils/redis';
+import { pushCopy, pushTxEvent } from '../services/push.service';
+import { logger } from '../utils/logger';
+import { Prisma } from '@prisma/client';
+import { Decimal } from '@prisma/client/runtime/library';
 import { z } from 'zod';
 
 /** Recipient pre-checks per customer per window (enumeration guard). */
 const RECIPIENT_CHECK_LIMIT = 60;
 const RECIPIENT_CHECK_WINDOW_S = 10 * 60;
+
+/**
+ * The transfer an earlier request with this key created, with both of its
+ * transaction rows — or null. A key reused for another recipient or amount
+ * is refused, never replayed.
+ */
+async function replayedTransfer(senderId: string, key: string, expect: { receiverId: string; amount: Decimal }) {
+  const transfer = await prisma.transfer.findUnique({ where: { senderId_idempotencyKey: { senderId, idempotencyKey: key } } });
+  if (!transfer) return null;
+  if (transfer.receiverId !== expect.receiverId || !new Decimal(transfer.amount.toString()).eq(expect.amount)) {
+    throw new AppError('This Idempotency-Key was already used for a different transfer', 409, 'DUPLICATE_REQUEST');
+  }
+  const [senderTx, receiverTx] = await Promise.all([
+    prisma.transaction.findFirst({ where: { reference: transfer.reference, userId: senderId, type: 'TRANSFER_OUT' } }),
+    prisma.transaction.findFirst({ where: { reference: transfer.reference, userId: transfer.receiverId, type: 'TRANSFER_IN' } }),
+  ]);
+  return { transfer, senderTx, receiverTx, replayed: true };
+}
+
+/** "Sent" / "Received" pushes after a committed transfer, per each side's prefs. */
+async function notifyTransfer(senderId: string, receiverId: string, amount: Decimal, asset: string, reference: string) {
+  try {
+    const users = await prisma.user.findMany({
+      where: { id: { in: [senderId, receiverId] } },
+      select: { id: true, username: true, firstName: true, notificationPrefs: true },
+    });
+    const sender = users.find((u) => u.id === senderId);
+    const receiver = users.find((u) => u.id === receiverId);
+    if (!sender || !receiver) return;
+    const handle = (u: typeof sender) => u.username || u.firstName || 'a tazdan user';
+    const wantsPush = (u: typeof sender) => (u.notificationPrefs as any)?.push?.transfers !== false;
+    const amt = amount.toFixed(8).replace(/\.?0+$/, '');
+    if (wantsPush(sender)) await pushTxEvent(senderId, pushCopy.sent(amt, asset, handle(receiver)), reference);
+    if (wantsPush(receiver)) await pushTxEvent(receiverId, pushCopy.received(amt, asset, handle(sender)), reference);
+  } catch (err) {
+    logger.warn('[transfer] post-commit push failed', { reference, err });
+  }
+}
 
 export class TransactionController {
   /**
@@ -45,11 +88,18 @@ export class TransactionController {
    *   - In-chat PAYMENT messages (MessageController will link the Transfer to the Message)
    *   - /send page (future)
    *
-   * Body: { receiverId, currency, amount, note? }
+   * Body: { receiverId, currency, amount, note?, idempotencyKey? }
+   *
+   * `idempotencyKey` (or an `Idempotency-Key` header) makes a retry after a
+   * lost reply return the original transfer (200, `replayed: true`) instead
+   * of moving the money twice.
    */
   static async internalTransfer(req: AuthRequest, res: Response, next: NextFunction) {
     try {
-      const { receiverId, currency: rawCurrency, amount, note, stepUpCode, biometricVerified } = req.body ?? {};
+      const { receiverId, currency: rawCurrency, amount, note, stepUpCode, biometricVerified, tillId: rawTillId } = req.body ?? {};
+      // Optional business till (from a till QR or kiosk): attribution only, checked below.
+      const tillId = typeof rawTillId === 'string' && /^[0-9a-f-]{36}$/i.test(rawTillId) ? rawTillId : undefined;
+      if (rawTillId !== undefined && rawTillId !== null && !tillId) throw new AppError('Invalid till code', 400);
       const senderId = req.user!.id;
 
       // Internal transfers are free (see feeCollector). A client-supplied
@@ -60,6 +110,13 @@ export class TransactionController {
       }
       const amountDec = parsePositiveAmount(amount);
       const currency = String(rawCurrency).toUpperCase();
+      const rawKey = req.body?.idempotencyKey ?? req.headers['idempotency-key'];
+      const idempotencyKey = typeof rawKey === 'string' && rawKey.trim() ? rawKey.trim() : null;
+      if (idempotencyKey && idempotencyKey.length > 120) throw new AppError('Idempotency-Key is too long', 400);
+      if (idempotencyKey) {
+        const replay = await replayedTransfer(senderId, idempotencyKey, { receiverId, amount: amountDec });
+        if (replay) return res.json(replay);
+      }
       // Same rules as GET /api/transactions/recipient-check. An unknown id is
       // refused like any other unavailable recipient (no enumeration).
       await assertRecipientCanReceive(senderId, receiverId, { currency });
@@ -72,6 +129,7 @@ export class TransactionController {
       const isEnumCurrency = ENUM_CURRENCIES.has(currency);
 
       await assertMovementAllowed({ userId: senderId, feature: 'transfers', currency });
+      if (tillId) await assertTillForReceiver(tillId, receiverId);
       // Limits first: never send a security code for a transfer that cannot go through.
       await enforceKycLimit(senderId, 'SEND', amountDec, currency);
       // This is the path the mobile Send screen uses; it must apply the same
@@ -89,13 +147,9 @@ export class TransactionController {
         await enforceKycLimit(senderId, 'SEND', amountDec, currency, tx);
         const reference = `TRF-${uuidv4().slice(0, 8).toUpperCase()}`;
 
-        // Enum currencies live in the Wallet table, everything else in
-        // UserWallet.altBalances. Both moves lock/check before reading.
-        const { senderBalBefore, senderBalAfter, receiverBalBefore, receiverBalAfter } = isEnumCurrency
-          ? await moveWalletBalance(tx, senderId, receiverId, currency, amountDec)
-          : await moveAltBalance(tx, senderId, receiverId, currency, amountDec);
-
-        // Transfer record — altcoins stored with USDT as ledger currency; asset in metadata
+        // Transfer record first — altcoins stored with USDT as ledger currency;
+        // asset in metadata. A concurrent retry with the same key blocks here
+        // on the unique index and rolls back before touching any balance.
         const transfer = await tx.transfer.create({
           data: {
             senderId,
@@ -105,8 +159,16 @@ export class TransactionController {
             fee: feeNum,
             reference,
             note: note || undefined,
+            idempotencyKey: idempotencyKey ?? undefined,
+            tillId,
           },
         });
+
+        // Enum currencies live in the Wallet table, everything else in
+        // UserWallet.altBalances. Both moves lock/check before reading.
+        const { senderBalBefore, senderBalAfter, receiverBalBefore, receiverBalAfter } = isEnumCurrency
+          ? await moveWalletBalance(tx, senderId, receiverId, currency, amountDec)
+          : await moveAltBalance(tx, senderId, receiverId, currency, amountDec);
 
         if (isLedgerCurrency(currency)) {
           await postLedger(tx as any, {
@@ -162,9 +224,18 @@ export class TransactionController {
         });
 
         return { transfer, senderTx, receiverTx };
+      }).catch(async (err) => {
+        // A concurrent retry with this key committed first: answer with it.
+        if (idempotencyKey && err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+          const replay = await replayedTransfer(senderId, idempotencyKey, { receiverId, amount: amountDec });
+          if (replay) return replay;
+        }
+        throw err;
       });
+      if ('replayed' in result) return res.json(result);
 
       emitActivity(req, [senderId, receiverId], { kind: 'transaction', type: 'TRANSFER' });
+      void notifyTransfer(senderId, receiverId, amountDec, currency, result.transfer.reference);
 
       // If res is provided (HTTP request), send JSON response
       if (res) {

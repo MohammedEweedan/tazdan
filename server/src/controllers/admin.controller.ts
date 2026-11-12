@@ -18,6 +18,7 @@ import { markWithdrawalHistory } from '../services/wallet/withdrawalHistory';
 import { toWire as messageWire } from './message.controller';
 import { assertNotSelf } from '../services/platform/segregation';
 import { canSeePii } from '../services/platform/pii';
+import { notifyNewMessage } from '../services/messaging/notify';
 import { getRedisClient } from '../utils/redis';
 
 const rateSchema = z.object({
@@ -1537,6 +1538,7 @@ export class AdminController {
         // Push them live — previously they only appeared after a refresh/poll.
         const io = req.app.get('io');
         if (io) for (const n of notices) io.to([`user:${n.receiverId}`, `user:${support.id}`]).emit('message:new', messageWire(n));
+        for (const n of notices) void notifyNewMessage(n);
       }
 
       res.json({ escalation: updated });
@@ -1806,6 +1808,7 @@ export class AdminController {
       // (the partial payload lacked readAt/editedAt/deletedAt/tradeId).
       const io = req.app.get('io');
       if (io) io.to([`user:${data.userId}`, `user:${support.id}`]).emit('message:new', messageWire(message));
+      void notifyNewMessage(message);
 
       // If the last inbound message from this user came via WhatsApp, mirror the reply there.
       try {

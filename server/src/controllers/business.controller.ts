@@ -15,6 +15,7 @@ import { approveBatch, businessStats, cancelPayout, createBatch, previewBulkPay,
 import { createKey, listKeys, revokeKey } from '../services/business/apiKeys.service';
 import { createEndpoint, publicEndpoint } from '../services/business/webhooks.service';
 import { enforceStepUp } from '../services/security/stepUp.service';
+import { googleWalletSaveUrl, payCodeFor, walletPassToken, appleWalletConfigured } from '../services/business/payCode.service';
 
 const ctxOf = (req: AuthRequest) => resolveBusiness(req.user!.id);
 
@@ -50,7 +51,7 @@ export const BusinessController = {
       res.json({
         profile: {
           id: b.id, legalName: b.legalName ?? b.companyName, tradingName: b.tradingName, country: b.country, kybStatus: b.kybStatus,
-          website: b.website, logoUrl: b.logoUrl, createdAt: b.createdAt, role: ctx.role,
+          website: b.website, logoUrl: b.logoUrl, brandPrimary: b.brandPrimary, brandSecondary: b.brandSecondary, createdAt: b.createdAt, role: ctx.role,
           approvalThresholdUsd: b.approvalThresholdUsd?.toString() ?? null, kybNotes: b.kybStatus === 'REJECTED' ? b.kybNotes : null,
         },
       });
@@ -66,9 +67,13 @@ export const BusinessController = {
         // and z.url() alone accepts javascript: and data: URLs.
         tradingName: z.string().trim().min(1).max(120).optional(), website: z.string().trim().url().max(200).regex(/^https:\/\//i, 'Website must be an https URL').nullable().optional(),
         logoUrl: z.string().trim().url().max(500).regex(/^https:\/\//i, 'Logo must be an https URL').nullable().optional(), approvalThresholdUsd: z.number().min(0).max(10_000_000).nullable().optional(),
+        // Brand colours for the printed QR and plaque.
+        brandPrimary: z.string().trim().regex(/^#[0-9a-f]{6}$/i, 'Use a colour like #24384F').nullable().optional(), brandSecondary: z.string().trim().regex(/^#[0-9a-f]{6}$/i, 'Use a colour like #24384F').nullable().optional(),
         stepUpCode: z.string().regex(/^\d{6}$/).optional(),
       }).parse(req.body);
       const { stepUpCode, ...changes } = body;
+      if (changes.brandPrimary) changes.brandPrimary = changes.brandPrimary.toUpperCase();
+      if (changes.brandSecondary) changes.brandSecondary = changes.brandSecondary.toUpperCase();
       if (changes.approvalThresholdUsd !== undefined && ctx.role !== 'OWNER') throw new AppError('Only the owner can change the approval threshold', 403);
       const before = ctx.business;
       // Raising the threshold switches off maker-checker (and the single-
@@ -83,8 +88,8 @@ export const BusinessController = {
         }
       }
       const updated = await prisma.businessProfile.update({ where: { id: before.id }, data: changes });
-      await writeAudit(prisma, { actorId: ctx.userId, action: 'BUSINESS_PROFILE_UPDATED', entity: 'BusinessProfile', entityId: before.id, before: { tradingName: before.tradingName, website: before.website, logoUrl: before.logoUrl, approvalThresholdUsd: before.approvalThresholdUsd }, after: changes });
-      res.json({ profile: { id: updated.id, legalName: updated.legalName ?? updated.companyName, tradingName: updated.tradingName, country: updated.country, kybStatus: updated.kybStatus, website: updated.website, logoUrl: updated.logoUrl, createdAt: updated.createdAt } });
+      await writeAudit(prisma, { actorId: ctx.userId, action: 'BUSINESS_PROFILE_UPDATED', entity: 'BusinessProfile', entityId: before.id, before: { tradingName: before.tradingName, website: before.website, logoUrl: before.logoUrl, approvalThresholdUsd: before.approvalThresholdUsd, brandPrimary: before.brandPrimary, brandSecondary: before.brandSecondary }, after: changes });
+      res.json({ profile: { id: updated.id, legalName: updated.legalName ?? updated.companyName, tradingName: updated.tradingName, country: updated.country, kybStatus: updated.kybStatus, website: updated.website, logoUrl: updated.logoUrl, brandPrimary: updated.brandPrimary, brandSecondary: updated.brandSecondary, createdAt: updated.createdAt } });
     } catch (e) { next(e); }
   },
 
@@ -102,6 +107,25 @@ export const BusinessController = {
 
   async stats(req: AuthRequest, res: Response, next: NextFunction) {
     try { res.json({ stats: await businessStats(await ctxOf(req)) }); } catch (e) { next(e); }
+  },
+
+  // ── Payment QR (one per business, see payCode.service) ─────────────
+  async payCode(req: AuthRequest, res: Response, next: NextFunction) {
+    try { res.json({ payCode: await payCodeFor((await ctxOf(req)).business) }); } catch (e) { next(e); }
+  },
+
+  /** A 10-minute link Safari can open to add the Apple Wallet card. */
+  async appleWalletLink(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const { business } = await ctxOf(req);
+      if (!appleWalletConfigured()) throw new AppError('Apple Wallet cards are not set up yet', 503);
+      if (business.kybStatus !== 'APPROVED') throw new AppError('Wallet cards are issued once the business is verified', 403, 'COMPLIANCE_HOLD');
+      res.json({ path: `/pay/wallet/apple/${walletPassToken(business.id)}` });
+    } catch (e) { next(e); }
+  },
+
+  async googleWalletLink(req: AuthRequest, res: Response, next: NextFunction) {
+    try { res.json({ url: await googleWalletSaveUrl((await ctxOf(req)).business) }); } catch (e) { next(e); }
   },
 
   // ── API keys ───────────────────────────────────────────────────────

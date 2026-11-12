@@ -189,6 +189,19 @@ export const registerLimiter = rateLimit({
 });
 
 /**
+ * Pay-tab payee lookup. An exact handle returns a name, so it is a probe
+ * target. Counted per signed-in customer, not per IP: shoppers on one
+ * carrier NAT address must not throttle each other.
+ */
+export const payeeLookupLimiter = rateLimit({
+  ...baseOpts('payee'),
+  keyGenerator: (req: any) => (req.user?.id ? `u:${req.user.id}` : clientIpKey(req.ip)),
+  windowMs: minutes(1),
+  max: 30,
+  message: { error: 'Too many lookups. Try again in a minute.' },
+});
+
+/**
  * Withdrawal limiter (money movement protection)
  */
 export const withdrawalLimiter = rateLimit({

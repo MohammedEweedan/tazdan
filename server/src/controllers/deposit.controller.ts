@@ -226,7 +226,7 @@ export class DepositController {
       }).parse(req.body);
 
       const provider = getActiveOnRampProvider();
-      await assertMovementAllowed({ userId: req.user!.id, feature: 'deposits', currency: body.fiatCurrency });
+      await assertMovementAllowed({ userId: req.user!.id, feature: 'deposits', currency: body.fiatCurrency, counterCurrency: body.cryptoCurrency });
       const quote = await provider.quote({
         fiatCurrency: body.fiatCurrency.toUpperCase() as Currency,
         fiatAmount: body.fiatAmount,
@@ -251,7 +251,7 @@ export class DepositController {
 
       const provider = getActiveOnRampProvider();
       const reference = generateReference('ONR');
-      await assertMovementAllowed({ userId: req.user!.id, feature: 'deposits', currency: body.fiatCurrency });
+      await assertMovementAllowed({ userId: req.user!.id, feature: 'deposits', currency: body.fiatCurrency, counterCurrency: body.cryptoCurrency });
       // Charge and record the same amount: the card is charged in minor units,
       // so the credit is exactly what the provider collects.
       const amountCents = Math.round(body.fiatAmount * 100);

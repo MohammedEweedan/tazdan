@@ -16,6 +16,9 @@ import { CockpitMoneyController as M } from '../controllers/cockpit/money.contro
 import { CockpitRiskController as K } from '../controllers/cockpit/risk.controller';
 import { CockpitAnalyticsController as A } from '../controllers/cockpit/analytics.controller';
 import { CockpitAiController as AI } from '../controllers/cockpit/ai.controller';
+import { LydtController as LYDT } from '../controllers/lydt.controller';
+import { CockpitAvailabilityController as AV } from '../controllers/cockpit/availability.controller';
+import { CockpitStorefrontController as SFC } from '../controllers/cockpit/storefront.controller';
 import { aiLimiter } from '../middleware/rateLimiters';
 import { maskPiiForStaff } from '../services/platform/pii';
 // Registers approval handlers (side-effect imports).
@@ -31,6 +34,12 @@ cockpitRouter.get('/overview', P('cockpit.view'), O.overview);
 cockpitRouter.get('/overview/series', P('cockpit.view'), O.series);
 cockpitRouter.get('/system', P('system.read'), O.system);
 cockpitRouter.get('/search', P('cockpit.view'), X.search);
+
+// LYDT supervision: reserve statements, holder freezes (the CBL's powers in the proposal).
+cockpitRouter.get('/lydt', P('treasury.read'), LYDT.supervisor);
+cockpitRouter.post('/lydt/attestations', P('treasury.operate'), LYDT.attest);
+cockpitRouter.post('/lydt/holders/:userId/freeze', P('customers.freeze'), LYDT.freeze);
+cockpitRouter.post('/lydt/holders/:userId/unfreeze', P('customers.freeze'), LYDT.unfreeze);
 
 cockpitRouter.get('/customers', P('customers.read'), C.list);
 cockpitRouter.get('/customers/:id', P('customers.read'), C.detail);
@@ -49,6 +58,11 @@ cockpitRouter.get('/ledger/entries', P('ledger.read'), X.ledgerEntries);
 
 cockpitRouter.get('/controls', P('controls.read'), X.controls);
 cockpitRouter.post('/controls', P('controls.operate'), X.setControl);
+
+// Product availability: hide or lock features, currencies and pairs for everyone or chosen customers.
+cockpitRouter.get('/availability', P('controls.read'), AV.list);
+cockpitRouter.put('/availability', P('availability.manage'), AV.set);
+cockpitRouter.get('/availability/preview/:userId', P('controls.read'), P('customers.read'), AV.preview);
 
 cockpitRouter.get('/approvals', P('cockpit.view'), X.approvals);
 cockpitRouter.post('/approvals', P('cockpit.view'), X.requestApproval);       // per-type permission checked inside
@@ -106,6 +120,12 @@ cockpitRouter.get('/businesses', P('businesses.read'), K.businesses);
 cockpitRouter.get('/businesses/:id', P('businesses.read'), K.businessDetail);
 cockpitRouter.post('/businesses/:id/kyb', P('businesses.kyb.review'), K.kybDecision);
 cockpitRouter.post('/businesses/batches/:id/review', P('compliance.decide'), K.batchReview);
+
+// Merchant posts (take-down) and till plaque orders (production, delivery).
+cockpitRouter.get('/business-posts', P('businesses.read'), SFC.posts);
+cockpitRouter.post('/business-posts/:id/visibility', P('businesses.kyb.review'), SFC.moderate);
+cockpitRouter.get('/plaque-orders', P('businesses.read'), SFC.plaqueOrders);
+cockpitRouter.post('/plaque-orders/:id/status', P('businesses.kyb.review'), SFC.plaqueStatus);
 
 // Finance and forecasting
 cockpitRouter.get('/finance', P('finance.read'), A.finance);

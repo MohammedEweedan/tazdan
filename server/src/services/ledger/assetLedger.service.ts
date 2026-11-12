@@ -20,7 +20,9 @@ export type AssetAccountType =
   | 'SYSTEM_OFFRAMP'
   | 'SYSTEM_CHAIN'
   | 'SYSTEM_FX'
-  | 'SYSTEM_ESCROW';
+  | 'SYSTEM_ESCROW'
+  // LYDT's issuer: carries minus the outstanding supply (services/lydt).
+  | 'TOKEN_ISSUER';
 
 export interface AssetLeg {
   type: AssetAccountType;
@@ -38,6 +40,14 @@ export interface AssetPostInput {
 
 export type AssetTx = Prisma.TransactionClient;
 
+/**
+ * Assets whose balances are read from this ledger only, with no
+ * UserWallet.altBalances mirror. LYDT holders need no crypto wallet (whose
+ * row requires chain addresses), and a second copy of a dinar token's
+ * balance is exactly what the ledger exists to avoid.
+ */
+const LEDGER_ONLY_ASSETS = new Set(['LYDT']);
+
 export function normaliseAsset(asset: string): string {
   const normalised = asset.trim().toUpperCase();
   if (!/^[A-Z0-9][A-Z0-9._-]{0,31}$/.test(normalised)) throw new Error('Invalid ledger asset identifier');
@@ -49,6 +59,9 @@ export function isDynamicAsset(asset: string): boolean {
   return !isLedgerCurrency(a);
 }
 
+// The ::text casts matter for system accounts: Postgres cannot infer the type
+// of a bare NULL parameter in "$n IS NULL" (42P18), so without them no
+// system-owned asset account (escrow, issuer, onramp) could be resolved.
 async function resolveAssetAccount(
   tx: AssetTx,
   type: AssetAccountType,
@@ -60,7 +73,7 @@ async function resolveAssetAccount(
     SELECT "id", "balance"
     FROM "AssetLedgerAccount"
     WHERE "type" = ${type} AND "asset" = ${normalised}
-      AND (("userId" = ${userId}) OR ("userId" IS NULL AND ${userId} IS NULL))
+      AND (("userId" = ${userId}::text) OR ("userId" IS NULL AND ${userId}::text IS NULL))
     LIMIT 1
   `;
   if (existing[0]) {
@@ -77,7 +90,7 @@ async function resolveAssetAccount(
     SELECT "id", "balance"
     FROM "AssetLedgerAccount"
     WHERE "type" = ${type} AND "asset" = ${normalised}
-      AND (("userId" = ${userId}) OR ("userId" IS NULL AND ${userId} IS NULL))
+      AND (("userId" = ${userId}::text) OR ("userId" IS NULL AND ${userId}::text IS NULL))
     LIMIT 1
   `;
   if (!row[0]) throw new Error(`asset ledger account could not be resolved: ${type}:${userId ?? 'SYSTEM'}:${normalised}`);
@@ -152,7 +165,7 @@ export async function postAssetLedger(
         ${input.memo ?? null}
       )
     `;
-    if (leg.type === 'USER' && leg.userId) {
+    if (leg.type === 'USER' && leg.userId && !LEDGER_ONLY_ASSETS.has(leg.asset)) {
       affectedUsers.set(`${leg.userId}:${leg.asset}`, { userId: leg.userId, asset: leg.asset });
     }
   }

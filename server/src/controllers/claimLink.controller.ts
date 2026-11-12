@@ -121,7 +121,7 @@ export class ClaimLinkController {
       });
       if (!senderWallet) throw new AppError(`${asset} wallet not found`, 404);
 
-      await assertMovementAllowed({ userId: senderId, feature: 'transfers', currency: asset });
+      await assertMovementAllowed({ userId: senderId, feature: 'transfers', product: 'claim_links', currency: asset });
       await enforceKycLimit(senderId, 'SEND', body.amount, asset); // before any security code
       await enforceRiskBasedStepUp({
         userId: senderId,
@@ -276,8 +276,8 @@ export class ClaimLinkController {
       // holds apply to the person receiving it AND to the sender whose
       // reservation pays it (a frozen sender's funds stay put; the link
       // simply expires back to them).
-      await assertMovementAllowed({ userId: claimerId, feature: 'transfers', currency: link.asset });
-      await assertMovementAllowed({ userId: link.senderId, feature: 'transfers', currency: link.asset });
+      await assertMovementAllowed({ userId: claimerId, feature: 'transfers', product: 'claim_links', currency: link.asset });
+      await assertMovementAllowed({ userId: link.senderId, feature: 'transfers', product: 'claim_links', currency: link.asset });
       if (link.expiresAt.getTime() < Date.now()) {
         // Auto-flip to EXPIRED + refund sender atomically.
         await ClaimLinkController._refundExpired(link.id);

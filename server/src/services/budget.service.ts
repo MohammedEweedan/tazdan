@@ -16,6 +16,7 @@ import { logger } from '../utils/logger';
 import type { RecurringFrequency } from '@prisma/client';
 import { AppError } from '../middleware/errorHandler';
 import { lockBudget, releaseReserve, reserveFunds } from './wallet/atomicWallet';
+import { assertAvailable, viewerFor } from './platform/availability.service';
 
 /** Next run time for an auto-contribution cadence (same rules as recurringBuy). */
 export function computeNextRun(from: Date, frequency: RecurringFrequency): Date {
@@ -42,6 +43,8 @@ export async function contribute(
 ) {
   const amt = new Decimal(amount);
   if (amt.lte(0)) throw new AppError('Amount must be positive', 400);
+  const target = await prisma.budgetWallet.findFirst({ where: { id: budgetId, userId }, select: { currency: true } });
+  await assertAvailable({ viewer: await viewerFor(userId), products: ['budgets'], currencies: [target?.currency] });
 
   return prisma.$transaction(async (tx: any) => {
     // Lock the budget row so concurrent contributions/withdrawals (manual +

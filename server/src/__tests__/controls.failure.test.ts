@@ -1,4 +1,4 @@
-jest.mock('../utils/prisma', () => ({ prisma: { controlSwitch: { findMany: jest.fn().mockResolvedValue([]) } } }));
+jest.mock('../utils/prisma', () => ({ prisma: { controlSwitch: { findMany: jest.fn().mockResolvedValue([]) }, availabilityRule: { findMany: jest.fn().mockResolvedValue([]) } } }));
 jest.mock('../services/ops/launchReadiness.service', () => ({ assertLaunchMovement: jest.fn() }));
 jest.mock('../services/ledger/reconcile.service', () => ({ isTradingHalted: jest.fn() }));
 jest.mock('../utils/redis', () => ({ getRedisClient: jest.fn() }));

@@ -20,6 +20,9 @@ messageRouter.post('/',                            MessageController.send);
 // Conversation list (one row per partner)
 messageRouter.get('/conversations',                MessageController.getConversations);
 
+// Total unopened inbound messages (app-icon badge)
+messageRouter.get('/unread-count',                 MessageController.unreadCount);
+
 // Chat privacy toggles
 messageRouter.get('/privacy',                      MessageController.getPrivacy);
 messageRouter.put('/privacy',                      MessageController.updatePrivacy);

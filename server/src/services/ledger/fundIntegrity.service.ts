@@ -45,7 +45,7 @@ import { writeAudit } from '../platform/audit';
 import { setTradingHalt } from './reconcile.service';
 
 const BOUNDARY: string[] = ['SYSTEM_ONRAMP', 'SYSTEM_OFFRAMP', 'SYSTEM_CHAIN', 'ADJUSTMENT'];
-const TAZDAN_HELD: string[] = ['SYSTEM_ESCROW', 'REMITTANCE_CLEARING', 'PLATFORM', 'SYSTEM_FX', 'TREASURY', 'PARTNER_SETTLEMENT', 'SUSPENSE'];
+const TAZDAN_HELD: string[] = ['SYSTEM_ESCROW', 'REMITTANCE_CLEARING', 'TOKEN_RESERVE', 'PLATFORM', 'SYSTEM_FX', 'TREASURY', 'PARTNER_SETTLEMENT', 'SUSPENSE'];
 /** Users whose Wallet rows are presentation only (their value is on the ledger). */
 const HOUSE_USERNAMES: string[] = ['platform', 'support'];
 const CRYPTO = new Set(['BTC', 'ETH', 'BNB', 'SOL', 'XRP', 'ADA', 'DOGE', 'MATIC', 'DOT', 'AVAX']);

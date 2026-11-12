@@ -8,7 +8,11 @@ const flags = z.object({
   trades: z.boolean(), transfers: z.boolean(), deposits: z.boolean(),
   withdrawals: z.boolean(), p2p: z.boolean(), marketing: z.boolean(),
 }).partial().strict();
-const prefsSchema = z.object({ email: flags.optional(), push: flags.optional() }).strict();
+// Chat pushes: on/off, and whether the banner shows the text (or amount).
+const pushFlags = flags.extend({ messages: z.boolean(), messagePreview: z.boolean() }).partial().strict();
+const prefsSchema = z.object({ email: flags.optional(), push: pushFlags.optional() }).strict();
+/** Languages the server writes push copy in (see services/messaging/notify). */
+const PUSH_LOCALES = new Set(['en', 'ar']);
 // Expo push tokens: ExponentPushToken[…] / ExpoPushToken[…].
 const PUSH_TOKEN = /^Expo(nent)?PushToken\[[A-Za-z0-9_-]{10,200}\]$/;
 
@@ -106,16 +110,25 @@ export class NotificationController {
    */
   static async registerToken(req: AuthRequest, res: Response, next: NextFunction) {
     try {
-      const { token } = req.body as { token?: unknown };
+      const { token, locale } = req.body as { token?: unknown; locale?: unknown };
       if (typeof token !== 'string' || !PUSH_TOKEN.test(token)) {
         throw new AppError('A valid Expo push token is required', 400);
       }
+      // The app's language, so pushes arrive in it. Kept beside the other
+      // notification settings; unknown values leave the stored one alone.
+      const current = await prisma.user.findUnique({ where: { id: req.user!.id }, select: { notificationPrefs: true } });
+      const base = current?.notificationPrefs && typeof current.notificationPrefs === 'object' && !Array.isArray(current.notificationPrefs)
+        ? current.notificationPrefs as Record<string, any> : {};
+      const pushLocale = typeof locale === 'string' && PUSH_LOCALES.has(locale) ? locale : undefined;
       // A device token belongs to one account at a time. When a phone changes
       // hands (or a second account signs in on it) the previous account must
       // stop receiving pushes there — they carry amounts and names.
       await prisma.$transaction([
         prisma.user.updateMany({ where: { expoPushToken: token, id: { not: req.user!.id } }, data: { expoPushToken: null } }),
-        prisma.user.update({ where: { id: req.user!.id }, data: { expoPushToken: token } }),
+        prisma.user.update({
+          where: { id: req.user!.id },
+          data: { expoPushToken: token, ...(pushLocale ? { notificationPrefs: { ...base, pushLocale } } : {}) },
+        }),
       ]);
       res.json({ ok: true });
     } catch (error) {
@@ -145,7 +158,8 @@ export class NotificationController {
    * to true (opt-in). Shape:
    * {
    *   email: { trades, transfers, deposits, withdrawals, p2p, marketing },
-   *   push:  { trades, transfers, deposits, withdrawals, p2p, marketing }
+   *   push:  { trades, transfers, deposits, withdrawals, p2p, marketing,
+   *            messages, messagePreview }
    * }
    */
   static async getPreferences(req: AuthRequest, res: Response, next: NextFunction) {
@@ -163,7 +177,12 @@ export class NotificationController {
         p2p:         prefs?.[cat]?.p2p         !== false,
         marketing:   prefs?.[cat]?.marketing   === true, // marketing defaults OFF
       });
-      res.json({ preferences: { email: fill('email'), push: fill('push') } });
+      const push = {
+        ...fill('push'),
+        messages:       prefs?.push?.messages       !== false,
+        messagePreview: prefs?.push?.messagePreview !== false,
+      };
+      res.json({ preferences: { email: fill('email'), push } });
     } catch (error) {
       next(error);
     }

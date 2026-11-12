@@ -19,6 +19,8 @@ export interface PushPayload {
   body: string;
   data?: Record<string, unknown>;
   badge?: number;
+  /** 'high' wakes Android devices in doze — used for chat messages. */
+  priority?: 'default' | 'normal' | 'high';
 }
 
 /**
@@ -54,6 +56,7 @@ export async function sendPushToUsers(userIds: string[], payload: PushPayload): 
       body: payload.body,
       data: payload.data ?? {},
       badge: payload.badge,
+      ...(payload.priority ? { priority: payload.priority } : {}),
     }));
 
   if (!messages.length) return;
@@ -104,6 +107,7 @@ async function sendPushToToken(token: string, userId: string, payload: PushPaylo
       body: payload.body,
       data: payload.data ?? {},
       badge: payload.badge,
+      ...(payload.priority ? { priority: payload.priority } : {}),
     }]);
 
     if (ticket.status === 'error' && (ticket as any).details?.error === 'DeviceNotRegistered') {

@@ -34,7 +34,6 @@ import { attachRequestContext } from './middleware/requestContext';
 import { attachSocketAuth } from './services/security/socketAuth';
 import { parseQueryString, jsonReviver, noStoreApi } from './middleware/httpHardening';
 import { dependencyReadiness, withDeadline } from './services/ops/health.service';
-import { currentLaunchReadiness, isRealMoneyEnabled } from './services/ops/launchReadiness.service';
 
 import { authRouter } from './routes/auth';
 import { userRouter } from './routes/user';
@@ -48,6 +47,8 @@ import linkedWalletRouter from './routes/linkedWallet';
 import { transferRouter } from './routes/transfer';
 import whatsappRouter from './routes/whatsapp';
 import { profileRouter } from './routes/profile';
+import { payRouter } from './routes/pay';
+import { lydtRouter } from './routes/lydt';
 import { p2pRouter } from './routes/p2p';
 import { messageRouter } from './routes/messages';
 import { referralRouter } from './routes/referral';
@@ -66,6 +67,7 @@ import platformBanksRouter from './routes/platformBanks';
 import ratesRouter from './routes/rates';
 import { waitlistRouter } from './routes/waitlist';
 import { errorHandler } from './middleware/errorHandler';
+import { attachSocketAdapter } from './utils/socketAdapter';
 import { prisma } from './utils/prisma';
 import { seedAdmin } from './utils/seed';
 import { ensureMasterSeed } from './services/wallet/masterSeed.service';
@@ -85,7 +87,8 @@ import { startOperationalReadinessAlerts } from './services/ops/operationalReadi
 import { globalLimiter, authLimiter, refreshLimiter, registerLimiter, withdrawalLimiter, webhookLimiter } from './middleware/rateLimiters';
 import { protectedUploadsRouter } from './middleware/protectedUploads';
 import { ipBanMiddleware } from './middleware/ipBan';
-import { featureFlags } from './utils/features';
+import { clientFeatures } from './services/platform/clientFeatures';
+import { viewerFor } from './services/platform/availability.service';
 import { metricsMiddleware, startMetricsSampler, prometheusMetrics } from './services/platform/metrics';
 import { cockpitRouter } from './routes/cockpit';
 import { remittanceRouter } from './routes/remittance';
@@ -298,6 +301,8 @@ app.use('/api/linked-wallets', linkedWalletRouter);
 app.use('/api/transfers', transferRouter);
 app.use('/api/whatsapp', whatsappRouter);
 app.use('/api/profile', profileRouter);
+app.use('/api/pay', payRouter);
+app.use('/api/lydt', lydtRouter);
 app.use('/api/p2p', p2pRouter);
 app.use('/api/messages', messageRouter);
 app.use('/api/contacts', contactsRouter);
@@ -334,16 +339,13 @@ app.use('/api/business', businessRouter);
 app.use('/api/v1', publicApiRouter);
 
 // Feature switches — public so the apps can hide surfaces that are off.
-app.get('/api/features', (_req, res) => {
-  const flags = featureFlags();
-  if (isProduction()) {
-    const report = currentLaunchReadiness();
-    const open = isRealMoneyEnabled() && report.ok;
-    const mapping = { p2p: 'p2p', cards: 'cards', altTrading: 'fx', blockchain: 'blockchain', cryptoTrading: 'fx', remittance: 'remittance' };
-    for (const key of Object.keys(flags) as (keyof typeof flags)[]) flags[key] = flags[key] && open && Boolean(report.evidence?.scope.features.includes(mapping[key] as any));
-  }
-  res.setHeader('Cache-Control', 'no-store');
-  res.json({ features: flags });
+// Signed-in viewers also get their own availability (allow/deny lists).
+app.get('/api/features', optionalAuthenticate, async (req: AuthRequest, res, next) => {
+  try {
+    const payload = await clientFeatures(await viewerFor(req.user?.id));
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.json(payload);
+  } catch (e) { next(e); }
 });
 
 app.get('/api/health/live', (_req, res) => res.json({ status: 'alive' }));
@@ -469,6 +471,10 @@ async function start() {
     await ensureMasterSeed();
     await initRedis();
     if (isProduction() && !getRedisClient()) throw new Error('Redis must be available before production startup');
+    const sharedSockets = await attachSocketAdapter(io);
+    if (NUM_WORKERS > 1 && !sharedSockets) {
+      logger.error('[socket] CLUSTER_WORKERS > 1 without the Redis adapter: live chat only reaches sockets on the emitting worker');
+    }
     if (isProduction() && process.env.REAL_MONEY_ENABLED === '1') {
       const ledger = await reconcileLedger();
       const funds = await auditFundIntegrity({ haltOnBreach: true });

@@ -122,7 +122,7 @@ const registerSchema = z.object({
   // Local phone number (national subscriber number).
   phone: z.string().min(4, 'Phone number required').max(20),
   // ISO date string (YYYY-MM-DD). Coerced to Date.
-  dateOfBirth: z.coerce.date({ errorMap: () => ({ message: 'Enter a valid date of birth' }) }),
+  dateOfBirth: z.coerce.date({ error: 'Enter a valid date of birth' }),
   avatarUrl: safeAvatar.optional(),
   referralCode: z.string().max(64).optional(),
   // ── B2B ──────────────────────────────────────────────────────

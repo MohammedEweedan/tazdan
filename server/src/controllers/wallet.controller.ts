@@ -191,7 +191,7 @@ export class WalletController {
       if (!SWAP_CURRENCIES.has(from) || !SWAP_CURRENCIES.has(to)) {
         throw new AppError(`Unsupported currency pair ${from}->${to}`, 400);
       }
-      await assertMovementAllowed({ userId: req.user!.id, feature: 'fx', currency: from });
+      await assertMovementAllowed({ userId: req.user!.id, feature: 'fx', currency: from, counterCurrency: to });
       const { isTradingHalted } = await import('../services/ledger/reconcile.service');
       if (await isTradingHalted()) {
         throw new AppError('Conversions are paused while the ledger is being reconciled. Please try again later.', 503, 'FEATURE_DISABLED');

@@ -84,6 +84,7 @@ export async function executeRecurringBuy(id: string) {
     quoteId: quote.id,
     idempotencyKey,
     fundingCurrency,
+    product: 'recurring_buys',
   });
 
   // Notify the user their scheduled buy ran.

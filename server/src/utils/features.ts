@@ -12,7 +12,7 @@
 import type { Request, Response, NextFunction } from 'express';
 import { AppError } from '../middleware/errorHandler';
 
-export type FeatureName = 'p2p' | 'cards' | 'altTrading' | 'blockchain' | 'cryptoTrading' | 'remittance';
+export type FeatureName = 'p2p' | 'cards' | 'altTrading' | 'blockchain' | 'cryptoTrading' | 'remittance' | 'lydt';
 
 const ENV_KEYS: Record<FeatureName, string> = {
   p2p: 'FEATURE_P2P',
@@ -21,6 +21,8 @@ const ENV_KEYS: Record<FeatureName, string> = {
   blockchain: 'FEATURE_BLOCKCHAIN',
   cryptoTrading: 'FEATURE_CRYPTO_TRADING',
   remittance: 'FEATURE_REMITTANCE',
+  // LYDT dinar token: a sandbox until the Central Bank of Libya authorises it.
+  lydt: 'FEATURE_LYDT',
 };
 
 export function isFeatureEnabled(name: FeatureName): boolean {
@@ -43,6 +45,7 @@ export function featureFlags(): Record<FeatureName, boolean> {
     blockchain: isFeatureEnabled('blockchain'),
     cryptoTrading: isFeatureEnabled('cryptoTrading'),
     remittance: isFeatureEnabled('remittance'),
+    lydt: isFeatureEnabled('lydt'),
   };
 }
 

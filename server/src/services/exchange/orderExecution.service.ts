@@ -239,10 +239,13 @@ export async function executeQuote(opts: {
    * is given, that wallet is debited (FX-converted) instead. Ignored on SELL.
    */
   fundingCurrency?: string;
+  /** Availability feature for this order (recurring buys check their own). */
+  product?: 'crypto_trading' | 'recurring_buys';
 }) {
   const { userId, quoteId, idempotencyKey } = opts;
+  const product = opts.product ?? 'crypto_trading';
   assertFeatureEnabled('cryptoTrading');
-  await assertMovementAllowed({ userId, feature: 'fx', currency: opts.fundingCurrency });
+  await assertMovementAllowed({ userId, feature: 'fx', product, currency: opts.fundingCurrency });
 
   // Treasury safety: refuse to execute while a ledger/fund-integrity breach
   // has halted trading. Better to block orders than compound a discrepancy.
@@ -279,8 +282,7 @@ export async function executeQuote(opts: {
   // quote (validated at quote time). No silent default — defaulting to USDT is
   // exactly what credited/debited the wrong wallet and corrupted balances.
   const settlementCurrency = (quote.settlementCurrency || '').toUpperCase();
-  await assertMovementAllowed({ userId, feature: 'fx', currency: assetUpper });
-  await assertMovementAllowed({ userId, feature: 'fx', currency: settlementCurrency });
+  await assertMovementAllowed({ userId, feature: 'fx', product, currency: assetUpper, counterCurrency: settlementCurrency });
   if (!settlementCurrency || !isLedgerCurrency(settlementCurrency)) {
     throw new AppError('Quote is missing a valid settlement currency. Request a new quote.', 400);
   }

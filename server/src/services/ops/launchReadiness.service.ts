@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { AppError } from '../../middleware/errorHandler';
 
 export const LAUNCH_GATES = ['authorization', 'providers', 'safeguarding', 'treasury', 'security', 'moneyPaths', 'deviceQa', 'recovery', 'operations'] as const;
-const FEATURES = ['withdrawals', 'deposits', 'p2p', 'fx', 'remittance', 'blockchain', 'cards', 'transfers', 'business_payouts'] as const;
+const FEATURES = ['withdrawals', 'deposits', 'p2p', 'fx', 'remittance', 'blockchain', 'cards', 'transfers', 'business_payouts', 'lydt'] as const;
 const review = z.object({
   status: z.enum(['verified', 'pending']),
   owner: z.string().min(3),

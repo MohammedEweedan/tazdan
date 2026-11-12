@@ -129,7 +129,7 @@ export class P2PController {
   static async createListing(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const data = createListingSchema.parse(req.body);
-      await assertMovementAllowed({ userId: req.user!.id, feature: 'p2p' });
+      await assertMovementAllowed({ userId: req.user!.id, feature: 'p2p', currency: data.currency, counterCurrency: data.fiatCurrency });
 
       const ticker    = data.currency.toUpperCase();
       const fiatTicker = data.fiatCurrency.toUpperCase();
@@ -443,6 +443,7 @@ export class P2PController {
       const remaining    = parseFloat(listing.amount.toString()) - parseFloat(listing.filled.toString());
       const realTicker = (listing.baseAsset ?? listing.currency) as string;
       const resolvedFiat = listing.fiatAsset ?? listing.fiatCurrency;
+      await assertMovementAllowed({ userId: req.user!.id, feature: 'p2p', currency: realTicker, counterCurrency: resolvedFiat });
       if (data.amount > remaining)
         throw new AppError(`Only ${remaining} ${realTicker} available`, 400);
       if (fiatAmount < parseFloat(listing.minLimit.toString()))

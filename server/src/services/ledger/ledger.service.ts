@@ -52,6 +52,8 @@ export const FUND_CLASS: Record<LedgerAccountType, FundClass> = {
   USER: 'CUSTOMER',
   SYSTEM_ESCROW: 'CUSTOMER',
   REMITTANCE_CLEARING: 'CUSTOMER',
+  // Dinars backing issued LYDT: owed to LYDT holders on redemption.
+  TOKEN_RESERVE: 'CUSTOMER',
   SYSTEM_ONRAMP: 'SETTLEMENT',
   SYSTEM_OFFRAMP: 'SETTLEMENT',
   SYSTEM_CHAIN: 'SETTLEMENT',

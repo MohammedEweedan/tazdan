@@ -121,7 +121,7 @@ export const CockpitRiskController = {
     try {
       const body = z.object({
         enabled: z.boolean().optional(), action: z.enum(['APPROVE', 'REVIEW', 'REJECT', 'FREEZE', 'REQUEST_INFORMATION', 'CHALLENGE', 'DELAY', 'BLOCK']).optional(),
-        score: z.number().int().min(0).max(100).optional(), params: z.record(z.unknown()).optional(), reason: z.string().trim().min(10),
+        score: z.number().int().min(0).max(100).optional(), params: z.record(z.string(), z.unknown()).optional(), reason: z.string().trim().min(10),
       }).parse(req.body);
       const rule = await prisma.riskRule.findUnique({ where: { code: req.params.code } });
       if (!rule) throw new AppError('Rule not found', 404);

@@ -183,8 +183,7 @@ export class ExchangeController {
     try {
       const body = quoteSchema.parse(req.body);
       assertFeatureEnabled('cryptoTrading');
-      await assertMovementAllowed({ userId: req.user!.id, feature: 'fx', currency: body.asset });
-      await assertMovementAllowed({ userId: req.user!.id, feature: 'fx', currency: body.fundingCurrency ?? body.receiveCurrency });
+      await assertMovementAllowed({ userId: req.user!.id, feature: 'fx', product: 'crypto_trading', currency: body.asset, counterCurrency: body.fundingCurrency ?? body.receiveCurrency });
       if (body.side === 'BUY' && body.fiatAmount == null) {
         throw new AppError('fiatAmount required for BUY', 400);
       }

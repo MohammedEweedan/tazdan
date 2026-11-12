@@ -13,6 +13,7 @@ import {
   isDateLocked, requiresStepUp, lockChangeNeedsStepUp,
 } from '../services/budget.service';
 import { lockBudget } from '../services/wallet/atomicWallet';
+import { assertAvailable, viewerFor } from '../services/platform/availability.service';
 import { issueStepUp, verifyStepUp } from '../services/security/stepUp.service';
 
 const CURRENCIES = z.string().min(2).max(12);
@@ -71,6 +72,7 @@ export class BudgetController {
   static async create(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const d = createSchema.parse(req.body);
+      await assertAvailable({ viewer: await viewerFor(req.user!.id), products: ['budgets'], currencies: [d.currency] });
       if ((d.lockType === 'DATE' || d.lockType === 'DATE_AND_STEP_UP') && !d.unlockDate) {
         throw new AppError('unlockDate is required for a date lock', 400);
       }

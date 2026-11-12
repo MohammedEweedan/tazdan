@@ -57,7 +57,7 @@ const transactionSchema = z.object({
   country: z.string().length(2).optional(),
   amount: z.number().positive(),
   type: z.enum(['PURCHASE', 'REFUND', 'FEE', 'CASHBACK', 'TOPUP', 'WITHDRAWAL']).default('PURCHASE'),
-  metadata: z.record(z.any()).optional(),
+  metadata: z.record(z.string(), z.any()).optional(),
 });
 
 /* ── Helpers ─────────────────────────────────────────────── */

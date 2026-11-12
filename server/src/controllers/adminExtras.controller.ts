@@ -649,7 +649,7 @@ export class AdminExtrasController {
         type:         z.string().optional(),
         mediaUrl:     z.string().url().max(500).refine((u) => /^https?:\/\//i.test(u), 'mediaUrl must be an http(s) URL').optional(),
         mediaType:    z.enum(['image', 'gif', 'video', 'none']).optional(),
-        locales:      z.record(z.object({ title: z.string(), subtitle: z.string().optional(), description: z.string().optional() })).optional(),
+        locales:      z.record(z.string(), z.object({ title: z.string(), subtitle: z.string().optional(), description: z.string().optional() })).optional(),
         targetRoles:  z.array(z.string()).optional(),
         targetUserIds: z.array(z.string().uuid()).optional(),
       }).parse(req.body);

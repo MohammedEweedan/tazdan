@@ -222,7 +222,7 @@ export const CockpitOperationsController = {
     try {
       const body = z.object({
         type: z.enum(['LEDGER_ADJUSTMENT', 'REMITTANCE_REFUND', 'FX_OVERRIDE']),
-        payload: z.record(z.unknown()),
+        payload: z.record(z.string(), z.unknown()),
         reason: z.string().trim().min(10).max(2000),
         subjectType: z.string().max(40).optional(),
         subjectId: z.string().max(80).optional(),

@@ -81,7 +81,7 @@ export class ReferralController {
   static async claimRewards(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const userId = req.user!.id;
-      await assertMovementAllowed({ userId, feature: 'transfers' });
+      await assertMovementAllowed({ userId, feature: 'transfers', product: 'referrals' });
 
       // Lock the unpaid rows, mark exactly those paid, then credit their sum —
       // all in one transaction. Two concurrent claims cannot both pay: the

@@ -36,6 +36,7 @@ export const PERMISSIONS = [
   'finance.read', 'forecast.read',
   'system.read', 'security.read', 'audit.read',
   'controls.read', 'controls.operate',
+  'availability.manage',
   'staff.manage',
   'settings.manage',
   'ai.use', 'ai.approve',
