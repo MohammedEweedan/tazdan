@@ -8,7 +8,9 @@ export type Currency =
   // crypto
   | 'BTC' | 'ETH' | 'USDT' | 'SOL' | 'BNB' | 'XRP' | 'ADA' | 'DOGE' | 'MATIC' | 'DOT' | 'AVAX'
   // fiat
-  | 'USD' | 'EUR' | 'GBP' | 'AED' | 'SAR' | 'EGP' | 'LYD';
+  | 'USD' | 'EUR' | 'GBP' | 'AED' | 'SAR' | 'EGP' | 'LYD'
+  // tazdan's dinar token: 1 LYDT = 1 LYD, held on the token ledger (sandbox)
+  | 'LYDT';
 
 export type CurrencyKind = 'crypto' | 'fiat';
 

@@ -22,7 +22,8 @@ import { StepUpModal } from '@/components/ui/StepUpModal';
 import { isStepUpChallengeError } from '@/lib/stepUpErrors';
 import { isTransientSendError } from '@/hooks/useMessages';
 import { useUsdValue } from '@/hooks/useForexRates';
-import { profileService, messageService, claimLinkService } from '@/services';
+import { profileService, messageService, claimLinkService, lydtService } from '@/services';
+import { LYDT, LYDT_QUERY_KEY, useLydtWallet } from '@/hooks/useLydt';
 import type { Currency } from '@/types';
 import { useRouter } from 'expo-router';
 import * as Clipboard from 'expo-clipboard';
@@ -42,7 +43,7 @@ function looksOffPlatform(v: string): { kind: 'email'; value: string } | { kind:
 
 const FIATS: Currency[] = ['USD', 'EUR', 'GBP', 'AED', 'SAR', 'EGP'];
 
-const FIAT_SET = new Set<string>(FIATS);
+const FIAT_SET = new Set<string>([...FIATS, 'LYD', 'LYDT']);
 
 // Static meta for known assets; unknown alts get a generated fallback below.
 const KNOWN_META: Record<string, { label: string; color: string; bg: string; icon: string }> = {
@@ -74,6 +75,7 @@ const KNOWN_META: Record<string, { label: string; color: string; bg: string; ico
   AED:  { label: 'UAE Dirham',  color: '#0f766e', bg: 'rgba(15,118,110,0.14)',  icon: 'د' },
   SAR:  { label: 'Saudi Riyal', color: '#15803d', bg: 'rgba(21,128,61,0.14)',   icon: '﷼' },
   EGP:  { label: 'Egypt Pound', color: '#dc2626', bg: 'rgba(220,38,38,0.14)',   icon: '£' },
+  LYDT: { label: 'Dinar Token', color: '', bg: '',  icon: 'LT' },
 };
 
 function assetMeta(currency: string) {
@@ -101,8 +103,12 @@ export function SendWidget({ initialRecipient }: { initialRecipient?: Profile } 
   const keypadFont = tight ? 22 : compact ? 24 : 27;
   const { playSuccess, playError } = useTransactionSound();
   const qc = useQueryClient();
-  const { data: wallets } = useWallets();
-  const toUsd = useUsdValue();
+  const { data: walletRows } = useWallets();
+  // LYDT (its own ledger) can be sent to any tazdan customer, like dinars.
+  const lydt = useLydtWallet();
+  const wallets = useMemo(() => [...(walletRows ?? []), ...(lydt.wallet ? [lydt.wallet] : [])], [walletRows, lydt.wallet]);
+  const usdOf = useUsdValue();
+  const toUsd = (n: number, c: string) => usdOf(n, c === LYDT ? 'LYD' : c);
   const stepUp = useStepUpAuth();
 
   const [currency,  setCurrency]  = useState<string>('USD');
@@ -199,12 +205,17 @@ export function SendWidget({ initialRecipient }: { initialRecipient?: Profile } 
         });
       }
 
-      await messageService.transfer({
-        receiverId: picked.id, currency: currency as Currency, amount: sendAmount, note: note || undefined,
-        idempotencyKey: transferKey(`${picked.id}|${currency}|${sendAmount}|${note}`),
-        ...(stepUpCode ? { stepUpCode } : {}),
-        ...(biometricVerified ? { biometricVerified: true } : {}),
-      });
+      const auth = { ...(stepUpCode ? { stepUpCode } : {}), ...(biometricVerified ? { biometricVerified: true } : {}) };
+      const idempotencyKey = transferKey(`${picked.id}|${currency}|${sendAmount}|${note}`);
+      if (currency === LYDT) {
+        await lydtService.transfer({ receiverId: picked.id, amount: sendAmount, note: note || undefined, idempotencyKey, ...auth });
+        void qc.invalidateQueries({ queryKey: LYDT_QUERY_KEY });
+      } else {
+        await messageService.transfer({
+          receiverId: picked.id, currency: currency as Currency, amount: sendAmount, note: note || undefined, idempotencyKey, ...auth,
+        });
+      }
+      void qc.invalidateQueries({ queryKey: ['activities'] });
       attemptRef.current = null;
       setStepUpOpen(false);
       playSuccess('transfer');
@@ -312,6 +323,10 @@ export function SendWidget({ initialRecipient }: { initialRecipient?: Profile } 
               const amountNum = parseFloat(amount || '0');
               const ready = amountNum > 0 && amountNum <= balance;
               const createAndShare = async () => {
+                if (currency === LYDT) {
+                  Alert.alert('LYDT stays on tazdan', 'Dinar tokens can only be sent to someone with a tazdan account. Pick them by @username, or send dinars instead.');
+                  return;
+                }
                 if (!ready) {
                   Alert.alert(t('send.amountRequiredTitle') || 'Enter an amount first', t('send.amountRequiredBody') || 'Type how much you want to send, then we will generate a one-tap link the recipient can claim.');
                   return;

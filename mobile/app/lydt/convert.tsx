@@ -70,6 +70,8 @@ export default function LydtConvert() {
       void qc.invalidateQueries({ queryKey: ['lydt-me'] });
       void qc.invalidateQueries({ queryKey: ['lydt-reserves'] });
       void qc.invalidateQueries({ queryKey: ['wallets'] });
+      void qc.invalidateQueries({ queryKey: ['transactions'] });
+      void qc.invalidateQueries({ queryKey: ['activities'] });
     } catch (e) {
       playError();
       setError(isTransientSendError(e) ? t('pay.unconfirmed') : extractErrorMessage(e, t('lydt.failed')));

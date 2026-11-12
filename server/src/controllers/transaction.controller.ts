@@ -26,6 +26,7 @@ import { enforceRiskBasedStepUp } from '../services/security/stepUp.service';
 import { valueInUsd } from '../utils/kycLimits';
 import { assertRecipientCanReceive, checkRecipient } from '../services/wallet/recipientEligibility';
 import { assertTillForReceiver } from '../services/business/tills.service';
+import { historyCount, historyRows } from '../services/lydt/lydt.service';
 import { incrAttempts } from '../utils/redis';
 import { pushCopy, pushTxEvent } from '../services/push.service';
 import { logger } from '../utils/logger';
@@ -298,21 +299,29 @@ export class TransactionController {
       const where: any = { userId };
       if (type) where.type = type as string;
       if (currency) where.currency = currency as string;
+      const filters = { currency: currency ? String(currency).toUpperCase() : undefined, type: type ? String(type) : undefined };
 
-      const [transactions, total] = await Promise.all([
-        prisma.transaction.findMany({
-          where,
-          orderBy: { createdAt: 'desc' },
-          skip,
-          take: limitNum,
-        }),
-        prisma.transaction.count({ where }),
+      // LYDT activity (its own ledger) is merged in, newest first, so issues,
+      // redeems and transfers sit in the same history as everything else.
+      const lydtTotal = await historyCount(userId, filters);
+      if (!lydtTotal) {
+        const [transactions, total] = await Promise.all([
+          prisma.transaction.findMany({ where, orderBy: { createdAt: 'desc' }, skip, take: limitNum }),
+          prisma.transaction.count({ where }),
+        ]);
+        res.json({ items: transactions, total });
+        return;
+      }
+      const onlyLydt = filters.currency === 'LYDT';
+      const [transactions, total, lydt] = await Promise.all([
+        onlyLydt ? Promise.resolve([]) : prisma.transaction.findMany({ where, orderBy: { createdAt: 'desc' }, take: skip + limitNum }),
+        onlyLydt ? Promise.resolve(0) : prisma.transaction.count({ where }),
+        historyRows(userId, { ...filters, take: skip + limitNum }),
       ]);
-
-      res.json({
-        items: transactions,
-        total,
-      });
+      const merged = [...transactions, ...lydt]
+        .sort((a: { createdAt: Date }, b: { createdAt: Date }) => b.createdAt.getTime() - a.createdAt.getTime())
+        .slice(skip, skip + limitNum);
+      res.json({ items: merged, total: total + lydtTotal });
     } catch (error) {
       next(new AppError('Failed to fetch transactions', 500));
     }

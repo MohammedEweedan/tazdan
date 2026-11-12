@@ -159,6 +159,8 @@ export function PayForm({ payee, preset }: { payee: Payee; preset: PayPreset }) 
       void qc.invalidateQueries({ queryKey: LIMITS_QUERY_KEY });
       void qc.invalidateQueries({ queryKey: ['pay-recent'] });
       if (currency === LYDT) void qc.invalidateQueries({ queryKey: ['lydt-me'] });
+      void qc.invalidateQueries({ queryKey: ['activities'] });
+      void qc.invalidateQueries({ queryKey: ['transactions'] });
       setCta('success');
       setReceipt({ amount: fmt(payAmount, currency), currency, reference, at: new Date() });
       import('@/lib/reviewPrompt').then(({ maybeAskForReview }) => maybeAskForReview());

@@ -17,6 +17,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { Text } from '@/components/ui/Text';
 import { useWallets, useCards, useHaptics, useMarkets, useDisplayCurrency } from '@/hooks';
+import { LYDT, useLydtWallet } from '@/hooks/useLydt';
 import { useAvailability, useFeatures } from '@/hooks/useFeatures';
 import { CoinIcon } from '@/components/ui/CoinIcon';
 import { getCurrencyMeta, normalizeCurrencyCode } from '@/constants';
@@ -57,6 +58,7 @@ export default function WalletScreen() {
   const hidden = useUiStore((s) => s.balancesHidden);
   const toggleHidden = useUiStore((s) => s.toggleBalancesHidden);
   const walletQuery = useWallets();
+  const lydt = useLydtWallet();
   const cardQuery = useCards();
   const { data: tickers } = useMarkets();
   const features = useFeatures();
@@ -70,7 +72,8 @@ export default function WalletScreen() {
 
   const holdings = useMemo<Holding[]>(() => {
     const tickerBy = new Map((tickers ?? []).map((m) => [m.base, m]));
-    return (walletQuery.data ?? [])
+    // LYDT sits on its own ledger; it joins the dinars here as a fiat holding.
+    return [...(walletQuery.data ?? []), ...(lydt.wallet ? [lydt.wallet] : [])]
       .map((wallet): Holding | null => {
         const kind = getCurrencyMeta(wallet.currency)?.kind;
         if (kind !== 'fiat' && kind !== 'crypto') return null;
@@ -84,7 +87,7 @@ export default function WalletScreen() {
       // A hidden currency stays listed while the customer holds any of it.
       .filter((x) => avail.currency(x.wallet.currency).state !== 'HIDDEN' || Number(x.wallet.balance) > 0)
       .sort((a, b) => b.usd - a.usd || Number(b.wallet.balance) - Number(a.wallet.balance));
-  }, [walletQuery.data, tickers, avail]);
+  }, [walletQuery.data, lydt.wallet, tickers, avail]);
 
   const fiat = holdings.filter((x) => x.kind === 'fiat');
   const crypto = holdings.filter((x) => x.kind === 'crypto');
@@ -102,10 +105,11 @@ export default function WalletScreen() {
 
   const refresh = async () => {
     setRefreshing(true);
-    try { await Promise.all([walletQuery.refetch(), cardQuery.refetch()]); } finally { setRefreshing(false); }
+    try { await Promise.all([walletQuery.refetch(), cardQuery.refetch(), lydt.refetch()]); } finally { setRefreshing(false); }
   };
   const openAsset = (w: Wallet) => {
     h.selection();
+    if (w.currency === LYDT) { router.push('/lydt' as never); return; }
     router.push({ pathname: '/asset/[currency]', params: { currency: w.currency } });
   };
 

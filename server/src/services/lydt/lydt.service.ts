@@ -311,3 +311,99 @@ export async function unfreeze(actorId: string, userId: string, reason: string) 
     await writeAudit(tx, { actorId, action: 'LYDT_HOLDER_UNFROZEN', entity: 'User', entityId: userId, before: { reason: before.reason }, reason: String(reason ?? '').slice(0, 300) || undefined });
   });
 }
+
+// ── Wallet integration (history, holdings, trading) ──────────────────
+/**
+ * Read-only check that an issue of `amount` would go through right now, so a
+ * two-step trade (e.g. USD → LYD → LYDT) can refuse before its first leg.
+ */
+export async function assertCanIssue(userId: string, rawAmount: unknown) {
+  assertFeatureEnabled('lydt');
+  const amount = parseAmount(rawAmount);
+  await assertMovementAllowed({ userId, feature: 'lydt', currency: 'LYD' });
+  await assertNotFrozen(prisma, userId);
+  const att = await latestAttestation();
+  if (!att || Date.now() - att.statementDate.getTime() > maxAttestationAgeMs()) {
+    throw new AppError('LYDT issuance is paused until the reserve statement from the Central Bank of Libya is updated.', 503, 'FEATURE_DISABLED');
+  }
+  if ((await supply()).plus(amount).gt(D(att.balance))) {
+    throw new AppError('LYDT issuance is at the limit of the reserve held at the Central Bank of Libya. Try a smaller amount or try later.', 409, 'LIMIT_EXCEEDED');
+  }
+  if ((await balanceOf(userId)).plus(amount).gt(holdingCap())) {
+    throw new AppError(`One account can hold at most ${fmt(holdingCap())} LYDT.`, 400, 'LIMIT_EXCEEDED', { cap: fmt(holdingCap()) });
+  }
+}
+
+/** Read-only check that `amount` LYDT can be redeemed by this holder now. */
+export async function assertCanRedeem(userId: string, rawAmount: unknown) {
+  const amount = parseAmount(rawAmount);
+  await assertNotFrozen(prisma, userId);
+  const bal = await balanceOf(userId);
+  if (bal.lt(amount)) throw new AppError(`Insufficient LYDT. Need ${fmt(amount)}, have ${fmt(bal)}`, 400);
+}
+
+/** One row of the wallet history, shaped like a Transaction row (amount signed, in `currency`). */
+export interface LydtHistoryRow {
+  id: string; userId: string; type: 'BUY' | 'SELL' | 'TRANSFER_IN' | 'TRANSFER_OUT';
+  currency: 'LYD' | 'LYDT'; amount: string; fee: string; balanceBefore: null; balanceAfter: null;
+  reference: string; description: string; metadata: Record<string, unknown>; createdAt: Date; status: 'COMPLETED';
+}
+
+const nameOf = (u?: { firstName: string | null; lastName: string | null; username: string | null } | null) =>
+  u ? ([u.firstName, u.lastName].filter(Boolean).join(' ') || (u.username ? `@${u.username}` : 'a tazdan customer')) : 'a tazdan customer';
+
+/**
+ * LYDT operations as history rows, newest first. An issue or redeem is a
+ * conversion and shows as two rows (dinars out / tokens in, or the reverse),
+ * like any swap; a transfer is one row for each side.
+ */
+export async function historyRows(userId: string, opts: { currency?: string; type?: string; take: number }): Promise<LydtHistoryRow[]> {
+  const ops = await prisma.lydtOperation.findMany({
+    where: { OR: [{ userId }, { counterpartyId: userId, kind: 'TRANSFER' }] },
+    orderBy: { createdAt: 'desc' },
+    take: opts.take,
+  });
+  const others = [...new Set(ops.map((o) => (o.userId === userId ? o.counterpartyId : o.userId)).filter((x): x is string => !!x))];
+  const people = others.length
+    ? new Map((await prisma.user.findMany({ where: { id: { in: others } }, select: { id: true, firstName: true, lastName: true, username: true } })).map((u) => [u.id, u]))
+    : new Map();
+  const rows: LydtHistoryRow[] = [];
+  for (const op of ops) {
+    const amt = D(op.amount);
+    const base = { userId, fee: '0', balanceBefore: null, balanceAfter: null, reference: op.reference, createdAt: op.createdAt, status: 'COMPLETED' as const };
+    if (op.kind === 'ISSUE') {
+      const meta = { kind: 'lydt_issue', rate: '1' };
+      rows.push({ ...base, id: `${op.id}:lydt`, type: 'BUY', currency: 'LYDT', amount: fmt(amt), description: `Converted ${fmt(amt)} LYD → LYDT`, metadata: { ...meta, counterparty: 'LYD' } });
+      rows.push({ ...base, id: `${op.id}:lyd`, type: 'SELL', currency: 'LYD', amount: fmt(amt.neg()), description: `Converted ${fmt(amt)} LYD → LYDT`, metadata: { ...meta, counterparty: 'LYDT' } });
+    } else if (op.kind === 'REDEEM') {
+      const meta = { kind: 'lydt_redeem', rate: '1' };
+      rows.push({ ...base, id: `${op.id}:lyd`, type: 'BUY', currency: 'LYD', amount: fmt(amt), description: `Converted ${fmt(amt)} LYDT → LYD`, metadata: { ...meta, counterparty: 'LYDT' } });
+      rows.push({ ...base, id: `${op.id}:lydt`, type: 'SELL', currency: 'LYDT', amount: fmt(amt.neg()), description: `Converted ${fmt(amt)} LYDT → LYD`, metadata: { ...meta, counterparty: 'LYD' } });
+    } else if (op.userId === userId) {
+      const to = people.get(op.counterpartyId ?? '');
+      rows.push({ ...base, id: `${op.id}:out`, type: 'TRANSFER_OUT', currency: 'LYDT', amount: fmt(amt.neg()), description: op.note || `Sent to ${nameOf(to)}`, metadata: { kind: 'lydt_transfer', counterpartyId: op.counterpartyId } });
+    } else {
+      const from = people.get(op.userId);
+      rows.push({ ...base, id: `${op.id}:in`, type: 'TRANSFER_IN', currency: 'LYDT', amount: fmt(amt), description: op.note || `From ${nameOf(from)}`, metadata: { kind: 'lydt_transfer', counterpartyId: op.userId } });
+    }
+  }
+  return rows.filter((r) => (!opts.currency || r.currency === opts.currency) && (!opts.type || r.type === opts.type));
+}
+
+/** How many history rows historyRows would give in total for these filters. */
+export async function historyCount(userId: string, opts: { currency?: string; type?: string }): Promise<number> {
+  const grouped = await prisma.lydtOperation.groupBy({
+    by: ['kind'], _count: { _all: true },
+    where: { OR: [{ userId }, { counterpartyId: userId, kind: 'TRANSFER' }] },
+  });
+  const sent = await prisma.lydtOperation.count({ where: { userId, kind: 'TRANSFER' } });
+  const n = (k: string) => grouped.find((g) => g.kind === k)?._count._all ?? 0;
+  const issue = n('ISSUE'), redeem = n('REDEEM'), received = n('TRANSFER') - sent;
+  const c = opts.currency, t = opts.type;
+  let total = 0;
+  const add = (cur: string, type: string, count: number) => { if ((!c || c === cur) && (!t || t === type)) total += count; };
+  add('LYDT', 'BUY', issue); add('LYD', 'SELL', issue);
+  add('LYD', 'BUY', redeem); add('LYDT', 'SELL', redeem);
+  add('LYDT', 'TRANSFER_OUT', sent); add('LYDT', 'TRANSFER_IN', received);
+  return total;
+}

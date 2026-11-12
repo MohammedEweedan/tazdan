@@ -35,6 +35,7 @@ import { useAuthStore } from '@/store/authStore';
 import { useUiStore } from '@/store/uiStore';
 import { realHandle, avatarMode } from '@/utils/displayUser';
 import { useWallets, useHaptics, useTransactions, useActivities, useActivityRealtime, useNotificationRealtime, useUnreadCount, useMarkets, useDisplayCurrency, useBudgets } from '@/hooks';
+import { useLydtWallet } from '@/hooks/useLydt';
 import { useAvailability, useFeatures } from '@/hooks/useFeatures';
 import { useMarkets as useCoinGeckoMarkets, ID_TO_SYM } from '@/hooks/useMarkets';
 import { useTheme, useThemedPalette, isMonochrome, type Palette } from '@/store/themeStore';
@@ -113,7 +114,9 @@ export default function Home() {
   const [moreMenuVisible, setMoreMenuVisible] = useState(false);
   const [balanceChartVisible, setBalanceChartVisible] = useState(false);
 
-  const list = wallets ?? [];
+  // LYDT (its own ledger) counts with the dinars.
+  const lydt = useLydtWallet();
+  const list = useMemo(() => [...(wallets ?? []), ...(lydt.wallet ? [lydt.wallet] : [])], [wallets, lydt.wallet]);
 
   // Live USD price map keyed by ticker (e.g. { BTC: 67_432.10, ETH: 3_240.50 }).
   // Computed from Binance WebSocket + backend ticker overlay. We re-derive `totalUsd` from
@@ -151,7 +154,7 @@ export default function Home() {
     setRefreshing(true);
     h.light();
     try {
-      await Promise.all([refetchWallets(), refetchTxs(), refetchActivity(), refetchMarkets()]);
+      await Promise.all([refetchWallets(), refetchTxs(), refetchActivity(), refetchMarkets(), lydt.refetch()]);
     } finally {
       setRefreshing(false);
     }
@@ -198,7 +201,7 @@ export default function Home() {
   );
 
   // Fiat currencies — everything else is treated as crypto
-  const FIAT_CURRENCIES = new Set(['USD', 'EUR', 'GBP', 'AED', 'SAR', 'EGP', 'LYD', 'CAD', 'AUD', 'CHF', 'JPY', 'CNY']);
+  const FIAT_CURRENCIES = new Set(['USD', 'EUR', 'GBP', 'AED', 'SAR', 'EGP', 'LYD', 'LYDT', 'CAD', 'AUD', 'CHF', 'JPY', 'CNY']);
 
   // Normalize a wallet currency to its Binance ticker base.
   // USDT_ERC20 / USDT_TRC20 both track as USDT (pegged $1).

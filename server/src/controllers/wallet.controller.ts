@@ -12,6 +12,7 @@ import { assertMovementAllowed } from '../services/platform/controls.service';
 import { parsePositiveAmount } from '../services/wallet/atomicWallet';
 import { quoteConversion } from '../services/exchange/conversion.service';
 import { isLedgerCurrency, postLedger } from '../services/ledger/ledger.service';
+import { assertCanIssue, assertCanRedeem, issue as lydtIssue, redeem as lydtRedeem } from '../services/lydt/lydt.service';
 
 interface WalletRecord {
   id: string;
@@ -30,6 +31,20 @@ interface RateRecord {
 }
 
 // Currencies a wallet swap may convert between (all Wallet-table enum values).
+/** Quote for a trade with LYDT on one side: LYDT is dinars at 1:1 (3 decimals). */
+async function lydtQuote(from: string, to: string, amount: Decimal) {
+  const other = from === 'LYDT' ? to : from;
+  if (other !== 'LYD' && !SWAP_CURRENCIES.has(other)) throw new AppError(`Unsupported currency pair ${from}->${to}`, 400);
+  if (other === 'LYD') return { credited: amount.toDecimalPlaces(3, Decimal.ROUND_DOWN), rate: new Decimal(1), sources: ['lydt', 'lydt'] };
+  if (from === 'LYDT') {
+    const q = await quoteConversion('LYD', to, amount);
+    return { credited: q.credited, rate: q.rate, sources: [q.fromLeg.source, q.toLeg.source] };
+  }
+  const q = await quoteConversion(from, 'LYD', amount);
+  const credited = q.credited.toDecimalPlaces(3, Decimal.ROUND_DOWN);
+  return { credited, rate: credited.div(amount), sources: [q.fromLeg.source, q.toLeg.source] };
+}
+
 const SWAP_CURRENCIES = new Set([
   'USD', 'USDT', 'EUR', 'GBP', 'AED', 'SAR', 'EGP', 'LYD', 'TRY', 'TND',
   'BTC', 'ETH', 'SOL', 'BNB', 'XRP', 'ADA', 'DOGE', 'MATIC', 'DOT', 'AVAX',
@@ -171,6 +186,11 @@ export class WalletController {
     try {
       const q = z.object({ from: z.string().toUpperCase(), to: z.string().toUpperCase(), amount: z.coerce.number().positive() }).parse(req.query);
       if (q.from === q.to) throw new AppError('From and to currencies must differ', 400);
+      if (q.from === 'LYDT' || q.to === 'LYDT') {
+        const lq = await lydtQuote(q.from, q.to, parsePositiveAmount(q.amount));
+        res.json({ quote: { from: q.from, to: q.to, amount: q.amount, credited: lq.credited.toString(), rate: lq.rate.toString(), sources: lq.sources, at: new Date().toISOString() } });
+        return;
+      }
       if (!SWAP_CURRENCIES.has(q.from) || !SWAP_CURRENCIES.has(q.to)) throw new AppError(`Unsupported currency pair ${q.from}->${q.to}`, 400);
       const quote = await quoteConversion(q.from, q.to, parsePositiveAmount(q.amount));
       res.json({ quote: { from: q.from, to: q.to, amount: q.amount, credited: quote.credited.toString(), rate: quote.rate.toString(), sources: [quote.fromLeg.source, quote.toLeg.source], at: new Date().toISOString() } });
@@ -188,6 +208,10 @@ export class WalletController {
       });
       const { from, to, amount, minCredited } = schema.parse(req.body);
       if (from === to) throw new AppError('From and to currencies must differ', 400);
+      if (from === 'LYDT' || to === 'LYDT') {
+        res.status(201).json({ message: 'Swap complete', swap: await WalletController.swapLydt(req.user!.id, from, to, amount, minCredited) });
+        return;
+      }
       if (!SWAP_CURRENCIES.has(from) || !SWAP_CURRENCIES.has(to)) {
         throw new AppError(`Unsupported currency pair ${from}->${to}`, 400);
       }
@@ -197,104 +221,7 @@ export class WalletController {
         throw new AppError('Conversions are paused while the ledger is being reconciled. Please try again later.', 503, 'FEATURE_DISABLED');
       }
 
-      // Executable prices from the FX and market engines (spread included).
-      // The old hardcoded rate table priced LYD near the official peg and
-      // crypto at fixed values whenever Binance was unreachable.
-      const amountD = parsePositiveAmount(amount);
-      const quote = await quoteConversion(from, to, amountD);
-      const creditedD = quote.credited;
-      const credited  = creditedD.toNumber(); // for the response only
-      if (minCredited !== undefined && creditedD.lt(new Decimal(String(minCredited)))) {
-        throw new AppError('The price moved since your quote. Check the new amount and try again.', 409, 'TRANSACTION_CONFLICT');
-      }
-
-      const result = await prisma.$transaction(async (tx) => {
-        // Make sure both wallets exist for this user (auto-create the
-        // destination one if missing — common when the user picks a coin
-        // they don't yet hold).
-        const [fromWallet, toWalletExisting] = await Promise.all([
-          tx.wallet.findUnique({
-            where: { userId_currency: { userId: req.user!.id, currency: from as any } },
-          }),
-          tx.wallet.findUnique({
-            where: { userId_currency: { userId: req.user!.id, currency: to as any } },
-          }),
-        ]);
-        if (!fromWallet) throw new AppError(`No ${from} wallet`, 404);
-        // Balance check uses Decimal arithmetic — float subtraction
-        // was the second half of the rounding bug.
-        const fromBalanceD = new Decimal(fromWallet.balance.toString());
-        const fromFrozenD  = new Decimal(fromWallet.frozen.toString());
-        const availableD   = fromBalanceD.sub(fromFrozenD);
-        if (availableD.lt(amountD)) {
-          throw new AppError(`Insufficient ${from}. Need ${amount}, have ${availableD.toFixed(8)}`, 400);
-        }
-
-        const toWallet = toWalletExisting ?? await tx.wallet.create({
-          data: { userId: req.user!.id, currency: to as any, balance: 0, frozen: 0 },
-        });
-        const toBalanceD = new Decimal(toWallet.balance.toString());
-        const reference = `SWP-${Date.now().toString(36).toUpperCase()}`;
-
-        // Apply balance changes
-        await tx.wallet.update({
-          where: { id: fromWallet.id },
-          data: { balance: { decrement: amountD } },
-        });
-        await tx.wallet.update({
-          where: { id: toWallet.id },
-          data: { balance: { increment: creditedD } },
-        });
-
-        if (isLedgerCurrency(from) && isLedgerCurrency(to)) {
-          await postLedger(tx as any, {
-            refType: 'swap',
-            refId: reference,
-            memo: `Swap ${amountD.toString()} ${from} to ${creditedD.toFixed(18)} ${to}`,
-            legs: [
-              { type: 'USER', userId: req.user!.id, currency: from as any, amount: amountD.neg() },
-              { type: 'SYSTEM_FX', currency: from as any, amount: amountD },
-              { type: 'SYSTEM_FX', currency: to as any, amount: creditedD.neg() },
-              { type: 'USER', userId: req.user!.id, currency: to as any, amount: creditedD },
-            ],
-          }, { allowNegativeUser: true });
-        }
-
-
-        // Two transaction rows — one debit, one credit (paired by reference).
-        await tx.transaction.createMany({
-          data: [
-            {
-              userId: req.user!.id,
-              type: 'SELL',
-              currency: from as any,
-              amount: amountD.neg(),
-              balanceBefore: fromBalanceD,
-              balanceAfter:  fromBalanceD.minus(amountD),
-              description: `Swapped ${amount} ${from} → ${credited.toFixed(8)} ${to}`,
-              reference,
-              metadata: { kind: 'swap', counterparty: to, rate: quote.rate.toString(), priceSources: [quote.fromLeg.source, quote.toLeg.source] },
-            },
-            {
-              userId: req.user!.id,
-              type: 'BUY',
-              currency: to as any,
-              amount: creditedD,
-              balanceBefore: toBalanceD,
-              balanceAfter:  toBalanceD.plus(creditedD),
-              description: `Swapped ${amount} ${from} → ${credited.toFixed(8)} ${to}`,
-              reference,
-              metadata: { kind: 'swap', counterparty: from, rate: quote.rate.toString(), priceSources: [quote.fromLeg.source, quote.toLeg.source] },
-            },
-          ],
-        });
-
-        return { from, to, amount, credited, rate: quote.rate.toNumber(), reference };
-      }, {
-        // SERIALIZABLE so two concurrent swaps on the same `from`
-        // wallet can't both pass the balance check off a stale read.
-        isolationLevel: 'Serializable',
-      });
+      const result = await WalletController.settleSwap(req.user!.id, from, to, amount, minCredited);
 
       // Fire-and-forget: send confirmation email + push. Failures here
       // never block the response — the swap has already settled.
@@ -331,6 +258,166 @@ export class WalletController {
       res.status(201).json({ message: 'Swap complete', swap: result });
     } catch (error) {
       next(error);
+    }
+  }
+
+  /**
+   * Settles a quoted conversion between two wallet currencies: balance check,
+   * both wallet rows, ledger legs and the paired SELL/BUY history rows, in one
+   * serializable transaction. Refuses below `minCredited`.
+   */
+  static async settleSwap(userId: string, from: string, to: string, amount: number, minCredited?: number | string) {
+    // Executable prices from the FX and market engines (spread included).
+    // The old hardcoded rate table priced LYD near the official peg and
+    // crypto at fixed values whenever Binance was unreachable.
+    const amountD = parsePositiveAmount(amount);
+    const quote = await quoteConversion(from, to, amountD);
+    const creditedD = quote.credited;
+    const credited  = creditedD.toNumber(); // for the response only
+    if (minCredited !== undefined && creditedD.lt(new Decimal(String(minCredited)))) {
+      throw new AppError('The price moved since your quote. Check the new amount and try again.', 409, 'TRANSACTION_CONFLICT');
+    }
+
+    return prisma.$transaction(async (tx) => {
+      // Make sure both wallets exist for this user (auto-create the
+      // destination one if missing — common when the user picks a coin
+      // they don't yet hold).
+      const [fromWallet, toWalletExisting] = await Promise.all([
+        tx.wallet.findUnique({
+          where: { userId_currency: { userId: userId, currency: from as any } },
+        }),
+        tx.wallet.findUnique({
+          where: { userId_currency: { userId: userId, currency: to as any } },
+        }),
+      ]);
+      if (!fromWallet) throw new AppError(`No ${from} wallet`, 404);
+      // Balance check uses Decimal arithmetic — float subtraction
+      // was the second half of the rounding bug.
+      const fromBalanceD = new Decimal(fromWallet.balance.toString());
+      const fromFrozenD  = new Decimal(fromWallet.frozen.toString());
+      const availableD   = fromBalanceD.sub(fromFrozenD);
+      if (availableD.lt(amountD)) {
+        throw new AppError(`Insufficient ${from}. Need ${amount}, have ${availableD.toFixed(8)}`, 400);
+      }
+
+      const toWallet = toWalletExisting ?? await tx.wallet.create({
+        data: { userId: userId, currency: to as any, balance: 0, frozen: 0 },
+      });
+      const toBalanceD = new Decimal(toWallet.balance.toString());
+      const reference = `SWP-${Date.now().toString(36).toUpperCase()}`;
+
+      // Apply balance changes
+      await tx.wallet.update({
+        where: { id: fromWallet.id },
+        data: { balance: { decrement: amountD } },
+      });
+      await tx.wallet.update({
+        where: { id: toWallet.id },
+        data: { balance: { increment: creditedD } },
+      });
+
+      if (isLedgerCurrency(from) && isLedgerCurrency(to)) {
+        await postLedger(tx as any, {
+          refType: 'swap',
+          refId: reference,
+          memo: `Swap ${amountD.toString()} ${from} to ${creditedD.toFixed(18)} ${to}`,
+          legs: [
+            { type: 'USER', userId: userId, currency: from as any, amount: amountD.neg() },
+            { type: 'SYSTEM_FX', currency: from as any, amount: amountD },
+            { type: 'SYSTEM_FX', currency: to as any, amount: creditedD.neg() },
+            { type: 'USER', userId: userId, currency: to as any, amount: creditedD },
+          ],
+        }, { allowNegativeUser: true });
+      }
+
+
+      // Two transaction rows — one debit, one credit (paired by reference).
+      await tx.transaction.createMany({
+        data: [
+          {
+            userId: userId,
+            type: 'SELL',
+            currency: from as any,
+            amount: amountD.neg(),
+            balanceBefore: fromBalanceD,
+            balanceAfter:  fromBalanceD.minus(amountD),
+            description: `Swapped ${amount} ${from} → ${credited.toFixed(8)} ${to}`,
+            reference,
+            metadata: { kind: 'swap', counterparty: to, rate: quote.rate.toString(), priceSources: [quote.fromLeg.source, quote.toLeg.source] },
+          },
+          {
+            userId: userId,
+            type: 'BUY',
+            currency: to as any,
+            amount: creditedD,
+            balanceBefore: toBalanceD,
+            balanceAfter:  toBalanceD.plus(creditedD),
+            description: `Swapped ${amount} ${from} → ${credited.toFixed(8)} ${to}`,
+            reference,
+            metadata: { kind: 'swap', counterparty: from, rate: quote.rate.toString(), priceSources: [quote.fromLeg.source, quote.toLeg.source] },
+          },
+        ],
+      });
+
+      return { from, to, amount, credited, rate: quote.rate.toNumber(), reference };
+    }, {
+      // SERIALIZABLE so two concurrent swaps on the same `from`
+      // wallet can't both pass the balance check off a stale read.
+      isolationLevel: 'Serializable',
+    });
+  }
+
+  /**
+   * LYDT trades. LYDT is dinars at 1:1: LYD ↔ LYDT issues or redeems on the
+   * token ledger; any other currency goes through LYD in two steps, each
+   * checked before the first one moves money so neither step is left half-done
+   * by a predictable refusal.
+   */
+  static async swapLydt(userId: string, from: string, to: string, amount: number, minCredited?: number | string) {
+    const other = from === 'LYDT' ? to : from;
+    if (other !== 'LYD' && !SWAP_CURRENCIES.has(other)) throw new AppError(`Unsupported currency pair ${from}->${to}`, 400);
+    const amountD = parsePositiveAmount(amount);
+    const min = minCredited !== undefined ? new Decimal(String(minCredited)) : null;
+
+    if (other === 'LYD') {
+      const op = from === 'LYD' ? await lydtIssue(userId, amountD.toString(), null) : await lydtRedeem(userId, amountD.toString(), null);
+      return { from, to, amount, credited: Number(op.amount), rate: 1, reference: op.reference };
+    }
+
+    const { isTradingHalted } = await import('../services/ledger/reconcile.service');
+    if (await isTradingHalted()) {
+      throw new AppError('Conversions are paused while the ledger is being reconciled. Please try again later.', 503, 'FEATURE_DISABLED');
+    }
+
+    if (from === 'LYDT') {
+      // LYDT → LYD (redeem) → other.
+      await assertCanRedeem(userId, amountD.toString());
+      await assertMovementAllowed({ userId, feature: 'fx', currency: 'LYD', counterCurrency: to });
+      const q = await quoteConversion('LYD', to, amountD);
+      if (min && q.credited.lt(min)) throw new AppError('The price moved since your quote. Check the new amount and try again.', 409, 'TRANSACTION_CONFLICT');
+      const op = await lydtRedeem(userId, amountD.toString(), null);
+      try {
+        const done = await WalletController.settleSwap(userId, 'LYD', to, amount, minCredited);
+        return { ...done, from, reference: `${op.reference}/${done.reference}` };
+      } catch (err: any) {
+        throw new AppError(`Your ${amountD.toFixed(3)} LYDT is now ${amountD.toFixed(3)} LYD in your wallet, but the exchange to ${to} didn't go through: ${err?.message ?? 'please try again'}`, 409, 'TRANSACTION_CONFLICT');
+      }
+    }
+
+    // other → LYD → LYDT (issue). LYDT has 3 decimals; any smaller remainder stays as LYD.
+    await assertMovementAllowed({ userId, feature: 'fx', currency: from, counterCurrency: 'LYD' });
+    const q = await quoteConversion(from, 'LYD', amountD);
+    const tokens = q.credited.toDecimalPlaces(3, Decimal.ROUND_DOWN);
+    if (tokens.lte(0)) throw new AppError('That amount is too small to turn into LYDT', 400);
+    if (min && tokens.lt(min)) throw new AppError('The price moved since your quote. Check the new amount and try again.', 409, 'TRANSACTION_CONFLICT');
+    await assertCanIssue(userId, tokens.toString());
+    const done = await WalletController.settleSwap(userId, from, 'LYD', amount, min ? min.toString() : undefined);
+    const issued = new Decimal(String(done.credited)).toDecimalPlaces(3, Decimal.ROUND_DOWN);
+    try {
+      const op = await lydtIssue(userId, issued.toString(), null);
+      return { from, to, amount, credited: Number(op.amount), rate: issued.div(amountD).toNumber(), reference: `${done.reference}/${op.reference}` };
+    } catch (err: any) {
+      throw new AppError(`Exchanged to ${issued.toFixed(3)} LYD (it's in your LYD wallet), but LYDT wasn't issued: ${err?.message ?? 'please try again'}`, 409, 'TRANSACTION_CONFLICT');
     }
   }
 

@@ -15,9 +15,11 @@ import { useI18n, useT } from '@/store/i18nStore';
 import { useThemedPalette } from '@/store/themeStore';
 import { fiatSymbol, getCurrencyMeta } from '@/constants';
 import { swapService } from '@/services';
+import { LYDT, LYDT_QUERY_KEY, useLydtWallet } from '@/hooks/useLydt';
 
 export const FIAT_EXCHANGE_CURRENCIES = ['LYD', 'USD', 'EUR', 'GBP', 'AED', 'SAR', 'EGP'];
-export const isFiatExchangeCurrency = (currency?: string) => FIAT_EXCHANGE_CURRENCIES.includes((currency ?? '').toUpperCase());
+/** LYDT trades here too (1:1 with LYD; other currencies go through LYD on the server). */
+export const isFiatExchangeCurrency = (currency?: string) => [...FIAT_EXCHANGE_CURRENCIES, LYDT].includes((currency ?? '').toUpperCase());
 
 /** Fiat pairs use the wallet conversion quote and settlement endpoints.
  *  The exact displayed credit is sent as the minimum acceptable credit. */
@@ -30,7 +32,10 @@ export function FiatExchangeWidget({ initialFrom, initialTo }: { initialFrom?: s
   const h = useHaptics();
   const qc = useQueryClient();
   const { height } = useWindowDimensions();
-  const { data: wallets = [] } = useWallets();
+  const { data: walletRows = [] } = useWallets();
+  const lydt = useLydtWallet();
+  const wallets = useMemo(() => [...walletRows, ...(lydt.wallet ? [lydt.wallet] : [])], [walletRows, lydt.wallet]);
+  const currencies = useMemo(() => (lydt.enabled ? [...FIAT_EXCHANGE_CURRENCIES, LYDT] : FIAT_EXCHANGE_CURRENCIES), [lydt.enabled]);
   const startFrom = isFiatExchangeCurrency(initialFrom) ? initialFrom!.toUpperCase() : isFiatExchangeCurrency(base) ? base : 'LYD';
   const startTo = isFiatExchangeCurrency(initialTo) && initialTo!.toUpperCase() !== startFrom
     ? initialTo!.toUpperCase() : startFrom === 'USD' ? 'LYD' : 'USD';
@@ -58,12 +63,12 @@ export function FiatExchangeWidget({ initialFrom, initialTo }: { initialFrom?: s
     const wallet = wallets.find((w) => w.currency === currency);
     return Math.max(0, Number(wallet?.balance ?? 0) - Number(wallet?.frozen ?? 0));
   };
-  const items = useMemo<CurrencyItem[]>(() => FIAT_EXCHANGE_CURRENCIES.map((currency) => {
+  const items = useMemo<CurrencyItem[]>(() => currencies.map((currency) => {
     const wallet = wallets.find((w) => w.currency === currency);
     return { currency, balance: Math.max(0, Number(wallet?.balance ?? 0) - Number(wallet?.frozen ?? 0)),
-      label: getCurrencyMeta(currency)?.name ?? currency, icon: fiatSymbol(currency, locale),
+      label: getCurrencyMeta(currency)?.name ?? currency, icon: currency === LYDT ? 'LT' : fiatSymbol(currency, locale),
       color: p.accent, bg: p.accentSoft, kind: 'fiat' as const };
-  }), [wallets, locale, p.accent, p.accentSoft]);
+  }), [currencies, wallets, locale, p.accent, p.accentSoft]);
   const currentQuote = quote.data && quote.data.from === from && quote.data.to === to && Number(quote.data.amount) === value
     ? quote.data : undefined;
   const insufficient = value > available(from);
@@ -84,7 +89,7 @@ export function FiatExchangeWidget({ initialFrom, initialTo }: { initialFrom?: s
       const settled = await swapService.swap({ from, to, amount: value, minCredited: currentQuote.credited });
       setResult(settled); h.success();
       await Promise.all([qc.invalidateQueries({ queryKey: ['wallets'] }), qc.invalidateQueries({ queryKey: ['transactions'] }),
-        qc.invalidateQueries({ queryKey: ['activities'] })]);
+        qc.invalidateQueries({ queryKey: ['activities'] }), qc.invalidateQueries({ queryKey: LYDT_QUERY_KEY })]);
     } catch (e: any) {
       setError(e?.response?.data?.error ?? t('fx.failed'));
       if (e?.response?.status === 409) await quote.refetch();
