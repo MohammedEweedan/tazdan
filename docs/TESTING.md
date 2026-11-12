@@ -2,10 +2,14 @@
 
 ## Server (Jest, `server/src/__tests__`)
 
-**20 suites, 151 tests — all pass** against a disposable PostgreSQL database (`RUN_DB_TESTS=1`; CI always runs them). Without a database, 103 pass and the database suites are skipped.
+**52 suites, 406 tests — all pass** (8 November 2026) against a disposable PostgreSQL database (`RUN_DB_TESTS=1`; CI always runs them). Without a database, the database suites are skipped.
 
 | Suite | Covers |
 |---|---|
+| `lydt.reserve.test.ts` | LYDT dinar token (sandbox): supply = holder balances = dinars in the reserve ledger; issuance never exceeds the CBL-attested reserve, even under concurrent requests, and stops on a stale statement; idempotent retries; redemption works while the switch is paused; frozen holders blocked; holding cap |
+| `business.payCode.test.ts` | Business payment QR: links to the account id, Apple Wallet pass zip + PKCS#7 signature verified with throwaway certificates, Google Wallet JWT, KYB gate, signed short-lived download link |
+| `pay.payee.test.ts` | Pay tab payee lookup: signed-in only, handle or id, private profiles shown as first name + last initial, merchant branding only after KYB approval, unknown and suspended accounts answer the same 404, recent payees |
+| `messaging.reliability.test.ts` | Idempotent chat sends and chat payments (sequential and concurrent retries pay once), recipient rules for chat payments, unread clearing with receipts off, thread paging and catch-up, conversation list, idempotent Send transfers, message push preferences |
 | `integration.auth.test.ts` | Login, refresh rotation, reuse detection, session list, sign out other devices |
 | `integration.wallet.test.ts` | Wallets, withdrawal reservation/cancel, kill switch, withdrawal screening and risk |
 | `concurrency.money.test.ts` | Claim links, P2P cancellation, deposit confirmation, withdrawals, chat payments under concurrent requests |
