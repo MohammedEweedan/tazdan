@@ -14,7 +14,6 @@ import {
   authenticate, generateTokens, issueSessionTokens, revokeAllUserSessions, revokeRefreshToken, verifyAndConsumeRefreshToken,
 } from '../middleware/auth';
 import { SecurityController } from '../controllers/security.controller';
-import { authLimiter } from '../middleware/rateLimiters';
 
 let n = 0;
 const uniq = (p: string) => `${p}${Date.now().toString(36)}${++n}`;
@@ -176,6 +175,13 @@ describe('socket handshake', () => {
 
 describe('per-IP auth limits', () => {
   it('rotating IPv6 addresses inside one /64 does not reset the limit', async () => {
+    // CI sets REDIS_URL; with no connected client that store fails open, so
+    // load the limiter on its in-memory store as this file's no-Redis premise.
+    const saved = process.env.REDIS_URL;
+    delete process.env.REDIS_URL;
+    let authLimiter!: typeof import('../middleware/rateLimiters').authLimiter;
+    jest.isolateModules(() => { ({ authLimiter } = require('../middleware/rateLimiters')); });
+    if (saved !== undefined) process.env.REDIS_URL = saved;
     const app = express();
     app.set('trust proxy', true);
     app.use('/login', authLimiter, (_req, res) => { res.json({ ok: true }); });
