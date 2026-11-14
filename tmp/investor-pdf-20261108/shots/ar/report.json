@@ -1,0 +1,72 @@
+{
+  "report": [
+    {
+      "id": "home",
+      "ok": true
+    },
+    {
+      "id": "pay",
+      "ok": true
+    },
+    {
+      "id": "pay-merchant",
+      "ok": true
+    },
+    {
+      "id": "pay-receipt",
+      "ok": true
+    },
+    {
+      "id": "pay-person",
+      "ok": true
+    },
+    {
+      "id": "business-qr",
+      "ok": true
+    },
+    {
+      "id": "business-home",
+      "ok": true
+    },
+    {
+      "id": "send",
+      "ok": true
+    },
+    {
+      "id": "messages",
+      "ok": true
+    },
+    {
+      "id": "wallet",
+      "ok": true
+    },
+    {
+      "id": "exchange",
+      "ok": true
+    },
+    {
+      "id": "remit",
+      "ok": true
+    },
+    {
+      "id": "budgets",
+      "ok": true
+    },
+    {
+      "id": "p2p",
+      "ok": true
+    },
+    {
+      "id": "kyc",
+      "ok": true
+    },
+    {
+      "id": "devices",
+      "ok": true
+    }
+  ],
+  "errors": [
+    "console: Received `%s` for a non-boolean attribute `%s`.\n\nIf you want to write it to the DOM, pass a string instead: %s=\"%s\" or %s={value.toString()}.\n\nIf you used to conditionally omit it with %s={condition && value}, pass %s={condition ? value : undefined} instead. false collapsable collapsable false colla"
+  ],
+  "unmatched": []
+}

@@ -1,0 +1,14 @@
+{
+  "report": [
+    {
+      "id": "pay-merchant",
+      "ok": true
+    },
+    {
+      "id": "pay-receipt",
+      "ok": true
+    }
+  ],
+  "errors": [],
+  "unmatched": []
+}

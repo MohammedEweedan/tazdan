@@ -1,0 +1,24 @@
+{
+  "verification": [
+    {
+      "case": "Downside",
+      "annualOutputsMatch": true,
+      "fundingMatch": true
+    },
+    {
+      "case": "Base",
+      "annualOutputsMatch": true,
+      "fundingMatch": true
+    },
+    {
+      "case": "Upside",
+      "annualOutputsMatch": true,
+      "fundingMatch": true
+    }
+  ],
+  "laterPeriodInputTest": true,
+  "unselectedBlankTest": true,
+  "selectedBlankExposed": true,
+  "zeroFundingTest": true,
+  "dealArithmeticTest": true
+}
