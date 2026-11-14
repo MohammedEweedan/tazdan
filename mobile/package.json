@@ -32,6 +32,7 @@
     "@tanstack/react-query": "^5.59.0",
     "axios": "^1.20.0",
     "babel-preset-expo": "~54.0.12",
+    "decode-uri-component": "file:./vendor/decode-uri-component",
     "expo": "~54.0.37",
     "expo-asset": "~12.0.13",
     "expo-audio": "~1.1.1",
@@ -97,7 +98,7 @@
     "postcss": "^8.5.29",
     "brace-expansion@^5.0.0": "^5.0.12",
     "image-size": "^2.0.4",
-    "decode-uri-component": "file:./vendor/decode-uri-component",
+    "decode-uri-component": "$decode-uri-component",
     "@expo/plist@0.0.18": {
       "@xmldom/xmldom": "^0.8.15"
     }
