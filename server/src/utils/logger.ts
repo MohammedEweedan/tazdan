@@ -3,6 +3,8 @@
 import winston from 'winston';
 import 'winston-daily-rotate-file';
 import path from 'path';
+import { requestContext } from '../middleware/requestContext';
+import { redactLogValue } from './redaction';
 
 const { combine, timestamp, json, colorize, simple, errors } = winston.format;
 
@@ -37,6 +39,12 @@ if (isProduction) {
 }
 
 export const logger = winston.createLogger({
+  format: combine(winston.format((info) => {
+    for (const key of Object.keys(info)) info[key] = redactLogValue(info[key]);
+    const context = requestContext.getStore();
+    if (context) info.requestId = context.requestId;
+    return info;
+  })()),
   level: process.env.LOG_LEVEL ?? (isProduction ? 'info' : 'debug'),
   transports,
   exitOnError: false,

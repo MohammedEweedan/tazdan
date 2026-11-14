@@ -102,6 +102,9 @@ export interface BusinessProfile {
   kybStatus:     'NOT_SUBMITTED' | 'PENDING' | 'APPROVED' | 'REJECTED';
   website:       string | null;
   logoUrl:       string | null;
+  /** Brand colours for the printed QR and plaque (#RRGGBB); null = tazdan navy. */
+  brandPrimary?:   string | null;
+  brandSecondary?: string | null;
   createdAt:     string;
   /** Caller's role in this business. */
   role?:         'OWNER' | 'ADMIN' | 'ANALYST' | 'DEVELOPER';

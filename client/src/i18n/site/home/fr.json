@@ -86,5 +86,19 @@
   "home.tour.business.chip": "Affaires",
   "home.tour.business.title": "Un endroit pour l'équipe.",
   "home.tour.business.body": "Les paiements professionnels, les rôles et l'accès aux API sont disponibles dans un espace de travail dédié.",
-  "home.tour.business.alt": "Maison d'affaires avec récapitulatif des paiements"
+  "home.tour.business.alt": "Maison d'affaires avec récapitulatif des paiements",
+  "home.widgets.eyebrow": "Widgets d’écran d’accueil",
+  "home.widgets.title": "Votre argent *en un coup d’œil.*",
+  "home.widgets.lead": "Paiements, discussions et prix de ce que vous détenez, directement sur l’écran d’accueil de votre iPhone ou Android. Touchez un widget pour l’ouvrir dans l’app.",
+  "home.widgets.ios": "iPhone",
+  "home.widgets.android": "Android",
+  "home.widgets.iosAlt": "Widgets tazdan sur l’écran d’accueil d’un iPhone",
+  "home.widgets.androidAlt": "Widgets tazdan sur l’écran d’accueil d’un Android",
+  "home.widgets.payments.title": "Paiements",
+  "home.widgets.payments.body": "Envoyer, recevoir, scanner pour payer ou recharger en un geste, avec votre dernier paiement à côté.",
+  "home.widgets.chats.title": "Discussions",
+  "home.widgets.chats.body": "Messages non lus et dernières conversations. Le texte n’apparaît que si les aperçus de notification sont activés.",
+  "home.widgets.prices.title": "Prix et avoirs",
+  "home.widgets.prices.body": "Votre total et le prix de chaque crypto et devise que vous détenez, actualisés en arrière-plan. Masquez les soldes dans l’app et les montants restent masqués ici aussi.",
+  "home.widgets.note": "Widgets rendus à partir du code actuel de l’app. Noms et montants à titre d’illustration."
 }

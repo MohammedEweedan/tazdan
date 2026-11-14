@@ -86,5 +86,19 @@
   "home.tour.business.chip": "Бизнес",
   "home.tour.business.title": "Одно место для команды.",
   "home.tour.business.body": "Бизнес-выплаты, роли и доступ к API находятся в выделенном рабочем пространстве.",
-  "home.tour.business.alt": "Бизнес-дом со сводкой выплат"
+  "home.tour.business.alt": "Бизнес-дом со сводкой выплат",
+  "home.widgets.eyebrow": "Виджеты на главном экране",
+  "home.widgets.title": "Ваши деньги *с одного взгляда.*",
+  "home.widgets.lead": "Платежи, чаты и цены того, чем вы владеете, — прямо на главном экране iPhone или Android. Нажмите на виджет, чтобы сразу перейти в приложение.",
+  "home.widgets.ios": "iPhone",
+  "home.widgets.android": "Android",
+  "home.widgets.iosAlt": "Виджеты tazdan на главном экране iPhone",
+  "home.widgets.androidAlt": "Виджеты tazdan на главном экране Android",
+  "home.widgets.payments.title": "Платежи",
+  "home.widgets.payments.body": "Отправка, получение, оплата по QR или пополнение в одно касание — рядом последний платёж.",
+  "home.widgets.chats.title": "Чаты",
+  "home.widgets.chats.body": "Непрочитанные сообщения и последние переписки. Текст сообщений виден, только если включены предпросмотры уведомлений.",
+  "home.widgets.prices.title": "Цены и активы",
+  "home.widgets.prices.body": "Общая сумма и цена каждой криптовалюты и валюты, которыми вы владеете, обновляются в фоне. Скройте балансы в приложении — и суммы скроются и здесь.",
+  "home.widgets.note": "Виджеты отрисованы по текущему коду приложения. Имена и суммы приведены для примера."
 }

@@ -84,19 +84,23 @@ export function toUsd(amount: number | Prisma.Decimal, currency: string): number
 /** USD value of one unit of `currency`: live price first, static table last. */
 export async function usdRate(currency: string): Promise<number> {
   const cur = currency.toUpperCase();
+  const realMoney = process.env.NODE_ENV === 'production' && process.env.REAL_MONEY_ENABLED === '1';
   if (cur === 'USD' || cur === 'USDT' || cur === 'USDC') return 1;
   try {
     if (FIAT.has(cur)) {
       const { getRate } = await import('../services/exchange/fxRateProvider.service');
       const pair = await getRate(cur, 'USD');
       const px = Number(pair.sellPrice || pair.buyPrice);
-      if (Number.isFinite(px) && px > 0) return px;
+      const trusted = !/fallback|stale|floor|placeholder/i.test(pair.source) &&
+        Number.isFinite(pair.fetchedAt?.getTime()) && Date.now() - pair.fetchedAt.getTime() <= 5 * 60_000;
+      if (Number.isFinite(px) && px > 0 && (!realMoney || trusted)) return px;
     } else {
       const { getMarketPrice } = await import('../services/exchange/priceEngine.service');
       const px = Number(await getMarketPrice(`${cur}USDT`));
       if (Number.isFinite(px) && px > 0) return px;
     }
   } catch { /* fall through to the static table */ }
+  if (realMoney) throw new AppError(`A current ${cur}/USD valuation is required for financial limits`, 503, 'RATE_UNAVAILABLE');
   return STATIC_USD_RATES[cur] ?? 1;
 }
 
@@ -121,6 +125,11 @@ interface UsageWindow {
 }
 
 interface UsageRow { amount: Prisma.Decimal; currency: string; createdAt: Date }
+
+function assetOf(metadata: unknown): string | null {
+  const a = metadata && typeof metadata === 'object' ? (metadata as Record<string, unknown>).asset : null;
+  return typeof a === 'string' && /^[A-Z0-9_]{2,15}$/.test(a.toUpperCase()) ? a.toUpperCase().replace(/_(ERC20|TRC20|BEP20)$/, '') : null;
+}
 
 // ── Calendar periods in the limits time zone ─────────────────────────
 export const LIMITS_TIMEZONE = () => process.env.LIMITS_TIMEZONE ?? 'Africa/Tripoli';
@@ -153,11 +162,35 @@ export function formatLimitDate(d: Date, tz = LIMITS_TIMEZONE()): string {
   return `${String(p.d).padStart(2, '0')}/${String(p.m).padStart(2, '0')}/${p.y}`;
 }
 
-async function getUsage(userId: string, action: LimitedAction, now = new Date()): Promise<UsageWindow> {
+async function getUsage(userId: string, action: LimitedAction, now = new Date(), client: Prisma.TransactionClient = prisma): Promise<UsageWindow> {
   const { dayStart, monthStart } = limitPeriods(now);
 
   let rows: UsageRow[];
-  if (action === 'WITHDRAW') {
+  if (client !== prisma) {
+    // One SQL snapshot across completed and pending obligations prevents a
+    // concurrent claim completion falling between separate table reads.
+    const scope = Prisma.sql`"createdAt" >= ${monthStart}`;
+    const query = action === 'WITHDRAW' ? Prisma.sql`
+      SELECT "amount", "currency"::text AS currency, "createdAt" FROM "Withdrawal"
+      WHERE "userId" = ${userId} AND ${scope} AND "status" NOT IN ('CANCELLED','REJECTED')
+      UNION ALL SELECT "amount", "asset" AS currency, "createdAt" FROM "OnChainTransaction"
+      WHERE "userId" = ${userId} AND ${scope} AND "type" = 'WITHDRAWAL' AND "status" <> 'FAILED'
+    ` : action === 'SEND' ? Prisma.sql`
+      SELECT "amount", CASE WHEN upper("metadata"->>'asset') ~ '^[A-Z0-9_]{2,15}$'
+        THEN regexp_replace(upper("metadata"->>'asset'), '_(ERC20|TRC20|BEP20)$', '') ELSE "currency"::text END AS currency, "createdAt"
+      FROM "Transaction" WHERE "userId" = ${userId} AND ${scope} AND "type" = 'TRANSFER_OUT'
+      UNION ALL SELECT "amount", "asset"::text AS currency, "createdAt" FROM "ClaimLink"
+      WHERE "senderId" = ${userId} AND ${scope} AND "status" = 'PENDING'
+      UNION ALL SELECT "cryptoAmount" AS amount, COALESCE("baseAsset", "currency"::text) AS currency, "createdAt" FROM "P2PTrade"
+      WHERE "sellerId" = ${userId} AND ${scope} AND "status" NOT IN ('CANCELLED','EXPIRED')
+      UNION ALL SELECT "amount", COALESCE("metadata"->>'fromCurrency', "currency"::text) AS currency, "createdAt" FROM "CardTransaction"
+      WHERE "userId" = ${userId} AND ${scope} AND "type" = 'TOPUP' AND NOT "declined"
+    ` : Prisma.sql`
+      SELECT "amount", "currency"::text AS currency, "createdAt" FROM "Transaction"
+      WHERE "userId" = ${userId} AND ${scope} AND "type"::text = ${TX_TYPES_FOR_ACTION[action][0]}
+    `;
+    rows = await client.$queryRaw<UsageRow[]>(query);
+  } else if (action === 'WITHDRAW') {
     // Count the withdrawal records themselves (fiat requests that weren't
     // cancelled/rejected, plus on-chain sends that didn't fail) — on-chain
     // withdrawals never create a Transaction row.
@@ -178,8 +211,40 @@ async function getUsage(userId: string, action: LimitedAction, now = new Date())
   } else {
     rows = (await prisma.transaction.findMany({
       where: { userId, type: { in: TX_TYPES_FOR_ACTION[action] }, createdAt: { gte: monthStart } },
-      select: { amount: true, currency: true, createdAt: true },
-    })).map((r) => ({ amount: r.amount, currency: r.currency as string, createdAt: r.createdAt }));
+      select: { amount: true, currency: true, createdAt: true, metadata: true },
+    })).map((r) => ({
+      amount: r.amount,
+      // Long-tail coins sent person-to-person are recorded under a
+      // placeholder currency (USDT) with the real asset in metadata; value
+      // them as the asset actually sent. (Trade rows carry the traded asset
+      // in metadata while amount is the settlement amount — not applicable.)
+      currency: (action === 'SEND' ? assetOf(r.metadata) : null) ?? (r.currency as string),
+      createdAt: r.createdAt,
+    }));
+    if (action === 'SEND') {
+      // Value already committed to leave but not yet booked as TRANSFER_OUT:
+      // pending claim links (booked when claimed) and P2P escrow handed to a
+      // buyer (booked as a SELL on completion). Without these, many pending
+      // links or trades — each under the per-transaction cap — added up to
+      // far more than the daily limit.
+      const [links, trades, cardLoads] = await Promise.all([
+        prisma.claimLink.findMany({
+          where: { senderId: userId, status: 'PENDING', createdAt: { gte: monthStart } },
+          select: { amount: true, asset: true, createdAt: true },
+        }),
+        prisma.p2PTrade.findMany({
+          where: { sellerId: userId, status: { notIn: ['CANCELLED', 'EXPIRED'] }, createdAt: { gte: monthStart } },
+          select: { cryptoAmount: true, currency: true, baseAsset: true, createdAt: true },
+        }),
+        prisma.cardTransaction?.findMany({
+          where: { userId, type: 'TOPUP', declined: false, createdAt: { gte: monthStart } },
+          select: { amount: true, currency: true, metadata: true, createdAt: true },
+        }) ?? Promise.resolve([]),
+      ]);
+      for (const l of links) rows.push({ amount: l.amount, currency: l.asset as string, createdAt: l.createdAt });
+      for (const t of trades) rows.push({ amount: t.cryptoAmount, currency: (t.baseAsset ?? t.currency) as string, createdAt: t.createdAt });
+      for (const t of cardLoads) rows.push({ amount: t.amount, currency: (t.metadata as any)?.fromCurrency ?? t.currency, createdAt: t.createdAt });
+    }
   }
 
   const rates = new Map<string, number>();
@@ -215,12 +280,12 @@ export interface LimitStatus {
 }
 
 /** What the customer can do now for one action, and when that changes. */
-export async function limitStatus(userId: string, action: LimitedAction, now = new Date()): Promise<LimitStatus> {
-  const user = await prisma.user.findUnique({ where: { id: userId }, select: { kycTier: true, kycStatus: true } });
+export async function limitStatus(userId: string, action: LimitedAction, now = new Date(), client: Prisma.TransactionClient = prisma): Promise<LimitStatus> {
+  const user = await client.user.findUnique({ where: { id: userId }, select: { kycTier: true, kycStatus: true } });
   if (!user) throw new AppError('User not found', 404);
   const tier = effectiveTier(user);
   const ceiling = KYC_LIMITS[tier][action];
-  const usage = await getUsage(userId, action, now);
+  const usage = await getUsage(userId, action, now, client);
   const { dayEnd, monthEnd } = limitPeriods(now);
   const dailyRemaining = Math.max(0, ceiling.daily - usage.dailyUsd);
   const monthlyRemaining = Math.max(0, ceiling.monthly - usage.monthlyUsd);
@@ -251,8 +316,8 @@ const usdText = (n: number) => `${n.toLocaleString('en-US', { maximumFractionDig
  * the requested action would breach the user's KYC tier limits. Call this
  * BEFORE any step-up challenge and before the write that commits the funds.
  *
- * Limits are a risk control checked just before the write, not inside it,
- * so two simultaneous requests can each pass against the same usage.
+ * Run once before step-up for friendly UX, then pass the committing
+ * transaction client to repeat under the shared customer limit lock.
  *
  * @example
  *   await enforceKycLimit(userId, 'SEND', 250, 'EUR');
@@ -262,9 +327,12 @@ export async function enforceKycLimit(
   action: LimitedAction,
   amount: number | string | Prisma.Decimal,
   currency: string,
+  tx?: Prisma.TransactionClient,
 ): Promise<void> {
-  const status = await limitStatus(userId, action);
+  if (tx) await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`kyc-limits:${userId}`}))`;
+  const status = await limitStatus(userId, action, new Date(), tx ?? prisma);
   const requestedUsd = Math.abs(Number(amount.toString())) * (await usdRate(currency));
+  if (!Number.isFinite(requestedUsd) || requestedUsd <= 0) throw new AppError('Amount must be positive and finite', 400);
   const verb = VERB[action];
   const upgrade = status.nextTier ? ' or raise your verification level' : '';
 

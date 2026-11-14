@@ -12,7 +12,9 @@
  * private, loopback or link-local addresses (SSRF guard).
  */
 import crypto from 'crypto';
-import dns from 'dns/promises';
+import dns from 'dns';
+import http from 'http';
+import https from 'https';
 import net from 'net';
 import { Prisma } from '@prisma/client';
 import { prisma } from '../../utils/prisma';
@@ -44,15 +46,51 @@ export function verifySignature(secret: string, body: string, header: string, to
   return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 
-function isPrivateAddress(ip: string): boolean {
-  if (net.isIPv4(ip)) {
-    const [a, b] = ip.split('.').map(Number);
-    return a === 10 || a === 127 || a === 0 || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31)
-      || (a === 192 && b === 168) || (a === 100 && b >= 64 && b <= 127) || a >= 224;
+function v4Private(ip: string): boolean {
+  const [a, b, c] = ip.split('.').map(Number);
+  return a === 0 || a === 10 || a === 127 || a >= 224
+    || (a === 100 && b >= 64 && b <= 127)          // carrier-grade NAT
+    || (a === 169 && b === 254)                    // link-local / cloud metadata
+    || (a === 172 && b >= 16 && b <= 31)
+    || (a === 192 && b === 168)
+    || (a === 192 && b === 0 && (c === 0 || c === 2))
+    || (a === 192 && b === 88 && c === 99)
+    || (a === 198 && (b === 18 || b === 19))       // benchmarking
+    || (a === 198 && b === 51 && c === 100)
+    || (a === 203 && b === 0 && c === 113);
+}
+
+/** Expand an IPv6 address to eight 16-bit groups (handles :: and a dotted IPv4 tail). */
+function v6Groups(ip: string): number[] | null {
+  let v = ip.toLowerCase().split('%')[0];
+  const dotted = v.match(/(\d+\.\d+\.\d+\.\d+)$/);
+  if (dotted) {
+    const [a, b, c, d] = dotted[1].split('.').map(Number);
+    v = v.slice(0, -dotted[1].length) + `${((a << 8) | b).toString(16)}:${((c << 8) | d).toString(16)}`;
   }
-  const v = ip.toLowerCase();
-  if (v.startsWith('::ffff:')) return isPrivateAddress(v.slice(7));
-  return v === '::1' || v === '::' || v.startsWith('fc') || v.startsWith('fd') || v.startsWith('fe80');
+  const [head, tail] = v.split('::');
+  const h = head ? head.split(':') : [];
+  const t = tail !== undefined ? (tail ? tail.split(':') : []) : [];
+  const fill = tail !== undefined ? 8 - h.length - t.length : 0;
+  const groups = [...h, ...Array(Math.max(0, fill)).fill('0'), ...t].map((g) => parseInt(g || '0', 16));
+  return groups.length === 8 && groups.every((g) => Number.isFinite(g) && g >= 0 && g <= 0xffff) ? groups : null;
+}
+
+export function isPrivateAddress(ip: string): boolean {
+  if (net.isIPv4(ip)) return v4Private(ip);
+  if (!net.isIPv6(ip)) return true; // not an IP literal: never "public"
+  const g = v6Groups(ip);
+  if (!g) return true;
+  const embedded = (hi: number, lo: number) => v4Private(`${hi >> 8}.${hi & 255}.${lo >> 8}.${lo & 255}`);
+  if (g.every((x) => x === 0) || (g.slice(0, 7).every((x) => x === 0) && g[7] === 1)) return true; // :: and ::1
+  if (g.slice(0, 5).every((x) => x === 0) && (g[5] === 0xffff || g[5] === 0)) return embedded(g[6], g[7]); // v4-mapped / v4-compatible
+  if (g[0] === 0x64 && g[1] === 0xff9b) return embedded(g[6], g[7]);  // NAT64
+  if (g[0] === 0x2002) return embedded(g[1], g[2]);                   // 6to4
+  if (g[0] === 0x2001 && g[1] === 0) return true;                     // Teredo
+  return (g[0] & 0xfe00) === 0xfc00   // unique local fc00::/7
+    || (g[0] & 0xffc0) === 0xfe80     // link-local
+    || (g[0] & 0xffc0) === 0xfec0     // site-local
+    || (g[0] & 0xff00) === 0xff00;    // multicast
 }
 
 /** Static checks at registration time. */
@@ -62,17 +100,51 @@ export function validateEndpointUrl(raw: string): URL {
   const localDev = !isProd() && (url.hostname === 'localhost' || url.hostname === '127.0.0.1');
   if (url.protocol !== 'https:' && !(localDev && url.protocol === 'http:')) throw new AppError('Webhook URL must use HTTPS', 400);
   if (url.username || url.password) throw new AppError('Webhook URL must not contain credentials', 400);
-  if (isProd() && (net.isIP(url.hostname) ? isPrivateAddress(url.hostname) : url.hostname === 'localhost')) {
+  const host = url.hostname.replace(/^\[|\]$/g, '');
+  if (isProd() && (net.isIP(host) ? isPrivateAddress(host) : host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.internal') || !host.includes('.'))) {
     throw new AppError('Webhook URL must be publicly reachable', 400);
   }
   return url;
 }
 
-/** Re-checked at send time: DNS can change after registration. */
-async function assertPublicTarget(url: URL): Promise<void> {
-  if (!isProd()) return;
-  const addrs = net.isIP(url.hostname) ? [{ address: url.hostname }] : await dns.lookup(url.hostname, { all: true });
-  if (!addrs.length || addrs.some((a) => isPrivateAddress(a.address))) throw new Error('Webhook host resolves to a non-public address');
+/**
+ * DNS lookup used for the actual connection: every resolved address must be
+ * public, and the socket connects to exactly the address checked here — so a
+ * hostname that re-resolves to an internal address between a check and the
+ * connection (DNS rebinding) cannot reach it.
+ */
+export function publicOnlyLookup(hostname: string, options: any, callback: any): void {
+  const opts = typeof options === 'object' && options !== null ? options : {};
+  dns.lookup(hostname, { ...opts, all: true }, (err, addresses) => {
+    if (err) return callback(err);
+    const list = addresses as unknown as dns.LookupAddress[];
+    if (!list.length || list.some((a) => isPrivateAddress(a.address))) {
+      return callback(Object.assign(new Error('Webhook host resolves to a non-public address'), { code: 'EBLOCKED' }));
+    }
+    if (opts.all) return callback(null, list);
+    callback(null, list[0].address, list[0].family);
+  });
+}
+
+/** POST a JSON body; resolves with the status code. No redirects are followed. */
+function postJson(url: URL, body: string, headers: Record<string, string>): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const host = url.hostname.replace(/^\[|\]$/g, '');
+    if (isProd() && net.isIP(host) && isPrivateAddress(host)) return reject(new Error('Webhook host is a non-public address'));
+    const lib = url.protocol === 'https:' ? https : http;
+    const req = lib.request(url, {
+      method: 'POST',
+      headers: { ...headers, 'content-length': String(Buffer.byteLength(body)) },
+      timeout: TIMEOUT_MS,
+      ...(isProd() ? { lookup: publicOnlyLookup as any } : {}),
+    }, (res) => {
+      res.resume(); // the body is never needed
+      resolve(res.statusCode ?? 0);
+    });
+    req.on('timeout', () => req.destroy(new Error('Webhook delivery timed out')));
+    req.on('error', reject);
+    req.end(body);
+  });
 }
 
 export async function createEndpoint(businessId: string, input: { url: string; events: string[] }) {
@@ -111,19 +183,12 @@ async function attempt(d: { id: string; attempts: number; event: string; payload
   const attempts = d.attempts + 1;
   try {
     const url = validateEndpointUrl(d.endpoint.url);
-    await assertPublicTarget(url);
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
-    const res = await fetch(url, {
-      method: 'POST', redirect: 'manual', signal: ctrl.signal,
-      headers: { 'content-type': 'application/json', 'user-agent': 'Tazdan-Webhooks/1', 'tazdan-event': d.event, 'tazdan-delivery': d.id, 'tazdan-signature': sign(d.endpoint.secret, body) },
-      body,
-    }).finally(() => clearTimeout(timer));
-    if (res.status >= 200 && res.status < 300) {
-      await prisma.businessWebhookDelivery.update({ where: { id: d.id }, data: { status: 'DELIVERED', attempts, responseStatus: res.status, deliveredAt: new Date(), lastError: null } });
+    const status = await postJson(url, body, { 'content-type': 'application/json', 'user-agent': 'Tazdan-Webhooks/1', 'tazdan-event': d.event, 'tazdan-delivery': d.id, 'tazdan-signature': sign(d.endpoint.secret, body) });
+    if (status >= 200 && status < 300) {
+      await prisma.businessWebhookDelivery.update({ where: { id: d.id }, data: { status: 'DELIVERED', attempts, responseStatus: status, deliveredAt: new Date(), lastError: null } });
       return;
     }
-    throw Object.assign(new Error(`HTTP ${res.status}`), { status: res.status });
+    throw Object.assign(new Error(`HTTP ${status}`), { status });
   } catch (err) {
     const dead = attempts >= MAX_ATTEMPTS;
     const backoffMin = Math.min(360, 2 ** attempts);

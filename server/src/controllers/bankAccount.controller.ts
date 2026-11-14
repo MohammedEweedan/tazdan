@@ -6,10 +6,10 @@ import { AuthRequest } from '../types';
 import { getBankFetchService } from '../services/banking';
 
 const bankAccountSchema = z.object({
-  bankName: z.string().min(1, 'Bank name is required'),
-  accountNumber: z.string().min(5, 'Account number must be at least 5 characters'),
-  accountName: z.string().min(1, 'Account name is required'),
-  branch: z.string().optional(),
+  bankName: z.string().trim().min(1, 'Bank name is required').max(120),
+  accountNumber: z.string().trim().min(5, 'Account number must be at least 5 characters').max(64),
+  accountName: z.string().trim().min(1, 'Account name is required').max(120),
+  branch: z.string().trim().max(120).optional(),
   isDefault: z.boolean().optional(),
 });
 

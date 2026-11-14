@@ -86,5 +86,19 @@
   "home.tour.business.chip": "Geschäft",
   "home.tour.business.title": "Ein Platz für das Team.",
   "home.tour.business.body": "Geschäftsauszahlungen, Rollen und API-Zugriff live in einem speziellen Arbeitsbereich.",
-  "home.tour.business.alt": "Geschäftshaus mit Auszahlungsübersicht"
+  "home.tour.business.alt": "Geschäftshaus mit Auszahlungsübersicht",
+  "home.widgets.eyebrow": "Widgets für den Homescreen",
+  "home.widgets.title": "Dein Geld *auf einen Blick.*",
+  "home.widgets.lead": "Zahlungen, Chats und die Kurse deiner Bestände – direkt auf dem Homescreen deines iPhone oder Android. Tippe auf ein Widget, um direkt dorthin in der App zu gelangen.",
+  "home.widgets.ios": "iPhone",
+  "home.widgets.android": "Android",
+  "home.widgets.iosAlt": "tazdan-Widgets auf einem iPhone-Homescreen",
+  "home.widgets.androidAlt": "tazdan-Widgets auf einem Android-Homescreen",
+  "home.widgets.payments.title": "Zahlungen",
+  "home.widgets.payments.body": "Senden, empfangen, per Scan bezahlen oder aufladen mit einem Tipp – daneben deine letzte Zahlung.",
+  "home.widgets.chats.title": "Chats",
+  "home.widgets.chats.body": "Ungelesene Nachrichten und deine neuesten Unterhaltungen. Nachrichtentext erscheint nur, wenn Vorschauen in Mitteilungen aktiviert sind.",
+  "home.widgets.prices.title": "Kurse & Bestände",
+  "home.widgets.prices.body": "Dein Gesamtwert und der Kurs jeder Krypto und Währung, die du hältst – im Hintergrund aktualisiert. Blendest du Salden in der App aus, bleiben Beträge auch hier verborgen.",
+  "home.widgets.note": "Widgets aus dem aktuellen App-Code gerendert. Namen und Beträge sind beispielhaft."
 }

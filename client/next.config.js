@@ -1,43 +1,3 @@
-const withPWA = require('next-pwa')({
-  dest: 'public',
-  // Register after the page is usable. Cache assets as they are visited;
-  // precaching every route, screenshot and video used to fetch 22 MB at startup.
-  register: false,
-  cacheStartUrl: false,
-  publicExcludes: ['!**/*'],
-  buildExcludes: [/./],
-  skipWaiting: true,
-  disable: process.env.NODE_ENV === 'development',
-  // Don't let the service worker serve a cached SPA shell for unknown URLs —
-  // that hijacks navigation and shows a stale page instead of Next's real 404.
-  // With no document fallback, unmatched routes hit the network and Next
-  // renders not-found.tsx correctly in production.
-  fallbacks: {},
-  // Network-first for page navigations so a deploy's new 404 (and fresh pages)
-  // win over any previously-cached document.
-  runtimeCaching: [
-    {
-      urlPattern: ({ request }) => request.mode === 'navigate',
-      handler: 'NetworkFirst',
-      options: {
-        cacheName: 'pages',
-        networkTimeoutSeconds: 10,
-        expiration: { maxEntries: 64, maxAgeSeconds: 24 * 60 * 60 },
-      },
-    },
-    {
-      urlPattern: /\/_next\/static\/.*/i,
-      handler: 'CacheFirst',
-      options: { cacheName: 'next-static', expiration: { maxEntries: 256, maxAgeSeconds: 31536000 } },
-    },
-    {
-      urlPattern: /\.(?:png|jpg|jpeg|svg|gif|webp|avif|ico|woff2?)$/i,
-      handler: 'StaleWhileRevalidate',
-      options: { cacheName: 'assets', expiration: { maxEntries: 256, maxAgeSeconds: 30 * 24 * 60 * 60 } },
-    },
-  ],
-});
-
 // `next dev` proxies /api to the local server (server/.env PORT=5001);
 // production builds default to the public API. NEXT_PUBLIC_API_URL wins.
 const API_BASE = process.env.NEXT_PUBLIC_API_URL
@@ -59,7 +19,7 @@ const isDev = process.env.NODE_ENV !== 'production';
 // practices" score.
 const ContentSecurityPolicy = `
   default-src 'self';
-  script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.stripe.com https://checkout.com;
+  script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ''} https://js.stripe.com https://checkout.com;
   style-src 'self' 'unsafe-inline';
   font-src 'self' data:;
   img-src 'self' data: blob: https: ${API_ORIGIN};
@@ -96,9 +56,8 @@ const nextConfig = {
   // dev server stays up. Default behaviour is unchanged.
   ...(process.env.NEXT_DIST_DIR ? { distDir: process.env.NEXT_DIST_DIR } : {}),
   ...(process.env.VERCEL ? {} : { output: 'standalone' }),
-  // Next.js 14 swc minify is on by default; explicit so it survives a Next bump.
-  swcMinify: true,
   reactStrictMode: true,
+  outputFileTracingRoot: __dirname,
   // Skip Next.js x-powered-by → one fewer header byte per response, tiny privacy win.
   poweredByHeader: false,
   // Drop console.* from production bundles — typical client-side logs add up.
@@ -136,7 +95,7 @@ const nextConfig = {
       { source: '/(.*)',                           headers: securityHeaders     },
       { source: '/sw.js', headers: [{ key: 'Cache-Control', value: 'no-cache, no-store, must-revalidate' }] },
       { source: '/_next/static/(.*)',              headers: STATIC_CACHE_HEADERS },
-      { source: '/icon-:rest*.png',                headers: STATIC_CACHE_HEADERS },
+      { source: '/icon-:rest.png',                 headers: STATIC_CACHE_HEADERS },
       { source: '/og-image.png',                   headers: STATIC_CACHE_HEADERS },
       { source: '/manifest.json',                  headers: [{ key: 'Cache-Control', value: 'public, max-age=3600' }] },
     ];
@@ -151,4 +110,4 @@ const nextConfig = {
   },
 };
 
-module.exports = withPWA(nextConfig);
+module.exports = nextConfig;

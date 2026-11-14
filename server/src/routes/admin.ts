@@ -4,6 +4,7 @@ import { AdminController } from '../controllers/admin.controller';
 import { AdminExtrasController as X } from '../controllers/adminExtras.controller';
 import { mediaUpload } from '../middleware/mediaUpload';
 import { requirePermission as P } from '../services/platform/rbac';
+import { maskPiiForStaff, companyDataOnly } from '../services/platform/pii';
 
 export const adminRouter = Router();
 
@@ -12,6 +13,9 @@ export const adminRouter = Router();
 // route. Admins without explicit staff roles keep SUPER_ADMIN for the mobile
 // console; give them roles in the cockpit to apply least privilege.
 adminRouter.use(authenticate, requireAdmin);
+// Contact details, account numbers and document links are masked in every
+// response for staff without customers.pii (see services/platform/pii.ts).
+adminRouter.use(maskPiiForStaff);
 
 adminRouter.get('/dashboard', P('cockpit.view'), AdminController.getDashboard);
 adminRouter.get('/rates', P('fx.read'), AdminController.getRates);
@@ -139,10 +143,10 @@ adminRouter.post('/media-upload', P('settings.manage'),
 );
 
 // Platform bank accounts (deposit rails admins manage)
-adminRouter.get('/platform-banks', P('cockpit.view'),          X.listPlatformBanks);
-adminRouter.post('/platform-banks', P('treasury.operate'),         X.createPlatformBank);
-adminRouter.put('/platform-banks/:id', P('treasury.operate'),      X.updatePlatformBank);
-adminRouter.delete('/platform-banks/:id', P('treasury.operate'),   X.deletePlatformBank);
+adminRouter.get('/platform-banks', P('cockpit.view'), companyDataOnly,          X.listPlatformBanks);
+adminRouter.post('/platform-banks', P('treasury.operate'), companyDataOnly,         X.createPlatformBank);
+adminRouter.put('/platform-banks/:id', P('treasury.operate'), companyDataOnly,      X.updatePlatformBank);
+adminRouter.delete('/platform-banks/:id', P('treasury.operate'), companyDataOnly,   X.deletePlatformBank);
 
 // Data browser — raw paginated reads of every core model
 adminRouter.get('/data/transactions', P('customers.pii'),   X.listRawTransactions);

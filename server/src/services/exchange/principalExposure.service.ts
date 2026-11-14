@@ -129,7 +129,9 @@ export async function principalPositions(client: Client = prisma): Promise<{ pos
 export async function assertPrincipalCapacity(tx: Prisma.TransactionClient, order: { asset: string; side: 'BUY' | 'SELL'; quantity: Decimal; priceUsd: Decimal }): Promise<void> {
   const asset = order.asset.toUpperCase();
   if (asset === 'USDT') return;
-  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`principal:${asset}`}))`;
+  // The aggregate cap is shared across every asset. Per-asset locks let
+  // simultaneous BTC and ETH orders each use the same total headroom.
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${'principal:portfolio'}))`;
 
   const [row] = await positionRows(tx, asset);
   const current = D(row?.hedged).minus(D(row?.customer));

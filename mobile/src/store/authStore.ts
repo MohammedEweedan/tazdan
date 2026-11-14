@@ -12,6 +12,10 @@ import type { User } from '@/types';
 
 const BIOMETRIC_KEY  = 'tazdan.biometricEnabled';
 const VIEW_MODE_KEY  = 'tazdan.viewMode';
+/** Bumped by forgetLastUser, so a lock-screen logout still in flight can't bring the forgotten account back. */
+let forgetEpoch = 0;
+/** The push unregister call is best-effort: an account switch never waits longer than this for it. */
+const UNREGISTER_WAIT_MS = 2500;
 
 export type ViewMode = 'admin' | 'user';
 
@@ -290,9 +294,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     // Soft logout (lock screen) deliberately keeps the registration: the
     // user still owns this account on this device, and deposit/transfer
     // pushes are the main reason they come back.
+    forgetEpoch += 1;
     try {
-      const { unregisterPushToken } = await import('@/lib/pushNotifications');
-      await unregisterPushToken();
+      const { unregisterPushToken, syncAppBadge } = await import('@/lib/pushNotifications');
+      // A slow or unreachable server must not freeze the account switch.
+      await Promise.race([unregisterPushToken(), new Promise((r) => setTimeout(r, UNREGISTER_WAIT_MS))]);
+      syncAppBadge(0); // the next account's unread count is not this one's
+      const { publishWidgetSnapshot } = await import('@/widgets/publish');
+      await publishWidgetSnapshot(null);
     } catch { /* non-fatal */ }
     await Promise.all([
       secureStore.remove(STORAGE_KEYS.accessToken).catch(() => {}),
@@ -312,6 +321,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   logout: async () => {
+    const epoch = forgetEpoch;
     const remembered = get().user ? toLastUser(get().user as User) : get().lastUser;
     if (get().user) await cacheLastUser(get().user as User);
     // "Logout" in the consumer app is a lock-screen transition: keep the
@@ -320,6 +330,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     // the full credential wipe.
     const { disconnectSocket } = await import('@/lib/socket');
     disconnectSocket();
+    // Home-screen widgets show nothing while signed out.
+    const { publishWidgetSnapshot } = await import('@/widgets/publish');
+    await publishWidgetSnapshot(null);
     await Promise.all([
       secureStore.remove(STORAGE_KEYS.accessToken).catch(() => {}),
       secureStore.remove(VIEW_MODE_KEY).catch(() => {}),
@@ -329,7 +342,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       isAuthenticated: false,
       viewMode: null,
       needsViewSelection: false,
-      lastUser: remembered,
+      // The account was forgotten meanwhile ("Use a different account"): stay forgotten.
+      lastUser: epoch === forgetEpoch ? remembered : null,
     });
   },
 }));

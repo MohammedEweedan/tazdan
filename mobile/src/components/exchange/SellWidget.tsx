@@ -17,7 +17,7 @@ import * as Haptics from 'expo-haptics';
 import { useAuthStore } from '@/store/authStore';
 import { useThemedPalette } from '@/store/themeStore';
 import { useI18n, useT } from '@/store/i18nStore';
-import { SlideToConfirm } from '@/components/ui/SlideToConfirm';
+import { ConfirmAction } from '@/components/ui/ConfirmAction';
 import { NumericKeypad } from '@/components/ui/NumericKeypad';
 import { AmountDisplay } from '@/components/ui/AmountDisplay';
 import { CurrencyPicker, type CurrencyItem } from '@/components/ui/CurrencyPicker';
@@ -353,8 +353,6 @@ export function SellWidget({ defaultAsset, lockAsset = false }: SellWidgetProps 
 
   const slideLabel = limit.blocked
     ? tr('limits.reached')
-    : canConfirm
-    ? tr('sell.slideToSell').replace('{asset}', asset)
     : overspend ? tr('sell.insufficient') : tr('sell.enterAmountToSell');
 
   // Holdings filtered by search for the asset sheet
@@ -389,8 +387,21 @@ export function SellWidget({ defaultAsset, lockAsset = false }: SellWidgetProps 
     [validReceiveOptions, locale, p.fg],
   );
 
+  // Summary for the review sheet — only once a live quote exists.
+  const review = quote && receiveTo ? {
+    confirmationKey: JSON.stringify({ quoteId: quote.id, receiveTo, network }),
+    amount: `${fmt(quote.cryptoAmount, 8)} ${asset}`,
+    rows: [
+      { label: tr('confirm.youReceive'), value: `${fmt(quote.settlementAmount ?? quote.fiatAmount, receiveTo.isFiat ? 2 : 6)} ${receiveTo.currency}` },
+      { label: tr('sell.platformFee'), value: `${fmt(quote.platformFeeSettlement ?? quote.platformFee, 2)} ${receiveTo.currency}` },
+      { label: tr('sell.networkFee'), value: `${fmt(quote.networkFeeSettlement ?? quote.networkFee, 2)} ${receiveTo.currency}` },
+      { label: tr('confirm.priceHeld'), value: `${seconds}s` },
+    ],
+  } : undefined;
+
   return (
-    <View style={{ flex: 1, paddingHorizontal: 20, paddingBottom: 8 }}>
+    // Bottom spacing comes from ConfirmAction's dock (clear of the home indicator).
+    <View style={{ flex: 1, paddingHorizontal: 20 }}>
 
       {/* ── Top row: asset + network (minimal, matches Buy) ── */}
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 18 }}>
@@ -537,20 +548,15 @@ export function SellWidget({ defaultAsset, lockAsset = false }: SellWidgetProps 
 
       {/* ── CTA ──────────────────────────────────────────────────── */}
       <LimitNotice action="OFFRAMP_SELL" amountUsd={quote ? Number(quote.fiatAmount) : null} style={{ marginBottom: 10 }} />
-      <SlideToConfirm
-        label={slideLabel}
+      <ConfirmAction
+        action={tr('confirm.act.sell', { asset })}
+        prompt={slideLabel}
         onConfirm={() => { if (canConfirm && !error && !success) onConfirm(); }}
-        enabled={canConfirm && !error && !success}
+        disabled={!canConfirm || !!error || !!success}
         status={exec ? 'loading' : success ? 'success' : error ? 'error' : 'idle'}
         successLabel={success || undefined}
         errorLabel={error || undefined}
-        accent={brandAccent}
-        accentFg={p.accentFg}
-        trackBg={p.bgElev}
-        trackFg={p.fg}
-        border={p.border}
-        greenBg={p.greenBg} greenFg={p.greenFg}
-        redBg={p.redBg} redFg={p.redFg}
+        review={review}
       />
 
       {/* Step-up 6-digit confirmation (high-value / new device) */}

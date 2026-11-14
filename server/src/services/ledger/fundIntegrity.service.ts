@@ -36,6 +36,8 @@
  * discrepancies that were artefacts of the formula (CL-47).
  */
 import { Decimal } from '@prisma/client/runtime/library';
+import type { Prisma } from '@prisma/client';
+type ReadClient = Prisma.TransactionClient | typeof prisma;
 import { prisma } from '../../utils/prisma';
 import { logger } from '../../utils/logger';
 import { AppError } from '../../middleware/errorHandler';
@@ -43,7 +45,7 @@ import { writeAudit } from '../platform/audit';
 import { setTradingHalt } from './reconcile.service';
 
 const BOUNDARY: string[] = ['SYSTEM_ONRAMP', 'SYSTEM_OFFRAMP', 'SYSTEM_CHAIN', 'ADJUSTMENT'];
-const TAZDAN_HELD: string[] = ['SYSTEM_ESCROW', 'REMITTANCE_CLEARING', 'PLATFORM', 'SYSTEM_FX', 'TREASURY', 'PARTNER_SETTLEMENT', 'SUSPENSE'];
+const TAZDAN_HELD: string[] = ['SYSTEM_ESCROW', 'REMITTANCE_CLEARING', 'TOKEN_RESERVE', 'PLATFORM', 'SYSTEM_FX', 'TREASURY', 'PARTNER_SETTLEMENT', 'SUSPENSE'];
 /** Users whose Wallet rows are presentation only (their value is on the ledger). */
 const HOUSE_USERNAMES: string[] = ['platform', 'support'];
 const CRYPTO = new Set(['BTC', 'ETH', 'BNB', 'SOL', 'XRP', 'ADA', 'DOGE', 'MATIC', 'DOT', 'AVAX']);
@@ -119,7 +121,7 @@ export interface FundIntegrityReport {
  * Records completed before a rail's first posting predate the ledger and are
  * covered by the opening-balance backfill.
  */
-export async function railEvidenceExceptions(limit = 200): Promise<RailException[]> {
+export async function railEvidenceExceptions(limit = 200, client: ReadClient = prisma): Promise<RailException[]> {
   const out: RailException[] = [];
   const push = (rows: any[], rail: RailException['rail'], problemFor: (r: any) => string) => {
     for (const r of rows) {
@@ -131,7 +133,7 @@ export async function railEvidenceExceptions(limit = 200): Promise<RailException
   };
 
   // Deposits (bank deposit or card on-ramp) — SYSTEM_ONRAMP leg carries −amount.
-  push(await prisma.$queryRaw<any[]>`
+  push(await client.$queryRaw<any[]>`
     SELECT e."refType", e."refId", e."currency"::text AS currency, (-e."amount")::text AS posted,
            COALESCE(d."amount", o."fiatAmount")::text AS recorded,
            d."status"::text AS dstatus, o."status"::text AS ostatus
@@ -149,7 +151,7 @@ export async function railEvidenceExceptions(limit = 200): Promise<RailException
     : r.dstatus && r.dstatus !== 'CONFIRMED' ? `Deposit is ${r.dstatus}, not CONFIRMED`
     : 'Posted amount differs from the record'));
 
-  push(await prisma.$queryRaw<any[]>`
+  push(await client.$queryRaw<any[]>`
     SELECT 'deposit' AS "refType", d."id" AS "refId", d."currency"::text AS currency, NULL AS posted, d."amount"::text AS recorded
     FROM "Deposit" d
     WHERE d."status" = 'CONFIRMED'
@@ -159,7 +161,7 @@ export async function railEvidenceExceptions(limit = 200): Promise<RailException
   `, 'DEPOSIT', () => 'Confirmed deposit has no journal');
 
   // Withdrawals — SYSTEM_OFFRAMP leg carries the net amount (amount − fee).
-  push(await prisma.$queryRaw<any[]>`
+  push(await client.$queryRaw<any[]>`
     SELECT e."refType", e."refId", e."currency"::text AS currency, e."amount"::text AS posted,
            (w."amount" - w."fee")::text AS recorded, w."status"::text AS wstatus
     FROM "LedgerEntry" e JOIN "LedgerAccount" a ON a."id" = e."accountId"
@@ -170,7 +172,7 @@ export async function railEvidenceExceptions(limit = 200): Promise<RailException
   `, 'WITHDRAWAL', (r) => (r.recorded == null ? 'Posting has no withdrawal record'
     : r.wstatus !== 'COMPLETED' ? `Withdrawal is ${r.wstatus}, not COMPLETED` : 'Posted amount differs from the record'));
 
-  push(await prisma.$queryRaw<any[]>`
+  push(await client.$queryRaw<any[]>`
     SELECT 'withdrawal' AS "refType", w."id" AS "refId", w."currency"::text AS currency, NULL AS posted, w."amount"::text AS recorded
     FROM "Withdrawal" w
     WHERE w."status" = 'COMPLETED'
@@ -180,7 +182,7 @@ export async function railEvidenceExceptions(limit = 200): Promise<RailException
   `, 'WITHDRAWAL', () => 'Completed withdrawal has no journal');
 
   // On-chain — the SYSTEM_CHAIN leg's absolute value equals the transaction amount.
-  push(await prisma.$queryRaw<any[]>`
+  push(await client.$queryRaw<any[]>`
     SELECT e."refType", e."refId", e."currency"::text AS currency, ABS(e."amount")::text AS posted, t."amount"::text AS recorded
     FROM "LedgerEntry" e JOIN "LedgerAccount" a ON a."id" = e."accountId"
     LEFT JOIN "OnChainTransaction" t ON t."id" = e."refId"
@@ -190,7 +192,7 @@ export async function railEvidenceExceptions(limit = 200): Promise<RailException
   `, 'ONCHAIN', (r) => (r.recorded == null ? 'Posting has no on-chain transaction' : 'Posted amount differs from the transaction'));
 
   // Trades, treasury, remittance payouts, adjustments — the record must exist.
-  push(await prisma.$queryRaw<any[]>`
+  push(await client.$queryRaw<any[]>`
     SELECT DISTINCT e."refType", e."refId", e."currency"::text AS currency
     FROM "LedgerEntry" e JOIN "LedgerAccount" a ON a."id" = e."accountId"
     LEFT JOIN "CryptoOrder" o ON o."id" = e."refId"
@@ -198,7 +200,7 @@ export async function railEvidenceExceptions(limit = 200): Promise<RailException
     LIMIT ${limit}
   `, 'TRADE', () => 'Trade posting has no order');
 
-  push(await prisma.$queryRaw<any[]>`
+  push(await client.$queryRaw<any[]>`
     SELECT DISTINCT e."refType", e."refId", e."currency"::text AS currency
     FROM "LedgerEntry" e
     LEFT JOIN "TreasuryMovement" m ON m."id" = e."refId"
@@ -206,7 +208,7 @@ export async function railEvidenceExceptions(limit = 200): Promise<RailException
     LIMIT ${limit}
   `, 'TREASURY', () => 'Treasury posting has no movement record');
 
-  push(await prisma.$queryRaw<any[]>`
+  push(await client.$queryRaw<any[]>`
     SELECT DISTINCT e."refType", e."refId", e."currency"::text AS currency
     FROM "LedgerEntry" e
     LEFT JOIN "RemittanceTransfer" t ON t."id" = e."refId"
@@ -214,7 +216,7 @@ export async function railEvidenceExceptions(limit = 200): Promise<RailException
     LIMIT ${limit}
   `, 'REMITTANCE', () => 'Payout posting has no transfer');
 
-  push(await prisma.$queryRaw<any[]>`
+  push(await client.$queryRaw<any[]>`
     SELECT DISTINCT e."refType", e."refId", e."currency"::text AS currency
     FROM "LedgerEntry" e JOIN "LedgerAccount" a ON a."id" = e."accountId"
     WHERE a."type" = 'ADJUSTMENT' AND e."refType" = 'adjustment'
@@ -225,8 +227,8 @@ export async function railEvidenceExceptions(limit = 200): Promise<RailException
   return out;
 }
 
-async function loadBaselines(): Promise<Map<string, Baseline>> {
-  const rows = await prisma.platformSettings.findMany({ where: { key: { startsWith: 'fund_audit_baseline.' } } });
+async function loadBaselines(client: ReadClient): Promise<Map<string, Baseline>> {
+  const rows = await client.platformSettings.findMany({ where: { key: { startsWith: 'fund_audit_baseline.' } } });
   const map = new Map<string, Baseline>();
   for (const r of rows) {
     try { map.set(r.key.slice('fund_audit_baseline.'.length), JSON.parse(r.value)); } catch { /* ignore malformed */ }
@@ -237,35 +239,35 @@ async function loadBaselines(): Promise<Map<string, Baseline>> {
 /**
  * Run the audit. Read-only, except that `haltOnBreach` sets the trading halt
  * when a currency shows read-model drift or unbacked value since its baseline.
- * Rail exceptions do not halt; they go to the reconciliation queue.
+ * Rail exceptions halt too: an unmatched external posting is not proof of funds.
  */
-export async function auditFundIntegrity(opts: { haltOnBreach?: boolean } = {}): Promise<FundIntegrityReport> {
+async function inspectFundIntegrity(client: ReadClient): Promise<FundIntegrityReport> {
   const [wallets, held, flows, baselines, rail] = await Promise.all([
-    prisma.$queryRaw<Array<{ currency: string; total: string }>>`
+    client.$queryRaw<Array<{ currency: string; total: string }>>`
       SELECT w."currency"::text AS currency, SUM(w."balance")::text AS total
       FROM "Wallet" w JOIN "User" u ON u."id" = w."userId"
       WHERE NOT (COALESCE(u."username", '') = ANY(${HOUSE_USERNAMES}))
       GROUP BY 1
     `,
     // Tazdan-held = internal accounts + any USER accounts of the house users.
-    prisma.$queryRaw<Array<{ currency: string; total: string }>>`
+    client.$queryRaw<Array<{ currency: string; total: string }>>`
       SELECT a."currency"::text AS currency, SUM(a."balance")::text AS total
       FROM "LedgerAccount" a LEFT JOIN "User" u ON u."id" = a."userId"
       WHERE a."type"::text = ANY(${TAZDAN_HELD})
          OR (a."type" = 'USER' AND COALESCE(u."username", '') = ANY(${HOUSE_USERNAMES}))
       GROUP BY 1
     `,
-    prisma.$queryRaw<Array<{ currency: string; refType: string; total: string; n: bigint; latest: Date }>>`
+    client.$queryRaw<Array<{ currency: string; refType: string; total: string; n: bigint; latest: Date }>>`
       SELECT e."currency"::text AS currency, e."refType", (-SUM(e."amount"))::text AS total, COUNT(*) AS n, MAX(e."createdAt") AS latest
       FROM "LedgerEntry" e JOIN "LedgerAccount" a ON a."id" = e."accountId"
       WHERE a."type"::text = ANY(${BOUNDARY})
       GROUP BY 1, 2
     `,
-    loadBaselines(),
-    railEvidenceExceptions(),
+    loadBaselines(client),
+    railEvidenceExceptions(200, client),
   ]);
 
-  const currencies = new Set<string>([...wallets.map((w) => w.currency), ...held.map((h) => h.currency), ...flows.map((f) => f.currency)]);
+  const currencies = new Set<string>([...wallets.map((w) => w.currency), ...held.map((h) => h.currency), ...flows.map((f) => f.currency), ...rail.map((r) => r.currency)]);
   const perCurrency: CurrencyIntegrity[] = [];
 
   for (const c of [...currencies].sort()) {
@@ -290,7 +292,7 @@ export async function auditFundIntegrity(opts: { haltOnBreach?: boolean } = {}):
       const unbackedTypes = lines.filter((f) => classifyFlow(f.refType) === 'UNBACKED' && new Date(f.latest) > new Date(baseline.at)).map((f) => f.refType);
       since = new Decimal(0);
       if (unbackedTypes.length) {
-        const rows = await prisma.$queryRaw<Array<{ total: string | null }>>`
+        const rows = await client.$queryRaw<Array<{ total: string | null }>>`
           SELECT (-SUM(e."amount"))::text AS total
           FROM "LedgerEntry" e JOIN "LedgerAccount" a ON a."id" = e."accountId"
           WHERE a."type"::text = ANY(${BOUNDARY})
@@ -324,18 +326,19 @@ export async function auditFundIntegrity(opts: { haltOnBreach?: boolean } = {}):
     });
   }
 
-  const ok = perCurrency.every((p) => p.ok);
-  const halting = perCurrency.filter((p) => D(p.diff).abs().gt(tolerance(p.currency)) || D(p.unbackedSinceBaseline).abs().gt(tolerance(p.currency)));
-  if (halting.length && opts.haltOnBreach) {
-    await setTradingHalt(true, `fund integrity breach: ${halting.map((b) => `${b.currency} drift ${b.diff}, unbacked since baseline ${b.unbackedSinceBaseline}`).join('; ')}`);
-    logger.error('[fund-integrity] BREACH — trading halted', { breaches: halting.map((h) => ({ currency: h.currency, diff: h.diff, unbackedSinceBaseline: h.unbackedSinceBaseline })) });
-  } else if (!ok) {
-    logger.warn('[fund-integrity] exceptions found', {
-      currencies: perCurrency.filter((p) => !p.ok).map((p) => ({ currency: p.currency, diff: p.diff, unbackedSinceBaseline: p.unbackedSinceBaseline, railExceptions: p.railExceptions })),
-    });
-  }
+  return { checkedAt: Date.now(), ok: perCurrency.every((p) => p.ok), perCurrency, railExceptions: rail };
+}
 
-  return { checkedAt: Date.now(), ok, perCurrency, railExceptions: rail };
+/** Read one consistent snapshot; safety writes happen after it is closed. */
+export async function auditFundIntegrity(opts: { haltOnBreach?: boolean } = {}): Promise<FundIntegrityReport> {
+  const report = await prisma.$transaction((tx) => inspectFundIntegrity(tx), { isolationLevel: 'RepeatableRead', timeout: 30_000 });
+  if (!report.ok && opts.haltOnBreach) {
+    await setTradingHalt(true, `Fund integrity failed: ${report.perCurrency.filter(p => !p.ok).map(p => `${p.currency}: drift ${p.diff}, unbacked ${p.unbackedSinceBaseline}, rail exceptions ${p.railExceptions}`).join('; ')}`);
+    logger.error('[fund-integrity] BREACH — money movements halted', { currencies: report.perCurrency.filter(p => !p.ok).map(p => p.currency) });
+  } else if (!report.ok) {
+    logger.warn('[fund-integrity] exceptions found', { currencies: report.perCurrency.filter(p => !p.ok).map(p => p.currency) });
+  }
+  return report;
 }
 
 /**
@@ -385,6 +388,7 @@ export async function acknowledgeBaseline(opts: {
 }
 
 let started = false;
+let running = false;
 /** Start periodic fund-integrity auditing (one worker only). */
 export function startFundIntegrityAudit(intervalMs = Number(process.env.FUND_AUDIT_MS ?? 10 * 60_000)): void {
   if (started) return;
@@ -392,8 +396,15 @@ export function startFundIntegrityAudit(intervalMs = Number(process.env.FUND_AUD
   // Halt-on-breach is opt-in (FUND_AUDIT_HALT=1). Turn it on in production
   // once each currency's history has been acknowledged.
   const haltOnBreach = process.env.FUND_AUDIT_HALT === '1';
-  setInterval(() => {
-    void auditFundIntegrity({ haltOnBreach }).catch((e) => logger.error('[fund-integrity] audit threw', { err: e }));
-  }, intervalMs).unref?.();
+  const run = () => {
+    if (running) return;
+    running = true;
+    void auditFundIntegrity({ haltOnBreach }).catch(async (e) => {
+      logger.error('[fund-integrity] audit failed', { err: e });
+      if (haltOnBreach) await setTradingHalt(true, 'Fund integrity could not be verified').catch(() => logger.error('[fund-integrity] halt persistence failed'));
+    }).finally(() => { running = false; });
+  };
+  run();
+  setInterval(run, intervalMs).unref?.();
   logger.info('[fund-integrity] audit scheduler started');
 }

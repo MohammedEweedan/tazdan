@@ -3,6 +3,8 @@ import rateLimit from 'express-rate-limit';
 import { authenticate } from '../middleware/auth';
 import { ExchangeController } from '../controllers/exchange.controller';
 import { AuthRequest } from '../types';
+import { fulusWebhookGuard } from '../middleware/webhookGuards';
+import { verifyFulusSignature } from '../services/exchange/fulus.service';
 
 export const exchangeRouter = Router();
 
@@ -55,7 +57,8 @@ exchangeRouter.get('/spread', ExchangeController.getSpread);
 // Fulus rate webhook (public; HMAC-verified over the raw body in the handler).
 // Index.ts captures req.rawBody for this path so the X-Webhook-Signature check
 // runs over the exact bytes Fulus signed.
-exchangeRouter.post('/webhook/fulus', ExchangeController.fulusWebhook);
+// The guard also refuses stale events and replays of an accepted body.
+exchangeRouter.post('/webhook/fulus', fulusWebhookGuard(verifyFulusSignature), ExchangeController.fulusWebhook);
 
 // Custody trading (fiat ↔ crypto via Binance liquidity).
 exchangeRouter.post('/quote',       authenticate, quoteLimiter,   ExchangeController.createQuote);

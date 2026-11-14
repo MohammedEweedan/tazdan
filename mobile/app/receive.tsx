@@ -109,8 +109,7 @@ export default function Receive() {
             {profileLink}
           </Text>
           <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '500', marginTop: 8, textAlign: 'center', paddingHorizontal: 12 }}>
-            Scanning the QR opens your public profile so anyone can pay you,
-            see your KYC tier, and view your P2P offers.
+            Anyone with tazdan can scan this code to pay you.
           </Text>
 
           <Pressable

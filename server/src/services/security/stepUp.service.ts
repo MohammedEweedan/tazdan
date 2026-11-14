@@ -25,6 +25,10 @@ import { AppError } from '../../middleware/errorHandler';
 import { sendEmail, emailErrorSummary } from '../email';
 import { logger } from '../../utils/logger';
 import { parseUserAgent, geoLocate } from '../../utils/deviceInfo';
+import { clearAttempts, reserveAttempt } from '../../utils/redis';
+import { recordSecurityEvent } from '../platform/securityEvents';
+import { verifyTotpOnce } from './totp';
+import { safeEqual } from './credentials';
 
 export const STEP_UP_USD = Number(process.env.STEP_UP_USD ?? '1000');
 const TTL_MS = 10 * 60_000;
@@ -32,6 +36,13 @@ const MAX_ATTEMPTS = 5;
 // Within this window, re-triggering an action reuses the existing code/email
 // instead of sending another — prevents duplicate "your code" emails.
 const RESEND_COOLDOWN_MS = 90_000;
+// Per-user budget across ALL challenges: re-issuing a challenge (silent for
+// authenticator users) must not buy a fresh set of guesses.
+const USER_ATTEMPT_BUDGET = 10;
+const USER_BUDGET_WINDOW_S = 30 * 60;
+const EMAIL_CODES_PER_HOUR = 20;
+
+const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string));
 
 export type StepUpAction = 'withdrawal' | 'buy' | 'sell' | 'transfer' | 'account_close';
 
@@ -44,15 +55,30 @@ function hashCode(code: string): string {
   return crypto.createHash('sha256').update(code).digest('hex');
 }
 
-/** Stable device fingerprint from request headers (UA + a client-sent id). */
-export function deviceFingerprint(req: { headers: Record<string, any> }): string {
+/**
+ * The per-install random id the app keeps in the keychain and sends as
+ * `x-device-id`. Without one there is no device to trust: a fingerprint of
+ * the User-Agent alone is shared by every phone of that model and trivially
+ * replayed, so such requests are never "known".
+ */
+function deviceIdOf(req: { headers: Record<string, any> }): string | null {
+  const raw = req.headers['x-device-id'];
+  if (typeof raw !== 'string') return null;
+  const id = raw.trim();
+  return id.length >= 16 && id.length <= 128 && /^[A-Za-z0-9._:-]+$/.test(id) ? id : null;
+}
+
+/** Stable device fingerprint from request headers (UA + the client's device id); null without a usable device id. */
+export function deviceFingerprint(req: { headers: Record<string, any> }): string | null {
+  const devId = deviceIdOf(req);
+  if (!devId) return null;
   const ua = String(req.headers['user-agent'] ?? '');
-  const devId = String(req.headers['x-device-id'] ?? '');
   return crypto.createHash('sha256').update(`${ua}::${devId}`).digest('hex').slice(0, 32);
 }
 
 /** Is this device already known/trusted for the user? */
-export async function isKnownDevice(userId: string, fingerprint: string): Promise<boolean> {
+export async function isKnownDevice(userId: string, fingerprint: string | null): Promise<boolean> {
+  if (!fingerprint) return false;
   const d = await prisma.knownDevice.findUnique({
     where: { userId_fingerprint: { userId, fingerprint } },
   });
@@ -72,9 +98,10 @@ export async function isKnownDevice(userId: string, fingerprint: string): Promis
  */
 export async function rememberDevice(
   userId: string,
-  fingerprint: string,
+  fingerprint: string | null,
   req?: { headers: Record<string, any>; ip?: string },
 ): Promise<void> {
+  if (!fingerprint) return; // nothing device-specific to trust
   let label: string | undefined;
   let deviceType: string | undefined;
   let os: string | undefined;
@@ -91,7 +118,6 @@ export async function rememberDevice(
       req.ip ||
       (req.headers['x-forwarded-for']?.toString().split(',')[0].trim()) ||
       undefined;
-    location = await geoLocate(ipAddress).catch(() => null);
   }
 
   await prisma.knownDevice.upsert({
@@ -106,6 +132,12 @@ export async function rememberDevice(
     },
     create: { userId, fingerprint, label, deviceType, os, ipAddress, location },
   });
+  // "City, Country" is cosmetic: never hold up a payment or sign-in for it.
+  if (ipAddress) {
+    void geoLocate(ipAddress)
+      .then((loc) => loc ? prisma.knownDevice.update({ where: { userId_fingerprint: { userId, fingerprint } }, data: { location: loc } }) : null)
+      .catch(() => undefined);
+  }
 }
 
 /**
@@ -148,6 +180,12 @@ export async function issueStepUp(userId: string, action: StepUpAction): Promise
     return { method: wantMethod };
   }
 
+  if (wantMethod === 'email') {
+    // Bounded inbox noise: a stolen session must not be able to mail-bomb the owner.
+    const slot = await reserveAttempt(`stepup:issue:${userId}`, EMAIL_CODES_PER_HOUR, 60 * 60);
+    if (!slot.allowed) throw new AppError('Too many security codes requested. Try again later.', 429);
+  }
+
   // Otherwise clear stale challenges (any method) and issue a fresh one.
   await prisma.stepUpChallenge.deleteMany({ where: { userId, action, consumedAt: null } });
 
@@ -172,7 +210,7 @@ export async function issueStepUp(userId: string, action: StepUpAction): Promise
     await sendEmail({
       to: user.email,
       subject: `Your tazdan security code: ${code}`,
-      html: `<p>Hi ${user.firstName || 'there'},</p>
+      html: `<p>Hi ${esc(user.firstName || 'there')},</p>
         <p>Confirm your <b>${ACTION_LABEL[action] ?? action}</b> with this code. It expires in 10 minutes.</p>
         <p style="font-size:28px;font-weight:700;letter-spacing:4px">${code}</p>
         <p>If you didn't request this, your account may be at risk — change your password and contact support.</p>`,
@@ -191,54 +229,73 @@ export async function issueStepUp(userId: string, action: StepUpAction): Promise
  * Throws AppError(401) on failure. For TOTP users, verifies the authenticator.
  */
 export async function verifyStepUp(userId: string, action: StepUpAction, code: string | undefined): Promise<void> {
-  if (!code || !/^\d{6}$/.test(code)) throw new AppError('A 6-digit security code is required', 401);
+  if (typeof code !== 'string' || !/^\d{6}$/.test(code)) throw new AppError('A 6-digit security code is required', 401);
 
-  // Check ALL active (unconsumed, unexpired) challenges for this action, not
-  // just the latest — the issue + modal-request paths can both create one, and
+  // Reserved BEFORE verifying, so a parallel burst is counted in full;
+  // refilled only by a success.
+  const budgetKey = `stepup:try:${userId}`;
+  const budget = await reserveAttempt(budgetKey, USER_ATTEMPT_BUDGET, USER_BUDGET_WINDOW_S);
+  if (!budget.allowed) throw new AppError('Too many attempts. Try again in 30 minutes.', 429);
+
+  // Check ALL active (unconsumed, unexpired, not exhausted) challenges for
+  // this action — the issue + modal-request paths can both create one, and
   // the user's emailed code may match either. We consume whichever matches.
   const candidates = await prisma.stepUpChallenge.findMany({
-    where: { userId, action, consumedAt: null, expiresAt: { gt: new Date() } },
+    where: { userId, action, consumedAt: null, expiresAt: { gt: new Date() }, attempts: { lt: MAX_ATTEMPTS } },
     orderBy: { createdAt: 'desc' },
   });
   if (candidates.length === 0) throw new AppError('No active security challenge. Re-initiate the action.', 401);
+  const ids = candidates.map((c) => c.id);
 
-  // Cheapest first: any TOTP challenge verifies against the authenticator.
-  const hasTotp = candidates.some((c) => c.method === 'totp');
-  let valid = false;
-  if (hasTotp) {
-    const user = await prisma.user.findUnique({ where: { id: userId }, select: { twoFactorSecret: true } });
-    if (user?.twoFactorSecret) {
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const speakeasy = require('speakeasy');
-      valid = speakeasy.totp.verify({ secret: user.twoFactorSecret, encoding: 'base32', token: code, window: 2 });
-    }
+  // Reserve this attempt on the challenges themselves. The conditional
+  // increment is re-checked under the row lock, so parallel guesses cannot
+  // all read a stale "attempts" and slip past the cap (the old code computed
+  // the cap from the value read before the increment).
+  const reserved = await prisma.stepUpChallenge.updateMany({
+    where: { id: { in: ids }, consumedAt: null, attempts: { lt: MAX_ATTEMPTS } },
+    data: { attempts: { increment: 1 } },
+  });
+  if (reserved.count === 0) {
+    await prisma.stepUpChallenge.deleteMany({ where: { id: { in: ids }, consumedAt: null } }).catch(() => {});
+    throw new AppError('Too many attempts. Request a new code.', 429);
   }
-  if (!valid) {
+
+  let matched: (typeof candidates)[number] | undefined;
+  const totpChallenge = candidates.find((c) => c.method === 'totp');
+  if (totpChallenge) {
+    const user = await prisma.user.findUnique({ where: { id: userId }, select: { twoFactorSecret: true, twoFactorEnabled: true } });
+    // Single-use: the same authenticator code cannot satisfy two challenges.
+    if (user?.twoFactorEnabled && await verifyTotpOnce(userId, user.twoFactorSecret, code)) matched = totpChallenge;
+  }
+  if (!matched) {
     // Match the emailed code against any active email challenge.
     const h = hashCode(code);
-    valid = candidates.some((c) => c.method === 'email' && c.codeHash === h);
+    matched = candidates.find((c) => c.method === 'email' && safeEqual(c.codeHash, h));
   }
 
-  if (!valid) {
-    // Increment attempts on all candidates; if any hit the cap, clear them.
-    await prisma.stepUpChallenge.updateMany({
-      where: { id: { in: candidates.map((c) => c.id) } },
-      data: { attempts: { increment: 1 } },
-    });
-    const maxed = candidates.some((c) => c.attempts + 1 >= MAX_ATTEMPTS);
-    if (maxed) {
-      await prisma.stepUpChallenge.deleteMany({ where: { id: { in: candidates.map((c) => c.id) } } }).catch(() => {});
-      throw new AppError('Too many attempts. Request a new code.', 429);
-    }
+  if (!matched) {
+    // Burn every challenge whose attempts are now used up (current DB values).
+    const burned = await prisma.stepUpChallenge
+      .deleteMany({ where: { id: { in: ids }, consumedAt: null, attempts: { gte: MAX_ATTEMPTS } } })
+      .catch(() => ({ count: 0 }));
+    void recordSecurityEvent({ type: 'STEP_UP_FAILED', severity: 'MEDIUM', userId, details: { action } });
+    if (burned.count > 0) throw new AppError('Too many attempts. Request a new code.', 429);
     throw new AppError('Invalid security code', 401);
   }
 
-  // Success — consume every active challenge for this action so a code can't
-  // be replayed and stale challenges don't linger.
-  await prisma.stepUpChallenge.updateMany({
-    where: { id: { in: candidates.map((c) => c.id) } },
+  // Single use, atomically: of several parallel requests carrying the same
+  // valid code, exactly one consumes the challenge — one code, one action.
+  const consumed = await prisma.stepUpChallenge.updateMany({
+    where: { id: matched.id, consumedAt: null },
     data: { consumedAt: new Date() },
   });
+  if (consumed.count !== 1) throw new AppError('This security code was already used. Request a new one.', 401);
+  // Retire the other active challenges for this action so stale codes don't linger.
+  const others = ids.filter((id) => id !== matched!.id);
+  if (others.length) {
+    await prisma.stepUpChallenge.updateMany({ where: { id: { in: others }, consumedAt: null }, data: { consumedAt: new Date() } }).catch(() => {});
+  }
+  await clearAttempts(budgetKey);
 }
 
 /**
@@ -262,23 +319,14 @@ export async function enforceStepUp(opts: {
   const highValue = Number.isFinite(opts.valueUsd) && opts.valueUsd >= STEP_UP_USD;
 
   // SECURITY MODEL:
-  //  - Trusted (known) device → a LOCAL biometric is sufficient confirmation;
-  //    the server does not require a code. (Face ID for purchases/sells.)
-  //  - New/unknown device OR no biometric available → the server requires a
-  //    real code (authenticator TOTP if 2FA on, else emailed code). Biometric
-  //    is local-only and cannot be trusted on an unrecognized device.
-  if (known && opts.biometricVerified) {
-    await rememberDevice(opts.userId, fp, opts.req).catch(() => {});
-    return;
-  }
-
-  // Decide whether a server code is required at all.
-  //  - new device → always (login/activity from somewhere new)
-  //  - high value → always
-  //  - known device, normal value, no biometric → still fine to allow, but if
-  //    biometric wasn't done we fall through to requiring confirmation.
-  const needCode = !known || highValue || !opts.biometricVerified;
-  if (!needCode) {
+  //  - `biometricVerified` is a flag the CLIENT sends; the server cannot
+  //    verify it. It may only relax a routine-value confirmation on a known
+  //    device. It never replaces a server-checked code for a high-value
+  //    action — otherwise anyone holding a session token and the device
+  //    headers could move any amount by sending `biometricVerified: true`.
+  //  - New/unknown device OR high value → the server requires a real code
+  //    (authenticator TOTP if 2FA on, else emailed code).
+  if (known && !highValue && opts.biometricVerified) {
     await rememberDevice(opts.userId, fp, opts.req).catch(() => {});
     return;
   }

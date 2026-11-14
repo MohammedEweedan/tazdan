@@ -85,10 +85,18 @@ export async function geoLocate(ipRaw: string | null | undefined): Promise<strin
   const cached = geoCache.get(ip);
   if (cached && Date.now() - cached.at < GEO_TTL_MS) return cached.location;
 
+  // Customer IPs are personal data: only sent to a provider the operator has
+  // chosen (and has a processing agreement with), only over HTTPS. The old
+  // default sent every session's IP to ip-api.com over plain HTTP.
+  // GEOIP_LOOKUP_URL is a template such as "https://geo.example/json/{ip}"
+  // answering { status: 'success', city, country }. Unset → no lookup.
+  const template = process.env.GEOIP_LOOKUP_URL?.trim();
+  if (!template || !/^https:\/\//i.test(template) || !template.includes('{ip}')) return null;
+
   try {
     const ctrl = new AbortController();
-    const t = setTimeout(() => ctrl.abort(), 4000);
-    const r = await fetch(`http://ip-api.com/json/${encodeURIComponent(ip)}?fields=status,city,country`, { signal: ctrl.signal });
+    const t = setTimeout(() => ctrl.abort(), 1500);
+    const r = await fetch(template.replace('{ip}', encodeURIComponent(ip)), { signal: ctrl.signal, redirect: 'error' });
     clearTimeout(t);
     if (!r.ok) return null;
     const d = await r.json() as { status?: string; city?: string; country?: string };

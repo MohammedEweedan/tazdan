@@ -18,6 +18,7 @@ import { StepUpModal } from '@/components/ui/StepUpModal';
 import { useThemedPalette } from '@/store/themeStore';
 import { useT } from '@/store/i18nStore';
 import { useHaptics, useWallets, useStepUpAuth, StepUpDeniedError, extractErrorMessage } from '@/hooks';
+import { useFeatures } from '@/hooks/useFeatures';
 import { useUsdValue } from '@/hooks/useForexRates';
 import { isStepUpChallengeError } from '@/lib/stepUpErrors';
 import { remittanceService, type Beneficiary, type Corridor, type PayoutMethod, type Quote } from '@/services/remittance';
@@ -32,6 +33,7 @@ export default function NewRemittance() {
   const router = useRouter();
   const p = useThemedPalette();
   const t = useT();
+  const features = useFeatures();
   const h = useHaptics();
   const qc = useQueryClient();
   const stepUp = useStepUpAuth();
@@ -63,7 +65,7 @@ export default function NewRemittance() {
   const quoteQ = useQuery({
     queryKey: ['remit-quote', corridor?.code, recipient?.id, debounced],
     queryFn: () => remittanceService.quote({ corridorCode: corridor!.code, sendAmount: debounced, beneficiaryId: recipient!.id }),
-    enabled: Boolean(corridor && recipient && debounced > 0 && (step === 'amount' || step === 'review')),
+    enabled: features.remittance && Boolean(corridor && recipient && debounced > 0 && (step === 'amount' || step === 'review')),
     refetchInterval: corridor ? Math.max(10, corridor.quoteTtlSeconds - 10) * 1000 : false,
     retry: false,
   });
@@ -96,6 +98,7 @@ export default function NewRemittance() {
   });
 
   const confirm = async (stepUpCode?: string) => {
+    if (!features.remittance) return;
     try { await send.mutateAsync(stepUpCode); }
     catch (e: any) {
       if (e instanceof StepUpDeniedError) { h.error(); Alert.alert(t('remit.failed'), e.message); return; }
@@ -120,6 +123,8 @@ export default function NewRemittance() {
       <Text style={{ color: p.fg, fontSize: strong ? 15 : 13, fontWeight: strong ? '700' : '600' }}>{value}</Text>
     </View>
   );
+
+  if (!features.remittance) return <ScreenShell title={t('remit.new')} onBack={() => router.back()}><Panel><Text>{t('features.remitPaused')}</Text></Panel></ScreenShell>;
 
   return (
     <ScreenShell title={t('remit.new')} onBack={back} keyboard>

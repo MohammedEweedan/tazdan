@@ -35,6 +35,8 @@ import { useAuthStore } from '@/store/authStore';
 import { useUiStore } from '@/store/uiStore';
 import { realHandle, avatarMode } from '@/utils/displayUser';
 import { useWallets, useHaptics, useTransactions, useActivities, useActivityRealtime, useNotificationRealtime, useUnreadCount, useMarkets, useDisplayCurrency, useBudgets } from '@/hooks';
+import { useLydtWallet } from '@/hooks/useLydt';
+import { useAvailability, useFeatures } from '@/hooks/useFeatures';
 import { useMarkets as useCoinGeckoMarkets, ID_TO_SYM } from '@/hooks/useMarkets';
 import { useTheme, useThemedPalette, isMonochrome, type Palette } from '@/store/themeStore';
 import { useT, useI18n } from '@/store/i18nStore';
@@ -72,6 +74,8 @@ export default function Home() {
   const user = useAuthStore((s) => s.user);
   const { data: wallets, refetch: refetchWallets, isPending: walletsLoading, isError: walletsError } = useWallets();
   const { data: budgets = [] } = useBudgets();
+  const features = useFeatures();
+  const avail = useAvailability();
   // `useTransactions` still feeds screens that need the raw Transaction
   // ledger. The home Activity tab uses the unified `useActivities` feed
   // so P2P trades, card spend, deposits, withdrawals, ramps, and crypto
@@ -110,7 +114,9 @@ export default function Home() {
   const [moreMenuVisible, setMoreMenuVisible] = useState(false);
   const [balanceChartVisible, setBalanceChartVisible] = useState(false);
 
-  const list = wallets ?? [];
+  // LYDT (its own ledger) counts with the dinars.
+  const lydt = useLydtWallet();
+  const list = useMemo(() => [...(wallets ?? []), ...(lydt.wallet ? [lydt.wallet] : [])], [wallets, lydt.wallet]);
 
   // Live USD price map keyed by ticker (e.g. { BTC: 67_432.10, ETH: 3_240.50 }).
   // Computed from Binance WebSocket + backend ticker overlay. We re-derive `totalUsd` from
@@ -148,7 +154,7 @@ export default function Home() {
     setRefreshing(true);
     h.light();
     try {
-      await Promise.all([refetchWallets(), refetchTxs(), refetchActivity(), refetchMarkets()]);
+      await Promise.all([refetchWallets(), refetchTxs(), refetchActivity(), refetchMarkets(), lydt.refetch()]);
     } finally {
       setRefreshing(false);
     }
@@ -195,7 +201,7 @@ export default function Home() {
   );
 
   // Fiat currencies — everything else is treated as crypto
-  const FIAT_CURRENCIES = new Set(['USD', 'EUR', 'GBP', 'AED', 'SAR', 'EGP', 'LYD', 'CAD', 'AUD', 'CHF', 'JPY', 'CNY']);
+  const FIAT_CURRENCIES = new Set(['USD', 'EUR', 'GBP', 'AED', 'SAR', 'EGP', 'LYD', 'LYDT', 'CAD', 'AUD', 'CHF', 'JPY', 'CNY']);
 
   // Normalize a wallet currency to its Binance ticker base.
   // USDT_ERC20 / USDT_TRC20 both track as USDT (pegged $1).
@@ -302,7 +308,7 @@ export default function Home() {
   // The dock: the three moves people make most, plus More. Each opens a
   // full page (never an in-place modal), so back/swipe and deep links work.
   const ink = useShimmerInk();
-  const DOCK: { key: string; icon: keyof typeof Ionicons.glyphMap; label: string; onPress: () => void }[] = [
+  const DOCK_ALL: { key: string; icon: keyof typeof Ionicons.glyphMap; label: string; onPress: () => void }[] = [
     { key: 'topup', icon: 'add',          label: t('action.topup'), onPress: () => router.push((currentPage?.kind === 'fiat' ? { pathname: '/topup', params: { currency: currentPage.wallet.currency } } : '/topup') as any) },
     { key: 'send',  icon: 'arrow-up',     label: t('action.send'),  onPress: () => router.push('/send' as any) },
     { key: 'buy',   icon: currentPage?.kind === 'fiat' ? 'swap-horizontal' : 'trending-up',
@@ -310,6 +316,7 @@ export default function Home() {
       onPress: () => router.push((currentPage?.kind === 'fiat' ? { pathname: '/exchange', params: { from: currentPage.wallet.currency } } : '/buy') as any) },
     { key: 'more',  icon: 'grid-outline', label: t('home.more'),    onPress: () => setMoreMenuVisible(true) },
   ];
+  const DOCK = DOCK_ALL.filter((d) => d.key === 'more' || avail.forHref(d.key === 'buy' ? (currentPage?.kind === 'fiat' ? '/exchange' : '/buy') : `/${d.key}`).state !== 'HIDDEN');
 
   return (
     <View style={{ flex: 1, backgroundColor: p.bg }}>
@@ -857,7 +864,8 @@ export default function Home() {
             { icon: 'repeat' as const,             label: t('recurring.title'),   href: '/recurring' },
             { icon: 'people-outline' as const,     label: 'P2P',                  href: '/p2p' },
             { icon: 'scan-outline' as const,       label: t('home.scan'),         href: '/scanner' },
-          ].map((item) => (
+            ...(features.lydt ? [{ icon: 'cash-outline' as const, label: 'LYDT', href: '/lydt' }] : []),
+          ].filter((item) => avail.forHref(item.href).state !== 'HIDDEN').map((item) => (
             <Pressable
               key={item.href}
               onPress={() => { h.selection(); setMoreMenuVisible(false); router.push(item.href as any); }}
@@ -870,6 +878,11 @@ export default function Home() {
                 backgroundColor: p.bgElev, borderWidth: StyleSheet.hairlineWidth, borderColor: p.border,
               }}>
                 <Ionicons name={item.icon} size={21} color={p.fg} />
+                {avail.forHref(item.href).state === 'LOCKED' ? (
+                  <View style={{ position: 'absolute', right: -2, bottom: -2, width: 20, height: 20, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: p.bg, borderWidth: StyleSheet.hairlineWidth, borderColor: p.border }}>
+                    <Ionicons name="lock-closed" size={11} color={p.fgMuted} />
+                  </View>
+                ) : null}
               </View>
               <Text numberOfLines={1} style={{ color: p.fg, fontSize: 12, fontWeight: '500', maxWidth: '92%' }}>{item.label}</Text>
             </Pressable>
@@ -886,7 +899,7 @@ export default function Home() {
             { icon: 'wallet-outline' as const,        label: t('home.fiatPortfolio'),   href: '/portfolio/fiat' },
             { icon: 'gift-outline' as const,          label: t('home.referral'),        href: '/referral' },
             { icon: 'settings-outline' as const,      label: t('settings.title'),       href: '/settings' },
-          ].map((item, i, all) => (
+          ].filter((item) => avail.forHref(item.href).state !== 'HIDDEN').map((item, i, all) => (
             <PanelRow key={item.href} icon={item.icon} label={item.label} last={i === all.length - 1}
               onPress={() => { h.selection(); setMoreMenuVisible(false); router.push(item.href as any); }} />
           ))}

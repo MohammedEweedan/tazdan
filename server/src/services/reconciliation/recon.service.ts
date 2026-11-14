@@ -105,7 +105,7 @@ export async function runIntegrityReconciliation(actorId?: string | null) {
 
   const ledger = await reconcileLedger();
   for (const d of ledger.cacheDrift) items.push({ status: 'AMOUNT_MISMATCH', internalType: 'LEDGER_ACCOUNT_CACHE', internalId: d.accountId, internalAmount: d.cached, externalAmount: d.derived, details: { diff: d.diff } as any });
-  for (const c of ledger.conservation) items.push({ status: 'AMOUNT_MISMATCH', internalType: 'LEDGER_CONSERVATION', internalId: c.currency, currency: c.currency, internalAmount: c.sum, externalAmount: 0, details: { message: 'Signed sum of all entries is not zero' } as any });
+  for (const c of ledger.conservation) items.push({ status: 'AMOUNT_MISMATCH', internalType: 'LEDGER_CONSERVATION', internalId: c.currency, ...(c.currency.startsWith('asset:') ? {} : { currency: c.currency }), internalAmount: c.sum, externalAmount: 0, details: { asset: c.currency, message: 'Signed sum of all entries is not zero' } as any });
 
   // Wallet read model vs USER ledger balance (enum currencies, platform/support excluded).
   const mismatches = await prisma.$queryRaw<Array<{ userId: string; currency: string; wallet: string; ledger: string }>>`

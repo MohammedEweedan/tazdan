@@ -53,12 +53,15 @@ export async function buildOperationalReadiness() {
     failedOffRamps,
     failedOnChain,
     queuedOnChain,
+    unknownBroadcasts,
     pendingWithdrawals,
     openEscalations,
     lastAuditReview,
     close,
     walletExposure,
     platformFees,
+    unpricedFees,
+    legacyFeeValuations,
     recentAuditLogs,
   ] = await Promise.all([
     auditFundIntegrity({ haltOnBreach: false }),
@@ -66,10 +69,11 @@ export async function buildOperationalReadiness() {
     isTradingHalted(),
     prisma.exchangeRate.findMany({ where: { isActive: true }, orderBy: { updatedAt: 'asc' } }),
     Promise.resolve(fulusCachedRates()),
-    (prisma as any).onRampTransaction.count({ where: { status: 'FAILED', updatedAt: { gte: failedSince } } }).catch(() => 0),
-    (prisma as any).offRampTransaction.count({ where: { status: 'FAILED', updatedAt: { gte: failedSince } } }).catch(() => 0),
-    prisma.onChainTx.count({ where: { status: 'FAILED', updatedAt: { gte: failedSince } } }).catch(() => 0),
-    prisma.onChainTx.count({ where: { status: 'QUEUED' } }).catch(() => 0),
+    (prisma as any).onRampTransaction.count({ where: { status: 'FAILED', updatedAt: { gte: failedSince } } }),
+    (prisma as any).offRampTransaction.count({ where: { status: 'FAILED', updatedAt: { gte: failedSince } } }),
+    prisma.onChainTx.count({ where: { status: 'FAILED', updatedAt: { gte: failedSince } } }),
+    prisma.onChainTx.count({ where: { status: 'QUEUED' } }),
+    prisma.onChainTransaction.count({ where: { type: 'WITHDRAWAL', status: 'BROADCAST_UNKNOWN' } }),
     prisma.withdrawal.count({ where: { status: 'PENDING' } }),
     (prisma as any).supportEscalation.findMany({
       where: { status: { in: ['OPEN', 'ASSIGNED'] } },
@@ -81,6 +85,8 @@ export async function buildOperationalReadiness() {
     latestDailyClose(),
     prisma.wallet.groupBy({ by: ['currency'], _sum: { balance: true, frozen: true } }),
     (prisma as any).platformFee.aggregate({ _sum: { amountUsd: true }, _count: { id: true } }).catch(() => null),
+    prisma.platformFee.count({ where: { amountUsd: null } }),
+    prisma.platformFee.count({ where: { valuationSource: 'LEGACY_UNVERIFIED' } }),
     prisma.auditLog.findMany({ orderBy: { createdAt: 'desc' }, take: 20 }).catch(() => []),
   ]);
 
@@ -122,7 +128,7 @@ export async function buildOperationalReadiness() {
 
   const reconciliationStatus: Status = funds.ok && ledger.ok && !tradingHalted ? 'ok' : 'critical';
   const fxStatus: Status = staleExchangeRates.length || staleFulusRates.length ? 'warn' : 'ok';
-  const webhookStatus: Status = failedOnRamps + failedOffRamps + failedOnChain > 0 ? 'critical' : 'ok';
+  const webhookStatus: Status = failedOnRamps + failedOffRamps + failedOnChain + unknownBroadcasts > 0 ? 'critical' : 'ok';
   const supportStatus: Status = resolutionBreaches.length ? 'critical' : unassignedBreaches.length ? 'warn' : 'ok';
   const hotWalletStatus: Status = hotWalletLimits.some((r) => r.status === 'critical') ? 'critical' : 'ok';
   const auditReviewAge = ageMs(lastAuditReview?.createdAt);
@@ -132,7 +138,7 @@ export async function buildOperationalReadiness() {
 
   return {
     generatedAt: now.toISOString(),
-    overall: worst(reconciliationStatus, fxStatus, webhookStatus, supportStatus, hotWalletStatus, auditStatus, dailyCloseStatus),
+    overall: worst(reconciliationStatus, fxStatus, webhookStatus, supportStatus, hotWalletStatus, auditStatus, dailyCloseStatus, unpricedFees || legacyFeeValuations ? 'warn' : 'ok'),
     controls: {
       reconciliation: { status: reconciliationStatus, tradingHalted, funds, ledger },
       dailyClose: {
@@ -142,14 +148,17 @@ export async function buildOperationalReadiness() {
       },
       alerts: {
         balanceDrift: { status: reconciliationStatus, fundBreaches: funds.perCurrency.filter((c) => !c.ok), ledgerBreaches: ledger.conservation },
-        providerWebhookFailures: { status: webhookStatus, failedOnRamps, failedOffRamps, failedOnChain, windowMs: failedWebhookWindowMs },
+        providerWebhookFailures: { status: webhookStatus, failedOnRamps, failedOffRamps, failedOnChain, unknownBroadcasts, windowMs: failedWebhookWindowMs },
         staleFxRates: { status: fxStatus, staleExchangeRates, staleFulusRates, thresholdMs: staleFxMs },
       },
       liquidityExposure: {
-        status: 'ok' as Status,
+        status: (unpricedFees || legacyFeeValuations ? 'warn' : 'ok') as Status,
         byCurrency: exposureByCurrency,
         feesUsd: String(platformFees?._sum?.amountUsd ?? 0),
         feeEvents: platformFees?._count?.id ?? 0,
+        unpricedFeeEvents: unpricedFees,
+        unverifiedLegacyValuations: legacyFeeValuations,
+        feeValuationIsCash: false,
       },
       hotWalletLimits: { status: hotWalletStatus, limits: hotWalletLimits },
       adminApprovals: {

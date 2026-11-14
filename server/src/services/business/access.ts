@@ -21,7 +21,9 @@ export type BusinessAction =
   | 'webhooks.manage'
   | 'payouts.create'
   | 'payouts.approve'
-  | 'kyb.submit';
+  | 'kyb.submit'
+  | 'tills.view'
+  | 'tills.manage';
 
 const CAN: Record<BusinessAction, TeamRole[]> = {
   read: ['OWNER', 'ADMIN', 'ANALYST', 'DEVELOPER'],
@@ -32,6 +34,8 @@ const CAN: Record<BusinessAction, TeamRole[]> = {
   'payouts.create': ['OWNER', 'ADMIN'],
   'payouts.approve': ['OWNER', 'ADMIN'],
   'kyb.submit': ['OWNER'],
+  'tills.view': ['OWNER', 'ADMIN', 'ANALYST'],
+  'tills.manage': ['OWNER', 'ADMIN'],
 };
 
 export interface BusinessContext {
@@ -75,9 +79,9 @@ export function assertCan(ctx: BusinessContext, action: BusinessAction): void {
 }
 
 /** Money can move only once the business is verified. */
-export function assertKybApproved(business: BusinessProfile): void {
+export function assertKybApproved(business: BusinessProfile, what = 'payouts can be sent'): void {
   if (business.kybStatus !== 'APPROVED') {
-    throw new AppError('Business verification (KYB) must be approved before payouts can be sent', 403, 'COMPLIANCE_HOLD');
+    throw new AppError(`Business verification (KYB) must be approved before ${what}`, 403, 'COMPLIANCE_HOLD');
   }
 }
 

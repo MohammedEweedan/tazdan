@@ -58,6 +58,12 @@ describe('feature switches', () => {
     process.env.FEATURE_ALT_TRADING = '0';
     expect(featureFlags()).toMatchObject({ cards: true, altTrading: false });
   });
+  it('refuses legacy crypto execution in real-money production even with an explicit override', () => {
+    process.env.NODE_ENV = 'production';
+    process.env.REAL_MONEY_ENABLED = '1';
+    process.env.FEATURE_CRYPTO_TRADING = '1';
+    expect(isFeatureEnabled('cryptoTrading')).toBe(false);
+  });
 });
 
 describe('effectiveTier', () => {

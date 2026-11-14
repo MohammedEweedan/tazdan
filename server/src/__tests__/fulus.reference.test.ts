@@ -6,7 +6,12 @@ jest.mock('../utils/prisma', () => ({ prisma: {
     findUnique: jest.fn().mockResolvedValue({ isActive: true, setBy: 'treasury', updatedAt: new Date(), overrideExpiresAt: new Date(Date.now() + 3600000), buyPrice: 9, sellPrice: 8 }),
     upsert: jest.fn().mockResolvedValue({}),
   },
-  platformSettings: { findUnique: jest.fn().mockImplementation(({ where }: { where: { key: string } }) => Promise.resolve({ value: where.key.includes('floor') ? '0' : '2' })) },
+  platformSettings: { findUnique: jest.fn().mockImplementation(({ where }: { where: { key: string } }) => Promise.resolve(
+    // No stored market-maker configuration: the defaults apply.
+    where.key.startsWith('fx_market_maker') ? null : { value: where.key.includes('floor') ? '0' : '2' },
+  )) },
+  // No kill switch is set (the market maker checks FX_MM:* before quoting).
+  controlSwitch: { findMany: jest.fn().mockResolvedValue([]) },
 } }));
 jest.mock('../services/exchange/lydOrderBook.service', () => ({
   currentLydSkewPct: () => .06, applyLydDemandSkew: () => { throw Error('Fulus must not be skewed'); }, noteLydPrice: jest.fn(),

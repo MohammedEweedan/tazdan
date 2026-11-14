@@ -105,7 +105,9 @@ export const cryptoWithdrawalAPI = {
     amount: string;
     toAddress: string;
     twoFactorCode: string;
-  }) => api.post('/withdrawal/initiate', data),
+    // Keep this key for the entire confirmation/retry lifecycle.
+    idempotencyKey: string;
+  }) => api.post('/withdrawal/initiate', data, { headers: { 'Idempotency-Key': data.idempotencyKey } }),
   estimateFee: (asset: string, network: string) =>
     api.get<{ asset: string; estimate: string }>(
       `/withdrawal/estimate-fee?asset=${asset}&network=${network}`,

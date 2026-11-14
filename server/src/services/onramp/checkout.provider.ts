@@ -135,9 +135,13 @@ export class CheckoutOnRamp implements OnRampProvider {
     const webhookSecret = process.env.CHECKOUT_WEBHOOK_SECRET;
     if (!webhookSecret) throw new AppError('CHECKOUT_WEBHOOK_SECRET not configured', 500);
 
-    const receivedSig = headers['cko-signature'];
+    const receivedSig = String(headers['cko-signature'] ?? '');
     const expectedSig = crypto.createHmac('sha256', webhookSecret).update(rawBody).digest('hex');
-    if (!receivedSig || receivedSig !== expectedSig) {
+    // Constant-time comparison: no timing signal about how much of a forged
+    // signature matched.
+    const got = Buffer.from(receivedSig, 'utf8');
+    const want = Buffer.from(expectedSig, 'utf8');
+    if (got.length !== want.length || !crypto.timingSafeEqual(got, want)) {
       throw new AppError('Invalid Checkout.com webhook signature', 400);
     }
 

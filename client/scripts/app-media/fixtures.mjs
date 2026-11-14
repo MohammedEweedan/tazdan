@@ -330,7 +330,7 @@ export function createWorld(locale = 'en') {
     const c = corridors.find((x) => x.code === code) ?? corridors[0];
     const [ff, fp] = feeFor[c.destCurrency] ?? [10, 0.005];
     const fee = +(ff + send * fp).toFixed(3); const rate = corridorRate[c.destCurrency];
-    return { id: `q_${++quoteSeq}`, corridor: { code: c.code, name: c.name }, sendAmount: send.toFixed(3), feeAmount: fee.toFixed(3), totalDebit: (send + fee).toFixed(3), customerRate: rate.toFixed(6), receiveAmount: (send * rate).toFixed(2), expiresAt: inFuture(90_000), estimatedDeliveryMinutes: c.destCurrency === 'GBP' ? 30 : 60, payoutAvailable: true, sandbox: false };
+    return { id: `q_${++quoteSeq}`, corridor: { code: c.code, name: c.name }, sendAmount: send.toFixed(3), feeAmount: fee.toFixed(3), totalDebit: (send + fee).toFixed(3), customerRate: rate.toFixed(6), receiveAmount: (send * rate).toFixed(2), expiresAt: Date.now() + 90_000, estimatedDeliveryMinutes: c.destCurrency === 'GBP' ? 30 : 60, payoutAvailable: true, sandbox: false };
   };
   const remitTransfers = [
     { id: 'rmt_omar', reference: 'RM-LYGB-2291', state: 'PAYOUT_PENDING', sourceCurrency: 'LYD', destCurrency: 'GBP', sendAmount: '2400.000', feeAmount: '22.000', totalDebit: '2422.000', customerRate: '0.103208', receiveAmount: '247.70', purpose: 'FAMILY_SUPPORT', createdAt: ago(26 * MIN), paidAt: null, completedAt: null, refundedAt: null, failureReason: null, corridor: { code: 'LY-GB', name: 'Libya → United Kingdom', status: 'LIVE' }, beneficiary: { id: 'ben_omar', fullName: full(P.omar), country: 'GB', payoutMethod: 'BANK_ACCOUNT' }, sandbox: false },
@@ -432,7 +432,32 @@ export function createWorld(locale = 'en') {
   };
   const rates = { ...BASE_RATES, ...FX };
 
+  // ── Pay tab: fictional KYB-approved shops + people paid lately ──
+  const shops = [
+    { id: 'usr_olive_cafe', username: 'olivelane', kind: 'MERCHANT', name: L('Olive Lane Café', 'مقهى درب الزيتون'), avatarUrl: null, verified: true },
+    { id: 'usr_corner_market', username: 'cornermarket', kind: 'MERCHANT', name: L('Corner Fresh Market', 'سوق الركن الطازج'), avatarUrl: null, verified: true },
+  ];
+  const person = (p) => ({ id: p.id, username: p.username, kind: 'PERSON', name: full(p), avatarUrl: null, verified: true });
+  const payees = [...shops, person(P.yusuf), person(P.nour), person(P.salma)];
+  const payRecent = payees.map((x, i) => ({ ...x, lastPaidAt: ago((i * 7 + 1) * HOUR) }));
+
+  // LYDT sandbox: the dinar token, backed 1:1 by dinars attested at the CBL.
+  const lydt = {
+    balance: 1250.5,
+    activity: [
+      { kind: 'TRANSFER', reference: 'LYDT-T-7C2A91E04B', amount: '18.500', counterpartyId: 'usr_olive_cafe', note: 'T-14', createdAt: ago(3 * HOUR), direction: 'OUT' },
+      { kind: 'TRANSFER', reference: 'LYDT-T-1F08B3D5A2', amount: '300.000', counterpartyId: P.yusuf.id, note: L('Rent share', 'حصة الإيجار'), createdAt: dayAt(1, 18, 5), direction: 'IN' },
+      { kind: 'ISSUE', reference: 'LYDT-I-94E0C7A1D3', amount: '1000.000', counterpartyId: null, note: null, createdAt: dayAt(2, 10, 40), direction: 'OUT' },
+    ],
+    reserves: () => ({
+      asset: 'LYDT', peg: '1 LYDT = 1 LYD', supply: '2418750.000', reserveLedger: '2418750.000',
+      attestation: { balance: '2500000.000', statementDate: dayAt(1, 9, 0), reference: 'CBL-RSV-20261107', fresh: true },
+      coverage: '1.0336', fullyBacked: true, headroom: '81250.000', issuanceOpen: true, holders: 1284, holdingCap: '10000.000', asOf: new Date().toISOString(),
+    }),
+  };
+
   return {
+    lydt, payees, payRecent,
     ME, user, P, full, wallets, walletRows, adjust, usdOf, activities, transactions, contactList, contactDetail, budgets, budgetFull, limits, notifications,
     threads, partners, conversations, offers, offersAll, trades, p2pThread, corridors, beneficiaries, makeQuote, remitTransfers, remitTimeline,
     cards, cardTxs, bankAccounts, devices, sessions, recurring, biz, claimPreview, claimMine, publicProfile, liveFiat, rates,
@@ -461,7 +486,7 @@ export function handleApi(method, path, q, body, ctx) {
 
   // public/system
   if (is('GET', /^\/health$/)) return ok({ status: 'ok' });
-  if (is('GET', /^\/features$/)) return ok({ features: { p2p: true, cards: true, altTrading: true } });
+  if (is('GET', /^\/features$/)) return ok({ features: { p2p: true, cards: true, altTrading: true, lydt: true } });
   if (is('GET', /^\/rates$/)) return ok({ rates: W.rates, base: 'USD' });
   if (is('GET', /^\/rates\/live$/)) return ok({ base: 'USD', asOf: new Date().toISOString(), currencies: W.liveFiat() });
   if (is('GET', /^\/rates\/history$/)) {
@@ -499,7 +524,29 @@ export function handleApi(method, path, q, body, ctx) {
   if (is('POST', /^\/transactions\/transfer$/)) {
     if (W.flags.stepUpTransfer && !body?.stepUpCode) return { status: 401, json: { error: 'Enter the 6-digit security code we sent to confirm this payment.', requiresStepUp: true, method: 'email' } };
     W.adjust(body.currency, -Number(body.amount));
-    return ok({ message: 'Transfer completed', reference: 'TZ-DEMO-' + Math.random().toString(36).slice(2, 6).toUpperCase(), fee: '0' }, { delay: 700 });
+    const reference = 'TRF-' + Math.random().toString(36).slice(2, 10).toUpperCase();
+    return ok({ message: 'Transfer completed', reference, fee: '0', transfer: { reference, receiverId: body.receiverId, amount: String(body.amount), currency: body.currency } }, { delay: 700 });
+  }
+  if (is('GET', /^\/transactions\/recipient-check$/)) return ok({ canReceive: true });
+
+  // LYDT dinar token (sandbox; illustrative figures)
+  if (is('GET', /^\/lydt\/reserves$/)) return ok({ reserves: W.lydt.reserves() });
+  if (is('GET', /^\/lydt\/me$/)) return ok({ lydt: { balance: W.lydt.balance.toFixed(3), frozen: false, activity: W.lydt.activity } });
+  if (M === 'POST' && seg[0] === 'lydt' && ['issue', 'redeem', 'transfer'].includes(seg[1])) {
+    const amount = Number(body?.amount || 0); const kind = seg[1] === 'issue' ? 'ISSUE' : seg[1] === 'redeem' ? 'REDEEM' : 'TRANSFER';
+    W.lydt.balance += kind === 'ISSUE' ? amount : -amount;
+    if (kind !== 'TRANSFER') W.adjust('LYD', kind === 'ISSUE' ? -amount : amount);
+    const op = { kind, reference: `LYDT-${kind[0]}-${Math.random().toString(16).slice(2, 12).toUpperCase()}`, amount: amount.toFixed(3), counterpartyId: body?.receiverId ?? null, note: body?.note ?? null, createdAt: new Date().toISOString(), direction: 'OUT' };
+    W.lydt.activity.unshift(op);
+    return ok({ operation: { ...op, replayed: false } }, { delay: 600 });
+  }
+
+  // pay tab
+  if (is('GET', /^\/pay\/recent$/)) return ok({ payees: W.payRecent });
+  if (M === 'GET' && seg[0] === 'pay' && seg[1] === 'payee') {
+    const ref = decodeURIComponent(seg[2] || '').toLowerCase();
+    const hit = W.payees.find((x) => x.username === ref || x.id === ref);
+    return hit ? ok({ payee: { ...hit, self: false } }, { delay: 120 }) : { status: 404, json: { error: 'Not found' } };
   }
   if (is('GET', /^\/activities$/)) return ok({ items: W.activities, total: W.activities.length, page: 1, limit: 25, hasMore: false });
 
@@ -513,7 +560,7 @@ export function handleApi(method, path, q, body, ctx) {
     if (b.fiatAmount) { fiatAmount = Number(b.fiatAmount); cryptoAmount = (fiatAmount / perUsd) / quoted; }
     else { cryptoAmount = Number(b.cryptoAmount || 0); fiatAmount = cryptoAmount * quoted * perUsd; }
     const usd = fiatAmount / perUsd; const platformFee = usd * 0.005;
-    return ok({ quote: { id: 'cq_' + Math.random().toString(36).slice(2, 8), side: b.side || 'BUY', asset, network: b.network || 'TRC20', marketPrice: String(price), quotedPrice: quoted.toFixed(6), spreadPct: String(spread), settlementCurrency: settle, fiatAmount: usd.toFixed(2), cryptoAmount: cryptoAmount.toFixed(asset === 'USDT' ? 2 : 8), platformFee: platformFee.toFixed(2), networkFee: asset === 'USDT' ? '1.00' : '0.00', spreadCapture: (usd * spread).toFixed(2), settlementAmount: fiatAmount.toFixed(settle === 'LYD' ? 3 : 2), platformFeeSettlement: (platformFee * perUsd).toFixed(settle === 'LYD' ? 3 : 2), networkFeeSettlement: (asset === 'USDT' ? perUsd : 0).toFixed(settle === 'LYD' ? 3 : 2), totalUserPays: ((usd + platformFee + (asset === 'USDT' ? 1 : 0)) * perUsd).toFixed(settle === 'LYD' ? 3 : 2), expiresAt: NOW + 10 * MIN } });
+    return ok({ quote: { id: 'cq_' + Math.random().toString(36).slice(2, 8), side: b.side || 'BUY', asset, network: b.network || 'TRC20', marketPrice: String(price), quotedPrice: quoted.toFixed(6), spreadPct: String(spread), settlementCurrency: settle, fiatAmount: usd.toFixed(2), cryptoAmount: cryptoAmount.toFixed(asset === 'USDT' ? 2 : 8), platformFee: platformFee.toFixed(2), networkFee: asset === 'USDT' ? '1.00' : '0.00', spreadCapture: (usd * spread).toFixed(2), settlementAmount: fiatAmount.toFixed(settle === 'LYD' ? 3 : 2), platformFeeSettlement: (platformFee * perUsd).toFixed(settle === 'LYD' ? 3 : 2), networkFeeSettlement: (asset === 'USDT' ? perUsd : 0).toFixed(settle === 'LYD' ? 3 : 2), totalUserPays: ((usd + platformFee + (asset === 'USDT' ? 1 : 0)) * perUsd).toFixed(settle === 'LYD' ? 3 : 2), expiresAt: Date.now() + 90_000 } });
   }
   if (is('POST', /^\/exchange\/execute$/)) return ok({ order: { id: 'ord_demo', status: 'FILLED' } }, { delay: 600 });
   if (is('GET', /^\/recurring-buys$/)) return ok({ recurringBuys: W.recurring });
@@ -608,6 +655,7 @@ export function handleApi(method, path, q, body, ctx) {
   if (seg[0] === 'business') {
     const B = W.biz;
     if (is('GET', /^\/business\/profile$/)) return ok({ profile: B.profile });
+    if (is('GET', /^\/business\/pay-code$/)) return ok({ payCode: { payUrl: `https://tazdan.com/pay/${W.ME}`, payeeId: W.ME, name: B.profile.tradingName || B.profile.legalName || 'Ben Ali Studio', handle: 'amira', verified: true, wallet: { apple: true, google: true } } });
     if (is('GET', /^\/business\/stats$/)) return ok({ stats: B.stats });
     if (is('GET', /^\/business\/invitations$/)) return ok({ invitations: [] });
     if (is('GET', /^\/business\/api-keys$/)) return ok({ keys: B.keys });

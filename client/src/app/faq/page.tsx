@@ -1,95 +1,127 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Box, Input } from "@chakra-ui/react";
 import { useTranslate } from "@tolgee/react";
-import { FiSearch } from "react-icons/fi";
+import { FiSearch, FiX } from "react-icons/fi";
 import {
-  Body, Container, CTABand, FAQList, PageHero, Section, SectionHeader,
-  SiteButton, SiteShell, useSiteTheme,
+  Body, Container, CTABand, Headline, MediaHero, Section, SiteButton, SiteShell, StatusChip, useSiteTheme,
 } from "@/components/site";
-
-type Category = "all" | "getting" | "security" | "trading" | "wallet" | "card" | "fees" | "tokens";
-const FAQS: { category: Category; q: string; a: string }[] = [
-  { category: "getting", q: "page_help_faq1_q", a: "page_help_faq1_a" },
-  { category: "trading", q: "page_help_faq2_q", a: "page_help_faq2_a" },
-  { category: "security", q: "page_help_faq3_q", a: "page_help_faq3_a" },
-  { category: "security", q: "page_help_faq4_q", a: "page_help_faq4_a" },
-  { category: "wallet", q: "page_help_faq5_q", a: "page_help_faq5_a" },
-  { category: "wallet", q: "page_help_faq6_q", a: "page_help_faq6_a" },
-  { category: "tokens", q: "page_help_faq7_q", a: "page_help_faq7_a" },
-  { category: "getting", q: "page_help_faq8_q", a: "page_help_faq8_a" },
-  { category: "getting", q: "faq_s_q1", a: "faq_s_a1" },
-  { category: "getting", q: "faq_s_q2", a: "faq_s_a2" },
-  { category: "wallet", q: "faq_s_q3", a: "faq_s_a3" },
-  { category: "fees", q: "faq_s_q4", a: "faq_s_a4" },
-  { category: "security", q: "faq_s_q5", a: "faq_s_a5" },
-  { category: "trading", q: "faq_s_q6", a: "faq_s_a6" },
-  { category: "card", q: "faq_s_q7", a: "faq_s_a7" },
-  { category: "getting", q: "faq_s_q8", a: "faq_s_a8" },
-  { category: "tokens", q: "faq_s_q9", a: "faq_s_a9" },
-  { category: "getting", q: "faq_s_q10", a: "faq_s_a10" },
-];
+import HelpAccordion from "@/components/pages/company/HelpAccordion";
+import { FAQ_CATEGORIES } from "@/components/pages/company/faqData";
+import { useFieldStyle } from "@/components/pages/company/fields";
 
 function FAQContent() {
   const { t } = useTranslate();
   const theme = useSiteTheme();
+  const field = useFieldStyle();
   const [query, setQuery] = useState("");
-  const [category, setCategory] = useState<Category>("all");
-  const categories: { id: Category; label: string }[] = [
-    { id: "all", label: t("faq_section_title") },
-    { id: "getting", label: t("page_help_cat_getting") },
-    { id: "security", label: t("page_help_cat_security") },
-    { id: "trading", label: t("page_help_cat_trading") },
-    { id: "wallet", label: t("page_help_cat_wallet") },
-    { id: "card", label: t("page_help_cat_card") },
-    { id: "fees", label: t("page_help_cat_fees") },
-    { id: "tokens", label: t("page_help_cat_tokens") },
-  ];
-  const filtered = useMemo(() => {
-    const needle = query.trim().toLocaleLowerCase();
-    const seen = new Set<string>();
-    return FAQS.map((f) => ({ category: f.category, q: t(f.q), a: t(f.a) }))
-      .filter((f) => {
-        if (seen.has(f.q)) return false;
-        seen.add(f.q);
-        return (category === "all" || f.category === category || Boolean(needle))
-          && (!needle || (f.q + " " + f.a).toLocaleLowerCase().includes(needle));
-      });
-  }, [category, query, t]);
-  const clear = () => { setQuery(""); setCategory("all"); };
+  const [category, setCategory] = useState("all");
+  const ring = theme.dark ? theme.accentText : theme.accent;
+
+  // Deep links (#faq-<id> or #<category>) land on the right topic.
+  useEffect(() => {
+    const hash = window.location.hash.slice(1);
+    if (FAQ_CATEGORIES.some((c) => c.id === hash)) setCategory(hash);
+  }, []);
+
+  const translated = useMemo(() => FAQ_CATEGORIES.map((c) => ({
+    ...c,
+    label: t(c.label),
+    items: c.items.map((it) => ({
+      id: it.id, q: t(it.q), a: t(it.a),
+      link: it.link ? { href: it.link.href, label: t(it.link.label) } : undefined,
+    })),
+  })), [t]);
+
+  const needle = query.trim().toLocaleLowerCase();
+  const visible = useMemo(() => translated
+    .filter((c) => needle || category === "all" || c.id === category)
+    .map((c) => ({ ...c, items: needle ? c.items.filter((it) => `${it.q} ${it.a}`.toLocaleLowerCase().includes(needle)) : c.items }))
+    .filter((c) => c.items.length > 0), [translated, needle, category]);
+  const count = visible.reduce((n, c) => n + c.items.length, 0);
+
+  const chip = (id: string, label: string) => {
+    const on = !needle && category === id;
+    return (
+      <Box key={id} as="button" type="button" onClick={() => { setCategory(id); setQuery(""); }} aria-pressed={on}
+        flexShrink={0} minH="44px" px="16px" borderRadius="999px" border="1px solid"
+        borderColor={on ? theme.fg : theme.border} bg={on ? theme.fg : "transparent"} color={on ? theme.bg : theme.fgMuted}
+        fontSize="14px" fontWeight={500} whiteSpace="nowrap" transition="background-color .15s ease, color .15s ease"
+        _hover={on ? undefined : { borderColor: theme.borderStrong, color: theme.fg }}
+        _focusVisible={{ outline: `2px solid ${ring}`, outlineOffset: "2px" }}>
+        {label}
+      </Box>
+    );
+  };
 
   return <>
-    <PageHero eyebrow={t("nav_help")} title={t("page_help_title")} lead={t("page_help_sub")} />
-    <Section rule><Container>
-      <Box maxW="720px" mx="auto" position="relative">
-        <Box aria-hidden position="absolute" top="18px" insetInlineStart="18px" color={theme.accentText}><FiSearch size={20} /></Box>
-        <Input value={query} onChange={(e) => setQuery(e.target.value)}
-          aria-label={t("page_help_search_ph")} placeholder={t("page_help_search_ph")}
-          h="56px" borderRadius="14px" borderColor={theme.borderStrong} bg={theme.bgElev}
-          color={theme.fg} sx={{ paddingInlineStart: "52px" }}
-          _placeholder={{ color: theme.fgFaint }} _focusVisible={{ borderColor: theme.accent }} />
+    <MediaHero compact eyebrow={t("company.faq.hero.eyebrow")} title={t("company.faq.hero.title")} lead={t("company.faq.hero.lead")}>
+      <Box role="search" maxW="640px" mx="auto" position="relative">
+        <Box as="label" htmlFor="faq-search" position="absolute" w="1px" h="1px" overflow="hidden" sx={{ clip: "rect(0 0 0 0)" }}>
+          {t("company.faq.search.label")}
+        </Box>
+        <Box aria-hidden position="absolute" top="0" bottom="0" display="flex" alignItems="center" color={theme.fgMuted} zIndex={1} pointerEvents="none"
+          style={{ insetInlineStart: "18px" }}>
+          <FiSearch size={19} />
+        </Box>
+        <Input id="faq-search" type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t("company.faq.search.placeholder")}
+          h="58px" {...field} fontSize="16px" borderRadius="999px" bg={theme.bgElev} sx={{ paddingInlineStart: "50px", paddingInlineEnd: "52px" }} />
+        {query && (
+          <Box as="button" type="button" onClick={() => setQuery("")} aria-label={t("company.faq.search.clear")}
+            position="absolute" top="7px" w="44px" h="44px" borderRadius="999px" display="flex" alignItems="center" justifyContent="center"
+            color={theme.fgMuted} zIndex={1} _hover={{ color: theme.fg }} _focusVisible={{ outline: `2px solid ${ring}` }}
+            style={{ insetInlineEnd: "7px" }}>
+            <FiX size={18} />
+          </Box>
+        )}
       </Box>
-      <Box display="flex" gap="8px" flexWrap="wrap" mt="30px" justifyContent="center">
-        {categories.map((c) => <Box key={c.id} as="button" type="button" onClick={() => setCategory(c.id)}
-          aria-pressed={category === c.id} px="16px" h="40px" borderRadius="999px"
-          border="1px solid" borderColor={category === c.id ? theme.accentBorder : theme.border}
-          color={category === c.id ? theme.fg : theme.fgMuted}
-          bg={category === c.id ? theme.accentSoft : "transparent"} fontSize="14px"
-          _focusVisible={{ outline: "2px solid " + theme.accent, outlineOffset: "2px" }}>
-          {c.label}
-        </Box>)}
-      </Box>
-      <Box maxW="820px" mx="auto" mt="clamp(50px, 6vw, 84px)">
-        <SectionHeader layout="stack" eyebrow={t("faq_section_title")} title={t("page_help_title")} lead={t("faq_section_sub")} />
-        <Box mt="30px">{filtered.length ? <FAQList items={filtered} /> : <>
-          <Body>{t("faq_no_results")}</Body>
-          <Box mt="18px"><SiteButton variant="link" onClick={clear}>{t("faq_clear_search")}</SiteButton></Box>
-        </>}</Box>
-      </Box>
-    </Container></Section>
-    <CTABand title={t("page_help_contact_title")} lead={t("page_help_contact_d")} />
+    </MediaHero>
+
+    <Section tight pt="clamp(40px, 5vw, 64px)">
+      <Container narrow>
+        <Box role="group" aria-label={t("company.faq.filter.label")}
+          display="flex" gap="8px" overflowX={{ base: "auto", md: "visible" }} flexWrap={{ base: "nowrap", md: "wrap" }}
+          justifyContent={{ base: "flex-start", md: "center" }} pb="6px" mx={{ base: "-16px", md: 0 }} px={{ base: "16px", md: 0 }}
+          sx={{ scrollbarWidth: "none", "&::-webkit-scrollbar": { display: "none" } }}>
+          {chip("all", t("company.faq.filter.all"))}
+          {translated.map((c) => chip(c.id, c.label))}
+        </Box>
+
+        <Box role="status" aria-live="polite" mt="24px" fontSize="14px" color={theme.fgFaint} textAlign="center" minH="20px">
+          {needle && <>{t("company.faq.results.label")} {count}</>}
+        </Box>
+
+        {count === 0 ? (
+          <Box mt="40px" textAlign="center" display="flex" flexDirection="column" alignItems="center">
+            <Headline text={t("company.faq.results.none.title")} size="sub" as="h2" textAlign="center" />
+            <Body align="center" mt="12px">{t("company.faq.results.none.body")}</Body>
+            <Box mt="20px" display="flex" gap="18px" flexWrap="wrap" justifyContent="center">
+              <SiteButton variant="link" onClick={() => setQuery("")}>{t("company.faq.search.clear")}</SiteButton>
+              <SiteButton variant="link" href="/contact" arrow>{t("company.faq.results.none.action")}</SiteButton>
+            </Box>
+          </Box>
+        ) : (
+          <Box mt="24px" display="grid" gap="clamp(48px, 6vw, 72px)">
+            {visible.map((c) => (
+              <Box as="section" key={c.id} id={c.id} aria-labelledby={`cat-${c.id}`} sx={{ scrollMarginTop: "96px" }}>
+                <Box display="flex" alignItems="center" gap="12px" flexWrap="wrap" mb="14px">
+                  <Headline id={`cat-${c.id}`} text={c.label} size="sub" as="h2" />
+                  {c.status && <StatusChip status={c.status} />}
+                </Box>
+                <HelpAccordion items={c.items} />
+              </Box>
+            ))}
+          </Box>
+        )}
+      </Container>
+    </Section>
+
+    <CTABand title={t("company.faq.contact.title")} lead={t("company.faq.contact.lead")}
+      secondary={{ label: t("company.faq.contact.secondary"), href: "/contact" }} />
   </>;
 }
 
-export default function FAQPage() { return <SiteShell><FAQContent /></SiteShell>; }
+export default function FAQPage() {
+  return <SiteShell><FAQContent /></SiteShell>;
+}

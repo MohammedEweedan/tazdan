@@ -1,0 +1,161 @@
+
+
+Your money.
+Your next move.
+
+Launch readiness, success outlook and investment returns for Tazdan. The founder reports a prospective <b>Libyan bank partner</b>; commercial terms remain unknown. This review treats $1.6m as company cash, with no founder withdrawal.
+<b>Decision: finance a scoped partner-led pilot; do not open broad real-money services yet.</b> The build has substantial financial controls. Authorization, live contracts, security acceptance, physical-device QA and recovery evidence still need to support the exact launch scope.
+Question | Finding
+Ready to launch? | Not ready for a public real-money launch. Prepare one approved product/corridor for a controlled pilot.
+Can $1.6m be enough? | Yes under the conditional Bank-supported cost profile. Under standard Base costs, an extra $598,658 is required to preserve the $200k reserve.
+When is operating break-even? | Bank-supported: M29 (Feb 2029). Base: M44 (May 2030), conditional on funding the gap.
+What could the company earn? | Bank-supported: $94,782 Year-3 operating profit and $873,013 in Year 5.
+When is the full investment recovered? | Beyond 60 months in Base and Bank-supported. Upside reaches modeled free-cash payback in M50.
+<b>Success judgment:</b> roughly 25–45% today for sustaining three profitable months by M36 without extra equity. A signed, workable bank agreement that enables the Bank-supported costs could raise the planning judgment to roughly 45–65%. These are subjective decision ranges, not measured probabilities.
+The new slogan is applied to English/Arabic website copy, mobile brand/onboarding text, and the existing investment-memorandum cover. The slogan focuses on everyday use and does not promise instant global availability or a guaranteed exchange rate.
+
+
+How ready is the product?
+
+Assessment date: 13 October 2026. Reviewed the current working tree at HEAD 64b590e, including uncommitted work. No production database, private launch evidence, signed provider contracts or external audit reports were inspected. A percentage-complete score would blur these missing prerequisites.
+Area | Evidence now | Acceptance still needed
+Authorization | Public trust page says not licensed; prospective bank reported by founder. | Exact bank/technology role, activity permissions and any required regulator consent.
+Providers | Adapters, production guards, remittance sandbox controls. | Signed live rails, price schedules, settlement and reconciliation callbacks.
+Security | Session, role, custody and release controls in code. | Resolve failing revocation test; independent review/pentest and credential rotation evidence.
+Money paths | Ledger, concurrency/replay test suites and control workflows. | Fresh database/API tests for each enabled rail, real statements, no unexplained balances.
+Device QA | Mobile TypeScript passes. | Signed physical iPhone/Android tests, RTL, outages and recovery; store acceptance.
+Recovery | Backup/restore runbooks and release evidence gate. | Fresh offsite restore and PITR drill with reconciled money records.
+Operations | Cockpit, limits, audit, alerts and stop rules are implemented. | Named owners, delivered alert drill, daily close and customer complaints process.
+<b>Fresh check result:</b> server, web and mobile TypeScript passed. Server tests: 264 passed, 1 failed, 82 skipped (347 total). The same session-revocation failure reproduced in an isolated run: 7 passed, 1 failed.
+The test expects a reused rotated refresh token to revoke the new access token; authentication still returned “ok” in its fake-database/no-Redis harness. Treat this as a release blocker until the cause is resolved and the actual database/API path passes. Database suites were deliberately disabled for this safe local run.
+
+
+The bank partnership must be concrete
+
+A Libyan bank relationship could shorten the route to service launch and improve trust, distribution and settlement access. Ownership of a bank alone does not establish that every Tazdan product can operate under its authority. The bank’s compliance/legal team and regulator must confirm the precise structure.
+Workstream | Proposed responsibility to agree
+Regulated service and customer funds | Bank: permitted accounts/payment activities, funds custody/safeguarding, customer terms and required approvals. Confirm these duties in writing.
+Technology and operations | Tazdan: app, APIs, ledger orchestration, support tooling, security, incident handling and contracted service delivery.
+KYC/AML and reporting | Allocate onboarding, beneficial ownership, screening, transaction monitoring, investigations and regulatory reporting; identify the accountable officers.
+Settlement and treasury | Confirm funding currencies, liquidity owner, netting, cutoffs, failure/reversal handling, losses and independent daily reconciliation.
+Distribution and IP | Agree channels and customer ownership, integration rights, IP ownership, exclusivity, data access, termination and migration support.
+Commercial terms that determine the forecast
+Get a signed term sheet covering the bank fee/revenue share, direct rail prices, minimum guarantees, reserves, settlement credit, fraud liability and support responsibilities. The model assumes the bank takes <b>20% of the customer fee pool</b> in Base; execution/rail costs are separate. Replace both with the actual all-in contract and avoid double counting.
+<b>Bank-supported case is conditional:</b> same Base customers, prices, bank share and company prefunding. Acquisition cost falls from $25 to $12 per activation, and fixed operating costs fall to $20k / $25k / $35k / $45k / $55k per month in Years 1–5 through shared services and distribution. None of that support is currently confirmed.
+A minimum platform fee paid by the bank could improve downside protection. It is excluded until agreed. Cards, card funding, crypto custody and extra corridors remain outside the pilot unless their own providers and permissions are accepted.
+
+
+Allocate the $1.6 million carefully
+
+Capital purpose | Budget | Treatment
+Legal, contracts, bank/provider onboarding | $150,000 | One-time setup cash in the first six months.
+Integration, assurance, device and launch QA | $150,000 | One-time setup cash; independent security work included.
+Initial corporate settlement prefunding | $300,000 | Restricted operating asset; grows with external settlement volume.
+Protected contingency reserve | $200,000 | Cash buffer, excluded from ordinary spending capacity.
+Operating losses, acquisition and capex | $800,000 | Remaining cash after setup, initial prefunding and reserve.
+Total company investment | $1,600,000 | Customer balances are never available to finance the company.
+What the cash forecast says
+Base needs the contingency in <b>M23 (Aug 2028)</b> and exhausts unrestricted corporate cash in <b>M30 (Mar 2029)</b>. Its worst cash deficit is $398,658; preserving the reserve takes about <b>$599k extra</b>. Later Base profit figures are conditional on closing that funding gap.
+Bank-supported reaches a minimum unrestricted corporate cash balance of <b>$591,461</b>, leaving $391,461 above the protected reserve. This case fits the $1.6m investment through the modeled 60 months without new equity.
+The standard Base plan needs approximately <b>$2.20m total corporate capital</b> to preserve the reserve. Secure lower bank-supported costs or an additional committed facility before adopting that plan. Do not treat expected future growth as financing.
+Release capital in stages
+Spend the first 30 days confirming scope and commercial economics. Approve the remaining setup budget only against a bank term sheet, integration plan and evidence owners. Release growth spending after pilot repeat usage and contribution margins are measured. Keep the prefunding and contingency policies separate from marketing cash.
+
+
+Unit economics before scale
+
+Worked Base example in Year 3: one paid $450 conversion/transfer. The model charges a 1.5% percentage fee plus $3, with a 20% bank share. These are pricing assumptions, not signed provider prices. The official/parallel FX gap is not Tazdan revenue.
+Transaction component | USD
+Customer principal moved | $450.00
+Gross percentage fee (1.5%) | $6.75
+Gross fixed transaction fee | $3.00
+Customer fee pool | $9.75
+Bank share (20%) | ($1.95)
+Tazdan retained revenue | $7.80
+Direct execution cost (0.65% of principal) | ($2.93)
+Fixed fulfillment cost | ($1.25)
+Fraud/FX-loss allowance (0.10%) | ($0.45)
+Contribution before onboarding, acquisition and fixed costs | $3.18
+Retained revenue margin after these transaction costs is about <b>40.7%</b>. It falls further after verification, replacements for churn, acquisition, people, compliance and infrastructure. Free internal transfers and balances held generate no assumed transaction revenue.
+Demand required in the Base ramp
+Year-end active transacting customers: 3,000 / 8,500 / 14,000 / 21,000 / 29,000. Transactions per active customer per month: 1.2 / 1.3 / 1.4 / 1.5 / 1.6. Average ticket: $400 / $425 / $450 / $475 / $500. Monthly active churn is 4%; acquisition budgets replace churn as well as adding growth.
+Paid business subscriptions reach 40 / 130 / 250 / 400 / 600 accounts at $40 per month, before bank share. Their subscription revenue is separate; business transaction volume is not added a second time. Validate fee acceptance and repeat paid use with pilot cohorts before scaling.
+
+
+How much the company could earn
+
+The table shows <b>Tazdan retained revenue / operating profit before tax</b>. Operating profit includes direct rails, loss allowance, verification, acquisition and recurring operating cash costs. One-time setup, cash tax reserves, capex and additional prefunding are in the cash forecast, not this operating-profit measure.
+Scenario | Year 1 | Year 3 | Year 5
+Downside | $4,615<br/>($0.39m) | $213,202<br/>($0.71m) | $541,548<br/>($0.98m)
+Base | $95,200<br/>($0.41m) | $1.55m<br/>($0.23m) | $4.22m<br/>$435,093
+Bank-supported | $95,200<br/>($0.25m) | $1.55m<br/>$94,782 | $4.22m<br/>$873,013
+Upside | $357,484<br/>($0.37m) | $4.51m<br/>$1.19m | $12.45m<br/>$4.65m
+Interpretation
+<b>Downside:</b> low fee retention and higher costs make the modeled contribution negative even before fixed operations. Cash is exhausted in M25. Do not pursue volume growth at those economics; renegotiate, reprice or stop. Later figures require large new funding and are not a financed plan.
+<b>Base:</b> Year-3 revenue reaches $1.55m but operations still lose $225k. Year-5 revenue reaches $4.22m and operating profit $435k. Funding is needed before that growth can happen.
+<b>Bank-supported:</b> identical revenue to Base; lower acquisition and shared operating costs generate about $95k Year-3 operating profit and $873k in Year 5. Year-5 free cash after the tax reserve, capex and additional prefunding is about <b>$391k</b>. This is the commercially conditional path compatible with $1.6m.
+<b>Upside:</b> 30,000 active users by Year 3 and 60,000 by Year 5, stronger usage, better pricing and lower bank/rail costs. It produces $1.19m Year-3 operating profit and $4.65m in Year 5. This is a demanding growth scenario, not an expected result.
+<b>Your personal earnings are not the company’s revenue.</b> Personal proceeds equal an approved dividend pool multiplied by your ownership percentage, plus any agreed salary or exit proceeds. No verified cap table, dividend policy or exit value is supplied, so personal take-home and investor IRR are not estimated.
+
+
+Break-even and investment payback
+
+Measure from funding | Base | Bank-supported | Upside
+Three profitable months reached | M44 | M29 | M19
+Setup and operating losses recovered | Beyond M60 | M56 | M33
+Full $1.6m free-cash payback | Beyond M60 | Beyond M60 | M50
+Extra capital to preserve $200k reserve | $598,658 | $0 | $0
+<b>Operating break-even</b> means three consecutive months of positive operating profit, before tax/setup/capex. Bank-supported first has a positive month at M24, then a Year-3 cost increase interrupts profitability; sustained acceptance comes at M29. Dates assume funding in October 2026.
+<b>Loss recovery</b> means cumulative operating cash after planning taxes, setup and capex becomes nonnegative. <b>Full payback</b> means cumulative free cash after additional settlement prefunding earns back the entire original $1.6m. No terminal liquidity release or exit valuation is counted.
+Unrestricted corporate cash over 60 months
+The Base line below zero is an unfunded projection. It requires new capital, cost cuts or shutdown. The chart excludes customer money and the $300k initial corporate prefunding; growing prefunding reduces cash. Downside is omitted from the chart because it exhausts cash earlier and has structurally negative unit economics.
+Bank-supported sustained break-even: Feb 2029. Base: May 2030. Upside: Apr 2028. Upside full payback: Nov 2030. These are scenario outputs, not promised dates.
+
+
+A realistic launch schedule
+
+Window from now | Deliverable | Release condition
+Days 0–30<br/>Oct–Nov 2026 | Bank term sheet, product scope, responsibilities, fee/rail schedule, distribution and prefunding terms. | Bank compliance/legal confirm activity authority and approvals. Assign seven evidence-gate owners.
+Days 31–90<br/>Nov 2026–Jan 2027 | Close session-test issue; integrate bank and one payout route; staged migrations; security review. | Database/API replay, races, reversals, outage recovery and live callbacks reconcile.
+Days 91–150<br/>Jan–Mar 2027 | Physical-device and Arabic/English QA, backup/PITR drill, incident exercise, final customer terms. | No unaccepted exploitable high/critical findings; signed acceptance tied to release SHA.
+Around M6<br/>Mar 2027 | First paid, capped pilot with 100–300 approved customers and a small business cohort. | Authorization and seven gates verified for exact market, currencies, features and providers.
+M8–10<br/>May–Jul 2027 | Broader Libya rollout after 60–90 days of reliable pilot service. | Measured retention, repeat paid use, settlement success, support and positive contribution.
+M12–24 | Reach 3,000 then 8,500 active transacting users in Base; deepen approved business distribution. | Growth spend tracks measured contribution and CAC; expand scope only after new gate reviews.
+Distribution should start with the partner
+Pilot the bank’s existing customer base, selected payroll/business users and approved family-payment use cases. Bank distribution is the assumption behind the lower $12 activation cost in Bank-supported; referrals alone do not prove that cost. Measure activation per verified customer, 30/90-day paid repeat use and net contribution by route.
+This schedule assumes cooperation and timely approvals. If the bank cannot offer the intended activity or a viable all-in price by Day 90, revise the product scope and cash plan before committing the growth budget. More code does not resolve a missing regulated service or negative transaction economics.
+
+
+How likely is success?
+
+<b>Defined success:</b> at least three consecutive profitable operating months by M36, while meeting customer-money controls and avoiding additional equity funding. This is a narrower and more useful goal than “becoming a major fintech.”
+Conditional milestone | Planning judgment
+Obtain a workable bank/legal/service arrangement | 60–70%
+Deliver a safe, reliable pilot given that arrangement | 80–90%
+Achieve economics and adoption given the first two | 55–70%
+Current combined judgment | About 25–45%
+With signed viable bank support and confirmed cost sharing | About 45–65%
+The first three ranges are subjective assumptions. Their conditional chain gives roughly 26–44% (0.60×0.80×0.55 to 0.70×0.90×0.70); this is not an empirical failure-rate model. With the first milestone achieved, the remaining chain is about 44–63%. Ranges are rounded for planning. There is no verified paying-customer cohort, conversion history or comparable-outcome dataset to calibrate them.
+Risks that can change the answer
+Risk | Practical mitigation
+Bank terms / legal scope | Bind permitted products, costs, responsibilities and exit rights in contracts. A possible partnership is not an activated service.
+Margin compression / competition | Pilot total-price acceptance. Existing banks, instant payment systems and licensed exchange channels already serve this market.
+Security / money integrity | Resolve the reproduced test failure; complete DB rail tests, independent assurance and daily reconciliation.
+FX / settlement liquidity | Executable quotes, exposure limits, prefunding thresholds and contracted liquidity; no profit assumption from the official/parallel gap.
+Distribution / retention | Use measured bank-channel cohorts, repeat paid use and contribution. Pay only for acquired customers whose economics justify it.
+Partner concentration / capital | Termination and data portability rights, backup rail plan, reserve policy and an agreed cost-cut trigger.
+Treat the bank partnership as a measurable commercial advantage only when its terms deliver lower costs, reliable funding or contractual revenue. The software foundation alone is insufficient to justify a high success probability.
+
+
+Evidence, sources and model limits
+
+Public sources checked on 13 October 2026
+1. <link href="https://www.tazdan.com/trust" color="#039CCD">Tazdan trust centre</link>: public pre-launch and licensing disclosures. Company statements, not independent certification.<br/>2. <link href="https://www.tazdan.com/" color="#039CCD">Tazdan public website</link>: product descriptions, service caveats and existing positioning.<br/>3. <link href="https://cbl.gov.ly/en/wp-content/uploads/sites/4/2026/01/Revenue-and-Expenditure-Statemen-from-1st-Jan-to-31-Dec-2025.pdf" color="#039CCD">CBL 2025 revenue/expenditure statement, page 6</link>: electronic payment instruments totaled LYD 389bn, against LYD 136bn in 2024. The reported 6.84m instant-service subscriber count is not necessarily unique people; neither figure establishes Tazdan’s reachable market.<br/>4. <link href="https://www.imf.org/en/news/articles/2026/04/10/mcs-04102026-libya-staff-concluding-statement-of-the-2026-article-iv-consultation-mission" color="#039CCD">IMF mission statement, 10 April 2026</link>: exchange-rate pressure, financial-sector constraints and digitalization. Opportunity exists alongside macro and infrastructure risk.
+Repository evidence and fresh validation
+Release controls: docs/runbooks/launch-readiness.md; server/src/services/ops/launchReadiness.service.ts; docs/launch-evidence.example.json. The example leaves all seven gates pending; it does not prove the state of a private production manifest.<br/>Provider status: server/src/services/cardIssuer/index.ts; server/src/services/remittance/remittance.service.ts. Cards have mock/unconfigured adapters; remittance refuses sandbox-only corridors in production.<br/>Security finding: server/src/__tests__/identity.sessions.test.ts:62. One failure reproduced in both the full non-DB run and isolated suite. No unrelated source fix was made during this report.
+What the financial model assumes
+All demand, pricing, cost and bank-share inputs are explicit assumptions. Base: launch M6; 20% bank share; 1.5% + $3 paid transaction pricing; 0.65% + $1.25 direct rail cost; 0.10% loss allowance; 4% monthly active churn; $25 CAC; $2 KYC at 75% check-to-activation. All Base years keep these rates; ticket and frequency increase as detailed on page 5. Bank-supported changes only CAC and fixed costs.
+Corporate prefunding = paid volume × 40% externally settled × 2 days / 30 × 1.3 buffer, with at least $300k held. Tax is a conservative 20% reserve on positive monthly operating profit, with no loss credits; it is not a legal tax opinion. Fixed opex includes recurring people, compliance, support, infrastructure and vendor minimums. Customer principal, card income, deposit interest, token appreciation and exit value are excluded.
+How to use the deliverables
+The workbook uses one case selector and one 60-month calculation. Four cases reconcile to independent calculations. Selector, later-year input, zero and missing-input behavior were checked; no formula errors appeared in the final scan. Every sheet was rendered. Native Excel operation was not tested. Replace assumptions with signed bank quotes and pilot cohorts before relying on returns.
+This report supersedes earlier financial planning estimates for this decision. The previous investment memorandum retains its separate 12-month proposal assumptions; only its slogan was refreshed. A partner-led structure and five-year cash model explain the different results. Years run Oct–Sep from assumed funding in October 2026. No exit multiple or founder personal return is presented.

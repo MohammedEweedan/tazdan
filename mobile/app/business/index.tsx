@@ -21,6 +21,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 
 import { useTheme, useThemedPalette } from '@/store/themeStore';
+import { useT } from '@/store/i18nStore';
 import { useHaptics } from '@/hooks';
 import { businessService } from '@/services/business';
 import type { BusinessStats, BusinessPayout, BusinessProfile } from '@/types/business';
@@ -55,7 +56,7 @@ function QuickAction({ icon, label, onPress, accent }: {
     <Pressable
       onPress={() => { h.selection(); onPress(); }}
       style={({ pressed }) => ({
-        flex: 1, alignItems: 'center', gap: 8,
+        width: '33.333%', alignItems: 'center', gap: 8,
         paddingVertical: 12, paddingHorizontal: 2,
         opacity: pressed ? 0.75 : 1,
       })}
@@ -123,6 +124,7 @@ export default function BusinessDashboard() {
   const p      = useThemedPalette();
   const h      = useHaptics();
   const mode   = useTheme((s) => s.mode);
+  const t      = useT();
 
   const [stats,    setStats]    = useState<BusinessStats | null>(null);
   const [payouts,  setPayouts]  = useState<BusinessPayout[]>([]);
@@ -262,11 +264,16 @@ export default function BusinessDashboard() {
               <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '600', letterSpacing: 0.7, marginTop: 28, marginBottom: 10 }}>
                 QUICK ACTIONS
               </Text>
-              <View style={{ flexDirection: 'row', gap: 10 }}>
-                <QuickAction icon="key-outline"    label="API Keys"   onPress={() => router.push('/business/api-keys' as never)} />
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
+                <QuickAction icon="qr-code-outline" label={t('bizqr.quick')} onPress={() => router.push('/business/qr' as never)} />
+                <QuickAction icon="storefront-outline" label="Tills" onPress={() => router.push('/business/tills' as never)} />
+                <QuickAction icon="megaphone-outline" label="Offers" onPress={() => router.push('/business/posts' as never)} />
+                <QuickAction icon="color-palette-outline" label="Brand" onPress={() => router.push('/business/brand' as never)} />
+                <QuickAction icon="pricetag-outline" label="Plaques" onPress={() => router.push('/business/plaque' as never)} />
                 <QuickAction icon="people-outline" label="Team"       onPress={() => router.push('/business/team' as never)} />
                 <QuickAction icon="send-outline"   label="Bulk Pay"   onPress={() => router.push('/business/bulk-pay' as never)} />
                 <QuickAction icon="receipt-outline" label="Payouts"   onPress={() => router.push('/business/invoices' as never)} />
+                <QuickAction icon="key-outline"    label="API Keys"   onPress={() => router.push('/business/api-keys' as never)} />
               </View>
 
               {/* Recent payouts */}

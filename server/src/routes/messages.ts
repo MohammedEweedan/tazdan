@@ -20,6 +20,9 @@ messageRouter.post('/',                            MessageController.send);
 // Conversation list (one row per partner)
 messageRouter.get('/conversations',                MessageController.getConversations);
 
+// Total unopened inbound messages (app-icon badge)
+messageRouter.get('/unread-count',                 MessageController.unreadCount);
+
 // Chat privacy toggles
 messageRouter.get('/privacy',                      MessageController.getPrivacy);
 messageRouter.put('/privacy',                      MessageController.updatePrivacy);
@@ -39,6 +42,8 @@ messageRouter.post('/escalate',                    MessageController.escalate);
 messageRouter.post('/read/:userId',                MessageController.markRead);
 
 // Single-message edit / delete (wildcard `:id` last)
+// Decline (the person asked) or cancel (the person who asked) a money request.
+messageRouter.post('/:id/request',                 MessageController.respondRequest);
 messageRouter.patch('/:id',                        MessageController.edit);
 messageRouter.delete('/:id',                       MessageController.remove);
 

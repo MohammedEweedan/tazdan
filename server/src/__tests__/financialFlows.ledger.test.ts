@@ -18,6 +18,7 @@ function makeFakeTx() {
   };
 
   const tx = {
+    $executeRaw: async () => 0,
     ledgerAccount: {
       findFirst: async ({ where }: any) =>
         findAccount(where.type, where.userId ?? null, where.currency) ?? null,

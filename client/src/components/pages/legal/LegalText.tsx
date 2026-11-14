@@ -9,7 +9,14 @@ import NextLink from "next/link";
 import { Box, VisuallyHidden, type BoxProps } from "@chakra-ui/react";
 import { useTranslate } from "@tolgee/react";
 import { FiAlertTriangle } from "react-icons/fi";
-import { useSiteTheme } from "@/components/site";
+import { useSiteLocale, useSiteTheme } from "@/components/site";
+
+/** dir="auto" lets a stray Arabic block read RTL on an English page (the
+ *  bilingual delete-account page). On Arabic pages we leave direction to the
+ *  page, so a Latin-only label such as "Memecoins" still sits on the right. */
+export function useAutoDir(): "auto" | undefined {
+  return useSiteLocale().isAr ? undefined : "auto";
+}
 
 /** Inline link inside legal copy — accent text, underlined, LTR-isolated. */
 export function InlineLink({
@@ -64,10 +71,11 @@ export function Linkify({ text }: { text: string }) {
 /** Body paragraph of a legal document. Strings are linkified. */
 export function LegalParagraph({ children, ...rest }: BoxProps) {
   const t = useSiteTheme();
+  const dir = useAutoDir();
   return (
     <Box
       as="p"
-      dir="auto"
+      dir={dir}
       color={t.fgMuted}
       fontSize="1em"
       lineHeight={1.78}
@@ -83,12 +91,13 @@ export function LegalParagraph({ children, ...rest }: BoxProps) {
 /** Bulleted list with small round dots (logical spacing, flips in RTL). */
 export function LegalList({ items, ...rest }: { items: React.ReactNode[] } & BoxProps) {
   const t = useSiteTheme();
+  const dir = useAutoDir();
   return (
     <Box as="ul" listStyleType="none" m={0} p={0} display="grid" gap="8px" {...rest}>
       {items.map((item, i) => (
         <Box as="li" key={i} display="flex" alignItems="flex-start" gap="12px" color={t.fgMuted} lineHeight={1.7}>
           <Box as="span" aria-hidden w="5px" h="5px" minW="5px" mt="0.72em" borderRadius="999px" bg={t.fgFaint} />
-          <Box as="span" dir="auto" minW={0}>
+          <Box as="span" dir={dir} minW={0}>
             {item}
           </Box>
         </Box>
@@ -100,6 +109,7 @@ export function LegalList({ items, ...rest }: { items: React.ReactNode[] } & Box
 /** A regulatory warning: amber rule on the reading-start side, no box. */
 export function LegalNotice({ children, ...rest }: BoxProps) {
   const t = useSiteTheme();
+  const dir = useAutoDir();
   return (
     <Box
       role="note"
@@ -115,7 +125,7 @@ export function LegalNotice({ children, ...rest }: BoxProps) {
       </Box>
       <Box
         as="p"
-        dir="auto"
+        dir={dir}
         color={t.fg}
         fontSize={{ base: "15px", md: "16px" }}
         fontWeight={500}

@@ -2,7 +2,7 @@
   "expo": {
     "name": "tazdan",
     "slug": "tazdan",
-    "version": "0.1.0",
+    "version": "0.2.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "scheme": "tazdan",
@@ -16,9 +16,8 @@
       "policy": "appVersion"
     },
     "splash": {
-      "image": "./assets/splash-mark.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#24384F"
+      "backgroundColor": "#24384F",
+      "resizeMode": "contain"
     },
     "ios": {
       "icon": "./assets/icon-ios.png",
@@ -38,6 +37,9 @@
       "entitlements": {
         "com.apple.developer.in-app-payments": [
           "merchant.com.tazdan.app"
+        ],
+        "com.apple.security.application-groups": [
+          "group.com.tazdan.app"
         ]
       }
     },
@@ -81,6 +83,8 @@
     },
     "plugins": [
       "./plugins/with-react-native-bundle-ip-output",
+      "./plugins/with-scene-lifecycle",
+      "./plugins/with-launch-screen",
       "expo-router",
       "expo-secure-store",
       "expo-video",
@@ -125,7 +129,60 @@
           "microphonePermission": false
         }
       ],
-      "expo-audio"
+      "expo-audio",
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "deploymentTarget": "16.4"
+          }
+        }
+      ],
+      "@bacons/apple-targets",
+      [
+        "react-native-android-widget",
+        {
+          "widgets": [
+            {
+              "name": "TazdanPayments",
+              "label": "Payments",
+              "description": "Send, receive, scan to pay — and your latest payments.",
+              "minWidth": "110dp",
+              "minHeight": "110dp",
+              "targetCellWidth": 4,
+              "targetCellHeight": 2,
+              "maxResizeWidth": "560dp",
+              "maxResizeHeight": "560dp",
+              "resizeMode": "horizontal|vertical"
+            },
+            {
+              "name": "TazdanChats",
+              "label": "Chats",
+              "description": "Unread messages and your latest conversations.",
+              "minWidth": "110dp",
+              "minHeight": "110dp",
+              "targetCellWidth": 4,
+              "targetCellHeight": 2,
+              "maxResizeWidth": "560dp",
+              "maxResizeHeight": "560dp",
+              "resizeMode": "horizontal|vertical"
+            },
+            {
+              "name": "TazdanHoldings",
+              "label": "Prices & holdings",
+              "description": "Live prices of the crypto and currencies you hold.",
+              "minWidth": "110dp",
+              "minHeight": "110dp",
+              "targetCellWidth": 4,
+              "targetCellHeight": 2,
+              "maxResizeWidth": "560dp",
+              "maxResizeHeight": "560dp",
+              "resizeMode": "horizontal|vertical",
+              "updatePeriodMillis": 1800000
+            }
+          ]
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": false

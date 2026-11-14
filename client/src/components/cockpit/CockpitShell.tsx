@@ -11,7 +11,7 @@ import {
 import {
   FiGrid, FiUsers, FiList, FiBookOpen, FiSend, FiDollarSign, FiDatabase, FiInbox, FiCheckSquare, FiGitMerge,
   FiServer, FiSliders, FiShield, FiAlertTriangle, FiLifeBuoy, FiBarChart2, FiTrendingUp, FiActivity, FiLock,
-  FiFileText, FiUserCheck, FiCpu, FiSearch, FiMenu, FiMoon, FiSun, FiLogOut, FiBriefcase, FiArrowDownCircle, FiArrowUpCircle,
+  FiFileText, FiUserCheck, FiCpu, FiSearch, FiMenu, FiMoon, FiSun, FiLogOut, FiBriefcase, FiArrowDownCircle, FiArrowUpCircle, FiEyeOff, FiRepeat, FiCreditCard, FiLink, FiGift, FiFlag, FiMessageSquare, FiMessageCircle, FiBell, FiMail, FiKey, FiSettings, FiHardDrive, FiTag,
 } from 'react-icons/fi';
 import { api, ApiError, hasSession, logout } from '@/lib/cockpit/api';
 import { initCockpitLang, useCockpitLang, useT } from '@/lib/cockpit/i18n';
@@ -44,6 +44,7 @@ export const NAV: NavGroup[] = [
   { label: 'Customers & money', items: [
     { href: '/admin/customers', label: 'Customers', icon: FiUsers, perm: 'customers.read' },
     { href: '/admin/businesses', label: 'Businesses', icon: FiBriefcase, perm: 'businesses.read' },
+    { href: '/admin/storefront', label: 'Merchant storefront', icon: FiTag, perm: 'businesses.read' },
     { href: '/admin/transactions', label: 'Transactions', icon: FiList, perm: 'transactions.read' },
     { href: '/admin/remittance', label: 'Remittance', icon: FiSend, perm: 'remittance.read' },
     { href: '/admin/fx', label: 'FX', icon: FiDollarSign, perm: 'fx.read' },
@@ -59,6 +60,7 @@ export const NAV: NavGroup[] = [
     { href: '/admin/reconciliation', label: 'Reconciliation', icon: FiGitMerge, perm: 'recon.read' },
     { href: '/admin/providers', label: 'Providers', icon: FiServer, perm: 'providers.read' },
     { href: '/admin/controls', label: 'Controls', icon: FiSliders, perm: 'controls.read' },
+    { href: '/admin/availability', label: 'Availability', icon: FiEyeOff, perm: 'controls.read' },
   ] },
   { label: 'Risk', items: [
     { href: '/admin/compliance', label: 'Compliance', icon: FiShield, perm: 'compliance.read' },
@@ -69,11 +71,32 @@ export const NAV: NavGroup[] = [
     { href: '/admin/finance', label: 'Finance', icon: FiBarChart2, perm: 'finance.read' },
     { href: '/admin/forecasts', label: 'Forecasts', icon: FiTrendingUp, perm: 'forecast.read' },
   ] },
+  { label: 'Products & channels', items: [
+    { href: '/admin/orders', label: 'Crypto orders', icon: FiList, perm: 'transactions.read' },
+    { href: '/admin/p2p', label: 'P2P', icon: FiRepeat, perm: 'transactions.read' },
+    { href: '/admin/cards', label: 'Cards', icon: FiCreditCard, perm: 'transactions.read' },
+    { href: '/admin/ramps', label: 'On/off ramps', icon: FiArrowDownCircle, perm: 'transactions.read' },
+    { href: '/admin/onchain', label: 'On-chain', icon: FiLink, perm: 'transactions.read' },
+    { href: '/admin/fees', label: 'Fee ledger', icon: FiBarChart2, perm: 'finance.read' },
+    { href: '/admin/referrals', label: 'Referrals', icon: FiGift, perm: 'finance.read' },
+    { href: '/admin/aml', label: 'AML flags', icon: FiFlag, perm: 'compliance.read' },
+  ]},
+  { label: 'Communications', items: [
+    { href: '/admin/escalations', label: 'Escalations', icon: FiLifeBuoy, perm: 'support.read' },
+    { href: '/admin/messages', label: 'Messages', icon: FiMessageSquare, perm: 'support.read' },
+    { href: '/admin/whatsapp', label: 'WhatsApp', icon: FiMessageCircle, perm: 'support.read' },
+    { href: '/admin/notifications', label: 'Notifications', icon: FiBell, perm: 'cockpit.view' },
+    { href: '/admin/waitlist', label: 'Waitlist', icon: FiMail, perm: 'cockpit.view' },
+  ]},
   { label: 'Platform', items: [
     { href: '/admin/system', label: 'System health', icon: FiActivity, perm: 'system.read' },
     { href: '/admin/security', label: 'Security', icon: FiLock, perm: 'security.read' },
     { href: '/admin/audit', label: 'Audit', icon: FiFileText, perm: 'audit.read' },
     { href: '/admin/staff', label: 'Staff & roles', icon: FiInbox, perm: 'staff.manage' },
+    { href: '/admin/sessions', label: 'Sessions & keys', icon: FiKey, perm: 'security.read' },
+    { href: '/admin/settings', label: 'Settings', icon: FiSettings, perm: 'cockpit.view' },
+    { href: '/admin/diagnostics', label: 'Diagnostics', icon: FiCpu, perm: 'system.read' },
+    { href: '/admin/data', label: 'Database', icon: FiHardDrive, perm: 'customers.pii' },
   ] },
 ];
 
@@ -83,7 +106,10 @@ const BUILT = new Set<string>([
   '/admin/queues/withdrawals', '/admin/queues/kyc', '/admin/approvals', '/admin/controls', '/admin/system',
   '/admin/security', '/admin/audit', '/admin/staff', '/admin/remittance', '/admin/fx', '/admin/treasury', '/admin/treasury/deposit-accounts',
   '/admin/providers', '/admin/reconciliation', '/admin/compliance', '/admin/fraud', '/admin/support',
-  '/admin/finance', '/admin/forecasts', '/admin/businesses', '/admin/assistant',
+  '/admin/finance', '/admin/forecasts', '/admin/businesses', '/admin/storefront', '/admin/assistant', '/admin/availability',
+  '/admin/orders', '/admin/p2p', '/admin/cards', '/admin/ramps', '/admin/onchain', '/admin/fees', '/admin/referrals', '/admin/aml',
+  '/admin/escalations', '/admin/messages', '/admin/whatsapp', '/admin/notifications', '/admin/waitlist',
+  '/admin/sessions', '/admin/settings', '/admin/diagnostics', '/admin/data',
 ]);
 export function registerBuiltRoutes(routes: string[]) { routes.forEach((r) => BUILT.add(r)); }
 

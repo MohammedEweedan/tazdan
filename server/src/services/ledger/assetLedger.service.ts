@@ -9,6 +9,9 @@
 import { Prisma } from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/library';
 import { v4 as uuidv4 } from 'uuid';
+import { AppError } from '../../middleware/errorHandler';
+import { isLedgerCurrency, negativeUserBalanceAllowed } from './ledger.service';
+import { ledgerAmount, LedgerDecimal, validateAccountOwner } from './validation';
 
 export type AssetAccountType =
   | 'USER'
@@ -17,7 +20,9 @@ export type AssetAccountType =
   | 'SYSTEM_OFFRAMP'
   | 'SYSTEM_CHAIN'
   | 'SYSTEM_FX'
-  | 'SYSTEM_ESCROW';
+  | 'SYSTEM_ESCROW'
+  // LYDT's issuer: carries minus the outstanding supply (services/lydt).
+  | 'TOKEN_ISSUER';
 
 export interface AssetLeg {
   type: AssetAccountType;
@@ -35,20 +40,28 @@ export interface AssetPostInput {
 
 export type AssetTx = Prisma.TransactionClient;
 
-const EPS = new Decimal('0.000000000001');
+/**
+ * Assets whose balances are read from this ledger only, with no
+ * UserWallet.altBalances mirror. LYDT holders need no crypto wallet (whose
+ * row requires chain addresses), and a second copy of a dinar token's
+ * balance is exactly what the ledger exists to avoid.
+ */
+const LEDGER_ONLY_ASSETS = new Set(['LYDT']);
 
 export function normaliseAsset(asset: string): string {
-  return asset.trim().toUpperCase().replace(/[^A-Z0-9._-]/g, '');
+  const normalised = asset.trim().toUpperCase();
+  if (!/^[A-Z0-9][A-Z0-9._-]{0,31}$/.test(normalised)) throw new Error('Invalid ledger asset identifier');
+  return normalised;
 }
 
 export function isDynamicAsset(asset: string): boolean {
   const a = normaliseAsset(asset);
-  return Boolean(a) && ![
-    'USDT', 'BTC', 'ETH', 'BNB', 'SOL', 'XRP', 'ADA', 'DOGE', 'MATIC', 'DOT', 'AVAX',
-    'USD', 'EUR', 'GBP', 'AED', 'SAR', 'EGP', 'LYD',
-  ].includes(a);
+  return !isLedgerCurrency(a);
 }
 
+// The ::text casts matter for system accounts: Postgres cannot infer the type
+// of a bare NULL parameter in "$n IS NULL" (42P18), so without them no
+// system-owned asset account (escrow, issuer, onramp) could be resolved.
 async function resolveAssetAccount(
   tx: AssetTx,
   type: AssetAccountType,
@@ -60,7 +73,7 @@ async function resolveAssetAccount(
     SELECT "id", "balance"
     FROM "AssetLedgerAccount"
     WHERE "type" = ${type} AND "asset" = ${normalised}
-      AND (("userId" = ${userId}) OR ("userId" IS NULL AND ${userId} IS NULL))
+      AND (("userId" = ${userId}::text) OR ("userId" IS NULL AND ${userId}::text IS NULL))
     LIMIT 1
   `;
   if (existing[0]) {
@@ -77,7 +90,7 @@ async function resolveAssetAccount(
     SELECT "id", "balance"
     FROM "AssetLedgerAccount"
     WHERE "type" = ${type} AND "asset" = ${normalised}
-      AND (("userId" = ${userId}) OR ("userId" IS NULL AND ${userId} IS NULL))
+      AND (("userId" = ${userId}::text) OR ("userId" IS NULL AND ${userId}::text IS NULL))
     LIMIT 1
   `;
   if (!row[0]) throw new Error(`asset ledger account could not be resolved: ${type}:${userId ?? 'SYSTEM'}:${normalised}`);
@@ -94,17 +107,18 @@ export async function postAssetLedger(
   opts: { allowNegativeUser?: boolean } = {},
 ): Promise<{ groupId: string }> {
   if (!input.legs.length) throw new Error('postAssetLedger: no legs');
-  const allowNegativeUser = Boolean(opts.allowNegativeUser) && process.env.LEDGER_ALLOW_NEGATIVE_USER !== '0';
+  const allowNegativeUser = negativeUserBalanceAllowed(opts.allowNegativeUser);
 
   const perAsset = new Map<string, Decimal>();
   for (const leg of input.legs) {
+    validateAccountOwner(leg.type, leg.userId);
     const asset = normaliseAsset(leg.asset);
     if (!asset) throw new Error('postAssetLedger: blank asset');
-    const amt = new Decimal(leg.amount.toString());
-    perAsset.set(asset, (perAsset.get(asset) ?? new Decimal(0)).plus(amt));
+    const amt = ledgerAmount(leg.amount);
+    perAsset.set(asset, (perAsset.get(asset) ?? new LedgerDecimal(0)).plus(amt));
   }
   for (const [asset, sum] of perAsset) {
-    if (sum.abs().gt(EPS)) {
+    if (!sum.isZero()) {
       throw new Error(`Asset ledger imbalance for ${asset}: legs sum to ${sum.toString()} refType=${input.refType}`);
     }
   }
@@ -114,25 +128,30 @@ export async function postAssetLedger(
   const affectedUsers = new Map<string, { userId: string; asset: string }>();
   for (const leg of input.legs) {
     const k = keyFor(leg);
-    const amt = new Decimal(leg.amount.toString());
+    const amt = ledgerAmount(leg.amount);
     const cur = agg.get(k);
     if (cur) cur.amount = cur.amount.plus(amt);
     else agg.set(k, { leg: { ...leg, asset: normaliseAsset(leg.asset) }, amount: amt });
   }
 
-  for (const { leg, amount } of agg.values()) {
+  for (const [, { leg, amount }] of [...agg.entries()].sort(([a], [b]) => a.localeCompare(b))) {
     if (amount.isZero()) continue;
     const acct = await resolveAssetAccount(tx, leg.type, leg.asset, leg.userId ?? null);
 
-    if (leg.type === 'USER' && !allowNegativeUser && amount.lt(0) && acct.balance.lt(amount.abs())) {
-      throw new Error(`Insufficient ${leg.asset} asset-ledger balance for user ${leg.userId}: need ${amount.abs().toString()}`);
-    }
-
-    await tx.$executeRaw`
+    const gated = leg.type === 'USER' && !allowNegativeUser && amount.lt(0);
+    // One conditional statement: the sufficiency check and the debit cannot be
+    // split by a concurrent posting (the old read-then-update could be).
+    const updated = await tx.$executeRaw`
       UPDATE "AssetLedgerAccount"
       SET "balance" = "balance" + ${new Prisma.Decimal(amount.toFixed(18))}, "updatedAt" = CURRENT_TIMESTAMP
       WHERE "id" = ${acct.id}
+        AND (${!gated} OR "balance" + ${new Prisma.Decimal(amount.toFixed(18))} >= 0)
     `;
+    if (updated !== 1) {
+      throw new AppError(`Insufficient ${leg.asset} balance`, 400, 'INSUFFICIENT_FUNDS', {
+        ledger: true, asset: leg.asset, need: amount.abs().toString(),
+      });
+    }
     await tx.$executeRaw`
       INSERT INTO "AssetLedgerEntry" ("id", "groupId", "accountId", "asset", "amount", "refType", "refId", "memo")
       VALUES (
@@ -146,7 +165,7 @@ export async function postAssetLedger(
         ${input.memo ?? null}
       )
     `;
-    if (leg.type === 'USER' && leg.userId) {
+    if (leg.type === 'USER' && leg.userId && !LEDGER_ONLY_ASSETS.has(leg.asset)) {
       affectedUsers.set(`${leg.userId}:${leg.asset}`, { userId: leg.userId, asset: leg.asset });
     }
   }

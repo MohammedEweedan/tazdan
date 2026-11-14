@@ -24,6 +24,7 @@ import { z } from 'zod';
 import { prisma } from '../utils/prisma';
 import { AppError } from '../middleware/errorHandler';
 import { AuthRequest } from '../types';
+import { historyRows } from '../services/lydt/lydt.service';
 
 const KINDS = ['transaction', 'p2p_trade', 'card', 'deposit', 'withdrawal', 'onramp', 'offramp', 'crypto_order'] as const;
 type Kind = typeof KINDS[number];
@@ -75,6 +76,7 @@ export class ActivityController {
         onramps,
         offramps,
         cryptoOrders,
+        lydtRows,
       ] = await Promise.all([
         want('transaction')
           ? prisma.transaction.findMany({
@@ -136,6 +138,8 @@ export class ActivityController {
               take,
             }).catch(() => [])
           : Promise.resolve([] as any[]),
+        // LYDT keeps its own ledger; its issues, redeems and transfers read as transactions.
+        want('transaction') ? historyRows(userId, { take }) : Promise.resolve([]),
       ]);
 
       const merged: Activity[] = [];
@@ -160,6 +164,13 @@ export class ActivityController {
           reference: t.reference ?? null,
           description: t.description ?? null,
           metadata: t.metadata ?? null,
+          createdAt: t.createdAt.toISOString(),
+        });
+      }
+      for (const t of lydtRows) {
+        merged.push({
+          id: t.id, kind: 'transaction', type: t.type, currency: t.currency, amount: t.amount, fee: t.fee,
+          status: t.status, reference: t.reference, description: t.description, metadata: t.metadata,
           createdAt: t.createdAt.toISOString(),
         });
       }

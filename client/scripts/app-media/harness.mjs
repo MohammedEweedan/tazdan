@@ -68,6 +68,17 @@ export async function launch({ locale = 'en', theme = 'dark', hidden = false, ds
   page.on('console', (m) => { if (m.type() === 'error') errors.push('console: ' + m.text().slice(0, 300)); });
   page.on('dialog', (d) => d.dismiss().catch(() => {}));
 
+  // Only the local Expo bundle and image/font assets may pass through. Every
+  // API operation is handled below; an unexpected API host is never contacted.
+  await context.route('**/*', async route => {
+    const request = route.request();
+    const url = new URL(request.url());
+    if (['fetch', 'xhr'].includes(request.resourceType()) && url.origin !== new URL(APP_URL).origin) {
+      unmatched.add(`BLOCKED ${request.method()} ${url.origin}${url.pathname}`);
+      await route.abort();
+    } else await route.continue();
+  });
+
   await context.route('http://localhost:5001/**', async (route) => {
     const req = route.request();
     const url = new URL(req.url());

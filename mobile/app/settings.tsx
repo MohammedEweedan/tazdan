@@ -8,6 +8,9 @@ import { Text, TextInput } from '@/components/ui/Text';
 import { Ionicons } from '@expo/vector-icons';
 import { ScreenShell, Panel, PanelRow, SectionLabel, ToggleRow } from '@/components/ui/ScreenShell';
 import { AppearancePicker } from '@/components/ui/AppearancePicker';
+import { SegmentedControl } from '@/components/ui/SegmentedControl';
+import { useUiStore } from '@/store/uiStore';
+import type { ConfirmStyle } from '@/constants/config';
 import { BottomSheet } from '@/components/ui/BottomSheet';
 import { avatarMode } from '@/utils/displayUser';
 import { useThemedPalette } from '@/store/themeStore';
@@ -23,6 +26,8 @@ export default function Settings() {
   const h = useHaptics();
   const t = useT();
   const p = useThemedPalette();
+  const confirmStyle = useUiStore((s) => s.confirmStyle);
+  const setConfirmStyle = useUiStore((s) => s.setConfirmStyle);
   const locale = useI18n((s) => s.locale);
   const { user, updateUser } = useAuthStore();
   const [langPickerVisible, setLangPickerVisible] = useState(false);
@@ -90,6 +95,16 @@ export default function Settings() {
 
       <SectionLabel first>{t('settings.appearance')}</SectionLabel>
       <AppearancePicker />
+      {/* How money flows confirm — lets owners/testers feel each pattern. */}
+      <View style={{ marginTop: 22 }}>
+        <Text style={{ color: p.fg, fontSize: 15, fontWeight: '500', marginBottom: 4 }}>{t('confirm.style')}</Text>
+        <Text style={{ color: p.fgMuted, fontSize: 12, lineHeight: 17, marginBottom: 10 }}>{t('confirm.styleHint')}</Text>
+        <SegmentedControl<ConfirmStyle> value={confirmStyle} onChange={setConfirmStyle} options={[
+          { key: 'review', label: t('confirm.style.review') },
+          { key: 'hold', label: t('confirm.style.hold') },
+          { key: 'slide', label: t('confirm.style.slide') },
+        ]} />
+      </View>
       <View style={{ marginTop: 20 }}><Panel>
         <PanelRow icon="language-outline" label={t('settings.language')}
           value={`${LOCALE_META[locale].flag}  ${LOCALE_META[locale].label}`} last

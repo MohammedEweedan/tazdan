@@ -4,7 +4,8 @@
    LegalDocument — the reading layout shared by the privacy policy, terms,
    risk summary (and any page that uses components/ui/LegalPage).
 
-   • Header: eyebrow, title, intro, "Last updated", print, optional notice.
+   • Hero: the kit's compact MediaHero (eyebrow, two-tone title, intro,
+     "Last updated" note, read + print actions); optional `before` block.
    • Body: sticky contents with scroll-spy (column on desktop, bar on phones),
      numbered sections at a ~68ch measure, each with a copy-link anchor.
    • Related legal documents at the end; a clean print stylesheet.
@@ -20,9 +21,9 @@ import { Box, VisuallyHidden } from "@chakra-ui/react";
 import { useTranslate } from "@tolgee/react";
 import { FiCheck, FiLink, FiPrinter } from "react-icons/fi";
 import {
-  Container, Eyebrow, Headline, Lead, Row, RowList, SectionLabel, useSiteLocale, useSiteTheme,
+  Container, MediaHero, Row, RowList, SectionLabel, SiteButton, useSiteLocale, useSiteTheme,
 } from "@/components/site";
-import { LegalParagraph } from "./LegalText";
+import { LegalParagraph, useAutoDir } from "./LegalText";
 import { DesktopToc, MobileToc, type TocItem } from "./LegalToc";
 import LegalPageStyles from "./LegalPageStyles";
 import { useScrollSpy } from "./useScrollSpy";
@@ -48,8 +49,13 @@ export type LegalDocumentProps = {
   sections: LegalSectionData[];
   /** Extra items for the meta line (e.g. reading time). */
   meta?: string[];
-  /** Shown under the meta line — e.g. a regulatory warning (LegalNotice). */
+  /** Shown at the top of the reading column — e.g. a regulatory warning (LegalNotice). */
   notice?: React.ReactNode;
+  /** Full-width block between the hero and the document (e.g. a summary bento). */
+  before?: React.ReactNode;
+  /** Primary hero action: label + in-page target. Defaults to "Read the full text" → #document. */
+  readLabel?: string;
+  readHref?: string;
   /** Link list of the other legal documents at the end. Default true. */
   related?: boolean;
 };
@@ -64,35 +70,6 @@ const RELATED = [
 ] as const;
 
 /* ── pieces ─────────────────────────────────────────────────────────────── */
-
-function MetaDot() {
-  const t = useSiteTheme();
-  return <Box as="span" aria-hidden w="3px" h="3px" borderRadius="999px" bg={t.fgFaint} />;
-}
-
-function PrintButton() {
-  const t = useSiteTheme();
-  const { t: tr } = useTranslate();
-  return (
-    <Box
-      as="button"
-      type="button"
-      data-legal-noprint
-      onClick={() => window.print()}
-      display="inline-flex"
-      alignItems="center"
-      gap="7px"
-      minH="44px"
-      color={t.accentText}
-      fontWeight={500}
-      _hover={{ textDecoration: "underline", textUnderlineOffset: "4px" }}
-      _focusVisible={{ outline: `2px solid ${t.accent}`, outlineOffset: "3px", borderRadius: "6px" }}
-    >
-      <FiPrinter size={15} aria-hidden />
-      {tr("legal.meta.print")}
-    </Box>
-  );
-}
 
 function AnchorButton({
   headingId, copied, onCopy,
@@ -150,12 +127,13 @@ function AnchorButton({
 /* ── document ───────────────────────────────────────────────────────────── */
 
 export default function LegalDocument({
-  eyebrow, title, updated, intro, sections, meta = [], notice, related = true,
+  eyebrow, title, updated, intro, sections, meta = [], notice, before, readLabel, readHref, related = true,
 }: LegalDocumentProps) {
   const t = useSiteTheme();
   const { t: tr } = useTranslate();
   const { isAr, forward } = useSiteLocale();
   const pathname = usePathname() ?? "";
+  const dir = useAutoDir();
 
   const items = useMemo(() => {
     let n = 0;
@@ -213,49 +191,40 @@ export default function LegalDocument({
     <Box data-legal-doc>
       <LegalPageStyles />
 
-      {/* header */}
-      <Box as="header" data-legal-header borderBottom="1px solid" borderColor={t.border}>
-        <Container pt="clamp(112px, 12vw, 164px)" pb="clamp(36px, 5vw, 64px)">
-          {eyebrow && <Eyebrow mb="16px">{eyebrow}</Eyebrow>}
-          <Headline as="h1" size="page" text={title} maxW="18ch" sx={{ ...headingFix, textWrap: "balance" }} />
-          {intro && (
-            <Lead mt="22px" maxW="60ch" dir="auto">
-              {intro}
-            </Lead>
-          )}
-          {(metaItems.length > 0 || true) && (
-            <Box
-              mt="20px"
-              display="flex"
-              flexWrap="wrap"
-              alignItems="center"
-              columnGap="14px"
-              rowGap="0"
-              fontSize="14px"
-              color={t.fgFaint}
-            >
-              {metaItems.map((m, i) => (
-                <Box as="span" key={i} display="inline-flex" alignItems="center" gap="14px" minH="44px">
-                  {i > 0 && <MetaDot />}
-                  <span>{m}</span>
-                </Box>
-              ))}
-              <Box as="span" display="inline-flex" alignItems="center" gap="14px" data-legal-noprint>
-                {metaItems.length > 0 && <MetaDot />}
-                <PrintButton />
-              </Box>
+      {/* hero — the landing's compact MediaHero, so the seam disappears */}
+      <Box data-legal-hero>
+        <MediaHero
+          compact
+          eyebrow={eyebrow}
+          title={title}
+          lead={intro}
+          note={metaItems.join(" · ") || undefined}
+          actions={
+            <Box data-legal-noprint display="flex" gap="12px" flexWrap="wrap" justifyContent="center">
+              <SiteButton size="lg" href={readHref ?? "#document"} arrow>
+                {readLabel ?? tr("legal.hero.read")}
+              </SiteButton>
+              <SiteButton size="lg" variant="secondary" onClick={() => window.print()}>
+                <FiPrinter size={16} aria-hidden />
+                {tr("legal.meta.print")}
+              </SiteButton>
             </Box>
-          )}
-          {notice && (
-            <Box mt="24px" maxW="68ch">
-              {notice}
-            </Box>
-          )}
-        </Container>
+          }
+        />
       </Box>
 
+      {before}
+
       {/* body */}
-      <Container data-legal-body pt="clamp(28px, 5vw, 64px)" pb="clamp(80px, 10vw, 140px)">
+      <Container
+        id="document"
+        data-legal-body
+        pt="clamp(40px, 6vw, 88px)"
+        pb="clamp(80px, 10vw, 140px)"
+        borderTop={{ base: "none", lg: before ? "none" : "1px solid" }}
+        borderColor={t.border}
+        sx={{ scrollMarginTop: "40px" }}
+      >
         <Box
           data-legal-grid
           display={{ base: "block", lg: "grid" }}
@@ -266,6 +235,7 @@ export default function LegalDocument({
           <DesktopToc items={toc} active={active} />
 
           <Box data-legal-content minW={0} maxW="68ch" fontSize={{ base: "16px", md: "17px" }}>
+            {notice && <Box mb="clamp(36px, 4.5vw, 56px)">{notice}</Box>}
             {items.map((s, i) => (
               <Box
                 as="section"
@@ -299,7 +269,7 @@ export default function LegalDocument({
                   <Box
                     as="h2"
                     id={`${s.id}-h`}
-                    dir="auto"
+                    dir={dir}
                     flex="1"
                     minW={0}
                     fontSize={{ base: "21px", md: "24px" }}

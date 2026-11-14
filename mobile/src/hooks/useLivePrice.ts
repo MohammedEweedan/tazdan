@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { AppState } from "react-native";
 export interface LivePrice {
   price: number;
   changePct24h: number;
@@ -23,10 +24,46 @@ const SYMBOL_TO_BASE: Record<string, string> = Object.fromEntries(
 
 let prices: Record<string, LivePrice> = {};
 const subscribers = new Set<(p: Record<string, LivePrice>) => void>();
+
+/* ── Connection policy ────────────────────────────────────────────────────
+   Binance's default stream host (stream.binance.com:9443) is unreachable on
+   some networks — the old loop then reconnected every 2 s forever and logged
+   the whole error event each time. Now:
+   - rotate through Binance's public market-data hosts (the :443 port and the
+     binance.vision mirror usually work where :9443 is blocked);
+   - exponential backoff with jitter (2 s → 60 s), reset when a stream opens;
+   - while no stream is open, REST-poll the 24h tickers (also with a mirror)
+     so prices stay fresh;
+   - pause in the background and when nothing is subscribed;
+   - one short dev-only log line per state change, never raw events. */
+const WS_HOSTS = [
+  'wss://stream.binance.com:9443',
+  'wss://stream.binance.com:443',
+  'wss://data-stream.binance.vision',
+];
+const REST_HOSTS = ['https://api.binance.com', 'https://data-api.binance.vision'];
+const BACKOFF_MIN_MS = 2_000;
+const BACKOFF_MAX_MS = 60_000;
+const REST_POLL_MS = 30_000;
+const IDLE_CLOSE_MS = 30_000;
+
 let ws: WebSocket | null = null;
+let wsHost = 0;
+let attempts = 0;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-let restSeeded = false;
-let connectionStarted = false;
+let restTimer: ReturnType<typeof setInterval> | null = null;
+let idleTimer: ReturnType<typeof setTimeout> | null = null;
+let restHost = 0;
+let active = false;          // subscribers present and app in the foreground
+let streamOpen = false;
+let lastLogged = '';
+let appStateSub: { remove: () => void } | null = null;
+
+function log(state: string) {
+  if (!__DEV__ || state === lastLogged) return;
+  lastLogged = state;
+  console.log(`[BinanceLive] ${state}`);
+}
 
 function notify() {
   const snapshot = prices;
@@ -38,150 +75,199 @@ function applyTick(base: string, lp: LivePrice) {
   notify();
 }
 
-function seedFromRest() {
-  if (restSeeded) return;
-  restSeeded = true;
+async function fetchRest(): Promise<void> {
   const symbols = SYMBOLS_BASE.map((b) => `${b}USDT`);
-  const url = `https://api.binance.com/api/v3/ticker/24hr?symbols=${encodeURIComponent(JSON.stringify(symbols))}`;
-
-  console.log('[BinanceLive] Seeding from REST:', url);
-
-  fetch(url)
-    .then((r) => r.json())
-    .then((rows: any[]) => {
-      if (!Array.isArray(rows)) {
-        console.warn('[BinanceLive] REST seed returned non-array');
-        return;
-      }
+  for (let i = 0; i < REST_HOSTS.length; i++) {
+    const host = REST_HOSTS[(restHost + i) % REST_HOSTS.length];
+    try {
+      const r = await fetch(`${host}/api/v3/ticker/24hr?symbols=${encodeURIComponent(JSON.stringify(symbols))}`);
+      if (!r.ok) continue;
+      const rows: any[] = await r.json();
+      if (!Array.isArray(rows)) continue;
       const seed: Record<string, LivePrice> = {};
       const now = Date.now();
-      rows.forEach((r) => {
-        const base = SYMBOL_TO_BASE[r.symbol];
+      rows.forEach((row) => {
+        const base = SYMBOL_TO_BASE[row.symbol];
         if (!base) return;
         seed[base] = {
-          price: parseFloat(r.lastPrice),
-          changePct24h: parseFloat(r.priceChangePercent),
-          high24h: parseFloat(r.highPrice),
-          low24h: parseFloat(r.lowPrice),
-          open24h: parseFloat(r.openPrice),
-          volume24h: parseFloat(r.quoteVolume),
+          price: parseFloat(row.lastPrice),
+          changePct24h: parseFloat(row.priceChangePercent),
+          high24h: parseFloat(row.highPrice),
+          low24h: parseFloat(row.lowPrice),
+          open24h: parseFloat(row.openPrice),
+          volume24h: parseFloat(row.quoteVolume),
           ts: now,
         };
       });
-      prices = { ...seed, ...prices };
-      console.log('[BinanceLive] REST seed completed with', Object.keys(seed).length, 'symbols');
+      restHost = (restHost + i) % REST_HOSTS.length;
+      // Live stream ticks win over a REST snapshot of the same symbol.
+      prices = streamOpen ? { ...seed, ...prices } : { ...prices, ...seed };
       notify();
-    })
-    .catch((e) => {
-      console.error('[BinanceLive] REST seed failed:', e);
-    });
+      return;
+    } catch { /* try the next host */ }
+  }
+  log('price snapshot unavailable — will retry');
 }
 
-function connect() {
-  if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
-    console.log('[BinanceLive] WebSocket already connected/connecting');
-    return;
-  }
+function startRestPolling() {
+  if (restTimer) return;
+  restTimer = setInterval(() => { if (!streamOpen) void fetchRest(); }, REST_POLL_MS);
+}
 
+function stopRestPolling() {
+  if (restTimer) clearInterval(restTimer);
+  restTimer = null;
+}
+
+function streamUrl(host: string) {
   const parts: string[] = [];
   SYMBOLS_BASE.forEach((b) => {
     const sym = `${b.toLowerCase()}usdt`;
-    parts.push(`${sym}@trade`);
-    parts.push(`${sym}@ticker`);
+    parts.push(`${sym}@trade`, `${sym}@ticker`);
   });
-  const url = `wss://stream.binance.com:9443/stream?streams=${parts.join('/')}`;
+  return `${host}/stream?streams=${parts.join('/')}`;
+}
 
-  console.log('[BinanceLive] Connecting to:', url);
-
+function onMessage(ev: { data: any }) {
   try {
-    ws = new WebSocket(url);
-  } catch (e) {
-    console.error('[BinanceLive] WebSocket creation failed:', e);
+    const d = JSON.parse(ev.data)?.data;
+    if (!d || !d.s) return;
+    const base = SYMBOL_TO_BASE[d.s];
+    if (!base) return;
+    const now = Date.now();
+    const prev = prices[base];
+    if (d.e === 'trade') {
+      const px = parseFloat(d.p);
+      applyTick(base, {
+        price: px,
+        changePct24h: prev?.changePct24h ?? 0,
+        high24h: prev?.high24h ?? px,
+        low24h: prev?.low24h ?? px,
+        open24h: prev?.open24h ?? px,
+        volume24h: prev?.volume24h ?? 0,
+        ts: now,
+      });
+    } else if (d.e === '24hrTicker') {
+      applyTick(base, {
+        price: prev?.price ?? parseFloat(d.c),
+        changePct24h: parseFloat(d.P),
+        high24h: parseFloat(d.h),
+        low24h: parseFloat(d.l),
+        open24h: parseFloat(d.o),
+        volume24h: parseFloat(d.q),
+        ts: prev?.ts ?? now,
+      });
+    }
+  } catch { /* ignore malformed frames */ }
+}
+
+function connect() {
+  if (!active) return;
+  if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return;
+  const host = WS_HOSTS[wsHost % WS_HOSTS.length];
+  let socket: WebSocket;
+  try {
+    socket = new WebSocket(streamUrl(host));
+  } catch {
     scheduleReconnect();
     return;
   }
-
-  ws.onopen = () => {
-    console.log('[BinanceLive] WebSocket connected');
+  ws = socket;
+  socket.onopen = () => {
+    streamOpen = true;
+    attempts = 0;
+    log(`live prices connected (${host.replace('wss://', '')})`);
   };
-
-  ws.onmessage = (ev) => {
-    try {
-      const msg = JSON.parse(ev.data);
-      const d = msg?.data;
-      if (!d || !d.s) return;
-      const base = SYMBOL_TO_BASE[d.s];
-      if (!base) return;
-      const e = d.e as string;
-      const now = Date.now();
-      const prev = prices[base];
-
-      if (e === 'trade') {
-        const px = parseFloat(d.p);
-        applyTick(base, {
-          price: px,
-          changePct24h: prev?.changePct24h ?? 0,
-          high24h: prev?.high24h ?? px,
-          low24h: prev?.low24h ?? px,
-          open24h: prev?.open24h ?? px,
-          volume24h: prev?.volume24h ?? 0,
-          ts: now,
-        });
-      } else if (e === '24hrTicker') {
-        applyTick(base, {
-          price: prev?.price ?? parseFloat(d.c),
-          changePct24h: parseFloat(d.P),
-          high24h: parseFloat(d.h),
-          low24h: parseFloat(d.l),
-          open24h: parseFloat(d.o),
-          volume24h: parseFloat(d.q),
-          ts: prev?.ts ?? now,
-        });
-      }
-    } catch (err) {
-      console.error('[BinanceLive] Message parse error:', err);
-    }
+  socket.onmessage = onMessage;
+  socket.onerror = () => {
+    // Details arrive with onclose; closing here keeps one code path.
+    try { socket.close(); } catch {}
   };
-
-  ws.onclose = () => {
-    console.log('[BinanceLive] WebSocket closed, scheduling reconnect');
-    ws = null;
+  socket.onclose = () => {
+    if (ws === socket) ws = null;
+    const wasOpen = streamOpen;
+    streamOpen = false;
+    if (!active) return;
+    if (!wasOpen) wsHost += 1; // never opened → try the next host next time
+    void fetchRest();
     scheduleReconnect();
-  };
-
-  ws.onerror = (e) => {
-    console.error('[BinanceLive] WebSocket error:', e);
-    try {
-      ws?.close();
-    } catch {}
   };
 }
 
 function scheduleReconnect() {
-  if (reconnectTimer) return;
+  if (reconnectTimer || !active) return;
+  const exp = Math.min(BACKOFF_MAX_MS, BACKOFF_MIN_MS * 2 ** attempts);
+  const delay = Math.round(exp * (0.75 + Math.random() * 0.5));
+  attempts += 1;
+  log(`live prices unavailable — using snapshots, retrying in ${Math.round(delay / 1000)}s`);
   reconnectTimer = setTimeout(() => {
     reconnectTimer = null;
     connect();
-  }, 2000);
+  }, delay);
 }
 
-function startConnection() {
-  if (connectionStarted) return;
-  connectionStarted = true;
-  seedFromRest();
+function teardown() {
+  if (reconnectTimer) clearTimeout(reconnectTimer);
+  reconnectTimer = null;
+  stopRestPolling();
+  const socket = ws;
+  ws = null;
+  streamOpen = false;
+  if (socket) {
+    socket.onclose = null;
+    try { socket.close(); } catch {}
+  }
+}
+
+function resume() {
+  if (active) return;
+  active = true;
+  attempts = 0;
+  void fetchRest();
+  startRestPolling();
   connect();
+}
+
+function pause() {
+  if (!active) return;
+  active = false;
+  teardown();
+  log('live prices paused');
+}
+
+function onSubscribersChanged() {
+  if (idleTimer) clearTimeout(idleTimer);
+  idleTimer = null;
+  if (subscribers.size > 0) {
+    if (!appStateSub) {
+      appStateSub = AppState.addEventListener('change', (state) => {
+        if (state === 'active' && subscribers.size > 0) resume();
+        else if (state === 'background') pause();
+      });
+    }
+    if (AppState.currentState !== 'background') resume();
+  } else {
+    // Keep the stream briefly so navigating between screens doesn't churn it.
+    idleTimer = setTimeout(() => {
+      if (subscribers.size === 0) {
+        pause();
+        appStateSub?.remove();
+        appStateSub = null;
+      }
+    }, IDLE_CLOSE_MS);
+  }
 }
 
 export function useBinanceLive(): Record<string, LivePrice> {
   const [snap, setSnap] = useState(prices);
 
   useEffect(() => {
-    console.log('[BinanceLive] Hook mounted, starting connection');
     subscribers.add(setSnap);
-    startConnection();
+    setSnap(prices);
+    onSubscribersChanged();
     return () => {
-      console.log('[BinanceLive] Hook unmounted');
       subscribers.delete(setSnap);
+      onSubscribersChanged();
     };
   }, []);
 

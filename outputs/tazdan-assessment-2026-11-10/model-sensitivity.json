@@ -1,0 +1,168 @@
+[
+  {
+    "name": "Base as modeled",
+    "edits": {},
+    "year3": {
+      "year": 3,
+      "users": 3110.608650270105,
+      "registrations": 17176.939603767485,
+      "business": 244.68475043976244,
+      "institutions": 4,
+      "payments": 255368.83736906783,
+      "volume": 16065842.218569878,
+      "revenue": 229354.9684456986,
+      "retained": 18393.190074562564,
+      "subscriptions": 106961.77837113604,
+      "institutionRecurring": 84000,
+      "setup": 20000,
+      "contribution": 177240.2551711991,
+      "ebitda": -340919.74482880085,
+      "freeCash": -454563.95110572525,
+      "ownLiquidity": 141024.92296747834,
+      "exitRecurringAnnual": 263721.56255852873,
+      "requiredFunding": 1265476.7413268702
+    },
+    "required18": 556552.9567480639,
+    "required36": 1265476.7413268702
+  },
+  {
+    "name": "Launch delayed to month 13",
+    "edits": {
+      "delay": 12
+    },
+    "year3": {
+      "year": 3,
+      "users": 3021.6322330808766,
+      "registrations": 15699.309326238546,
+      "business": 228.59993767259536,
+      "institutions": 3,
+      "payments": 237758.83669562644,
+      "volume": 14744331.35890936,
+      "revenue": 193306.71418936283,
+      "retained": 16926.581017657674,
+      "subscriptions": 96380.13317170517,
+      "institutionRecurring": 60000,
+      "setup": 20000,
+      "contribution": 147473.84861271718,
+      "ebitda": -370686.1513872828,
+      "freeCash": -478448.58854145766,
+      "ownLiquidity": 132550.70684129128,
+      "exitRecurringAnnual": 228745.3797570899,
+      "requiredFunding": 1294138.3062497491
+    },
+    "required18": 532270.8040686512,
+    "required36": 1294138.3062497491
+  },
+  {
+    "name": "Business conversion 5% instead of 10%",
+    "edits": {
+      "conversion": 0.05
+    },
+    "year3": {
+      "year": 3,
+      "users": 1989.0388883425449,
+      "registrations": 10991.020442780606,
+      "business": 122.34237521988122,
+      "institutions": 4,
+      "payments": 151762.8828437692,
+      "volume": 8875667.354858177,
+      "revenue": 167788.103382194,
+      "retained": 10307.21419662601,
+      "subscriptions": 53480.88918556802,
+      "institutionRecurring": 84000,
+      "setup": 20000,
+      "contribution": 125854.80600590372,
+      "ebitda": -382225.19399409625,
+      "freeCash": -439384.2463721656,
+      "ownLiquidity": 74472.74612859944,
+      "exitRecurringAnnual": 181252.53845445812,
+      "requiredFunding": 1247261.0956465986
+    },
+    "required18": 545102.6745778362,
+    "required36": 1247261.0956465986
+  },
+  {
+    "name": "Own prefunding removed (contract required)",
+    "edits": {
+      "prefundDays": 0
+    },
+    "year3": {
+      "year": 3,
+      "users": 3110.608650270105,
+      "registrations": 17176.939603767485,
+      "business": 244.68475043976244,
+      "institutions": 4,
+      "payments": 255368.83736906783,
+      "volume": 16065842.218569878,
+      "revenue": 229354.9684456986,
+      "retained": 18393.190074562564,
+      "subscriptions": 106961.77837113604,
+      "institutionRecurring": 84000,
+      "setup": 20000,
+      "contribution": 177240.2551711991,
+      "ebitda": -340919.74482880085,
+      "freeCash": -313539.02813824685,
+      "ownLiquidity": 0,
+      "exitRecurringAnnual": 263721.56255852873,
+      "requiredFunding": 1096246.8337658963
+    },
+    "required18": 526735.7903689094,
+    "required36": 1096246.8337658963
+  },
+  {
+    "name": "Own prefunding five days instead of two",
+    "edits": {
+      "prefundDays": 5
+    },
+    "year3": {
+      "year": 3,
+      "users": 3110.608650270105,
+      "registrations": 17176.939603767485,
+      "business": 244.68475043976244,
+      "institutions": 4,
+      "payments": 255368.83736906783,
+      "volume": 16065842.218569878,
+      "revenue": 229354.9684456986,
+      "retained": 18393.190074562564,
+      "subscriptions": 106961.77837113604,
+      "institutionRecurring": 84000,
+      "setup": 20000,
+      "contribution": 177240.2551711991,
+      "ebitda": -340919.74482880085,
+      "freeCash": -666101.3355569427,
+      "ownLiquidity": 352562.3074186959,
+      "exitRecurringAnnual": 263721.56255852873,
+      "requiredFunding": 1519321.6026683312
+    },
+    "required18": 601278.7063167955,
+    "required36": 1519321.6026683312
+  },
+  {
+    "name": "Business price $75/month in every year",
+    "edits": {
+      "businessPrice": 75
+    },
+    "year3": {
+      "year": 3,
+      "users": 3110.608650270105,
+      "registrations": 17176.939603767485,
+      "business": 244.68475043976244,
+      "institutions": 4,
+      "payments": 255368.83736906783,
+      "volume": 16065842.218569878,
+      "revenue": 282835.85763126664,
+      "retained": 18393.190074562564,
+      "subscriptions": 160442.66755670408,
+      "institutionRecurring": 84000,
+      "setup": 20000,
+      "contribution": 225373.05543821031,
+      "ebitda": -292786.9445617897,
+      "freeCash": -382603.14238624997,
+      "ownLiquidity": 141024.92296747834,
+      "exitRecurringAnnual": 335553.9325518681,
+      "requiredFunding": 1179123.7708635
+    },
+    "required18": 545036.3194454407,
+    "required36": 1179123.7708635
+  }
+]

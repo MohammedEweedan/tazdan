@@ -20,6 +20,7 @@ import { Keypair as SolKeypair } from '@solana/web3.js';
 import { derivePath as deriveSolPath } from 'ed25519-hd-key';
 import { prisma } from '../../utils/prisma';
 import { getMasterMnemonic, getMasterSeedBuffer } from './masterSeed.service';
+import { custodyMode, provisionRemoteWallet } from './custodyProvider.service';
 
 const bip32 = BIP32Factory(ecc);
 
@@ -87,8 +88,8 @@ export async function deriveTronWallet(userIndex: number): Promise<DerivedWallet
     return { address, privateKey: pkHex };
   } catch (err: any) {
     console.error('[deriveTronWallet] Failed to derive TRON address:', err.message);
-    // Return a placeholder address if TRON derivation fails
-    return { address: `TRON-PENDING-${pkHex.slice(0, 8)}`, privateKey: pkHex };
+    // Never expose a private-key prefix as a placeholder deposit address.
+    throw new Error('TRON wallet derivation failed');
   }
 }
 
@@ -98,15 +99,19 @@ export async function deriveTronWallet(userIndex: number): Promise<DerivedWallet
  * `walletIndex` is assigned by Postgres via autoincrement().
  */
 export async function createUserWallets(userId: string) {
+  const mode = custodyMode();
+  if (mode === 'disabled') throw new Error('Custody provider is not activated');
   const existing = await prisma.userWallet.findUnique({ where: { userId } });
-  if (existing) return existing;
+  if (existing && !existing.ethAddress.startsWith('pending-')) return existing;
 
   // Step 1 — reserve a row to claim a walletIndex from Postgres.
   // Placeholder addresses satisfy the @unique constraints temporarily.
   // This is a plain fast write, no interactive transaction.
   const placeholder = `pending-${userId}`;
-  const row = await prisma.userWallet.create({
-    data: {
+  const row = existing ?? await prisma.userWallet.upsert({
+    where: { userId },
+    update: {},
+    create: {
       userId,
       ethAddress:  `${placeholder}-eth`,
       btcAddress:  `${placeholder}-btc`,
@@ -119,6 +124,10 @@ export async function createUserWallets(userId: string) {
   // CPU-heavy (BIP-32 + crypto) and can take 200–500 ms each under load,
   // which would exceed Prisma's 5 s interactive transaction timeout.
   const index = row.walletIndex;
+  if (mode === 'remote') {
+    const addresses = await provisionRemoteWallet(userId, index);
+    return prisma.userWallet.update({ where: { id: row.id }, data: addresses });
+  }
   const [eth, btc, sol, tron] = await Promise.all([
     deriveEthWallet(index),
     deriveBtcWallet(index),

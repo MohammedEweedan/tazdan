@@ -1,4 +1,7 @@
 name: Deploy
+permissions:
+  contents: read
+  packages: write
 
 # Images are built only after the CI workflow has passed for the same commit.
 # A red build can never produce a deployable image.
@@ -27,6 +30,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: ./server
+          build-args: RELEASE_SHA=${{ github.event.workflow_run.head_sha }}
           push: true
           tags: |
             ghcr.io/${{ github.repository }}/server:latest

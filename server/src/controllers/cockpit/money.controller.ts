@@ -19,6 +19,7 @@ import { acknowledgeBaseline, auditFundIntegrity } from '../../services/ledger/f
 import { principalPositions, recordHedge } from '../../services/exchange/principalExposure.service';
 import { getLiveProviderRate, getRate } from '../../services/exchange/fxRateProvider.service';
 import { pageParams, usdConverter } from './helpers';
+import { assertNotSelf } from '../../services/platform/segregation';
 
 const FAILED_STATES: RemittanceState[] = ['FAILED', 'REFUND_PENDING', 'DISPUTED'];
 
@@ -113,6 +114,8 @@ export const CockpitMoneyController = {
   async remittanceReview(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const body = z.object({ approve: z.boolean(), note: z.string().trim().min(5).max(2000) }).parse(req.body);
+      const owner = await prisma.remittanceTransfer.findUnique({ where: { id: req.params.id }, select: { userId: true } });
+      assertNotSelf(req.user!.id, [owner?.userId], 'remittance_review', { ipAddress: req.ip, path: req.originalUrl });
       res.json({ transfer: await decideReview(req.params.id, body.approve, req.user!.id, body.note, req) });
     } catch (e) { next(e); }
   },
@@ -132,6 +135,7 @@ export const CockpitMoneyController = {
       const { reason } = z.object({ reason: z.string().trim().min(10).max(2000) }).parse(req.body);
       const t = await prisma.remittanceTransfer.findUnique({ where: { id: req.params.id } });
       if (!t) throw new AppError('Remittance not found', 404);
+      assertNotSelf(req.user!.id, [t.userId], 'remittance_refund', { ipAddress: req.ip, path: req.originalUrl });
       if (['PAID', 'RECONCILIATION_PENDING', 'RECONCILED', 'COMPLETED'].includes(t.state)) {
         const approval = await requestApproval({ type: 'REMITTANCE_REFUND', payload: { transferId: t.id }, reason, requestedById: req.user!.id, subjectType: 'REMITTANCE', subjectId: t.id, permissions: req.staff!.permissions, req });
         return res.status(202).json({ pendingApproval: true, approvalId: approval.id, message: 'The payout already happened, so this goodwill refund comes from corporate funds and needs a second approver.' });

@@ -1,16 +1,19 @@
-import type { Metadata } from 'next';
+import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: 'Careers',
+  title: "Careers at tazdan",
   description:
-    'Join the tazdan team — engineers, product managers, compliance officers and more. Help us build the financial layer for the MENA region.',
+    "Join a small team building a Libya-first money app. Open roles in engineering, product, compliance, support and growth.",
   openGraph: {
-    title: 'Careers at tazdan',
+    title: "Careers at tazdan",
     description:
-      'We are hiring engineers, PMs, and compliance specialists. Build the future of money with us.',
-    url: 'https://tazdan.com/careers',
+      "Join a small team building a Libya-first money app. Open roles in engineering, product, compliance, support and growth.",
+    url: "https://tazdan.com/careers",
+    type: "website",
+    images: [{ url: "/og-image.png", width: 1200, height: 630, alt: "Careers at tazdan" }],
   },
-  alternates: { canonical: 'https://tazdan.com/careers' },
+  twitter: { card: "summary_large_image", title: "Careers at tazdan", description: "Join a small team building a Libya-first money app. Open roles in engineering, product, compliance, support and growth.", images: ["/og-image.png"] },
+  alternates: { canonical: "https://tazdan.com/careers" },
 };
 
 export default function CareersLayout({ children }: { children: React.ReactNode }) {

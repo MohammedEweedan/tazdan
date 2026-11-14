@@ -50,6 +50,26 @@ export default function WelcomeBack() {
   const [bioAvailable, setBioAvailable] = useState(false);
   const [bioLoading, setBioLoading] = useState(false);
   const [langPickerVisible, setLangPickerVisible] = useState(false);
+  // Leaving this account ("Use a different account" / onboarding): the wipe
+  // finishes before the next screen so it can't erase a new sign-in.
+  const [leaving, setLeaving] = useState<null | 'switch' | 'onboarding'>(null);
+  const leave = async (to: 'switch' | 'onboarding') => {
+    if (leaving) return;
+    h.selection();
+    setLeaving(to);
+    try {
+      await forgetLastUser();
+      if (to === 'onboarding') {
+        await Promise.all([
+          secureStore.remove(STORAGE_KEYS.onboarded).catch(() => {}),
+          secureStore.remove(STORAGE_KEYS.refreshToken).catch(() => {}),
+        ]);
+      }
+    } finally {
+      router.replace(to === 'onboarding' ? '/(auth)/onboarding' : '/(auth)/login');
+      setLeaving(null);
+    }
+  };
 
   useEffect(() => {
     Promise.all([
@@ -330,32 +350,25 @@ export default function WelcomeBack() {
               )}
 
               <Pressable
-                onPress={async () => {
-                  h.selection();
-                  await forgetLastUser();
-                  router.replace('/(auth)/login');
-                }}
+                onPress={() => leave('switch')}
+                disabled={!!leaving}
                 hitSlop={8}
-                style={{ alignSelf: 'center', marginTop: 22, paddingVertical: 8, paddingHorizontal: 12 }}
+                accessibilityRole="button"
+                style={{ alignSelf: 'center', marginTop: 22, paddingVertical: 8, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', gap: 8 }}
               >
+                {leaving === 'switch' && <ActivityIndicator size="small" color={p.fgMuted} />}
                 <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '700' }}>
                   {t('auth.differentAccount')}
                 </Text>
               </Pressable>
               <Pressable
-                onPress={async () => {
-                  h.selection();
-
-                  await forgetLastUser();
-
-                  await secureStore.remove(STORAGE_KEYS.onboarded);
-                  await secureStore.remove(STORAGE_KEYS.refreshToken);
-
-                  router.replace('/(auth)/onboarding');
-                }}
+                onPress={() => leave('onboarding')}
+                disabled={!!leaving}
                 hitSlop={8}
-                style={{ alignSelf: 'center', marginTop: 22, paddingVertical: 8, paddingHorizontal: 12 }}
+                accessibilityRole="button"
+                style={{ alignSelf: 'center', marginTop: 22, paddingVertical: 8, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', gap: 8 }}
               >
+                {leaving === 'onboarding' && <ActivityIndicator size="small" color={p.fgMuted} />}
                 <Text style={{ color: p.fgMuted, fontSize: 13, fontWeight: '700' }}>
                   Go to onboarding
                 </Text>

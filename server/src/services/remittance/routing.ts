@@ -16,6 +16,7 @@ import { Decimal } from '@prisma/client/runtime/library';
 import { prisma } from '../../utils/prisma';
 import { adapterUsable, circuitOpen, listPayoutAdapters } from '../providers/registry';
 import { isBlocked } from '../platform/controls.service';
+import { currentLaunchReadiness } from '../ops/launchReadiness.service';
 import { availableIn } from '../treasury/pools.service';
 
 export interface RouteInput {
@@ -93,6 +94,7 @@ export async function rankRoutes(input: RouteInput): Promise<RouteCandidate[]> {
     if (!d.currencies.includes(input.destCurrency)) continue; // not a rail for this currency at all
     if (!(d.countries.includes('*') || d.countries.includes(input.destCountry))) continue;
     if (!(d.payoutMethods ?? []).includes(input.payoutMethod)) { reject(`Does not support ${input.payoutMethod}`); continue; }
+    if (process.env.NODE_ENV === 'production' && !currentLaunchReadiness().evidence?.scope.providers.includes(d.code)) { reject('Provider is outside the reviewed launch scope'); continue; }
     if (!adapterUsable(a)) { reject('Sandbox rail — not available in production'); continue; }
     if (!row || row.status !== 'ENABLED') { reject(`Provider is ${row?.status ?? 'not registered'}`); continue; }
     if (await isBlocked('PROVIDER', d.code)) { reject('Provider paused by kill switch'); continue; }

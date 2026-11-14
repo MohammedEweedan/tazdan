@@ -6,3 +6,5 @@ export * from "./story";
 export * from "./blocks";
 export { default as SiteShell, useWaitlist } from "./SiteShell";
 export { NAV_LINKS } from "./SiteNav";
+export * from "./landing";
+export { default as PhoneJourney } from "./PhoneJourney";

@@ -13,6 +13,8 @@ import { AppError } from '../middleware/errorHandler';
 import { AuthRequest } from '../types';
 import { createUserWallets } from '../services/wallet/walletDerivation.service';
 import { exportWallet } from '../services/wallet/selfCustody.service';
+import { assertFeatureEnabled } from '../utils/features';
+import { assertMovementAllowed } from '../services/platform/controls.service';
 
 const exportSchema = z.object({
   chain: z.enum(['ETH', 'BTC', 'SOL', 'TRON']),
@@ -30,6 +32,8 @@ async function getOrCreate(userId: string) {
 export class CryptoWalletController {
   static async getAddresses(req: AuthRequest, res: Response, next: NextFunction) {
     try {
+      assertFeatureEnabled('blockchain');
+      await assertMovementAllowed({ userId: req.user!.id, feature: 'blockchain' });
       const userId = req.user!.id;
       const w = await getOrCreate(userId);
       res.json({
@@ -72,6 +76,8 @@ export class CryptoWalletController {
       const userId = req.user!.id;
       const asset = String(req.params.asset || '').toUpperCase();
       const network = String(req.params.network || '').toUpperCase();
+      assertFeatureEnabled('blockchain');
+      await assertMovementAllowed({ userId: req.user!.id, feature: 'blockchain', currency: asset });
       const w = await getOrCreate(userId);
 
       // Network classification — determines which on-chain address to return.
@@ -89,16 +95,12 @@ export class CryptoWalletController {
         address = w.btcAddress;
       } else if (asset === 'SOL' && (network === 'SOL' || network === 'NATIVE')) {
         address = w.solAddress;
-      } else if (TRON_ASSETS.has(asset) || TRON_NETWORKS.has(network)) {
+      } else if (asset === 'USDT' && TRON_NETWORKS.has(network)) {
         address = w.tronAddress;
-      } else if (asset === 'XRP' && (network === 'XRP' || network === 'RIPPLE')) {
-        // XRP Ledger — use ETH address as a stable unique identifier until
-        // a proper XRP key derivation service is wired up.
-        address = w.ethAddress ? `r${w.ethAddress.slice(2, 35)}` : null;
-      } else {
-        // Default: EVM-compatible address (ETH, BNB, MATIC, ARB, OP, AVAX,
-        // LINK, UNI, SHIB, PEPE, and every other ERC-20 / BEP-20 token).
+      } else if ((asset === 'ETH' || asset === 'USDT') && ['ETH', 'ERC20', 'ERC-20'].includes(network)) {
         address = w.ethAddress;
+      } else {
+        throw new AppError(`Deposits are not supported for ${asset}/${network}`, 503, 'PROVIDER_NOT_ACTIVATED');
       }
 
       if (!address) throw new AppError(`Wallet address not provisioned for ${asset}/${network}`, 400);

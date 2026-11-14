@@ -1,1 +1,43 @@
-if(!self.define){let e,t={};const s=(s,n)=>(s=new URL(s+".js",n).href,t[s]||new Promise(t=>{if("document"in self){const e=document.createElement("script");e.src=s,e.onload=t,document.head.appendChild(e)}else e=s,importScripts(s),t()}).then(()=>{let e=t[s];if(!e)throw new Error(`Module ${s} didn’t register its module`);return e}));self.define=(n,i)=>{const c=e||("document"in self?document.currentScript.src:"")||location.href;if(t[c])return;let o={};const r=e=>s(e,c),a={module:{uri:c},exports:o,require:r};t[c]=Promise.all(n.map(e=>a[e]||r(e))).then(e=>(i(...e),o))}}define(["./workbox-3ec3e326"],function(e){"use strict";importScripts(),self.skipWaiting(),e.clientsClaim(),e.registerRoute("/",new e.NetworkFirst({cacheName:"start-url",plugins:[{cacheWillUpdate:async({request:e,response:t,event:s,state:n})=>t&&"opaqueredirect"===t.type?new Response(t.body,{status:200,statusText:"OK",headers:t.headers}):t}]}),"GET"),e.registerRoute(({request:e})=>"navigate"===e.mode,new e.NetworkFirst({cacheName:"pages",networkTimeoutSeconds:10,plugins:[new e.ExpirationPlugin({maxEntries:64,maxAgeSeconds:86400})]}),"GET"),e.registerRoute(/\/_next\/static\/.*/i,new e.CacheFirst({cacheName:"next-static",plugins:[new e.ExpirationPlugin({maxEntries:256,maxAgeSeconds:31536e3})]}),"GET"),e.registerRoute(/\.(?:png|jpg|jpeg|svg|gif|webp|avif|ico|woff2?)$/i,new e.StaleWhileRevalidate({cacheName:"assets",plugins:[new e.ExpirationPlugin({maxEntries:256,maxAgeSeconds:2592e3})]}),"GET")});
+/* Public static assets only. Payment APIs, account pages and documents must
+ * always reach the network; never persist their responses in Cache Storage. */
+const CACHE = 'tazdan-public-assets-v1';
+const MAX_ENTRIES = 192;
+
+self.addEventListener('install', () => { self.skipWaiting(); });
+self.addEventListener('activate', event => {
+  event.waitUntil((async () => {
+    const keys = await caches.keys();
+    // Earlier workers used several runtime-cache names for pages. Clear all
+    // legacy Cache Storage on this app origin so none retain account data.
+    await Promise.all(keys.filter(key => key !== CACHE).map(key => caches.delete(key)));
+    await self.clients.claim();
+  })());
+});
+
+function publicAsset(request) {
+  if (request.method !== 'GET' || request.mode === 'navigate' || request.headers.has('authorization')) return false;
+  const url = new URL(request.url);
+  if (url.origin !== self.location.origin || url.search) return false;
+  return url.pathname.startsWith('/_next/static/') ||
+    /^\/(?:app\/(?:screens|loops)|icons)\/.*\.(?:png|jpe?g|webp|avif|svg|woff2?)$/i.test(url.pathname) ||
+    /^\/(?:icon[^/]*|logo[^/]*|favicon|apple-touch-icon|og-image)\.(?:png|svg|ico)$/i.test(url.pathname);
+}
+
+self.addEventListener('fetch', event => {
+  if (!publicAsset(event.request)) return;
+  event.respondWith((async () => {
+    const cache = await caches.open(CACHE);
+    const existing = await cache.match(event.request);
+    if (existing) return existing;
+    const response = await fetch(event.request);
+    const control = response.headers.get('cache-control') || '';
+    if (response.ok && !response.redirected && response.type === 'basic' && !/no-store|private/i.test(control)) {
+      try {
+        await cache.put(event.request, response.clone());
+        const keys = await cache.keys();
+        await Promise.all(keys.slice(0, Math.max(0, keys.length - MAX_ENTRIES)).map(key => cache.delete(key)));
+      } catch { /* Storage quota must not prevent the network response. */ }
+    }
+    return response;
+  })());
+});

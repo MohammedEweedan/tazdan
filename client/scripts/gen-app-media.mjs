@@ -24,6 +24,10 @@ const scan = (kind, ext) => {
     for (const f of fs.readdirSync(dir)) {
       if (!f.endsWith(ext)) continue;
       const id = f.slice(0, -ext.length);
+      if (kind === "loops" && ![".mp4", ".webm", ".jpg"].every(suffix => {
+        const asset = path.join(dir, `${id}${suffix}`);
+        return fs.existsSync(asset) && fs.statSync(asset).size > 0;
+      })) continue;
       if (!ids.has(id)) ids.set(id, []);
       ids.get(id).push(v);
     }
@@ -60,7 +64,7 @@ ${videos.map(([id, vs]) => `  "${id}": { variants: ${list(vs)}, durationSec: ${d
 export const APP_GIFS: Record<string, AppMediaVariant[]> = {
 ${gifs.map(([id, vs]) => `  "${id}": ${list(vs)},`).join("\n")}
 };
-/** Smooth screen loops captured from real app interaction at 30 fps. */
+/** Smooth screen loops encoded at 30 fps from timestamped app captures. */
 export const APP_LOOPS: Record<string, { variants: AppMediaVariant[]; durationSec: number; caption: string }> = {
 ${loops.map(([id, vs]) => `  "${id}": { variants: ${list(vs)}, durationSec: ${durationOf(id, vs[0], "loops")}, caption: "${meta(id, "caption") ?? human(id)}" },`).join("\n")}
 };

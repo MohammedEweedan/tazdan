@@ -6,7 +6,7 @@
 import { Response, NextFunction } from 'express';
 import { z } from 'zod';
 import crypto from 'crypto';
-import speakeasy from 'speakeasy';
+import { Decimal } from '@prisma/client/runtime/library';
 import type { Server as IOServer } from 'socket.io';
 import { prisma } from '../utils/prisma';
 import { AuthRequest } from '../types';
@@ -24,13 +24,18 @@ import { recordSecurityEvent } from '../services/platform/securityEvents';
 import { enforceKycLimit } from '../utils/kycLimits';
 import { assertMovementAllowed } from '../services/platform/controls.service';
 import { assessWithdrawal } from '../services/risk/withdrawalRisk';
+import { authorizeWithdrawal } from '../services/security/withdrawalAuthorization.service';
 
 const initiateSchema = z.object({
   asset: z.enum(['ETH', 'BTC', 'SOL', 'USDT']),
   network: z.string().min(1),
-  amount: z.union([z.string(), z.number()]).transform(String),
+  amount: z.union([z.string(), z.number()]).transform(String).refine(value => {
+    try { const amount = new Decimal(value); return amount.isFinite() && amount.gt(0) && amount.decimalPlaces() <= 8; }
+    catch { return false; }
+  }, 'Amount must be positive, finite and have at most eight decimal places'),
   toAddress: z.string().min(10),
   twoFactorCode: z.string().min(6).max(8).optional(),
+  idempotencyKey: z.string().regex(/^[A-Za-z0-9_-]{8,128}$/).optional(),
 });
 
 const estimateSchema = z.object({
@@ -80,11 +85,12 @@ export class CryptoWithdrawalController {
       }
       if (!body.twoFactorCode) throw new AppError('2FA code required', 401);
 
-      const ok = speakeasy.totp.verify({
-        secret: user.twoFactorSecret,
-        encoding: 'base32',
-        token: body.twoFactorCode,
-        window: 1,
+      // Single-use: a code accepted once (here or anywhere else) cannot
+      // authorise a second, parallel or replayed withdrawal.
+      const ok = await authorizeWithdrawal({
+        userId: req.user!.id, secret: user.twoFactorSecret, code: body.twoFactorCode,
+        key: body.idempotencyKey ?? req.get('Idempotency-Key'), asset: body.asset, network: body.network,
+        amount: body.amount, toAddress: body.toAddress,
       });
       if (!ok) throw new AppError('Invalid 2FA code', 401);
 
@@ -144,12 +150,21 @@ export class CryptoWithdrawalController {
         network: body.network,
         amount: body.amount,
         toAddress: body.toAddress,
+        idempotencyKey: body.idempotencyKey ?? req.get('Idempotency-Key'),
       });
 
       const io = req.app.get('io') as IOServer | undefined;
       io?.to(`user:${req.user!.id}`).emit('withdrawal:submitted', {
         id: tx.id, txHash: tx.txHash, status: tx.status,
       });
+
+      if (tx.status === 'BROADCAST_UNKNOWN') {
+        return res.status(202).json({
+          transaction: tx,
+          code: 'SETTLEMENT_PENDING',
+          message: 'Your withdrawal is being reconciled. Do not submit it again; track this reference in your history.',
+        });
+      }
 
       // Transactional email + push for the on-chain withdrawal. Fire-
       // and-forget; the broadcast has already happened.

@@ -104,13 +104,19 @@ export class SecurityController {
   static async revokeAllSessions(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const currentSid = req.user?.sid;
-      const others = await prisma.refreshToken.findMany({
-        where: { userId: req.user!.id, revokedAt: null, ...(currentSid ? { id: { not: currentSid } } : {}) },
-        select: { id: true },
-      });
+      // One conditional update (not "list, then revoke the listed ids"): a
+      // session that rotates in between would otherwise survive with a fresh
+      // token. Any refresh still in flight loses its conditional rotation.
+      // The shared timestamp then finds exactly the rows this call revoked,
+      // so each one's live access token is denylisted too.
+      const revokedAt = new Date();
       await prisma.refreshToken.updateMany({
-        where: { id: { in: others.map((o) => o.id) }, revokedAt: null },
-        data: { revokedAt: new Date() },
+        where: { userId: req.user!.id, revokedAt: null, ...(currentSid ? { id: { not: currentSid } } : {}) },
+        data: { revokedAt },
+      });
+      const others = await prisma.refreshToken.findMany({
+        where: { userId: req.user!.id, revokedAt, replacedById: null, ...(currentSid ? { id: { not: currentSid } } : {}) },
+        select: { id: true },
       });
       await Promise.all(others.map((o) => revokeSessionAccess(o.id)));
       void recordSecurityEvent({ type: 'SESSION_REVOKED', userId: req.user!.id, ipAddress: req.ip, details: { count: others.length, scope: 'all_others' } });

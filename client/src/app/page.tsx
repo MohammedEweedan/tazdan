@@ -12,6 +12,7 @@ import HomeStory from "@/components/pages/home/HomeStory";
 import FeatureShowcase from "@/components/pages/home/FeatureShowcase";
 import ImpressedCard from "@/components/pages/home/ImpressedCard";
 import HomeHero from "@/components/pages/home/HomeHero";
+import WidgetsShowcase from "@/components/pages/home/WidgetsShowcase";
 
 function HomeContent() {
   const { t } = useTranslate();
@@ -49,6 +50,7 @@ function HomeContent() {
     </Section>
     <AppTour />
     <FeatureShowcase />
+    <WidgetsShowcase />
     <AfterJourney />
   </>;
 }

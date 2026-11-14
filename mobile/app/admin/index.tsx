@@ -84,7 +84,39 @@ type NavItem = { icon: keyof typeof Ionicons.glyphMap; label: string; route: str
 type NavGroupDef = { title: string; icon: keyof typeof Ionicons.glyphMap; defaultOpen?: boolean; items: NavItem[] };
 
 const NAV_GROUPS: NavGroupDef[] = [
-  { title: 'Trading', icon: 'trending-up-outline', defaultOpen: true, items: [
+  // Same endpoints and staff permissions as the web Control Cockpit.
+  { title: 'Control centre', icon: 'options-outline', defaultOpen: true, items: [
+    { icon: 'eye-off-outline',         label: 'Availability',  route: '/admin/availability' },
+    { icon: 'power-outline',           label: 'Kill switches', route: '/admin/controls' },
+    { icon: 'checkbox-outline',        label: 'Approvals',     route: '/admin/approvals' },
+    { icon: 'person-circle-outline',   label: 'Customers',     route: '/admin/customers' },
+    { icon: 'list-outline',            label: 'Transactions',  route: '/admin/transactions' },
+    { icon: 'globe-outline',           label: 'Remittance',    route: '/admin/remittance' },
+    { icon: 'briefcase-outline',       label: 'Businesses',    route: '/admin/businesses' },
+    { icon: 'pricetag-outline',        label: 'Storefront',    route: '/admin/storefront' },
+    { icon: 'speedometer-outline',     label: 'Overview',      route: '/admin/overview' },
+    { icon: 'sparkles-outline',        label: 'Assistant',     route: '/admin/assistant' },
+  ]},
+  { title: 'Money control', icon: 'wallet-outline', items: [
+    { icon: 'swap-vertical-outline',   label: 'FX',            route: '/admin/fx' },
+    { icon: 'server-outline',          label: 'Treasury',      route: '/admin/treasury' },
+    { icon: 'git-merge-outline',       label: 'Reconciliation', route: '/admin/reconciliation' },
+    { icon: 'hardware-chip-outline',   label: 'Providers',     route: '/admin/providers' },
+    { icon: 'book-outline',            label: 'Ledger',        route: '/admin/ledger' },
+    { icon: 'bar-chart-outline',       label: 'Finance',       route: '/admin/finance' },
+    { icon: 'analytics-outline',       label: 'Forecasts',     route: '/admin/forecasts' },
+    { icon: 'cash-outline',            label: 'LYDT supervision', route: '/admin/lydt' },
+  ]},
+  { title: 'Risk & security', icon: 'shield-checkmark-outline', items: [
+    { icon: 'shield-half-outline',     label: 'Compliance',    route: '/admin/compliance' },
+    { icon: 'lock-closed-outline',     label: 'Security',      route: '/admin/security' },
+    { icon: 'document-lock-outline',   label: 'Audit',         route: '/admin/audit' },
+    { icon: 'people-circle-outline',   label: 'Staff & roles', route: '/admin/staff' },
+    { icon: 'warning-outline',         label: 'Fraud',         route: '/admin/fraud' },
+    { icon: 'pulse-outline',           label: 'System health', route: '/admin/system' },
+    { icon: 'help-buoy-outline',       label: 'Support desk',  route: '/admin/support-desk' },
+  ]},
+  { title: 'Trading', icon: 'trending-up-outline', items: [
     { icon: 'trending-up-outline',     label: 'Rates',         route: '/admin/rates' },
     { icon: 'cube-outline',            label: 'Orders',        route: '/admin/orders' },
     { icon: 'swap-horizontal-outline', label: 'P2P',           route: '/admin/p2p' },

@@ -1,0 +1,48 @@
+{
+  "sheets": 4,
+  "formulas": 710,
+  "formulaErrors": [],
+  "charts": [
+    {
+      "path": "xl/drawings/charts/chart1.xml",
+      "series": 2,
+      "bindings": [
+        "'Forecast'!$AD$5:$AD$28",
+        "'Forecast'!$AE$5:$AE$28",
+        "'Forecast'!$AD$5:$AD$28",
+        "'Forecast'!$AF$5:$AF$28"
+      ],
+      "colors": [
+        {
+          "val": "087E8B"
+        },
+        {
+          "val": "C45C36"
+        },
+        {
+          "val": "CCCCCC"
+        },
+        {
+          "val": "CCCCCC"
+        },
+        {
+          "val": "D9D9D9"
+        }
+      ]
+    }
+  ],
+  "independentModelCheck": {
+    "Downside": {
+      "matchesIndependentCalculation": true,
+      "firstFundingShortfallMonth": 16
+    },
+    "Base": {
+      "matchesIndependentCalculation": true,
+      "firstFundingShortfallMonth": 9
+    },
+    "Growth": {
+      "matchesIndependentCalculation": true,
+      "firstFundingShortfallMonth": 5
+    }
+  }
+}

@@ -59,3 +59,9 @@ mobile/.expo/
 *.pem
 .vercel
 client/.next-build/
+output/app-media-capture/
+output/app-media-qa/
+output/ui-verification/
+
+# Private authorization, provider, security and recovery evidence
+private-launch-evidence/

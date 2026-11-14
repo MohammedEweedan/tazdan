@@ -32,6 +32,9 @@ services:
       REDIS_URL: redis://:${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env}@redis:6379
       CLUSTER_WORKERS: ${CLUSTER_WORKERS:-1}
       CLIENT_URL: ${CLIENT_URL:-https://promrkts.com,https://www.promrkts.com}
+      REAL_MONEY_ENABLED: ${REAL_MONEY_ENABLED:-0}
+      CUSTODY_MODE: ${CUSTODY_MODE:-disabled}
+      LAUNCH_EVIDENCE_PATH: /run/launch-evidence/manifest.json
     # Loopback only: host nginx proxies api.promrkts.com → 127.0.0.1:5000.
     # Publishing on 0.0.0.0 would let clients skip nginx (TLS, rate limits)
     # and spoof X-Forwarded-For past the IP limits and admin allowlist —
@@ -40,6 +43,7 @@ services:
       - '127.0.0.1:5000:5000'
     volumes:
       - uploads:/app/uploads
+      - ./private-launch-evidence:/run/launch-evidence:ro
     networks:
       - app
 
@@ -49,19 +53,33 @@ services:
   # Manual run / restore drill:
   #   docker compose -f docker-compose.prod.yml run --rm backup sh /backup.sh
   backup:
-    image: postgres:16-alpine
+    build:
+      context: ./scripts
+      dockerfile: backup/Dockerfile
     container_name: tazdan-backup
     restart: unless-stopped
-    env_file: .env
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL}
+      BACKUP_S3_URI: ${BACKUP_S3_URI:?Set an offsite backup destination}
+      BACKUP_REQUIRE_OFFSITE: '1'
+      BACKUP_RETAIN_DAYS: ${BACKUP_RETAIN_DAYS:-14}
+      AWS_ACCESS_KEY_ID: ${BACKUP_AWS_ACCESS_KEY_ID:?Set dedicated backup credentials}
+      AWS_SECRET_ACCESS_KEY: ${BACKUP_AWS_SECRET_ACCESS_KEY:?Set dedicated backup credentials}
+      AWS_REGION: ${BACKUP_AWS_REGION:-eu-central-1}
+      AWS_ENDPOINT_URL: ${BACKUP_AWS_ENDPOINT_URL:-}
     volumes:
       - dbbackups:/backups
       - uploads:/uploads:ro
-      - ./scripts/db-backup.sh:/backup.sh:ro
     # Sleep-loop cron: runs once on start (so every deploy proves the backup
-    # path still works), then every 24h. The aws CLI is installed at start —
-    # the postgres image doesn't ship it, and without it offsite copies fail.
+    # path still works), then every 24h. The image includes the pinned-lock
+    # application script and AWS CLI; startup never installs packages.
     # For DO Spaces also set AWS_ENDPOINT_URL (e.g. https://fra1.digitaloceanspaces.com).
-    entrypoint: ["sh", "-c", "apk add --no-cache aws-cli >/dev/null 2>&1 || echo '[backup] could not install aws-cli'; while true; do sh /backup.sh || echo '[backup] FAILED'; sleep 86400; done"]
+    healthcheck:
+      test: ['CMD-SHELL', 'test ! -e /backups/latest-failure && test -s /backups/latest-success && test $$(($$(date +%s) - $$(cat /backups/latest-success))) -lt 108000']
+      interval: 5m
+      timeout: 10s
+      start_period: 10m
+      retries: 1
     networks:
       - app
 

@@ -16,6 +16,7 @@ import { useThemedPalette, type Palette } from '@/store/themeStore';
 import { useHaptics, useWallets } from '@/hooks';
 import { budgetService, type BudgetLockType } from '@/services';
 import { fiatSymbol } from '@/constants';
+import { useAvailability } from '@/hooks/useFeatures';
 import {
   etaForContribution, requiredPerPeriod, suggestPlan,
   humanizeDays, fmtGoalDate, freqAdverb,
@@ -36,6 +37,7 @@ function parseDdmmyyyy(s: string): Date | null {
 export default function NewBudget() {
   const router = useRouter();
   const p = useThemedPalette();
+  const avail = useAvailability();
   const t = useT();
   const h = useHaptics();
   const qc = useQueryClient();
@@ -123,7 +125,7 @@ export default function NewBudget() {
       {/* Currency */}
       <Text style={label(p)}>{t('budgets.currency')}</Text>
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-        {FIATS.map((c) => (
+        {FIATS.filter((c) => avail.canUse(c)).map((c) => (
           <Chip key={c} label={c} active={currency === c} palette={p} onPress={() => { setCurrency(c); h.selection(); }} />
         ))}
       </View>

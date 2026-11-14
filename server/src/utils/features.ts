@@ -12,15 +12,24 @@
 import type { Request, Response, NextFunction } from 'express';
 import { AppError } from '../middleware/errorHandler';
 
-export type FeatureName = 'p2p' | 'cards' | 'altTrading';
+export type FeatureName = 'p2p' | 'cards' | 'altTrading' | 'blockchain' | 'cryptoTrading' | 'remittance' | 'lydt';
 
 const ENV_KEYS: Record<FeatureName, string> = {
   p2p: 'FEATURE_P2P',
   cards: 'FEATURE_CARDS',
   altTrading: 'FEATURE_ALT_TRADING',
+  blockchain: 'FEATURE_BLOCKCHAIN',
+  cryptoTrading: 'FEATURE_CRYPTO_TRADING',
+  remittance: 'FEATURE_REMITTANCE',
+  // LYDT dinar token: a sandbox until the Central Bank of Libya authorises it.
+  lydt: 'FEATURE_LYDT',
 };
 
 export function isFeatureEnabled(name: FeatureName): boolean {
+  // The legacy execution path credits assets before the venue responds and
+  // refunds ambiguous transport failures. Keep real money out until the
+  // reserve/submit/reconcile/finalise saga has provider certification.
+  if (name === 'cryptoTrading' && process.env.NODE_ENV === 'production' && process.env.REAL_MONEY_ENABLED === '1') return false;
   const raw = process.env[ENV_KEYS[name]];
   if (raw === '1') return true;
   if (raw === '0') return false;
@@ -33,6 +42,10 @@ export function featureFlags(): Record<FeatureName, boolean> {
     p2p: isFeatureEnabled('p2p'),
     cards: isFeatureEnabled('cards'),
     altTrading: isFeatureEnabled('altTrading'),
+    blockchain: isFeatureEnabled('blockchain'),
+    cryptoTrading: isFeatureEnabled('cryptoTrading'),
+    remittance: isFeatureEnabled('remittance'),
+    lydt: isFeatureEnabled('lydt'),
   };
 }
 

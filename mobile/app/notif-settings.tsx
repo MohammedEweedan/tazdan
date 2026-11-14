@@ -12,11 +12,15 @@ import { Ionicons } from '@expo/vector-icons';
 import { ScreenShell, Panel, SectionLabel, ToggleRow } from '@/components/ui/ScreenShell';
 import { useThemedPalette } from '@/store/themeStore';
 import { useT } from '@/store/i18nStore';
+import { useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
+import { NOTIF_PREFS_KEY } from '@/widgets/useWidgetSync';
 
 type ChannelKey = 'email' | 'push';
 type CategoryKey = 'trades' | 'transfers' | 'deposits' | 'withdrawals' | 'p2p' | 'marketing';
-type Prefs = Record<ChannelKey, Record<CategoryKey, boolean>>;
+/** Push-only chat settings. Present only when the server supports them. */
+type ChatKey = 'messages' | 'messagePreview';
+type Prefs = { email: Record<CategoryKey, boolean>; push: Record<CategoryKey, boolean> & Partial<Record<ChatKey, boolean>> };
 
 const CATEGORIES: { key: CategoryKey; titleKey: string; descKey: string; icon: keyof typeof Ionicons.glyphMap }[] = [
   { key: 'trades',      titleKey: 'notifPrefs.trades.title',      descKey: 'notifPrefs.trades.desc',      icon: 'trending-up' },
@@ -37,6 +41,7 @@ export default function NotifSettings() {
   const p = useThemedPalette();
   const [prefs, setPrefs] = useState<Prefs>(DEFAULT_PREFS);
   const [loading, setLoading] = useState(true);
+  const qc = useQueryClient();
 
   useEffect(() => {
     let cancelled = false;
@@ -51,7 +56,9 @@ export default function NotifSettings() {
     return () => { cancelled = true; };
   }, []);
 
-  const toggle = (channel: ChannelKey, cat: CategoryKey, value: boolean) => {
+  const chatsSupported = typeof prefs.push.messages === 'boolean';
+
+  const toggle = (channel: ChannelKey, cat: CategoryKey | ChatKey, value: boolean) => {
     const next: Prefs = {
       ...prefs,
       [channel]: { ...prefs[channel], [cat]: value },
@@ -59,6 +66,7 @@ export default function NotifSettings() {
     setPrefs(next);
     // Optimistic save — revert on error.
     api.put('/notifications/preferences', { preferences: next })
+      .then(() => qc.invalidateQueries({ queryKey: NOTIF_PREFS_KEY })) // widgets follow "Show preview"
       .catch(() => setPrefs(prefs));
   };
 
@@ -73,6 +81,30 @@ export default function NotifSettings() {
           <Text style={{ color: p.fgMuted, fontSize: 13, lineHeight: 19, marginTop: 12, marginLeft: 4 }}>
             {t('notifPrefs.intro') || 'Choose which transactional confirmations you receive by email and push.'}
           </Text>
+
+          {chatsSupported && (
+            <View>
+              <SectionLabel>{t('notifPrefs.channel.chats')}</SectionLabel>
+              <Panel>
+                <ToggleRow
+                  icon="chatbubble-ellipses"
+                  label={t('notifPrefs.messages.title')}
+                  description={t('notifPrefs.messages.desc')}
+                  value={prefs.push.messages !== false}
+                  onValueChange={(v) => toggle('push', 'messages', v)}
+                />
+                <ToggleRow
+                  icon="eye"
+                  label={t('notifPrefs.preview.title')}
+                  description={t('notifPrefs.preview.desc')}
+                  value={prefs.push.messages !== false && prefs.push.messagePreview !== false}
+                  disabled={prefs.push.messages === false}
+                  onValueChange={(v) => toggle('push', 'messagePreview', v)}
+                  last
+                />
+              </Panel>
+            </View>
+          )}
 
           {(['email', 'push'] as ChannelKey[]).map((channel) => (
             <View key={channel}>

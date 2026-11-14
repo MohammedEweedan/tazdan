@@ -3,7 +3,8 @@
 /* ═══════════════════════════════════════════════════════════════════════════
    Device — real app screens on the site.
 
-   <PhoneFrame>  CSS iPhone (19.5:9) with a Dynamic Island. Screens captured
+   <PhoneFrame>  CSS iPhone (19.5:9) with a Dynamic Island, or a Pixel with a
+                 punch-hole camera (`device="android"`). Screens captured
                  by the pipeline already carry the iOS status bar and home
                  indicator, so the frame only adds bezel + island.
    <AppScreen>   A still from public/app/screens, picked for the visitor's
@@ -17,9 +18,9 @@
    pages never break while media is still being produced.
    ═══════════════════════════════════════════════════════════════════════════ */
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Box, type BoxProps } from "@chakra-ui/react";
-import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import { APP_GIFS, APP_LOOPS, APP_SCREENS, APP_VIDEOS, gifSrc, loopSrc, screenSrc, videoSrc, type AppMediaVariant } from "@/content/appMedia";
 import { EASE, useSiteLocale, useSiteTheme } from "./tokens";
 
@@ -37,20 +38,46 @@ export function useMediaVariant(available: AppMediaVariant[] | undefined): AppMe
 export const hasScreen = (id: string) => Boolean(APP_SCREENS[id]?.variants?.length);
 export const hasVideo = (id: string) => Boolean(APP_VIDEOS[id]?.variants?.length);
 
+const MOTION_QUERY = "(prefers-reduced-motion: reduce)";
+const subscribeMotion = (onChange: () => void) => {
+  const query = window.matchMedia(MOTION_QUERY);
+  query.addEventListener("change", onChange);
+  return () => query.removeEventListener("change", onChange);
+};
+const motionSnapshot = () => window.matchMedia(MOTION_QUERY).matches;
+// Hydrate from the same static screen the server rendered, then read the live
+// preference. This also stops motion immediately if the setting changes.
+const serverMotionSnapshot = () => true;
+export function useMediaReducedMotion() {
+  return useSyncExternalStore(subscribeMotion, motionSnapshot, serverMotionSnapshot);
+}
+
 /* ── frame ───────────────────────────────────────────────────────────────── */
 
-/** iPhone-proportioned frame. Size it with `w` (e.g. "min(320px, 78vw)"). */
-export function PhoneFrame({ children, ...rest }: BoxProps) {
+/** Which phone a frame draws. */
+export type PhoneDevice = "iphone" | "android";
+
+/** iPhone-proportioned frame (or a Pixel-proportioned one with `device="android"`).
+ *  Size it with `w` (e.g. "min(320px, 78vw)"). */
+/**
+ * One bezel for every frame, iPhone or Android, at any size. (A percentage
+ * padding is measured against the parent's width, so the old 1.35% gave the
+ * same phone a thin bezel in a narrow column and a thick one in a wide hero.)
+ */
+const BEZEL = "4px";
+
+export function PhoneFrame({ children, device = "iphone", ...rest }: BoxProps & { device?: PhoneDevice }) {
   const t = useSiteTheme();
+  const android = device === "android";
   return (
     <Box
       position="relative"
       w="300px"
       flexShrink={0}
-      sx={{ aspectRatio: "393 / 852" }}
-      borderRadius="15.5% / 7.2%"
+      sx={{ aspectRatio: android ? "412 / 915" : "393 / 852" }}
+      borderRadius={android ? "11% / 5%" : "15.5% / 7.2%"}
       bg={t.dark ? "#0B0C0E" : "#111215"}
-      p="1.35%"
+      p={BEZEL}
       boxShadow={`${t.phoneShadow}, inset 0 0 0 1px rgba(255,255,255,0.18)`}
       {...rest}
     >
@@ -59,20 +86,21 @@ export function PhoneFrame({ children, ...rest }: BoxProps) {
         w="100%"
         h="100%"
         overflow="hidden"
-        borderRadius="14.1% / 6.55%"
+        borderRadius={android ? "9.8% / 4.45%" : "14.1% / 6.55%"}
         bg={t.dark ? "#16181C" : "#F6F7FA"}
         sx={{ isolation: "isolate", transform: "translateZ(0)" }}
       >
         {children}
-        {/* Dynamic Island */}
+        {/* Dynamic Island, or Android's punch-hole camera */}
         <Box
           aria-hidden
           position="absolute"
-          top="1.35%"
+          top={android ? "1.3%" : "1.35%"}
           left="50%"
           transform="translateX(-50%)"
-          w="32%"
-          h="4.3%"
+          w={android ? "5.4%" : "32%"}
+          sx={android ? { aspectRatio: "1" } : undefined}
+          h={android ? undefined : "4.3%"}
           borderRadius="999px"
           bg="#000"
           zIndex={3}
@@ -137,12 +165,24 @@ function MediaLoop({ src, alt, playing, priority, onError }: {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [loaded, setLoaded] = useState(false);
   const active = visible && playing;
+  const shouldPlay = useRef(active);
+  shouldPlay.current = active;
+  const play = () => {
+    const video = videoRef.current;
+    if (video && shouldPlay.current) void video.play().then(() => {
+      if (!shouldPlay.current) video.pause();
+    }).catch(() => {});
+  };
   useEffect(() => { if (active) setLoaded(true); }, [active]);
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
-    if (loaded && active) void video.play().catch(() => {});
+    shouldPlay.current = active;
+    if (loaded && active) void video.play().then(() => {
+      if (!shouldPlay.current) video.pause();
+    }).catch(() => {});
     else video.pause();
+    return () => { shouldPlay.current = false; video.pause(); };
   }, [loaded, active]);
   return (
     <Box ref={containerRef} position="absolute" inset={0}>
@@ -154,7 +194,7 @@ function MediaLoop({ src, alt, playing, priority, onError }: {
         muted loop playsInline preload="none"
         src={loaded ? src.mp4 : undefined}
         poster={src.poster}
-        onLoadedData={() => { if (active) void videoRef.current?.play().catch(() => {}); }}
+        onLoadedData={play}
         onError={onError}
         aria-label={alt}
         disablePictureInPicture
@@ -189,7 +229,7 @@ export function AppScreen({ id, alt, priority, still, playing = true }: {
   const variant = useMediaVariant(APP_SCREENS[id]?.variants);
   const loopVariant = useMediaVariant(APP_LOOPS[id]?.variants);
   const gifVariant = useMediaVariant(APP_GIFS[id]);
-  const reduced = useReducedMotion();
+  const reduced = useMediaReducedMotion();
   const [failedSource, setFailedSource] = useState<string | null>(null);
   const animated = !still && !reduced;
   const src = loopVariant ? loopSrc(id, loopVariant) : null;
@@ -206,7 +246,7 @@ export function AppVideo({
   id, alt, fallbackScreen, playing = true,
 }: { id: string; alt: string; fallbackScreen?: string; playing?: boolean }) {
   const variant = useMediaVariant(APP_VIDEOS[id]?.variants);
-  const reduced = useReducedMotion();
+  const reduced = useMediaReducedMotion();
   const [failedSource, setFailedSource] = useState<string | null>(null);
   const src = variant ? videoSrc(id, variant) : null;
   if (!src || failedSource === src.mp4 || reduced) {
@@ -221,8 +261,8 @@ export type PhoneMedia = { video?: string; screen?: string; alt: string };
 /** A phone that crossfades between media items (driven by `index`). */
 export function PhoneStage({
   items, index, priority, playing = true, ...rest
-}: { items: PhoneMedia[]; index: number; priority?: boolean; playing?: boolean } & BoxProps) {
-  const reduced = useReducedMotion();
+}: { items: PhoneMedia[]; index: number; priority?: boolean; playing?: boolean; device?: PhoneDevice } & BoxProps) {
+  const reduced = useMediaReducedMotion();
   const item = items[Math.max(0, Math.min(index, items.length - 1))];
   if (items.length === 1) {
     return (

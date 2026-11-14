@@ -1,29 +1,30 @@
 /**
- * SendMoneySheet — bottom-sheet picker for sending an in-chat payment.
+ * SendMoneySheet — pay or request money inside a chat.
  *
- *   • Asset chips driven by the user's actual `useWallets()` data, so they
- *     can only pay with what they hold. Each chip shows the available
- *     balance (balance − frozen) under the symbol.
- *   • Amount input with the active currency suffix and a soft "MAX" pill
- *     to drop the full available balance into the field.
- *   • Personalised note input under the amount.
- *   • Keyboard-aware: wraps the sheet in `KeyboardAvoidingView` so the
- *     primary action stays visible whenever a soft keyboard is up.
- *   • Pure-presentational — the parent owns the actual mutation.
+ *   • Currency pills from the user's wallets (each chain variant collapses to
+ *     one logical asset). Paying needs a balance; requesting can ask for any
+ *     held currency plus the core fiats.
+ *   • A big centred amount typed on the app's own keypad (no system keyboard
+ *     jumping over the sheet); "Available" fills the maximum when paying.
+ *   • An optional note, and the action docked at the bottom.
+ *   • Pure presentation — the parent owns the actual send.
  */
-
 import { useEffect, useMemo, useState } from 'react';
-import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, View } from 'react-native';
-import { Text, TextInput } from '@/components/ui/Text';
+import { Pressable, ScrollView, View, useWindowDimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-
-import { type Palette } from '@/store/themeStore';
-import { useT } from '@/store/i18nStore';
-import { useWallets } from '@/hooks';
-import { getCurrencyMeta } from '@/constants';
-import type { Currency, Wallet } from '@/types';
-
+import { Text, TextInput } from '@/components/ui/Text';
+import { AmountDisplay } from '@/components/ui/AmountDisplay';
+import { NumericKeypad } from '@/components/ui/NumericKeypad';
 import { BottomSheet } from '@/components/ui/BottomSheet';
+import { CurrencyMark } from '@/components/messages/PaymentReceiptBubble';
+import { type Palette } from '@/store/themeStore';
+import { useI18n, useT } from '@/store/i18nStore';
+import { useWallets } from '@/hooks';
+import { fiatSymbol, getCurrencyMeta } from '@/constants';
+import type { Wallet } from '@/types';
+
+/** Always offered when asking for money, held or not. */
+const REQUESTABLE = ['LYD', 'USD', 'EUR'];
 
 export interface SendMoneySheetProps {
   visible: boolean;
@@ -33,265 +34,173 @@ export interface SendMoneySheetProps {
   mode?: 'SEND' | 'REQUEST';
   onClose: () => void;
   onSubmit: (amount: number, currency: string, note?: string) => void;
+  /** Set when the recipient can't receive right now — shown above the
+   *  button, which stays disabled (SEND only; requests are unaffected). */
+  blockedNotice?: string | null;
 }
 
 export function SendMoneySheet({
-  visible, palette: p, recipientLabel, mode = 'SEND', onClose, onSubmit,
+  visible, palette: p, recipientLabel, mode = 'SEND', onClose, onSubmit, blockedNotice,
 }: SendMoneySheetProps) {
   const { data: wallets } = useWallets();
   const t = useT();
+  const locale = useI18n((s) => s.locale);
+  const { height } = useWindowDimensions();
+  const compact = height < 760;
+  const request = mode === 'REQUEST';
 
-  // Normalised wallet list: any chain variant (USDT_ERC20, USDT_TRC20,
-  // ETH_ERC20 if/when introduced, etc.) collapses into a single chip
-  // for the base symbol.  Mirrors the home-tab merge logic so the
-  // user sees the same "one logical asset" view everywhere.  We still
-  // show every base symbol (even 0-balance) so the user can see what
-  // they hold; chips with 0 avail are visually dimmed and
-  // non-selectable.
-  const displayWallets = useMemo<DisplayWallet[]>(() => {
-    // Base = the part of the currency code before the first `_`.
-    //   USDT_TRC20 → USDT.  BTC → BTC.  No special-cases.
-    const baseOf = (c: string) => {
-      const i = c.indexOf('_');
-      return i >= 0 ? c.slice(0, i) : c;
-    };
-    const chainOf = (c: string) => {
-      const i = c.indexOf('_');
-      return i >= 0 ? c.slice(i + 1) : undefined;
-    };
-    const map = new Map<string, DisplayWallet>();
+  // One entry per logical asset (USDT_TRC20 + USDT_ERC20 → USDT), richest first.
+  const assets = useMemo<Asset[]>(() => {
+    const map = new Map<string, Asset>();
     (wallets ?? []).forEach((w) => {
       const cur = String(w.currency);
-      const base = baseOf(cur);
+      const i = cur.indexOf('_');
+      const base = i >= 0 ? cur.slice(0, i) : cur;
       const bal = availableOf(w);
+      const usd = Number(w.fiatValueUsd ?? 0);
       const existing = map.get(base);
-      if (existing) {
-        existing.balance += bal;
-        // Keep the variant with the highest balance as canonical so
-        // the metadata (icon, decimals) prefers what the user
-        // actually holds the most of.
-        if (bal > availableOf(existing.wallet)) {
-          existing.wallet = w;
-          existing.chain = chainOf(cur);
-        }
-      } else {
-        map.set(base, {
-          currency: base,
-          wallet: w,
-          balance: bal,
-          chain: chainOf(cur),
-        });
-      }
+      if (existing) { existing.balance += bal; existing.usd += usd; }
+      else map.set(base, { currency: base, balance: bal, usd });
     });
-    return Array.from(map.values())
-      .sort((a, b) => Number(b.wallet.fiatValueUsd ?? 0) - Number(a.wallet.fiatValueUsd ?? 0));
-  }, [wallets]);
+    if (request) REQUESTABLE.forEach((c) => { if (!map.has(c)) map.set(c, { currency: c, balance: 0, usd: 0 }); });
+    return [...map.values()]
+      .filter((a) => request || a.balance > 0)
+      .sort((a, b) => b.usd - a.usd || b.balance - a.balance);
+  }, [wallets, request]);
 
   const [currency, setCurrency] = useState<string | null>(null);
-  const [amount,   setAmount]   = useState('');
-  const [note,     setNote]     = useState('');
+  const [amount, setAmount] = useState('');
+  const [note, setNote] = useState('');
 
-  // Reset form on every open; default to top-funded wallet.
+  // Fresh form on every open, on the best-funded asset (LYD first when asking).
   useEffect(() => {
     if (!visible) { setAmount(''); setNote(''); return; }
-    const firstFunded = displayWallets.find((d) => d.balance > 0);
-    setCurrency(firstFunded?.currency ?? displayWallets[0]?.currency ?? null);
-  }, [visible, displayWallets]);
+    setCurrency(request ? (assets.find((a) => a.currency === 'LYD')?.currency ?? assets[0]?.currency ?? null) : assets[0]?.currency ?? null);
+  }, [visible, request]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const selected = displayWallets.find((d) => d.currency === currency);
+  const selected = assets.find((a) => a.currency === currency);
+  const decimals = Math.min(getCurrencyMeta(currency ?? '')?.decimals ?? 2, 8);
   const available = selected?.balance ?? 0;
-  const numAmount = parseFloat(amount);
-  const overflow = numAmount > available;
-  const valid = !!selected && numAmount > 0 && (mode === 'REQUEST' || (selected.balance > 0 && !overflow));
+  const numAmount = Number(amount || 0);
+  const overflow = !request && numAmount > available;
+  const blocked = !request && !!blockedNotice;
+  const valid = !blocked && !!selected && numAmount > 0 && !overflow;
+  const fmt = (n: number) => new Intl.NumberFormat('en-US', { maximumFractionDigits: decimals }).format(n);
+  const symbol = currency ? (getCurrencyMeta(currency)?.kind === 'fiat' ? fiatSymbol(currency, locale) : currency) : '';
+
+  const cta = (
+    <View style={{ paddingHorizontal: 16, paddingTop: 6 }}>
+      {blocked && (
+        <View accessibilityRole="alert" style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+          <Ionicons name="information-circle-outline" size={16} color={p.redFg} />
+          <Text style={{ flex: 1, color: p.redFg, fontSize: 13, fontWeight: '500' }}>{blockedNotice}</Text>
+        </View>
+      )}
+      <Pressable
+        disabled={!valid}
+        // The LOGICAL currency (USDT, not USDT_TRC20): the server picks the wallet.
+        onPress={() => valid && onSubmit(numAmount, selected!.currency, note.trim() || undefined)}
+        accessibilityRole="button"
+        style={({ pressed }) => ({
+          height: 54, borderRadius: 27, flexDirection: 'row', gap: 8,
+          alignItems: 'center', justifyContent: 'center',
+          backgroundColor: valid ? p.accent : p.pillBg,
+          opacity: pressed ? 0.88 : 1,
+        })}
+      >
+        <Ionicons name={request ? 'arrow-down' : 'arrow-up'} size={17} color={valid ? p.accentFg : p.fgFaint} />
+        <Text style={{ color: valid ? p.accentFg : p.fgFaint, fontSize: 16, fontWeight: '700' }}>
+          {valid
+            ? t(request ? 'money.requestCta' : 'money.sendCta', { amount: fmt(numAmount), currency: currency ?? '' })
+            : t(request ? 'money.requestFallback' : 'money.sendFallback')}
+        </Text>
+      </Pressable>
+    </View>
+  );
 
   return (
     <BottomSheet
       visible={visible}
       onClose={onClose}
-      title={mode === 'REQUEST' ? t('money.requestTitle') : t('money.sendTitle')}
-      subtitle={recipientLabel ? `${mode === 'REQUEST' ? t('money.from') : t('money.to')} ${recipientLabel}` : undefined}
+      title={request ? t('money.requestTitle') : t('money.sendTitle')}
+      subtitle={recipientLabel ? `${request ? t('money.from') : t('money.to')} ${recipientLabel}` : undefined}
+      footer={assets.length ? cta : undefined}
     >
-
-            {displayWallets.length === 0 ? (
-              <View style={{
-                padding: 16, borderRadius: 14,
-                borderWidth: 1, borderColor: p.border,
-                backgroundColor: p.bgElev,
-                gap: 6,
-              }}>
-                <Text style={{ color: p.fg, fontSize: 14, fontWeight: '700' }}>
-                  {t('money.noWalletsTitle')}
-                </Text>
-                <Text style={{ color: p.fgMuted, fontSize: 12, fontWeight: '500' }}>
-                  {t('money.noWalletsBody')}
-                </Text>
-              </View>
-            ) : (
-              <>
-                {/* Asset chips */}
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  keyboardShouldPersistTaps="always"
-                  contentContainerStyle={{ gap: 8, paddingVertical: 2 }}
-                >
-                  {displayWallets.map((d) => {
-                    const meta = getCurrencyMeta(d.currency);
-                    const active = currency === d.currency;
-                    const decimals = meta?.decimals ?? 2;
-                    const hasBalance = d.balance > 0;
-                    return (
-                      <Pressable
-                        key={d.currency}
-                        onPress={() => hasBalance && setCurrency(d.currency)}
-                        style={({ pressed }) => ({
-                          paddingHorizontal: 12, paddingVertical: 10,
-                          borderRadius: 14, minWidth: 110,
-                          backgroundColor: active ? p.accent : p.bgElev,
-                          borderWidth: 1, borderColor: active ? p.accent : p.border,
-                          opacity: hasBalance ? (pressed ? 0.9 : 1) : 0.45,
-                        })}
-                      >
-                        <Text style={{
-                          color: active ? p.accentFg : p.fg,
-                          fontSize: 13, fontWeight: '600', letterSpacing: 0.2,
-                        }}>
-                          {meta?.flagOrIcon ?? d.currency.slice(0, 1)} {d.currency}
-                          {d.chain && (
-                            <Text style={{ fontSize: 9, fontWeight: '700', opacity: 0.7 }}>
-                              {' '}{d.chain}
-                            </Text>
-                          )}
-                        </Text>
-                        <Text
-                          numberOfLines={1}
-                          style={{
-                            color: active ? p.accentFg : p.fgMuted,
-                            fontSize: 10, fontWeight: '600', marginTop: 2,
-                            fontVariant: ['tabular-nums'],
-                            opacity: active ? 0.8 : 1,
-                          }}
-                        >
-                          {formatBal(d.balance, decimals)} {t('money.availableSuffix')}
-                        </Text>
-                      </Pressable>
-                    );
-                  })}
-                </ScrollView>
-
-                {/* Amount */}
-                <View style={{
-                  borderRadius: 14, borderWidth: 1,
-                  borderColor: overflow ? '#ef4444' : p.border,
-                  backgroundColor: p.bgElev,
-                  paddingHorizontal: 14, paddingVertical: 12, gap: 4,
-                }}>
-                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '700', letterSpacing: 0.5 }}>
-                      {t('money.amount')}
-                    </Text>
-                    {selected && selected.balance > 0 && (
-                      <Pressable
-                        hitSlop={6}
-                        onPress={() => setAmount(String(available))}
-                        style={{
-                          paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8,
-                          backgroundColor: p.pillBg,
-                          borderWidth: 1, borderColor: p.border,
-                        }}
-                      >
-                        <Text style={{ color: p.fg, fontSize: 10, fontWeight: '600', letterSpacing: 0.4 }}>
-                          {t('money.max')}
-                        </Text>
-                      </Pressable>
-                    )}
+      {assets.length === 0 ? (
+        <View style={{ alignItems: 'center', paddingVertical: 28, gap: 8 }}>
+          <View style={{ width: 56, height: 56, borderRadius: 28, backgroundColor: p.pillBg, alignItems: 'center', justifyContent: 'center' }}>
+            <Ionicons name="wallet-outline" size={24} color={p.fgMuted} />
+          </View>
+          <Text style={{ color: p.fg, fontSize: 16, fontWeight: '700' }}>{t('money.noWalletsTitle')}</Text>
+          <Text style={{ color: p.fgMuted, fontSize: 13, textAlign: 'center', maxWidth: 260 }}>{t('money.noWalletsBody')}</Text>
+        </View>
+      ) : (
+        <View>
+          {/* Currency pills */}
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="always"
+            contentContainerStyle={{ gap: 8, paddingVertical: 2, paddingHorizontal: 2 }}>
+            {assets.map((a) => {
+              const on = a.currency === currency;
+              return (
+                <Pressable key={a.currency} onPress={() => { setCurrency(a.currency); setAmount(''); }} accessibilityRole="button"
+                  accessibilityState={{ selected: on }}
+                  style={({ pressed }) => ({
+                    flexDirection: 'row', alignItems: 'center', gap: 8,
+                    paddingLeft: 6, paddingRight: 14, height: 40, borderRadius: 20,
+                    backgroundColor: on ? p.accent : p.bgElev,
+                    borderWidth: 1, borderColor: on ? p.accent : p.border,
+                    opacity: pressed ? 0.85 : 1,
+                  })}>
+                  <View style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: on ? 'rgba(255,255,255,0.18)' : p.pillBg, alignItems: 'center', justifyContent: 'center' }}>
+                    <CurrencyMark currency={a.currency} size={18} fallbackColor={on ? p.accentFg : p.fg} />
                   </View>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                    <TextInput
-                      value={amount}
-                      onChangeText={setAmount}
-                      placeholder="0.00"
-                      keyboardType="decimal-pad"
-                      placeholderTextColor={p.fgFaint}
-                      style={{
-                        flex: 1, color: p.fg, fontSize: 28, fontWeight: '600',
-                        fontVariant: ['tabular-nums'], letterSpacing: -0.5,
-                        paddingVertical: 0,
-                      }}
-                    />
-                    <Text style={{ color: p.fgMuted, fontSize: 14, fontWeight: '600' }}>
-                      {currency}{selected?.chain ? ` (${selected.chain})` : ''}
-                    </Text>
-                  </View>
-                  {overflow && (
-                    <Text style={{ color: '#ef4444', fontSize: 11, fontWeight: '700', marginTop: 2 }}>
-                      {t('money.exceedsBalance')}
-                    </Text>
-                  )}
-                </View>
+                  <Text style={{ color: on ? p.accentFg : p.fg, fontSize: 14, fontWeight: '700' }}>{a.currency}</Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
 
-                {/* Note */}
-                <View style={{
-                  borderRadius: 14, borderWidth: 1, borderColor: p.border,
-                  backgroundColor: p.bgElev,
-                  paddingHorizontal: 14, paddingVertical: 10,
-                }}>
-                  <TextInput
-                    value={note}
-                    onChangeText={setNote}
-                    placeholder={mode === 'REQUEST' ? t('money.requestNotePlaceholder') : t('money.notePlaceholder')}
-                    placeholderTextColor={p.fgFaint}
-                    multiline
-                    style={{ color: p.fg, fontSize: 14, fontWeight: '500', minHeight: 36 }}
-                  />
-                </View>
-              </>
-            )}
-
-            {/* Send / request CTA */}
-            <Pressable
-              disabled={!valid}
-              // Send the LOGICAL currency (USDT, BTC, ETH…) rather than
-              // the underlying wallet currency (USDT_TRC20, etc). The
-              // server's transfer controller now collapses USDT
-              // variants to a single logical balance and picks the
-              // right underlying wallet to debit; the client just has
-              // to ask in human terms.
-              onPress={() => valid && onSubmit(numAmount, selected!.currency, note.trim() || undefined)}
-              style={({ pressed }) => ({
-                height: 52, borderRadius: 16, marginTop: 4,
-                backgroundColor: valid ? p.accent : p.border,
-                alignItems: 'center', justifyContent: 'center',
-                opacity: pressed ? 0.9 : 1,
-                flexDirection: 'row', gap: 8,
-              })}
-            >
-              <Ionicons name={mode === 'REQUEST' ? 'receipt-outline' : 'paper-plane'} size={15} color={p.accentFg} />
-              <Text style={{ color: p.accentFg, fontSize: 15, fontWeight: '600' }}>
-                {valid
-                  ? t(mode === 'REQUEST' ? 'money.requestCta' : 'money.sendCta', { amount: formatAmount(numAmount), currency: currency ?? '' })
-                  : t(mode === 'REQUEST' ? 'money.requestFallback' : 'money.sendFallback')}
+          {/* Amount */}
+          <View style={{ marginTop: compact ? 14 : 22 }}>
+            <AmountDisplay value={amount} symbol={symbol} palette={p} tint={overflow ? p.redFg : undefined} maxSize={compact ? 48 : 58} />
+          </View>
+          {request ? (
+            <Text style={{ color: p.fgFaint, fontSize: 12.5, textAlign: 'center', marginTop: 6 }}>
+              {recipientLabel ? t('money.requestFrom', { name: recipientLabel }) : t('money.requestTitle')}
+            </Text>
+          ) : (
+            <Pressable onPress={() => setAmount(String(Number(available.toFixed(decimals))))} hitSlop={8} style={{ alignSelf: 'center', marginTop: 6 }}>
+              <Text style={{ color: overflow ? p.redFg : p.fgMuted, fontSize: 12.5, fontWeight: '600' }}>
+                {overflow ? t('money.exceedsBalance') : `${t('money.available')} · ${fmt(available)} ${currency ?? ''}`}
               </Text>
             </Pressable>
-          </BottomSheet>
+          )}
+
+          {/* Note */}
+          <View style={{
+            flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: compact ? 12 : 18,
+            height: 44, borderRadius: 22, paddingHorizontal: 14,
+            backgroundColor: p.bgElev, borderWidth: 1, borderColor: p.border,
+          }}>
+            <Ionicons name="create-outline" size={16} color={p.fgMuted} />
+            <TextInput value={note} onChangeText={setNote} maxLength={200}
+              placeholder={request ? t('money.requestNotePlaceholder') : t('money.notePlaceholder')} placeholderTextColor={p.fgFaint}
+              style={{ flex: 1, color: p.fg, fontSize: 14, fontWeight: '500', paddingVertical: 0 }} />
+          </View>
+
+          {/* Keypad */}
+          <View style={{ marginTop: compact ? 8 : 14 }}>
+            <NumericKeypad value={amount} onChange={setAmount} palette={p} maxDecimals={decimals}
+              keyHeight={compact ? 44 : 52} fontSize={compact ? 23 : 26} />
+          </View>
+        </View>
+      )}
+    </BottomSheet>
   );
 }
 
-interface DisplayWallet {
-  currency: string;
-  wallet: Wallet;
-  balance: number;
-  chain?: string;
-}
+interface Asset { currency: string; balance: number; usd: number }
 
 function availableOf(w: Wallet): number {
   return Math.max(0, Number(w.balance) - Number(w.frozen ?? 0));
-}
-
-function formatBal(n: number, decimals: number): string {
-  return new Intl.NumberFormat('en-US', { maximumFractionDigits: Math.min(decimals, 6) }).format(n);
-}
-
-function formatAmount(n: number): string {
-  return new Intl.NumberFormat('en-US', { maximumFractionDigits: 8 }).format(n);
 }

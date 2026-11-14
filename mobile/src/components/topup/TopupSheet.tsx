@@ -30,8 +30,9 @@ import { PressableScale, FadeIn } from '@/components/ui/Motion';
 import { AmountDisplay } from '@/components/ui/AmountDisplay';
 import { CurrencyPicker, type CurrencyItem } from '@/components/ui/CurrencyPicker';
 import { NumericKeypad } from '@/components/ui/NumericKeypad';
-import { SlideToConfirm } from '@/components/ui/SlideToConfirm';
+import { ConfirmAction, ltr } from '@/components/ui/ConfirmAction';
 import { useThemedPalette, type Palette } from '@/store/themeStore';
+import { useT } from '@/store/i18nStore';
 import { useHaptics, useStepUpAuth, StepUpDeniedError, usePlatformBanks, useTransactionSound } from '@/hooks';
 import { useAuthStore } from '@/store/authStore';
 import { useUsdValue } from '@/hooks/useForexRates';
@@ -87,6 +88,7 @@ export function TopupBody({
   onComplete: () => void;
 }) {
   const h = useHaptics();
+  const t = useT();
   const stepUp = useStepUpAuth();
   const router = useRouter();
   const [instructions, setInstructions] = useState<{ reference: string; amount: number; currency: string; bank: PlatformBank | null; agent: boolean } | null>(null);
@@ -289,22 +291,23 @@ export function TopupBody({
     ? 'Choose a method'
     : bankUnavailable
     ? `Not available in ${currency} yet`
-    : selectedMethod.id === 'P2P'
-    ? 'Slide to open the P2P market'
-    : numeric > 0
-    ? `Slide to top up ${formatMoney(numeric, currency, { showSymbol: true })}`
-    : 'Enter amount';
+    : t('buy.enterAmount');
+
+  const canTopUp = !!selectedMethod && (numeric > 0 || selectedMethod.id === 'P2P') && !busy && !bankUnavailable;
+  const amountLabel = formatMoney(numeric, currency, { showSymbol: true });
+  const processing = feeRows ? feeRows.total.amount - numeric : 0;
 
   if (instructions) {
     return <TransferInstructions {...instructions} palette={p} onDone={onComplete} />;
   }
 
   return (
+    <View style={{ flex: 1 }}>
     <ScrollView
       style={{ flex: 1 }}
       showsVerticalScrollIndicator={false}
       keyboardShouldPersistTaps="handled"
-      contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 28 }}
+      contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 4 }}
     >
       <FadeIn>
         <Text style={{ color: p.fgMuted, fontSize: 11, fontWeight: '700', letterSpacing: 0.6, marginBottom: 8 }}>
@@ -411,22 +414,30 @@ export function TopupBody({
         />
       </View>
 
-      <SlideToConfirm
-        label={slideLabel}
-        onConfirm={() => { if (selectedMethod && (numeric > 0 || selectedMethod.id === 'P2P') && !busy && !bankUnavailable) submit(); }}
-        enabled={!!selectedMethod && (numeric > 0 || selectedMethod.id === 'P2P') && !busy && !bankUnavailable}
-        status={busy ? 'loading' : ctaState}
-        successLabel={successLabel ?? undefined}
-        errorLabel={errorLabel ?? undefined}
-        accent={p.accent}
-        accentFg={p.accentFg}
-        trackBg={p.bgElev}
-        trackFg={p.fg}
-        border={p.border}
-        greenBg={p.greenBg} greenFg={p.greenFg}
-        redBg={p.redBg} redFg={p.redFg}
-      />
     </ScrollView>
+      {/* Pinned like every money page; the dock keeps it clear of the home indicator. */}
+      <View style={{ paddingHorizontal: 20 }}>
+        <ConfirmAction
+          action={selectedMethod?.id === 'P2P' ? t('confirm.act.p2p') : t('confirm.act.topup', { amount: ltr(amountLabel) })}
+          prompt={slideLabel}
+          onConfirm={() => { if (canTopUp) submit(); }}
+          disabled={!canTopUp}
+          status={busy ? 'loading' : ctaState}
+          successLabel={successLabel ?? undefined}
+          errorLabel={errorLabel ?? undefined}
+          review={selectedMethod && selectedMethod.id !== 'P2P' && numeric > 0 ? {
+            amount: amountLabel,
+            rows: [
+              { label: t('confirm.method'), value: selectedMethod.name },
+              ...(payTo ? [{ label: t('confirm.to'), value: payTo.bankName }] : []),
+              { label: t('confirm.fee'), value: processing > 0 ? formatMoney(processing, currency, { showSymbol: true }) : selectedMethod.feeSummary },
+              ...(feeRows ? [{ label: t('confirm.youPay'), value: formatMoney(feeRows.total.amount, currency, { showSymbol: true }) }] : []),
+              { label: t('confirm.arrives'), value: selectedMethod.speed },
+            ],
+          } : undefined}
+        />
+      </View>
+    </View>
   );
 }
 

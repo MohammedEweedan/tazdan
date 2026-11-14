@@ -1,13 +1,15 @@
 import { Router } from 'express';
 import { authenticate } from '../middleware/auth';
-import { upload } from '../middleware/upload';
+import { upload, verifyUploads, discardUploadsOnFailure } from '../middleware/upload';
 import { UserController } from '../controllers/user.controller';
 
 export const userRouter = Router();
 
 userRouter.put('/profile', authenticate, UserController.updateProfile);
 userRouter.put('/password', authenticate, UserController.changePassword);
-userRouter.post('/kyc', authenticate, upload.array('documents', 3), UserController.submitKYC);
+// Documents are content-checked and stripped of location metadata; a
+// rejected submission deletes its files.
+userRouter.post('/kyc', authenticate, discardUploadsOnFailure, upload.array('documents', 3), verifyUploads, UserController.submitKYC);
 userRouter.get('/kyc', authenticate, UserController.getKYCStatus);
 userRouter.get('/notifications', authenticate, UserController.getNotifications);
 userRouter.put('/notifications/:id/read', authenticate, UserController.markNotificationRead);

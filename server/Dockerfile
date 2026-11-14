@@ -10,10 +10,7 @@
 #
 # `--mount=type=cache,target=/root/.npm` keeps the npm cache on the build
 # host between builds, so even lockfile-busting rebuilds reuse packages.
-# Use `npm install` rather than `npm ci` in Docker: npm 10 on node:20-alpine
-# can hard-fail on optional peer lock drift (utf-8-validate), while install
-# repairs that metadata inside the image. Code-only changes still rebuild fast:
-# both install layers are cached, only COPY + esbuild re-run.
+# Clean installs enforce the reviewed dependency lock in every build stage.
 
 FROM node:20-alpine AS deps
 WORKDIR /app
@@ -22,20 +19,22 @@ COPY package.json package-lock.json ./
 COPY prisma ./prisma/
 # prisma is a production dependency (the runtime image runs `migrate deploy`
 # at boot), so the CLI + generated client both land here.
-RUN --mount=type=cache,target=/root/.npm npm install --omit=dev --prefer-offline --no-audit --no-fund \
+RUN --mount=type=cache,target=/root/.npm npm ci --omit=dev --prefer-offline --no-audit --no-fund \
  && npx prisma generate
 
 FROM node:20-alpine AS build
 WORKDIR /app
 RUN apk add --no-cache openssl
 COPY package.json package-lock.json ./
-RUN --mount=type=cache,target=/root/.npm npm install --prefer-offline --no-audit --no-fund
+RUN --mount=type=cache,target=/root/.npm npm ci --prefer-offline --no-audit --no-fund
 COPY . .
 RUN npm run build:fast
 
 FROM node:20-alpine AS production
 WORKDIR /app
 ENV NODE_ENV=production
+ARG RELEASE_SHA
+ENV RELEASE_SHA=$RELEASE_SHA
 RUN apk add --no-cache openssl
 # --chown on COPY sets ownership during extraction — a separate
 # `chown -R /app` walked every node_modules inode and took ~230s on the

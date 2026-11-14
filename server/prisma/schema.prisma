@@ -515,9 +515,94 @@ model BusinessProfile {
   payoutBatches        BusinessPayoutBatch[]
   webhooks             BusinessWebhookEndpoint[]
   apiKeys              APIKey[]
+  tills                BusinessTill[]
+  /// Brand colours for the printed QR and plaque (#RRGGBB).
+  brandPrimary         String?
+  brandSecondary       String?
+  /// Manager PIN that unlocks kiosk mode on the business's tills (bcrypt).
+  kioskPinHash         String?
+  kioskPinSetAt        DateTime?
+  kioskPinFailures     Int                       @default(0)
+  kioskPinLockedUntil  DateTime?
+  posts                BusinessPost[]
+  plaqueOrders         PlaqueOrder[]
 
   @@index([country])
   @@index([kybStatus])
+}
+
+enum BusinessPostKind {
+  OFFER
+  DEAL
+  NEWS
+}
+
+/// Offers, deals and news a business posts on its public profile.
+model BusinessPost {
+  id            String           @id @default(uuid())
+  businessId    String
+  kind          BusinessPostKind
+  title         String
+  body          String
+  startsAt      DateTime?
+  endsAt        DateTime?
+  published     Boolean          @default(true)
+  /// Staff can take a post down (complaints, misleading claims).
+  hiddenByStaff Boolean          @default(false)
+  createdById   String
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+  business      BusinessProfile  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@index([businessId, published, createdAt])
+}
+
+enum PlaqueOrderStatus {
+  REQUESTED
+  IN_PRODUCTION
+  SHIPPED
+  DELIVERED
+  CANCELLED
+}
+
+/// A printed till plaque ordered by a business; staff produce and ship it.
+model PlaqueOrder {
+  id              String            @id @default(uuid())
+  businessId      String
+  tillId          String?
+  quantity        Int
+  size            String
+  locale          String
+  shippingName    String
+  shippingPhone   String
+  shippingAddress String
+  shippingCity    String
+  notes           String?
+  status          PlaqueOrderStatus @default(REQUESTED)
+  statusNote      String?
+  createdById     String
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  business        BusinessProfile   @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@index([businessId, createdAt])
+  @@index([status])
+}
+
+/// A checkout point of a business. Each till has its own QR and kiosk; a
+/// payment made at it carries its id, so the business sees metrics per till.
+model BusinessTill {
+  id          String          @id @default(uuid())
+  businessId  String
+  name        String
+  active      Boolean         @default(true)
+  createdById String
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  business    BusinessProfile @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  transfers   Transfer[]
+
+  @@index([businessId])
 }
 
 model Session {
@@ -773,6 +858,7 @@ enum LedgerAccountType {
   TREASURY // prefunded liquidity held at partners / banks (treasury funds)
   SUSPENSE // unidentified or unmatched value awaiting investigation
   ADJUSTMENT // controlled operator corrections (always maker-checked and audited)
+  TOKEN_RESERVE // dinars backing issued LYDT, held at the Central Bank of Libya (customer money)
 }
 
 model LedgerAccount {
@@ -859,19 +945,20 @@ model AssetLedgerEntry {
 /// wallet (the user with username='platform'). Fees from deposits
 /// and internal transfers are intentionally excluded.
 model PlatformFee {
-  id          String   @id @default(uuid())
+  id              String   @id @default(uuid())
   /// Where the fee originated: order, withdrawal, p2p, swap, crypto_order, p2p_trade
-  source      String
-  sourceId    String?
+  source          String
+  sourceId        String?
   /// The user who paid the fee
-  payerId     String?
-  amount      Decimal  @db.Decimal(20, 8)
-  currency    Currency
-  /// USD equivalent at time of capture, for dashboard aggregation
-  amountUsd   Decimal  @default(0) @db.Decimal(20, 8)
-  description String?
-  metadata    Json?
-  createdAt   DateTime @default(now())
+  payerId         String?
+  amount          Decimal  @db.Decimal(20, 8)
+  currency        Currency
+  /// Reporting valuation only. Missing rates remain null; no asset conversion.
+  amountUsd       Decimal? @db.Decimal(20, 8)
+  valuationSource String   @default("LEGACY_UNVERIFIED")
+  description     String?
+  metadata        Json?
+  createdAt       DateTime @default(now())
 
   @@index([source])
   @@index([payerId])
@@ -971,14 +1058,22 @@ model Transfer {
   fee              Decimal                    @default(0) @db.Decimal(20, 8)
   reference        String                     @unique
   note             String?
+  /// Sender-supplied idempotency key: a retried Send returns this transfer
+  /// instead of moving the money a second time.
+  idempotencyKey   String?
   createdAt        DateTime                   @default(now())
   sender           User                       @relation("TransferSender", fields: [senderId], references: [id], onDelete: Cascade)
   receiver         User                       @relation("TransferReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
   message          Message?                   @relation("MessageTransfer")
   poolContribution LiquidityPoolContribution? @relation("PoolContribTransfer")
+  /// The business till the payment was made at (scan of a till QR or kiosk).
+  tillId           String?
+  till             BusinessTill?              @relation(fields: [tillId], references: [id], onDelete: SetNull)
 
+  @@unique([senderId, idempotencyKey])
   @@index([senderId])
   @@index([receiverId])
+  @@index([tillId, createdAt])
   @@index([reference])
   @@index([createdAt])
 }
@@ -1191,8 +1286,16 @@ model Message {
   type         String          @default("TEXT")
   /// Structured payload: for PAYMENT { amount, currency, txRef, status }
   metadata     Json?
+  /// Read receipt the SENDER sees — only set when the reader shares receipts.
   isRead       Boolean         @default(false)
   readAt       DateTime?
+  /// Receiver-private "opened" marker that drives unread counts and badges.
+  /// Always set when the receiver opens the thread, receipts on or off.
+  seenAt       DateTime?
+  /// Sender-generated idempotency key: a retried send (lost reply, offline
+  /// outbox) returns the original message instead of a duplicate — and for
+  /// PAYMENT messages, instead of a second payment.
+  clientId     String?
   editedAt     DateTime?
   /// Soft-delete: bubble shows "Message deleted" but preserves audit trail.
   deletedAt    DateTime?
@@ -1211,9 +1314,11 @@ model Message {
   receiverTx   Transaction?    @relation("MessageReceiverTx", fields: [receiverTxId], references: [id])
   receiverTxId String?         @unique
 
+  @@unique([senderId, clientId])
   @@index([senderId])
   @@index([receiverId])
   @@index([senderId, receiverId])
+  @@index([receiverId, seenAt])
   @@index([tradeId])
   @@index([transferId])
   @@index([createdAt])
@@ -1966,21 +2071,22 @@ model CryptoOrder {
 }
 
 model OnChainTransaction {
-  id            String    @id @default(cuid())
-  userId        String
-  type          String
-  asset         String
-  network       String
-  amount        Decimal   @db.Decimal(36, 18)
-  txHash        String?   @unique
-  fromAddress   String
-  toAddress     String
-  status        String
-  gasUsed       Decimal?  @db.Decimal(20, 8)
-  confirmations Int       @default(0)
-  createdAt     DateTime  @default(now())
-  confirmedAt   DateTime?
-  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id             String    @id @default(cuid())
+  idempotencyKey String?   @unique
+  userId         String
+  type           String
+  asset          String
+  network        String
+  amount         Decimal   @db.Decimal(36, 18)
+  txHash         String?   @unique
+  fromAddress    String
+  toAddress      String
+  status         String
+  gasUsed        Decimal?  @db.Decimal(20, 8)
+  confirmations  Int       @default(0)
+  createdAt      DateTime  @default(now())
+  confirmedAt    DateTime?
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([status])
@@ -2113,6 +2219,46 @@ model ControlSwitchEvent {
 
   @@index([scope, key, createdAt])
   @@index([createdAt])
+}
+
+// ── Product availability ─────────────────────────────────────────────
+/// Hide or lock a feature, currency or currency pair for everyone or for
+/// chosen customers. Kill switches and the launch gate still apply on top:
+/// a rule can only narrow what they allow.
+enum AvailabilityKind {
+  FEATURE // key = availability feature, e.g. p2p, budgets
+  CURRENCY // key = currency code, e.g. EGP
+  PAIR // key = "BASE/QUOTE", matched in both directions, e.g. BTC/LYD
+}
+
+enum AvailabilityState {
+  AVAILABLE
+  LOCKED // shown, new activity refused
+  HIDDEN // not shown, new activity refused
+}
+
+/// One rule per item. Customers on the deny list get `denyState`; customers
+/// on the allow list (and staff when `includeStaff`) get AVAILABLE; everyone
+/// else gets `state`. Deny wins. Changes are written to AuditLog.
+model AvailabilityRule {
+  id           String            @id @default(cuid())
+  kind         AvailabilityKind
+  key          String
+  state        AvailabilityState @default(AVAILABLE)
+  allowUserIds String[]          @default([])
+  includeStaff Boolean           @default(false)
+  denyUserIds  String[]          @default([])
+  denyState    AvailabilityState @default(LOCKED)
+  /// Shown to customers who see the item locked, e.g. "Coming soon".
+  message      String?
+  reason       String
+  setById      String
+  /// The rule stops applying at this time.
+  expiresAt    DateTime?
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  @@unique([kind, key])
 }
 
 // ── Unified lifecycle log ────────────────────────────────────────────
@@ -2906,4 +3052,47 @@ model PrincipalHedge {
   createdAt   DateTime @default(now())
 
   @@index([asset, createdAt])
+}
+
+// ── LYDT: tazdan's dinar token (sandbox) ──────────────────────────────
+// Each LYDT is issued against one LYD moved into the TOKEN_RESERVE ledger
+// account, backed by dinars held at the Central Bank of Libya. Token balances
+// live on the asset ledger (asset 'LYDT'; the TOKEN_ISSUER account carries
+// minus the supply). See services/lydt/lydt.service.ts.
+
+/// Statements of the LYDT reserve account at the Central Bank of Libya.
+/// Issuance never takes supply above the latest attested balance.
+model LydtAttestation {
+  id            String   @id @default(cuid())
+  balance       Decimal  @db.Decimal(20, 3)
+  statementDate DateTime
+  reference     String
+  recordedById  String
+  createdAt     DateTime @default(now())
+
+  @@index([createdAt])
+}
+
+/// One LYDT issue, redemption or transfer (idempotent per customer key).
+model LydtOperation {
+  id             String   @id @default(cuid())
+  kind           String // ISSUE | REDEEM | TRANSFER
+  userId         String
+  counterpartyId String?
+  amount         Decimal  @db.Decimal(20, 3)
+  reference      String   @unique
+  note           String?
+  idempotencyKey String?
+  createdAt      DateTime @default(now())
+
+  @@unique([userId, idempotencyKey])
+  @@index([userId, createdAt])
+}
+
+/// Holders a supervisor has frozen: no sending, receiving or redeeming.
+model LydtFreeze {
+  userId     String   @id
+  reason     String
+  frozenById String
+  createdAt  DateTime @default(now())
 }

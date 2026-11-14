@@ -1,148 +1,24 @@
-/**
- * Platform Fee Collector
- * ──────────────────────
- * Every commission or transaction fee the platform takes flows
- * through `collectFee()`. The function:
- *
- *   1. Records a row in the `PlatformFee` ledger so we can audit and
- *      report on every dollar collected.
- *   2. Credits the platform's corporate USDT wallet (a designated user
- *      with `username='platform'`) so revenue is consolidated instead
- *      of stranded across every fee currency.
- *
- * Fees from deposits and internal user-to-user transfers are
- * intentionally NOT collected here — the user explicitly asked for
- * those to remain free.
- *
- * Call sites:
- *   - order.controller (BUY / SELL)
- *   - orderExecution.service (crypto orders)
- *   - withdrawal.controller (fiat / crypto withdrawals)
- *   - cryptoWithdrawal.controller (on-chain withdrawals)
- *   - p2p.controller (trade settlement)
- *
- * Designed to be transaction-safe: pass in your `tx` Prisma client
- * when called inside a $transaction, otherwise it falls back to the
- * top-level `prisma` client.
- */
-
+/** Fee reporting only. Native revenue is posted by the originating journal.
+ * A USD valuation never converts assets or creates a spendable USDT balance. */
 import { Prisma, type Currency } from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/library';
 import { prisma } from '../../utils/prisma';
 import { getRate } from '../exchange/fxRateProvider.service';
-import { postLedger } from '../ledger/ledger.service';
+import { isLedgerCurrency } from '../ledger/ledger.service';
+import { AppError } from '../../middleware/errorHandler';
 
-// ── Constants ──────────────────────────────────────────────────────
-const PLATFORM_USERNAME = 'platform';
-const PLATFORM_EMAIL    = process.env.PLATFORM_EMAIL || 'platform@tazdan.com';
-
-// Memo the platform user id so we're not hitting the DB on every fee
-let _platformUserId: string | null = null;
-
-async function getPlatformUserId(client: any): Promise<string> {
-  if (_platformUserId) return _platformUserId;
-  const user = await client.user.findFirst({ where: { username: PLATFORM_USERNAME }, select: { id: true } });
-  if (user) {
-    _platformUserId = user.id;
-    return user.id;
-  }
-
-  // Lazily provision the platform user if missing. Created with role
-  // ADMIN so admins can browse the platform wallet via the existing
-  // user list endpoints.
-  const created = await client.user.create({
-    data: {
-      email:        PLATFORM_EMAIL,
-      username:     PLATFORM_USERNAME,
-      firstName:    'Platform',
-      lastName:     'Treasury',
-      passwordHash: 'PLATFORM_USER_NO_LOGIN',
-      role:         'ADMIN',
-      status:       'ACTIVE',
-      kycStatus:    'APPROVED',
-      kycTier:      'TIER_3',
-      referralCode: 'PLATFORM',
-    },
-    select: { id: true },
-  });
-  _platformUserId = created.id;
-  return created.id;
-}
-
-// Enum currencies that have a real Wallet row.
-const ENUM_CURRENCIES: Currency[] = [
-  'USDT', 'BTC', 'ETH', 'BNB', 'SOL', 'XRP', 'ADA', 'DOGE', 'MATIC', 'DOT', 'AVAX',
-  'USD',  'EUR', 'GBP', 'AED', 'SAR', 'EGP', 'LYD',
-];
-
-function isEnumCurrency(c: string): c is Currency {
-  return (ENUM_CURRENCIES as readonly string[]).includes(c);
-}
-
-// Last-resort fiat conversion floor. Used ONLY when every live source
-// fails — better to over-report fees by a few percent than to silently
-// record $0 and lose track of revenue. These are rough order-of-magnitude
-// rates and are intentionally conservative.
-const FIAT_USD_FLOOR: Record<string, number> = {
-  USD:  1.0,
-  USDT: 1.0,
-  EUR:  1.08,
-  GBP:  1.27,
-  AED:  0.27,
-  SAR:  0.27,
-  EGP:  0.021,
-  LYD:  0.16,
-};
-
-/**
- * Best-effort USD conversion for ledger reporting.
- * Never returns 0 when `amount > 0` — that would silently zero out the
- * platform fee. The cascade is:
- *   1. USD/USDT → identity.
- *   2. Live rate `currency → USD`.
- *   3. Live rate `currency → USDT` (treat USDT≈USD).
- *   4. Inverted rate `USD → currency`.
- *   5. Conservative hardcoded floor.
- *   6. If even the floor is unknown, log a warning and fall back to the
- *      raw amount as a placeholder — the admin can reconcile via the
- *      backfill script. NEVER zero.
- */
-async function toUsd(amount: Decimal, currency: string): Promise<Decimal> {
-  const cur = currency.toUpperCase();
-  if (cur === 'USD' || cur === 'USDT') return amount;
-
-  // 1. currency → USD
+async function valuation(amount: Decimal, currency: string): Promise<{ amountUsd: Decimal | null; valuationSource: string }> {
+  if (currency === 'USD') return { amountUsd: amount, valuationSource: 'USD_NATIVE' };
+  if (currency === 'USDT') return { amountUsd: amount, valuationSource: 'USDT_PEG_ESTIMATE' };
   try {
-    const pair = await getRate(cur, 'USD');
-    const sellPrice = parseFloat(pair?.sellPrice ?? '0');
-    if (sellPrice > 0 && Number.isFinite(sellPrice)) return amount.mul(sellPrice);
-  } catch { /* fall through */ }
-
-  // 2. currency → USDT (USDT pegged ≈ USD)
-  try {
-    const pair = await getRate(cur, 'USDT');
-    const sellPrice = parseFloat(pair?.sellPrice ?? '0');
-    if (sellPrice > 0 && Number.isFinite(sellPrice)) return amount.mul(sellPrice);
-  } catch { /* fall through */ }
-
-  // 3. USD → currency (invert)
-  try {
-    const pair = await getRate('USD', cur);
-    const buyPrice = parseFloat(pair?.buyPrice ?? '0');
-    if (buyPrice > 0 && Number.isFinite(buyPrice)) return amount.div(buyPrice);
-  } catch { /* fall through */ }
-
-  // 4. Hardcoded floor table
-  const floor = FIAT_USD_FLOOR[cur];
-  if (floor && floor > 0) {
-    console.warn(`[feeCollector] toUsd: live FX failed for ${cur}, using hardcoded floor ${floor}`);
-    return amount.mul(floor);
-  }
-
-  // 5. Last resort: log and return the raw amount. Better to over-report
-  // than silently lose dollars from the dashboard.
-  console.warn(`[feeCollector] toUsd: no USD rate or floor for "${cur}" — recording raw amount as USD placeholder`);
-  return amount;
+    const rate = await getRate(currency, 'USD');
+    const value = new Decimal(rate.sellPrice);
+    if (value.isFinite() && value.gt(0) && !/fallback|stale|floor|placeholder/i.test(rate.source) &&
+        Date.now() - rate.fetchedAt.getTime() <= 5 * 60_000) {
+      return { amountUsd: amount.mul(value).toDecimalPlaces(8, Decimal.ROUND_DOWN), valuationSource: rate.source };
+    }
+  } catch { /* Preserve native revenue; missing valuation is visible, never invented. */ }
+  return { amountUsd: null, valuationSource: 'UNPRICED' };
 }
 
 export type FeeSource =
@@ -173,81 +49,32 @@ export interface CollectFeeInput {
   tx?:         any;
 }
 
-/**
- * Records a fee in the platform ledger and credits the platform wallet.
- * Safe to call from inside a $transaction (pass `tx`). Returns the
- * PlatformFee row id, or null if the amount was zero or invalid.
- */
+/** Record once, atomically with the originating money transaction when tx is supplied. */
 export async function collectFee(input: CollectFeeInput): Promise<string | null> {
-  const client = input.tx ?? prisma;
-
   const amount = new Decimal(input.amount);
-  if (amount.isNaN() || amount.lte(0)) return null;
-
-  const platformUserId = await getPlatformUserId(client);
-  const currencyUpper = input.currency.toUpperCase();
-  const amountUsd = await toUsd(amount, currencyUpper);
-
-  if (amountUsd.lte(0) && amount.gt(0)) {
-    // Should never happen after the toUsd cascade above, but if it
-    // somehow does, surface it loudly so the admin dashboard never
-    // silently loses revenue.
-    console.warn(
-      `[feeCollector] amountUsd <= 0 for non-zero amount`,
-      { source: input.source, sourceId: input.sourceId, amount: amount.toString(), currency: currencyUpper }
-    );
+  if (!amount.isFinite() || amount.lt(0) || amount.decimalPlaces() > 8) throw new AppError('Invalid fee amount', 400);
+  if (amount.isZero()) return null;
+  const currency = input.currency.trim().toUpperCase();
+  if (!isLedgerCurrency(currency)) throw new AppError(`Fee accounting does not support ${currency}`, 400);
+  if (!input.tx) return prisma.$transaction(tx => collectFee({ ...input, tx }));
+  const client = input.tx;
+  if (input.sourceId) {
+    await client.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`fee:${input.source}:${input.sourceId}`}))`;
+    const prior = await client.platformFee.findFirst({ where: { source: input.source, sourceId: input.sourceId } });
+    if (prior) {
+      if (prior.currency !== currency || !new Decimal(prior.amount).eq(amount)) throw new AppError('Fee reference already used with different terms', 409, 'DUPLICATE_REQUEST');
+      return prior.id;
+    }
   }
-
-  // Corporate revenue is held in USDT. Keep the original fee amount/currency
-  // on PlatformFee, but credit treasury in USD-equivalent USDT.
-  const creditedCurrency: Currency = 'USDT';
-  const creditedAmount = amountUsd;
-  const baseMetadata = input.metadata ?? {};
-
-  // Record the fee event
-  const fee = await client.platformFee.create({
-    data: {
-      source:      input.source,
-      sourceId:    input.sourceId ?? null,
-      payerId:     input.payerId  ?? null,
-      amount,
-      currency:    isEnumCurrency(currencyUpper) ? currencyUpper : 'USDT',
-      amountUsd,
-      description: input.description ?? null,
-      metadata:    {
-        ...baseMetadata,
-        originalAmount: amount.toString(),
-        originalCurrency: currencyUpper,
-        creditedAmount: creditedAmount.toString(),
-        creditedCurrency,
-      } as Prisma.InputJsonValue,
-    },
-  });
-
-  await client.wallet.upsert({
-    where: { userId_currency: { userId: platformUserId, currency: creditedCurrency } },
-    update: { balance: { increment: creditedAmount } },
-    create: { userId: platformUserId, currency: creditedCurrency, balance: creditedAmount, frozen: new Decimal(0) },
-  });
-
-  if (isEnumCurrency(currencyUpper) && currencyUpper !== creditedCurrency && creditedAmount.gt(0)) {
-    await postLedger(client, {
-      refType: 'fee_consolidation',
-      refId: fee.id,
-      memo: `Convert ${currencyUpper} fee revenue to corporate USDT`,
-      legs: [
-        { type: 'PLATFORM', currency: currencyUpper as Currency, amount: amount.neg() },
-        { type: 'SYSTEM_FX', currency: currencyUpper as Currency, amount },
-        { type: 'SYSTEM_FX', currency: creditedCurrency, amount: creditedAmount.neg() },
-        { type: 'PLATFORM', currency: creditedCurrency, amount: creditedAmount },
-      ],
-    }, { allowNegativeUser: true });
-  }
-
+  const priced = await valuation(amount, currency);
+  const fee = await client.platformFee.create({ data: {
+    source: input.source, sourceId: input.sourceId ?? null, payerId: input.payerId ?? null,
+    amount, currency: currency as Currency, ...priced, description: input.description ?? null,
+    metadata: { ...(input.metadata ?? {}), originalAmount: amount.toString(), originalCurrency: currency,
+      accounting: 'NATIVE_CURRENCY_REVENUE', usdValuationOnly: true } as Prisma.InputJsonValue,
+  } });
   return fee.id;
 }
 
-/** Reset the cached platform user id — useful in tests. */
-export function _resetPlatformUserCache() {
-  _platformUserId = null;
-}
+/** Kept for callers/tests that previously cleared the corporate-user mirror. */
+export function _resetPlatformUserCache(): void { /* Revenue has no user-wallet mirror. */ }

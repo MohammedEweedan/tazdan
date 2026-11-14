@@ -24,6 +24,8 @@ import { randomUUID } from 'crypto';
 import { Prisma, type Currency, type LedgerAccountType } from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/library';
 import { prisma } from '../../utils/prisma';
+import { AppError } from '../../middleware/errorHandler';
+import { ledgerAmount, LedgerDecimal, validateAccountOwner } from './validation';
 
 export type Tx = Prisma.TransactionClient;
 
@@ -50,6 +52,8 @@ export const FUND_CLASS: Record<LedgerAccountType, FundClass> = {
   USER: 'CUSTOMER',
   SYSTEM_ESCROW: 'CUSTOMER',
   REMITTANCE_CLEARING: 'CUSTOMER',
+  // Dinars backing issued LYDT: owed to LYDT holders on redemption.
+  TOKEN_RESERVE: 'CUSTOMER',
   SYSTEM_ONRAMP: 'SETTLEMENT',
   SYSTEM_OFFRAMP: 'SETTLEMENT',
   SYSTEM_CHAIN: 'SETTLEMENT',
@@ -78,9 +82,6 @@ export interface PostInput {
   legs: Leg[];
 }
 
-// Tolerance for floating-point dust when summing high-precision decimals.
-const EPS = new Decimal('0.000000000001'); // 1e-12
-
 function keyFor(leg: Pick<Leg, 'type' | 'userId' | 'currency'>): string {
   return `${leg.type}:${leg.userId ?? 'SYSTEM'}:${leg.currency}`;
 }
@@ -95,6 +96,10 @@ export async function resolveAccount(
   currency: Currency,
   userId: string | null = null,
 ): Promise<{ id: string; balance: Decimal }> {
+  validateAccountOwner(type, userId);
+  // Serialise first creation too. NULL is distinct in PostgreSQL UNIQUE
+  // constraints, so the database also has a partial system-account index.
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`ledger-account:${type}:${userId ?? 'SYSTEM'}:${currency}`}))`;
   // `findFirst` (not findUnique) because the compound unique key includes a
   // nullable userId, which Prisma's unique-where input can't express for the
   // system-account (userId = null) case.
@@ -105,13 +110,36 @@ export async function resolveAccount(
 }
 
 /**
+ * May a journal take a USER account below zero?
+ *
+ * Only when the caller asks for it AND the deployment allows it. In
+ * production the ledger is the spending gate for every customer debit: a
+ * crypto asset can sit in two stores (the Wallet row and a UserWallet
+ * column), and a debit that is not gated on the ledger lets the same coins be
+ * spent once from each store. Production therefore refuses negative customer
+ * balances unless an operator explicitly opts in with
+ * LEDGER_ALLOW_NEGATIVE_USER=1 on a deployment that does not hold real money
+ * (a migration or demo environment). LEDGER_ALLOW_NEGATIVE_USER=0 forces the
+ * gate everywhere.
+ */
+export function negativeUserBalanceAllowed(requested: boolean | undefined): boolean {
+  if (!requested) return false;
+  const flag = process.env.LEDGER_ALLOW_NEGATIVE_USER;
+  if (flag === '0') return false;
+  if (process.env.NODE_ENV === 'production') {
+    return flag === '1' && process.env.REAL_MONEY_ENABLED !== '1';
+  }
+  return true;
+}
+
+/**
  * Post a balanced set of legs to the ledger. Throws if the legs don't sum to
  * zero per currency (the conservation invariant). Runs inside the caller's
  * transaction so the whole business operation is atomic with the ledger.
  *
- * @param allowNegative accounts allowed to go negative (system rails do; user
- *   wallets must not — passing the user's account here would be a bug, so the
- *   default forbids negative USER balances).
+ * @param allowNegativeUser lets a USER account go negative (system rails may;
+ *   customer balances must not). Honoured only where
+ *   `negativeUserBalanceAllowed` permits it — never in real-money production.
  */
 export async function postLedger(
   tx: Tx,
@@ -119,16 +147,18 @@ export async function postLedger(
   opts: { allowNegativeUser?: boolean } = {},
 ): Promise<{ groupId: string }> {
   if (!input.legs.length) throw new Error('postLedger: no legs');
-  const allowNegativeUser = Boolean(opts.allowNegativeUser) && process.env.LEDGER_ALLOW_NEGATIVE_USER !== '0';
+  const allowNegativeUser = negativeUserBalanceAllowed(opts.allowNegativeUser);
 
-  // 1) Assert conservation: signed sum per currency must be ~0.
+  // 1) Assert conservation: signed sum per currency must be exactly zero.
   const perCurrency = new Map<string, Decimal>();
   for (const leg of input.legs) {
-    const amt = new Decimal(leg.amount.toString());
-    perCurrency.set(leg.currency, (perCurrency.get(leg.currency) ?? new Decimal(0)).plus(amt));
+    validateAccountOwner(leg.type, leg.userId);
+    if (!isLedgerCurrency(leg.currency)) throw new Error(`Unsupported ledger currency ${leg.currency}`);
+    const amt = ledgerAmount(leg.amount);
+    perCurrency.set(leg.currency, (perCurrency.get(leg.currency) ?? new LedgerDecimal(0)).plus(amt));
   }
   for (const [currency, sum] of perCurrency) {
-    if (sum.abs().gt(EPS)) {
+    if (!sum.isZero()) {
       throw new Error(
         `Ledger imbalance for ${currency}: legs sum to ${sum.toString()} (must be 0). ` +
           `refType=${input.refType} refId=${input.refId ?? '-'}`,
@@ -141,7 +171,7 @@ export async function postLedger(
   const agg = new Map<string, { leg: Leg; amount: Decimal }>();
   for (const leg of input.legs) {
     const k = keyFor(leg);
-    const amt = new Decimal(leg.amount.toString());
+    const amt = ledgerAmount(leg.amount);
     const cur = agg.get(k);
     if (cur) cur.amount = cur.amount.plus(amt);
     else agg.set(k, { leg, amount: amt });
@@ -152,9 +182,20 @@ export async function postLedger(
   // debits must compete against the current DB value, otherwise two requests
   // can both pass a stale balance check and overwrite each other's result.
   const affectedUserAccounts = new Map<string, { userId: string; currency: Currency }>();
-  for (const { leg, amount } of agg.values()) {
+  const accounts = new Map<string, { id: string; balance: Decimal }>();
+  for (const [key, { leg, amount }] of [...agg.entries()].sort(([a], [b]) => a.localeCompare(b))) {
     if (amount.isZero()) continue;
-    const acct = await resolveAccount(tx, leg.type, leg.currency, leg.userId ?? null);
+    const account = await resolveAccount(tx, leg.type, leg.currency, leg.userId ?? null);
+    accounts.set(key, account);
+    if (leg.type === 'USER' && !allowNegativeUser && amount.lt(0) && account.balance.plus(amount).lt(0)) {
+      throw new AppError(`Insufficient ${leg.currency} balance`, 400, 'INSUFFICIENT_FUNDS', { ledger: true, currency: leg.currency, need: amount.abs().toString() });
+    }
+  }
+  // All journals acquire account locks in the same order, including reverse
+  // transfers. This prevents opposite-direction transfers deadlocking.
+  for (const [, { leg, amount }] of [...agg.entries()].sort(([a], [b]) => a.localeCompare(b))) {
+    if (amount.isZero()) continue;
+    const acct = accounts.get(keyFor(leg))!;
 
     if (leg.type === 'USER' && !allowNegativeUser && amount.lt(0)) {
       const updated = await tx.ledgerAccount.updateMany({
@@ -167,10 +208,11 @@ export async function postLedger(
         },
       });
       if (updated.count !== 1) {
-        throw new Error(
-          `Insufficient ${leg.currency} balance for user ${leg.userId}: ` +
-            `need ${amount.abs().toString()}`,
-        );
+        // A customer-facing refusal (not a 500): the ledger, which is the
+        // authoritative balance, does not cover this debit.
+        throw new AppError(`Insufficient ${leg.currency} balance`, 400, 'INSUFFICIENT_FUNDS', {
+          ledger: true, currency: leg.currency, need: amount.abs().toString(),
+        });
       }
     } else {
       await tx.ledgerAccount.update({

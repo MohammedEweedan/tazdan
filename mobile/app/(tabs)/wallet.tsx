@@ -17,7 +17,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { Text } from '@/components/ui/Text';
 import { useWallets, useCards, useHaptics, useMarkets, useDisplayCurrency } from '@/hooks';
-import { useFeatures } from '@/hooks/useFeatures';
+import { LYDT, useLydtWallet } from '@/hooks/useLydt';
+import { useAvailability, useFeatures } from '@/hooks/useFeatures';
 import { CoinIcon } from '@/components/ui/CoinIcon';
 import { getCurrencyMeta, normalizeCurrencyCode } from '@/constants';
 import { useTheme, useThemedPalette } from '@/store/themeStore';
@@ -57,9 +58,11 @@ export default function WalletScreen() {
   const hidden = useUiStore((s) => s.balancesHidden);
   const toggleHidden = useUiStore((s) => s.toggleBalancesHidden);
   const walletQuery = useWallets();
+  const lydt = useLydtWallet();
   const cardQuery = useCards();
   const { data: tickers } = useMarkets();
   const features = useFeatures();
+  const avail = useAvailability();
   const cards = cardQuery.data ?? [];
 
   const [filter, setFilter] = useState<Filter>('ALL');
@@ -69,7 +72,8 @@ export default function WalletScreen() {
 
   const holdings = useMemo<Holding[]>(() => {
     const tickerBy = new Map((tickers ?? []).map((m) => [m.base, m]));
-    return (walletQuery.data ?? [])
+    // LYDT sits on its own ledger; it joins the dinars here as a fiat holding.
+    return [...(walletQuery.data ?? []), ...(lydt.wallet ? [lydt.wallet] : [])]
       .map((wallet): Holding | null => {
         const kind = getCurrencyMeta(wallet.currency)?.kind;
         if (kind !== 'fiat' && kind !== 'crypto') return null;
@@ -80,8 +84,10 @@ export default function WalletScreen() {
         return { wallet, kind, usd: Number.isFinite(usd) ? usd : 0, change };
       })
       .filter((x): x is Holding => x !== null)
+      // A hidden currency stays listed while the customer holds any of it.
+      .filter((x) => avail.currency(x.wallet.currency).state !== 'HIDDEN' || Number(x.wallet.balance) > 0)
       .sort((a, b) => b.usd - a.usd || Number(b.wallet.balance) - Number(a.wallet.balance));
-  }, [walletQuery.data, tickers]);
+  }, [walletQuery.data, lydt.wallet, tickers, avail]);
 
   const fiat = holdings.filter((x) => x.kind === 'fiat');
   const crypto = holdings.filter((x) => x.kind === 'crypto');
@@ -99,10 +105,11 @@ export default function WalletScreen() {
 
   const refresh = async () => {
     setRefreshing(true);
-    try { await Promise.all([walletQuery.refetch(), cardQuery.refetch()]); } finally { setRefreshing(false); }
+    try { await Promise.all([walletQuery.refetch(), cardQuery.refetch(), lydt.refetch()]); } finally { setRefreshing(false); }
   };
   const openAsset = (w: Wallet) => {
     h.selection();
+    if (w.currency === LYDT) { router.push('/lydt' as never); return; }
     router.push({ pathname: '/asset/[currency]', params: { currency: w.currency } });
   };
 
@@ -189,7 +196,7 @@ export default function WalletScreen() {
       <SafeAreaView edges={['top']} style={{ flex: 1 }}>
         <ScrollView
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ paddingBottom: 48 }}
+          contentContainerStyle={{ paddingBottom: 140 }}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={p.accentText} colors={[p.accent]} />}
         >
           <TabHeader
@@ -346,7 +353,10 @@ function AssetRow({ holding, value, hidden, rtl, last, onPress }: {
     maximumFractionDigits: meta?.decimals ?? 8,
   });
   const up = (change ?? 0) >= 0;
-  const align = rtl ? 'flex-start' : 'flex-end';
+  // Holdings rows stay strictly LTR in Arabic too (owner rule, 11 Oct 2026):
+  // flag/icon and currency name on the left, value on the right — the same
+  // order as the home screen's asset rows.
+  void rtl;
 
   return (
     <Pressable
@@ -354,7 +364,7 @@ function AssetRow({ holding, value, hidden, rtl, last, onPress }: {
       accessibilityLabel={`${meta?.name ?? wallet.currency}, ${value}`}
       onPress={onPress}
       style={({ pressed }) => ({
-        flexDirection: rtl ? 'row-reverse' : 'row', alignItems: 'center', gap: 14,
+        flexDirection: 'row', alignItems: 'center', gap: 14,
         paddingHorizontal: 16, paddingVertical: 15,
         borderBottomWidth: last ? 0 : 1, borderBottomColor: p.border,
         backgroundColor: pressed ? p.bgRaised : 'transparent',
@@ -369,14 +379,14 @@ function AssetRow({ holding, value, hidden, rtl, last, onPress }: {
         <CoinIcon symbol={wallet.currency} size={40} />
       )}
 
-      <View style={{ flex: 1, alignItems: rtl ? 'flex-end' : 'flex-start' }}>
+      <View style={{ flex: 1, alignItems: 'flex-start' }}>
         <Text numberOfLines={1} style={{ color: p.fg, fontSize: 15, fontWeight: '600' }}>{meta?.name ?? wallet.currency}</Text>
         <Text numberOfLines={1} style={{ color: p.fgMuted, fontSize: 13, marginTop: 3, fontVariant: ['tabular-nums'] }}>
           {amount} {meta?.code ?? wallet.currency}
         </Text>
       </View>
 
-      <View style={{ alignItems: align }}>
+      <View style={{ alignItems: 'flex-end' }}>
         <Text style={{ color: p.fg, fontSize: 15, fontWeight: '600', fontVariant: ['tabular-nums'] }}>{value}</Text>
         {change !== undefined && Number.isFinite(change) && !empty && (
           <Text style={{ color: up ? p.greenFg : p.redFg, fontSize: 12, fontWeight: '600', marginTop: 3, fontVariant: ['tabular-nums'] }}>

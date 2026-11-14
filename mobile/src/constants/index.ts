@@ -8,7 +8,7 @@ import type { Currency, CurrencyMeta } from '@/types';
 
 export const APP = {
   name: 'tazdan',
-  tagline: 'Arab roots. Crypto. Connected.',
+  tagline: 'Your money. Your next move.',
   supportEmail: 'support@tazdan.com',
   apiBaseUrl: API_BASE_URL,
 };
@@ -85,6 +85,8 @@ export const CURRENCY_META: Record<Currency, CurrencyMeta> = {
   EGP:   { code: 'EGP',   kind: 'fiat',   name: 'Egyptian Pound',    symbol: 'E£',  decimals: 2, flagOrIcon: 'E£' },
   // Libyan Dinar — 3 decimals (millimes). "LD" in Latin contexts, "د.ل" in Arabic.
   LYD:   { code: 'LYD',   kind: 'fiat',   name: 'Libyan Dinar',      symbol: 'LD',  decimals: 3, flagOrIcon: 'LD' },
+  // tazdan's dinar token, pegged 1:1 to the dinar (millimes, like LYD).
+  LYDT:  { code: 'LYDT',  kind: 'fiat',   name: 'Libyan Dinar Token', symbol: 'LYDT', decimals: 3, flagOrIcon: 'LT' },
 };
 
 /**

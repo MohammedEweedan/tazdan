@@ -6,8 +6,12 @@
  * every confirmation silent; expo-audio is its SDK 54+ replacement.
  *
  * The module is required at runtime: a build without the native audio module
- * degrades to haptics only and never throws inside a confirmation. Sounds
- * follow the device's silent switch.
+ * degrades to haptics only and never throws inside a confirmation.
+ *
+ * The audio session is set once: confirmations play even with the ring/silent
+ * switch on silent (like Apple Pay's), and mix over the user's music instead
+ * of stopping it. Without this iOS used its default session, which the silent
+ * switch mutes — so most phones heard nothing.
  */
 
 import { useRef, useCallback, useEffect } from 'react';
@@ -16,12 +20,25 @@ import * as Haptics from 'expo-haptics';
 import { TRANSACTION_SOUND, type TransactionType } from '@/constants';
 import { SUCCESS_SOUND_ASSET, DECLINE_SOUND_ASSET } from '@/utils/soundGenerator';
 
-let createAudioPlayer: ((source: number) => any) | undefined;
+let audio: any;
 try {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
-  createAudioPlayer = require('expo-audio')?.createAudioPlayer;
+  audio = require('expo-audio');
 } catch {
-  createAudioPlayer = undefined;
+  audio = undefined;
+}
+const createAudioPlayer: ((source: number) => any) | undefined = audio?.createAudioPlayer;
+
+let modeSet = false;
+function ensureAudioMode() {
+  if (modeSet || !audio?.setAudioModeAsync || Platform.OS === 'web') return;
+  modeSet = true;
+  audio.setAudioModeAsync({
+    playsInSilentMode: true,
+    interruptionMode: 'mixWithOthers',
+    allowsRecording: false,
+    shouldPlayInBackground: false,
+  }).catch(() => { modeSet = false; });
 }
 
 const safe = (fn: () => Promise<unknown> | void) => {
@@ -31,6 +48,7 @@ const safe = (fn: () => Promise<unknown> | void) => {
 
 function play(ref: { current: any }, asset: number) {
   if (!createAudioPlayer || Platform.OS === 'web') return;
+  ensureAudioMode();
   try {
     ref.current ??= createAudioPlayer(asset);
     ref.current.seekTo(0);
@@ -41,6 +59,9 @@ function play(ref: { current: any }, asset: number) {
 export function useTransactionSound() {
   const successRef = useRef<any>(null);
   const declineRef = useRef<any>(null);
+
+  // Set the session before the first confirmation, so it plays at once.
+  useEffect(() => { ensureAudioMode(); }, []);
 
   // Release the native players with the component.
   useEffect(() => () => {

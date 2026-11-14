@@ -3,6 +3,8 @@ import { z } from 'zod';
 import { prisma } from '../utils/prisma';
 import { AppError } from '../middleware/errorHandler';
 import { AuthRequest } from '../types';
+import { isAccessRevoked, verifyAccessToken } from '../middleware/auth';
+import { isReservedHandle } from '../services/security/credentials';
 
 function messagePrivacyOf(user: { notificationPrefs?: any } | null | undefined) {
   const prefs = user?.notificationPrefs && typeof user.notificationPrefs === 'object' ? user.notificationPrefs : {};
@@ -20,17 +22,22 @@ const noHtml = (s: string) => s.replace(/[<>]/g, '');
 // Avatar must be a safe https/data-image URL or a short emoji — never a
 // javascript:/data:text/html scheme (classic stored-XSS vector).
 const safeAvatar = z.string().max(512).refine(
-  (v) => v === '' || /^https:\/\//i.test(v) || /^data:image\//i.test(v) || [...v].length <= 8,
+  (v) => v === '' || /^https:\/\//i.test(v) || /^data:image\/(png|jpe?g|webp|gif);base64,/i.test(v) || [...v].length <= 8,
   'Avatar must be an https URL, image data URL, or emoji',
 );
 
 const updateProfileSchema = z.object({
-  username: z.string().min(3).max(30).regex(/^[a-zA-Z0-9_]+$/, 'Username can only contain letters, numbers, and underscores').optional(),
+  // Handles are stored lower-case and unique regardless of case, so "@Alice"
+  // can never sit next to "@alice" and catch payments meant for her.
+  username: z.string().min(3).max(30).regex(/^[a-zA-Z0-9_]+$/, 'Username can only contain letters, numbers, and underscores')
+    .transform((u) => u.toLowerCase())
+    .refine((u) => !isReservedHandle(u), 'That handle is reserved')
+    .optional(),
   bio: z.string().max(500).transform(noHtml).optional(),
   avatarUrl: safeAvatar.optional(),
   baseCurrency: z.enum(['USD', 'EUR', 'GBP', 'AED', 'SAR', 'EGP', 'USDT', 'BTC', 'ETH', 'BNB', 'SOL', 'XRP', 'ADA', 'DOGE', 'MATIC', 'DOT', 'AVAX']).optional(),
   profilePublic: z.boolean().optional(),
-  acceptedCurrencies: z.array(z.string()).optional(),
+  acceptedCurrencies: z.array(z.string().max(12)).max(50).optional(),
 });
 
 export class ProfileController {
@@ -41,11 +48,21 @@ export class ProfileController {
    */
   static async searchProfiles(req: Request, res: Response, next: NextFunction) {
     try {
-      const q = String(req.query.q ?? '').trim().toLowerCase().replace(/^@/, '');
+      // Signed-in customers only (the app always sends its token): an open
+      // endpoint let anyone page through every public customer's full name
+      // by handle prefix.
+      const auth = req.headers.authorization;
+      const viewer = auth?.startsWith('Bearer ') ? verifyAccessToken(auth.slice(7)) : null;
+      if (!viewer || await isAccessRevoked(viewer.id, viewer.iat, viewer.sid)) throw new AppError('Sign in to search for people', 401);
+      const q = String(req.query.q ?? '').trim().toLowerCase().replace(/^@/, '').slice(0, 30);
       if (q.length < 1) return res.json({ profiles: [] });
       const matches = await prisma.user.findMany({
         where: {
           profilePublic: true,
+          // Only accounts that can actually receive money (not frozen,
+          // closed, banned or unverified-pending), and never the viewer.
+          status: 'ACTIVE',
+          id: { not: viewer.id },
           username: { startsWith: q, mode: 'insensitive' },
         },
         select: { id: true, username: true, firstName: true, lastName: true, avatarUrl: true, kycTier: true },
@@ -90,10 +107,19 @@ export class ProfileController {
       const canSeePresence = mine.lastSeenOn && theirs.lastSeenOn;
       const onlineUsers = req.app.get('onlineUsers') as Map<string, number> | undefined;
       const onlineNow = canSeePresence ? Boolean(onlineUsers?.has(id)) : false;
+      // Name, handle and avatar are what a chat header needs. Bio, KYC state
+      // and join date only for public profiles (or yourself). `role` is never
+      // exposed (it let any customer find staff/admin accounts to target);
+      // the support account is flagged so the app can label its thread.
+      const isSelf = id === req.user!.id;
+      const showDetails = isSelf || user.profilePublic;
+      const isSupport = user.username === 'support';
       res.json({
         user: {
-          ...user,
-          notificationPrefs: undefined,
+          id: user.id, firstName: user.firstName, lastName: user.lastName, username: user.username,
+          avatarUrl: user.avatarUrl, profilePublic: user.profilePublic,
+          ...(showDetails ? { bio: user.bio, kycStatus: user.kycStatus, createdAt: user.createdAt } : {}),
+          isSupport,
           messagePrivacy: {
             ...theirs,
             canSeeReadReceipts,
@@ -135,7 +161,8 @@ export class ProfileController {
       // Check username uniqueness
       if (data.username) {
         const existing = await prisma.user.findFirst({
-          where: { username: data.username, NOT: { id: req.user!.id } },
+          where: { username: { equals: data.username, mode: 'insensitive' }, NOT: { id: req.user!.id } },
+          select: { id: true },
         });
         if (existing) throw new AppError('Username already taken', 400);
       }

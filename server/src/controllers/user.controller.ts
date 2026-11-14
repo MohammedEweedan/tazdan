@@ -5,15 +5,25 @@ import { prisma } from '../utils/prisma';
 import { AppError } from '../middleware/errorHandler';
 import { recordRiskEvent } from '../services/risk/engine';
 import { AuthRequest } from '../types';
+import { revokeSessionAccess } from '../middleware/auth';
+import { BCRYPT_COST, sensitiveActionSucceeded, verifyPasswordForSensitiveAction } from '../services/security/credentials';
+import { sendSecurityNotice } from '../services/security/notify';
+
+const personName = z
+  .string()
+  .trim()
+  .min(1)
+  .max(100)
+  .regex(/^[\p{L}\p{M}][\p{L}\p{M} .'’-]*$/u, 'Use letters, spaces, apostrophes and hyphens only');
 
 const updateProfileSchema = z.object({
-  firstName: z.string().min(1).max(100).optional(),
-  lastName: z.string().min(1).max(100).optional(),
-  phone: z.string().optional(),
+  firstName: personName.optional(),
+  lastName: personName.optional(),
+  phone: z.string().max(32).optional(),
 });
 
 const changePasswordSchema = z.object({
-  currentPassword: z.string(),
+  currentPassword: z.string().min(1).max(256),
   newPassword: z.string().min(8).max(128),
 });
 
@@ -21,9 +31,28 @@ export class UserController {
   static async updateProfile(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const data = updateProfileSchema.parse(req.body);
+      const current = await prisma.user.findUnique({
+        where: { id: req.user!.id },
+        select: { phone: true, firstName: true, lastName: true, kycStatus: true },
+      });
+      if (!current) throw new AppError('User not found', 404);
+
+      // The phone number is an identity factor (2FA recovery, OTP). It used
+      // to be changeable here with no re-verification while `phoneVerified`
+      // stayed true — a stolen session could swap in its own number.
+      if (data.phone !== undefined && data.phone.replace(/[^\d+]/g, '') !== (current.phone ?? '')) {
+        throw new AppError('Changing your phone number needs identity verification. Contact support.', 400);
+      }
+      // After identity verification the legal name must match the documents.
+      const renames = (data.firstName !== undefined && data.firstName !== current.firstName) ||
+        (data.lastName !== undefined && data.lastName !== current.lastName);
+      if (renames && (current.kycStatus === 'APPROVED' || current.kycStatus === 'PENDING')) {
+        throw new AppError('Your name is verified. Contact support to change it.', 409);
+      }
+
       const user = await prisma.user.update({
         where: { id: req.user!.id },
-        data,
+        data: { firstName: data.firstName, lastName: data.lastName },
         select: {
           id: true, email: true, phone: true, firstName: true,
           lastName: true, role: true, kycStatus: true,
@@ -94,13 +123,36 @@ export class UserController {
       const user = await prisma.user.findUnique({ where: { id: req.user!.id } });
       if (!user) throw new AppError('User not found', 404);
 
-      const valid = await bcrypt.compare(data.currentPassword, user.passwordHash);
-      if (!valid) throw new AppError('Current password is incorrect', 400);
+      // Capped (5 per 15 minutes) so a stolen session is not an unthrottled password oracle.
+      const check = await verifyPasswordForSensitiveAction(user.id, user.passwordHash, data.currentPassword);
+      if (check === 'locked') throw new AppError('Too many attempts. Try again in 15 minutes.', 429);
+      if (check === 'invalid') throw new AppError('Current password is incorrect', 400);
+      if (await bcrypt.compare(data.newPassword, user.passwordHash)) {
+        throw new AppError('Choose a password you have not used for this account.', 400);
+      }
 
-      const passwordHash = await bcrypt.hash(data.newPassword, 12);
-      await prisma.user.update({ where: { id: user.id }, data: { passwordHash } });
+      const passwordHash = await bcrypt.hash(data.newPassword, BCRYPT_COST);
+      await prisma.user.update({ where: { id: user.id }, data: { passwordHash, failedLoginAttempts: 0, lockoutUntil: null } });
+      await sensitiveActionSucceeded(user.id);
+
+      // A password change is usually a reaction to suspected compromise:
+      // sign out every OTHER session (refresh tokens + their live access
+      // tokens), keep the one making this request.
+      const currentSid = req.user?.sid;
+      const revokedAt = new Date();
+      await prisma.refreshToken.updateMany({
+        where: { userId: user.id, revokedAt: null, ...(currentSid ? { id: { not: currentSid } } : {}) },
+        data: { revokedAt },
+      });
+      const others = await prisma.refreshToken.findMany({
+        where: { userId: user.id, revokedAt, ...(currentSid ? { id: { not: currentSid } } : {}) },
+        select: { id: true },
+      });
+      await Promise.all(others.map((o) => revokeSessionAccess(o.id)));
+
       void recordRiskEvent(user.id, 'SECURITY_CHANGE', { change: 'password_changed' }, 'MEDIUM');
-      res.json({ message: 'Password changed successfully' });
+      sendSecurityNotice(user.id, 'password_changed', { ip: req.ip });
+      res.json({ message: 'Password changed successfully', signedOutSessions: others.length });
     } catch (error) {
       next(error);
     }
@@ -345,12 +397,14 @@ export class UserController {
 
       if (!user) throw new AppError('User not found', 404);
 
+      // Every interpolated value is escaped: names are customer-supplied.
+      const esc = (v: unknown) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string));
       // Generate simple HTML statement
       const statementHtml = `
         <!DOCTYPE html>
         <html>
         <head>
-          <title>Account Statement - ${user.firstName} ${user.lastName}</title>
+          <title>Account Statement - ${esc(user.firstName)} ${esc(user.lastName)}</title>
           <style>
             body { font-family: Arial, sans-serif; margin: 40px; }
             .header { text-align: center; margin-bottom: 30px; }
@@ -370,10 +424,10 @@ export class UserController {
           
           <div class="section">
             <h3>Account Information</h3>
-            <p><strong>Name:</strong> ${user.firstName} ${user.lastName}</p>
-            <p><strong>Email:</strong> ${user.email}</p>
-            <p><strong>Phone:</strong> ${user.phone || 'N/A'}</p>
-            <p><strong>Account Status:</strong> ${user.kycStatus}</p>
+            <p><strong>Name:</strong> ${esc(user.firstName)} ${esc(user.lastName)}</p>
+            <p><strong>Email:</strong> ${esc(user.email)}</p>
+            <p><strong>Phone:</strong> ${esc(user.phone || 'N/A')}</p>
+            <p><strong>Account Status:</strong> ${esc(user.kycStatus)}</p>
           </div>
 
           <div class="section">

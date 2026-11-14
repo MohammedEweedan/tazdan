@@ -1,4 +1,4 @@
-// Fulus rate service unit tests — pure logic, no real network.
+// Fulus rate service unit tests — unchanged provider rates, no real network.
 import crypto from 'crypto';
 import {
   verifyFulusSignature,
@@ -51,15 +51,23 @@ describe('verifyFulusSignature', () => {
   });
 });
 
-describe('noteFulusRate sanity bounds', () => {
+describe('noteFulusRate provider values', () => {
   it('accepts an in-range USD rate (LYD per USD)', () => {
     expect(noteFulusRate('USD', 7.2, 'webhook')).toBe(true);
     expect(fulusCachedRates().USD?.rate).toBe(7.2);
   });
 
-  it('rejects an out-of-range USD rate', () => {
-    expect(noteFulusRate('USD', 0.5, 'webhook')).toBe(false); // way below floor
-    expect(noteFulusRate('USD', 99, 'webhook')).toBe(false); // way above ceiling
+  it('preserves finite positive provider rates without arbitrary floors or ceilings', () => {
+    expect(noteFulusRate('USD', 0.5, 'webhook')).toBe(true);
+    expect(fulusCachedRates().USD?.rate).toBe(0.5);
+    expect(noteFulusRate('USD', 99, 'webhook')).toBe(true);
+    expect(fulusCachedRates().USD?.rate).toBe(99);
+  });
+
+  it('does not replace a known rate with zero, negative or infinite values', () => {
+    noteFulusRate('USD', 8.37, 'webhook');
+    for (const rate of [0, -1, Infinity, -Infinity]) expect(noteFulusRate('USD', rate, 'webhook')).toBe(false);
+    expect(fulusCachedRates().USD?.rate).toBe(8.37);
   });
 
   it('rejects a currency Fulus does not carry', () => {
@@ -74,13 +82,14 @@ describe('noteFulusRate sanity bounds', () => {
 // Fulus uses axios (with insecureHTTPParser) because its responses use
 // LF-terminated headers that Node's strict fetch parser rejects.
 jest.mock('axios');
+jest.mock('../services/exchange/fulusPublic.service', () => ({ getPublicFulusRates: jest.fn(async () => []) }));
 import axios from 'axios';
 const mockedAxios = axios as jest.Mocked<typeof axios>;
 
 describe('backfillHistory', () => {
   afterEach(() => { jest.clearAllMocks(); });
 
-  it('inserts a tick per sane data point and skips out-of-range rates', async () => {
+  it('inserts valid provider ticks and skips non-positive rates and missing timestamps', async () => {
     process.env.FULUS_API_TOKEN = 'tok_test';
     // Mock the prisma module used inside backfillHistory.
     const created: any[] = [];
@@ -98,7 +107,7 @@ describe('backfillHistory', () => {
     mockedAxios.get.mockResolvedValue({
       data: { data: [
         { rate: 8.37, timestamp: '2026-06-08T14:00:00+02:00' },  // sane → inserted
-        { rate: 99,   timestamp: '2026-06-08T09:00:00+02:00' },  // out of bounds → skipped
+        { rate: 0,    timestamp: '2026-06-08T09:00:00+02:00' },  // invalid → skipped
         { rate: 8.40 },                                          // no timestamp → skipped
       ] },
     });
@@ -119,10 +128,10 @@ describe('backfillHistory', () => {
 });
 
 describe('getFulusLydRate', () => {
-  it('returns null when no token configured (defers to scraper)', async () => {
+  it('returns null without a token or cached/public value for the currency', async () => {
     delete process.env.FULUS_API_TOKEN;
     expect(fulusEnabled()).toBe(false);
-    expect(await getFulusLydRate('USD')).toBeNull();
+    expect(await getFulusLydRate('TRY')).toBeNull();
   });
 
   it('serves a fresh webhook-fed value from cache without polling', async () => {

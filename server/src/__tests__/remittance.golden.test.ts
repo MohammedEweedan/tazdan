@@ -10,7 +10,8 @@
  *  4. Idempotency and a double-spend race on one quote.
  *  5. Ledger and clearing invariants after everything.
  *
- * Rates are pinned with treasury overrides so the test never calls a network feed.
+ * Fulus rates are fixed at the provider boundary; other fiat pairs use treasury
+ * overrides. The remittance flow runs against Postgres without a network feed.
  */
 import { Decimal } from '@prisma/client/runtime/library';
 import { prisma } from '../utils/prisma';
@@ -21,6 +22,14 @@ import { createQuote } from '../services/remittance/pricing';
 import { createBeneficiary, createTransfer, decideReview, pollPendingPayouts } from '../services/remittance/remittance.service';
 import { runIntegrityReconciliation, runProviderReconciliation, completeInternalPayouts } from '../services/reconciliation/recon.service';
 import { importWatchlist } from '../services/compliance/screening.service';
+
+jest.mock('../services/exchange/fulus.service', () => ({
+  ...jest.requireActual('../services/exchange/fulus.service'),
+  getFulusLydRate: jest.fn(async (currency: string) => {
+    const rates: Record<string, number> = { GBP: 6.9, USD: 1 / 0.146 };
+    return rates[currency] ?? null;
+  }),
+}));
 
 const RUN_DB = process.env.CI === 'true' || process.env.RUN_DB_TESTS === '1';
 const describeDb = RUN_DB ? describe : describe.skip;
@@ -74,9 +83,8 @@ describeDb('golden remittance flows', () => {
   beforeAll(async () => {
     process.env.SANDBOX_TIME_SCALE = '1000000'; // sandbox SLA elapses almost instantly
     await bootstrapPlatform({ workers: false });
-    // 1 GBP = 6.90 LYD (pinned), USD references for limits and risk valuation.
-    await pinRate('GBP', 'LYD', 6.9); await pinRate('LYD', 'GBP', 1 / 6.9);
-    await pinRate('LYD', 'USD', 0.146); await pinRate('GBP', 'USD', 1.27);
+    // LYD pairs use the fixed Fulus feed above; pin the non-Fulus USD reference.
+    await pinRate('GBP', 'USD', 1.27);
     const staff = await user('Compliance', 'Officer', 'LY');
     await prisma.user.update({ where: { id: staff.id }, data: { role: 'ADMIN', staffRoles: ['COMPLIANCE', 'TREASURY'] } });
     staffId = staff.id;
@@ -106,6 +114,7 @@ describeDb('golden remittance flows', () => {
 
     // Quote: recipient gets exactly £1,000.
     const q = await createQuote({ userId: mohammed.id, corridorCode: 'LY-GB', receiveAmount: 1000, payoutMethod: 'BANK_ACCOUNT', beneficiaryCountry: 'GB' });
+    expect(q.quote.rateSource).toContain('fulus');
     expect(q.quote.receiveAmount.toString()).toBe('1000');
     expect(Number(q.quote.customerRate)).toBeLessThan(Number(q.quote.baseRate));
     expect(D(q.quote.totalDebit).equals(D(q.quote.sendAmount).plus(q.quote.feeAmount))).toBe(true);

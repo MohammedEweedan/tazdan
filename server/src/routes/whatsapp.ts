@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { WhatsAppController } from '../controllers/whatsapp.controller';
 import { authenticate, requireAdmin } from '../middleware/auth';
 import { requirePermission } from '../services/platform/rbac';
+import { maskPiiForStaff } from '../services/platform/pii';
 
 const router = Router();
 
@@ -13,7 +14,7 @@ router.post('/webhook/meta', WhatsAppController.receiveMetaMessage);
 router.post('/webhook',      WhatsAppController.receiveMessage);
 
 // Admin only routes
-router.use(authenticate, requireAdmin);
+router.use(authenticate, requireAdmin, maskPiiForStaff);
 router.post('/send', requirePermission('support.reply'), WhatsAppController.sendMessage);
 router.get('/messages', requirePermission('support.read'), WhatsAppController.getMessages);
 router.get('/stats', requirePermission('support.read'), WhatsAppController.getStats);

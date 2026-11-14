@@ -154,9 +154,11 @@ describeDb('fund integrity across money flows', () => {
     expect(onboard.body.openingBalances).toEqual([expect.objectContaining({ currency: 'USD', pendingApproval: false })]);
     expect((await bal(onboard.body.user.id, 'USD')).toString()).toBe('30');
 
-    // Sanity: the platform earned fees that the old audit misread as new USDT.
-    const platform = await prisma.user.findFirst({ where: { username: 'platform' } });
-    expect((await bal(platform.id, 'USDT')).gt(0)).toBe(true);
+    // Revenue exists in its native ledger currency. A reporting conversion
+    // must not fabricate a separate spendable corporate USDT wallet.
+    const revenue = await prisma.ledgerAccount.findFirst({ where: { type: 'PLATFORM', currency: 'USD' } });
+    expect(new Decimal(revenue.balance).gt(0)).toBe(true);
+    expect(await prisma.user.findFirst({ where: { username: 'platform' } })).toBeNull();
 
     const report = await audit.auditFundIntegrity();
     for (const c of report.perCurrency) {
@@ -212,6 +214,9 @@ describeDb('fund integrity across money flows', () => {
     const report = await audit.auditFundIntegrity();
     expect(report.railExceptions).toEqual([expect.objectContaining({ rail: 'DEPOSIT', refId: ghost, posted: expect.stringMatching(/^12/), recorded: null })]);
     expect(report.perCurrency.find((c) => c.currency === 'EUR')!.ok).toBe(false);
+    await audit.auditFundIntegrity({ haltOnBreach: true });
+    const { isTradingHalted } = await import('../services/ledger/reconcile.service');
+    expect(await isTradingHalted()).toBe(true);
 
     const { runIntegrityReconciliation } = await import('../services/reconciliation/recon.service');
     await runIntegrityReconciliation();
