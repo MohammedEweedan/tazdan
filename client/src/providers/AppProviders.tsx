@@ -23,12 +23,12 @@ function LangInit() {
   return null;
 }
 
-export default function AppProviders({ children, initialLanguage = 'en' }: { children: React.ReactNode; initialLanguage?: string }) {
+export default function AppProviders({ children, initialLanguage = 'en', nonce }: { children: React.ReactNode; initialLanguage?: string; nonce?: string }) {
   const [tolgee] = useState(() => createTolgee(initialLanguage));
   return (
     <TolgeeProvider tolgee={tolgee} ssr={{ language: initialLanguage }} fallback="Loading...">
       <ChakraProvider theme={theme}>
-        <ColorModeScript initialColorMode={theme.config.initialColorMode} />
+        <ColorModeScript initialColorMode={theme.config.initialColorMode} nonce={nonce} />
         <LangInit />
         <PageCache />
         {children}

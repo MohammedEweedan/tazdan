@@ -191,7 +191,10 @@ const jsonLd = {
 };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  const locale = (await headers()).get('x-tazdan-locale') === 'ar' ? 'ar' : 'en';
+  const requestHeaders = await headers();
+  const locale = requestHeaders.get('x-tazdan-locale') === 'ar' ? 'ar' : 'en';
+  // Set by middleware on Control Cockpit pages, whose policy only runs nonced scripts.
+  const nonce = requestHeaders.get('x-nonce') ?? undefined;
   return (
     <html
       suppressHydrationWarning
@@ -214,19 +217,21 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         {/* Structured data — JSON-LD, inlined so Googlebot sees it on
             first byte without waiting for client JS. */}
         <script
+          nonce={nonce}
           type="application/ld+json"
           // eslint-disable-next-line react/no-danger
           dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
         />
         {/* Skip the first-load ن overlay before paint once this session has seen it. */}
         <script
+          nonce={nonce}
           // eslint-disable-next-line react/no-danger
           dangerouslySetInnerHTML={{ __html: LOADER_SEEN_SCRIPT }}
         />
       </head>
       <body>
         <FirstLoadOverlay />
-        <AppProviders initialLanguage={locale}>
+        <AppProviders initialLanguage={locale} nonce={nonce}>
           <PageTitle />
           {children}
         </AppProviders>
