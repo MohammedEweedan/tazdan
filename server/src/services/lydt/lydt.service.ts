@@ -207,6 +207,7 @@ export async function transfer(opts: {
   const { senderId, receiverId } = opts;
   if (!receiverId || receiverId === senderId) throw new AppError('Choose someone else to send LYDT to', 400);
   const amount = parseAmount(opts.amount);
+  // eslint-disable-next-line no-control-regex -- notes are shown to the receiver; control characters are removed on purpose
   const note = opts.note?.replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 140) || null;
 
   const earlier = await replay(senderId, opts.key, 'TRANSFER', amount, receiverId);

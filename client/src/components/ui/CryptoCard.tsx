@@ -85,7 +85,7 @@ const CryptoCard = () => {
       <MotionBox
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        // @ts-ignore
+        // @ts-expect-error Chakra types `transition` as a CSS string; framer-motion takes an object
         transition={{ duration: 0.6, cubicBezier: [0.16, 1, 0.3, 1] }}
         bg={dark ? "rgba(10, 10, 26, 0.85)" : "white"}
         border="1px solid"
@@ -244,7 +244,7 @@ const CryptoCard = () => {
                 initial={{ opacity: 0, x: -10 }}
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: 10 }}
-                // @ts-ignore
+                // @ts-expect-error Chakra types `transition` as a CSS string; framer-motion takes an object
                 transition={{ duration: 0.3 }}
               >
                 <VStack align="start" spacing={1}>

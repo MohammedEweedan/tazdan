@@ -10,7 +10,7 @@
     "ios:local-test": "bash scripts/ios-local-test.sh",
     "android": "expo run:android",
     "web": "expo start --web",
-    "lint": "expo lint",
+    "lint": "eslint app src modules",
     "typecheck": "tsc --noEmit",
     "i18n:audit": "node scripts/i18n-audit.js",
     "i18n:audit:strict": "node scripts/i18n-audit.js --strict",
@@ -92,6 +92,8 @@
   "devDependencies": {
     "@babel/core": "^7.25.0",
     "@types/react": "~19.1.0",
+    "eslint": "^9.39.5",
+    "eslint-config-expo": "~10.0.0",
     "typescript": "~5.9.2"
   },
   "overrides": {

@@ -55,13 +55,14 @@ export function westernDigits(s: string): string {
 function normHeader(s: string): string {
   return westernDigits(s)
     .normalize('NFKD').replace(/[̀-ͯ]/g, '')
-    .replace(/[آأإ]/g, 'ا').replace(/ى/g, 'ي').replace(/ة/g, 'ه').replace(/[ـً-ٟ]/g, '')
+    // eslint-disable-next-line no-misleading-character-class -- deliberately strips Arabic tatweel and harakat (combining marks)
+    .replace(/[آأإ]/g, 'ا').replace(/ى/g, 'ي').replace(/ة/g, 'ه').replace(/[\u0640\u064B-\u065F]/g, '')
     .toLowerCase().replace(/[^a-z0-9؀-ۿ]+/g, ' ').trim();
 }
 
 /** UTF-8 unless that produces replacement characters; then Windows-1256 (Arabic Windows). */
 export function decodeText(buf: Buffer): string {
-  const utf8 = buf.toString('utf8').replace(/^﻿/, '');
+  const utf8 = buf.toString('utf8').replace(/^\uFEFF/, '');
   if (!utf8.includes('�')) return utf8;
   try { return new TextDecoder('windows-1256').decode(buf); } catch { return utf8; }
 }

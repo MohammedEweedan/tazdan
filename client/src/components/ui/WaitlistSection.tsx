@@ -17,6 +17,10 @@ export default function WaitlistSection() {
   const fg     = useColorModeValue('#ffffff', '#000000');
   const muted  = useColorModeValue('rgba(255,255,255,0.6)', 'rgba(0,0,0,0.55)');
   const border = useColorModeValue('rgba(255,255,255,0.15)', 'rgba(0,0,0,0.12)');
+  // Hooks must run in the same order every render, so none live inside the form branches.
+  const successBg = useColorModeValue('rgba(255,255,255,0.1)', 'rgba(0,0,0,0.06)');
+  const inputBg   = useColorModeValue('rgba(255,255,255,0.08)', 'rgba(0,0,0,0.06)');
+  const faint     = useColorModeValue('rgba(255,255,255,0.35)', 'rgba(0,0,0,0.30)');
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -80,7 +84,7 @@ export default function WaitlistSection() {
         {/* Form */}
         {status === 'success' ? (
           <HStack
-            bg={useColorModeValue('rgba(255,255,255,0.1)', 'rgba(0,0,0,0.06)')}
+            bg={successBg}
             border="1px solid" borderColor={border}
             borderRadius="16px" px={6} py={4} spacing={3}
           >
@@ -104,7 +108,7 @@ export default function WaitlistSection() {
                 value={email}
                 onChange={e => setEmail(e.target.value)}
                 required
-                bg={useColorModeValue('rgba(255,255,255,0.08)', 'rgba(0,0,0,0.06)')}
+                bg={inputBg}
                 border="1px solid"
                 borderColor={border}
                 color={fg}
@@ -142,7 +146,7 @@ export default function WaitlistSection() {
           </Box>
         )}
 
-        <Text fontSize="12px" color={useColorModeValue('rgba(255,255,255,0.35)', 'rgba(0,0,0,0.30)')}>
+        <Text fontSize="12px" color={faint}>
           {t('waitlist_disclaimer')}
         </Text>
       </VStack>

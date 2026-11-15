@@ -77,6 +77,7 @@ export async function verifyKioskPin(ctx: BusinessContext, pin: string): Promise
 // ── Posts ───────────────────────────────────────────────────────────
 
 const MAX_LIVE_POSTS = 30;
+// eslint-disable-next-line no-control-regex -- stripping control and bidi characters from shop text is the point
 const clean = (s: string) => s.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f\u202a-\u202e\u2066-\u2069]/g, '').trim();
 
 export interface PostInput { kind: BusinessPostKind; title: string; body: string; startsAt?: Date | null; endsAt?: Date | null; published?: boolean }
