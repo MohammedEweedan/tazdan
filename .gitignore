@@ -65,3 +65,13 @@ output/ui-verification/
 
 # Private authorization, provider, security and recovery evidence
 private-launch-evidence/
+
+# ── Generated documents and investor material (kept outside git) ──
+# Investor packs, assessments, deck builds and scratch output. These held
+# pitch terms and ~490 MB of binaries; share them through Drive instead.
+/tmp/
+/output/
+/outputs/
+/deliverables/
+/.artifacts/
+/.claude/worktrees/
