@@ -31,7 +31,7 @@ type Req = { ip?: string; headers?: Record<string, any>; originalUrl?: string };
 
 /** Credit a deposit that is still awaiting confirmation. Exactly once. */
 async function credit(depositId: string, actorId: string, notes: string | null, req?: Req, approval?: { requestId: string; requestedById: string }) {
-  return prisma.$transaction(async (tx: any) => {
+  return prisma.$transaction(async (tx) => {
     const deposit = await tx.deposit.findUnique({ where: { id: depositId } });
     if (!deposit) throw new AppError('Deposit not found', 404);
     const moved = await tx.deposit.updateMany({

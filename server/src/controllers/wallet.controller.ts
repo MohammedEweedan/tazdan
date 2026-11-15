@@ -1,4 +1,5 @@
 import { Response, NextFunction } from 'express';
+import { idempotencyKeyFrom, keyReused } from '../utils/idempotency';
 import { Decimal } from '@prisma/client/runtime/library';
 import { z } from 'zod';
 import axios from 'axios';
@@ -98,6 +99,19 @@ async function getLivePrices(): Promise<Record<string, number>> {
 function fiatValueUsd(currency: string, balance: number, prices: Record<string, number>): number {
   const rate = prices[currency] ?? 0;
   return +(balance * rate).toFixed(2);
+}
+
+/** The swap an earlier request with this key settled (its SELL and BUY rows), or null. */
+async function replayedSwap(storedKey: string, from: string, to: string, amount: number) {
+  const sell = await prisma.transaction.findUnique({ where: { idempotencyKey: storedKey } });
+  if (!sell) return null;
+  if (sell.currency !== from || !new Decimal(sell.amount.toString()).neg().eq(new Decimal(amount))) {
+    throw keyReused('swap');
+  }
+  const buy = await prisma.transaction.findFirst({ where: { reference: sell.reference, userId: sell.userId, type: 'BUY' } });
+  if (!buy || buy.currency !== to) throw keyReused('swap');
+  const rate = Number((sell.metadata as any)?.rate ?? 0);
+  return { from, to, amount, credited: Number(buy.amount.toString()), rate, reference: sell.reference };
 }
 
 export class WalletController {
@@ -208,6 +222,11 @@ export class WalletController {
       });
       const { from, to, amount, minCredited } = schema.parse(req.body);
       if (from === to) throw new AppError('From and to currencies must differ', 400);
+      // A retry after a lost reply gets the first swap back instead of converting twice.
+      const idemKey = idempotencyKeyFrom(req);
+      const storedKey = idemKey ? `swap:${req.user!.id}:${idemKey}` : null;
+      const replay = storedKey ? await replayedSwap(storedKey, from, to, amount) : null;
+      if (replay) { res.json({ message: 'Swap complete', swap: replay, replayed: true }); return; }
       if (from === 'LYDT' || to === 'LYDT') {
         res.status(201).json({ message: 'Swap complete', swap: await WalletController.swapLydt(req.user!.id, from, to, amount, minCredited) });
         return;
@@ -221,7 +240,18 @@ export class WalletController {
         throw new AppError('Conversions are paused while the ledger is being reconciled. Please try again later.', 503, 'FEATURE_DISABLED');
       }
 
-      const result = await WalletController.settleSwap(req.user!.id, from, to, amount, minCredited);
+      let result;
+      try {
+        result = await WalletController.settleSwap(req.user!.id, from, to, amount, minCredited, storedKey);
+      } catch (err) {
+        // A concurrent retry with the same key may have settled first (key or
+        // serialization conflict, or its reservation left too little): return it.
+        if (storedKey) {
+          const first = await replayedSwap(storedKey, from, to, amount);
+          if (first) { res.json({ message: 'Swap complete', swap: first, replayed: true }); return; }
+        }
+        throw err;
+      }
 
       // Fire-and-forget: send confirmation email + push. Failures here
       // never block the response — the swap has already settled.
@@ -266,7 +296,7 @@ export class WalletController {
    * both wallet rows, ledger legs and the paired SELL/BUY history rows, in one
    * serializable transaction. Refuses below `minCredited`.
    */
-  static async settleSwap(userId: string, from: string, to: string, amount: number, minCredited?: number | string) {
+  static async settleSwap(userId: string, from: string, to: string, amount: number, minCredited?: number | string, idempotencyKey?: string | null) {
     // Executable prices from the FX and market engines (spread included).
     // The old hardcoded rate table priced LYD near the official peg and
     // crypto at fixed values whenever Binance was unreachable.
@@ -343,6 +373,7 @@ export class WalletController {
             balanceAfter:  fromBalanceD.minus(amountD),
             description: `Swapped ${amount} ${from} → ${credited.toFixed(8)} ${to}`,
             reference,
+            idempotencyKey: idempotencyKey ?? undefined,
             metadata: { kind: 'swap', counterparty: to, rate: quote.rate.toString(), priceSources: [quote.fromLeg.source, quote.toLeg.source] },
           },
           {

@@ -659,29 +659,32 @@ model Deposit {
 }
 
 model Withdrawal {
-  id            String               @id @default(uuid())
-  userId        String
-  currency      Currency
-  amount        Decimal              @db.Decimal(20, 8)
-  fee           Decimal              @default(0) @db.Decimal(20, 8)
-  netAmount     Decimal              @db.Decimal(20, 8)
-  paymentMethod PaymentMethod?
-  walletAddress String?
-  network       String?
-  bankName      String?
-  accountNumber String?
-  accountName   String?
-  status        WithdrawalStatus     @default(PENDING)
-  reference     String               @unique
-  adminNotes    String?
-  processedAt   DateTime?
-  processedBy   String?
-  createdAt     DateTime             @default(now())
-  updatedAt     DateTime             @updatedAt
-  user          User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
-  onChainTxs    OnChainTx[]
-  approvals     WithdrawalApproval[]
+  id             String               @id @default(uuid())
+  userId         String
+  currency       Currency
+  amount         Decimal              @db.Decimal(20, 8)
+  fee            Decimal              @default(0) @db.Decimal(20, 8)
+  netAmount      Decimal              @db.Decimal(20, 8)
+  paymentMethod  PaymentMethod?
+  walletAddress  String?
+  network        String?
+  bankName       String?
+  accountNumber  String?
+  accountName    String?
+  status         WithdrawalStatus     @default(PENDING)
+  reference      String               @unique
+  adminNotes     String?
+  processedAt    DateTime?
+  processedBy    String?
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+  user           User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  onChainTxs     OnChainTx[]
+  approvals      WithdrawalApproval[]
+  /// Same key on a retry returns the first request instead of reserving twice.
+  idempotencyKey String?
 
+  @@unique([userId, idempotencyKey])
   @@index([userId])
   @@index([status])
 }
@@ -736,6 +739,8 @@ model Transaction {
   balanceBefore   Decimal         @db.Decimal(20, 8)
   balanceAfter    Decimal         @db.Decimal(20, 8)
   reference       String?
+  /// "swap:<user id>:<key>" on the first row of a swap: a retried swap returns the first one.
+  idempotencyKey  String?         @unique
   description     String?
   metadata        Json?
   createdAt       DateTime        @default(now())
@@ -1231,6 +1236,8 @@ model P2PTrade {
   escrowAmount    Decimal        @db.Decimal(20, 8) // amount locked in escrow
   status          P2PTradeStatus @default(AWAITING_ESCROW)
   reference       String         @unique
+  /// "<requester id>:<key>": a retried trade request returns the first trade.
+  idempotencyKey  String?        @unique
   buyerNote       String?
   sellerNote      String?
   paymentMethod   String?

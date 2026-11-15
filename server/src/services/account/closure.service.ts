@@ -14,6 +14,7 @@
  *      linked to an anonymous account (docs/regulatory/DATA_RETENTION.md).
  */
 import fs from 'fs/promises';
+import type { Prisma } from '@prisma/client';
 import path from 'path';
 import { Decimal } from '@prisma/client/runtime/library';
 import { prisma } from '../../utils/prisma';
@@ -31,7 +32,7 @@ export interface ClosureBlocker { code: string; message: string; params?: Record
 const OPEN_REMITTANCE_EXCLUDED = ['COMPLETED', 'EXPIRED', 'REFUNDED', 'REJECTED', 'CANCELLED'];
 
 /** Everything that must be settled before the account can close. */
-export async function closureBlockers(userId: string, client: any = prisma): Promise<ClosureBlocker[]> {
+export async function closureBlockers(userId: string, client: Prisma.TransactionClient = prisma): Promise<ClosureBlocker[]> {
   const db = client;
   const [wallets, uw, deposits, withdrawals, trades, links, remittances, business, cards] = await Promise.all([
     db.wallet.findMany({ where: { userId, OR: [{ balance: { not: 0 } }, { frozen: { not: 0 } }] }, select: { currency: true, balance: true, frozen: true } }),

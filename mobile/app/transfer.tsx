@@ -18,6 +18,7 @@ import { api } from '@/lib/api';
 import { swapService } from '@/services';
 import { QUERY_KEYS } from '@/constants';
 import type { Currency } from '@/types';
+import { useAttemptKey } from '@/hooks/useAttemptKey';
 
 const PICKABLE: Currency[] = ['USDT', 'BTC', 'ETH', 'USD', 'EUR', 'AED'];
 
@@ -51,10 +52,12 @@ export default function Transfer() {
   const rate = quote ? Number(quote.rate) : null;
   const youGet = quote ? Number(quote.credited) : null;
 
+  const attempt = useAttemptKey('swap');
   const convert = useMutation({
     // Allow 0.5% movement between the quote shown and execution; beyond that the server refuses.
-    mutationFn: () => swapService.swap({ from, to, amount: v, minCredited: (youGet! * 0.995).toFixed(8) }),
+    mutationFn: () => swapService.swap({ from, to, amount: v, minCredited: (youGet! * 0.995).toFixed(8), idempotencyKey: attempt.keyFor(`${from}|${to}|${v}`) }),
     onSuccess: (r) => {
+      attempt.settled();
       h.success();
       qc.invalidateQueries({ queryKey: QUERY_KEYS.wallets });
       Alert.alert('Converted', `${v} ${from} → ${Number(r.credited).toLocaleString('en-US', { maximumFractionDigits: 8 })} ${to}`, [{ text: 'OK', onPress: () => router.back() }]);

@@ -1,4 +1,5 @@
 import { Response, NextFunction } from 'express';
+import { idempotencyKeyFrom, keyReused } from '../utils/idempotency';
 import { z } from 'zod';
 import { Decimal } from '@prisma/client/runtime/library';
 import { prisma } from '../utils/prisma';
@@ -71,6 +72,23 @@ const transferSchema = z.object({
   message: 'Recipient email, phone, or username is required',
 });
 
+/** The transfer an earlier request with this key created, as the send response, or null. */
+async function replayedSend(senderId: string, key: string, recipient: { id: string; firstName: string; lastName: string }, amount: Decimal) {
+  const t = await prisma.transfer.findUnique({ where: { senderId_idempotencyKey: { senderId, idempotencyKey: key } } });
+  if (!t) return null;
+  if (t.receiverId !== recipient.id || !new Decimal(t.amount.toString()).eq(amount)) throw keyReused('transfer');
+  const fee = new Decimal(t.fee.toString());
+  return {
+    message: 'Transfer successful',
+    replayed: true,
+    transfer: {
+      currency: t.currency, amount: Number(t.amount.toString()), fee: Number(fee.toString()),
+      total: Number(new Decimal(t.amount.toString()).plus(fee).toString()), reference: t.reference,
+      recipient: { firstName: recipient.firstName, lastName: recipient.lastName },
+    },
+  };
+}
+
 export class TransferController {
   static async send(req: AuthRequest, res: Response, next: NextFunction) {
     try {
@@ -124,6 +142,11 @@ export class TransferController {
           usdValue = data.amount * Number(pair.buyPrice || pair.sellPrice || 1);
         } catch { /* fall back to raw amount */ }
       }
+      // A retry after a lost reply gets the first transfer back instead of sending twice.
+      const idempotencyKey = idempotencyKeyFrom(req);
+      const replay = idempotencyKey ? await replayedSend(req.user!.id, idempotencyKey, recipient, amountDec) : null;
+      if (replay) { res.json(replay); return; }
+
       // Limits first: never send a security code for a transfer that cannot go through.
       await enforceKycLimit(req.user!.id, 'SEND', data.amount, logicalCurrency);
       await enforceStepUp({ userId: req.user!.id, action: 'transfer', valueUsd: usdValue, req, code: data.stepUpCode });
@@ -138,8 +161,8 @@ export class TransferController {
       // (SERIALIZABLE isolation gives us that on Postgres) and
       // re-verify before any debit.
       let senderCurrencyOnRow: string = '';
-      let senderBalanceBefore: number = 0;
-      await prisma.$transaction(async (tx: any) => {
+      let senderBalanceBefore = new Decimal(0);
+      const settle = () => prisma.$transaction(async (tx) => {
         await enforceKycLimit(req.user!.id, 'SEND', data.amount, logicalCurrency, tx);
         // Re-read inside the tx; this is the source of truth.
         const senderVariants = await tx.wallet.findMany({
@@ -166,7 +189,7 @@ export class TransferController {
           );
         }
         senderCurrencyOnRow = senderWallet.currency as string;
-        senderBalanceBefore = parseFloat(senderWallet.balance.toString());
+        senderBalanceBefore = new Decimal(senderWallet.balance.toString());
 
         await tx.wallet.update({
           where: { userId_currency: { userId: req.user!.id, currency: senderCurrencyOnRow as any } },
@@ -182,7 +205,7 @@ export class TransferController {
           take: 1,
         });
         const recipientCurrencyOnRow = recipientExisting[0]?.currency ?? variants[0];
-        const recipientBalanceBefore = parseFloat(recipientExisting[0]?.balance.toString() || '0');
+        const recipientBalanceBefore = new Decimal(recipientExisting[0]?.balance.toString() ?? '0');
 
         await tx.wallet.upsert({
           where: { userId_currency: { userId: recipient.id, currency: recipientCurrencyOnRow as any } },
@@ -199,6 +222,7 @@ export class TransferController {
             fee: feeDec,
             reference,
             note: data.note,
+            idempotencyKey: idempotencyKey ?? undefined,
           },
         });
 
@@ -239,7 +263,7 @@ export class TransferController {
               amount: totalDec.neg(),
               fee: feeDec,
               balanceBefore: senderBalanceBefore,
-              balanceAfter: new Decimal(senderBalanceBefore).minus(totalDec),
+              balanceAfter: senderBalanceBefore.minus(totalDec),
               reference,
               // The description is user-facing — collapse to the
               // logical name so the activity feed reads "Sent 10 USDT"
@@ -253,7 +277,7 @@ export class TransferController {
               amount: amountDec,
               fee: 0,
               balanceBefore: recipientBalanceBefore,
-              balanceAfter: new Decimal(recipientBalanceBefore).plus(amountDec),
+              balanceAfter: recipientBalanceBefore.plus(amountDec),
               reference,
               description: `Received ${data.amount} ${logicalCurrency} from transfer`,
             },
@@ -276,6 +300,17 @@ export class TransferController {
         // surface as a P2002/40001 error and the caller can retry.
         isolationLevel: 'Serializable',
       });
+      try {
+        await settle();
+      } catch (err) {
+        // A concurrent retry with the same key may have settled first (key or
+        // serialization conflict, or its reservation left too little): return it.
+        if (idempotencyKey) {
+          const first = await replayedSend(req.user!.id, idempotencyKey, recipient, amountDec);
+          if (first) { res.json(first); return; }
+        }
+        throw err;
+      }
 
       // Fire-and-forget transactional confirmations — never block the
       // response, never throw. Sender gets a "sent" copy, recipient gets

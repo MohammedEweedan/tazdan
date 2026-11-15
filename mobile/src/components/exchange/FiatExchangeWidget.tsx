@@ -16,6 +16,7 @@ import { useThemedPalette } from '@/store/themeStore';
 import { fiatSymbol, getCurrencyMeta } from '@/constants';
 import { swapService } from '@/services';
 import { LYDT, LYDT_QUERY_KEY, useLydtWallet } from '@/hooks/useLydt';
+import { useAttemptKey } from '@/hooks/useAttemptKey';
 
 export const FIAT_EXCHANGE_CURRENCIES = ['LYD', 'USD', 'EUR', 'GBP', 'AED', 'SAR', 'EGP'];
 /** LYDT trades here too (1:1 with LYD; other currencies go through LYD on the server). */
@@ -81,12 +82,14 @@ export function FiatExchangeWidget({ initialFrom, initialTo }: { initialFrom?: s
     if (side === 'from') { if (currency === to) setTo(from); setFrom(currency); }
     else { if (currency === from) setFrom(to); setTo(currency); }
   };
+  const attempt = useAttemptKey('swap');
   async function exchange() {
     if (!valid || !currentQuote || submitting.current) return;
     submitting.current = true;
     setBusy(true); setError(null);
     try {
-      const settled = await swapService.swap({ from, to, amount: value, minCredited: currentQuote.credited });
+      const settled = await swapService.swap({ from, to, amount: value, minCredited: currentQuote.credited, idempotencyKey: attempt.keyFor(`${from}|${to}|${value}`) });
+      attempt.settled();
       setResult(settled); h.success();
       await Promise.all([qc.invalidateQueries({ queryKey: ['wallets'] }), qc.invalidateQueries({ queryKey: ['transactions'] }),
         qc.invalidateQueries({ queryKey: ['activities'] }), qc.invalidateQueries({ queryKey: LYDT_QUERY_KEY })]);

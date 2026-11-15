@@ -21,6 +21,7 @@ import { bankAccountService, withdrawalService } from '@/services';
 import type { BankAccount } from '@/types';
 
 import { BottomSheet } from '@/components/ui/BottomSheet';
+import { useAttemptKey } from '@/hooks/useAttemptKey';
 const FIAT_SET = new Set(['USD', 'EUR', 'GBP', 'AED', 'SAR', 'EGP', 'LYD']);
 const CRYPTO_ENUM = new Set(['USDT', 'BTC', 'ETH', 'BNB', 'SOL', 'XRP', 'ADA', 'DOGE', 'MATIC', 'DOT', 'AVAX']);
 
@@ -255,10 +256,12 @@ export function WithdrawWidget() {
   const withdrawAmount = Number(amount || 0);
   const overspend = withdrawAmount > balance;
 
+  const attempt = useAttemptKey('withdraw');
   const withdrawMutation = useMutation({
     mutationFn: () => withdrawalService.create({
       currency,
       amount: withdrawAmount,
+      idempotencyKey: attempt.keyFor(`${currency}|${withdrawAmount}|${isFiat ? selectedBank?.id ?? selectedBank?.accountNumber : walletAddress.trim()}`),
       ...(isFiat ? {
         paymentMethod: 'BANK_TRANSFER',
         bankAccountId: selectedBank?.id,
@@ -271,6 +274,7 @@ export function WithdrawWidget() {
       }),
     }),
     onSuccess: () => {
+      attempt.settled();
       playSuccess('withdrawal');
       Alert.alert(
         'Withdrawal Requested ✓',

@@ -456,7 +456,7 @@ export const p2pService = {
     return data.listing;
   },
   cancelListing: (id: string) => api.put(`/p2p/listings/${id}/cancel`),
-  initiateTrade: async (payload: { listingId: string; amount: number; paymentMethod?: string }) => {
+  initiateTrade: async (payload: { listingId: string; amount: number; paymentMethod?: string; idempotencyKey?: string }) => {
     const { data } = await api.post('/p2p/trades', payload);
     return data.trade;
   },
@@ -478,7 +478,7 @@ export const swapService = {
     const { data } = await api.get('/wallets/swap/quote', { params: payload });
     return data.quote;
   },
-  swap: async (payload: { from: string; to: string; amount: number; minCredited?: string }) => {
+  swap: async (payload: { from: string; to: string; amount: number; minCredited?: string; idempotencyKey?: string }) => {
     const { data } = await api.post('/wallets/swap', payload);
     return data.swap as { from: string; to: string; amount: number; credited: number; rate: number };
   },
@@ -866,6 +866,7 @@ export const withdrawalService = {
     bankName?: string;
     accountNumber?: string;
     accountName?: string;
+    idempotencyKey?: string;
   }) => {
     const { data } = await api.post<{ withdrawal: any }>('/withdrawals', payload);
     return data.withdrawal;
