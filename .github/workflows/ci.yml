@@ -11,7 +11,7 @@ on:
 jobs:
   server:
     name: Server — lint, type-check, test
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     services:
       postgres:
         image: postgres:16-alpine
@@ -51,7 +51,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
           cache: 'npm'
           cache-dependency-path: server/package-lock.json
       - run: npm ci
@@ -66,6 +66,7 @@ jobs:
         env:
           PGPASSWORD: testpassword
       - run: npx tsc --noEmit
+      - run: npm run lint
       # pg_dump/pg_restore run inside the Postgres service, the same image as
       # the prod backup sidecar. Runner client tools follow the runner image
       # (ubuntu-26.04 ships 18), and a newer pg_restore breaks on a 16 server.
@@ -88,7 +89,8 @@ jobs:
         env:
           PGPASSWORD: testpassword
           PG_TOOL_CONTAINER: ${{ job.services.postgres.id }}
-      - run: npm test -- --runInBand --forceExit
+      # Coverage may not fall below the thresholds in jest.config.ts.
+      - run: npm test -- --runInBand --forceExit --coverage --coverageReporters=text-summary
       - name: Route inventory (fails if a router stops parsing)
         run: npx ts-node --transpile-only scripts/route-inventory.ts --json > /tmp/routes.json && node -e "const j=require('/tmp/routes.json'); if (j.total < 280) { console.error('route count dropped to', j.total); process.exit(1) }"
       # The Docker image ships esbuild output, not tsc output — verify that
@@ -97,7 +99,7 @@ jobs:
 
   mobile:
     name: Mobile — type-check
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     defaults:
       run:
         working-directory: mobile
@@ -105,11 +107,12 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
           cache: 'npm'
           cache-dependency-path: mobile/package-lock.json
       - run: npm ci --legacy-peer-deps
       - run: npx tsc --noEmit
+      - run: npm run lint
 
       - run: npm run test:api-config
       - name: iOS bundle and patched asset parser
@@ -117,7 +120,7 @@ jobs:
 
   client:
     name: Client — type-check, build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     defaults:
       run:
         working-directory: client
@@ -125,11 +128,12 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
           cache: 'npm'
           cache-dependency-path: client/package-lock.json
       - run: npm ci
       - run: npx tsc --noEmit
+      - run: npm run lint
       - run: npm run build
     env:
       NEXT_PUBLIC_API_URL: http://localhost:5001
@@ -137,12 +141,12 @@ jobs:
 
   security:
     name: Security audit
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
       - name: Audit policy tests
         run: node --test scripts/security/audit-policy.test.mjs
       - name: Audit server dependencies

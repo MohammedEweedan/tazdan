@@ -22,7 +22,9 @@ describeDb('ledger reconciliation under concurrent postings', () => {
     const post = (i: number) => prisma.$transaction((tx) => postLedger(tx, {
       refType: 'test_race', refId: `${marker}:${i}`,
       legs: [{ type: 'SYSTEM_ONRAMP', currency: 'USD', amount: new Decimal(-1) }, { type: 'USER', userId: u.id, currency: 'USD', amount: new Decimal(1) }],
-    }));
+    // 52 transactions at once queue for pool connections; under coverage
+    // instrumentation the default 2 s wait for one was not always enough.
+    }), { maxWait: 30_000, timeout: 30_000 });
     const results = await Promise.all([
       ...Array.from({ length: 40 }, (_, i) => post(i)),
       ...Array.from({ length: 12 }, () => reconcileLedger()),

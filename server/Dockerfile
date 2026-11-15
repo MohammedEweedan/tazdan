@@ -12,7 +12,7 @@
 # host between builds, so even lockfile-busting rebuilds reuse packages.
 # Clean installs enforce the reviewed dependency lock in every build stage.
 
-FROM node:20-alpine AS deps
+FROM node:24-alpine AS deps
 WORKDIR /app
 RUN apk add --no-cache openssl
 COPY package.json package-lock.json ./
@@ -22,7 +22,7 @@ COPY prisma ./prisma/
 RUN --mount=type=cache,target=/root/.npm npm ci --omit=dev --prefer-offline --no-audit --no-fund \
  && npx prisma generate
 
-FROM node:20-alpine AS build
+FROM node:24-alpine AS build
 WORKDIR /app
 RUN apk add --no-cache openssl
 COPY package.json package-lock.json ./
@@ -30,7 +30,7 @@ RUN --mount=type=cache,target=/root/.npm npm ci --prefer-offline --no-audit --no
 COPY . .
 RUN npm run build:fast
 
-FROM node:20-alpine AS production
+FROM node:24-alpine AS production
 WORKDIR /app
 ENV NODE_ENV=production
 ARG RELEASE_SHA
