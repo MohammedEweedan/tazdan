@@ -11,6 +11,7 @@
  */
 
 import { Decimal } from '@prisma/client/runtime/library';
+import type { BudgetWallet, Prisma } from '@prisma/client';
 import { prisma } from '../utils/prisma';
 import { logger } from '../utils/logger';
 import type { RecurringFrequency } from '@prisma/client';
@@ -46,7 +47,7 @@ export async function contribute(
   const target = await prisma.budgetWallet.findFirst({ where: { id: budgetId, userId }, select: { currency: true } });
   await assertAvailable({ viewer: await viewerFor(userId), products: ['budgets'], currencies: [target?.currency] });
 
-  return prisma.$transaction(async (tx: any) => {
+  return prisma.$transaction(async (tx) => {
     // Lock the budget row so concurrent contributions/withdrawals (manual +
     // the auto scheduler) read and write its balance one at a time.
     await lockBudget(tx, budgetId);
@@ -94,7 +95,7 @@ export async function release(
   amount?: Decimal | number | string,
   opts: { stepUpVerified?: boolean } = {},
 ) {
-  return prisma.$transaction(async (tx: any) => {
+  return prisma.$transaction(async (tx) => {
     await lockBudget(tx, budgetId);
     const budget = await tx.budgetWallet.findFirst({ where: { id: budgetId, userId } });
     if (!budget) throw new AppError('Budget not found', 404);
@@ -111,7 +112,7 @@ export async function release(
  * and end up frozen inside a closed budget.
  */
 export async function close(userId: string, budgetId: string, opts: { stepUpVerified?: boolean } = {}) {
-  return prisma.$transaction(async (tx: any) => {
+  return prisma.$transaction(async (tx) => {
     await lockBudget(tx, budgetId);
     const budget = await tx.budgetWallet.findFirst({ where: { id: budgetId, userId } });
     if (!budget) throw new AppError('Budget not found', 404);
@@ -127,7 +128,7 @@ export async function close(userId: string, budgetId: string, opts: { stepUpVeri
 }
 
 /** Release from a budget whose row the caller has already locked. */
-async function releaseLocked(tx: any, userId: string, budget: any, amount?: Decimal | number | string) {
+async function releaseLocked(tx: Prisma.TransactionClient, userId: string, budget: BudgetWallet, amount?: Decimal | number | string) {
   const have = new Decimal(budget.balance);
   const amt = amount != null ? new Decimal(amount) : have;
   if (amt.lte(0)) throw new AppError('Amount must be positive', 400);

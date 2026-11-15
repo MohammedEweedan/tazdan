@@ -120,6 +120,7 @@ export const Text = forwardRef<RNText, TextProps>((props, ref) => {
   const localizedChildren = localizeChildren(props.children, locale);
   return <RNText {...props} ref={ref} style={resolvedStyle}>{localizedChildren}</RNText>;
 });
+Text.displayName = 'Text';
 
 export const TextInput = forwardRef<RNTextInput, TextInputProps>((props, ref) => {
   const locale = useI18n((s) => s.locale);
@@ -138,3 +139,4 @@ export const TextInput = forwardRef<RNTextInput, TextInputProps>((props, ref) =>
   ], locale === 'ar' && !technicalInput && !isNumericContent(inspectable));
   return <RNTextInput selectionColor={palette.accentText} cursorColor={palette.accentText} {...props} ref={ref} placeholder={placeholder ?? undefined} style={resolvedStyle} />;
 });
+TextInput.displayName = 'TextInput';

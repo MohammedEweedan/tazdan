@@ -37,7 +37,8 @@ export type ApprovalType =
   | 'REMITTANCE_REFUND'
   | 'FX_OVERRIDE'
   | 'DEPOSIT_ACCOUNT_CHANGE'
-  | 'DEPOSIT_CONFIRMATION';
+  | 'DEPOSIT_CONFIRMATION'
+  | 'BANK_DISCLOSURE';
 
 interface Handler {
   /** Permission needed to request this type. */

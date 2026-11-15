@@ -31,8 +31,9 @@ const ContentSecurityPolicy = `
   ${isDev ? '' : 'upgrade-insecure-requests;'}
 `.replace(/\s+/g, ' ').trim();
 
+// The Control Cockpit (/admin) gets a nonce-based policy from middleware.ts.
+const publicCsp = [{ key: 'Content-Security-Policy', value: ContentSecurityPolicy }];
 const securityHeaders = [
-  { key: 'Content-Security-Policy', value: ContentSecurityPolicy },
   { key: 'X-Frame-Options', value: 'DENY' },
   { key: 'X-Content-Type-Options', value: 'nosniff' },
   { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
@@ -93,6 +94,7 @@ const nextConfig = {
   async headers() {
     return [
       { source: '/(.*)',                           headers: securityHeaders     },
+      { source: '/((?!admin(?:/|$)).*)',           headers: publicCsp           },
       { source: '/sw.js', headers: [{ key: 'Cache-Control', value: 'no-cache, no-store, must-revalidate' }] },
       { source: '/_next/static/(.*)',              headers: STATIC_CACHE_HEADERS },
       { source: '/icon-:rest.png',                 headers: STATIC_CACHE_HEADERS },

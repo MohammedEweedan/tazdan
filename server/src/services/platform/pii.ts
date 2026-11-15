@@ -16,7 +16,7 @@ import type { AuthRequest } from '../../types';
 
 const EMAIL_KEYS = new Set(['email', 'recipientEmail', 'senderEmail', 'createdByEmail', 'ownerEmail', 'invitedEmail']);
 const PHONE_KEYS = new Set(['phone', 'recipientPhone', 'phoneNumber', 'mobileNumber']);
-const TAIL_KEYS = new Set(['accountNumber', 'iban', 'routingNumber', 'sortCode', 'mobileWallet', 'taxId', 'nationalId', 'idNumber', 'passportNumber']);
+const TAIL_KEYS = new Set(['accountNumber', 'iban', 'routingNumber', 'sortCode', 'mobileWallet', 'taxId', 'nationalId', 'idNumber', 'passportNumber', 'counterpartyAccount', 'accountKey']);
 const DROP_KEYS = new Set(['dateOfBirth', 'addressLine', 'documentUrl', 'proofImageUrl', 'lastLoginIp']);
 
 export function maskEmailValue(email: string): string {

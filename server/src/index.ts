@@ -91,6 +91,7 @@ import { clientFeatures } from './services/platform/clientFeatures';
 import { viewerFor } from './services/platform/availability.service';
 import { metricsMiddleware, startMetricsSampler, prometheusMetrics } from './services/platform/metrics';
 import { cockpitRouter } from './routes/cockpit';
+import { bankFeedRouter } from './routes/bankFeeds';
 import { remittanceRouter } from './routes/remittance';
 import { businessRouter } from './routes/business';
 import { publicApiRouter } from './routes/publicApi';
@@ -107,11 +108,18 @@ if (CLUSTER_ENABLED) {
   const log = (msg: string) => process.stdout.write(`[cluster:primary] ${msg}\n`);
   log(`PID ${process.pid} — forking ${NUM_WORKERS} workers`);
 
-  for (let i = 0; i < NUM_WORKERS; i++) cluster.fork();
+  // Exactly one worker runs the schedulers. The role travels with the
+  // replacement when that worker dies: cluster worker ids only grow, so the
+  // old `worker.id === 1` test left no scheduler after the first restart.
+  const schedulerRole = new Map<number, '1' | '0'>();
+  const fork = (role: '1' | '0') => { const w = cluster.fork({ TAZDAN_SCHEDULER: role }); schedulerRole.set(w.id, role); };
+  for (let i = 0; i < NUM_WORKERS; i++) fork(i === 0 ? '1' : '0');
 
   cluster.on('exit', (worker, code, signal) => {
-    log(`Worker ${worker.process.pid} exited (code=${code ?? '—'} signal=${signal ?? '—'}) — restarting`);
-    cluster.fork();
+    const role = schedulerRole.get(worker.id) ?? '0';
+    schedulerRole.delete(worker.id);
+    log(`Worker ${worker.process.pid} exited (code=${code ?? '—'} signal=${signal ?? '—'}) — restarting${role === '1' ? ' (scheduler)' : ''}`);
+    fork(role);
   });
 
   cluster.on('online', (w) => log(`Worker ${w.process.pid} online`));
@@ -225,9 +233,12 @@ app.use((req, res, next) => {
   const needsRawBody =
     req.path === '/api/whatsapp/webhook/meta' ||
     req.path === '/api/exchange/webhook/fulus' ||
-    req.path.startsWith('/api/remittance/webhooks/');
+    req.path.startsWith('/api/remittance/webhooks/') ||
+    req.path.startsWith('/api/bank-feeds/');
+  // Statement files (base64, up to 6 MB) are uploaded to these two staff routes only.
+  const statementUpload = req.path === '/api/cockpit/bank-matching/imports' || req.path === '/api/cockpit/bank-matching/preview';
   return express.json({
-    limit:  '1mb',
+    limit:  statementUpload ? '10mb' : '1mb',
     reviver: jsonReviver,
     verify: needsRawBody
       ? (req2: any, _res, buf) => { req2.rawBody = buf.toString('utf8'); }
@@ -266,6 +277,7 @@ app.use('/api/auth/register', registerLimiter);
 app.use('/api/withdrawals', withdrawalLimiter);
 app.use('/api/withdrawal', withdrawalLimiter);
 app.use('/api/withdrawal/webhook', webhookLimiter);
+app.use('/api/bank-feeds', webhookLimiter);
 
 // Public media files for announcements (UUID filenames = unguessable).
 const MEDIA_DIR = path.resolve(process.env.MEDIA_UPLOAD_DIR || './uploads/media');
@@ -295,6 +307,7 @@ app.use('/api/wallets', walletRouter);
 app.use('/api/deposits', depositRouter);
 app.use('/api/withdrawals', withdrawalRouter);
 app.use('/api/admin', adminRouter);
+app.use('/api/bank-feeds', bankFeedRouter);
 app.use('/api/exchange', exchangeRouter);
 app.use('/api/bank-accounts', bankAccountRouter);
 app.use('/api/linked-wallets', linkedWalletRouter);
@@ -488,10 +501,11 @@ async function start() {
       logger.info(`Server running on port ${PORT}${workerTag}`);
     });
 
-    // Recurring-buy scheduler. In a clustered deploy only worker 1 runs it
-    // so due schedules aren't executed once per worker. The DB-level
-    // idempotency key (rb_<id>_<slot>) is the real safety net regardless.
-    const isSchedulerWorker = !cluster.isWorker || cluster.worker?.id === 1;
+    // Recurring-buy scheduler. In a clustered deploy only the worker the
+    // primary gave the scheduler role runs it (and every other job below), so
+    // due schedules aren't executed once per worker. The DB-level idempotency
+    // key (rb_<id>_<slot>) is the real safety net regardless.
+    const isSchedulerWorker = !cluster.isWorker || process.env.TAZDAN_SCHEDULER === '1';
     if (isSchedulerWorker && process.env.DISABLE_RECURRING_BUY_SCHEDULER !== '1') {
       startRecurringBuyScheduler();
       startBudgetScheduler();

@@ -657,7 +657,7 @@ export class AdminController {
         // Threshold met → fall through to release.
       }
 
-      await prisma.$transaction(async (tx: any) => {
+      await prisma.$transaction(async (tx) => {
         // Claim the transition first: a second concurrent approval (another
         // admin, a double-click) finds it no longer PENDING and pays nothing.
         const moved = await tx.withdrawal.updateMany({
@@ -666,8 +666,8 @@ export class AdminController {
         });
         assertTransitioned(moved, 'Withdrawal already processed');
         const wallet = await tx.wallet.findUnique({ where: { userId_currency: { userId: withdrawal.userId, currency: withdrawal.currency } } });
-        const balanceBefore = parseFloat(wallet?.balance.toString() || '0');
-        const amount = parseFloat(withdrawal.amount.toString());
+        const balanceBefore = new Decimal(wallet?.balance.toString() ?? '0');
+        const amount = new Decimal(withdrawal.amount.toString());
 
         // Spend the reservation made at request time. Refuses (409) if the
         // reserved funds don't cover it rather than pushing the wallet negative.
@@ -676,7 +676,7 @@ export class AdminController {
         // Withdrawals created before that row existed get one now.
         const updatedRows = await markWithdrawalHistory(tx, withdrawal.reference, 'COMPLETED');
         if (updatedRows === 0) {
-          await tx.transaction.create({ data: { userId: withdrawal.userId, type: 'WITHDRAWAL', currency: withdrawal.currency, amount: new Decimal(-amount), fee: withdrawal.fee, balanceBefore, balanceAfter: balanceBefore - amount, reference: withdrawal.reference, description: `Withdrawal processed`, metadata: { withdrawalId: withdrawal.id, status: 'COMPLETED' } } });
+          await tx.transaction.create({ data: { userId: withdrawal.userId, type: 'WITHDRAWAL', currency: withdrawal.currency, amount: amount.neg(), fee: withdrawal.fee, balanceBefore, balanceAfter: balanceBefore.minus(amount), reference: withdrawal.reference, description: `Withdrawal processed`, metadata: { withdrawalId: withdrawal.id, status: 'COMPLETED' } } });
         }
 
         // Ledger mirror: user balance leaves — net goes off-platform, fee to platform.
@@ -872,7 +872,7 @@ export class AdminController {
       const passwordHash = await bcrypt.hash(data.password || generatedPassword!, 12);
       const referralCode = generateReferralCode();
 
-      const user = await prisma.$transaction(async (tx: any) => {
+      const user = await prisma.$transaction(async (tx) => {
         const created = await tx.user.create({
           data: {
             email,
@@ -1966,7 +1966,7 @@ export class AdminController {
       const dec = new Decimal(amount);
       const cur = currency as any;
       const reference = `SIM-${Date.now()}`;
-      const wallet = await prisma.$transaction(async (tx: any) => {
+      const wallet = await prisma.$transaction(async (tx) => {
         const updated = await tx.wallet.upsert({
           where:  { userId_currency: { userId, currency: cur } },
           create: { userId, currency: cur, balance: dec },

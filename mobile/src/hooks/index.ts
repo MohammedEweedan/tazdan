@@ -9,6 +9,7 @@ import {
   walletService, transactionService, activityService, p2pService, cardsService,
   swapService, profileService, notificationService, budgetService,
 } from '@/services';
+import { useAttemptKey } from './useAttemptKey';
 
 export { useHaptics } from './useHaptics';
 export { useTransactionSound } from './useTransactionSound';
@@ -167,9 +168,12 @@ export function useUpdateMyProfile() {
 
 export function useInitiateP2PTrade() {
   const qc = useQueryClient();
+  const attempt = useAttemptKey('trade');
   return useMutation({
-    mutationFn: p2pService.initiateTrade,
+    mutationFn: (payload: Parameters<typeof p2pService.initiateTrade>[0]) =>
+      p2pService.initiateTrade({ ...payload, idempotencyKey: attempt.keyFor(`${payload.listingId}|${payload.amount}`) }),
     onSuccess: () => {
+      attempt.settled();
       qc.invalidateQueries({ queryKey: QUERY_KEYS.p2pMyTrades });
       qc.invalidateQueries({ queryKey: QUERY_KEYS.wallets });
     },

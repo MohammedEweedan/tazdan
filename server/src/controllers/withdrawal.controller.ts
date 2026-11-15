@@ -1,4 +1,5 @@
 import { Response, NextFunction } from 'express';
+import { idempotencyKeyFrom, keyReused } from '../utils/idempotency';
 import { z } from 'zod';
 import { Decimal } from '@prisma/client/runtime/library';
 import { prisma } from '../utils/prisma';
@@ -46,6 +47,14 @@ const withdrawalSchema = z.object({
   stepUpCode: z.string().regex(/^\d{6}$/).optional(),
 });
 
+/** The withdrawal an earlier request with this key created, or null. */
+async function replayedWithdrawal(userId: string, key: string, currency: string, amount: Decimal) {
+  const w = await prisma.withdrawal.findUnique({ where: { userId_idempotencyKey: { userId, idempotencyKey: key } } });
+  if (!w) return null;
+  if (w.currency !== currency || !new Decimal(w.amount.toString()).eq(amount)) throw keyReused('withdrawal');
+  return w;
+}
+
 export class WithdrawalController {
   /**
    * Create a withdrawal request.
@@ -58,6 +67,11 @@ export class WithdrawalController {
       const data = withdrawalSchema.parse(req.body);
       const currency = data.currency.toUpperCase();
       const amountDec = parsePositiveAmount(data.amount);
+      // A retry after a lost reply gets the first request back — before the
+      // balance check, which the first request's reservation would now fail.
+      const idempotencyKey = idempotencyKeyFrom(req);
+      const replay = idempotencyKey ? await replayedWithdrawal(req.user!.id, idempotencyKey, currency, amountDec) : null;
+      if (replay) { res.json({ withdrawal: replay, replayed: true }); return; }
       await assertMovementAllowed({ userId: req.user!.id, feature: 'withdrawals', currency });
       const isFiat = FIAT_CURRENCIES.has(currency);
       const isCryptoEnum = ['USDT','BTC','ETH','BNB','SOL','XRP','ADA','DOGE','MATIC','DOT','AVAX'].includes(currency);
@@ -156,54 +170,66 @@ export class WithdrawalController {
 
       // Atomically reserve + create the withdrawal record + log activity.
       // The fee is booked when an admin completes the withdrawal, not here.
-      const withdrawal = await prisma.$transaction(async (tx) => {
-        await enforceKycLimit(req.user!.id, 'WITHDRAW', data.amount, currency, tx);
-        // Checked and applied in one statement: concurrent requests can never
-        // reserve more than the spendable balance.
-        await reserveFunds(tx, req.user!.id, currency, amountDec);
-        const w = await tx.withdrawal.create({
-          data: {
-            userId: req.user!.id,
-            currency: currency as any,
-            amount: amountDec,
-            fee,
-            netAmount,
-            paymentMethod: isFiat ? 'BANK_TRANSFER' : (data.paymentMethod as any ?? undefined),
-            walletAddress: data.walletAddress,
-            network: data.network,
-            bankName: bankAccountDetails.bankName ?? data.bankName,
-            accountNumber: bankAccountDetails.accountNumber ?? data.accountNumber,
-            accountName: bankAccountDetails.accountName ?? data.accountName,
-            reference,
-            // Shown to the approving staff member in the withdrawal queue.
-            adminNotes: risk.review ? `Risk review (score ${risk.score}): ${risk.explanation}`.slice(0, 1000) : null,
-          },
-        });
-
-        // Log the activity so it shows up in the user's transaction history.
-        // We capture amount as negative because it's leaving the wallet.
-        {
-          await tx.transaction.create({
+      let withdrawal;
+      try {
+        withdrawal = await prisma.$transaction(async (tx) => {
+          await enforceKycLimit(req.user!.id, 'WITHDRAW', data.amount, currency, tx);
+          // Checked and applied in one statement: concurrent requests can never
+          // reserve more than the spendable balance.
+          await reserveFunds(tx, req.user!.id, currency, amountDec);
+          const w = await tx.withdrawal.create({
             data: {
               userId: req.user!.id,
-              type: 'WITHDRAWAL',
               currency: currency as any,
-              amount: amountDec.neg(),
+              amount: amountDec,
               fee,
-              balanceBefore: available,
-              balanceAfter:  available.minus(amountDec),
+              netAmount,
+              paymentMethod: isFiat ? 'BANK_TRANSFER' : (data.paymentMethod as any ?? undefined),
+              walletAddress: data.walletAddress,
+              network: data.network,
+              bankName: bankAccountDetails.bankName ?? data.bankName,
+              accountNumber: bankAccountDetails.accountNumber ?? data.accountNumber,
+              accountName: bankAccountDetails.accountName ?? data.accountName,
               reference,
-              description: isFiat
-                ? `Withdrawal to ${bankAccountDetails.bankName ?? data.bankName ?? 'bank'}`
-                : `Withdrawal ${data.network} → ${data.walletAddress?.slice(0, 8)}…`,
-              metadata: { withdrawalId: w.id, network: data.network ?? null, status: 'PENDING' } as any,
+              idempotencyKey: idempotencyKey ?? undefined,
+              // Shown to the approving staff member in the withdrawal queue.
+              adminNotes: risk.review ? `Risk review (score ${risk.score}): ${risk.explanation}`.slice(0, 1000) : null,
             },
           });
-        }
-        await recordTransition(tx, { entityType: 'WITHDRAWAL', entityId: w.id, fromState: null, toState: 'PENDING', actorType: 'USER', actorId: req.user!.id });
 
-        return w;
-      });
+          // Log the activity so it shows up in the user's transaction history.
+          // We capture amount as negative because it's leaving the wallet.
+          {
+            await tx.transaction.create({
+              data: {
+                userId: req.user!.id,
+                type: 'WITHDRAWAL',
+                currency: currency as any,
+                amount: amountDec.neg(),
+                fee,
+                balanceBefore: available,
+                balanceAfter:  available.minus(amountDec),
+                reference,
+                description: isFiat
+                  ? `Withdrawal to ${bankAccountDetails.bankName ?? data.bankName ?? 'bank'}`
+                  : `Withdrawal ${data.network} → ${data.walletAddress?.slice(0, 8)}…`,
+                metadata: { withdrawalId: w.id, network: data.network ?? null, status: 'PENDING' } as any,
+              },
+            });
+          }
+          await recordTransition(tx, { entityType: 'WITHDRAWAL', entityId: w.id, fromState: null, toState: 'PENDING', actorType: 'USER', actorId: req.user!.id });
+
+          return w;
+        });
+      } catch (err) {
+        // A concurrent retry with the same key may have settled first (key or
+        // serialization conflict, or its reservation left too little): return it.
+        if (idempotencyKey) {
+          const first = await replayedWithdrawal(req.user!.id, idempotencyKey, currency, amountDec);
+          if (first) { res.json({ withdrawal: first, replayed: true }); return; }
+        }
+        throw err;
+      }
 
       // Notify admins
       const admins = await prisma.user.findMany({ where: { role: 'ADMIN' } });

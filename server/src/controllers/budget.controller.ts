@@ -117,7 +117,7 @@ export class BudgetController {
         stepUpVerified = true;
       }
 
-      const budget = await prisma.$transaction(async (tx: any) => {
+      const budget = await prisma.$transaction(async (tx) => {
         // Re-validate against the locked row so a concurrent change can't
         // slip a weakening past the check above.
         await lockBudget(tx, existing.id);

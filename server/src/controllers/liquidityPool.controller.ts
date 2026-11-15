@@ -161,7 +161,7 @@ export const LiquidityPoolController = {
         );
       }
 
-      const result = await prisma.$transaction(async (tx: any) => {
+      const result = await prisma.$transaction(async (tx) => {
         // Debit user's wallet.
         const wallet = await tx.wallet.findUnique({
           where: { userId_currency: { userId: me, currency: parsed.currency as any } },
@@ -330,7 +330,7 @@ export const LiquidityPoolController = {
         throw new AppError('Pool balance insufficient', 400);
       }
 
-      const result = await prisma.$transaction(async (tx: any) => {
+      const result = await prisma.$transaction(async (tx) => {
         // Credit caller's USDT wallet.
         const wallet = await tx.wallet.upsert({
           where:  { userId_currency: { userId: me, currency: 'USDT' as any } },
@@ -447,7 +447,7 @@ export const LiquidityPoolController = {
 
       const totalUsd = new Decimal(pool.totalBalanceUsd);
 
-      const result = await prisma.$transaction(async (tx: any) => {
+      const result = await prisma.$transaction(async (tx) => {
         if (totalUsd.gt(0)) {
           // Pro-rata refund: each member's payout = (their net share / sum of net shares) * pool balance.
           const netShares = pool.members.map((m: any) => ({

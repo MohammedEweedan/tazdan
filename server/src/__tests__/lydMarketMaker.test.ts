@@ -49,14 +49,9 @@ jest.mock('../utils/prisma', () => {
 });
 jest.mock('../services/exchange/gasOracle.service', () => ({ liveNetworkCostUsd: jest.fn(async () => null) }));
 jest.mock('axios', () => ({ get: jest.fn(async () => ({ data: { price: '50000' } })), post: jest.fn() }));
-
-// eslint-disable-next-line import/first
 import * as MM from '../services/exchange/lydMarketMaker.service';
-// eslint-disable-next-line import/first
 import { getRate } from '../services/exchange/fxRateProvider.service';
-// eslint-disable-next-line import/first
 import { conversionLedgerLegs, lydConversionMargin, quoteConversion } from '../services/exchange/conversion.service';
-// eslint-disable-next-line import/first
 import { buildQuote, consumeQuote } from '../services/exchange/priceEngine.service';
 
 const R = new Decimal('9.81');

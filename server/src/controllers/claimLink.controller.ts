@@ -350,9 +350,7 @@ export class ClaimLinkController {
         const recipientWalletExisting = await tx.wallet.findUnique({
           where: { userId_currency: { userId: claimerId, currency: link.asset } },
         });
-        const recipientBefore = recipientWalletExisting
-          ? parseFloat(recipientWalletExisting.balance.toString())
-          : 0;
+        const recipientBefore = new Decimal(recipientWalletExisting?.balance.toString() ?? '0');
         await tx.wallet.upsert({
           where: { userId_currency: { userId: claimerId, currency: link.asset } },
           update: { balance: { increment: link.amount } },
@@ -376,7 +374,8 @@ export class ClaimLinkController {
         }
 
         // Activity rows on both sides — paired by claim link id.
-        const senderBalanceBefore = parseFloat(senderWallet.balance.toString());
+        const senderBalanceBefore = new Decimal(senderWallet.balance.toString());
+        const linkAmount = new Decimal(link.amount.toString());
         await tx.transaction.createMany({
           data: [
             {
@@ -385,7 +384,7 @@ export class ClaimLinkController {
               currency: link.asset,
               amount: new Decimal(`-${link.amount.toString()}`),
               balanceBefore: senderBalanceBefore,
-              balanceAfter:  senderBalanceBefore - parseFloat(link.amount.toString()),
+              balanceAfter:  senderBalanceBefore.minus(linkAmount),
               reference: ref,
               description: `Claim link claimed by recipient`,
               metadata: { kind: 'claim_link', linkId: link.id } as any,
@@ -396,7 +395,7 @@ export class ClaimLinkController {
               currency: link.asset,
               amount: new Decimal(link.amount.toString()),
               balanceBefore: recipientBefore,
-              balanceAfter:  recipientBefore + parseFloat(link.amount.toString()),
+              balanceAfter:  recipientBefore.plus(linkAmount),
               reference: ref,
               description: `Claimed via tazdan claim link`,
               metadata: { kind: 'claim_link', linkId: link.id } as any,
