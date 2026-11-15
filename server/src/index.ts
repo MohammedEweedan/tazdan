@@ -91,6 +91,7 @@ import { clientFeatures } from './services/platform/clientFeatures';
 import { viewerFor } from './services/platform/availability.service';
 import { metricsMiddleware, startMetricsSampler, prometheusMetrics } from './services/platform/metrics';
 import { cockpitRouter } from './routes/cockpit';
+import { bankFeedRouter } from './routes/bankFeeds';
 import { remittanceRouter } from './routes/remittance';
 import { businessRouter } from './routes/business';
 import { publicApiRouter } from './routes/publicApi';
@@ -225,9 +226,12 @@ app.use((req, res, next) => {
   const needsRawBody =
     req.path === '/api/whatsapp/webhook/meta' ||
     req.path === '/api/exchange/webhook/fulus' ||
-    req.path.startsWith('/api/remittance/webhooks/');
+    req.path.startsWith('/api/remittance/webhooks/') ||
+    req.path.startsWith('/api/bank-feeds/');
+  // Statement files (base64, up to 6 MB) are uploaded to these two staff routes only.
+  const statementUpload = req.path === '/api/cockpit/bank-matching/imports' || req.path === '/api/cockpit/bank-matching/preview';
   return express.json({
-    limit:  '1mb',
+    limit:  statementUpload ? '10mb' : '1mb',
     reviver: jsonReviver,
     verify: needsRawBody
       ? (req2: any, _res, buf) => { req2.rawBody = buf.toString('utf8'); }
@@ -266,6 +270,7 @@ app.use('/api/auth/register', registerLimiter);
 app.use('/api/withdrawals', withdrawalLimiter);
 app.use('/api/withdrawal', withdrawalLimiter);
 app.use('/api/withdrawal/webhook', webhookLimiter);
+app.use('/api/bank-feeds', webhookLimiter);
 
 // Public media files for announcements (UUID filenames = unguessable).
 const MEDIA_DIR = path.resolve(process.env.MEDIA_UPLOAD_DIR || './uploads/media');
@@ -295,6 +300,7 @@ app.use('/api/wallets', walletRouter);
 app.use('/api/deposits', depositRouter);
 app.use('/api/withdrawals', withdrawalRouter);
 app.use('/api/admin', adminRouter);
+app.use('/api/bank-feeds', bankFeedRouter);
 app.use('/api/exchange', exchangeRouter);
 app.use('/api/bank-accounts', bankAccountRouter);
 app.use('/api/linked-wallets', linkedWalletRouter);

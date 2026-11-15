@@ -2851,6 +2851,132 @@ model ReconciliationItem {
   @@index([internalType, internalId])
 }
 
+// ── Bank statement matching (LyPay, OnePay, bank statements) ─────────
+/// One statement file or feed batch from a payment rail or bank.
+model BankStatementImport {
+  id                    String              @id @default(cuid())
+  source                String // LYPAY | ONEPAY | BANK | OTHER
+  platformBankAccountId String?
+  fileName              String?
+  /// The same file (or feed batch) can't be imported twice.
+  contentSha256         String              @unique
+  format                String // CSV | XLSX | FEED
+  lineCount             Int                 @default(0)
+  newLines              Int                 @default(0)
+  duplicateLines        Int                 @default(0)
+  skippedRows           Int                 @default(0)
+  periodStart           DateTime?
+  periodEnd             DateTime?
+  importedById          String?
+  createdAt             DateTime            @default(now())
+  lines                 BankStatementLine[]
+
+  @@index([source, createdAt])
+}
+
+/// A single movement on a rail statement: money in (CREDIT) or out (DEBIT).
+model BankStatementLine {
+  id                    String               @id @default(cuid())
+  importId              String
+  source                String
+  platformBankAccountId String?
+  direction             String // CREDIT | DEBIT
+  amount                Decimal              @db.Decimal(20, 8)
+  currency              String               @default("LYD")
+  valueDate             DateTime
+  railRef               String?
+  narration             String?
+  counterpartyName      String?
+  counterpartyAccount   String?
+  counterpartyBank      String?
+  /// Account digits normalised for lookups (IBAN and plain numbers compare).
+  accountKey            String?
+  dedupeKey             String               @unique
+  status                String               @default("UNMATCHED") // UNMATCHED | SUGGESTED | MATCHED | HELD | IGNORED
+  matchedType           String? // DEPOSIT | WITHDRAWAL
+  matchedId             String?
+  matchedById           String?
+  matchedAt             DateTime?
+  bestScore             Int?
+  flags                 String[]             @default([])
+  note                  String?
+  raw                   Json
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @updatedAt
+  import                BankStatementImport  @relation(fields: [importId], references: [id], onDelete: Cascade)
+  candidates            BankMatchCandidate[]
+
+  @@unique([matchedType, matchedId])
+  @@index([status, direction])
+  @@index([accountKey])
+  @@index([valueDate])
+}
+
+/// A possible owner of a statement line, with the evidence behind the score.
+model BankMatchCandidate {
+  id         String            @id @default(cuid())
+  lineId     String
+  targetType String // DEPOSIT | WITHDRAWAL
+  targetId   String
+  userId     String
+  score      Int
+  signals    Json
+  flags      String[]          @default([])
+  status     String            @default("OPEN") // OPEN | ACCEPTED | REJECTED
+  createdAt  DateTime          @default(now())
+  line       BankStatementLine @relation(fields: [lineId], references: [id], onDelete: Cascade)
+
+  @@unique([lineId, targetType, targetId])
+  @@index([targetType, targetId])
+}
+
+/// A bank account seen paying in or out for a customer, confirmed by staff.
+/// Later payments from the same account match on it.
+model BankPayerLink {
+  id            String   @id @default(cuid())
+  userId        String
+  accountKey    String
+  name          String?
+  source        String // CONFIRMED_MATCH
+  confirmedById String?
+  timesSeen     Int      @default(1)
+  lastSeenAt    DateTime @default(now())
+  createdAt     DateTime @default(now())
+
+  @@unique([userId, accountKey])
+  @@index([accountKey])
+}
+
+/// AML/KYC requests exchanged with banks: Tazdan asking a bank (OUTBOUND) or
+/// a bank asking Tazdan (INBOUND). Disclosing customer data needs a second
+/// staff member's approval.
+model BankInfoRequest {
+  id              String    @id @default(cuid())
+  reference       String    @unique
+  direction       String // OUTBOUND | INBOUND
+  bankName        String
+  bankContact     String?
+  type            String // ACCOUNT_HOLDER | KYC_INFORMATION | TRANSACTION_DETAILS | SOURCE_OF_FUNDS | RETURN_OF_FUNDS | FREEZE | OTHER
+  legalBasis      String // CUSTOMER_CONSENT | AML_LAW | COURT_ORDER | CBL_INSTRUCTION | SERVICE_CONTRACT
+  status          String    @default("OPEN") // OPEN | PENDING_APPROVAL | SENT | ANSWERED | CLOSED
+  subjectUserId   String?
+  statementLineId String?
+  caseId          String?
+  question        String
+  answer          String?
+  dueAt           DateTime?
+  createdById     String
+  approvedById    String?
+  sentAt          DateTime?
+  answeredAt      DateTime?
+  closedAt        DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([status, direction])
+  @@index([subjectUserId])
+}
+
 // ── Business payouts, team and webhooks ──────────────────────────────
 model BusinessTeamMember {
   id          String          @id @default(cuid())

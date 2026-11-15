@@ -19,6 +19,7 @@ import { CockpitAiController as AI } from '../controllers/cockpit/ai.controller'
 import { LydtController as LYDT } from '../controllers/lydt.controller';
 import { CockpitAvailabilityController as AV } from '../controllers/cockpit/availability.controller';
 import { CockpitStorefrontController as SFC } from '../controllers/cockpit/storefront.controller';
+import { CockpitBankMatchingController as BM } from '../controllers/cockpit/bankMatching.controller';
 import { aiLimiter } from '../middleware/rateLimiters';
 import { maskPiiForStaff } from '../services/platform/pii';
 // Registers approval handlers (side-effect imports).
@@ -101,6 +102,27 @@ cockpitRouter.post('/reconciliation/runs', P('recon.run'), M.reconRun);
 cockpitRouter.post('/reconciliation/items/:id/resolve', P('recon.resolve'), M.reconResolve);
 cockpitRouter.get('/reconciliation/fund-integrity', P('recon.read'), M.fundIntegrity);
 cockpitRouter.post('/reconciliation/fund-integrity/baseline', P('adjustments.approve'), M.fundBaseline);
+// LyPay / OnePay / bank statements matched to deposit and withdrawal requests.
+// Accepting a match also needs deposits.confirm or withdrawals.approve (checked per target).
+cockpitRouter.get('/bank-matching/lines', P('recon.read'), BM.lines);
+cockpitRouter.get('/bank-matching/lines/:id', P('recon.read'), BM.line);
+cockpitRouter.get('/bank-matching/exceptions', P('recon.read'), BM.exceptions);
+cockpitRouter.get('/bank-matching/imports', P('recon.read'), BM.imports);
+cockpitRouter.post('/bank-matching/preview', P('recon.run'), BM.preview);
+cockpitRouter.post('/bank-matching/imports', P('recon.run'), BM.import);
+cockpitRouter.post('/bank-matching/rematch', P('recon.run'), BM.rematch);
+cockpitRouter.post('/bank-matching/accept-strong', P('deposits.confirm'), BM.acceptStrong);
+cockpitRouter.post('/bank-matching/lines/:id/accept', P('recon.read'), BM.accept);
+cockpitRouter.post('/bank-matching/lines/:id/assign', P('deposits.confirm'), BM.assign);
+cockpitRouter.post('/bank-matching/lines/:id/status', P('recon.resolve'), BM.setStatus);
+cockpitRouter.post('/bank-matching/lines/:id/case', P('compliance.case.manage'), BM.openCase);
+// AML/KYC requests exchanged with banks; disclosing customer data needs a second approver.
+cockpitRouter.get('/bank-requests', P('compliance.read'), BM.requests);
+cockpitRouter.get('/bank-requests/:id', P('compliance.read'), BM.request);
+cockpitRouter.post('/bank-requests', P('compliance.case.manage'), BM.createRequest);
+cockpitRouter.post('/bank-requests/:id/sent', P('compliance.case.manage'), BM.markSent);
+cockpitRouter.post('/bank-requests/:id/answer', P('compliance.case.manage'), BM.answer);
+cockpitRouter.post('/bank-requests/:id/close', P('compliance.case.manage'), BM.close);
 
 // Compliance, fraud, support, businesses
 cockpitRouter.get('/compliance', P('compliance.read'), K.compliance);
