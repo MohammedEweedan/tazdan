@@ -108,11 +108,18 @@ if (CLUSTER_ENABLED) {
   const log = (msg: string) => process.stdout.write(`[cluster:primary] ${msg}\n`);
   log(`PID ${process.pid} — forking ${NUM_WORKERS} workers`);
 
-  for (let i = 0; i < NUM_WORKERS; i++) cluster.fork();
+  // Exactly one worker runs the schedulers. The role travels with the
+  // replacement when that worker dies: cluster worker ids only grow, so the
+  // old `worker.id === 1` test left no scheduler after the first restart.
+  const schedulerRole = new Map<number, '1' | '0'>();
+  const fork = (role: '1' | '0') => { const w = cluster.fork({ TAZDAN_SCHEDULER: role }); schedulerRole.set(w.id, role); };
+  for (let i = 0; i < NUM_WORKERS; i++) fork(i === 0 ? '1' : '0');
 
   cluster.on('exit', (worker, code, signal) => {
-    log(`Worker ${worker.process.pid} exited (code=${code ?? '—'} signal=${signal ?? '—'}) — restarting`);
-    cluster.fork();
+    const role = schedulerRole.get(worker.id) ?? '0';
+    schedulerRole.delete(worker.id);
+    log(`Worker ${worker.process.pid} exited (code=${code ?? '—'} signal=${signal ?? '—'}) — restarting${role === '1' ? ' (scheduler)' : ''}`);
+    fork(role);
   });
 
   cluster.on('online', (w) => log(`Worker ${w.process.pid} online`));
@@ -494,10 +501,11 @@ async function start() {
       logger.info(`Server running on port ${PORT}${workerTag}`);
     });
 
-    // Recurring-buy scheduler. In a clustered deploy only worker 1 runs it
-    // so due schedules aren't executed once per worker. The DB-level
-    // idempotency key (rb_<id>_<slot>) is the real safety net regardless.
-    const isSchedulerWorker = !cluster.isWorker || cluster.worker?.id === 1;
+    // Recurring-buy scheduler. In a clustered deploy only the worker the
+    // primary gave the scheduler role runs it (and every other job below), so
+    // due schedules aren't executed once per worker. The DB-level idempotency
+    // key (rb_<id>_<slot>) is the real safety net regardless.
+    const isSchedulerWorker = !cluster.isWorker || process.env.TAZDAN_SCHEDULER === '1';
     if (isSchedulerWorker && process.env.DISABLE_RECURRING_BUY_SCHEDULER !== '1') {
       startRecurringBuyScheduler();
       startBudgetScheduler();
