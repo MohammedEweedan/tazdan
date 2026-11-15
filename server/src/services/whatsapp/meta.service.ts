@@ -19,6 +19,8 @@
  * real Meta business account configured.
  */
 import crypto from 'crypto';
+import { maskPhoneValue } from '../platform/pii';
+import { logger } from '../../utils/logger';
 import { prisma } from '../../utils/prisma';
 
 const API_VERSION = process.env.META_WA_API_VERSION || 'v20.0';
@@ -65,7 +67,7 @@ export async function sendWhatsAppText(opts: {
   const token         = process.env.META_WA_ACCESS_TOKEN;
 
   if (!phoneNumberId || !token) {
-    console.log('[meta:wa] no creds — would send to', to, ':', opts.body);
+    logger.info('[meta:wa] no credentials — message simulated', { to: maskPhoneValue(String(to)), chars: opts.body.length });
     await persistOutbound({ userId: opts.userId, phone, body: opts.body, status: 'SIMULATED' });
     return { ok: true, reason: 'simulated' };
   }
@@ -119,7 +121,7 @@ export async function sendWhatsAppTemplate(opts: {
   const token         = process.env.META_WA_ACCESS_TOKEN;
 
   if (!phoneNumberId || !token) {
-    console.log('[meta:wa-template] no creds — would send', opts.templateName, 'to', to, opts.bodyParams);
+    logger.info('[meta:wa-template] no credentials — template simulated', { template: opts.templateName, to: maskPhoneValue(String(to)) });
     await persistOutbound({
       userId: opts.userId, phone,
       body: `[template ${opts.templateName}] ${opts.bodyParams?.join(' | ')}`,

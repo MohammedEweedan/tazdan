@@ -1,4 +1,6 @@
 import nodemailer from 'nodemailer';
+import { maskEmailValue } from './platform/pii';
+import { logger } from '../utils/logger';
 import QRCode from 'qrcode';
 import axios from 'axios';
 
@@ -309,7 +311,7 @@ async function sendViaResend(opts: { from: string; to: string; subject: string; 
   } catch (err: any) {
     // Surface Resend's error body — usually a clear domain/auth message. Never
     // log the raw error (its request config contains the API key header).
-    console.error('[email] Resend send failed:', opts.subject, 'to', opts.to, '→', emailErrorSummary(err));
+    logger.error('[email] Resend send failed', { subject: opts.subject, to: [opts.to].flat().map((a) => maskEmailValue(String(a))), error: emailErrorSummary(err) });
     throw err;
   }
 }

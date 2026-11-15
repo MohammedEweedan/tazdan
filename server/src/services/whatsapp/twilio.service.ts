@@ -18,6 +18,8 @@
  *   TWILIO_VERIFY_SERVICE_SID   VAxx…  (optional — enables Twilio Verify path)
  */
 import crypto from 'crypto';
+import { maskPhoneValue } from '../platform/pii';
+import { logger } from '../../utils/logger';
 import { prisma } from '../../utils/prisma';
 
 /* ── Twilio SDK lazy-init ─────────────────────────────────────────── */
@@ -74,7 +76,7 @@ export async function sendWhatsAppText(opts: {
   const from = process.env.TWILIO_WHATSAPP_FROM;
 
   if (!cli || !from) {
-    console.log('[twilio:wa] no creds — would send to', to, ':', opts.body);
+    logger.info('[twilio:wa] no credentials — message simulated', { to: maskPhoneValue(String(to)), chars: opts.body.length });
     await persistOutbound({ userId: opts.userId, phone, body: opts.body, status: 'SIMULATED' });
     return { ok: true, reason: 'simulated' };
   }
@@ -102,7 +104,7 @@ export async function sendSMS(opts: {
   const cli = client();
   const from = process.env.TWILIO_SMS_FROM;
   if (!cli || !from) {
-    console.log('[twilio:sms] no creds — would send to', to, ':', opts.body);
+    logger.info('[twilio:sms] no credentials — SMS simulated', { to: maskPhoneValue(String(to)), chars: opts.body.length });
     return { ok: true, reason: 'simulated' };
   }
   try {
@@ -219,7 +221,7 @@ export async function startVerification(opts: {
   if (process.env.NODE_ENV === 'production') {
     return { ok: false, status: 'failed', reason: 'Phone verification is unavailable right now', mode: 'unconfigured' };
   }
-  console.log('[twilio:verify] simulated OTP for', to, 'channel:', opts.channel);
+  logger.info('[twilio:verify] simulated verification', { to: maskPhoneValue(String(to)), channel: opts.channel });
   if (opts.userId) {
     // Store a simulated code so checkVerification works end-to-end in dev.
     await prisma.user.update({
